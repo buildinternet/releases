@@ -1,22 +1,23 @@
 /**
- * Resolve `{ url, quote }` overview citations (emitted alongside the body by the
- * AI SDK structured-output lane) into body-offset `{ startIndex, endIndex, ... }`
- * citations, matching the `RegenerateOverviewBodySchema.citations` wire format:
- *   { startIndex, endIndex, sourceUrl, title, citedText }
+ * Resolve the `{ url }` source citations the overview model returns (alongside
+ * the body) into stored citation rows: `{ sourceUrl, title }` — deduped and
+ * filtered to the sources the model was actually given.
  *
- * `resolveOverviewCitations` does the offset resolution (see its own doc
- * comment); `clampCitationsToBody` is the defensive guard applied before
- * upsert.
+ * Overview citations are a *source list*, not span-anchored provenance (#1934).
+ * An org overview is durable, publicly-cached editorial content whose sources
+ * are destinations to click, not claims to fact-check against a highlighted
+ * body span. So there is no verbatim-quote matching and no body char offsets —
+ * that contract (reproduce an exact substring of your own, lint-rewritten
+ * prose) failed twice on the same seam: it leaked raw JSON into the body
+ * (#1927/#1929) and silently dropped the large majority of citations when the
+ * quotes didn't match. Dropping it deletes that entire failure class.
  */
 
 import { stripLeadingHeading } from "@buildinternet/releases-core/overview";
 
 export interface OverviewCitation {
-  startIndex: number;
-  endIndex: number;
   sourceUrl: string;
   title: string | null;
-  citedText: string;
 }
 
 const HTML_ENTITY_MAP: Record<string, string> = {
@@ -54,10 +55,9 @@ export interface PostHocResolveInput {
   titleBySource: Map<string, string | null>;
 }
 
-/** A structured citation as returned by the model: a source URL + a verbatim body phrase. */
+/** A structured citation as returned by the model: a source URL it drew on. */
 export interface RawOverviewCitation {
   url: string;
-  quote: string;
 }
 
 /**
@@ -69,25 +69,18 @@ export interface RawOverviewCitation {
  */
 const TRAILING_CITATIONS_RE = /\n+[ \t]*(?:citations?|sources?)\s*:[\s\S]*$/i;
 
-/** True when [start,end) contains an odd number of `**` markers (would split a bold span). */
-function crossesBoldBoundary(body: string, start: number, end: number): boolean {
-  const span = body.slice(start, end);
-  return ((span.match(/\*\*/g) ?? []).length & 1) === 1;
-}
-
 /**
- * Resolve structured `{ url, quote }` citations (from an AI SDK `generateObject`
- * response) into body-offset citations. The body and the citation list arrive as
- * separate typed fields — no fenced JSON block scraped out of prose — so there is
- * no transport parsing here, only offset resolution:
+ * Normalize the model's overview body and resolve its `{ url }` citations into
+ * stored `{ sourceUrl, title }` rows. Body and citations arrive as separate
+ * typed fields (AI SDK `generateObject`), so there is no transport parsing —
+ * only:
  *
- *   - normalize the body (HTML-entity decode + strip a stray leading heading),
- *   - for each citation, keep it only if its url is a provided source, its quote
- *     appears verbatim in the body, and the span doesn't split a `**` bold run,
- *   - clamp the resulting offsets into the body.
+ *   - normalize the body (HTML-entity decode, strip a stray leading heading and
+ *     any trailing `Citations:`/`Sources:` block the model appended anyway),
+ *   - keep each citation whose url is one of the provided sources, deduped.
  *
- * Unknown urls / quotes-not-found are dropped (citation fidelity is advisory);
- * an empty list yields an empty citation set. Never throws.
+ * Unknown urls are dropped; an empty list yields an empty citation set. Never
+ * throws. No offsets, no verbatim-quote matching — see the file header.
  */
 export function resolveOverviewCitations(
   rawBody: string,
@@ -99,42 +92,13 @@ export function resolveOverviewCitations(
     .trimEnd();
 
   const citations: OverviewCitation[] = [];
-  for (const { url, quote } of rawCitations) {
-    if (typeof url !== "string" || typeof quote !== "string") continue;
+  const seen = new Set<string>();
+  for (const { url } of rawCitations) {
+    if (typeof url !== "string") continue;
     if (!input.validSources.has(url)) continue;
-    const needle = decodeHtmlEntities(quote).trim();
-    if (needle.length === 0) continue;
-    const startIndex = body.indexOf(needle);
-    if (startIndex === -1) continue;
-    const endIndex = startIndex + needle.length;
-    if (crossesBoldBoundary(body, startIndex, endIndex)) continue;
-    citations.push({
-      startIndex,
-      endIndex,
-      sourceUrl: url,
-      title: input.titleBySource.get(url) ?? null,
-      citedText: needle,
-    });
+    if (seen.has(url)) continue;
+    seen.add(url);
+    citations.push({ sourceUrl: url, title: input.titleBySource.get(url) ?? null });
   }
-  return { body, citations: clampCitationsToBody(body, citations) };
-}
-
-/**
- * Drop citations whose offsets fall outside `body`. Defensive guard before
- * upsert — the API rejects `bad_citations` with 400, so trimming here lets
- * the workflow persist what's valid instead of failing the whole row when
- * one citation drifted (e.g. body was further normalized after extraction).
- */
-export function clampCitationsToBody(
-  body: string,
-  citations: OverviewCitation[],
-): OverviewCitation[] {
-  const max = body.length;
-  return citations
-    .map((c) => ({
-      ...c,
-      startIndex: Math.max(0, Math.min(c.startIndex, max)),
-      endIndex: Math.max(0, Math.min(c.endIndex, max)),
-    }))
-    .filter((c) => c.endIndex > c.startIndex);
+  return { body, citations };
 }

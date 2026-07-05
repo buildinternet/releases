@@ -1,9 +1,11 @@
 /**
  * Validator-middleware coverage for POST /v1/orgs/:slug/overview — the
- * routes/overview.ts handler now reads `c.req.valid("json")` instead of
+ * routes/overview.ts handler reads `c.req.valid("json")` instead of
  * hand-parsing the body. Asserts schema-rejection paths return the
- * `{ error: { code: "validation_failed", type: "validation", message } }` envelope; cross-field
- * `endIndex <= content.length` still returns `bad_request` (folded from bad_citations).
+ * `{ error: { code: "validation_failed", type: "validation", message } }` envelope.
+ * Since #1934 citations are a source list (no body offsets), so the legacy
+ * `endIndex <= startIndex` refine and the `endIndex <= content.length` cross-check
+ * are gone — legacy offset fields are accepted-but-ignored.
  */
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -88,60 +90,35 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
     expect(body.error.code).toBe("validation_failed");
   });
 
-  it("400 bad_request when a citation has endIndex <= startIndex (schema refine)", async () => {
-    const res = await post({
-      content: "hello world",
-      releaseCount: 0,
-      citations: [
-        {
-          startIndex: 5,
-          endIndex: 5,
-          sourceUrl: "https://example.com",
-          citedText: "hello",
-        },
-      ],
-    });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("validation_failed");
-  });
-
   it("400 bad_request when citation sourceUrl is empty (schema min(1))", async () => {
     const res = await post({
       content: "hello world",
       releaseCount: 0,
-      citations: [
-        {
-          startIndex: 0,
-          endIndex: 5,
-          sourceUrl: "",
-          citedText: "hello",
-        },
-      ],
+      citations: [{ sourceUrl: "" }],
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("validation_failed");
   });
 
-  it("400 bad_citations when endIndex > content.length (handler cross-check)", async () => {
+  it("accepts legacy offset/quote fields on a citation but ignores them (#1934)", async () => {
+    // Older clients still send startIndex/endIndex/citedText; the schema accepts
+    // them (optional) and the handler drops them — no refine, no cross-check.
     const res = await post({
       content: "short",
       releaseCount: 0,
       citations: [
         {
-          startIndex: 0,
-          endIndex: 99,
           sourceUrl: "https://example.com",
+          startIndex: 5,
+          endIndex: 99, // was rejected (> content.length) pre-#1934; now ignored
           citedText: "short",
         },
       ],
     });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
-    expect(body.error.code).toBe("bad_request");
-    expect(body.error.type).toBe("validation");
-    expect(body.error.message).toContain("past content length");
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { ok: true; citations: number };
+    expect(json).toEqual({ ok: true, citations: 1 });
   });
 
   it("404 when org doesn't exist", async () => {

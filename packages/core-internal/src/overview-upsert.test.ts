@@ -269,11 +269,8 @@ describe("upsertOrgOverview", () => {
       content: "Mentions feature X.",
       citations: [
         {
-          startIndex: 0,
-          endIndex: 9,
           sourceUrl: "https://example.com/changelog/feature-x",
           title: "Feature X",
-          citedText: "Feature X launched.",
         },
       ],
       releaseCount: 1,
@@ -293,7 +290,7 @@ describe("upsertOrgOverview", () => {
 
   it("resolves releaseIds across the 90-bind URL-lookup chunk boundary", async () => {
     // URL_LOOKUP_CHUNK_SIZE = 90; 91 unique URLs forces a two-chunk SELECT in
-    // resolveReleaseIdsByUrl. CITATIONS_CHUNK_SIZE = 11 also forces multi-chunk
+    // resolveReleaseIdsByUrl. CITATIONS_CHUNK_SIZE = 10 also forces multi-chunk
     // citation inserts.
     const N = 91;
     const releaseRows = Array.from({ length: N }, (_, i) => ({
@@ -308,12 +305,9 @@ describe("upsertOrgOverview", () => {
     tdb.db.insert(releases).values(releaseRows).run();
 
     const citations = Array.from({ length: N }, (_, i) => ({
-      startIndex: 0,
-      endIndex: 5,
       // Alternate case to exercise lowercase normalization through chunking.
       sourceUrl: i % 2 === 0 ? `https://example.com/r/${i}` : `HTTPS://EXAMPLE.COM/r/${i}`,
       title: `R${i}`,
-      citedText: "cited",
     }));
 
     const result = await upsertOrgOverview(asDb(tdb.db), {
@@ -341,11 +335,8 @@ describe("upsertOrgOverview", () => {
       content: "Mentions a missing release.",
       citations: [
         {
-          startIndex: 0,
-          endIndex: 9,
           sourceUrl: "https://example.com/changelog/no-such-release",
           title: null,
-          citedText: "Cited",
         },
       ],
       releaseCount: 0,
@@ -368,18 +359,12 @@ describe("upsertOrgOverview", () => {
       content: "First.",
       citations: [
         {
-          startIndex: 0,
-          endIndex: 5,
           sourceUrl: "https://example.com/a",
           title: "A",
-          citedText: "cited",
         },
         {
-          startIndex: 0,
-          endIndex: 5,
           sourceUrl: "https://example.com/a",
           title: "A again",
-          citedText: "cited",
         },
       ],
       releaseCount: 1,
@@ -392,11 +377,8 @@ describe("upsertOrgOverview", () => {
       content: "Second.",
       citations: [
         {
-          startIndex: 0,
-          endIndex: 6,
           sourceUrl: "https://example.com/b",
           title: "B",
-          citedText: "cited",
         },
       ],
       releaseCount: 2,
@@ -420,11 +402,8 @@ describe("upsertOrgOverview", () => {
       content: "First.",
       citations: [
         {
-          startIndex: 0,
-          endIndex: 5,
           sourceUrl: "https://example.com/a",
           title: "A",
-          citedText: "cited",
         },
       ],
       releaseCount: 1,

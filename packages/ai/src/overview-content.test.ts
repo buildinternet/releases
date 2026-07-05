@@ -21,7 +21,7 @@ const input: OverviewRequestInput = {
   totalAvailable: 1,
 };
 
-type OverviewObject = { body: string; citations: Array<{ url: string; quote: string }> };
+type OverviewObject = { body: string; citations: Array<{ url: string }> };
 
 /**
  * A mock `LanguageModel` (AI SDK v7 / LanguageModelV3) that returns the given
@@ -63,22 +63,20 @@ test("buildOverviewUserText labels each release with its citation source", () =>
   expect(txt).toContain("Added a streaming API.");
   expect(txt).toContain("Acme");
   // The structured-output path instructs the model to return citations as a typed
-  // field (a verbatim quote + source URL), not a fenced ```json block.
-  expect(txt).toContain("copied VERBATIM");
+  // field — a source-URL list (#1934), not a fenced ```json block.
+  expect(txt).toContain("source URLs listed above");
 });
 
 test("generateOverview returns body + resolved citations from the model output", async () => {
   const model = mockOverviewModel([
     {
       body: "Shipped a streaming API.",
-      citations: [{ url: "https://acme.dev/releases/v2", quote: "streaming API" }],
+      citations: [{ url: "https://acme.dev/releases/v2" }],
     },
   ]);
   const { body, citations } = await generateOverview(model as unknown as LanguageModel, input);
   expect(body).toBe("Shipped a streaming API.");
-  expect(citations).toHaveLength(1);
-  expect(citations[0]!.sourceUrl).toBe("https://acme.dev/releases/v2");
-  expect(body.slice(citations[0]!.startIndex, citations[0]!.endIndex)).toBe("streaming API");
+  expect(citations).toEqual([{ sourceUrl: "https://acme.dev/releases/v2", title: "v2.0" }]);
 });
 
 test("generateOverview degrades to no citations when the model omits the block", async () => {
@@ -103,7 +101,7 @@ test("generateOverview surfaces truncated=true and salvages the body on a length
     [
       {
         body: "Shipped a streaming API.",
-        citations: [{ url: "https://acme.dev/releases/v2", quote: "streaming API" }],
+        citations: [{ url: "https://acme.dev/releases/v2" }],
       },
     ],
     ["length"],
@@ -123,8 +121,8 @@ test("generateOverview salvages a complete body from genuinely truncated JSON, d
   // serialized, the second did not. parsePartialJson recovers the valid prefix.
   const truncatedJson =
     '{"body":"Shipped a streaming API and faster cold starts.",' +
-    '"citations":[{"url":"https://acme.dev/releases/v2","quote":"streaming API"},' +
-    '{"url":"https://acme.dev/rel'; // cut mid-URL: salvaged fragment lacks a quote → dropped
+    '"citations":[{"url":"https://acme.dev/releases/v2"},' +
+    '{"url":"https://acme.dev/rel'; // cut mid-URL: the second source is incomplete / unknown → dropped
   const model = new MockLanguageModelV3({
     doGenerate: async () => ({
       content: [{ type: "text", text: truncatedJson }],
@@ -143,9 +141,8 @@ test("generateOverview salvages a complete body from genuinely truncated JSON, d
   expect(truncated).toBe(true);
   expect(body).toBe("Shipped a streaming API and faster cold starts.");
   expect(body).not.toContain('"url"');
-  // Only the citation that fully serialized before the cut is resolved.
-  expect(citations).toHaveLength(1);
-  expect(citations[0]!.citedText).toBe("streaming API");
+  // Only the citation that fully serialized before the cut (a known source) is kept.
+  expect(citations).toEqual([{ sourceUrl: "https://acme.dev/releases/v2", title: "v2.0" }]);
 });
 
 test("generateOverview discards a body cut off mid-content (never reached the citations key)", async () => {

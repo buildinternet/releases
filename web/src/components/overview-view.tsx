@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import type { OverviewPageItem } from "@/lib/api";
 import { rehypeShikiPlugin } from "@/lib/shiki";
-import { applyCitationMarkers } from "@/lib/overview-citations";
+import { stripLeadingHeading } from "@/lib/overview-citations";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { markdownComponents } from "./markdown-components";
 import { OverviewSourceChips } from "./overview-source-chips";
@@ -58,30 +57,14 @@ export function OverviewView({ page, variant = "default" }: OverviewViewProps) {
   // Deterministic per-entity id: unique across the (at most one) org and one
   // product overview that can share a page, and stable between server render
   // and hydration (unlike `useId`, which isn't available in a server
-  // component). Feeds `applyCitationMarkers` so footnote ids don't collide, and
-  // doubles as the content div id for the clamp's `aria-controls`.
+  // component). Used as the content div id for the clamp's `aria-controls`.
   const contentId =
     "overview-" + [page.scope, page.orgSlug, page.productSlug].filter(Boolean).join("-");
 
-  const { content: renderedContent, rendered: renderedCitations } = applyCitationMarkers(
-    page.content,
-    page.citations,
-    contentId,
-  );
-
-  // Replace the default GFM-rendered footnotes <section> with our chip-based
-  // Sources block. Anchor IDs on the chips match the `user-content-fn-${label}`
-  // targets the in-body superscript markers expect, so click-to-jump still works.
-  const components = {
-    ...markdownComponents,
-    section: (props: any) => {
-      const className = props.className as string | undefined;
-      if (className?.split(/\s+/).includes("footnotes")) {
-        return <OverviewSourceChips items={renderedCitations} />;
-      }
-      return <section {...props} />;
-    },
-  };
+  // Citations render as a Sources chip footer below the body, not as inline
+  // superscripts (#1934) — so the body is just the stored markdown with a stray
+  // leading heading stripped (the org page already shows the org name).
+  const renderedContent = stripLeadingHeading(page.content);
 
   const updatedDate = new Date(page.updatedAt).toLocaleDateString("en-US", {
     month: "short",
@@ -109,11 +92,12 @@ export function OverviewView({ page, variant = "default" }: OverviewViewProps) {
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
             rehypePlugins={[rehypeShikiPlugin]}
-            components={components}
+            components={markdownComponents}
           >
             {renderedContent}
           </ReactMarkdown>
         </OverviewClamp>
+        <OverviewSourceChips citations={page.citations} />
       </div>
     </div>
   );

@@ -165,7 +165,7 @@ export function buildUserMessageContent(
  * Output token budget for the AI SDK structured-output path: the JSON object
  * carrying the body plus the citation list. The citation list scales with the
  * release count (up to `OVERVIEW_RELEASE_LIMIT` = 50), and each citation carries
- * a long changelog URL plus a verbatim quote (~40–90 tokens each), so a large
+ * a long changelog URL (~15–40 tokens each), so a large
  * org's full object can run 3K+ tokens. Sized to fit body + a complete list for
  * the biggest orgs. A too-low cap truncates the object (`finishReason: "length"`,
  * surfaced as `OverviewGeneration.truncated`); unlike the old fenced-block
@@ -214,9 +214,9 @@ export function buildOverviewUserText(input: OverviewRequestInput): string {
     );
   }
   lines.push(
-    `\nAlongside the body, return citations: for the key claims in your body, cite the exact source ` +
-      `URL listed above together with a short phrase copied VERBATIM from your body that the source ` +
-      `supports. Use no citations if none apply. Do not mention citations in the body itself.`,
+    `\nAlongside the body, return citations: the exact source URLs listed above that your overview ` +
+      `draws on. List each source once. Use no citations if none apply. Do not list any URLs in the ` +
+      `body itself.`,
   );
   return lines.join("\n");
 }
@@ -363,12 +363,12 @@ const OVERVIEW_OUTPUT_SCHEMA = z.object({
     .array(
       z.object({
         url: z.string().describe("One of the exact source URLs listed in the input."),
-        quote: z
-          .string()
-          .describe("A short phrase copied VERBATIM from your body that this source supports."),
       }),
     )
-    .describe("Citations mapping body phrases to their source URL. Empty array if none apply."),
+    .describe(
+      "The source URLs from the input that this overview draws on, each listed once. " +
+        "Empty array if none apply.",
+    ),
 });
 
 /**
@@ -376,8 +376,8 @@ const OVERVIEW_OUTPUT_SCHEMA = z.object({
  * — OpenRouter in prod, Anthropic Haiku fail-open — resolved by the worker). The
  * model returns a typed `{ body, citations }` object, so the citation list is a
  * first-class field, never a fenced JSON block scraped out of the body (#1928).
- * Resolves each `{ url, quote }` to a body-offset citation, lints the draft, and
- * on any violation runs ONE corrective re-generation (kept only if it is no worse
+ * Resolves each `{ url }` to a stored `{ sourceUrl, title }` citation, lints the
+ * draft, and on any violation runs ONE corrective re-generation (kept only if it is no worse
  * on the lint). Shared by `OverviewRegenWorkflow` and the eval harness so the eval
  * exercises the production path. `timeoutMs` bounds each model call (the worker
  * passes the overview lane's ceiling); omit to inherit the AI SDK default.
@@ -470,10 +470,7 @@ function coerceOverviewObject(raw: unknown): { body: string; citations: RawOverv
   const citations = Array.isArray(obj.citations)
     ? obj.citations.filter(
         (c): c is RawOverviewCitation =>
-          !!c &&
-          typeof c === "object" &&
-          typeof (c as { url?: unknown }).url === "string" &&
-          typeof (c as { quote?: unknown }).quote === "string",
+          !!c && typeof c === "object" && typeof (c as { url?: unknown }).url === "string",
       )
     : [];
   return { body, citations };

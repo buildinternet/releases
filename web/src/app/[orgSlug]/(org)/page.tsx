@@ -8,7 +8,12 @@ import { LatestReleasesTeaser } from "@/components/org/latest-releases-teaser";
 import { OrgActivityPanel } from "@/components/org/org-activity-panel";
 import { JsonLd } from "@/components/json-ld";
 
-import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
+import {
+  buildOverviewCitationJsonLd,
+  buildReleaseItemListJsonLd,
+  currentPeriod,
+  lastModifiedAt,
+} from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
 import { enableOnDemandIsr } from "@/lib/static-params";
 import { getOrg } from "../_lib/org-data";
@@ -94,6 +99,14 @@ export default async function OrgOverviewPage({
   const releaseListId = `${orgUrl}#releases`;
   const lastModified = lastModifiedAt(org);
   const releaseItems = releasesResult.data?.releases ?? [];
+  // Declare the overview's provenance as internal release-page citations (#1934).
+  const overviewCitationNode = org.overview
+    ? buildOverviewCitationJsonLd(org.overview.citations, {
+        orgName: org.name,
+        aboutId: orgNodeId,
+        dateModified: lastModified,
+      })
+    : null;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -121,6 +134,7 @@ export default async function OrgOverviewPage({
           { "@type": "ListItem", position: 2, name: org.name, item: orgUrl },
         ],
       },
+      ...(overviewCitationNode ? [overviewCitationNode] : []),
       ...(releaseItems.length > 0
         ? [
             buildReleaseItemListJsonLd(releaseItems, {
