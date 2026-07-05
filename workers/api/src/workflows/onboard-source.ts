@@ -37,8 +37,15 @@ export type OnboardSourceWorkflowEnv = InvalidationEnv &
     OPENAI_API_KEY?: { get(): Promise<string> };
     RELEASE_HUB?: DurableObjectNamespace;
     WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
-    /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
-    DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
+    // Deterministic-update dispatch bindings (#1946), forwarded into
+    // FetchOneEnv so summary-only crawl-enabled feeds can delegate to the
+    // update workflow.
+    DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
+    SOURCE_ACTOR?: DurableObjectNamespace;
+    STATUS_HUB?: DurableObjectNamespace;
+    MA_SESSIONS_DISABLED?: string;
+    MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
+    MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
     /**
      * Ingest-time feed-content enrichment (mirrors `FetchOneEnv` /
      * `PollAndFetchWorkflowEnv`): kill switch + tuning knobs, the signed-fetch

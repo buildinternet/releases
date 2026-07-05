@@ -114,7 +114,10 @@ function makeKv(): GraphqlCacheBinding & { _store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     _store: store,
-    async get(key, _type) {
+    // Single implementation covering both `get` overloads (the plain-string
+    // read was added to LatestCacheBinding for the update-dispatch gates).
+    // oxlint-disable-next-line no-explicit-any -- overload-compatible stub
+    async get(key: string, _type?: "json"): Promise<any> {
       const raw = store.get(key);
       return raw === undefined ? null : (JSON.parse(raw) as unknown);
     },

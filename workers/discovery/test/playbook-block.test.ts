@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { buildPlaybookMarkdown } from "../src/playbook-block.js";
+import { buildPlaybookMarkdown } from "@releases/adapters/playbook-block";
 
 describe("buildPlaybookMarkdown", () => {
   it("tiers header (ground truth) above demoted notes with an age cue", () => {

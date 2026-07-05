@@ -7,7 +7,7 @@ import { buildWorkerSystemPrompt } from "../../src/shared/worker-prompt.js";
 import {
   classifyProviderSessionError,
   isRetriesExhaustedIdle,
-} from "../../workers/discovery/src/session-error-classify.js";
+} from "@releases/lib/session-error-classify";
 
 /**
  * Unit tests for managed-discovery module internals.

@@ -8,7 +8,7 @@
  * `openRouterApiKey` — otherwise the lane fails open to Anthropic (unset).
  */
 import { describe, it, expect } from "bun:test";
-import { buildWorkerExtractDeps, type WorkerDepsEnv } from "../src/extract-deps-worker.js";
+import { buildWorkerExtractDeps, type WorkerDepsEnv } from "@releases/adapters/extract-deps-worker";
 
 function baseEnv(overrides: Partial<WorkerDepsEnv> = {}): WorkerDepsEnv {
   return {

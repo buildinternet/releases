@@ -9,7 +9,7 @@
  * depends on slug uniqueness.
  */
 import { describe, it, expect } from "bun:test";
-import { buildWorkerExtractDeps, type WorkerDepsEnv } from "../src/extract-deps-worker.js";
+import { buildWorkerExtractDeps, type WorkerDepsEnv } from "@releases/adapters/extract-deps-worker";
 
 type Call = { url: string; body: Record<string, unknown> };
 

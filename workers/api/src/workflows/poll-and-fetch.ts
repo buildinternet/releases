@@ -75,8 +75,15 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
      * module-level FANOUT_JITTER_WINDOW_MS default.
      */
     FANOUT_JITTER_WINDOW_MS?: string;
-    /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
-    DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
+    // Deterministic-update dispatch bindings (#1946), forwarded into
+    // FetchOneEnv so summary-only crawl-enabled feeds can delegate to the
+    // update workflow (LATEST_CACHE + FLAGS ride on InvalidationEnv above).
+    DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
+    SOURCE_ACTOR?: DurableObjectNamespace;
+    STATUS_HUB?: DurableObjectNamespace;
+    MA_SESSIONS_DISABLED?: string;
+    MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
+    MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
     WEB_BOT_AUTH_ENABLED?: string;
     WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
     /**

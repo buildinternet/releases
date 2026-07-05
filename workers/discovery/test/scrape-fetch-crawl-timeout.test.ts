@@ -103,7 +103,7 @@ describe("scrapeFetch crawl-timeout short-circuit", () => {
   });
 
   it("writes crawl_timeout (not no_change) when the crawl throws a timeout", async () => {
-    const { scrapeFetch } = await import("../src/scrape-fetch.js");
+    const { scrapeFetch } = await import("@releases/adapters/scrape-fetch");
     const result = await scrapeFetch(
       {
         cloudflareAccountId: "acct",

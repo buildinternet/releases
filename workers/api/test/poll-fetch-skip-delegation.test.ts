@@ -3,13 +3,13 @@
  *
  * When `fetchOne` is called with `opts.skipDelegation = true` on a
  * summary-only, crawl-enabled source, it must NOT invoke
- * `delegateScrapeToDiscovery` — even if `DISCOVERY_WORKER` is present and
- * `shouldDelegateToCrawl` would normally return true. Instead it should
+ * `delegateScrapeToUpdateWorkflow` — even if the workflow binding is present
+ * and `shouldDelegateToCrawl` would normally return true. Instead it should
  * proceed with the inline parse-and-insert path.
  *
- * This simulates the fix for MA session self-collision: the API route sets
+ * This simulates the fix for update-run self-collision: the API route sets
  * `skipDelegation` when it detects the `X-Releases-MA-Session` request header,
- * preventing the session from re-entering its own session-start path.
+ * preventing a run from re-entering its own dispatch path.
  */
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
@@ -100,30 +100,25 @@ async function seedScrapeSource(
   });
 }
 
-// Fake DISCOVERY_WORKER binding — records whether startManagedFetchSession was called.
-function makeDiscoveryWorker() {
+// Fake DETERMINISTIC_UPDATE_WORKFLOW binding — records created instances
+// (dispatch replaced the discovery RPC in #1946).
+function makeUpdateWorkflow() {
   const calls: unknown[] = [];
   return {
     calls,
-    startManagedFetchSession: async (args: unknown) => {
-      calls.push(args);
-      return { ok: true };
+    create: async (opts: { id: string; params: unknown }) => {
+      calls.push(opts.params);
+      return {} as never;
     },
   };
 }
 
-function makeEnv(
-  discoveryWorker?: ReturnType<
-    typeof makeDiscoveryWorker
-  >["startManagedFetchSession"] extends undefined
-    ? undefined
-    : ReturnType<typeof makeDiscoveryWorker>,
-): unknown {
+function makeEnv(workflow?: ReturnType<typeof makeUpdateWorkflow>): unknown {
   return {
     GITHUB_TOKEN: undefined,
     RELEASES_INDEX: undefined,
     CHANGELOG_CHUNKS_INDEX: undefined,
-    DISCOVERY_WORKER: discoveryWorker ?? undefined,
+    DETERMINISTIC_UPDATE_WORKFLOW: workflow ?? undefined,
   };
 }
 
@@ -196,11 +191,11 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
     });
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
 
-    const worker = makeDiscoveryWorker();
+    const worker = makeUpdateWorkflow();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await fetchOne(db as any, src, makeEnv(worker) as any);
 
-    // Delegation should have been attempted — DISCOVERY_WORKER.startManagedFetchSession called
+    // Delegation should have been attempted — a workflow instance created
     expect(worker.calls.length).toBe(1);
     // Delegation surfaces a dedicated "delegated" discriminant (#1056 / #1062).
     expect(result.status).toBe("delegated");
@@ -219,13 +214,13 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
     });
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
 
-    const worker = makeDiscoveryWorker();
+    const worker = makeUpdateWorkflow();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await fetchOne(db as any, src, makeEnv(worker) as any, {
       skipDelegation: true,
     });
 
-    // DISCOVERY_WORKER must NOT have been called
+    // The workflow must NOT have been created
     expect(worker.calls.length).toBe(0);
     // Inline path runs: releases are inserted
     expect(result.status).toBe("success");
@@ -234,7 +229,7 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
     expect(rows.length).toBe(2);
   });
 
-  it("skips delegation when skipDelegation=true even if DISCOVERY_WORKER is present", async () => {
+  it("skips delegation when skipDelegation=true even if the workflow binding is present", async () => {
     // Belt-and-suspenders: same as above but we also assert that the worker
     // binding itself is not consulted at all.
     const db = mkDb();
@@ -248,7 +243,7 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
 
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
 
-    const worker = makeDiscoveryWorker();
+    const worker = makeUpdateWorkflow();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await fetchOne(db as any, src, makeEnv(worker) as any, { skipDelegation: true });
 
@@ -290,7 +285,7 @@ describe("fetchOne — crawl novelty gate", () => {
     await Promise.all(SUMMARY_ONLY_ITEMS.map((item) => seedRelease(db, item.url!)));
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
 
-    const worker = makeDiscoveryWorker();
+    const worker = makeUpdateWorkflow();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await fetchOne(db as any, src, makeEnv(worker) as any);
 
@@ -320,7 +315,7 @@ describe("fetchOne — crawl novelty gate", () => {
     await seedRelease(db, SUMMARY_ONLY_ITEMS[1]!.url!);
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
 
-    const worker = makeDiscoveryWorker();
+    const worker = makeUpdateWorkflow();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await fetchOne(db as any, src, makeEnv(worker) as any);
 

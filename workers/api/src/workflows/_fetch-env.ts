@@ -12,7 +12,7 @@
  */
 import { getSecret } from "@releases/lib/secrets";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
-import type { FetchOneEnv, DiscoveryWorkerRpc } from "../cron/poll-fetch.js";
+import type { FetchOneEnv } from "../cron/poll-fetch.js";
 import type { AnthropicEnv } from "../lib/anthropic.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 
@@ -32,7 +32,16 @@ export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv {
   RELEASE_HUB?: DurableObjectNamespace;
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   DB?: D1Database;
-  DISCOVERY_WORKER?: DiscoveryWorkerRpc;
+  // Deterministic-update dispatch bindings (#1946): summary-only crawl-enabled
+  // feeds delegate through startDeterministicUpdate, which needs the workflow
+  // binding, the per-source lock DO, StatusHub, and the spend-cap/kill-switch
+  // levers (LATEST_CACHE + FLAGS ride on InvalidationEnv above).
+  DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
+  SOURCE_ACTOR?: DurableObjectNamespace;
+  STATUS_HUB?: DurableObjectNamespace;
+  MA_SESSIONS_DISABLED?: string;
+  MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
+  MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
   WEB_BOT_AUTH_ENABLED?: string;
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
   MEDIA?: R2Bucket;
@@ -94,7 +103,13 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     RELEASE_HUB: env.RELEASE_HUB,
     WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
     DB: env.DB,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+    DETERMINISTIC_UPDATE_WORKFLOW: env.DETERMINISTIC_UPDATE_WORKFLOW,
+    SOURCE_ACTOR: env.SOURCE_ACTOR,
+    STATUS_HUB: env.STATUS_HUB,
+    LATEST_CACHE: env.LATEST_CACHE,
+    MA_SESSIONS_DISABLED: env.MA_SESSIONS_DISABLED,
+    MA_DAILY_SPEND_CAP_ORG_CENTS: env.MA_DAILY_SPEND_CAP_ORG_CENTS,
+    MA_DAILY_SPEND_CAP_GLOBAL_CENTS: env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS,
     WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
     WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
     MEDIA: env.MEDIA,

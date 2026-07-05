@@ -18,7 +18,18 @@
  * Issue #1055. Part of #1051.
  */
 
-import { logEvent } from "@releases/lib/log-event.js";
+import { logEvent } from "@releases/lib/log-event";
+
+/**
+ * Structural subset of a Cloudflare KVNamespace used for the spend counters.
+ * Declared locally (mirroring `rate-limit-tiers.ts`) so this package doesn't
+ * depend on the Workers ambient types; both workers' `LATEST_CACHE` binding
+ * satisfies it.
+ */
+export interface SpendCapKv {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+}
 
 // 26 hours — slightly longer than a calendar day so a counter written at
 // 23:59 UTC on day N doesn't expire before midnight UTC on day N+1.
@@ -60,7 +71,7 @@ function parseNonNegativeInt(raw: string | null | undefined, fallback: number): 
  * precision.
  */
 export async function incrementKvSpend(
-  kv: KVNamespace,
+  kv: SpendCapKv,
   key: string,
   cents: number,
   ttlSeconds: number,
@@ -80,7 +91,7 @@ export async function incrementKvSpend(
  * so a KV blip doesn't halt all managed-agent sessions.
  */
 export async function checkSpendCap(
-  kv: KVNamespace,
+  kv: SpendCapKv,
   orgId: string | undefined,
   env: { MA_DAILY_SPEND_CAP_ORG_CENTS?: string; MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string },
 ): Promise<SpendCapResult> {
@@ -114,7 +125,7 @@ export async function checkSpendCap(
     return { blocked: false };
   } catch (err) {
     logEvent("warn", {
-      component: "discovery",
+      component: "spend-cap",
       event: "spend-cap-check-failed",
       orgId,
       err: err instanceof Error ? err : new Error(String(err)),
@@ -131,7 +142,7 @@ export async function checkSpendCap(
  * Wrapped in try/catch so a KV failure never propagates out of the finally block.
  */
 export async function recordSessionSpend(
-  kv: KVNamespace,
+  kv: SpendCapKv,
   estimatedUsd: number,
   orgId: string | undefined,
 ): Promise<void> {
@@ -150,7 +161,7 @@ export async function recordSessionSpend(
         const newRaw = await kv.get(globalKey);
         const newCents = parseNonNegativeInt(newRaw, cents);
         logEvent("info", {
-          component: "discovery",
+          component: "spend-cap",
           event: "spend-counter-incremented",
           scope: "global",
           key: globalKey,
@@ -160,7 +171,7 @@ export async function recordSessionSpend(
       } catch {
         // Logging the new value is best-effort; the write already succeeded.
         logEvent("info", {
-          component: "discovery",
+          component: "spend-cap",
           event: "spend-counter-incremented",
           scope: "global",
           key: globalKey,
@@ -178,7 +189,7 @@ export async function recordSessionSpend(
           const newRaw = await kv.get(orgKey);
           const newCents = parseNonNegativeInt(newRaw, cents);
           logEvent("info", {
-            component: "discovery",
+            component: "spend-cap",
             event: "spend-counter-incremented",
             scope: "org",
             key: orgKey,
@@ -187,7 +198,7 @@ export async function recordSessionSpend(
           });
         } catch {
           logEvent("info", {
-            component: "discovery",
+            component: "spend-cap",
             event: "spend-counter-incremented",
             scope: "org",
             key: orgKey,
@@ -202,7 +213,7 @@ export async function recordSessionSpend(
     await Promise.all(writes);
   } catch (err) {
     logEvent("warn", {
-      component: "discovery",
+      component: "spend-cap",
       event: "spend-counter-write-failed",
       orgId,
       addedCents: cents,

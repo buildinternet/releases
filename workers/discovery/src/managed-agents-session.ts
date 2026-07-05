@@ -24,8 +24,8 @@ import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js
 import { buildOnboardTaskMessage } from "@releases/shared/onboard-task-message.js";
 import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
-import { scrapeFetch } from "./scrape-fetch.js";
-import { runScrapeFetchLoop, scrapeFetchErrorCategory } from "./deterministic-update.js";
+import { scrapeFetch } from "@releases/adapters/scrape-fetch";
+import { scrapeFetchErrorCategory } from "@releases/adapters/deterministic-update";
 import { discoveryIdentityHeaders } from "./identity.js";
 import {
   STAGING_KEY_HEADER,
@@ -36,8 +36,7 @@ import {
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { signingFetchFromRawKey } from "@releases/core-internal/web-bot-auth-sign";
-import { recordSessionSpend } from "./spend-cap.js";
-import { releaseSourceLocks } from "./source-lock.js";
+import { recordSessionSpend } from "@releases/lib/spend-cap";
 import { FLAGS, flag } from "@releases/lib/flags";
 
 /**
@@ -80,10 +79,9 @@ function delay(ms: number): Promise<void> {
 
 import {
   classifyProviderSessionError,
-  classifyUsFatal,
   isRetriesExhaustedIdle,
   type SessionErrorClassification,
-} from "./session-error-classify.js";
+} from "@releases/lib/session-error-classify";
 
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
@@ -98,10 +96,10 @@ export interface SessionParams {
   agentId: string;
   agentVersion?: number;
   environmentId: string;
-  mode: "onboard" | "update";
-  /** For update mode: source IDs (src_...) or slugs. IDs preferred. */
-  sourceIdentifiers?: string[];
-  /** Organization ID (org_...) for playbook lookup in update mode. */
+  // Onboarding is the only session mode left — routine updates run as the API
+  // worker's DeterministicUpdateWorkflow (#1946).
+  mode: "onboard";
+  /** Organization ID (org_...) for playbook lookup. */
   orgId?: string;
   /** Correlation ID from the originating client for end-to-end tracing. */
   correlationId?: string;
@@ -116,15 +114,6 @@ export interface SessionParams {
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
-
-/**
- * Wall-clock budget for the deterministic update loop (#1878). Kept under
- * SESSION_TIMEOUT_MS with headroom so an in-flight scrapeFetch always has time
- * to finish; remaining sources past the budget are reported as skipped and
- * picked up on the next sweep. Update batches are small (one org's due sources),
- * so this is a safety backstop rather than a routinely-hit limit.
- */
-const DETERMINISTIC_UPDATE_BUDGET_MS = 12 * 60 * 1000;
 
 export class ManagedAgentsSession extends DurableObject<Env> {
   /** Cached staging access key — resolved lazily, reused for every outbound api call. */
@@ -373,20 +362,19 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   private async runSession(params: SessionParams): Promise<void> {
     const { sessionId, environmentId, mode } = params;
 
-    // Agent selection (onboard only — `update` runs the deterministic scrapeFetch
-    // loop and returns before any Managed-Agents session is created):
-    //   - onboard + ANTHROPIC_COORDINATOR_AGENT_ID → multi-agent coordinator
-    //     (Sonnet) that delegates fetches to the worker via the
-    //     agent_toolset_20260401 tool. Subordinate-thread custom-tool calls
-    //     are cross-posted to the primary stream with session_thread_id;
-    //     handleCustomToolUse + sendResult work unchanged because the server
-    //     routes the reply by custom_tool_use_id.
+    // Agent selection:
+    //   - ANTHROPIC_COORDINATOR_AGENT_ID → multi-agent coordinator (Sonnet)
+    //     that delegates fetches to the worker via the agent_toolset_20260401
+    //     tool. Subordinate-thread custom-tool calls are cross-posted to the
+    //     primary stream with session_thread_id; handleCustomToolUse +
+    //     sendResult work unchanged because the server routes the reply by
+    //     custom_tool_use_id.
     //   - otherwise → single-agent discovery (Sonnet, current default).
     const coordinatorAgentId = this.env.ANTHROPIC_COORDINATOR_AGENT_ID;
     let agentRole: "discovery" | "coordinator";
     let agentId: string;
     let agentVersion: number | undefined;
-    if (mode === "onboard" && coordinatorAgentId) {
+    if (coordinatorAgentId) {
       agentRole = "coordinator";
       agentId = coordinatorAgentId;
       agentVersion = undefined;
@@ -426,9 +414,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         (await getSecretWithFallback(this.env.RELEASES_API_KEY, this.env.RELEASED_API_KEY)) ??
         undefined;
 
-      // Resolve Cloudflare scrape secrets up front so `update` can fail closed
-      // when they are absent (local dev / misconfig) instead of falling through
-      // into the onboard Managed-Agents path.
+      // Resolve Cloudflare scrape secrets up front — the onboard agent's
+      // manage_source(fetch) custom tool needs them to build scrapeHandler.
       const [cfAccountId, cfApiToken] = await Promise.all([
         getSecret(this.env.CLOUDFLARE_ACCOUNT_ID)
           .catch(() => null)
@@ -438,12 +425,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           .then((v) => v ?? ""),
       ]);
 
-      let statusHubAgentLabel: "sonnet" | "coordinator" | "deterministic";
-      if (mode === "update") {
-        statusHubAgentLabel = "deterministic";
-      } else {
-        statusHubAgentLabel = agentRole === "coordinator" ? "coordinator" : "sonnet";
-      }
+      const statusHubAgentLabel: "sonnet" | "coordinator" =
+        agentRole === "coordinator" ? "coordinator" : "sonnet";
       await this.notifyStatusHub(
         {
           type: "session:start",
@@ -453,9 +436,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           agent: statusHubAgentLabel,
           ...(params.orgId ? { orgId: params.orgId } : {}),
           ...(params.correlationId ? { correlationId: params.correlationId } : {}),
-          ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
-            ? { activeSources: params.sourceIdentifiers }
-            : {}),
         },
         releasesApiKey,
       );
@@ -535,24 +515,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               );
             }
           : undefined;
-
-      // ── Deterministic update path (#1878) ─────────────────────────────────
-      // Routine `update` runs are a direct scrapeFetch loop — no Managed-Agents
-      // session. The outer `finally` still releases per-source locks; extraction
-      // sub-calls self-log ai_usage so there is no session-level cost to record.
-      if (mode === "update") {
-        if (!scrapeHandler) {
-          await this.fail(
-            sessionId,
-            params.company,
-            "scrape secrets not configured",
-            releasesApiKey,
-          );
-          return;
-        }
-        await this.runDeterministicUpdate(params, sessionId, scrapeHandler, releasesApiKey);
-        return;
-      }
 
       // The managed-agents session client uses `events.stream(...)` — a
       // long-lived `GET /v1/sessions/<id>/events/stream` returning
@@ -1111,15 +1073,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           /* non-critical */
         }
       }
-      // Release per-source dedup locks so the next run of the same source is
-      // not blocked (#1814). The SourceActor DO does the conditional release
-      // atomically — it only clears a lease still owned by THIS sessionId, so a
-      // lease that expired mid-session and was re-claimed by a newer owner is
-      // left untouched. Best-effort (errors are swallowed inside the helper);
-      // the 15-min lease is the backstop if this never lands.
-      if (params.sourceIdentifiers && params.sourceIdentifiers.length > 0) {
-        await releaseSourceLocks(this.env, params.sourceIdentifiers, sessionId);
-      }
       // Persist session cost to the KV spend counters (global + per-org).
       // Only written when the session incurred non-zero cost; cancelled/zero-cost
       // paths (e.g. killed before the first LLM call) don't pollute the counter.
@@ -1138,70 +1091,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         }
       }
     }
-  }
-
-  /**
-   * Deterministic `update` path (#1878): fetch each due source via scrapeFetch
-   * directly, with no Managed-Agents session. Mirrors the agent path's terminal
-   * semantics — a run where every processed source failed is reported via
-   * `fail()` (so downstream error handling/alerting is unchanged); otherwise it
-   * writes a result summary and marks the session complete. Source-lock release
-   * happens in the caller's `finally`; this method must not throw.
-   */
-  private async runDeterministicUpdate(
-    params: SessionParams,
-    sessionId: string,
-    scrapeFetchSource: (sourceIdentifier: string) => Promise<string>,
-    releasesApiKey: string | undefined,
-  ): Promise<void> {
-    const sources = params.sourceIdentifiers ?? [];
-    const summary = await runScrapeFetchLoop(sources, scrapeFetchSource, {
-      budgetMs: DETERMINISTIC_UPDATE_BUDGET_MS,
-    });
-
-    // Shared count fields for both the (log-only) event and the client-facing
-    // result record below — same numbers, different audiences.
-    const counts = {
-      sourcesProcessed: summary.sourcesProcessed,
-      sourcesSkipped: summary.sourcesSkipped,
-      releasesFound: summary.totalReleasesFound,
-      releasesInserted: summary.totalReleasesInserted,
-      errorCount: summary.errorCount,
-    };
-
-    logEvent("info", {
-      component: "discovery",
-      event: "deterministic-update-complete",
-      sessionId,
-      company: params.company,
-      ...(params.orgId ? { orgId: params.orgId } : {}),
-      ...counts,
-    });
-
-    // Every processed source failed (and at least one ran) → terminal failure,
-    // matching the agent path's "all tool calls failed" branch.
-    if (summary.sourcesProcessed > 0 && summary.errorCount >= summary.sourcesProcessed) {
-      const firstError = summary.results.find((r) => !r.ok);
-      const detail = firstError?.error
-        ? `All ${summary.errorCount} source fetch(es) failed: ${truncate(firstError.error, 120)}`
-        : `All ${summary.errorCount} source fetch(es) failed`;
-      const classification = classifyUsFatal(firstError?.errorCategory, detail);
-      await this.fail(sessionId, params.company, detail, releasesApiKey, undefined, classification);
-      return;
-    }
-
-    const result: Record<string, unknown> = { mode: "update-deterministic", ...counts };
-    await this.ctx.storage.put("result", result);
-    await this.ctx.storage.put("status", "complete");
-    await this.notifyStatusHub(
-      {
-        type: "session:complete",
-        sessionId,
-        company: params.company,
-        result,
-      },
-      releasesApiKey,
-    );
   }
 
   private async fail(

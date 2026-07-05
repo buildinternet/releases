@@ -23,7 +23,9 @@
     "./rate-limit-tiers": "./src/rate-limit-tiers.ts",
     "./releases-error": "./src/releases-error.ts",
     "./secrets": "./src/secrets.ts",
-    "./source-edit": "./src/source-edit.ts"
+    "./session-error-classify": "./src/session-error-classify.ts",
+    "./source-edit": "./src/source-edit.ts",
+    "./spend-cap": "./src/spend-cap.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",

@@ -1,23 +1,14 @@
-import type {
-  Env,
-  OnboardRequest,
-  OnboardResponse,
-  StatusResponse,
-  UpdateRequest,
-} from "./types.js";
+import type { Env, OnboardRequest, OnboardResponse, StatusResponse } from "./types.js";
 import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { errorResponse } from "./error-response.js";
-import { checkSpendCap } from "./spend-cap.js";
-import { tryAcquireSourceLocks, releaseSourceLocks } from "./source-lock.js";
+import { checkSpendCap } from "@releases/lib/spend-cap";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { FLAGS, flag } from "@releases/lib/flags";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
-
-const MAX_UPDATE_SOURCES = 20;
 
 /**
  * Check whether MA session creation is globally disabled.
@@ -43,28 +34,6 @@ async function maSessionsDisabled(
   if (await flag(env.FLAGS, env.MA_SESSIONS_DISABLED, FLAGS.maSessionsDisabled))
     return { disabled: true, via: "env" };
   return { disabled: false };
-}
-
-/**
- * Shared shape validation for the two entrypoints that launch an update-mode
- * MA session: the `/update` HTTP route (request body comes in as `unknown`)
- * and the typed `startManagedFetchSession` RPC. Returns an error message
- * string when something is wrong, or `null` when the inputs are valid. Keeps
- * the source-cap error text identical across both surfaces so a change to
- * `MAX_UPDATE_SOURCES` doesn't accidentally drift one wording and not the
- * other.
- */
-function validateUpdateParams(company: unknown, sourceIdentifiers: unknown): string | null {
-  if (!company || typeof company !== "string") {
-    return "Missing required field: company";
-  }
-  if (!Array.isArray(sourceIdentifiers) || sourceIdentifiers.length === 0) {
-    return "sourceIdentifiers must be a non-empty array";
-  }
-  if (sourceIdentifiers.length > MAX_UPDATE_SOURCES) {
-    return `Too many sources (${sourceIdentifiers.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`;
-  }
-  return null;
 }
 
 interface AnthropicConfig {
@@ -116,9 +85,6 @@ async function startManagedSession(
     agentVersion?: number;
     environmentId: string;
   }) => Record<string, unknown>,
-  // #1814: callers that hold a per-source lease pass the sessionId they reserved
-  // it under (acquired before this mint) so the lease owner matches the session.
-  providedSessionId?: string,
 ): Promise<{ sessionId: string } | Response> {
   const anthropicKey = await getSecret(env.ANTHROPIC_API_KEY);
   if (!anthropicKey) {
@@ -129,7 +95,7 @@ async function startManagedSession(
   if (config instanceof Response) return config;
   const { agentId, agentVersion, environmentId } = config;
 
-  const sessionId = providedSessionId ?? `ma-${crypto.randomUUID()}`;
+  const sessionId = `ma-${crypto.randomUUID()}`;
   const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
   const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
 
@@ -145,164 +111,17 @@ async function startManagedSession(
   return { sessionId };
 }
 
-export interface StartManagedFetchSessionParams {
-  /**
-   * Sources to hand to the MA worker session. Currently always single-source
-   * from the poll-fetch delegation path. Multi-source batching (one MA session
-   * per org with several sourceIdentifiers) is left for a future change once
-   * the caller learns to group by org.
-   */
-  sourceIds: string[];
-  /** Human-readable org name. Used as the MA session `company` key for dedup. */
-  company: string;
-  /** Optional org ID, mirrors the `/update` HTTP shape. */
-  orgId?: string;
-  /** Optional trace tag — surfaces in the Anthropic MA dashboard. */
-  correlationId?: string;
-}
-
-export type StartManagedFetchSessionResult =
-  | { ok: true; sessionId: string }
-  | { ok: false; error: string };
-
 /**
- * Named entrypoint for typed RPC calls from the API worker.
+ * Named entrypoint for the API worker's service binding.
  *
- * Exposes `startManagedFetchSession` so the poll-and-fetch workflow can hand
- * summary-only feeds with `crawlEnabled: true` off to the same MA worker
- * pipeline used by `/update`. The MA session writes its own `fetch_log` rows
- * and source-counter updates when it completes — callers must not double-bump
- * those counters.
- *
- * Binding declaration in the API worker's wrangler.jsonc must include
- * `"entrypoint": "DiscoveryEntrypoint"` on the service binding object.
+ * Update-mode sessions are gone (#1946 — routine updates run as the API
+ * worker's DeterministicUpdateWorkflow), so this class is just the HTTP shim:
+ * a service binding with `entrypoint: "DiscoveryEntrypoint"` only exposes this
+ * class's members, and the default-export `fetch` isn't reachable through it.
  */
 export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
-  // A service binding with `entrypoint: "DiscoveryEntrypoint"` only exposes
-  // this class's named methods, so the default-export `fetch` isn't reachable
-  // through the binding. This shim makes HTTP routing work alongside RPC.
   async fetch(request: Request): Promise<Response> {
     return httpHandler.fetch(request, this.env);
-  }
-
-  /**
-   * Kick off a deterministic update session for one or more sources and return
-   * immediately with the new sessionId. The session runs async on the discovery
-   * Durable Object; scrapeFetch writes `fetch_log` rows + source counters on
-   * completion.
-   *
-   * Concurrent sessions for the same source are serialized by the per-source
-   * SourceActor lease acquired below (#1814) — the atomic mutex that replaced
-   * the org-level StatusHub dedup window (#1816).
-   */
-  async startManagedFetchSession(
-    params: StartManagedFetchSessionParams,
-  ): Promise<StartManagedFetchSessionResult> {
-    const killSwitch = await maSessionsDisabled(this.env);
-    if (killSwitch.disabled) {
-      logEvent("warn", {
-        component: "discovery",
-        event: "ma-session-blocked-kill-switch",
-        entry: "startManagedFetchSession",
-        via: killSwitch.via,
-        company: params.company,
-        sourceIds: params.sourceIds,
-      });
-      return { ok: false, error: "Managed-agent sessions temporarily disabled (kill switch)" };
-    }
-    const validationError = validateUpdateParams(params.company, params.sourceIds);
-    if (validationError) {
-      return { ok: false, error: validationError };
-    }
-
-    // Daily spend cap: reject if global or per-org spend already hit the
-    // ceiling. Checked before the per-source lock because spend is the
-    // wider-reaching gate — a cap hit blocks ALL sources, so failing fast
-    // here saves a KV round-trip.
-    if (this.env.LATEST_CACHE) {
-      const spendCheck = await checkSpendCap(this.env.LATEST_CACHE, params.orgId, this.env);
-      if (spendCheck.blocked) {
-        logEvent("warn", {
-          component: "discovery",
-          event: "ma-session-blocked-spend-cap",
-          entry: "startManagedFetchSession",
-          scope: spendCheck.scope,
-          currentCents: spendCheck.currentCents,
-          capCents: spendCheck.capCents,
-          orgId: params.orgId,
-          company: params.company,
-        });
-        return {
-          ok: false,
-          error: `Daily ${spendCheck.scope} spend cap reached ($${(spendCheck.currentCents / 100).toFixed(2)} of $${(spendCheck.capCents / 100).toFixed(2)})`,
-        };
-      }
-    }
-
-    // Per-source dedup lock (#1814): atomically claim the lease for every source
-    // BEFORE minting, so a losing race never starts a duplicate session. Backed
-    // by the SourceActor DO (replaced the KV ma:active:src lock). The sessionId is
-    // minted here and threaded into the session so the lease owner matches.
-    const sessionId = `ma-${crypto.randomUUID()}`;
-    {
-      const lockedSources = await tryAcquireSourceLocks(this.env, params.sourceIds, sessionId);
-      if (lockedSources.length > 0) {
-        const detail = lockedSources
-          .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
-          .join("; ");
-        logEvent("info", {
-          component: "discovery",
-          event: "ma-session-blocked-source-dedup",
-          entry: "startManagedFetchSession",
-          company: params.company,
-          lockedSources: lockedSources.map((s) => s.id),
-        });
-        return { ok: false, error: detail };
-      }
-    }
-
-    const result = await startManagedSession(
-      this.env,
-      "Failed to start managed fetch session",
-      (ctx) => ({
-        company: params.company,
-        mode: "update" as const,
-        sourceIdentifiers: params.sourceIds,
-        orgId: params.orgId,
-        correlationId: params.correlationId,
-        ...ctx,
-      }),
-      sessionId,
-    );
-    if (result instanceof Response) {
-      // Mint failed — release the leases we took so the source isn't wedged
-      // until the 15-min lease expires.
-      await releaseSourceLocks(this.env, params.sourceIds, sessionId);
-      // The mint-failure Response now carries the nested error envelope
-      // `{ error: { code, type, message } }` (see ./error-response), so read the
-      // human string from `.error.message`.
-      let errBody: { error?: { message?: string } } = {};
-      try {
-        errBody = (await result.clone().json()) as typeof errBody;
-      } catch {
-        /* ignore parse failure */
-      }
-      return {
-        ok: false,
-        error: errBody.error?.message ?? `Discovery returned ${result.status}`,
-      };
-    }
-
-    logEvent("info", {
-      component: "discovery",
-      event: "managed-fetch-session-started",
-      sessionId: result.sessionId,
-      sourceIds: params.sourceIds,
-      company: params.company,
-      correlationId: params.correlationId,
-    });
-
-    return { ok: true, sessionId: result.sessionId };
   }
 }
 
@@ -486,105 +305,6 @@ const httpHandler = {
 
       const response: OnboardResponse = { sessionId: result.sessionId, status: "running" };
       return jsonResponse(response, 202);
-    }
-
-    if (request.method === "POST" && url.pathname === "/update") {
-      const killSwitch = await maSessionsDisabled(env);
-      if (killSwitch.disabled) {
-        logEvent("warn", {
-          component: "discovery",
-          event: "ma-session-blocked-kill-switch",
-          entry: "/update",
-          via: killSwitch.via,
-        });
-        return errorResponse("Managed-agent sessions temporarily disabled (kill switch)", 503);
-      }
-      let body: UpdateRequest;
-      try {
-        body = await request.json();
-      } catch {
-        return errorResponse("Invalid JSON body", 400, { code: "invalid_json" });
-      }
-
-      // Accept sourceIdentifiers (preferred) or legacy sourceSlugs
-      const identifiers = body.sourceIdentifiers ?? body.sourceSlugs;
-      const validationError = validateUpdateParams(body.company, identifiers);
-      if (validationError) {
-        return errorResponse(validationError, 400);
-      }
-
-      // Daily spend cap: reject if global or per-org spend already hit the
-      // ceiling. Checked before the per-source lock — cap hits block all
-      // sources, so failing fast here saves a KV round-trip.
-      if (env.LATEST_CACHE) {
-        const spendCheck = await checkSpendCap(env.LATEST_CACHE, body.orgId, env);
-        if (spendCheck.blocked) {
-          logEvent("warn", {
-            component: "discovery",
-            event: "ma-session-blocked-spend-cap",
-            entry: "/update",
-            scope: spendCheck.scope,
-            currentCents: spendCheck.currentCents,
-            capCents: spendCheck.capCents,
-            orgId: body.orgId,
-            company: body.company,
-          });
-          return errorResponse(
-            `Daily ${spendCheck.scope} spend cap reached ($${(spendCheck.currentCents / 100).toFixed(2)} of $${(spendCheck.capCents / 100).toFixed(2)})`,
-            429,
-          );
-        }
-      }
-
-      // Per-source dedup lock (#1814): atomically claim the lease for every
-      // source BEFORE minting so a losing race never starts a duplicate session.
-      // Backed by the SourceActor DO (replaced the KV ma:active:src lock). The
-      // sessionId is minted here and threaded in so the lease owner matches.
-      const sessionId = `ma-${crypto.randomUUID()}`;
-      if (identifiers) {
-        const lockedSources = await tryAcquireSourceLocks(env, identifiers as string[], sessionId);
-        if (lockedSources.length > 0) {
-          const detail = lockedSources
-            .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
-            .join("; ");
-          logEvent("info", {
-            component: "discovery",
-            event: "ma-session-blocked-source-dedup",
-            entry: "/update",
-            company: body.company,
-            lockedSources: lockedSources.map((s) => s.id),
-          });
-          return errorResponse(detail, 409, {
-            headers: { "Retry-After": "900" },
-          });
-        }
-      }
-
-      const result = await startManagedSession(
-        env,
-        "Failed to start update session",
-        (ctx) => ({
-          company: body.company,
-          mode: "update",
-          sourceIdentifiers: identifiers,
-          orgId: body.orgId,
-          correlationId: body.correlationId,
-          ...ctx,
-        }),
-        sessionId,
-      );
-      if (result instanceof Response) {
-        // Mint failed — release the leases we took so the source isn't wedged.
-        if (identifiers) {
-          await releaseSourceLocks(env, identifiers as string[], sessionId);
-        }
-        return result;
-      }
-
-      return jsonResponse(
-        { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
-        202,
-      );
     }
 
     const statusMatch = url.pathname.match(/^\/onboard\/([\w-]+)\/status$/);

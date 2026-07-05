@@ -257,6 +257,13 @@
       "service": "releases-discovery",
       "entrypoint": "DiscoveryEntrypoint",
     },
+    {
+      // Self binding (#1946): the deterministic-update workflow's scrapeFetch
+      // persists via this worker's own HTTP routes; the self hop preserves the
+      // per-call invocation semantics of the retired discovery->api boundary.
+      "binding": "API_SELF",
+      "service": "releases-api",
+    },
   ],
   "r2_buckets": [
     {
@@ -392,6 +399,14 @@
       "name": "media-backfill",
       "binding": "MEDIA_BACKFILL_WORKFLOW",
       "class_name": "MediaBackfillWorkflow",
+    },
+    {
+      // Deterministic scrape/agent update runs (#1946): one instance per
+      // OrgActor drain / POST /v1/workflows/update / crawl-feed delegation.
+      // Replaced the discovery worker's /update session path.
+      "name": "deterministic-update",
+      "binding": "DETERMINISTIC_UPDATE_WORKFLOW",
+      "class_name": "DeterministicUpdateWorkflow",
     },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
@@ -847,6 +862,11 @@
           "binding": "MEDIA_BACKFILL_WORKFLOW",
           "class_name": "MediaBackfillWorkflow",
         },
+        {
+          "name": "deterministic-update-staging",
+          "binding": "DETERMINISTIC_UPDATE_WORKFLOW",
+          "class_name": "DeterministicUpdateWorkflow",
+        },
       ],
       // Empty cron list. Without this override, Wrangler inherits the
       // top-level schedule and fires scheduled events hourly against staging
@@ -859,6 +879,12 @@
           "binding": "DISCOVERY_WORKER",
           "service": "releases-discovery-staging",
           "entrypoint": "DiscoveryEntrypoint",
+        },
+        {
+          // Self binding (#1946) — staging self-calls carry the staging access
+          // key (attached by the workflow), so they clear the gate.
+          "binding": "API_SELF",
+          "service": "releases-api-staging",
         },
       ],
       "secrets_store_secrets": [

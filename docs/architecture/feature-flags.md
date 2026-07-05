@@ -47,11 +47,11 @@ the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `fa
 | `api-tokens-disabled`                | `false` | api, mcp       | Kill switch for scoped `relk_` API-token auth. false = tokens active (static root key still works).                                                                                                          |
 | `batch-summarize-enabled`            | `false` | api            | Post-ingest batch auto-summarize (Haiku title / short-title / summary).                                                                                                                                      |
 | `cache-disabled`                     | `false` | api            | Kill switch for `Cache-Control` response headers. false = caching active.                                                                                                                                    |
-| `extract-toolloop-enabled`           | `true`  | discovery      | Multi-round tool-use extraction for large bodies (>50K tokens). Off = one-shot inline only.                                                                                                                  |
+| `extract-toolloop-enabled`           | `true`  | api, discovery | Multi-round tool-use extraction for large bodies (>50K tokens). Off = one-shot inline only.                                                                                                                  |
 | `feed-enrich-enabled`                | `false` | api            | Enriches summary-only feed items by fetching the linked page and extracting full content before insert.                                                                                                      |
 | `feedback-disabled`                  | `false` | api            | Kill switch for the feedback endpoints. false = feedback enabled.                                                                                                                                            |
 | `indexing-disabled`                  | `false` | api, mcp       | Stamps `X-Robots-Tag: noindex` + `Disallow: /` (how staging is gated). false in prod = indexable.                                                                                                            |
-| `ma-sessions-disabled`               | `false` | discovery      | Incident kill switch for managed-agent sessions. false = sessions allowed.                                                                                                                                   |
+| `ma-sessions-disabled`               | `false` | api, discovery | Incident kill switch for managed-agent sessions. false = sessions allowed.                                                                                                                                   |
 | `openrouter-enabled`                 | `true`  | api, discovery | Single switch for the secondary cheap-call AI lanes (marketing classifier, summarizer, feed-enrich, large-body extract). On = lanes with an OpenRouter model var route to OpenRouter; off = Anthropic Haiku. |
 | `rate-limit-enabled`                 | `false` | api, mcp       | Public read-path rate limiting. Off = no limiting.                                                                                                                                                           |
 | `recommendations-disabled`           | `false` | api            | Kill switch for recommendations. false = recommendations active.                                                                                                                                             |
@@ -62,15 +62,15 @@ the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `fa
 
 #### Rollout gates — retire once fully rolled out
 
-| Flag key                       | Default | Reads     | What it controls                                                                                                                                  |
-| ------------------------------ | ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backfill-workflow-enabled`    | `false` | api       | Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.                                               |
-| `invalidation-enabled`         | `false` | api       | Cache-invalidation workflow. Off = not running.                                                                                                   |
-| `media-gif-transcode-enabled`  | `false` | api       | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                             |
-| `oauth-client-reaper-enabled`  | `false` | api       | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                  |
-| `overview-regen-enabled`       | `false` | api       | Automated org-overview regeneration workflow — daily cron, per-org cadence (#1706, #1895). Off = manual/agent-driven only.                        |
-| `raw-snapshot-capture-enabled` | `false` | discovery | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).                                 |
-| `user-api-keys-enabled`        | `false` | api, mcp  | Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes). |
+| Flag key                       | Default | Reads          | What it controls                                                                                                                                  |
+| ------------------------------ | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backfill-workflow-enabled`    | `false` | api            | Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.                                               |
+| `invalidation-enabled`         | `false` | api            | Cache-invalidation workflow. Off = not running.                                                                                                   |
+| `media-gif-transcode-enabled`  | `false` | api            | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                             |
+| `oauth-client-reaper-enabled`  | `false` | api            | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                  |
+| `overview-regen-enabled`       | `false` | api            | Automated org-overview regeneration workflow — daily cron, per-org cadence (#1706, #1895). Off = manual/agent-driven only.                        |
+| `raw-snapshot-capture-enabled` | `false` | api, discovery | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).                                 |
+| `user-api-keys-enabled`        | `false` | api, mcp       | Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes). |
 
 <!-- END GENERATED FLAG TABLE -->
 

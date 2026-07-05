@@ -102,7 +102,7 @@ function buildApiFetcher() {
 }
 
 function runScrapeFetch() {
-  return import("../src/scrape-fetch.js").then(({ scrapeFetch }) =>
+  return import("@releases/adapters/scrape-fetch").then(({ scrapeFetch }) =>
     scrapeFetch(
       {
         cloudflareAccountId: "acct",

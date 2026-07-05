@@ -130,7 +130,7 @@ describe("scrapeFetch error category tagging", () => {
     // intercepted by the CF markdown stub. probeUpstreamStatus catches network
     // errors and returns null, so isUpstreamGone is false and we reach the
     // markdown-fetch stage where cfMarkdownResult=null triggers the infra path.
-    const { scrapeFetch } = await import("../src/scrape-fetch.js");
+    const { scrapeFetch } = await import("@releases/adapters/scrape-fetch");
     const result = await scrapeFetch(
       {
         cloudflareAccountId: "acct",

@@ -45,7 +45,7 @@ function seedFlaggedScrape(
     .run();
 }
 
-function mkActor(db: Db, updateImpl?: (body: any) => Response) {
+function mkActor(db: Db, opts: { locked?: boolean; spendCapped?: boolean } = {}) {
   let alarm: number | null = null;
   const store = new Map<string, unknown>();
   const storage = {
@@ -63,16 +63,39 @@ function mkActor(db: Db, updateImpl?: (body: any) => Response) {
   const env: OrgActorEnv = {
     DB: {} as D1Database,
     _drizzleOverride: db,
-    RELEASES_API_KEY: { get: async () => "k" },
-    DISCOVERY_WORKER: {
-      fetch: async (_i: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body ?? "{}"));
-        dispatched.push(body);
-        return updateImpl
-          ? updateImpl(body)
-          : new Response(JSON.stringify({ sessionId: "ma-1" }), { status: 200 });
+    // Dispatch goes through startDeterministicUpdate (#1946): the created
+    // workflow instance's params carry what the old /update body carried.
+    DETERMINISTIC_UPDATE_WORKFLOW: {
+      create: async (o: { id: string; params: unknown }) => {
+        dispatched.push(o.params);
+        return {} as never;
       },
-    },
+    } as unknown as Workflow,
+    // `locked` simulates the per-source scrape lock (#1814) already held by
+    // another session — the SourceActor stub refuses the lease.
+    ...(opts.locked
+      ? {
+          SOURCE_ACTOR: {
+            idFromName: (name: string) => name,
+            get: () => ({
+              tryAcquireScrapeLock: async (_id: string, _sid: string) => ({
+                acquired: false,
+                sessionId: "det-owner",
+              }),
+              releaseScrapeLock: async () => {},
+            }),
+          } as unknown as DurableObjectNamespace,
+        }
+      : {}),
+    // `spendCapped` seeds a global spend counter over the default $15 cap.
+    ...(opts.spendCapped
+      ? {
+          LATEST_CACHE: {
+            get: async (key: string) => (key.startsWith("ma:spend:global") ? "999999" : null),
+            put: async () => {},
+          },
+        }
+      : {}),
   };
   const actor = new (OrgActor as any)(ctx, env);
   return { actor, alarmAt: () => alarm, dispatched };
@@ -89,7 +112,7 @@ describe("OrgActor", () => {
     expect(h.alarmAt()).toBe(first); // not re-armed
   });
 
-  it("alarm dispatches ONE /update for the org's flagged sources", async () => {
+  it("alarm dispatches ONE update run for the org's flagged sources", async () => {
     const db = mkDb();
     seedFlaggedScrape(db, "src_a");
     seedFlaggedScrape(db, "src_b");
@@ -222,39 +245,29 @@ describe("OrgActor", () => {
     expect(error.some((l) => l.event === "drain-error")).toBe(false);
   });
 
-  it("classifies a 409 (scrape lock held) as drain-superseded, not drain-failed", async () => {
+  it("classifies a lock refusal (scrape lock held) as drain-superseded, not drain-failed", async () => {
     const db = mkDb();
     seedFlaggedScrape(db, "src_a");
-    const h = mkActor(
-      db,
-      () =>
-        new Response("Source src_a has an active MA session (ma-abc)", {
-          status: 409,
-          headers: { "Retry-After": "900" },
-        }),
-    );
+    const h = mkActor(db, { locked: true });
     await h.actor.ensureDrainScheduled("org_x");
     const { info, warn } = await captureLogs(() => h.actor.alarm()); // must not throw
-    expect(h.dispatched.length).toBe(1);
+    // Refused before the workflow instance is created.
+    expect(h.dispatched.length).toBe(0);
     expect(h.alarmAt()).toBeNull();
     // Benign race: emitted at info level as drain-superseded, never as an error.
-    expect(info.some((l) => l.event === "drain-superseded" && l.status === 409)).toBe(true);
+    expect(info.some((l) => l.event === "drain-superseded" && l.reason === "locked")).toBe(true);
     expect(warn.some((l) => l.event === "drain-failed")).toBe(false);
   });
 
-  it("classifies a non-409 error (spend cap 429) as drain-failed", async () => {
+  it("classifies a spend-cap refusal as drain-failed", async () => {
     const db = mkDb();
     seedFlaggedScrape(db, "src_a");
-    const h = mkActor(
-      db,
-      () =>
-        new Response(JSON.stringify({ error: "Daily global spend cap reached" }), { status: 429 }),
-    );
+    const h = mkActor(db, { spendCapped: true });
     await h.actor.ensureDrainScheduled("org_x");
     const { info, warn } = await captureLogs(() => h.actor.alarm()); // must not throw
-    expect(h.dispatched.length).toBe(1);
+    expect(h.dispatched.length).toBe(0);
     expect(h.alarmAt()).toBeNull();
-    expect(warn.some((l) => l.event === "drain-failed" && l.status === 429)).toBe(true);
+    expect(warn.some((l) => l.event === "drain-failed" && l.reason === "spend_cap")).toBe(true);
     expect(info.some((l) => l.event === "drain-superseded")).toBe(false);
   });
 });

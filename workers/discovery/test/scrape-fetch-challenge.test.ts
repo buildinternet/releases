@@ -102,7 +102,7 @@ describe("scrapeFetch Cloudflare challenge detection", () => {
   });
 
   it("short-circuits to a blocked/bot_challenge signal on a challenge interstitial", async () => {
-    const { scrapeFetch } = await import("../src/scrape-fetch.js");
+    const { scrapeFetch } = await import("@releases/adapters/scrape-fetch");
     const result = await scrapeFetch(
       {
         cloudflareAccountId: "acct",
