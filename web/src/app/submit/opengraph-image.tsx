@@ -1,6 +1,6 @@
 import { OG_CONTENT_TYPE, OG_SIZE, renderOgImage } from "@/lib/og";
 
-export const alt = "Submit a source — releases.sh";
+export const alt = "Submit your product — releases.sh";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
@@ -8,8 +8,8 @@ export const revalidate = 86400;
 export default function Image() {
   return renderOgImage({
     eyebrow: "Open Catalog",
-    title: "Submit a release source",
+    title: "Submit Your Product",
     description:
-      "Recommend a changelog, release notes page, feed, or GitHub releases URL for the registry.",
+      "Add your product with a releases.json manifest or a release notes URL.",
   });
 }

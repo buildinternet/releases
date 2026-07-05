@@ -10,6 +10,7 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Product",
     links: [
+      { label: "Add your product", href: "/docs/listing" },
       { label: "Why", href: "/docs/why" },
       { label: "What's New", href: "/updates" },
       { label: "Live Updates", href: "/live" },
@@ -40,7 +41,7 @@ const COLUMNS: FooterColumn[] = [
 ];
 
 const linkClass =
-  "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors";
+  "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 underline-offset-2 hover:underline transition-colors";
 
 function FooterLinkItem({ link }: { link: FooterLink }) {
   if (link.external) {
@@ -64,22 +65,25 @@ export function Footer() {
       style={{ viewTransitionName: "site-footer" }}
     >
       <div className="max-w-5xl mx-auto px-6 py-10 grid grid-cols-2 gap-8 text-xs sm:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <div className="col-span-2 sm:col-span-1 text-stone-500 dark:text-stone-400">
+        <div className="col-span-2 sm:col-span-1">
           <div>
-            <Link href="/" className="font-medium hover:text-stone-700 dark:hover:text-stone-300">
+            <Link
+              href="/"
+              className="font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
+            >
               releases.sh
             </Link>
           </div>
-          <p className="mt-2 max-w-[30ch] text-stone-400 dark:text-stone-500">
+          <p className="mt-2 max-w-[30ch] text-stone-500 dark:text-stone-400">
             A registry of release notes from across the web.
           </p>
-          <p className="mt-2 text-stone-400 dark:text-stone-500">
+          <p className="mt-4 text-[10px] leading-relaxed text-stone-400 dark:text-stone-600">
             Maintained by{" "}
             <a
               href="https://zachdunn.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-stone-700 dark:hover:text-stone-300 underline-offset-2 hover:underline"
+              className="text-stone-500 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-400 underline-offset-2 hover:underline"
             >
               Zach Dunn
             </a>{" "}
@@ -88,7 +92,7 @@ export function Footer() {
               href="https://buildinternet.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-stone-700 dark:hover:text-stone-300 underline-offset-2 hover:underline"
+              className="text-stone-500 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-400 underline-offset-2 hover:underline"
             >
               Build Internet
             </a>
