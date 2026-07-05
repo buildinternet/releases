@@ -32,8 +32,9 @@ type Db = ReturnType<typeof createDb>;
 const DEFAULT_MAX_APPS_PER_ORG = 5;
 
 export interface DiscoverMobileAppsOptions {
-  /** The org's domain; files are fetched from `https://{domain}/.well-known/…`. */
-  domain: string;
+  /** The org's domain; files are fetched from `https://{domain}/.well-known/…`.
+   *  A missing domain is a safe no-op (`skippedReason: "no_domain"`). */
+  domain: string | null | undefined;
   storefront?: string;
   /** Cap on iTunes lookups per org (bounds subrequests). Default 5. */
   maxAppsPerOrg?: number;
@@ -70,7 +71,7 @@ export interface MobileDiscoveryResult {
   android: DiscoveredAndroidApp[];
   /** True if any DB write happened (candidate created or hint stored). */
   applied: boolean;
-  skippedReason?: "invalid_domain";
+  skippedReason?: "no_domain" | "invalid_domain";
 }
 
 /** Charset-harden the domain before interpolating it into a URL (mirrors
@@ -93,6 +94,7 @@ export async function discoverMobileApps(
     applied: false,
   };
 
+  if (!opts.domain) return { ...empty, skippedReason: "no_domain" };
   const domain = normalizeProbeDomain(opts.domain);
   if (!domain) {
     logEvent("warn", {
@@ -104,85 +106,88 @@ export async function discoverMobileApps(
     return { ...empty, skippedReason: "invalid_domain" };
   }
 
-  const [org] = await db
-    .select({ id: organizations.id, slug: organizations.slug })
-    .from(organizations)
-    .where(eq(organizations.id, orgId));
-  if (!org) return empty;
-
+  // Callers (the sweep cron and the on-demand route) always pass an existing
+  // orgId; a dangling id would fail the sources FK at insert time anyway, so no
+  // pre-check round-trip.
   const storefront = opts.storefront ?? "us";
   const maxApps = opts.maxAppsPerOrg ?? DEFAULT_MAX_APPS_PER_ORG;
   const enabled = opts.enabled !== false;
   const dryRun = opts.dryRun === true;
   const canWrite = enabled && !dryRun;
 
-  // ── AASA (iOS/macOS) ────────────────────────────────────────────────────
-  const aasa = await fetchReleasesJson(`https://${domain}/.well-known/apple-app-site-association`, {
-    fetchImpl: opts.fetchImpl,
-  });
+  // Both well-known files are independent GETs to the same host — fetch them
+  // together. (The per-bundle-ID iTunes lookups below stay sequential to bound
+  // the Cloudflare subrequest budget.)
+  const [aasa, assetlinks] = await Promise.all([
+    fetchReleasesJson(`https://${domain}/.well-known/apple-app-site-association`, {
+      fetchImpl: opts.fetchImpl,
+    }),
+    fetchReleasesJson(`https://${domain}/.well-known/assetlinks.json`, {
+      fetchImpl: opts.fetchImpl,
+    }),
+  ]);
   const bundleIds = aasa.ok ? parseAppSiteAssociation(aasa.json).bundleIds : [];
-
-  const ios: DiscoveredIosApp[] = [];
-  let applied = false;
-  for (const bundleId of bundleIds.slice(0, maxApps)) {
-    if (!enabled) {
-      ios.push({ bundleId, action: "gated" });
-      continue;
-    }
-    // oxlint-disable-next-line no-await-in-loop -- sequential to bound iTunes subrequests
-    const listing = await resolveAppStoreByBundleId(bundleId, { storefront, platform: "ios" });
-    if (!listing) {
-      ios.push({ bundleId, action: "not_found" });
-      continue;
-    }
-    const trackId = String(listing.trackId);
-    const trackViewUrl = listing.trackViewUrl;
-    if (dryRun) {
-      ios.push({ bundleId, action: "created", trackId, trackViewUrl });
-      continue;
-    }
-    // oxlint-disable-next-line no-await-in-loop -- sequential per-app candidate creation
-    const result = await materializeAppStoreSource(db, {
-      identifier: trackId,
-      orgSlug: org.slug,
-      storefront,
-      platform: "ios",
-      discovery: "on_demand",
-      isHidden: true,
-      fetchPriority: "paused",
-      preResolved: { listing, coord: { trackId, platform: "ios", storefront } },
-    });
-    if (result.status === "indexed") {
-      applied = true;
-      ios.push({
-        bundleId,
-        action: "created",
-        trackId,
-        trackViewUrl,
-        sourceId: result.source.id,
-      });
-    } else if (result.status === "existing") {
-      ios.push({
-        bundleId,
-        action: "existing",
-        trackId,
-        trackViewUrl,
-        sourceId: result.source.id,
-      });
-    } else {
-      ios.push({ bundleId, action: "not_found", trackId });
-    }
-  }
-
-  // ── assetlinks.json (Android) ───────────────────────────────────────────
-  const assetlinks = await fetchReleasesJson(`https://${domain}/.well-known/assetlinks.json`, {
-    fetchImpl: opts.fetchImpl,
-  });
   const packageNames = assetlinks.ok ? parseAssetLinks(assetlinks.json).packageNames : [];
+
   const android: DiscoveredAndroidApp[] = packageNames.map((packageName) => ({
     packageName,
     playUrl: playStoreUrl(packageName),
   }));
+
+  // ── iOS candidates ──────────────────────────────────────────────────────
+  const ios: DiscoveredIosApp[] = [];
+  let applied = false;
+  const capped = bundleIds.slice(0, maxApps);
+  if (!enabled) {
+    // Materialization gated off — report the declared apps without resolving.
+    for (const bundleId of capped) ios.push({ bundleId, action: "gated" });
+  } else {
+    for (const bundleId of capped) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential to bound iTunes subrequests
+      const listing = await resolveAppStoreByBundleId(bundleId, { storefront, platform: "ios" });
+      if (!listing) {
+        ios.push({ bundleId, action: "not_found" });
+        continue;
+      }
+      const trackId = String(listing.trackId);
+      const trackViewUrl = listing.trackViewUrl;
+      if (dryRun) {
+        ios.push({ bundleId, action: "created", trackId, trackViewUrl });
+        continue;
+      }
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-app candidate creation
+      const result = await materializeAppStoreSource(db, {
+        identifier: trackId,
+        orgId,
+        storefront,
+        platform: "ios",
+        discovery: "on_demand",
+        isHidden: true,
+        fetchPriority: "paused",
+        preResolved: { listing, coord: { trackId, platform: "ios", storefront } },
+      });
+      if (result.status === "indexed") {
+        applied = true;
+        ios.push({
+          bundleId,
+          action: "created",
+          trackId,
+          trackViewUrl,
+          sourceId: result.source.id,
+        });
+      } else if (result.status === "existing") {
+        ios.push({
+          bundleId,
+          action: "existing",
+          trackId,
+          trackViewUrl,
+          sourceId: result.source.id,
+        });
+      } else {
+        ios.push({ bundleId, action: "not_found", trackId });
+      }
+    }
+  }
 
   // Store the current app inventory as a display-only hint. Overwrite (not
   // append) so it always reflects the latest well-known state; `json_set`

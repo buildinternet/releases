@@ -743,15 +743,6 @@ orgRoutes.post(
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
-    if (!org.domain) {
-      return c.json({
-        fetched: { aasa: false, assetlinks: false },
-        ios: [],
-        android: [],
-        applied: false,
-        skippedReason: "no_domain",
-      });
-    }
     const materializationEnabled = await flag(
       c.env.FLAGS,
       c.env.WELL_KNOWN_MATERIALIZATION_ENABLED,

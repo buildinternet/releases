@@ -112,6 +112,12 @@ export interface MaterializeAppStoreParams {
   isHidden?: boolean;
   fetchPriority?: "normal" | "low" | "paused";
   /**
+   * Bind the new source to an org the caller already resolved by id (the
+   * discovery path). Skips the seller-name org insert/reselect entirely.
+   * `orgSlug` is ignored when this is set.
+   */
+  orgId?: string;
+  /**
    * A listing already resolved by the caller (e.g. discovery resolved it by
    * bundleId). When present the iTunes lookup is skipped; `identifier` is still
    * used for the coordinate/idempotency key and must be the numeric trackId.
@@ -167,20 +173,26 @@ export async function materializeAppStoreSource(
     return { status: "existing", source: src, releaseCount: rel.length };
   }
 
-  // Org (curated). Prefer caller-supplied slug, else derive from seller name.
-  const developerName = listing.sellerName ?? listing.artistName ?? listing.trackName;
-  const orgSlug = (params.orgSlug ?? toSlug(developerName)).toLowerCase();
-  const orgId = newOrgId();
-  await db
-    .insert(organizations)
-    .values({ id: orgId, name: developerName, slug: orgSlug, discovery: "curated" })
-    .onConflictDoNothing();
-  const [org] = await db
-    .select()
-    .from(organizationsActive)
-    .where(eq(organizationsActive.slug, orgSlug))
-    .limit(1);
-  const resolvedOrgId = org!.id;
+  // Org. When the caller already resolved one by id (discovery path), bind to
+  // it directly. Otherwise curate one from the App Store seller name, preferring
+  // a caller-supplied slug.
+  let resolvedOrgId: string;
+  if (params.orgId) {
+    resolvedOrgId = params.orgId;
+  } else {
+    const developerName = listing.sellerName ?? listing.artistName ?? listing.trackName;
+    const orgSlug = (params.orgSlug ?? toSlug(developerName)).toLowerCase();
+    await db
+      .insert(organizations)
+      .values({ id: newOrgId(), name: developerName, slug: orgSlug, discovery: "curated" })
+      .onConflictDoNothing();
+    const [org] = await db
+      .select()
+      .from(organizationsActive)
+      .where(eq(organizationsActive.slug, orgSlug))
+      .limit(1);
+    resolvedOrgId = org!.id;
+  }
 
   // Product (curated, always). Prefer caller-supplied slug, else app name.
   const kind = coord.platform === "macos" ? "desktop" : "mobile";

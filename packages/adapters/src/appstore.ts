@@ -128,14 +128,12 @@ export function appStoreCoordFromSource(source: Source): AppStoreCoordinate | nu
 }
 
 /**
- * Call the iTunes Lookup API for one coordinate. Returns the single listing, or
- * null on non-2xx OR any network/parse error (DNS, timeout, malformed JSON,
- * not-found, empty). Never throws — the caller treats null as a no-op poll, so
- * a transient blip doesn't bump the source's consecutiveErrors counter.
+ * GET an iTunes Lookup URL and return its single result, or null on non-2xx OR
+ * any network/parse error (DNS, timeout, malformed JSON, not-found, empty).
+ * Never throws — callers treat null as a no-op poll, so a transient blip doesn't
+ * bump a source's consecutiveErrors counter.
  */
-export async function resolveAppStore(coord: AppStoreCoordinate): Promise<AppStoreListing | null> {
-  const entity = coord.platform === "macos" ? "&entity=macSoftware" : "";
-  const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(coord.trackId)}&country=${encodeURIComponent(coord.storefront)}${entity}`;
+async function lookupItunes(url: string): Promise<AppStoreListing | null> {
   try {
     const res = await fetch(url, { headers: { "User-Agent": RELEASES_BOT_UA } });
     if (!res.ok) return null;
@@ -147,30 +145,31 @@ export async function resolveAppStore(coord: AppStoreCoordinate): Promise<AppSto
   }
 }
 
+const macEntity = (platform?: "ios" | "macos") =>
+  platform === "macos" ? "&entity=macSoftware" : "";
+
+/** Resolve a numeric-trackId coordinate to its App Store listing. */
+export async function resolveAppStore(coord: AppStoreCoordinate): Promise<AppStoreListing | null> {
+  return lookupItunes(
+    `https://itunes.apple.com/lookup?id=${encodeURIComponent(coord.trackId)}&country=${encodeURIComponent(coord.storefront)}${macEntity(coord.platform)}`,
+  );
+}
+
 /**
  * Resolve an iOS/macOS **bundle identifier** (`com.example.app`, as declared in
  * a domain's AASA file) to its App Store listing via the iTunes Lookup API's
  * `bundleId=` parameter. Unlike {@link resolveAppStore} (which keys on the
  * numeric trackId), this is the discovery entrypoint — the bundle ID is what a
- * well-known probe has in hand. Same never-throws contract: null on non-2xx,
- * network/parse error, or an empty/not-found result.
+ * well-known probe has in hand.
  */
 export async function resolveAppStoreByBundleId(
   bundleId: string,
   opts?: { storefront?: string; platform?: "ios" | "macos" },
 ): Promise<AppStoreListing | null> {
   const storefront = opts?.storefront ?? "us";
-  const entity = opts?.platform === "macos" ? "&entity=macSoftware" : "";
-  const url = `https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=${encodeURIComponent(storefront)}${entity}`;
-  try {
-    const res = await fetch(url, { headers: { "User-Agent": RELEASES_BOT_UA } });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { resultCount?: number; results?: AppStoreListing[] };
-    if (!data.resultCount || !data.results?.length) return null;
-    return data.results[0]!;
-  } catch {
-    return null;
-  }
+  return lookupItunes(
+    `https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=${encodeURIComponent(storefront)}${macEntity(opts?.platform)}`,
+  );
 }
 
 /** Convenience: resolve straight from a source row. */
