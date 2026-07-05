@@ -334,6 +334,29 @@ test("parsePostHocOverview drops unknown URLs, missing quotes, and unparseable J
   expect(broken.citations).toEqual([]);
 });
 
+test("parsePostHocOverview strips an unterminated (max_tokens-truncated) citation block from the body", () => {
+  // Reproduces the prod bug: the model hit its token cap mid-citation-list, so
+  // the trailing ```json array never closed. The strict regex can't match, but
+  // the raw partial JSON must NOT survive into the rendered body.
+  const raw =
+    "Shipped a new streaming API and faster cold starts.\n\n" +
+    '```json\n[\n  {"url":"https://acme.dev/releases/v2","quote":"streaming API"},\n' +
+    '  {"url":"https://acme.dev/releases/v3","quote":"faster cold st';
+  const { body, citations } = parsePostHocOverview(raw, input);
+  expect(body).toBe("Shipped a new streaming API and faster cold starts.");
+  expect(body).not.toContain("```json");
+  expect(body).not.toContain('"url"');
+  // Citations are unrecoverable from a truncated list — degrade to none.
+  expect(citations).toEqual([]);
+});
+
+test("parsePostHocOverview strips a truncated citation block even without a json info-string", () => {
+  const raw = 'Body text here.\n```\n[\n  {"url":"https://acme.dev/releases/v2","quote":"partia';
+  const { body } = parsePostHocOverview(raw, input);
+  expect(body).toBe("Body text here.");
+  expect(body).not.toContain("```");
+});
+
 // ── clampCitationsToBody ────────────────────────────────────────────────────
 
 describe("clampCitationsToBody", () => {

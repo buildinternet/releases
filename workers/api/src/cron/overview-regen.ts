@@ -131,7 +131,7 @@ export async function regenerateOverviewChunk(
         continue;
       }
       // oxlint-disable-next-line no-await-in-loop
-      const { body, citations } = await generateOverviewWithRetry(
+      const { body, citations, truncated } = await generateOverviewWithRetry(
         model,
         toOverviewRequestInput(inputs),
         c.orgSlug,
@@ -140,6 +140,19 @@ export async function regenerateOverviewChunk(
       if (body.trim().length === 0) {
         skipped++;
         continue;
+      }
+      if (truncated) {
+        // The kept draft hit the output cap — its citation list was likely cut
+        // short (the partial trailing JSON block is stripped defensively). We
+        // still persist the body; this warning is the signal to raise the cap.
+        logEvent("warn", {
+          component: "overview-regen",
+          event: "org-truncated",
+          orgId: c.orgId,
+          orgSlug: c.orgSlug,
+          releaseCount: inputs.totalAvailable,
+          citations: citations.length,
+        });
       }
       if (opts?.dryRun) {
         generated++;

@@ -67,6 +67,32 @@ test("generateOverview degrades to no citations when the model omits the block",
   expect(citations).toEqual([]);
 });
 
+test("generateOverview reports truncated=false on a complete draft", async () => {
+  const { truncated } = await generateOverview(fakeModel("Shipped things."), input);
+  expect(truncated).toBe(false);
+});
+
+test("generateOverview surfaces truncated + strips the cut-off citation block", async () => {
+  // Model hit its cap mid-citation-list: unterminated ```json block, truncated flag set.
+  const model: TextModel = {
+    id: "openrouter:test",
+    async complete() {
+      return {
+        text:
+          "Shipped a streaming API.\n\n" +
+          '```json\n[{"url":"https://acme.dev/releases/v2","quote":"streaming AP',
+        truncated: true,
+        usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 },
+      };
+    },
+  };
+  const { body, citations, truncated } = await generateOverview(model, input);
+  expect(truncated).toBe(true);
+  expect(body).toBe("Shipped a streaming API.");
+  expect(body).not.toContain("```json");
+  expect(citations).toEqual([]);
+});
+
 test("lintOverviewBody flags format/voice violations and passes clean bodies", () => {
   expect(lintOverviewBody("Intro line.\n\n## Section\n\nMore.", "Acme")).toContain(
     "markdown-heading",

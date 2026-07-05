@@ -63,6 +63,30 @@ describe("anthropicTextModel", () => {
     // Missing cache fields default to 0.
     expect(res.usage).toEqual({ input: 1, output: 1, cacheCreate: 0, cacheRead: 0 });
   });
+
+  it("maps stop_reason 'max_tokens' to truncated=true, else false", async () => {
+    const clientWith = (stopReason: string | null) => ({
+      messages: {
+        create: async () => ({
+          content: [{ type: "text", text: "x" }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+          stop_reason: stopReason,
+        }),
+      },
+    });
+    const cut = await anthropicTextModel(clientWith("max_tokens") as never, "m").complete({
+      system: "s",
+      user: "u",
+      maxTokens: 1,
+    });
+    expect(cut.truncated).toBe(true);
+    const done = await anthropicTextModel(clientWith("end_turn") as never, "m").complete({
+      system: "s",
+      user: "u",
+      maxTokens: 1,
+    });
+    expect(done.truncated).toBe(false);
+  });
 });
 
 describe("openRouterTextModel", () => {

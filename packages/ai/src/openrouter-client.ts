@@ -145,6 +145,8 @@ export interface OpenRouterUsage {
 export interface OpenRouterResult {
   text: string;
   usage: OpenRouterUsage;
+  /** True when the model stopped on `finish_reason: "length"` — output cut off at max_tokens. */
+  truncated?: boolean;
 }
 
 const DEFAULT_BASE = "https://openrouter.ai/api/v1";
@@ -201,7 +203,7 @@ export async function openRouterChat(
   }
 
   const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
     usage?: {
       prompt_tokens?: number;
       completion_tokens?: number;
@@ -213,6 +215,7 @@ export async function openRouterChat(
   const u = json.usage ?? {};
   return {
     text,
+    truncated: json.choices?.[0]?.finish_reason === "length",
     usage: {
       input: u.prompt_tokens ?? 0,
       output: u.completion_tokens ?? 0,
