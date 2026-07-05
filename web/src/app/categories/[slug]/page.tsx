@@ -16,7 +16,7 @@ import { CollectionTimeline } from "@/components/collection-timeline";
 import { TaxonomyList } from "@/components/taxonomy-list";
 import { JsonLd } from "@/components/json-ld";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
-import { withReleaseBodyHtml } from "@/lib/render-release-body";
+import { withCollectionReleaseView } from "@/lib/render-release-body";
 
 const getCategory = cache((slug: string) => api.categoryDetail(slug));
 const getCategoryReleases = cache((slug: string) => api.categoryReleases(slug, { limit: 20 }));
@@ -153,7 +153,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             key={slug}
             fetchEndpoint={`/api/category-releases/${slug}`}
             formatPath={`/categories/${slug}`}
-            initialReleases={withReleaseBodyHtml(releases.releases, "collapsed")}
+            initialReleases={withCollectionReleaseView(releases.releases)}
             initialCursor={releases.pagination.nextCursor}
             members={memberOrgs}
           />
