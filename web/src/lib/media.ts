@@ -15,6 +15,27 @@ const MEDIA_ORIGIN = "https://media.releases.sh";
 export const IMG_TRANSFORM_ON = process.env.NEXT_PUBLIC_RELEASES_IMG_TRANSFORM === "true";
 
 /**
+ * True when `src` is an absolute URL whose origin exactly equals `origin`.
+ *
+ * Exact-origin match, never a `startsWith` prefix check — a hostile host like
+ * `media.releases.sh.evil.com` must not read as same-origin. Relative or
+ * malformed URLs throw in `new URL` and are treated as not-same-origin.
+ *
+ * Shared by both Cloudflare-transform gates ({@link thumbUrl} for
+ * `/cdn-cgi/image/`, {@link shouldRenderAsVideo} for `/cdn-cgi/media/`): a
+ * cross-origin transform request 403s once the zone's Transformations "Sources"
+ * list is scoped to "Specified origins", so we only ever emit a transform URL
+ * for a source already on the media origin.
+ */
+export function isSameOrigin(src: string, origin: string): boolean {
+  try {
+    return new URL(src).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Pure core of {@link releaseThumbUrl}, parameterized on the flag + origin so
  * both states are unit-testable without juggling the build-time env const.
  *
@@ -33,16 +54,7 @@ export function thumbUrl(
   opts: { enabled: boolean; origin: string },
 ): string {
   if (!opts.enabled) return src;
-  // Exact origin match — a `startsWith` prefix check would treat a hostile host
-  // like `media.releases.sh.evil.com` as same-origin. Relative/malformed URLs
-  // throw and pass through untransformed.
-  let parsed: URL;
-  try {
-    parsed = new URL(src);
-  } catch {
-    return src;
-  }
-  if (parsed.origin !== opts.origin) return src; // third-party → passthrough
+  if (!isSameOrigin(src, opts.origin)) return src; // third-party → passthrough
   return cfImageUrl(src, { origin: opts.origin, width });
 }
 
@@ -85,23 +97,35 @@ export function isGifSrc(src: string): boolean {
 }
 
 /**
- * Pure decision (parameterized on the flag for testability): render a media item
- * as an MP4 `<video>` rather than an `<img>`. True for a `gif`-typed item or any
- * `.gif` source, when the rollout flag is enabled.
+ * Pure decision (parameterized on the flag + origin for testability): render a
+ * media item as an MP4 `<video>` rather than an `<img>`. True for a `gif`-typed
+ * item or any `.gif` source, when the rollout flag is enabled **and the source
+ * is same-origin** (R2-hosted).
+ *
+ * The same-origin gate mirrors {@link thumbUrl}: the `/cdn-cgi/media/` transform
+ * shares the zone's Transformations "Sources" list with `/cdn-cgi/image/`, so a
+ * cross-origin GIF→MP4 request 403s once that list is scoped to "Specified
+ * origins". Gating here means a third-party GIF renders as a plain `<img>`
+ * (heavier but never a wasted 403 → fallback round-trip) until ingest mirrors it
+ * to R2; only same-origin GIFs are routed through the MP4 transform.
  */
 export function shouldRenderAsVideo(opts: {
   type?: string;
   src: string;
   enabled: boolean;
+  origin?: string;
 }): boolean {
   if (!opts.enabled) return false;
+  if (!isSameOrigin(opts.src, opts.origin ?? MEDIA_ORIGIN)) return false;
   return opts.type === "gif" || isGifSrc(opts.src);
 }
 
 /**
- * The Cloudflare Media Transformations MP4 URL for a GIF source. Third-party and
- * R2-hosted sources both work (cross-origin transforms are permitted on the
- * media zone). See {@link cfMediaUrl}.
+ * The Cloudflare Media Transformations MP4 URL for a same-origin (R2-hosted) GIF
+ * source. Callers reach this only via {@link shouldRenderAsVideo}, which gates
+ * to same-origin — a cross-origin `/cdn-cgi/media/` request 403s once the zone's
+ * Transformations "Sources" list is scoped to "Specified origins". See
+ * {@link cfMediaUrl}.
  */
 export function releaseVideoUrl(src: string): string {
   return cfMediaUrl(src, { origin: MEDIA_ORIGIN });

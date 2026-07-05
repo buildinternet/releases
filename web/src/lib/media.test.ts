@@ -54,23 +54,53 @@ describe("isGifSrc", () => {
 });
 
 describe("shouldRenderAsVideo", () => {
-  const src = "https://cdn.example.com/demo.gif";
+  const sameOriginGif = `${origin}/releases/demo.gif`;
 
-  it("is false when the flag is off, even for a gif", () => {
-    expect(shouldRenderAsVideo({ type: "gif", src, enabled: false })).toBe(false);
+  it("is false when the flag is off, even for a same-origin gif", () => {
+    expect(shouldRenderAsVideo({ type: "gif", src: sameOriginGif, enabled: false, origin })).toBe(
+      false,
+    );
   });
 
-  it("is true for a gif-typed item when enabled", () => {
-    expect(shouldRenderAsVideo({ type: "gif", src: "https://x/y", enabled: true })).toBe(true);
-  });
-
-  it("is true for a .gif src even when the stored type is image", () => {
-    expect(shouldRenderAsVideo({ type: "image", src, enabled: true })).toBe(true);
-  });
-
-  it("is false for a non-gif image when enabled", () => {
+  it("is true for a same-origin gif-typed item when enabled", () => {
     expect(
-      shouldRenderAsVideo({ type: "image", src: "https://cdn.example.com/a.png", enabled: true }),
+      shouldRenderAsVideo({ type: "gif", src: `${origin}/releases/x.mp4`, enabled: true, origin }),
+    ).toBe(true);
+  });
+
+  it("is true for a same-origin .gif src even when the stored type is image", () => {
+    expect(shouldRenderAsVideo({ type: "image", src: sameOriginGif, enabled: true, origin })).toBe(
+      true,
+    );
+  });
+
+  it("is false for a third-party gif (same-origin gate — renders as <img> until mirrored)", () => {
+    const thirdParty = "https://cdn.example.com/demo.gif";
+    expect(shouldRenderAsVideo({ type: "gif", src: thirdParty, enabled: true, origin })).toBe(
+      false,
+    );
+  });
+
+  it("does not treat a host that merely prefixes the origin as same-origin", () => {
+    const src = "https://media.releases.sh.evil.com/releases/demo.gif";
+    expect(shouldRenderAsVideo({ type: "gif", src, enabled: true, origin })).toBe(false);
+  });
+
+  it("is false for a same-origin non-gif image when enabled", () => {
+    expect(
+      shouldRenderAsVideo({
+        type: "image",
+        src: `${origin}/releases/a.png`,
+        enabled: true,
+        origin,
+      }),
+    ).toBe(false);
+  });
+
+  it("defaults origin to the media origin when not passed", () => {
+    expect(shouldRenderAsVideo({ type: "gif", src: sameOriginGif, enabled: true })).toBe(true);
+    expect(
+      shouldRenderAsVideo({ type: "gif", src: "https://cdn.example.com/x.gif", enabled: true }),
     ).toBe(false);
   });
 });
