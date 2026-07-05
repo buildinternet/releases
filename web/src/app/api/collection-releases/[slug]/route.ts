@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { webApiHeaders } from "@/lib/api";
 import { apiBaseUrl } from "@/lib/env";
-import { withReleaseBodyHtml } from "@/lib/render-release-body";
+import { withCollectionReleaseView } from "@/lib/render-release-body";
 
 const API_URL = apiBaseUrl() ?? "http://localhost:3456";
 
@@ -25,9 +25,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   // Pre-render each row's excerpt to HTML server-side (collapsed variant, images
   // stripped) so scroll-appended rows match the SSR initial page and shiki +
   // react-markdown stay off the client. The full body is fetched lazily on
-  // expand via `/api/release-body/[id]`.
+  // expand via `/api/release-body/[id]`. Also strips the raw `content`/`summary`
+  // fields from the response so the full verbatim body never reaches this
+  // timeline's client JSON (#1918).
   if (res.ok && Array.isArray(data?.releases)) {
-    data.releases = withReleaseBodyHtml(data.releases, "collapsed");
+    data.releases = withCollectionReleaseView(data.releases);
   }
   return NextResponse.json(data, { status: res.status });
 }

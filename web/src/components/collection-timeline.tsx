@@ -21,7 +21,6 @@ import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollu
 import { Caret } from "./caret";
 import { pluralReleases } from "@/lib/formatters";
 import { deriveFeedTitle, normalizeVersionLabel } from "@/lib/release-title";
-import { releaseExcerpt } from "@/lib/release-excerpt";
 
 interface CollectionTimelineProps {
   /**
@@ -716,7 +715,7 @@ function OrgSection({
   );
 }
 
-function tagKey(item: TagListItem) {
+function tagKey(item: TagListItem<CollectionReleaseItemView>) {
   if (item.kind === "single")
     return `s:${item.release.id ?? item.release.url ?? item.release.title}`;
   return `r:${item.groupKey}`;
@@ -735,11 +734,9 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
   // the full verbatim body never reaches server HTML — that lives on the
   // canonical /release/{id} page (#1606). "Show more" swaps in the full body
   // client-side; it appears only when there's more than the excerpt to reveal.
-  const fullBody = release.content || release.summary || "";
-  const excerpt = releaseExcerpt(release);
-  // "Show more" swaps the excerpt for the full body, fetched on demand — so it
-  // only appears when there's more to reveal AND we have an id to fetch by.
-  const hasMore = fullBody.trim() !== excerpt.trim() && !!release.id;
+  // The raw content/summary fields are stripped from this timeline's payload
+  // (#1918), so `hasMore` arrives precomputed server-side.
+  const hasMore = !!release.hasMore;
 
   return (
     <article
@@ -851,11 +848,10 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
   // bare "v2.1.176" release.
   const headline = descriptive ?? versionLabel ?? release.title ?? "Update";
   const versionTag = versionLabel && versionLabel !== headline ? versionLabel : null;
-  const fullBody = release.content || release.summary || "";
-  const excerpt = releaseExcerpt(release);
-  // "Show more" swaps the excerpt for the full body, fetched on demand — so it
-  // only appears when there's more to reveal AND we have an id to fetch by.
-  const hasMore = fullBody.trim() !== excerpt.trim() && !!release.id;
+  // "Show more" swaps the excerpt for the full body, fetched on demand. The raw
+  // content/summary fields are stripped from this timeline's payload (#1918),
+  // so `hasMore` arrives precomputed server-side.
+  const hasMore = !!release.hasMore;
   const thumbnail = findThumbnail(release);
 
   return (
@@ -928,7 +924,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
 
 // ── Tag rows (commit-log) ──────────────────────────────────────
 
-function TagItem({ item, index }: { item: TagListItem; index: number }) {
+function TagItem({ item, index }: { item: TagListItem<CollectionReleaseItemView>; index: number }) {
   const [open, setOpen] = useState(false);
   const topBorder = index === 0 ? "" : "border-t border-stone-200 dark:border-stone-800";
 
@@ -1000,11 +996,14 @@ function CommitLogRow({ release }: { release: CollectionReleaseItemView }) {
   // Falling back to the source name beats an empty dash for standalone sources.
   const productLabel = release.groupName ?? release.product?.name ?? release.source.name;
   // Expand reveals the full body, fetched on demand — so it needs both a body
-  // and an id to fetch by.
-  const body = release.content || release.summary || "";
-  const hasBody = body.trim().length > 0 && !!release.id;
+  // and an id to fetch by. The raw content/summary fields are stripped from
+  // this timeline's payload (#1918), so `hasBody` arrives precomputed
+  // server-side (presence, not "exceeds excerpt").
+  const hasBody = !!release.hasBody;
   const thumbnail = findThumbnail(release);
-  const inlineSummary = release.summary || "";
+  // Plain-text AI summary for the always-visible inline preview line — never
+  // HTML-rendered (distinct from `bodyHtml`, which backs the expanded body).
+  const inlineSummary = release.summaryText ?? "";
 
   return (
     <div className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 px-3 py-2.5">

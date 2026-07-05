@@ -168,3 +168,34 @@ export function withReleaseBodyHtml<T extends BodyRenderable>(
     bodyHtml: renderReleaseBodyHtml(release, pick(release)),
   }));
 }
+
+/**
+ * Collection/category timeline variant of `withReleaseBodyHtml`. Attaches the
+ * rendered excerpt (`bodyHtml`, "collapsed" variant) plus the `hasMore` /
+ * `hasBody` / `summaryText` signals `collection-timeline`'s cards need, then
+ * DELETES the raw `content` and `summary` fields so the full verbatim body (and
+ * the raw AI summary) never reach the collection/category timeline's client
+ * JSON. The client's only full-body source stays `/api/release-body/[id]`. #1918
+ */
+export function withCollectionReleaseView<T extends BodyRenderable & { id?: string }>(
+  releases: T[],
+): Array<
+  Omit<T, "content" | "summary"> & {
+    bodyHtml: string;
+    hasMore: boolean;
+    hasBody: boolean;
+    summaryText: string;
+  }
+> {
+  return releases.map((release) => {
+    const excerpt = releaseExcerpt(release);
+    const fullBody = release.content || release.summary || "";
+    const bodyHtml = renderReleaseBodyHtml(release, "collapsed");
+    const hasId = !!release.id;
+    const hasMore = fullBody.trim() !== excerpt.trim() && hasId;
+    const hasBody = fullBody.trim().length > 0 && hasId;
+    const summaryText = (release.summary ?? "").trim();
+    const { content: _content, summary: _summary, ...rest } = release;
+    return { ...rest, bodyHtml, hasMore, hasBody, summaryText };
+  });
+}
