@@ -74,10 +74,12 @@
     // Retention window for `search_queries` rows. Rows older than this many days
     // are deleted by the nightly 05:00 UTC sweep (see issue #575). Default 90.
     "SEARCH_QUERY_RETENTION_DAYS": "90",
-    // Route Anthropic SDK calls through Cloudflare AI Gateway.
-    // See docs/architecture/ai-gateway.md. Gateway runs in authenticated
-    // mode — the AI_GATEWAY_TOKEN secret below must be bound.
-    "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
+    // ANTHROPIC_BASE_URL routes Anthropic SDK calls through Cloudflare AI
+    // Gateway. It embeds an account-scoped gateway URL, so it is provisioned as
+    // a worker secret (`wrangler secret put ANTHROPIC_BASE_URL`), not a var —
+    // forks and self-hosters get the direct-Anthropic default (unset → no
+    // gateway, fail-open). See docs/architecture/ai-gateway.md. Gateway runs in
+    // authenticated mode — the AI_GATEWAY_TOKEN secret below must be bound.
     // OpenRouter cheap-call model for the marketing classifier. Consulted only
     // when the `openrouter-enabled` flag is on; otherwise the classifier stays on
     // Anthropic Haiku. OpenRouter is called directly (not fronted by the CF AI
@@ -683,9 +685,8 @@
         // serve a deny-all /robots.txt. Belt-and-suspenders against the
         // staging hostname getting crawled while it sits unprotected.
         "INDEXING_DISABLED": "true",
-        // Route Anthropic SDK calls through Cloudflare AI Gateway.
-        // See docs/architecture/ai-gateway.md. Flip on prod after staging burn-in.
-        "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",
+        // ANTHROPIC_BASE_URL (AI Gateway routing) is a per-env worker secret,
+        // not a var — see the prod vars block note + docs/architecture/ai-gateway.md.
         // OpenRouter cheap-call model (marketing classifier); gated by the
         // `openrouter-enabled` flag. Mirrors prod.
         "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",

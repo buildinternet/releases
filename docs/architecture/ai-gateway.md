@@ -22,10 +22,20 @@ Not covered (by design):
 
 Two optional env vars, both no-op when unset (falls back to direct Anthropic API):
 
-- `ANTHROPIC_BASE_URL` — full URL to the gateway's Anthropic sub-path, e.g. `https://gateway.ai.cloudflare.com/v1/<account-id>/<gateway-id>/anthropic`. Plain env var (not a secret).
+- `ANTHROPIC_BASE_URL` — full URL to the gateway's Anthropic sub-path, e.g. `https://gateway.ai.cloudflare.com/v1/<account-id>/<gateway-id>/anthropic`. Provisioned as a **worker secret** (`wrangler secret put`), not a `vars` entry: the URL embeds the Cloudflare account ID, and a repo-committed default would point every fork's deploy at our gateway (where authenticated mode would reject their calls). Unset, the SDK talks to Anthropic directly.
 - `AI_GATEWAY_TOKEN` — Bearer token for Cloudflare AI Gateway authenticated mode. Only required when the gateway is configured to require auth. Provisioned via Secrets Store when needed.
 
-For prod/staging deploys, set `ANTHROPIC_BASE_URL` in the `vars` block of each worker's `wrangler.jsonc`, and bind `AI_GATEWAY_TOKEN` through `secrets_store_secrets` if authenticated mode is enabled. Rollback: unset the var, redeploy.
+For prod/staging deploys, set the secret once per worker/env — it survives subsequent `wrangler deploy`s:
+
+```bash
+echo "https://gateway.ai.cloudflare.com/v1/<account-id>/releases/anthropic" \
+  | bunx wrangler secret put ANTHROPIC_BASE_URL --config workers/api/wrangler.jsonc
+echo "https://gateway.ai.cloudflare.com/v1/<account-id>/releases-staging/anthropic" \
+  | bunx wrangler secret put ANTHROPIC_BASE_URL --env staging --config workers/api/wrangler.jsonc
+# …and the same pair for workers/discovery/wrangler.jsonc
+```
+
+Bind `AI_GATEWAY_TOKEN` through `secrets_store_secrets` if authenticated mode is enabled. Rollback: `wrangler secret delete ANTHROPIC_BASE_URL` (calls fall back to direct Anthropic; no redeploy needed beyond the secret change).
 
 **Current deploy state.** Both environments run through the gateway in authenticated mode:
 
