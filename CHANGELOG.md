@@ -3,6 +3,22 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 4, 2026
+
+**Added**
+- Release URLs now include a human-readable slug — links look like `/release/rel_...-whats-new-in-v2` instead of bare IDs; old bare-ID links redirect permanently. The slugged canonical URL is now carried through MCP tool outputs, Atom feeds, webhook payloads, Slack cards, and digest emails.
+- `releases.json` v2 manifest — declare where your release notes live at `/.well-known/releases.json`; the registry auto-creates sources from `feed`, `github`, and `appstore` locators and reconciles product metadata, tags, and identity fields without overwriting curator edits.
+- Docs pages now support deep links and show an "On this page" rail — all `/docs/` section headings have stable anchor IDs, authored cross-section links resolve correctly, and a scrolling sidebar highlights the active section.
+- Mobile app discovery from platform link files — iOS apps are auto-discovered from `/.well-known/apple-app-site-association` and queued as paused candidates for curator review; no bespoke manifest required.
+
+**Changed**
+- Org overviews now adapt to release velocity — active orgs refresh on a 2-day cycle with a 30-day activity window; quiet orgs use a 90-day fallback; per-org cadence overrides are supported.
+- Collection, category, and release-list pages load faster — markdown is now rendered server-side; shiki and react-markdown no longer ship to the browser on list views.
+
+**Fixed**
+- Product rows in org overview panels now link to their product pages.
+- Hidden sources no longer appear on public org, product, or search pages — a filtering gap in release feeds, source rows, and organization search results has been corrected.
+
 ## July 3, 2026
 
 **Added**
