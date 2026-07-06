@@ -1,7 +1,7 @@
 /**
- * CI gate: every HTTP method registered under a `publicReadRoutes` prefix must
- * appear in `/v1/openapi.json`. Catches public-read routes that ship without
- * `describeRoute(...)` annotations.
+ * CI gate: every HTTP method registered under a `publicReadRoutes` or
+ * `publicWriteRoutes` prefix must appear in `/v1/openapi.json`. Catches
+ * public routes that ship without `describeRoute(...)` annotations.
  *
  * Run: `bun scripts/check-openapi-coverage.ts` (exit 0 = OK, 1 = holes,
  * 2 = bug — spec couldn't be generated).
@@ -14,7 +14,7 @@
  */
 import { Hono } from "hono";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { publicReadRoutes } from "../workers/api/src/route-namespaces.js";
+import { publicReadRoutes, publicWriteRoutes } from "../workers/api/src/route-namespaces.js";
 import { mountV1Routes } from "../workers/api/src/v1-routes.js";
 import type { Env } from "../workers/api/src/index.js";
 
@@ -147,7 +147,7 @@ const ALLOWLIST = new Set<string>([
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
-const PUBLIC_READ_PREFIXES = publicReadRoutes.map((r) => `/${r}`);
+const PUBLIC_READ_PREFIXES = [...publicReadRoutes, ...publicWriteRoutes].map((r) => `/${r}`);
 
 function honoToOpenapi(path: string): string {
   return path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");

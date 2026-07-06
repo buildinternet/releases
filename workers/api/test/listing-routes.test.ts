@@ -1,9 +1,13 @@
 import { describe, it, expect, afterEach } from "bun:test";
+import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { listingRoutes } from "../src/routes/listing.js";
 import { createTestDb, createTestApp } from "./setup";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { publicWriteRoutes } from "../src/route-namespaces.js";
+import { mountV1Routes } from "../src/v1-routes.js";
+import type { Env } from "../src/index.js";
 
 afterEach(() => {
   restoreGlobalFetch();
@@ -176,5 +180,51 @@ describe("POST /v1/listing/activate", () => {
       },
     );
     expect(res.status).toBe(429);
+  });
+});
+
+describe("wiring: /v1/listing is a public-write namespace", () => {
+  it("declares 'listing' as the sole publicWriteRoutes entry", () => {
+    expect(publicWriteRoutes).toEqual(["listing"]);
+  });
+
+  it("mounts listingRoutes through the composed v1 router, reachable without auth headers", async () => {
+    // Mirrors the real app's mount order (mountV1Routes), but without any of
+    // index.ts's publicReadRoutes/adminRoutes middleware loops — proving the
+    // handler itself is reached (and its own guardListing 404s on the
+    // kill-switch default) rather than any shared auth middleware.
+    const v1 = new Hono<Env>();
+    mountV1Routes(v1);
+    const composedApp = new Hono<Env>();
+    composedApp.route("/v1", v1);
+    const db = createTestDb();
+    const res = await composedApp.fetch(
+      new Request("https://x/v1/listing/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ domain: "acme.com" }),
+      }),
+      { DB: db },
+      { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+    );
+    // No Authorization header was sent. A 401/403 here would mean auth
+    // middleware intercepted the request before the handler's own guard ran.
+    expect([200, 404, 429]).toContain(res.status);
+  });
+
+  it("registers /listing/validate and /listing/activate in the OpenAPI spec", async () => {
+    const v1 = new Hono<Env>();
+    mountV1Routes(v1);
+    const composedApp = new Hono<Env>();
+    composedApp.route("/v1", v1);
+    const res = await composedApp.fetch(
+      new Request("https://x/v1/openapi.json"),
+      { ENVIRONMENT: "production" },
+      { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    const spec = (await res.json()) as { paths?: Record<string, Record<string, unknown>> };
+    expect(spec.paths?.["/listing/validate"]?.post).toBeTruthy();
+    expect(spec.paths?.["/listing/activate"]?.post).toBeTruthy();
   });
 });
