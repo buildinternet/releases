@@ -7,16 +7,12 @@
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
-import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, inArray, sql } from "drizzle-orm";
-import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
+import { eq } from "drizzle-orm";
+import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
-import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
-import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
-import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import {
   SOURCE_DELETED_SENTINEL,
   RATE_LIMITED_SENTINEL,
@@ -24,31 +20,39 @@ import {
   isDurableObjectReset,
   recordWorkflowFailure,
 } from "./_shared.js";
-import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { summarizeRelease } from "@releases/ai-internal/release-content";
-import { splitModelId } from "@releases/ai-internal/text-model";
-import {
-  qualifiesForBreakingClassification,
-  isValidKind,
-} from "@buildinternet/releases-core/kinds";
-import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import {
   fetchOne,
   pollOne,
-  embedReleasesForSource,
   embedChangelogFileForSource,
   refreshChangelogFile,
   loadPlaybookNotesForSources,
-  type FetchOneEnv,
 } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
-import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
+import { type InvalidationEnv } from "../lib/latest-cache.js";
+import {
+  RETRY_POLL,
+  RETRY_FETCH,
+  RETRY_EMBED,
+  RETRY_GENERATE,
+  resolveFetchEnv,
+  generateContentForReleases,
+  runContentAndEmbedSteps,
+  runInvalidateLatestCacheStep,
+} from "../lib/ingest-steps.js";
+// Back-compat re-exports: existing importers (backfill-source, batch-enrich,
+// routes/workflows, tests) still import these shared primitives from this
+// module. Their canonical home is now lib/ingest-steps.ts (#1946 phase 3).
+export {
+  RETRY_POLL,
+  RETRY_FETCH,
+  RETRY_EMBED,
+  RETRY_GENERATE,
+  resolveFetchEnv,
+  generateContentForReleases,
+};
 import { type AnthropicEnv } from "../lib/anthropic.js";
-import { resolveSummarizeModel } from "../lib/text-model.js";
-import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
-import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 
 /**
@@ -121,35 +125,6 @@ export type PollAndFetchParams = {
 };
 
 /**
- * Retry policies. Embed is the critical failure mode we're solving — give it
- * plenty of room to ride out Voyage rate limits. Fetch retries cover transient
- * 5xx / network blips; permanent 4xx surfaces as NonRetryableError downstream.
- */
-// Exported so sibling workflows (e.g. FirecrawlIngestWorkflow) reuse the same
-// retry policies instead of re-declaring identical constants.
-export const RETRY_POLL = {
-  retries: { limit: 2, delay: "5 seconds", backoff: "exponential" },
-} satisfies WorkflowStepConfig;
-
-export const RETRY_FETCH = {
-  retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-  timeout: "5 minutes",
-} satisfies WorkflowStepConfig;
-
-export const RETRY_EMBED = {
-  retries: { limit: 5, delay: "30 seconds", backoff: "exponential" },
-  timeout: "5 minutes",
-} satisfies WorkflowStepConfig;
-
-// Per-row failures are caught + logged inside the step body, so retries are
-// conservative; the `title_generated IS NULL` predicate on the UPDATE
-// makes a step-level retry safe.
-export const RETRY_GENERATE = {
-  retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
-  timeout: "10 minutes",
-} satisfies WorkflowStepConfig;
-
-/**
  * Smearing window for the per-source jitter sleep at the workflow head. The
  * cron fans out 30-160 instances per fire and every D1 overload in the last 7d
  * landed within the first 7 minutes of the hour — pure thundering-herd. We
@@ -178,306 +153,6 @@ function fnv1a32(s: string): number {
 export function jitterMsForSource(sourceId: string, windowMs: number): number {
   if (windowMs <= 0) return 0;
   return fnv1a32(sourceId) % windowMs;
-}
-
-/**
- * Project this workflow's env down to the `FetchOneEnv` slice via the shared
- * {@link buildFetchOneEnv} (single source of truth for the forwarded bindings).
- * The result only flows through step closures, so it never lands in the
- * workflow's persisted state.
- */
-export function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
-  return buildFetchOneEnv(env);
-}
-
-/**
- * Per-fire row cap. A typical fire is 0–3 rows; anything larger is almost
- * always a monorepo dump or first-onboard backfill, neither of which is a
- * useful target for the per-row LLM call. Bail loudly and let a deliberate
- * `scripts/generate-release-content.ts` invocation mop up if wanted.
- */
-const MAX_AUTOGEN_ROWS_PER_FIRE = 20;
-
-/**
- * Per-row body cap (chars). Haiku 4.5 input is $1/M tokens (~4 chars/token),
- * so 50k chars ≈ 12.5k tokens ≈ $0.013 per call before output. Above that we
- * skip the row — outlier bodies don't summarize well and they dominate cost.
- */
-const MAX_AUTOGEN_BODY_CHARS = 50_000;
-
-/**
- * Per-org opt-in: when the source's org has `auto_generate_content = true`
- * and the source isn't hidden, run freshly-inserted releases through Haiku
- * 4.5 to populate `title_generated` / `title_short` / `summary`. A source can
- * opt out individually via `metadata.summarize = false` (see
- * `summarizeNotOptedOut`) — useful for App Store apps whose notes are always
- * boilerplate. The opt-out lives in the SELECT predicate so it holds for the
- * partial-source `regenerate` caller in routes/workflows.ts too.
- *
- * Per-row exceptions log + continue so a single bad call can't pin the
- * workflow into a retry storm. The step itself only throws on outer-loop
- * failures (SELECT, client construction).
- */
-export async function generateContentForReleases(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
-  db: any,
-  env: PollAndFetchWorkflowEnv,
-  source: Source,
-  insertedIds: string[],
-  // `ignoreAutoGenerateGate` drops the org-level `auto_generate_content` opt-in
-  // (for an explicit operator trigger that wants content regardless). The
-  // per-source `metadata.summarize=false` opt-out is still honored — that's a
-  // deliberate "never summarize this source" signal, not a rollout gate.
-  opts: { ignoreAutoGenerateGate?: boolean } = {},
-): Promise<number> {
-  // Hidden sources skip AI features per existing convention.
-  if (source.isHidden === true) return 0;
-
-  // Order matters: SELECT before secret-store fetch. Most orgs are opted out,
-  // and the empty-result path saves a Secrets Store round-trip per non-opted
-  // source on every cron fire. The IN list is chunked for the D1 100-bind cap
-  // (90 ids + 1 boolean = 91 binds per statement); a backfill or first-time
-  // onboard can push insertedIds well past 90.
-  type ContentRow = {
-    id: string;
-    title: string;
-    version: string | null;
-    content: string;
-    url: string | null;
-    orgSlug: string;
-    sourceName: string;
-    productName: string | null;
-    // Raw `kind` text from source + parent product (free-text column), used to
-    // gate breaking-change classification to developer-facing kinds (#1696).
-    sourceKind: string | null;
-    productKind: string | null;
-  };
-  const rows: ContentRow[] = [];
-  for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = insertedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
-    // Skip coverage-side rows: they're hidden from read paths by default, so
-    // summarizing them is a pure waste. The LEFT JOIN keeps canonical and
-    // unlinked rows; the IS NULL filter drops anything that's already linked
-    // as coverage to another release.
-    // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
-    const chunkRows: ContentRow[] = await db
-      .select({
-        id: releases.id,
-        title: releases.title,
-        version: releases.version,
-        content: releases.content,
-        url: releases.url,
-        orgSlug: organizations.slug,
-        sourceName: sources.name,
-        productName: products.name,
-        sourceKind: sources.kind,
-        productKind: products.kind,
-      })
-      .from(releases)
-      .innerJoin(sources, eq(sources.id, releases.sourceId))
-      .innerJoin(organizations, eq(organizations.id, sources.orgId))
-      .leftJoin(products, eq(products.id, sources.productId))
-      .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
-      .where(
-        and(
-          inArray(releases.id, chunk),
-          ...summarizeEligibilityConds({ ignoreAutoGate: opts.ignoreAutoGenerateGate }),
-        ),
-      );
-    rows.push(...chunkRows);
-  }
-
-  if (rows.length === 0) return 0;
-
-  if (rows.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
-    logEvent("warn", {
-      component: "auto-generate-content",
-      event: "row-cap-tripped",
-      sourceSlug: source.slug,
-      candidateCount: rows.length,
-      cap: MAX_AUTOGEN_ROWS_PER_FIRE,
-    });
-    return 0;
-  }
-
-  // Provider/model decided here: Anthropic Haiku via gateway by default, or a
-  // cheap OpenRouter model when `openrouter-enabled` is on + a model is configured.
-  // Fail-open: null means no usable provider (no Anthropic key) — skip.
-  const model = await resolveSummarizeModel(env);
-  if (!model) return 0;
-
-  const startedAt = Date.now();
-
-  let skippedEmpty = 0;
-  let skippedTooLarge = 0;
-  let failed = 0;
-  let totalTokens = 0;
-
-  // Sequential LLM calls (cache warming + cost bounding depend on this), then
-  // a single batched UPDATE pass at the end. Each UPDATE binds at most 5 values
-  // (titleGenerated, titleShort, summary, optional compositionJson, id) →
-  // chunk at 20 to stay under D1's 100-bind per-statement cap. WHERE
-  // title_generated IS NULL preserves idempotency against step retry — and
-  // unlike title_short, it survives the boilerplate-discard path (where
-  // title_short is intentionally null) so eligibility doesn't re-pick those
-  // rows on the next batch run. When composition is null we omit metadata SET
-  // entirely so boilerplate
-  // rows don't trigger a no-op D1 page write.
-  const updates: {
-    id: string;
-    titleGenerated: string | null;
-    titleShort: string | null;
-    summary: string | null;
-    composition: ReleaseComposition | null;
-    breaking: BreakingLevel;
-    migrationNotes: string | null;
-  }[] = [];
-
-  for (const row of rows) {
-    if ((row.content?.length ?? 0) > MAX_AUTOGEN_BODY_CHARS) {
-      skippedTooLarge++;
-      logEvent("warn", {
-        component: "auto-generate-content",
-        event: "body-cap-skip",
-        releaseId: row.id,
-        orgSlug: row.orgSlug,
-        bodyChars: row.content.length,
-        cap: MAX_AUTOGEN_BODY_CHARS,
-      });
-      continue;
-    }
-    try {
-      // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; typical fire is 0–3 rows
-      const result = await summarizeRelease(model, {
-        orgSlug: row.orgSlug,
-        sourceName: row.sourceName,
-        productName: row.productName,
-        title: row.title,
-        version: row.version,
-        url: row.url,
-        content: row.content,
-      });
-      totalTokens +=
-        result.usage.input +
-        result.usage.output +
-        result.usage.cacheCreate +
-        result.usage.cacheRead;
-      // Only log rows we actually summarized; skipped rows short-circuit
-      // before the model call so they consumed no tokens. logUsage is
-      // fail-open, so a write error never aborts the summarization loop.
-      if (!result.skipped) {
-        // eslint-disable-next-line no-await-in-loop -- one write per row; bounded by MAX_AUTOGEN_ROWS_PER_FIRE
-        await logUsage(
-          db,
-          {
-            operation: "summarize",
-            // usage_log.model historically stores the bare model id (e.g.
-            // "claude-haiku-4-5") so Anthropic rollups stay continuous with the
-            // batch path. The TextModel id is "<provider>:<model>"; strip the
-            // provider tag via the shared parser (OpenRouter ids like "google/…"
-            // carry no further colon, so the bare model is unambiguous and, while
-            // the flag is off, reproduces today's value byte-for-byte).
-            model: splitModelId(model.id).model,
-            inputTokens: result.usage.input,
-            outputTokens: result.usage.output,
-            cacheReadTokens: result.usage.cacheRead,
-            cacheWriteTokens: result.usage.cacheCreate,
-            sourceId: source.id,
-            releaseCount: 1,
-          },
-          "poll-and-fetch",
-        );
-      }
-      if (result.skipped) {
-        skippedEmpty++;
-        continue;
-      }
-
-      // Breaking-change verdict (#1696) rides the SAME summarize call — no extra
-      // request. Persist it only for developer-facing source kinds
-      // (sdk/tool/platform/integration); consumer apps / docs / kind-less rows
-      // keep the "unknown" default even though the model classified them.
-      const rawKind = row.sourceKind ?? row.productKind ?? null;
-      const resolvedKind = rawKind && isValidKind(rawKind) ? rawKind : null;
-      const qualifies = qualifiesForBreakingClassification(resolvedKind);
-      const breaking: BreakingLevel = qualifies ? result.breaking : "unknown";
-      const migrationNotes = qualifies ? result.migrationNotes : null;
-
-      updates.push({
-        id: row.id,
-        titleGenerated: result.title,
-        titleShort: result.titleShort,
-        summary: result.summary,
-        composition: result.composition,
-        breaking,
-        migrationNotes,
-      });
-    } catch (err) {
-      failed++;
-      logEvent("warn", {
-        component: "auto-generate-content",
-        event: "generation-failed",
-        releaseId: row.id,
-        orgSlug: row.orgSlug,
-        err,
-      });
-    }
-  }
-
-  let generated = 0;
-  // Worst-case binds per UPDATE: titleGenerated, titleShort, summary, metadata,
-  // breaking, migration_notes, id = 7 → chunk at floor(100 / 7) = 14 to stay
-  // under D1's 100-bind per-statement cap. breaking/migration_notes are only SET
-  // for classified rows; non-classified rows keep their "unknown" default.
-  const UPDATE_CHUNK_SIZE = 14;
-  for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
-    const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
-    const statements = chunk.map((u) => {
-      const metadataSet = buildCompositionMetadataSet(u.composition);
-      return db
-        .update(releases)
-        .set({
-          titleGenerated: u.titleGenerated,
-          titleShort: u.titleShort,
-          summary: u.summary,
-          ...(metadataSet ? { metadata: metadataSet } : {}),
-          ...(u.breaking !== "unknown"
-            ? { breaking: u.breaking, migrationNotes: u.migrationNotes }
-            : {}),
-        })
-        .where(and(eq(releases.id, u.id), sql`${releases.titleGenerated} IS NULL`));
-    });
-    try {
-      // eslint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
-      await db.batch(statements as [(typeof statements)[number], ...typeof statements]);
-      generated += chunk.length;
-    } catch (err) {
-      failed += chunk.length;
-      logEvent("warn", {
-        component: "auto-generate-content",
-        event: "update-batch-failed",
-        chunkOffset: i,
-        chunkSize: chunk.length,
-        err,
-        ...dbErrorLogFields(err),
-      });
-    }
-  }
-
-  logEvent("info", {
-    component: "auto-generate-content",
-    event: "batch-summary",
-    sourceSlug: source.slug,
-    candidateCount: rows.length,
-    generated,
-    skippedEmpty,
-    skippedTooLarge,
-    failed,
-    totalTokens,
-    durationMs: Date.now() - startedAt,
-  });
-
-  return generated;
 }
 
 export class PollAndFetchWorkflow extends WorkflowEntrypoint<
@@ -678,25 +353,13 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
 
       const insertedIds = fetchResult.insertedIds ?? [];
 
-      // Runs before embed so (a) the AI headline doesn't get embedded as a
-      // separate signal, and (b) the new content_* fields land before the
-      // row reaches release-event observers.
-      if (insertedIds.length > 0) {
-        currentStep = "generate-content";
-        await step.do("generate-content", RETRY_GENERATE, async () => {
-          await generateContentForReleases(db, env, source, insertedIds);
-        });
-      }
-
-      // Embed new releases. Retry-heavy — this is the failure mode the workflow
-      // exists to solve. `throwOnError` makes the embed helper re-throw after
-      // logging so the step picks up the failure.
-      currentStep = "embed-releases";
-      if (insertedIds.length > 0 && env.RELEASES_INDEX) {
-        await step.do("embed-releases", RETRY_EMBED, async () => {
-          await embedReleasesForSource(db, source, insertedIds, fetchEnv, { throwOnError: true });
-        });
-      }
+      // generate-content → embed-releases, in that order (shared with the
+      // firecrawl webhook path via lib/ingest-steps so the two can't drift —
+      // see #1955/#1946). `onStep` keeps `currentStep` accurate for the
+      // failure-context row.
+      await runContentAndEmbedSteps(step, { db, env, source, insertedIds, fetchEnv }, (name) => {
+        currentStep = name;
+      });
 
       // Refresh GitHub CHANGELOG mirror + embed chunks. Runs in two steps so a
       // retry on embed doesn't re-fetch the repo tree. `skipEmbed` defers the
@@ -721,18 +384,18 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         }
       }
 
-      // Purge latest-cache when we actually inserted rows. Per-source
-      // invalidation replaces the cron-aggregated call (see #486) — KV writes
-      // are cheap and idempotent.
-      if (fetchResult.releasesInserted > 0) {
-        currentStep = "invalidate-latest-cache";
-        await step.do("invalidate-latest-cache", async () => {
-          await invalidateLatestCache(env, {
-            nReleases: fetchResult.releasesInserted,
-            cause: source.id,
-          });
-        });
-      }
+      // Purge latest-cache when we actually inserted rows (shared with the
+      // firecrawl path via lib/ingest-steps). Per-source invalidation replaces
+      // the cron-aggregated call (see #486) — KV writes are cheap + idempotent.
+      await runInvalidateLatestCacheStep(
+        step,
+        env,
+        source,
+        fetchResult.releasesInserted,
+        (name) => {
+          currentStep = name;
+        },
+      );
 
       logEvent("info", {
         component: "poll-fetch-workflow",
