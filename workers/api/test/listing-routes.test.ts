@@ -92,7 +92,20 @@ describe("POST /v1/listing/validate", () => {
         body: JSON.stringify({ nope: true }),
       }),
     );
-    expect([400, 422]).toContain(res.status);
+    expect(res.status).toBe(400);
+  });
+
+  it("404s a malformed body when the kill switch is off (guard runs before body validation)", async () => {
+    const res = await app(createTestDb(), { LISTING_SELF_SERVE_ENABLED: "false" })(
+      new Request("https://x/v1/listing/validate", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ nope: true }),
+      }),
+    );
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: { type: string } };
+    expect(body.error.type).toBe("not_found");
   });
 });
 

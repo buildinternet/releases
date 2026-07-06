@@ -41,6 +41,7 @@ export const ListingOrgPointerSchema = z.strictObject({
   name: z.string(),
   webUrl: z.string(),
 });
+export type ListingOrgPointer = z.infer<typeof ListingOrgPointerSchema>;
 
 export const ListingValidationResultSchema = z.strictObject({
   valid: z.boolean(),

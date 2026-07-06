@@ -43,7 +43,7 @@ import { promoteStubOrg } from "../lib/well-known/promote.js";
 import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
-import { eq, count, max, min, and, sql, inArray, gte, desc, isNotNull } from "drizzle-orm";
+import { eq, count, max, min, and, sql, inArray, gte, desc, isNotNull, isNull } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   organizations,
@@ -186,8 +186,10 @@ orgRoutes.get(
         description:
           "Admin-only. Pass `1` to restrict to orgs that have stamped `trackingRequestedAt` " +
           "(the self-serve listing owner-demand signal, #1947), ordered most-recent-first. " +
-          "Items on this path additionally carry `trackingRequestedAt`. Requires admin bearer " +
-          "auth — a non-admin caller gets a 403, the param is never silently ignored.",
+          "Items still conform to `OrgListItemSchema` (same envelope as the public list) but " +
+          "carry the additive `trackingRequestedAt` field and zeroed stats — these are " +
+          "self-serve stub orgs with no processed sources yet. Requires admin bearer auth — " +
+          "a non-admin caller gets a 403, the param is never silently ignored.",
       },
     ],
     responses: {
@@ -216,22 +218,61 @@ orgRoutes.get(
           new ForbiddenError("Admin scope is required to filter by trackingRequested"),
         );
       }
+      // Tombstoned orgs must never surface in the curator demand queue — their
+      // slug/domain get a mangled "<value>--<id>" suffix on soft-delete, which
+      // would read as confusing, actionable-looking noise here.
+      const trackingRequestedFilter = and(
+        isNotNull(organizations.trackingRequestedAt),
+        isNull(organizations.deletedAt),
+      );
       const rows = await db
         .select({
           id: organizations.id,
           slug: organizations.slug,
           name: organizations.name,
           domain: organizations.domain,
+          description: organizations.description,
+          category: organizations.category,
+          avatarUrl: organizations.avatarUrl,
+          featured: organizations.featured,
           tier: organizations.tier,
           trackingRequestedAt: organizations.trackingRequestedAt,
         })
         .from(organizations)
-        .where(isNotNull(organizations.trackingRequestedAt))
+        .where(trackingRequestedFilter)
         .orderBy(desc(organizations.trackingRequestedAt))
         .limit(pagination.pageSize)
         .offset(pagination.offset);
+      const [{ n: totalItems }] = await db
+        .select({ n: count() })
+        .from(organizations)
+        .where(trackingRequestedFilter);
 
-      return c.json(buildListResponse(rows, pagination));
+      // These are self-serve stub orgs by construction (no processed sources
+      // yet), so the zeroed stats fields below are accurate, not placeholders
+      // — this keeps the response a genuine `OrgListItemSchema` instance
+      // rather than a divergent shape, just with the additive
+      // `trackingRequestedAt` field the public catalog path never sends.
+      const items = rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        domain: row.domain,
+        description: row.description,
+        category: row.category,
+        avatarUrl: row.avatarUrl,
+        featured: Boolean(row.featured),
+        status: row.tier,
+        sourceCount: 0,
+        releaseCount: 0,
+        recentReleaseCount: 0,
+        lastActivity: null,
+        topProducts: [],
+        sparkline: Array.from({ length: 30 }, () => 0),
+        trackingRequestedAt: row.trackingRequestedAt,
+      }));
+
+      return c.json(buildListResponse(items, pagination, Number(totalItems ?? 0)));
     }
 
     const cutoff30d = daysAgoIso(30);

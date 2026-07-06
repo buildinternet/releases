@@ -50,6 +50,12 @@ async function guardListing(c: Context<Env>): Promise<Response | null> {
   return null;
 }
 
+async function requireListingEnabled(c: Context<Env>, next: () => Promise<void>) {
+  const guarded = await guardListing(c);
+  if (guarded) return guarded;
+  await next();
+}
+
 listingRoutes.post(
   "/listing/validate",
   describeRoute({
@@ -59,16 +65,16 @@ listingRoutes.post(
       "Fetches https://{domain}/.well-known/releases.json live (HTTPS-only, 64KB, 5s), validates it against the v2 manifest schema, and returns a preview: identity, products, and per-locator classification, plus whether the domain is already listed. Public and anonymous; rate limited.",
     responses: {
       200: { description: "ListingValidationResult" },
+      404: { description: "Lane disabled" },
       429: {
         description: "Rate limited",
         content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
+  requireListingEnabled,
   validateJson(ListingValidateBodySchema),
   async (c) => {
-    const guarded = await guardListing(c);
-    if (guarded) return guarded;
     const { domain } = c.req.valid("json");
     const db = createDb(c.env.DB);
     const result = await validateListing(db, domain, {
@@ -103,12 +109,16 @@ listingRoutes.post(
         description: "Manifest invalid or unfetchable",
         content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
+      404: { description: "Lane disabled" },
+      429: {
+        description: "Rate limited",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
     },
   }),
+  requireListingEnabled,
   validateJson(ListingActivateBodySchema),
   async (c) => {
-    const guarded = await guardListing(c);
-    if (guarded) return guarded;
     const { domain: rawDomain, requestTracking } = c.req.valid("json");
     const domain = normalizeListingDomain(rawDomain);
     if (!domain) return respondError(c, new ValidationError("Not a valid domain name."));
