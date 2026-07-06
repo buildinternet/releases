@@ -447,7 +447,7 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
 
   try {
     if (source.type === "agent") {
-      return await runAgentPath(env, persister, source, meta, guidance, deps, start);
+      return await runAgentPath(persister, source, meta, guidance, deps, start);
     }
     return await runScrapePath(env, persister, source, meta, guidance, deps, start);
   } catch (err) {
@@ -473,7 +473,6 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
 // ── Agent path (handles type=agent sources) ──────────────────────
 
 async function runAgentPath(
-  env: ScrapeEnv,
   persister: ScrapePersister,
   source: Source,
   meta: ReturnType<typeof getSourceMeta>,
