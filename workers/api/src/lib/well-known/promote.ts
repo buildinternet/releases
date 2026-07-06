@@ -111,12 +111,12 @@ export async function promoteStubOrg(
   // (an abandoned run that never released it). 0 rows affected means another
   // run currently holds the claim — surface a 409 rather than racing it on
   // the per-org `UNIQUE(org_id, slug)` source insert.
+  const claimStamp = new Date().toISOString();
   if (opts.dryRun !== true) {
-    const nowIso = new Date().toISOString();
     const staleBefore = new Date(Date.now() - PROMOTION_CLAIM_TTL_MS).toISOString();
     const claimResult = await db
       .update(organizations)
-      .set({ promotingAt: nowIso })
+      .set({ promotingAt: claimStamp })
       .where(
         and(
           eq(organizations.id, orgId),
@@ -231,10 +231,14 @@ export async function promoteStubOrg(
     return { promoted: true, sourcesCreated, sourcesMatched, locatorsStamped, plan };
   } finally {
     // Release the claim on every path — success or thrown failure — so a
-    // failed run doesn't block retries for the full TTL. No-op (and
-    // harmless) when dryRun never took the claim in the first place.
+    // failed run doesn't block retries for the full TTL. Scoped to OUR stamp:
+    // a run that outlived the TTL and lost its claim to a newer run must not
+    // clear that newer claim on its way out. No-op when dryRun never claimed.
     if (opts.dryRun !== true) {
-      await db.update(organizations).set({ promotingAt: null }).where(eq(organizations.id, orgId));
+      await db
+        .update(organizations)
+        .set({ promotingAt: null })
+        .where(and(eq(organizations.id, orgId), eq(organizations.promotingAt, claimStamp)));
     }
   }
 }
