@@ -52,6 +52,14 @@ export type SweepOauthClientsEnv = {
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   // oxlint-disable-next-line no-explicit-any -- test seam, mirrors sibling sweeps
   _drizzleOverride?: any;
+  /**
+   * TEST-ONLY: pin the reference "now" so the retention cutoff is deterministic.
+   * The retention window is measured against real wall-clock time, so a test
+   * that seeds fixed created_at dates relative to a hardcoded "now" would rot
+   * as real time advances past the window (a client seeded "2d ago" eventually
+   * ages past 30d). Injecting `now` keeps such tests stable regardless of date.
+   */
+  _now?: Date;
 };
 
 function parseRetentionDays(raw: string | undefined): number {
@@ -66,7 +74,7 @@ export async function sweepOauthClients(env: SweepOauthClientsEnv): Promise<void
   }
 
   const db = env._drizzleOverride ?? drizzle(env.DB);
-  const now = new Date();
+  const now = env._now ?? new Date();
   const retentionDays = parseRetentionDays(env.OAUTH_CLIENT_REAPER_RETENTION_DAYS);
   // `oauth_client.created_at` is an integer-timestamp column (schema-auth uses
   // unix-int timestamps, unlike core's ISO-text), so compare against a Date —

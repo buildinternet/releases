@@ -28,6 +28,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
 import { ensureActiveWorkspace, isOrgOwnerOrAdmin } from "./workspace.js";
 import { preserveCustomAvatarOnUpdate } from "../lib/avatar-ingest.js";
@@ -661,7 +662,7 @@ export function derivePasskeyRp(env: { WEB_BASE_URL?: string }): {
   rpName: string;
   origin: string;
 } {
-  const base = env.WEB_BASE_URL ?? "https://releases.sh";
+  const base = releaseWebBase(env);
   try {
     const url = new URL(base);
     return { rpID: url.hostname, rpName: APP_NAME, origin: url.origin };
@@ -1151,8 +1152,8 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       // verificationUri. WEB_BASE_URL is releases.sh in prod/staging, the portless
       // web origin locally; the session cookie is .releases.sh-scoped so it rides
       // across the two subdomains.
-      loginPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/login`,
-      consentPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/oauth/consent`, // page built in sub-project 3; path provisional
+      loginPage: `${releaseWebBase(env)}/login`,
+      consentPage: `${releaseWebBase(env)}/oauth/consent`, // page built in sub-project 3; path provisional
       scopes: ["openid", "profile", "email", "offline_access", "read", "write", "admin"],
       validAudiences: oauthValidAudiences(env),
       // RFC 7591 dynamic client registration. ON so off-the-shelf MCP clients
@@ -1227,7 +1228,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     organization({
       membershipLimit: 100,
       sendInvitationEmail: async (data) => {
-        const url = `${env.WEB_BASE_URL ?? "https://releases.sh"}/accept-invitation/${data.id}`;
+        const url = `${releaseWebBase(env)}/accept-invitation/${data.id}`;
         const msg: AuthEmailMessage = {
           to: data.email,
           ...invitationEmailTemplate({
@@ -1282,7 +1283,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       ? [
           bearer(),
           deviceAuthorization({
-            verificationUri: `${env.WEB_BASE_URL ?? "https://releases.sh"}/device`,
+            verificationUri: `${releaseWebBase(env)}/device`,
             validateClient: (clientId) => clientId === DEVICE_AUTH_CLIENT_ID,
             // `schema: {}` is load-bearing, not a no-op. The plugin's own options
             // schema declares `schema: z.custom(() => true)` WITHOUT `.optional()`;

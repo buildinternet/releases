@@ -41,7 +41,7 @@ import { buildCompositionMetadataSet } from "@releases/core-internal/composition
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
-import { parseReleaseParam, releasePath } from "@buildinternet/releases-core/release-slug";
+import { parseReleaseParam, releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import {
   buildChangelogResponse,
   selectChangelogFile,
@@ -3573,13 +3573,13 @@ sourceRoutes.get(
       composition,
       appStore,
       video,
-      webUrl: `${releaseWebBase(c.env)}${releasePath({
+      webUrl: releaseWebUrl(releaseWebBase(c.env), {
         id: release.id,
         titleShort: release.titleShort,
         titleGenerated: release.titleGenerated,
         title: release.title,
         version: release.version,
-      })}`,
+      }),
     };
 
     if (wantsMarkdown(c)) {

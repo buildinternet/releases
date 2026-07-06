@@ -3,6 +3,7 @@
  * submissions. Both paths are best-effort and must never fail the POST.
  */
 import { logEvent } from "@releases/lib/log-event";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
 import { sendAuthEmail, type AuthEmailEnv } from "../auth/email.js";
 import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "./email-layout.js";
@@ -130,7 +131,7 @@ export function formatRecommendationAckEmail(
 }
 
 function webOrigin(env: RecommendationAckEnv): string {
-  const raw = env.WEB_BASE_URL ?? "https://releases.sh";
+  const raw = releaseWebBase(env);
   try {
     return new URL(raw).origin;
   } catch {

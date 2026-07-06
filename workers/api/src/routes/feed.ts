@@ -35,7 +35,7 @@ feedRoutes.get("/feed/:token", async (c) => {
     mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)),
   );
 
-  const baseUrl = c.env.WEB_BASE_URL ?? "https://releases.sh";
+  const baseUrl = releaseWebBase(c.env);
   const selfUrl = feedAtomUrl(new URL(c.req.url).origin, raw);
   const body = userFeedToAtom({ releases, lookupId: resolved.lookupId, selfUrl }, { baseUrl });
 

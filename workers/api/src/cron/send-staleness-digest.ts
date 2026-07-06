@@ -4,6 +4,7 @@
  * scan; this is the inbox-friendly rollup.
  */
 import { logEvent } from "@releases/lib/log-event";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { scanStaleFirecrawlSources, type FirecrawlStalenessEnv } from "./firecrawl-staleness.js";
 import { scanStaleSources, type SourceStalenessEnv } from "./source-staleness.js";
 import { buildStalenessDigestEmail } from "../lib/staleness-digest-email.js";
@@ -16,7 +17,7 @@ export type SendStalenessDigestEnv = SourceStalenessEnv &
   };
 
 function webOrigin(env: SendStalenessDigestEnv): string {
-  const raw = env.WEB_BASE_URL ?? "https://releases.sh";
+  const raw = releaseWebBase(env);
   try {
     return new URL(raw).origin;
   } catch {
