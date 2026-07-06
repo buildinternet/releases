@@ -3,5 +3,5 @@
   "framework": "nextjs",
   "installCommand": "bun install",
   "outputDirectory": ".next",
-  "ignoreCommand": "if [ -z \"$VERCEL_GIT_PREVIOUS_SHA\" ]; then exit 1; fi; git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- :/web :/packages :/scripts :/bun.lock :/package.json"
+  "ignoreCommand": "git fetch origin \"$VERCEL_GIT_PREVIOUS_SHA\" --depth=1 -q 2>/dev/null; git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- :/web :/packages :/scripts :/bun.lock :/package.json || exit 1"
 }
