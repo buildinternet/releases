@@ -38,6 +38,12 @@ export const OrgListItemSchema = z.object({
   lastActivity: z.string().nullable(),
   topProducts: z.array(z.string()),
   sparkline: z.array(z.number().int().min(0)).length(30),
+  /**
+   * Additive, admin-only field (#1947 phase 2). Only populated on the
+   * `GET /v1/orgs?trackingRequested=1` demand-queue projection — absent on
+   * the public catalog listing.
+   */
+  trackingRequestedAt: z.string().nullable().optional(),
 });
 
 /**

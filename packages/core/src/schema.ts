@@ -92,6 +92,11 @@ export const organizations = sqliteTable(
     // never reached its `finally`. Internal-only — never exposed on any read
     // surface or in api-types.
     promotingAt: text("promoting_at"),
+    // Owner demand signal (#1947 phase 2): stamped when a domain owner requests
+    // tracking through the self-serve listing lane (POST /v1/listing/activate
+    // with requestTracking). Repeat requests refresh the timestamp. Internal —
+    // surfaced only on admin read surfaces, never in public api-types.
+    trackingRequestedAt: text("tracking_requested_at"),
     // Per-org opt-in for ingest-time release content generation. When true,
     // the poll-fetch / scrape-agent workflows call Haiku 4.5 to populate
     // title_generated / title_short / summary on newly-inserted releases.

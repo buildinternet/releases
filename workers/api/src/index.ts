@@ -32,7 +32,7 @@ import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
 import { stagingAccessGate } from "./middleware/staging-access.js";
 import { mountV1Routes } from "./v1-routes.js";
-import { publicReadRoutes, adminRoutes } from "./route-namespaces.js";
+import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namespaces.js";
 import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
@@ -232,6 +232,13 @@ export type Env = {
     // because publicRateLimitMiddleware only covers safe methods.
     FEEDBACK_RATE_LIMIT_ENABLED?: string;
     FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Anonymous self-serve listing lane (/v1/listing validate + activate,
+    // #1947 phase 2). Kill switch + per-IP and per-domain rate limiters.
+    LISTING_SELF_SERVE_ENABLED?: string;
+    LISTING_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    LISTING_DOMAIN_RATE_LIMITER?: {
+      limit(options: { key: string }): Promise<{ success: boolean }>;
+    };
     // Per-sub / per-user caps on POST /v1/me/webhooks/:id/test (see test-rate-limit.ts).
     WEBHOOK_TEST_RATE_LIMIT_ENABLED?: string;
     WEBHOOK_TEST_SUB_RATE_LIMITER?: {
@@ -647,9 +654,10 @@ const v1 = new Hono<Env>();
 // edge for a Workers route (issue #1800). See middleware/edge-cache.ts.
 v1.use("*", edgeCache());
 
-// `publicReadRoutes` and `adminRoutes` are defined in route-namespaces.ts so
-// the CI coverage gate (scripts/check-openapi-coverage.ts) can import them
-// without pulling in the worker's `cloudflare:workers` re-exports.
+// `publicReadRoutes`, `adminRoutes`, and `publicWriteRoutes` are defined in
+// route-namespaces.ts so the CI coverage gate
+// (scripts/check-openapi-coverage.ts) can import them without pulling in the
+// worker's `cloudflare:workers` re-exports.
 for (const r of publicReadRoutes) {
   v1.use(`/${r}`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
@@ -660,6 +668,16 @@ for (const r of adminRoutes) {
   const mw = r === "tokens" ? tokensAuthMiddleware : authMiddleware;
   v1.use(`/${r}`, mw, dbHealthCheck);
   v1.use(`/${r}/*`, mw, dbHealthCheck);
+}
+// `publicWriteRoutes` namespaces get NO auth middleware and NO shared
+// rate-limit middleware here — every method, including writes, is open to
+// anonymous callers, and the handlers carry their OWN kill switch + per-IP /
+// per-domain limiters (see route-namespaces.ts). dbHealthCheck is the only
+// shared plumbing attached, matching the open /feedback and /recommendations
+// write paths below.
+for (const r of publicWriteRoutes) {
+  v1.use(`/${r}`, dbHealthCheck);
+  v1.use(`/${r}/*`, dbHealthCheck);
 }
 
 // Admin / write paths — scope CORS to known first-party origins so the

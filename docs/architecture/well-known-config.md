@@ -338,12 +338,55 @@ Triggers:
 | [#1907](https://github.com/buildinternet/releases/issues/1907) | Mobile-app discovery via AASA/assetlinks — deliberately out of manifest scope                                                           |
 | [#1441](https://github.com/buildinternet/releases/issues/1441) | Schema drift gate on regenerated v2 schema                                                                                              |
 
+## Self-serve listing (`/v1/listing`, #1947 phase 2)
+
+Two anonymous, public routes let an owner list their domain without a curator round trip:
+
+- `POST /v1/listing/validate { domain }` — live-fetches `https://{domain}/.well-known/releases.json`
+  (same fetch guards as the sweep: HTTPS-only, 64KB, 5s, no redirects), validates it against the
+  v2 schema, and returns a preview (`ListingValidationResult`: identity, per-product location
+  counts, per-locator tier classification, and `domainStatus` — `unlisted` / `stub` / `listed`).
+  No writes.
+- `POST /v1/listing/activate { domain, requestTracking? }` — re-validates server-side, then
+  materializes an instant **stub** org (`ListingActivateResult`). Returns `201` on create, `200`
+  when the domain is already a stub (the only write in that case is the optional tracking
+  stamp), and **409** when the domain resolves to an already-tracked (non-stub) org — the
+  conflict carries the existing `slug`/`webUrl`. An invalid or unfetchable manifest is a **400**
+  `ValidationError` (the error taxonomy has no 422).
+
+**Anonymous posture.** Both routes accept unauthenticated writes — deliberately. Integrity comes
+from **host-scoping**, not a bearer token: only the domain's own owner can publish a file at
+`https://{domain}/.well-known/releases.json`, so activation is gated by demonstrated control of
+that host, the same trust model the daily sweep already relies on. Routes live in a new
+`publicWriteRoutes` namespace bucket in `route-namespaces.ts` — distinct from `publicReadRoutes`
+(open GET, auth-gated write) and `adminRoutes` (all methods gated) — with the guard logic
+(flag check, IP/domain limiters) inline in the handler rather than in shared auth middleware,
+since these are the first routes where even non-`SAFE_METHODS` calls are intentionally open.
+
+**Stub carve-out.** `createStubFromManifest` treats an existing stub as a demand signal, not a
+duplicate: re-activating a stub never creates a second org, it only optionally stamps
+`organizations.trackingRequestedAt`. A 409 is reserved for domains that are already a real
+(non-stub) listing — that's the only case where activation would clobber something.
+
+**Rate limits (CF-native, 60s windows).** `LISTING_RATE_LIMITER` — 10/min per `cf-connecting-ip`,
+shared across validate + activate. `LISTING_DOMAIN_RATE_LIMITER` — 3/min per normalized domain,
+activate-only (a churn brake independent of caller IP).
+
+**Kill switch:** `listing-self-serve-enabled` (Flagship, default **on**). Off ⇒ both routes
+respond `404` (not 403 — when the lane is off it simply doesn't exist).
+
+**Curator surface.** No admin-only route was added (the repo avoids `/admin/*` CRUD
+duplicates) — instead `GET /v1/orgs?trackingRequested=1` on the canonical org list filters to
+stub orgs with a stamped `trackingRequestedAt`, admin-gated inside the handler, ordered
+newest-first and carrying `trackingRequestedAt` per item.
+
 ## Out of scope (phase 2+)
 
-- **Self-serve listing:** extend `/v1/lookups` by-domain (and `/submit`) to consult the
-  manifest when the domain is not yet in the registry — publish file → look up / submit domain
-  → org + Tier-1 sources materialize with `declared` basis.
-- **CLI:** `releases json validate [path|domain]`.
+- **CLI:** `releases json validate [path|domain]` (OSS repo, after the api-types publish).
+- **Web `/submit` owner path:** a UI over `/v1/listing/{validate,activate}`.
+- **Admin surface beyond the list filter:** anything richer than
+  `GET /v1/orgs?trackingRequested=1` (e.g. a dedicated queue/triage view) — shape TBD once real
+  requests exist.
 - **Verification claim flow:** observe `registries.releases.sh.verification` → domain↔account
   linkage for owner edit rights and a future GitHub-app/webhook push lane.
 - **Declared-lane pruning:** pause/remove entries this file previously declared and no longer

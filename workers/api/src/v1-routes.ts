@@ -64,6 +64,7 @@ import { changelogRoutes } from "./routes/changelog.js";
 import { whatsChangedRoutes } from "./routes/whats-changed.js";
 import { firecrawlRoutes } from "./routes/firecrawl.js";
 import { githubRoutes } from "./routes/github.js";
+import { listingRoutes } from "./routes/listing.js";
 import { mountOpenApi } from "./openapi.js";
 
 /**
@@ -127,6 +128,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", whatsChangedRoutes);
   v1.route("/", firecrawlRoutes);
   v1.route("/", githubRoutes);
+  v1.route("/", listingRoutes);
   // `graphqlRoutes` is intentionally NOT mounted here — it carries its own
   // dedicated middleware sandwich in `index.ts` (publicRateLimit + dbHealth,
   // no publicReadAuth) and isn't under any namespace the OpenAPI gate cares

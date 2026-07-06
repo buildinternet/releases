@@ -137,6 +137,108 @@ describe("GET /v1/orgs — featured filter", () => {
   });
 });
 
+describe("GET /v1/orgs — admin trackingRequested filter (#1947 phase 2)", () => {
+  function secretBinding(value: string) {
+    return { get: async () => value };
+  }
+
+  function adminEnv() {
+    return { RELEASES_API_KEY: secretBinding("root-secret") };
+  }
+
+  function adminHeaders() {
+    return { Authorization: "Bearer root-secret" };
+  }
+
+  async function seedTracking(db: ReturnType<typeof mkDb>) {
+    await db.insert(organizations).values([
+      { id: "org_plain", slug: "plain-org", name: "Plain Org" },
+      {
+        id: "org_stamped",
+        slug: "stamped-org",
+        name: "Stamped Org",
+        trackingRequestedAt: "2026-06-01T00:00:00.000Z",
+      },
+      {
+        id: "org_stamped_later",
+        slug: "stamped-later-org",
+        name: "Stamped Later Org",
+        trackingRequestedAt: "2026-06-15T00:00:00.000Z",
+      },
+    ]);
+  }
+
+  it("?trackingRequested=1 without admin auth returns 403", async () => {
+    const db = mkDb();
+    await seedTracking(db);
+
+    const res = await createTestApp(db, orgRoutes, { env: adminEnv() })(
+      new Request("https://x.test/v1/orgs?trackingRequested=1"),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("?trackingRequested=1 with admin auth returns only stamped orgs, ordered desc, with the stamp", async () => {
+    const db = mkDb();
+    await seedTracking(db);
+
+    const res = await createTestApp(db, orgRoutes, { env: adminEnv() })(
+      new Request("https://x.test/v1/orgs?trackingRequested=1", { headers: adminHeaders() }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{ slug: string; trackingRequestedAt?: string | null }>;
+      pagination: { totalItems?: number; totalPages?: number };
+    };
+    expect(body.items.map((o) => o.slug)).toEqual(["stamped-later-org", "stamped-org"]);
+    expect(body.items.every((o) => Boolean(o.trackingRequestedAt))).toBe(true);
+    expect(body.pagination.totalItems).toBe(2);
+    if (body.pagination.totalPages !== undefined) {
+      expect(body.pagination.totalPages).toBe(1);
+    }
+  });
+
+  it("?trackingRequested=1 excludes soft-deleted orgs even if trackingRequestedAt survived the tombstone", async () => {
+    const db = mkDb();
+    await seedTracking(db);
+    await db.insert(organizations).values({
+      id: "org_deleted_stamped",
+      slug: "deleted-stamped-org--org_deleted_stamped",
+      name: "Deleted Stamped Org",
+      trackingRequestedAt: "2026-06-20T00:00:00.000Z",
+      deletedAt: "2026-06-21T00:00:00.000Z",
+    });
+
+    const res = await createTestApp(db, orgRoutes, { env: adminEnv() })(
+      new Request("https://x.test/v1/orgs?trackingRequested=1", { headers: adminHeaders() }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{ slug: string }>;
+      pagination: { totalItems?: number };
+    };
+    expect(body.items.map((o) => o.slug)).toEqual(["stamped-later-org", "stamped-org"]);
+    expect(body.pagination.totalItems).toBe(2);
+  });
+
+  it("plain list without the param is unchanged and never exposes trackingRequestedAt", async () => {
+    const db = mkDb();
+    await seedTracking(db);
+
+    const res = await createTestApp(db, orgRoutes, { env: adminEnv() })(
+      new Request("https://x.test/v1/orgs"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<Record<string, unknown>>;
+    };
+    // trackingRequestedAt never appears on the public projection.
+    for (const item of body.items) {
+      expect(item).not.toHaveProperty("trackingRequestedAt");
+    }
+  });
+});
+
 describe("GET /v1/orgs/:slug — featured in detail response", () => {
   it("returns featured=true when org is featured", async () => {
     const db = mkDb();

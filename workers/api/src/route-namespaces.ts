@@ -39,6 +39,14 @@ export const publicReadRoutes = [
   "site-notice",
 ] as const;
 
+/**
+ * Public-WRITE namespaces: even non-SAFE methods are open to anonymous
+ * callers. Integrity lives in the handlers (host-scoped manifest fetch,
+ * kill-switch flag, per-IP + per-domain rate limiters) — NOT in auth
+ * middleware. Currently only the self-serve listing lane (#1947 phase 2).
+ */
+export const publicWriteRoutes = ["listing"] as const;
+
 /** Admin-only namespaces: every method requires `authMiddleware`. */
 export const adminRoutes = [
   "sessions",

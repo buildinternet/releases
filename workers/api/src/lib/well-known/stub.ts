@@ -249,6 +249,33 @@ export async function createStubOrg(
   return { org, productCount: productIdByIndex.length, locationCount: rows.length };
 }
 
+/** Resolve a normalized domain to its live org via `organizations.domain` or
+ *  a `domain_aliases` row — the same two backends GET /v1/lookups/by-domain
+ *  resolves through. Returns the org row (for status/pointer) or null. */
+export async function resolveDomainOrg(
+  db: Db,
+  domain: string,
+): Promise<typeof organizations.$inferSelect | null> {
+  const [direct] = await db
+    .select()
+    .from(organizations)
+    .where(and(eq(organizations.domain, domain), isNull(organizations.deletedAt)))
+    .limit(1);
+  if (direct) return direct;
+  const [alias] = await db
+    .select({ orgId: domainAliases.orgId })
+    .from(domainAliases)
+    .where(eq(domainAliases.domain, domain))
+    .limit(1);
+  if (!alias?.orgId) return null;
+  const [aliasOrg] = await db
+    .select()
+    .from(organizations)
+    .where(and(eq(organizations.id, alias.orgId), isNull(organizations.deletedAt)))
+    .limit(1);
+  return aliasOrg ?? null;
+}
+
 function nextSlug(base: string, used: Set<string>): string {
   const normalized = toSlug(base) || "product";
   for (let attempt = 1; attempt <= 50; attempt++) {
@@ -348,18 +375,24 @@ export async function createStubFromManifest(
 
   // Guard: never shadow an existing org. Matches organizations.domain and any
   // domain alias (the two backends GET /v1/lookups/by-domain resolves through).
-  const [existingOrg] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(and(eq(organizations.domain, domain), isNull(organizations.deletedAt)))
-    .limit(1);
-  if (existingOrg) return { created: false, skippedReason: "org_exists" };
-  const [aliasOrg] = await db
+  if (await resolveDomainOrg(db, domain)) {
+    return { created: false, skippedReason: "org_exists" };
+  }
+
+  // Fail-closed on bare alias existence, even when the aliased org is
+  // soft-deleted/missing. resolveDomainOrg() intentionally returns only a LIVE
+  // org (that shape is what the listing lane wants), so a dangling alias would
+  // otherwise slip past the check above. A domain_aliases row means the domain
+  // was deliberately mapped to an org; deleting that org must not silently
+  // reopen the domain to anonymous stub creation.
+  const [danglingAlias] = await db
     .select({ orgId: domainAliases.orgId })
     .from(domainAliases)
     .where(eq(domainAliases.domain, domain))
     .limit(1);
-  if (aliasOrg) return { created: false, skippedReason: "org_exists" };
+  if (danglingAlias) {
+    return { created: false, skippedReason: "org_exists" };
+  }
 
   const url = `https://${domain}/.well-known/releases.json`;
   const fetched = await fetchReleasesJson(url, { fetchImpl: opts.fetchImpl });
