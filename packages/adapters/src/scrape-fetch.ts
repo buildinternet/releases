@@ -681,8 +681,11 @@ async function runScrapePath(
   // Fire-and-forget: keep the snapshot POST + R2 write off the extraction
   // critical path. `captureRawSnapshot` swallows its own errors (floating
   // promise never rejects), and the multi-second extraction keeps the request
-  // alive long enough for it to land. No `ctx.waitUntil` in this RPC.
-  void persister.captureRawSnapshot(source, markdown);
+  // alive long enough for it to land. No `ctx.waitUntil` in this RPC. The
+  // `.catch` is a belt-and-suspenders guard on the interface's never-throw
+  // contract — a persister impl that violates it must not surface an
+  // unhandled rejection here.
+  void persister.captureRawSnapshot(source, markdown).catch(() => {});
 
   const knownReleases = await knownReleasesPromise;
 
