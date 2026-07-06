@@ -82,6 +82,16 @@ export const organizations = sqliteTable(
     tier: text("tier", { enum: ["stub", "tracked"] })
       .notNull()
       .default("tracked"),
+    // Promotion claim state (#1958). NULL when no promotion is in flight; set
+    // to "now" by an atomic conditional UPDATE at the start of promoteStubOrg
+    // so two concurrent promotions of the same org can't both pass the tier
+    // check and race on the per-org source insert. Released (set back to
+    // NULL) in a `finally` around the promotion body, so a thrown failure
+    // still releases the claim. A claim older than the 10-minute TTL enforced
+    // in promoteStubOrg is treated as free, self-healing a crashed run that
+    // never reached its `finally`. Internal-only — never exposed on any read
+    // surface or in api-types.
+    promotingAt: text("promoting_at"),
     // Per-org opt-in for ingest-time release content generation. When true,
     // the poll-fetch / scrape-agent workflows call Haiku 4.5 to populate
     // title_generated / title_short / summary on newly-inserted releases.

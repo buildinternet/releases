@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import {
   organizations,
   products,
@@ -13,6 +13,7 @@ import type {
 import { isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { logEvent } from "@releases/lib/log-event";
+import { ConflictError } from "@releases/lib/releases-error";
 import type { createDb } from "../../db.js";
 import {
   reconcileDomainEntities,
@@ -23,6 +24,20 @@ import {
 } from "./materialize.js";
 
 type Db = ReturnType<typeof createDb>;
+
+// How long a claim is honored before it's treated as abandoned (a crashed run
+// that never reached its `finally`). Self-heals without any manual cleanup.
+const PROMOTION_CLAIM_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Number of rows an UPDATE touched, normalized across drivers: prod's
+ * drizzle-orm/d1 adapter returns `{ meta: { changes } }`; the bun-sqlite
+ * adapter used by tests returns `{ changes }` directly (no `meta` wrapper).
+ */
+export function affectedRows(result: unknown): number {
+  const r = result as { changes?: number; meta?: { changes?: number } };
+  return r.meta?.changes ?? r.changes ?? 0;
+}
 
 export interface PromoteStubResult {
   promoted: boolean;
@@ -89,100 +104,155 @@ export async function promoteStubOrg(
     };
   }
 
-  const [locators, productRows] = await Promise.all([
-    db
-      .select()
-      .from(releaseLocations)
-      .where(and(eq(releaseLocations.orgId, orgId), isNull(releaseLocations.deletedAt))),
-    db
-      .select()
-      .from(products)
-      .where(and(eq(products.orgId, orgId), isNull(products.deletedAt))),
-  ]);
-
-  // Rebuild the manifest: product-scoped locators nest under their product;
-  // the rest ride the top-level releases[]. reconcileDomainEntities matches the
-  // existing products by name (they already exist), so no duplicates are made.
-  const productManifest: ReleasesJsonProduct[] = productRows.map((product) => ({
-    name: product.name,
-    slug: product.slug,
-    ...(product.description ? { description: product.description } : {}),
-    ...(product.url ? { website: product.url } : {}),
-    ...(product.category ? { category: product.category } : {}),
-    ...(product.kind && isValidKind(product.kind) ? { kind: product.kind } : {}),
-    releases: locators.filter((l) => l.productId === product.id).map(rowToRelease),
-  }));
-  // A locator's product_id is only nulled on HARD delete, so a locator pointing
-  // at a soft-deleted (tombstoned) product still carries the dead id — and
-  // `productRows` excludes tombstoned products. Treat any locator whose product
-  // is missing from the active set as top-level, else it'd be dropped from both
-  // the product manifest and releases[] and never materialize on promotion.
-  const activeProductIds = new Set(productRows.map((p) => p.id));
-  const topLevelReleases = locators
-    .filter((l) => l.productId === null || !activeProductIds.has(l.productId))
-    .map(rowToRelease);
-
-  const manifest: ReleasesJsonDomain = {
-    version: 2,
-    ...(org.name ? { name: org.name } : {}),
-    ...(productManifest.length > 0 ? { products: productManifest } : {}),
-    ...(topLevelReleases.length > 0 ? { releases: topLevelReleases } : {}),
-  };
-
-  const { plan } = await reconcileDomainEntities(db, orgId, manifest, {
-    dryRun: opts.dryRun === true,
-    // Forced on: promotion is an explicit admin action, not subject to the
-    // sweep-facing WELL_KNOWN_MATERIALIZATION_ENABLED gate.
-    enabled: true,
-    source: "well-known",
-    fetchImpl: opts.fetchImpl,
-    githubToken: opts.githubToken,
-    probe: opts.probe,
-    resolveCategory: async (input) => {
-      const result = await resolveCategoryInput(db, input);
-      return result.ok ? result.slug : null;
-    },
-  });
-
-  const sourcesCreated = plan.sources.filter((s) => s.action === "create").length;
-  const sourcesMatched = plan.sources.filter((s) => s.action === "match").length;
-
-  if (opts.dryRun) {
-    return { promoted: false, sourcesCreated, sourcesMatched, locatorsStamped: 0, plan };
+  // Serialize per-org promotion (#1958). Dry-run never claims — it does no
+  // writes at all, so there's nothing to serialize against. A real run takes
+  // an atomic conditional UPDATE claim before any materialization work: only
+  // succeeds when no claim is held, or the held claim is older than the TTL
+  // (an abandoned run that never released it). 0 rows affected means another
+  // run currently holds the claim — surface a 409 rather than racing it on
+  // the per-org `UNIQUE(org_id, slug)` source insert.
+  const claimStamp = new Date().toISOString();
+  if (opts.dryRun !== true) {
+    const staleBefore = new Date(Date.now() - PROMOTION_CLAIM_TTL_MS).toISOString();
+    const claimResult = await db
+      .update(organizations)
+      .set({ promotingAt: claimStamp })
+      .where(
+        and(
+          eq(organizations.id, orgId),
+          eq(organizations.tier, "stub"),
+          or(isNull(organizations.promotingAt), lt(organizations.promotingAt, staleBefore)),
+        ),
+      );
+    if (affectedRows(claimResult) === 0) {
+      // Distinguish the two ways the claim predicate can fail: another run
+      // finished promoting between our tier check and the claim (org is now
+      // `tracked` — report the same idempotent no-op success as the up-front
+      // check), vs. an in-flight run genuinely holding the claim.
+      const [current] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+      if (current?.tier === "tracked") {
+        return {
+          promoted: false,
+          alreadyTracked: true,
+          sourcesCreated: 0,
+          sourcesMatched: 0,
+          locatorsStamped: 0,
+        };
+      }
+      throw new ConflictError("Promotion already in progress for this org", {
+        code: "conflict",
+        details: { orgId },
+      });
+    }
   }
 
-  // Stamp each locator with the source it materialized into, matched via the
-  // same primitive the materializer uses. Idempotent — re-stamps to the same id.
-  const orgSources = await db
-    .select()
-    .from(sources)
-    .where(and(eq(sources.orgId, orgId), isNull(sources.deletedAt)));
-  let locatorsStamped = 0;
-  for (const locator of locators) {
-    const location = rowToRelease(locator) as DeclaredLocation;
-    const match = orgSources.find((source) => locationMatchesSource(location, source));
-    if (!match || locator.sourceId === match.id) continue;
-    // oxlint-disable-next-line no-await-in-loop -- per-locator stamp; bounded by the org's locator count
+  try {
+    const [locators, productRows] = await Promise.all([
+      db
+        .select()
+        .from(releaseLocations)
+        .where(and(eq(releaseLocations.orgId, orgId), isNull(releaseLocations.deletedAt))),
+      db
+        .select()
+        .from(products)
+        .where(and(eq(products.orgId, orgId), isNull(products.deletedAt))),
+    ]);
+
+    // Rebuild the manifest: product-scoped locators nest under their product;
+    // the rest ride the top-level releases[]. reconcileDomainEntities matches the
+    // existing products by name (they already exist), so no duplicates are made.
+    const productManifest: ReleasesJsonProduct[] = productRows.map((product) => ({
+      name: product.name,
+      slug: product.slug,
+      ...(product.description ? { description: product.description } : {}),
+      ...(product.url ? { website: product.url } : {}),
+      ...(product.category ? { category: product.category } : {}),
+      ...(product.kind && isValidKind(product.kind) ? { kind: product.kind } : {}),
+      releases: locators.filter((l) => l.productId === product.id).map(rowToRelease),
+    }));
+    // A locator's product_id is only nulled on HARD delete, so a locator pointing
+    // at a soft-deleted (tombstoned) product still carries the dead id — and
+    // `productRows` excludes tombstoned products. Treat any locator whose product
+    // is missing from the active set as top-level, else it'd be dropped from both
+    // the product manifest and releases[] and never materialize on promotion.
+    const activeProductIds = new Set(productRows.map((p) => p.id));
+    const topLevelReleases = locators
+      .filter((l) => l.productId === null || !activeProductIds.has(l.productId))
+      .map(rowToRelease);
+
+    const manifest: ReleasesJsonDomain = {
+      version: 2,
+      ...(org.name ? { name: org.name } : {}),
+      ...(productManifest.length > 0 ? { products: productManifest } : {}),
+      ...(topLevelReleases.length > 0 ? { releases: topLevelReleases } : {}),
+    };
+
+    const { plan } = await reconcileDomainEntities(db, orgId, manifest, {
+      dryRun: opts.dryRun === true,
+      // Forced on: promotion is an explicit admin action, not subject to the
+      // sweep-facing WELL_KNOWN_MATERIALIZATION_ENABLED gate.
+      enabled: true,
+      source: "well-known",
+      fetchImpl: opts.fetchImpl,
+      githubToken: opts.githubToken,
+      probe: opts.probe,
+      resolveCategory: async (input) => {
+        const result = await resolveCategoryInput(db, input);
+        return result.ok ? result.slug : null;
+      },
+    });
+
+    const sourcesCreated = plan.sources.filter((s) => s.action === "create").length;
+    const sourcesMatched = plan.sources.filter((s) => s.action === "match").length;
+
+    if (opts.dryRun) {
+      return { promoted: false, sourcesCreated, sourcesMatched, locatorsStamped: 0, plan };
+    }
+
+    // Stamp each locator with the source it materialized into, matched via the
+    // same primitive the materializer uses. Idempotent — re-stamps to the same id.
+    const orgSources = await db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.orgId, orgId), isNull(sources.deletedAt)));
+    let locatorsStamped = 0;
+    for (const locator of locators) {
+      const location = rowToRelease(locator) as DeclaredLocation;
+      const match = orgSources.find((source) => locationMatchesSource(location, source));
+      if (!match || locator.sourceId === match.id) continue;
+      // oxlint-disable-next-line no-await-in-loop -- per-locator stamp; bounded by the org's locator count
+      await db
+        .update(releaseLocations)
+        .set({ sourceId: match.id, updatedAt: new Date().toISOString() })
+        .where(eq(releaseLocations.id, locator.id));
+      locatorsStamped++;
+    }
+
     await db
-      .update(releaseLocations)
-      .set({ sourceId: match.id, updatedAt: new Date().toISOString() })
-      .where(eq(releaseLocations.id, locator.id));
-    locatorsStamped++;
+      .update(organizations)
+      .set({ tier: "tracked", updatedAt: new Date().toISOString() })
+      .where(eq(organizations.id, orgId));
+
+    logEvent("info", {
+      component: "well-known",
+      event: "stub-promoted",
+      orgId,
+      sourcesCreated,
+      sourcesMatched,
+      locatorsStamped,
+    });
+
+    return { promoted: true, sourcesCreated, sourcesMatched, locatorsStamped, plan };
+  } finally {
+    // Release the claim on every path — success or thrown failure — so a
+    // failed run doesn't block retries for the full TTL. Scoped to OUR stamp:
+    // a run that outlived the TTL and lost its claim to a newer run must not
+    // clear that newer claim on its way out. No-op when dryRun never claimed.
+    if (opts.dryRun !== true) {
+      await db
+        .update(organizations)
+        .set({ promotingAt: null })
+        .where(and(eq(organizations.id, orgId), eq(organizations.promotingAt, claimStamp)));
+    }
   }
-
-  await db
-    .update(organizations)
-    .set({ tier: "tracked", updatedAt: new Date().toISOString() })
-    .where(eq(organizations.id, orgId));
-
-  logEvent("info", {
-    component: "well-known",
-    event: "stub-promoted",
-    orgId,
-    sourcesCreated,
-    sourcesMatched,
-    locatorsStamped,
-  });
-
-  return { promoted: true, sourcesCreated, sourcesMatched, locatorsStamped, plan };
 }
