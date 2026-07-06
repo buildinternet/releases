@@ -26,17 +26,15 @@ import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
-import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
-import { invalidateLatestCache } from "../lib/latest-cache.js";
+import { ingestRawReleases, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
   RETRY_FETCH,
-  RETRY_EMBED,
-  RETRY_GENERATE,
   resolveFetchEnv,
-  generateContentForReleases,
-  type PollAndFetchWorkflowEnv,
-} from "./poll-and-fetch.js";
+  runContentAndEmbedSteps,
+  runInvalidateLatestCacheStep,
+} from "../lib/ingest-steps.js";
+import type { PollAndFetchWorkflowEnv } from "./poll-and-fetch.js";
 
 // Model for Firecrawl extraction. Matches the standard cron ingest model
 // (config.ingestModel default) rather than the heavier discovery agentModel:
@@ -225,38 +223,23 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
         return ingestRawReleases(db, source, rawReleases, fetchEnv);
       });
 
-      // ── Steps 5a/5b: summarize + embed (only when new rows landed) ────────────
-      // Order matches the poll path (poll-and-fetch.ts): generate-content runs
-      // BEFORE embed-releases so (a) the AI-generated headline isn't embedded as
-      // a separate signal, and (b) the new content_* fields land before the row
-      // reaches release-event observers. The firecrawl path previously ran these
-      // reversed; the swap is replay-safe (CF Workflows matches completed steps
-      // by name, and both steps are idempotent).
-      if (ingest.insertedIds.length > 0) {
-        await step.do("generate-content", RETRY_GENERATE, async () => {
-          await generateContentForReleases(db, env, source, ingest.insertedIds);
-        });
-
-        if (env.RELEASES_INDEX) {
-          await step.do("embed-releases", RETRY_EMBED, async () => {
-            const fetchEnv: FetchOneEnv = await resolveFetchEnv(env);
-            await embedReleasesForSource(db, source, ingest.insertedIds, fetchEnv, {
-              throwOnError: true,
-            });
-          });
-        }
-      }
-
-      // ── Step 5c: purge the latest-cache when new rows landed ──────────────────
-      // Mirrors the poll path (poll-and-fetch.ts): a firecrawl-detected release is
-      // a publish like any other, so the cached /v1/releases/latest shapes must be
-      // invalidated or they serve stale results until the 5-min TTL. Best-effort;
-      // a new terminal-ish step is replay-safe.
-      if (ingest.inserted > 0) {
-        await step.do("invalidate-latest-cache", async () => {
-          await invalidateLatestCache(env, { nReleases: ingest.inserted, cause: source.id });
-        });
-      }
+      // ── Steps 5a/5b/5c: post-insert side-effects (only when new rows landed) ──
+      // Shared with the poll path via lib/ingest-steps so the two can't drift
+      // (the drift these helpers close was fixed in #1955): generate-content runs
+      // BEFORE embed-releases (don't embed the AI headline; land content_* before
+      // release-event observers), then the latest-cache is purged. Same step
+      // names + gating as before the extraction, so in-flight instances replay
+      // cleanly. resolveFetchEnv is cheap + idempotent; it runs on each replay
+      // outside a step, matching the poll path.
+      const postInsertFetchEnv: FetchOneEnv = await resolveFetchEnv(env);
+      await runContentAndEmbedSteps(step, {
+        db,
+        env,
+        source,
+        insertedIds: ingest.insertedIds,
+        fetchEnv: postInsertFetchEnv,
+      });
+      await runInvalidateLatestCacheStep(step, env, source, ingest.inserted);
 
       // ── Step 6: bookkeep ─────────────────────────────────────────────────────
       await step.do("bookkeep", RETRY_POLL, async () => {
