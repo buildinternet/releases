@@ -11,7 +11,7 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { eq } from "drizzle-orm";
 import { organizations, sources, releaseLocations } from "@buildinternet/releases-core/schema";
 import { orgRoutes } from "../src/routes/orgs.js";
-import { createStubOrg } from "../src/lib/well-known/stub.js";
+import { createStubOrg, resolveDomainOrg } from "../src/lib/well-known/stub.js";
 import { createTestDb, createTestApp } from "./setup";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
@@ -169,5 +169,19 @@ describe("POST /v1/orgs/:slug/promote", () => {
       new Request("https://x/v1/orgs/nope/promote", { method: "POST", headers: auth }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("resolveDomainOrg", () => {
+  it("resolves by organizations.domain and returns the org row", async () => {
+    const db = createTestDb();
+    const { org } = await createStubOrg(
+      db as never,
+      { name: "Acme", slug: "acme", domain: "acme.com" },
+      { basis: "curator" },
+    );
+    const hit = await resolveDomainOrg(db as never, "acme.com");
+    expect(hit?.id).toBe(org.id);
+    expect(await resolveDomainOrg(db as never, "other.com")).toBeNull();
   });
 });
