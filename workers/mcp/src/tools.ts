@@ -1190,7 +1190,7 @@ export async function getOrganization(
       .select()
       .from(releaseLocations)
       .where(and(eq(releaseLocations.orgId, org.id), isNull(releaseLocations.deletedAt)))
-      .orderBy(asc(releaseLocations.matchKey));
+      .orderBy(desc(releaseLocations.canonical), asc(releaseLocations.matchKey));
     lines.push("");
     if (locations.length > 0) {
       lines.push("Declared release locations (not yet processed):");
@@ -1278,7 +1278,7 @@ export async function lookupDomain(db: D1Db, params: { domain: string }): Promis
         .select()
         .from(releaseLocations)
         .where(and(eq(releaseLocations.orgId, orgRow.id), isNull(releaseLocations.deletedAt)))
-        .orderBy(asc(releaseLocations.matchKey));
+        .orderBy(desc(releaseLocations.canonical), asc(releaseLocations.matchKey));
       lines.push(
         "",
         "Status: stub — not yet processed. Release info is published at these locations:",

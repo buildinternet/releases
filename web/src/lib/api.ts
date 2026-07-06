@@ -58,6 +58,8 @@ export type {
   KnowledgePageItem,
   LookupResultPayload,
   LookupStatus,
+  OrgStatus,
+  ReleaseLocationItem,
 } from "@buildinternet/releases-api-types";
 
 export type {

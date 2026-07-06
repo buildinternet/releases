@@ -6,6 +6,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { OverviewView } from "@/components/overview-view";
 import { LatestReleasesTeaser } from "@/components/org/latest-releases-teaser";
 import { OrgActivityPanel } from "@/components/org/org-activity-panel";
+import { StubLocations } from "@/components/org/stub-locations";
 import { JsonLd } from "@/components/json-ld";
 
 import {
@@ -32,11 +33,15 @@ export async function generateMetadata({
   try {
     const org = await getOrg(orgSlug);
     const lastModified = lastModifiedAt(org);
-    const shouldNoIndex = org.discovery === "on_demand" || org.isHidden === true;
+    // A stub is a thin, near-duplicate page (no releases yet) — noindex AND
+    // nofollow it (#1947), stronger than the index:false/follow:true posture
+    // used for on_demand / hidden orgs.
+    const isStub = org.status === "stub";
+    const shouldNoIndex = isStub || org.discovery === "on_demand" || org.isHidden === true;
     return {
       title: `${org.name} Releases & Latest Updates · ${currentPeriod()}`,
       description: `Latest releases, product updates, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
-      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
+      ...(shouldNoIndex ? { robots: { index: false, follow: !isStub } } : {}),
       openGraph: {
         type: "website",
         url: `/${orgSlug}`,
@@ -146,6 +151,17 @@ export default async function OrgOverviewPage({
         : []),
     ],
   };
+
+  // A stub org has no processed sources — surface its declared release
+  // locations as the page body instead of the (empty) overview/activity panels.
+  if (org.status === "stub") {
+    return (
+      <>
+        <JsonLd data={jsonLd} />
+        <StubLocations orgName={org.name} locations={org.locations ?? []} />
+      </>
+    );
+  }
 
   return (
     <>
