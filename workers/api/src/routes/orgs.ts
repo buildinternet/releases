@@ -43,7 +43,7 @@ import { promoteStubOrg } from "../lib/well-known/promote.js";
 import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
-import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
+import { eq, count, max, min, and, sql, inArray, gte, desc, isNotNull } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   organizations,
@@ -178,19 +178,64 @@ orgRoutes.get(
         description:
           "Filter to editorially featured orgs only (home-page rail). Default unfiltered.",
       },
+      {
+        name: "trackingRequested",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["1"] },
+        description:
+          "Admin-only. Pass `1` to restrict to orgs that have stamped `trackingRequestedAt` " +
+          "(the self-serve listing owner-demand signal, #1947), ordered most-recent-first. " +
+          "Items on this path additionally carry `trackingRequestedAt`. Requires admin bearer " +
+          "auth — a non-admin caller gets a 403, the param is never silently ignored.",
+      },
     ],
     responses: {
       200: {
         description: "Paginated org list",
         content: { "application/json": { schema: resolver(OrgListResponseSchema) } },
       },
+      403: {
+        description: "Admin scope required for `?trackingRequested=1`",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
     },
   }),
   async (c) => {
     const db = createDb(c.env.DB);
+    const pagination = parseListPagination(new URL(c.req.url).searchParams);
+
+    // Admin-only tracking-requested filter (#1947 phase 2) — a distinct,
+    // narrower projection over `organizations` rather than the public
+    // stats-heavy list below. Fails closed: presence of the param always
+    // requires admin, never silently falls through to the public path.
+    if (c.req.query("trackingRequested") === "1") {
+      if (!(await isValidBearerAuth(c))) {
+        return respondError(
+          c,
+          new ForbiddenError("Admin scope is required to filter by trackingRequested"),
+        );
+      }
+      const rows = await db
+        .select({
+          id: organizations.id,
+          slug: organizations.slug,
+          name: organizations.name,
+          domain: organizations.domain,
+          tier: organizations.tier,
+          trackingRequestedAt: organizations.trackingRequestedAt,
+        })
+        .from(organizations)
+        .where(isNotNull(organizations.trackingRequestedAt))
+        .orderBy(desc(organizations.trackingRequestedAt))
+        .limit(pagination.pageSize)
+        .offset(pagination.offset);
+
+      return c.json(buildListResponse(rows, pagination));
+    }
+
     const cutoff30d = daysAgoIso(30);
     const qParam = c.req.query("q");
-    const pagination = parseListPagination(new URL(c.req.url).searchParams);
     // Default off — orgs without indexed releases are stubs; admin surfaces
     // see them through `/v1/admin/*`, not this public catalog route.
     const includeEmpty = parseBoolParam(c.req.query("includeEmpty"));
