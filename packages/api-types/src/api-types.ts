@@ -335,6 +335,21 @@ export type {
   ReleasesJsonRepoRelease,
 } from "./schemas/well-known.js";
 export {
+  ListingValidateBodySchema,
+  ListingActivateBodySchema,
+  ListingIssueSchema,
+  ListingLocationSchema,
+  ListingOrgPointerSchema,
+  ListingValidationResultSchema,
+  ListingActivateResultSchema,
+  type ListingValidateBody,
+  type ListingActivateBody,
+  type ListingIssue,
+  type ListingLocation,
+  type ListingValidationResult,
+  type ListingActivateResult,
+} from "./schemas/listing.js";
+export {
   SourceListItemSchema,
   SourceWithOrgSchema,
   SourceListResponseSchema,
