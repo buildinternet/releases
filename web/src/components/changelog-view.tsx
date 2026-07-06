@@ -1,7 +1,4 @@
-import ReactMarkdown from "react-markdown";
-import { remarkPlugins } from "@/lib/markdown-plugins";
-import { rehypeShikiPlugin } from "@/lib/shiki";
-import { markdownComponents } from "./markdown-components";
+import { renderChangelogHtml } from "@/lib/render-changelog-html";
 import { api } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/formatters";
 import { ChangelogStream } from "./changelog-stream";
@@ -73,27 +70,17 @@ export async function ChangelogView({
     );
   }
 
-  // When the view was deep-linked from a search chunk hit, wrap the
-  // initial slice in an anchor (`#chunk`) so the browser's hash-target
-  // scrolling lands the user on it automatically. The range API already
-  // snapped the offset forward to the nearest heading, so the first
-  // element in `file.content` is the start of the matched section.
-  const markdown = (
-    <ReactMarkdown
-      remarkPlugins={remarkPlugins}
-      rehypePlugins={[rehypeShikiPlugin]}
-      components={markdownComponents}
-    >
-      {file.content}
-    </ReactMarkdown>
-  );
-  const initial = hasDeepLink ? (
-    <div id="chunk" style={{ scrollMarginTop: "5rem" }}>
-      {markdown}
-    </div>
-  ) : (
-    markdown
-  );
+  // Render the initial slice to HTML on the server (same shared pipeline the
+  // lazy-chunk route handler uses), so shiki + react-markdown stay off this
+  // route's client bundle (#1919). When the view was deep-linked from a search
+  // chunk hit, wrap the slice in an anchor (`#chunk`) so the browser's
+  // hash-target scrolling lands the user on it automatically — the range API
+  // already snapped the offset forward to the nearest heading, so the first
+  // element is the start of the matched section.
+  const bodyHtml = renderChangelogHtml(file.content);
+  const initialHtml = hasDeepLink
+    ? `<div id="chunk" style="scroll-margin-top:5rem">${bodyHtml}</div>`
+    : bodyHtml;
 
   const files = file.files ?? [];
   const hasMultiple = files.length > 1;
@@ -157,7 +144,7 @@ export async function ChangelogView({
         activePath={file.path}
         markdownClassName={markdownClasses}
         initial={{
-          content: initial,
+          contentHtml: initialHtml,
           offset: file.offset,
           limit: DEFAULT_CHANGELOG_SLICE_LIMIT,
           nextOffset: file.nextOffset,
