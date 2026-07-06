@@ -35,76 +35,33 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
-function classificationLabel(classification: "tier1-live" | "tier2-paused-review"): string {
-  return classification === "tier1-live" ? "goes live" : "reviewed first";
-}
-
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-stone-300 bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300">
-      {children}
-    </span>
-  );
-}
-
 function LocationsPreview({ result }: { result: ListingValidationResult }) {
   return (
-    <div className="mt-4 space-y-4">
+    <div className="mt-4 space-y-3">
       {result.identity && (
         <div className="text-sm text-stone-700 dark:text-stone-300">
           <span className="font-semibold text-stone-900 dark:text-stone-100">
             {result.identity.name}
           </span>{" "}
-          <span className="font-mono text-[0.85em] text-stone-500 dark:text-stone-400">
-            ({result.identity.slug})
-          </span>{" "}
           &middot; {result.identity.domain}
         </div>
       )}
 
-      {result.products && result.products.length > 0 && (
-        <ul className="space-y-1 text-sm text-stone-600 dark:text-stone-400">
-          {result.products.map((product) => (
-            <li key={product.name}>
-              {product.name} &middot; {product.locationCount}{" "}
-              {product.locationCount === 1 ? "location" : "locations"}
+      {result.locations.length > 0 && (
+        <ul className="space-y-1.5 text-sm text-stone-600 dark:text-stone-400">
+          {result.locations.map((location, index) => (
+            <li key={`${location.locator}-${index}`} className="truncate">
+              <span className="font-mono text-[0.85em]">{location.locator}</span>
+              {location.productName && (
+                <span className="text-stone-400 dark:text-stone-500">
+                  {" "}
+                  — {location.productName}
+                </span>
+              )}
             </li>
           ))}
         </ul>
       )}
-
-      <div className="overflow-x-auto border border-stone-200 dark:border-stone-800">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-[11px] uppercase tracking-[0.14em] text-stone-400 dark:border-stone-800 dark:text-stone-500">
-              <th className="px-3 py-2 font-medium">Locator</th>
-              <th className="px-3 py-2 font-medium">Kind</th>
-              <th className="px-3 py-2 font-medium">Becomes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.locations.map((location, index) => (
-              <tr
-                key={`${location.locator}-${index}`}
-                className="border-b border-stone-100 last:border-0 dark:border-stone-900"
-              >
-                <td className="max-w-xs truncate px-3 py-2 font-mono text-[0.85em] text-stone-700 dark:text-stone-300">
-                  {location.locator}
-                </td>
-                <td className="px-3 py-2">
-                  <Chip>{location.kind}</Chip>
-                </td>
-                <td className="px-3 py-2 text-stone-600 dark:text-stone-400">
-                  {location.becomes}{" "}
-                  <span className="text-stone-400 dark:text-stone-500">
-                    ({classificationLabel(location.classification)})
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
@@ -165,23 +122,18 @@ export function ListingFastLane() {
   return (
     <div>
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
-        A{" "}
+        Publish a{" "}
         <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
           releases.json
         </code>{" "}
-        file on your domain tells the registry where your changelog, feed, and product releases
-        live.{" "}
+        file on your domain, then enter the domain here to activate your listing.{" "}
         <Link
           href="/docs/listing"
           className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
         >
           Learn how to create one
         </Link>{" "}
-        &mdash; by hand, or by handing the prompt to your coding agent.
-      </p>
-
-      <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">
-        Already publish one? Enter your domain to check and activate your listing.
+        &mdash; or hand the prompt to your coding agent.
       </p>
 
       {(state.phase === "idle" ||

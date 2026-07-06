@@ -25,33 +25,15 @@ export default function SubmitPage() {
             Submit Your Product
           </h1>
           <p className="mt-4 leading-6">
-            Own your listing by publishing a{" "}
-            <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-              releases.json
-            </code>{" "}
-            manifest on your domain, or suggest a changelog, feed, or GitHub releases URL for a
-            curator to review.
+            List your product in the registry from your own domain, or suggest a changelog URL for a
+            curator to review.{" "}
+            <Link
+              href="/docs/listing"
+              className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            >
+              How to get listed
+            </Link>
           </p>
-
-          <div className="mt-6 border-t border-stone-200 pt-6 dark:border-stone-800">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-              Own your listing
-            </p>
-            <p className="mt-3 leading-6">
-              Tell the registry where you publish updates — changelogs, feeds, and products —
-              straight from your own domain by publishing a{" "}
-              <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-                releases.json
-              </code>
-              .{" "}
-              <Link
-                href="/docs/listing"
-                className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-              >
-                How to get listed
-              </Link>
-            </p>
-          </div>
         </aside>
 
         <section className="space-y-10">
