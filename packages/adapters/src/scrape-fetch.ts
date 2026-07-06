@@ -39,6 +39,7 @@ import {
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { logEvent } from "@releases/lib/log-event";
 import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
+import { httpPersister, type ScrapePersister } from "./scrape-persister.js";
 
 /**
  * True when a source has no indexed releases yet — its first fetch should run
@@ -100,141 +101,22 @@ export interface ScrapeEnv {
   captureRawSnapshots?: boolean;
   /** Signed outbound fetch for third-party content; falls back to global fetch. */
   signedFetch?: typeof fetch;
+  /**
+   * Persistence seam (#1946 phase 4). Defaults to `httpPersister(env)` — the
+   * API-worker-backed path used by the discovery worker (no D1/R2 access) and
+   * everything else that doesn't inject one. A direct-DB persister can be
+   * supplied by callers that have D1 access, skipping the HTTP round-trip.
+   */
+  persister?: ScrapePersister;
 }
 
 // ── API helpers ────────────────────────────────────────────────────
-
-/**
- * Build an org-scoped sub-resource path for a source. Mirrors the helper in
- * `extract-deps-worker.ts` — passing `source.orgId` + `source.id` (both
- * `org_…`/`src_…` IDs) avoids the bare-slug ambiguity that #690 introduced
- * and unblocks the planned 400-on-bare-slug rejection (#698).
- */
-function sourceSubpath(source: Source, sub?: string): string {
-  const tail = sub ? `/${sub}` : "";
-  return `/v1/orgs/${encodeURIComponent(source.orgId)}/sources/${encodeURIComponent(source.id)}${tail}`;
-}
-
-async function fetchSourceInfo(env: ScrapeEnv, identifier: string): Promise<Source | null> {
-  // Callers (cron triggers, manual scrape requests, the agent's manage_source
-  // fetch fallback) hand us a `src_…` ID, an `org/slug` coordinate, or a bare
-  // slug. Typed IDs and coordinates have unambiguous routes after #698 — bare
-  // slugs are rejected on the legacy path. Pick the right URL by shape so the
-  // coordinate form (used by the agent fallback once #710 lands) doesn't 404.
-  const slash = identifier.indexOf("/");
-  const url = identifier.startsWith("src_")
-    ? `https://api/v1/sources/${encodeURIComponent(identifier)}`
-    : slash > 0 && slash < identifier.length - 1
-      ? `https://api/v1/orgs/${encodeURIComponent(identifier.slice(0, slash))}/sources/${encodeURIComponent(identifier.slice(slash + 1))}`
-      : `https://api/v1/sources/${encodeURIComponent(identifier)}`;
-  const res = await env.apiFetcher.fetch(url, {
-    headers: { Authorization: `Bearer ${env.apiKey}` },
-  });
-  if (!res.ok) return null;
-  return res.json() as Promise<Source>;
-}
-
-async function fetchKnownReleases(env: ScrapeEnv, source: Source): Promise<KnownRelease[]> {
-  const res = await env.apiFetcher.fetch(
-    `https://api${sourceSubpath(source, "known-releases")}?limit=10`,
-    { headers: { Authorization: `Bearer ${env.apiKey}` } },
-  );
-  if (!res.ok) return [];
-  return (await res.json()) as KnownRelease[];
-}
-
-async function insertReleases(
-  env: ScrapeEnv,
-  source: Source,
-  releases: MappedEntry[],
-): Promise<number> {
-  if (releases.length === 0) return 0;
-
-  const res = await env.apiFetcher.fetch(`https://api${sourceSubpath(source, "releases/batch")}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.apiKey}`,
-    },
-    body: JSON.stringify({
-      releases: releases.map((r) => ({
-        title: r.title,
-        content: r.content,
-        url: r.url ?? null,
-        version: r.version ?? null,
-        publishedAt: r.publishedAt?.toISOString() ?? null,
-        media: JSON.stringify(r.media ?? []),
-      })),
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new CategorizedError("infra", `Release insert failed (${res.status}): ${body}`);
-  }
-
-  const result = (await res.json()) as { inserted: number };
-  return result.inserted;
-}
-
-async function updateSourceAfterFetch(env: ScrapeEnv, source: Source): Promise<void> {
-  await env.apiFetcher.fetch(`https://api${sourceSubpath(source)}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.apiKey}`,
-    },
-    body: JSON.stringify({
-      lastFetchedAt: new Date().toISOString(),
-      changeDetectedAt: null,
-      consecutiveErrors: 0,
-      consecutiveNoChange: 0,
-      // Clear any error backoff a prior deterministic failure set (#1851) so a
-      // recovered source resumes its normal tier cadence immediately instead of
-      // waiting out a stale `next_fetch_after`.
-      nextFetchAfter: null,
-    }),
-  });
-}
-
-async function writeFetchLog(
-  env: ScrapeEnv,
-  sourceId: string,
-  result: {
-    releasesFound: number;
-    releasesInserted: number;
-    durationMs: number;
-    status: string;
-    error?: string;
-    errorCategory?: ErrorCategory;
-    // Transport-only signal (#1862): the source was flagged (change_detected_at
-    // set) when this fetch began. Lets the fetch-log handler distinguish an
-    // unproductive drain (flagged → 0 releases) from a legitimately-quiet poll.
-    // Stripped before the fetch_log insert — it is not a fetch_log column.
-    wasFlagged?: boolean;
-  },
-): Promise<void> {
-  await env.apiFetcher
-    .fetch("https://api/v1/admin/logs/fetch", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiKey}`,
-      },
-      body: JSON.stringify({
-        sourceId,
-        sessionId: env.sessionId ?? null,
-        releasesFound: result.releasesFound,
-        releasesInserted: result.releasesInserted,
-        durationMs: result.durationMs,
-        status: result.status,
-        error: result.error ?? null,
-        errorCategory: result.errorCategory ?? null,
-        ...(result.wasFlagged ? { wasFlagged: true } : {}),
-      }),
-    })
-    .catch(() => {}); // best-effort
-}
+//
+// The HTTP-backed helpers that used to live here (fetchSourceInfo,
+// fetchKnownReleases, insertReleases, updateSourceAfterFetch, writeFetchLog,
+// sourceSubpath) have moved to `./scrape-persister.js` as `httpPersister`'s
+// methods (#1946 phase 4). `scrapeFetch` now goes through the injected (or
+// default HTTP) `ScrapePersister` — see the top of `scrapeFetch` below.
 
 // ── Content acquisition for scrape path ───────────────────────────
 
@@ -534,8 +416,9 @@ async function fetchMarkdownUrl(
 
 export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Promise<string> {
   const start = Date.now();
+  const persister = env.persister ?? httpPersister(env);
 
-  const source = await fetchSourceInfo(env, sourceIdentifier);
+  const source = await persister.getSource(sourceIdentifier);
   if (!source) return `Error: source ${sourceIdentifier} not found`;
 
   if (source.type !== "scrape" && source.type !== "agent") {
@@ -564,9 +447,9 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
 
   try {
     if (source.type === "agent") {
-      return await runAgentPath(env, source, meta, guidance, deps, start);
+      return await runAgentPath(persister, source, meta, guidance, deps, start);
     }
-    return await runScrapePath(env, source, meta, guidance, deps, start);
+    return await runScrapePath(env, persister, source, meta, guidance, deps, start);
   } catch (err) {
     const durationMs = Date.now() - start;
     const message = err instanceof Error ? err.message : String(err);
@@ -575,7 +458,7 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
         ? err.category
         : (err as { category?: ErrorCategory } | null)?.category;
     const tag = category ?? "unknown";
-    await writeFetchLog(env, source.id, {
+    await persister.writeFetchLog(source.id, {
       releasesFound: 0,
       releasesInserted: 0,
       durationMs,
@@ -590,7 +473,7 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
 // ── Agent path (handles type=agent sources) ──────────────────────
 
 async function runAgentPath(
-  env: ScrapeEnv,
+  persister: ScrapePersister,
   source: Source,
   meta: ReturnType<typeof getSourceMeta>,
   guidance: { parseInstructions?: string; playbookContext?: string },
@@ -608,11 +491,11 @@ async function runAgentPath(
       },
       deps,
     );
-    return finalize(env, source, result.releases, start);
+    return finalize(persister, source, result.releases, start);
   }
 
   const result = await runAgentExtraction(source, { guidance }, deps);
-  return finalize(env, source, result.releases, start);
+  return finalize(persister, source, result.releases, start);
 }
 
 /**
@@ -622,41 +505,25 @@ async function runAgentPath(
  * (#1284). Gated by `env.captureRawSnapshots` (the `raw-snapshot-capture-enabled`
  * flag, resolved once per session). Never throws — a capture failure must not
  * abort the extraction it precedes.
+ *
+ * Retained as a thin wrapper over `httpPersister(env).captureRawSnapshot` for
+ * back-compat — `workers/discovery`'s tests import this directly by name.
+ * Callers inside this file go through the resolved `persister` instead (which
+ * may be a non-HTTP implementation).
  */
 export async function captureRawSnapshot(
   env: ScrapeEnv,
   source: Source,
   body: string,
 ): Promise<void> {
-  if (!env.captureRawSnapshots || body.trim().length === 0) return;
-  try {
-    const res = await env.apiFetcher.fetch(`https://api${sourceSubpath(source, "raw-snapshot")}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.apiKey}` },
-      body: JSON.stringify({ body, format: "markdown" }),
-    });
-    if (!res.ok) {
-      logEvent("warn", {
-        component: "scrape-fetch",
-        event: "raw-snapshot-capture-failed",
-        sourceSlug: source.slug,
-        status: res.status,
-      });
-    }
-  } catch (err) {
-    logEvent("warn", {
-      component: "scrape-fetch",
-      event: "raw-snapshot-capture-error",
-      sourceSlug: source.slug,
-      err: err instanceof Error ? err : String(err),
-    });
-  }
+  return httpPersister(env).captureRawSnapshot(source, body);
 }
 
 // ── Scrape path (handles type=scrape sources) ────────────────────
 
 async function runScrapePath(
   env: ScrapeEnv,
+  persister: ScrapePersister,
   source: Source,
   meta: ReturnType<typeof getSourceMeta>,
   guidance: { parseInstructions?: string; playbookContext?: string },
@@ -673,7 +540,7 @@ async function runScrapePath(
   if (probe && isUpstreamGone(probe.status)) {
     const durationMs = Date.now() - start;
     const errMsg = `Upstream returned ${probe.status} for ${source.url}; refusing to extract from rendered error page`;
-    await writeFetchLog(env, source.id, {
+    await persister.writeFetchLog(source.id, {
       releasesFound: 0,
       releasesInserted: 0,
       durationMs,
@@ -691,7 +558,7 @@ async function runScrapePath(
     return `Error [validation]: ${errMsg}`;
   }
 
-  const knownReleasesPromise = fetchKnownReleases(env, source);
+  const knownReleasesPromise = persister.getKnownReleases(source);
 
   let markdown: string | null = null;
   let cameFromCrawl = false;
@@ -714,7 +581,7 @@ async function runScrapePath(
     // path so the source is visibly flagged rather than looking healthy (#1341).
     if (crawl.error) {
       const durationMs = Date.now() - start;
-      await writeFetchLog(env, source.id, {
+      await persister.writeFetchLog(source.id, {
         releasesFound: 0,
         releasesInserted: 0,
         durationMs,
@@ -773,7 +640,7 @@ async function runScrapePath(
 
   if (!markdown) {
     const durationMs = Date.now() - start;
-    await writeFetchLog(env, source.id, {
+    await persister.writeFetchLog(source.id, {
       releasesFound: 0,
       releasesInserted: 0,
       durationMs,
@@ -793,7 +660,7 @@ async function runScrapePath(
   if (isCloudflareChallengePage(markdown)) {
     const durationMs = Date.now() - start;
     const errMsg = `Cloudflare challenge interstitial rendered for ${source.url}; skipping extraction`;
-    await writeFetchLog(env, source.id, {
+    await persister.writeFetchLog(source.id, {
       releasesFound: 0,
       releasesInserted: 0,
       durationMs,
@@ -814,8 +681,11 @@ async function runScrapePath(
   // Fire-and-forget: keep the snapshot POST + R2 write off the extraction
   // critical path. `captureRawSnapshot` swallows its own errors (floating
   // promise never rejects), and the multi-second extraction keeps the request
-  // alive long enough for it to land. No `ctx.waitUntil` in this RPC.
-  void captureRawSnapshot(env, source, markdown);
+  // alive long enough for it to land. No `ctx.waitUntil` in this RPC. The
+  // `.catch` is a belt-and-suspenders guard on the interface's never-throw
+  // contract — a persister impl that violates it must not surface an
+  // unhandled rejection here.
+  void persister.captureRawSnapshot(source, markdown).catch(() => {});
 
   const knownReleases = await knownReleasesPromise;
 
@@ -839,7 +709,7 @@ async function runScrapePath(
     const crawlBodyHash = sha256Hex(markdown);
     if (meta.lastFailedExtractHash && meta.lastFailedExtractHash === crawlBodyHash) {
       const durationMs = Date.now() - start;
-      await writeFetchLog(env, source.id, {
+      await persister.writeFetchLog(source.id, {
         releasesFound: 0,
         releasesInserted: 0,
         durationMs,
@@ -925,7 +795,12 @@ async function runScrapePath(
     if (meta.lastFailedExtractHash) {
       await deps.repo.updateSourceMeta(source, { lastFailedExtractHash: null });
     }
-    return finalize(env, source, mapEntries(result.entries, { sourceUrl: source.url }), start);
+    return finalize(
+      persister,
+      source,
+      mapEntries(result.entries, { sourceUrl: source.url }),
+      start,
+    );
   }
 
   // Incremental extraction is designed for already-indexed sources. On a
@@ -938,7 +813,7 @@ async function runScrapePath(
       `No known releases for ${source.slug} — running full agent extraction (seed run)`,
     );
     const result = await runAgentExtraction(source, { guidance }, deps);
-    return finalize(env, source, result.releases, start);
+    return finalize(persister, source, result.releases, start);
   }
 
   const result = await runIncrementalExtraction(
@@ -951,11 +826,11 @@ async function runScrapePath(
     deps,
   );
 
-  return finalize(env, source, result.releases, start);
+  return finalize(persister, source, result.releases, start);
 }
 
 async function finalize(
-  env: ScrapeEnv,
+  persister: ScrapePersister,
   source: Source,
   releases: MappedEntry[],
   start: number,
@@ -967,8 +842,8 @@ async function finalize(
 
   if (releases.length === 0) {
     await Promise.all([
-      updateSourceAfterFetch(env, source),
-      writeFetchLog(env, source.id, {
+      persister.updateSourceAfterFetch(source),
+      persister.writeFetchLog(source.id, {
         releasesFound: 0,
         releasesInserted: 0,
         durationMs,
@@ -985,11 +860,11 @@ async function finalize(
     });
   }
 
-  const inserted = await insertReleases(env, source, releases);
+  const { inserted, insertedIds } = await persister.insertReleases(source, releases);
   const finalDuration = Date.now() - start;
   await Promise.all([
-    updateSourceAfterFetch(env, source),
-    writeFetchLog(env, source.id, {
+    persister.updateSourceAfterFetch(source),
+    persister.writeFetchLog(source.id, {
       releasesFound: releases.length,
       releasesInserted: inserted,
       durationMs: finalDuration,
@@ -1003,6 +878,7 @@ async function finalize(
     status: "success",
     releasesFound: releases.length,
     releasesInserted: inserted,
+    insertedIds,
     source: source.slug,
   });
 }

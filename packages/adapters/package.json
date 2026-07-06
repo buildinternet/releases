@@ -30,6 +30,7 @@
     "./overview-model": "./src/overview-model.ts",
     "./github-probe": "./src/github-probe.ts",
     "./scrape-fetch": "./src/scrape-fetch.ts",
+    "./scrape-persister": "./src/scrape-persister.ts",
     "./extract-deps-worker": "./src/extract-deps-worker.ts",
     "./playbook-block": "./src/playbook-block.ts",
     "./deterministic-update": "./src/deterministic-update.ts"
