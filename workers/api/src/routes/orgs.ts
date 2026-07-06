@@ -26,11 +26,19 @@ import {
   TagRowSchema,
   DeleteOrgAccountResponseSchema,
   SyncWellKnownResponseSchema,
+  CreateStubOrgBodySchema,
+  StubFromDomainBodySchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 import { avatarRejectToError, ingestOrgAvatar } from "../lib/avatar-ingest.js";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
 import { discoverMobileApps } from "../lib/well-known/mobile-apps.js";
+import {
+  createStubOrg,
+  createStubFromManifest,
+  type StubOrgInput,
+  type StubProductInput,
+} from "../lib/well-known/stub.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
@@ -108,7 +116,12 @@ import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { respondError } from "../lib/error-response.js";
-import { NotFoundError, ValidationError, ConflictError } from "@releases/lib/releases-error";
+import {
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+  ForbiddenError,
+} from "@releases/lib/releases-error";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -757,6 +770,158 @@ orgRoutes.post(
       enabled: materializationEnabled,
       dryRun,
     });
+    return c.json(result);
+  },
+);
+
+orgRoutes.post(
+  "/orgs/stub",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Orgs"],
+    summary: "Create a stub-tier organization",
+    description:
+      'Creates a stub org (#1947): identity + optional product rows + declared release locations, and NO sources — nothing schedulable. Locators are stored with `basis: "curator"`. Slug derives from `name` when omitted; `category` is resolved through the alias overlay. Admin scope required (a stub is a registry-shaping write). Promote it later with POST /v1/orgs/:slug/promote.',
+    security: [{ bearerAuth: [] }],
+    responses: {
+      201: { description: "Stub organization created" },
+      400: {
+        description: "Invalid request body or category",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+      403: {
+        description: "Admin scope required",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+      409: {
+        description: "Slug/domain conflict or reserved slug",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  validateJson(CreateStubOrgBodySchema),
+  async (c) => {
+    // The namespace write-gate already required `write`; a stub is a
+    // registry-shaping write, so bump to admin in-handler (mirrors site-notice).
+    if (!(await isValidBearerAuth(c))) {
+      return respondError(c, new ForbiddenError("Admin scope is required to create a stub org"));
+    }
+    const db = createDb(c.env.DB);
+    const body = c.req.valid("json");
+
+    const slug = body.slug ?? toSlug(body.name);
+    if (isReservedSlug(slug, "root")) {
+      return respondError(
+        c,
+        new ConflictError(`Slug "${slug}" is reserved and cannot be used for an organization.`, {
+          code: "slug_reserved",
+          details: { slug },
+        }),
+      );
+    }
+
+    // Org category is validated strictly (400 on invalid), matching POST
+    // /v1/orgs; per-product categories are resolved leniently (dropped when
+    // unknown) like the reconciler.
+    let category: string | null = null;
+    if (body.category) {
+      const resolved = await resolveCategoryInput(db, body.category);
+      if (!resolved.ok) {
+        return respondError(
+          c,
+          new ValidationError(`Invalid category: "${body.category}"`, { code: "bad_request" }),
+        );
+      }
+      category = resolved.slug;
+    }
+
+    const productInputs: StubProductInput[] = [];
+    for (const product of body.products ?? []) {
+      let productCategory: string | null = null;
+      if (product.category) {
+        // oxlint-disable-next-line no-await-in-loop -- bounded by MAX_PRODUCTS
+        const resolved = await resolveCategoryInput(db, product.category);
+        productCategory = resolved.ok ? resolved.slug : null;
+      }
+      productInputs.push({
+        name: product.name,
+        slug: product.slug,
+        kind: product.kind ?? null,
+        category: productCategory,
+        description: product.description ?? null,
+        url: product.website ?? null,
+        archived: product.archived === true,
+        locations: product.releases ?? [],
+      });
+    }
+
+    const socials = body.social
+      ? Object.entries(body.social).map(([platform, handle]) => ({ platform, handle }))
+      : [];
+
+    const input: StubOrgInput = {
+      name: body.name,
+      slug,
+      domain: body.domain ?? null,
+      description: body.description ?? null,
+      category,
+      avatarUrl: body.avatar ?? null,
+      tags: body.tags,
+      socials,
+      products: productInputs,
+      locations: body.releases ?? [],
+    };
+
+    try {
+      const result = await createStubOrg(db, input, {
+        basis: "curator",
+        evidence: { curator: true },
+      });
+      return c.json(
+        { ...result.org, productCount: result.productCount, locationCount: result.locationCount },
+        201,
+      );
+    } catch (err) {
+      if (isConflictError(err)) {
+        return respondError(
+          c,
+          new ConflictError(`Organization with slug "${slug}" or that domain already exists`, {
+            code: "conflict",
+          }),
+        );
+      }
+      throw err;
+    }
+  },
+);
+
+orgRoutes.post(
+  "/orgs/stub-from-domain",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Orgs"],
+    summary: "Create a stub org from an unlisted domain's manifest",
+    description:
+      'Fetches https://{domain}/.well-known/releases.json for a domain with no org yet; if valid, creates a stub org + declared locators (`basis: "declared"`). Skips (never duplicates) when the domain already resolves to an org or the manifest names a registry org. Pass ?dryRun=1 to preview the mapped input without writing. Admin scope required.',
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: "Result: created stub, or a skip reason / dry-run plan" },
+      403: {
+        description: "Admin scope required",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  validateJson(StubFromDomainBodySchema),
+  async (c) => {
+    if (!(await isValidBearerAuth(c))) {
+      return respondError(c, new ForbiddenError("Admin scope is required to create a stub org"));
+    }
+    const db = createDb(c.env.DB);
+    const { domain } = c.req.valid("json");
+    const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
+
+    const result = await createStubFromManifest(db, domain, { dryRun });
     return c.json(result);
   },
 );

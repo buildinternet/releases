@@ -168,6 +168,41 @@ export type ReleasesJsonProduct = z.infer<typeof ReleasesJsonProductSchema>;
 export type ReleasesJsonDomainRelease = z.infer<typeof ReleasesJsonDomainReleaseSchema>;
 export type ReleasesJsonRepoRelease = z.infer<typeof ReleasesJsonRepoReleaseSchema>;
 
+/**
+ * Body for `POST /v1/orgs/stub` — curator-authored stub org (#1947). Mirrors
+ * the domain-manifest identity + product + locator shape (so a curator can hand
+ * the same declaration a manifest would carry), minus manifest-transport fields
+ * (`version`/`$schema`/`registries`) and plus the registry-identity fields a
+ * stub org needs to be resolvable (`slug`/`domain`). Locators are optional — an
+ * identity-only stub (locations TBD) is valid. `category`/taxonomy strings stay
+ * lenient; the route resolves them and ignores the rest, same as the reconciler.
+ */
+export const CreateStubOrgBodySchema = z.strictObject({
+  name: z.string().min(1).max(120),
+  slug: z.string().min(1).max(120).optional(),
+  domain: z.string().min(1).max(255).optional(),
+  description: z.string().max(2000).optional(),
+  category: z.string().min(1).max(120).optional(),
+  avatar: HttpsUrlSchema.optional(),
+  tags: z.array(z.string().min(1).max(60)).max(50).optional(),
+  social: SocialSchema.optional(),
+  products: z.array(ReleasesJsonProductSchema).max(MAX_PRODUCTS).optional(),
+  releases: DomainReleasesSchema.optional(),
+});
+
+export type CreateStubOrgBody = z.infer<typeof CreateStubOrgBodySchema>;
+
+/**
+ * Body for `POST /v1/orgs/stub-from-domain` (#1947) — the unlisted-domain path.
+ * The worker fetches https://{domain}/.well-known/releases.json and, if valid
+ * and the domain has no org yet, creates a stub org + declared locators.
+ */
+export const StubFromDomainBodySchema = z.strictObject({
+  domain: z.string().min(1).max(255),
+});
+
+export type StubFromDomainBody = z.infer<typeof StubFromDomainBodySchema>;
+
 /** Response shape of POST /v1/orgs/:slug/sync-well-known. */
 export const SyncWellKnownResponseSchema = z.object({
   fetched: z.boolean(),

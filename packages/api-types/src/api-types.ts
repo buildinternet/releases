@@ -308,6 +308,8 @@ export {
   WorkspaceProfileResponseSchema,
 } from "./schemas/account-profile.js";
 export {
+  CreateStubOrgBodySchema,
+  StubFromDomainBodySchema,
   ReleasesJsonConfigSchema,
   ReleasesJsonDomainReleaseSchema,
   ReleasesJsonDomainSchema,
@@ -319,6 +321,8 @@ export {
   SyncWellKnownResponseSchema,
 } from "./schemas/well-known.js";
 export type {
+  CreateStubOrgBody,
+  StubFromDomainBody,
   ReleasesJsonConfig,
   ReleasesJsonDomain,
   ReleasesJsonDomainRelease,
