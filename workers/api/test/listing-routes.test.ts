@@ -204,8 +204,10 @@ describe("wiring: /v1/listing is a public-write namespace", () => {
   it("mounts listingRoutes through the composed v1 router, reachable without auth headers", async () => {
     // Mirrors the real app's mount order (mountV1Routes), but without any of
     // index.ts's publicReadRoutes/adminRoutes middleware loops — proving the
-    // handler itself is reached (and its own guardListing 404s on the
-    // kill-switch default) rather than any shared auth middleware.
+    // handler itself is reached (its own guardListing 404s with the kill
+    // switch explicitly off) rather than any shared auth middleware. The
+    // switch MUST be off here: enabled, the handler live-fetches the domain's
+    // manifest, and that real network call hangs past the test timeout on CI.
     const v1 = new Hono<Env>();
     mountV1Routes(v1);
     const composedApp = new Hono<Env>();
@@ -217,12 +219,13 @@ describe("wiring: /v1/listing is a public-write namespace", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ domain: "acme.com" }),
       }),
-      { DB: db },
+      { DB: db, LISTING_SELF_SERVE_ENABLED: "false" },
       { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
     );
     // No Authorization header was sent. A 401/403 here would mean auth
-    // middleware intercepted the request before the handler's own guard ran.
-    expect([200, 404, 429]).toContain(res.status);
+    // middleware intercepted the request before the handler's own guard ran;
+    // the guard's own kill-switch 404 is the expected deterministic outcome.
+    expect(res.status).toBe(404);
   });
 
   it("registers /listing/validate and /listing/activate in the OpenAPI spec", async () => {
