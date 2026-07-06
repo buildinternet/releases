@@ -3,6 +3,18 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 5, 2026
+
+**Added**
+- Stub organizations appear in the registry catalog — orgs known from a `releases.json` manifest but not yet ingested are listed with a stub badge; `GET /v1/orgs/:slug` and the domain-lookup endpoint return their declared source locations; MCP `get_organization` and `lookup_domain` surface stub status and declared release locations instead of an empty sources list.
+
+**Changed**
+- Org overview citation style rebuilt — the Sources section now links to release pages on releases.sh rather than placing inline superscripts; cited sources link inward to the canonical release URL when available and carry `CreativeWork` JSON-LD for SEO; the fenced-JSON citation format is retired.
+
+**Fixed**
+- Raw JSON citation blocks no longer appear in org overviews — a generation-truncation edge case was leaking an unterminated JSON code block into the overview body; affected overviews have been repaired.
+- Emoji sprites and CI-status badges no longer appear in newly indexed release media — the media pipeline now filters WordPress emoji sprites and CI badge URLs before mirroring.
+
 ## July 4, 2026
 
 **Added**
