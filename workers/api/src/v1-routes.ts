@@ -39,6 +39,7 @@ import { adminSearchQueriesRoutes } from "./routes/admin-search-queries.js";
 import { adminOverviewsRoutes } from "./routes/admin-overviews.js";
 import { adminSourcesRoutes } from "./routes/admin-sources.js";
 import { adminOrgDependentsRoutes } from "./routes/admin-org-dependents.js";
+import { adminOrgsRoutes } from "./routes/admin-orgs.js";
 import { adminBatchRunsRoutes } from "./routes/admin-batch-runs.js";
 import { adminUsersRoutes } from "./routes/admin-users.js";
 import { adminDigestRoutes } from "./routes/admin-digest.js";
@@ -103,6 +104,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", adminOverviewsRoutes);
   v1.route("/", adminSourcesRoutes);
   v1.route("/", adminOrgDependentsRoutes);
+  v1.route("/", adminOrgsRoutes);
   v1.route("/", adminBatchRunsRoutes);
   v1.route("/", adminUsersRoutes);
   v1.route("/", adminDigestRoutes);
