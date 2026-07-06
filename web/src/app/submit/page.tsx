@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/header";
+import { ListingFastLane } from "./listing-fast-lane";
 import { SubmitSourceForm } from "./submit-source-form";
 
 export const metadata: Metadata = {
@@ -24,11 +25,12 @@ export default function SubmitPage() {
             Submit Your Product
           </h1>
           <p className="mt-4 leading-6">
-            Add your product to the registry with a{" "}
+            Own your listing by publishing a{" "}
             <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
               releases.json
             </code>{" "}
-            manifest on your domain, or submit a changelog, feed, or GitHub releases URL.
+            manifest on your domain, or suggest a changelog, feed, or GitHub releases URL for a
+            curator to review.
           </p>
 
           <div className="mt-6 border-t border-stone-200 pt-6 dark:border-stone-800">
@@ -52,8 +54,22 @@ export default function SubmitPage() {
           </div>
         </aside>
 
-        <section className="border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
-          <SubmitSourceForm />
+        <section className="space-y-10">
+          <div className="border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
+            <ListingFastLane />
+          </div>
+
+          <div className="border-t border-stone-200 pt-8 dark:border-stone-800">
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+              Not your product, or no manifest?
+            </p>
+            <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
+              Suggest a changelog, feed, or GitHub releases URL and a curator will take a look.
+            </p>
+            <div className="mt-5 border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
+              <SubmitSourceForm />
+            </div>
+          </div>
         </section>
       </div>
     </div>
