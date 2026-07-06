@@ -1,6 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import { eq } from "drizzle-orm";
-import { organizations, sources, releaseLocations } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  products,
+  sources,
+  releaseLocations,
+} from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../test/setup.js";
 import { createStubOrg } from "./stub.js";
 import { promoteStubOrg } from "./promote.js";
@@ -81,6 +86,38 @@ describe("promoteStubOrg", () => {
     expect(rerun.sourcesMatched).toBe(1);
     const srcs = await db.select().from(sources).where(eq(sources.orgId, org.id));
     expect(srcs.length).toBe(1);
+  });
+
+  it("materializes a locator whose product was soft-deleted (reclassified top-level)", async () => {
+    const db = createTestDb();
+    const { org } = await createStubOrg(
+      db as never,
+      {
+        name: "Epsilon",
+        slug: "epsilon",
+        domain: "epsilon.com",
+        products: [{ name: "Widget", locations: [{ feed: "https://epsilon.com/widget.xml" }] }],
+      },
+      { basis: "curator" },
+    );
+    // Soft-delete the product AFTER the locator was written against it. The
+    // locator's product_id still points at the tombstoned product (only a HARD
+    // delete nulls it), so a naive "productId === null → top-level" filter would
+    // drop it entirely. The fix reclassifies it as top-level.
+    await db
+      .update(products)
+      .set({ deletedAt: new Date().toISOString() })
+      .where(eq(products.orgId, org.id));
+
+    const res = await promoteStubOrg(db as never, org.id, { probe: okProbe });
+    expect(res.promoted).toBe(true);
+    expect(res.sourcesCreated).toBe(1);
+    expect(res.locatorsStamped).toBe(1);
+
+    const srcs = await db.select().from(sources).where(eq(sources.orgId, org.id));
+    expect(srcs.length).toBe(1);
+    const locs = await db.select().from(releaseLocations).where(eq(releaseLocations.orgId, org.id));
+    expect(locs.every((l) => l.sourceId !== null)).toBe(true);
   });
 
   it("dryRun returns a plan and writes nothing", async () => {

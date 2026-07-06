@@ -933,7 +933,10 @@ export async function listOrganizations(
 
   // Stub orgs (#1947) have no visible releases but belong in the directory
   // (coverage breadth is the product), so the empty-org filter keeps them.
-  const visibleOrStub = sql`(${ORG_HAS_VISIBLE_RELEASE} OR o.tier = 'stub')`;
+  // The stub branch has no release/source join to implicitly gate soft-deleted
+  // rows the way ORG_HAS_VISIBLE_RELEASE does, so guard it explicitly — a
+  // tombstoned stub must not surface in the directory.
+  const visibleOrStub = sql`(${ORG_HAS_VISIBLE_RELEASE} OR (o.tier = 'stub' AND o.deleted_at IS NULL))`;
 
   let fromWhere = sql`FROM organizations o`;
   let distinct = false;

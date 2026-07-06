@@ -10,6 +10,7 @@ import {
 import { newProductId, newReleaseLocationId } from "@buildinternet/releases-core/id";
 import { isValidKind } from "@buildinternet/releases-core/kinds";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import {
   ReleasesJsonDomainSchema,
   type ReleasesJsonDomain,
@@ -18,7 +19,11 @@ import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { logEvent } from "@releases/lib/log-event";
 import { getOrCreateTagsD1, isConflictError } from "../../utils.js";
 import type { createDb } from "../../db.js";
-import { RELEASE_LOCATIONS_INSERT_CHUNK_SIZE, ENTITY_TAG_INSERT_CHUNK_SIZE } from "../d1-limits.js";
+import {
+  RELEASE_LOCATIONS_INSERT_CHUNK_SIZE,
+  ENTITY_TAG_INSERT_CHUNK_SIZE,
+  ORG_ACCOUNTS_INSERT_CHUNK_SIZE,
+} from "../d1-limits.js";
 import type { DeclaredLocation } from "./materialize.js";
 import { releaseLocationMatchKey } from "./locator.js";
 import { fetchReleasesJson } from "./fetch.js";
@@ -157,19 +162,21 @@ export async function createStubOrg(
     }
   }
 
-  // Additive socials.
+  // Additive socials. Chunked to stay under D1's 100-bind cap (5 binds/row).
   if (input.socials && input.socials.length > 0) {
-    await db
-      .insert(orgAccounts)
-      .values(
-        input.socials.map((s) => ({
-          orgId: org.id,
-          platform: s.platform,
-          handle: s.handle,
-          createdAt: now,
-        })),
-      )
-      .onConflictDoNothing();
+    const socialRows = input.socials.map((s) => ({
+      orgId: org.id,
+      platform: s.platform,
+      handle: s.handle,
+      createdAt: now,
+    }));
+    for (let i = 0; i < socialRows.length; i += ORG_ACCOUNTS_INSERT_CHUNK_SIZE) {
+      // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100-bind cap)
+      await db
+        .insert(orgAccounts)
+        .values(socialRows.slice(i, i + ORG_ACCOUNTS_INSERT_CHUNK_SIZE))
+        .onConflictDoNothing();
+    }
   }
 
   // Products. Slugs are made unique within the org up front (the DB also
@@ -379,6 +386,18 @@ export async function createStubFromManifest(
   }
 
   const input = await manifestToStubInput(db, domain, config);
+  // The manifest-derived slug bypasses the route-level guard on POST /orgs/stub,
+  // so re-apply it here: a manifest naming an org like "admin"/"api"/"v1" must
+  // not mint a slug that collides with a reserved route.
+  if (isReservedSlug(input.slug, "root")) {
+    logEvent("warn", {
+      component: "well-known",
+      event: "stub-reserved-slug-skip",
+      domain,
+      slug: input.slug,
+    });
+    return { created: false, skippedReason: "slug_reserved" };
+  }
   if (opts.dryRun) return { created: false, skippedReason: "dry_run", plan: input };
 
   try {

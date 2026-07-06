@@ -43,6 +43,12 @@ export const RELEASE_COVERAGE_INSERT_CHUNK_SIZE = 20;
 // 30 for headroom.
 export const ENTITY_TAG_INSERT_CHUNK_SIZE = 30;
 
+// `org_accounts` INSERT binds 5 placeholders per row: id ($defaultFn), org_id,
+// platform, handle, created_at. 18 rows * 5 = 90 bindings, under the 100 cap.
+// (Distinct from the 3-bind tag chunk — don't reuse ENTITY_TAG_INSERT_CHUNK_SIZE
+// here; 30 * 5 = 150 would blow the budget.)
+export const ORG_ACCOUNTS_INSERT_CHUNK_SIZE = 18;
+
 // `source_changelog_chunks` INSERT binds 11 placeholders per row: the nine
 // listed columns (source_changelog_file_id, source_id, offset, length,
 // tokens, content_hash, heading, vector_id, embedded_at — vectorId and

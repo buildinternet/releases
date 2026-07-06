@@ -71,12 +71,54 @@ export default async function OrgOverviewPage({
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let org;
+  try {
+    org = await getOrg(orgSlug);
+  } catch (err) {
+    if (err instanceof ApiSetupError) throw err;
+    notFound();
+  }
+
+  const orgUrl = `https://releases.sh/${orgSlug}`;
+  const orgNodeId = `${orgUrl}#org`;
+  const lastModified = lastModifiedAt(org);
+
+  // A stub org has no processed sources — skip the activity/heatmap/releases
+  // fetches entirely (they'd be discarded) and render declared locations.
+  if (org.status === "stub") {
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": orgNodeId,
+          name: org.name,
+          url: orgUrl,
+          ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
+          ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
+          ...(lastModified ? { dateModified: lastModified } : {}),
+        },
+        {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+            { "@type": "ListItem", position: 2, name: org.name, item: orgUrl },
+          ],
+        },
+      ],
+    };
+    return (
+      <>
+        <JsonLd data={jsonLd} />
+        <StubLocations orgName={org.name} locations={org.locations ?? []} />
+      </>
+    );
+  }
+
   let activityResult;
   let heatmapResult;
   let releasesResult;
   try {
-    [org, activityResult, heatmapResult, releasesResult] = await Promise.all([
-      getOrg(orgSlug),
+    [activityResult, heatmapResult, releasesResult] = await Promise.all([
       tryFetch(api.orgActivity(orgSlug, activityFrom), {
         route: `/${orgSlug}`,
         event: "org-activity-fetch-failed",
@@ -99,10 +141,7 @@ export default async function OrgOverviewPage({
   const activity = activityResult.data;
   const heatmap: OrgHeatmap | null = heatmapResult.data;
 
-  const orgUrl = `https://releases.sh/${orgSlug}`;
-  const orgNodeId = `${orgUrl}#org`;
   const releaseListId = `${orgUrl}#releases`;
-  const lastModified = lastModifiedAt(org);
   const releaseItems = releasesResult.data?.releases ?? [];
   // Declare the overview's provenance as internal release-page citations (#1934).
   const overviewCitationNode = org.overview
@@ -151,17 +190,6 @@ export default async function OrgOverviewPage({
         : []),
     ],
   };
-
-  // A stub org has no processed sources — surface its declared release
-  // locations as the page body instead of the (empty) overview/activity panels.
-  if (org.status === "stub") {
-    return (
-      <>
-        <JsonLd data={jsonLd} />
-        <StubLocations orgName={org.name} locations={org.locations ?? []} />
-      </>
-    );
-  }
 
   return (
     <>

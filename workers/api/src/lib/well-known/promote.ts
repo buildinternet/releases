@@ -112,7 +112,15 @@ export async function promoteStubOrg(
     ...(product.kind && isValidKind(product.kind) ? { kind: product.kind } : {}),
     releases: locators.filter((l) => l.productId === product.id).map(rowToRelease),
   }));
-  const topLevelReleases = locators.filter((l) => l.productId === null).map(rowToRelease);
+  // A locator's product_id is only nulled on HARD delete, so a locator pointing
+  // at a soft-deleted (tombstoned) product still carries the dead id — and
+  // `productRows` excludes tombstoned products. Treat any locator whose product
+  // is missing from the active set as top-level, else it'd be dropped from both
+  // the product manifest and releases[] and never materialize on promotion.
+  const activeProductIds = new Set(productRows.map((p) => p.id));
+  const topLevelReleases = locators
+    .filter((l) => l.productId === null || !activeProductIds.has(l.productId))
+    .map(rowToRelease);
 
   const manifest: ReleasesJsonDomain = {
     version: 2,
