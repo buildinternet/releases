@@ -24,6 +24,13 @@ export interface ScrapeFetchOutcome {
   error?: string;
   /** Error category parsed from an `Error [category]: …` result, when present. */
   errorCategory?: string;
+  /**
+   * Release IDs inserted this fetch, when the scrapeFetch success JSON carries
+   * them (#1946 phase 4) — drives the deterministic-update workflow's
+   * post-insert summarize/embed/invalidate chain. Absent on non-JSON/failure
+   * results and on older callers whose persister doesn't return ids.
+   */
+  insertedIds?: string[];
 }
 
 export interface UpdateLoopSummary {
@@ -76,6 +83,7 @@ export function parseScrapeFetchResult(source: string, raw: string): ScrapeFetch
       status?: string;
       releasesFound?: number;
       releasesInserted?: number;
+      insertedIds?: string[];
     };
     return {
       source,
@@ -83,6 +91,7 @@ export function parseScrapeFetchResult(source: string, raw: string): ScrapeFetch
       status: parsed.status,
       releasesFound: parsed.releasesFound ?? 0,
       releasesInserted: parsed.releasesInserted ?? 0,
+      ...(parsed.insertedIds ? { insertedIds: parsed.insertedIds } : {}),
     };
   } catch {
     // A non-JSON, non-`Error` string is unexpected — treat as a failure so it
