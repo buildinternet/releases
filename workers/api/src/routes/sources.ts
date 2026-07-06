@@ -33,7 +33,6 @@ import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/sour
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
-import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseNotice, setNoticeInMetadata } from "@buildinternet/releases-core/notice";
@@ -110,16 +109,11 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { authMiddleware, isValidBearerAuth } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
-import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
+import { processMediaForR2 } from "../lib/media-ingest.js";
 import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { fetchOne, renderCheckOne, embedReleasesForSource } from "../cron/poll-fetch.js";
-import {
-  getSourceMeta,
-  isGitHubFetched,
-  filterByUrlDeny,
-  isUrlDenied,
-} from "@releases/adapters/feed.js";
+import { getSourceMeta, isGitHubFetched, isUrlDenied } from "@releases/adapters/feed.js";
 import { isAppStoreFetched, isVideoFetched, videoSourceInfo } from "@releases/adapters/source-meta";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
@@ -144,25 +138,16 @@ import {
 } from "../queries/sources.js";
 import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
 import { regeneratePlaybook } from "../playbook-regen.js";
-import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
-import { publishReleaseEvents } from "../events/publish.js";
-import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
-import {
-  RELEASES_BATCH_CHUNK_SIZE,
-  RELEASES_ID_IN_CHUNK_SIZE,
-  IN_ARRAY_CHUNK_SIZE,
-} from "../lib/d1-limits.js";
+import { RELEASES_ID_IN_CHUNK_SIZE, IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import {
   runGenerateContent,
   buildGenerateContentDeps,
   GENERATE_CONTENT_MAX_LIMIT,
 } from "./workflows.js";
-import { notifyIndexNowForSource } from "../lib/indexnow.js";
-import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
-import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
+import { ingestReleaseBatch, runBatchIngestEffects } from "../lib/release-batch-ingest.js";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
@@ -170,7 +155,6 @@ import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
 import { getActiveSessionRaw } from "../lib/active-fetch-session.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
-import { normalizeMediaBind } from "../lib/media-bind.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
@@ -851,348 +835,17 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   }
   const enrichMode = body.mode === "upsert-content";
 
-  // Defense-in-depth `feedUrlDeny` (#1335). The cron poll-fetch path drops
-  // locale-suffixed translation dupes in-memory, but every managed-agent fetch
-  // path — operator `admin source fetch`, scrape summary-only crawl delegation,
-  // and the in-worker scrape pipeline — writes through this endpoint and would
-  // otherwise bypass that filter (the MA worker re-derives URLs independently of
-  // the in-memory filtered list). Applying it here at the write boundary means a
-  // denied URL can't be ingested as an active release regardless of fetch path.
-  const denyMeta = getSourceMeta(src);
-  if (denyMeta.feedUrlDeny && denyMeta.feedUrlDeny.length > 0) {
-    const filtered = filterByUrlDeny(body.releases, denyMeta.feedUrlDeny);
-    if (filtered.dropped > 0) {
-      logEvent("info", {
-        component: "sources-batch",
-        event: "url-deny-filter-applied",
-        sourceId: src.id,
-        slug: src.slug,
-        kept: filtered.kept.length,
-        dropped: filtered.dropped,
-        feedUrlDeny: denyMeta.feedUrlDeny,
-      });
-    }
-    body.releases = filtered.kept;
-  }
-
-  // Title-dedup for scrape sources (#1410): the discovery-worker scrape sweep and
-  // the local backfill both write through this endpoint with synthesized anchor
-  // URLs (`<page>#<slug>`); a backfill's heading-slug anchor (`#may-2026`) and a
-  // re-fetch's slug(title) anchor for the SAME release don't collide under
-  // UNIQUE(source_id, url), so the entry lands twice. Collapse by normalized title
-  // (scrape-scoped; feed/github/appstore carry stable real URLs). Kill-switchable.
-  // Skipped entirely in enrich mode (#1526): a deliberate content re-POST carries
-  // the SAME title as the row it updates, so title-dedup would drop the very rows
-  // the operator means to enrich; the URL upsert is the right discriminator there.
-  if (src.type === "scrape" && body.releases.length > 0 && !enrichMode) {
-    const dedupDisabled = await flag(
-      c.env.FLAGS,
-      c.env.SCRAPE_TITLE_DEDUP_DISABLED,
-      FLAGS.scrapeTitleDedupDisabled,
-    );
-    if (!dedupDisabled) {
-      const existing = await selectExistingReleaseKeys(db, src.id);
-      const deduped = dedupeByExistingTitle(body.releases, existing.titleKeys, existing.urls);
-      if (deduped.dropped > 0) {
-        logEvent("info", {
-          component: "sources-batch",
-          event: "title-dedup-applied",
-          sourceId: src.id,
-          slug: src.slug,
-          kept: deduped.kept.length,
-          dropped: deduped.dropped,
-        });
-      }
-      body.releases = deduped.kept;
-    }
-  }
-
   try {
-    // D1 caps prepared statements at 100 bound parameters — see
-    // `../lib/d1-limits.ts` for the math behind the chunk size.
-    let inserted = 0;
-    const publishRows: InsertedReleaseRow[] = [];
-    // Parallel collection of fresh rows-with-content for changesets
-    // clustering. We can't run the clusterer off `publishRows` because
-    // those omit `content` (the publish payload doesn't need it).
-    const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
-
-    // Ingest-time R2 media upload (#1177). When the `MEDIA` bucket is bound,
-    // drop junk and mirror surviving images to `released-media` before insert
-    // so reads resolve a same-origin `r2Url`. Sequential per release (the
-    // helper bounds image concurrency within); fail-open. An unbound `MEDIA`
-    // bucket => the agent-provided media JSON is stored verbatim, as today.
-    const r2UploadEnabled = c.env.MEDIA != null;
-    // GIF→MP4 ingest transcode (#1368): store ingested GIFs as small MP4s when the
-    // transform binding is bound + the flag is on; off => GIFs mirror verbatim.
-    const transcodeGif =
-      c.env.MEDIA_TRANSFORM != null &&
-      (await flag(c.env.FLAGS, c.env.MEDIA_GIF_TRANSCODE_ENABLED, FLAGS.mediaGifTranscodeEnabled));
-    // Coerce array/object media to a JSON string so a non-primitive bind can't
-    // 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
-    const mediaJsonByIndex = body.releases.map((r) => normalizeMediaBind(r.media));
-    if (r2UploadEnabled) {
-      // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
-      // the `media` column on conflict, so mirroring their images to R2 would
-      // upload bytes the upsert immediately discards. In enrich mode (#1526) the
-      // upsert DOES overwrite media, so existing URLs must be processed too —
-      // skip the skip.
-      const existingMediaUrls = enrichMode
-        ? new Set<string>()
-        : await selectExistingReleaseUrls(
-            db,
-            src.id,
-            body.releases.map((r) => r.url),
-          );
-      for (let i = 0; i < body.releases.length; i++) {
-        const rel = body.releases[i]!;
-        if (rel.url != null && existingMediaUrls.has(rel.url)) continue;
-        const rawMedia = rel.media;
-        if (!rawMedia) continue;
-        let parsed: Array<{
-          type: "image" | "video" | "gif";
-          url: string;
-          alt?: string;
-          r2Key?: string;
-        }>;
-        try {
-          parsed = JSON.parse(rawMedia);
-        } catch {
-          continue;
-        }
-        if (!Array.isArray(parsed) || parsed.length === 0) continue;
-        // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
-        const processed = await processMediaForR2(
-          filterJunkMedia(parsed.filter((m) => m && typeof m.url === "string")),
-          {
-            db,
-            bucket: c.env.MEDIA!,
-            sourceId: src.id,
-            mediaTransform: c.env.MEDIA_TRANSFORM,
-            transcodeGif,
-          },
-        );
-        mediaJsonByIndex[i] = JSON.stringify(processed);
-      }
-    }
-
-    for (let i = 0; i < body.releases.length; i += RELEASES_BATCH_CHUNK_SIZE) {
-      const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r, j) => {
-        // LLM-driven agent fetches occasionally emit literal placeholders
-        // ("<UNKNOWN>", "n/a", "none") instead of omitting the version.
-        // The web frontend promotes a non-null version to the heading slot
-        // and demotes title to a byline, so a placeholder leaks all the way
-        // to the UI. Strip them here as a server-side safety net — the AI
-        // extract path already calls `sanitizeVersion` on its own output.
-        // Type-guard the JSON: sanitizeVersion calls .trim(), which would
-        // throw on a number or object payload (the body type is the request
-        // contract, not a runtime guarantee).
-        const version = typeof r.version === "string" ? (sanitizeVersion(r.version) ?? null) : null;
-        // Mirror the version type-guard: the helper expects a string, and a
-        // non-string title would crash .match() and 500 the whole batch.
-        const inferredPublishedAt =
-          typeof r.title === "string" ? inferMonthOnlyDate(r.title) : null;
-        const size = computeContentSize(r.content);
-        return {
-          sourceId: src.id,
-          version,
-          versionSort: computeVersionSort(version),
-          type: r.type ?? "feature",
-          title: r.title,
-          content: r.content,
-          url: r.url ?? null,
-          contentHash: r.contentHash ?? null,
-          contentChars: size.contentChars,
-          contentTokens: size.contentTokens,
-          publishedAt: r.publishedAt ?? inferredPublishedAt ?? null,
-          prerelease: r.prerelease ?? isPrereleaseVersion(version),
-          media: mediaJsonByIndex[i + j]!,
-        };
-      });
-      // RETURNING is built here — not zipped against `chunk` — because
-      // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
-      // database to omit rows where the update didn't apply. The returned
-      // rows are the authoritative set of affected ids + content.
-      // In enrich mode (#1526) the clobbering RELEASE_CONTENT_UPSERT overwrites
-      // content/media on a same-URL collision instead of fill-only.
-      // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
-      const rows = await db
-        .insert(releases)
-        .values(chunk)
-        .onConflictDoUpdate(enrichMode ? RELEASE_CONTENT_UPSERT : RELEASE_URL_UPSERT)
-        .returning({
-          id: releases.id,
-          title: releases.title,
-          version: releases.version,
-          publishedAt: releases.publishedAt,
-          media: releases.media,
-          content: releases.content,
-          contentChars: releases.contentChars,
-          contentTokens: releases.contentTokens,
-          type: releases.type,
-        });
-      inserted += rows.length;
-      for (const r of rows) {
-        const { content, ...publishRow } = r;
-        publishRows.push(publishRow);
-        clusterRows.push({ id: r.id, version: r.version, content });
-      }
-    }
-    const insertedIds = publishRows.map((r) => r.id);
-
-    // Detect changesets cascade rows and demote them to coverage so they
-    // don't dominate the feed, broadcast on the live tail, or trigger an
-    // IndexNow ping per row. Synchronous — we want coverage state visible
-    // to the downstream waitUntils, not racing them.
-    const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
-      component: "sources-batch",
-      sourceId: src.id,
+    const result = await ingestReleaseBatch(db, c.env, src, {
+      releases: body.releases,
+      enrichMode,
     });
-    const visiblePublishRows =
-      cascadeResult.coverageIds.size > 0
-        ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id))
-        : publishRows;
-
-    const [{ n: total }] = await db
-      .select({ n: count() })
-      .from(releases)
-      .where(eq(releases.sourceId, src.id));
-
-    // Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
-    // `tail -f`, the upcoming web live view, webhook delivery) see new
-    // releases in real time. Coverage-side rows are excluded — they're
-    // not shown in default feeds and shouldn't broadcast on the live tail
-    // either.
-    if (visiblePublishRows.length > 0) {
-      c.executionCtx.waitUntil(
-        publishReleaseEvents(c.env, {
-          src: {
-            name: src.name,
-            slug: src.slug,
-            orgId: src.orgId,
-            sourceId: src.id,
-            type: src.type,
-            productId: src.productId,
-          },
-          inserted: visiblePublishRows,
-        }),
-      );
-      c.executionCtx.waitUntil(
-        invalidateLatestCache(c.env, {
-          nReleases: visiblePublishRows.length,
-          cause: src.id,
-        }),
-      );
-      c.executionCtx.waitUntil(
-        notifyIndexNowForSource(
-          c.env,
-          {
-            resolveOrgSlug: (id) => resolveOrgSlug(db, id),
-            resolveProductSlug: (id) => resolveProductSlug(db, id),
-          },
-          {
-            slug: src.slug,
-            orgId: src.orgId,
-            productId: src.productId,
-            isHidden: src.isHidden,
-            discovery: src.discovery,
-          },
-          visiblePublishRows.length,
-        ),
-      );
-    }
-
-    // Fire-and-forget: embed the rows we just wrote. Uses waitUntil so the
-    // HTTP response returns immediately; embedding runs outside the request
-    // path. Never fails the write — embedAndUpsertReleases catches every
-    // error internally and logs to console.
-    if (insertedIds.length > 0) {
-      c.executionCtx.waitUntil(
-        (async () => {
-          try {
-            const embedConfig = await buildEmbedConfig(c.env);
-            if (!embedConfig) return;
-            // Load the rows back so we have full content, category, etc.
-            // We need the org/product category for metadata filtering.
-            const [orgRow] = src.orgId
-              ? await db
-                  .select({ category: organizations.category })
-                  .from(organizations)
-                  .where(eq(organizations.id, src.orgId))
-              : [{ category: null as string | null }];
-            // D1 bind-param cap is 100; chunk the IN clause so we stay
-            // well clear of the limit even if the caller posts a large
-            // batch. See `../lib/d1-limits.ts`.
-            const rowsToEmbed: Array<{
-              id: string;
-              title: string;
-              content: string;
-              summary: string | null;
-              version: string | null;
-              publishedAt: string | null;
-              sourceId: string;
-              type: ReleaseType;
-            }> = [];
-            for (let i = 0; i < insertedIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
-              const slice = insertedIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
-              // oxlint-disable-next-line no-await-in-loop -- D1 chunked select (100 bind param limit for inArray)
-              const rows = await db
-                .select({
-                  id: releases.id,
-                  title: releases.title,
-                  content: releases.content,
-                  summary: releases.summary,
-                  version: releases.version,
-                  publishedAt: releases.publishedAt,
-                  sourceId: releases.sourceId,
-                  type: releases.type,
-                })
-                .from(releases)
-                .where(inArray(releases.id, slice));
-              rowsToEmbed.push(...rows);
-            }
-
-            const category = orgRow?.category ?? null;
-            await embedAndUpsertReleases({
-              // oxlint-disable-next-line no-map-spread -- copy-on-write required; r is a DB row
-              releases: rowsToEmbed.map((r) => ({
-                ...r,
-                orgId: src.orgId,
-                productId: src.productId,
-                category,
-              })),
-              // See note in embedSourceSideEffect about the cast.
-              vectorIndex: c.env
-                .RELEASES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
-              embedConfig,
-              onPersisted: async (ids) => {
-                if (ids.length === 0) return;
-                // Mark the rows as embedded. D1's 100 bind-param cap means
-                // the embeddedAt SET + N IN-clause ids must total ≤100, so
-                // we chunk IDs — see `../lib/d1-limits.ts`.
-                const now = new Date().toISOString();
-                for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
-                  const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
-                  // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
-                  await db
-                    .update(releases)
-                    .set({ embeddedAt: now })
-                    .where(inArray(releases.id, slice));
-                }
-              },
-            });
-          } catch (err) {
-            logEvent("warn", {
-              component: "sources-batch",
-              event: "embed-side-effect-failed",
-              err: err instanceof Error ? err : String(err),
-            });
-          }
-        })(),
-      );
-    }
-
-    return c.json({ inserted, total });
+    c.executionCtx.waitUntil(runBatchIngestEffects(db, c.env, src, result));
+    return c.json({
+      inserted: result.inserted,
+      total: result.total,
+      insertedIds: result.insertedIds,
+    });
   } catch (err) {
     const classified = classifyDbError(err);
     logEvent("error", {

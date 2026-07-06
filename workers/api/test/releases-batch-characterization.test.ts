@@ -63,12 +63,18 @@ describe("POST /v1/sources/:slug/releases/batch — insert", () => {
 
     const res = await batch(db, { releases: [rel(1), rel(2), rel(3)] });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { inserted: number; total: number };
+    const body = (await res.json()) as { inserted: number; total: number; insertedIds: string[] };
     expect(body.inserted).toBe(3);
     expect(body.total).toBe(3);
+    expect(Array.isArray(body.insertedIds)).toBe(true);
+    expect(body.insertedIds).toHaveLength(3);
+    for (const id of body.insertedIds) {
+      expect(id).toMatch(/^rel_/);
+    }
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_h"));
     expect(rows).toHaveLength(3);
+    expect(new Set(body.insertedIds)).toEqual(new Set(rows.map((r) => r.id)));
   });
 
   it("reaches the same handler via the org-scoped path", async () => {
