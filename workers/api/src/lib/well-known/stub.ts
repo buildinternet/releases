@@ -379,6 +379,21 @@ export async function createStubFromManifest(
     return { created: false, skippedReason: "org_exists" };
   }
 
+  // Fail-closed on bare alias existence, even when the aliased org is
+  // soft-deleted/missing. resolveDomainOrg() intentionally returns only a LIVE
+  // org (that shape is what the listing lane wants), so a dangling alias would
+  // otherwise slip past the check above. A domain_aliases row means the domain
+  // was deliberately mapped to an org; deleting that org must not silently
+  // reopen the domain to anonymous stub creation.
+  const [danglingAlias] = await db
+    .select({ orgId: domainAliases.orgId })
+    .from(domainAliases)
+    .where(eq(domainAliases.domain, domain))
+    .limit(1);
+  if (danglingAlias) {
+    return { created: false, skippedReason: "org_exists" };
+  }
+
   const url = `https://${domain}/.well-known/releases.json`;
   const fetched = await fetchReleasesJson(url, { fetchImpl: opts.fetchImpl });
   if (!fetched.ok) {

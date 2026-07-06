@@ -9,9 +9,18 @@
  */
 import { describe, it, expect, afterEach } from "bun:test";
 import { eq } from "drizzle-orm";
-import { organizations, sources, releaseLocations } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  sources,
+  releaseLocations,
+  domainAliases,
+} from "@buildinternet/releases-core/schema";
 import { orgRoutes } from "../src/routes/orgs.js";
-import { createStubOrg, resolveDomainOrg } from "../src/lib/well-known/stub.js";
+import {
+  createStubOrg,
+  resolveDomainOrg,
+  createStubFromManifest,
+} from "../src/lib/well-known/stub.js";
 import { createTestDb, createTestApp } from "./setup";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
@@ -183,5 +192,48 @@ describe("resolveDomainOrg", () => {
     const hit = await resolveDomainOrg(db as never, "acme.com");
     expect(hit?.id).toBe(org.id);
     expect(await resolveDomainOrg(db as never, "other.com")).toBeNull();
+  });
+
+  it("returns null for a domain aliased to a soft-deleted org (dangling alias)", async () => {
+    const db = createTestDb();
+    const { org } = await createStubOrg(
+      db as never,
+      { name: "Ghost Co", slug: "ghost-co", domain: "ghost.com" },
+      { basis: "curator" },
+    );
+    await db.insert(domainAliases).values({ domain: "ghost.com-alias", orgId: org.id });
+    await db
+      .update(organizations)
+      .set({ deletedAt: new Date().toISOString() })
+      .where(eq(organizations.id, org.id));
+
+    // resolveDomainOrg is live-org-only by design (the listing lane wants that
+    // shape) — it does NOT see the aliased org once it's soft-deleted.
+    expect(await resolveDomainOrg(db as never, "ghost.com-alias")).toBeNull();
+  });
+});
+
+describe("createStubFromManifest — alias-existence guard fail-closed", () => {
+  it("skips as org_exists when the aliased org is soft-deleted", async () => {
+    const db = createTestDb();
+    const { org } = await createStubOrg(
+      db as never,
+      { name: "Ghost Co", slug: "ghost-co-2", domain: "ghost2.com" },
+      { basis: "curator" },
+    );
+    await db.insert(domainAliases).values({ domain: "ghost2-alias.com", orgId: org.id });
+    await db
+      .update(organizations)
+      .set({ deletedAt: new Date().toISOString() })
+      .where(eq(organizations.id, org.id));
+
+    // Documents the intentional divergence: the helper says "no live org here"
+    // but the guard must still refuse — an alias row means the domain was
+    // deliberately mapped, and deleting the org must not silently reopen it.
+    expect(await resolveDomainOrg(db as never, "ghost2-alias.com")).toBeNull();
+
+    const result = await createStubFromManifest(db as never, "ghost2-alias.com");
+    expect(result.skippedReason).toBe("org_exists");
+    expect(result.created).toBe(false);
   });
 });
