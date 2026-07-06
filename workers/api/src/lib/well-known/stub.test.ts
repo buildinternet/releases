@@ -159,6 +159,22 @@ describe("createStubFromManifest", () => {
     expect(res.skippedReason).toBe("org_exists");
   });
 
+  it("reports slug_conflict (not a mislabel) when the derived slug is taken by another domain", async () => {
+    const db = createTestDb();
+    // An unrelated org already owns the slug "beta-corp" derives to, on a
+    // different domain — so the domain guard passes but createStubOrg throws a
+    // UNIQUE(slug) conflict, which must surface as slug_conflict specifically.
+    await db
+      .insert(organizations)
+      .values({ id: "org_bc", name: "Beta Corp", slug: "beta-corp", domain: "other.com" });
+    const res = await createStubFromManifest(db as never, "beta.com", {
+      fetchImpl: async () =>
+        new Response(manifest, { status: 200, headers: { "content-type": "application/json" } }),
+    });
+    expect(res.created).toBe(false);
+    expect(res.skippedReason).toBe("slug_conflict");
+  });
+
   it("skips an invalid manifest without writing", async () => {
     const db = createTestDb();
     const res = await createStubFromManifest(db as never, "bad.com", {

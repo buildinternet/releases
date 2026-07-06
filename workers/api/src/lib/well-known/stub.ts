@@ -16,7 +16,7 @@ import {
 } from "@buildinternet/releases-api-types";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { logEvent } from "@releases/lib/log-event";
-import { getOrCreateTagsD1 } from "../../utils.js";
+import { getOrCreateTagsD1, isConflictError } from "../../utils.js";
 import type { createDb } from "../../db.js";
 import { RELEASE_LOCATIONS_INSERT_CHUNK_SIZE, ENTITY_TAG_INSERT_CHUNK_SIZE } from "../d1-limits.js";
 import type { DeclaredLocation } from "./materialize.js";
@@ -109,10 +109,13 @@ function locatorRow(
  *
  * The caller owns identity resolution: `slug` must be final and non-reserved,
  * `category` an already-resolved slug. A slug/domain UNIQUE collision throws
- * (the route maps it to 409); the whole write is best-effort sequential rather
- * than a transaction because D1 has no interactive transactions — a partial
- * failure leaves a re-runnable org (locators upsert by the partial-unique
- * match_key on retry).
+ * (the route maps it to 409). The write is best-effort sequential, not a
+ * transaction (D1 has no interactive transactions): a failure mid locator-batch
+ * leaves a stub with a partial locator set and, in phase 1, NO automatic repair
+ * path — the org row already exists, so a re-run 409s at the org insert before
+ * it can reach the locators. Manual repair (or the deferred locator-sync mode)
+ * is required. The locator insert is `onConflictDoNothing` so that a future
+ * repair/re-sync pass can safely run over an already-populated stub.
  */
 export async function createStubOrg(
   db: Db,
@@ -217,10 +220,14 @@ export async function createStubOrg(
   });
 
   for (let i = 0; i < rows.length; i += RELEASE_LOCATIONS_INSERT_CHUNK_SIZE) {
+    // onConflictDoNothing on the partial-unique (org_id, match_key): a fresh
+    // create never conflicts (rows are deduped above), but it keeps a future
+    // repair/re-sync pass safe to run over an already-populated stub.
     // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100-bind cap)
     await db
       .insert(releaseLocations)
-      .values(rows.slice(i, i + RELEASE_LOCATIONS_INSERT_CHUNK_SIZE));
+      .values(rows.slice(i, i + RELEASE_LOCATIONS_INSERT_CHUNK_SIZE))
+      .onConflictDoNothing();
   }
 
   logEvent("info", {
@@ -386,14 +393,15 @@ export async function createStubFromManifest(
       locationCount: result.locationCount,
     };
   } catch (err) {
-    // A slug/domain UNIQUE race (concurrent create) collapses to a skip — the
-    // other writer won, and we don't want the unlisted path to 500 a sweep.
-    logEvent("warn", {
-      component: "well-known",
-      event: "stub-create-conflict",
-      domain,
-      err: err instanceof Error ? err : String(err),
-    });
-    return { created: false, skippedReason: "slug_conflict" };
+    // ONLY a slug/domain UNIQUE race (a concurrent create won) is a skip — the
+    // fail-closed label has to be accurate. Any other throw (CHECK violation,
+    // transient D1 error) rethrows so the route surfaces a 5xx and a sweep
+    // caller's own per-domain catch logs the real error, rather than every
+    // failure masquerading as `slug_conflict`.
+    if (isConflictError(err)) {
+      logEvent("warn", { component: "well-known", event: "stub-create-conflict", domain });
+      return { created: false, skippedReason: "slug_conflict" };
+    }
+    throw err;
   }
 }
