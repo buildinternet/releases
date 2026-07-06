@@ -39,6 +39,7 @@ import {
   type StubOrgInput,
   type StubProductInput,
 } from "../lib/well-known/stub.js";
+import { promoteStubOrg } from "../lib/well-known/promote.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
@@ -922,6 +923,44 @@ orgRoutes.post(
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
 
     const result = await createStubFromManifest(db, domain, { dryRun });
+    return c.json(result);
+  },
+);
+
+orgRoutes.post(
+  "/orgs/:slug/promote",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Orgs"],
+    summary: "Promote a stub org to tracked",
+    description:
+      'Materializes the org\'s stored release locations into sources — probing tier-1 (feed/github/appstore) into live sources and pending tier-2 (bare url/file) as paused sources for review — stamps each locator with the source it became, and flips the org to `tier: "tracked"`. Locators are kept (demotion symmetry). Idempotent: an already-tracked org is a no-op, and a re-run matches existing sources without duplicating. Pass ?dryRun=1 to preview the materialization plan. Admin scope required.',
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: "Promotion result (or the dry-run plan)" },
+      403: {
+        description: "Admin scope required",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    if (!(await isValidBearerAuth(c))) {
+      return respondError(c, new ForbiddenError("Admin scope is required to promote an org"));
+    }
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
+
+    const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
+    const result = await promoteStubOrg(db, org.id, { dryRun, githubToken });
     return c.json(result);
   },
 );

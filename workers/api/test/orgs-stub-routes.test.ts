@@ -9,8 +9,9 @@
  */
 import { describe, it, expect, afterEach } from "bun:test";
 import { eq } from "drizzle-orm";
-import { organizations, releaseLocations } from "@buildinternet/releases-core/schema";
+import { organizations, sources, releaseLocations } from "@buildinternet/releases-core/schema";
 import { orgRoutes } from "../src/routes/orgs.js";
+import { createStubOrg } from "../src/lib/well-known/stub.js";
 import { createTestDb, createTestApp } from "./setup";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
@@ -120,5 +121,53 @@ describe("POST /v1/orgs/stub-from-domain", () => {
       }),
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /v1/orgs/:slug/promote", () => {
+  it("promotes a stub to tracked (tier-2 locators, no network)", async () => {
+    const db = createTestDb();
+    // A bare-url locator is tier-2 — the materializer pends it as a paused
+    // source without a network probe, so the route stays hermetic.
+    await createStubOrg(
+      db as never,
+      { name: "Promo", slug: "promo", locations: [{ url: "https://promo.com/blog" }] },
+      { basis: "curator" },
+    );
+    const app = createTestApp(db, orgRoutes, { env: adminEnv });
+    const res = await app(
+      new Request("https://x/v1/orgs/promo/promote", { method: "POST", headers: auth }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { promoted: boolean; sourcesCreated: number };
+    expect(body.promoted).toBe(true);
+    expect(body.sourcesCreated).toBe(1);
+    const [org] = await db.select().from(organizations).where(eq(organizations.slug, "promo"));
+    expect(org!.tier).toBe("tracked");
+    const srcs = await db.select().from(sources).where(eq(sources.orgId, org!.id));
+    expect(srcs.length).toBe(1);
+    expect(srcs[0]!.fetchPriority).toBe("paused");
+  });
+
+  it("rejects a non-admin with 403", async () => {
+    const db = createTestDb();
+    await createStubOrg(db as never, { name: "P2", slug: "p2" }, { basis: "curator" });
+    const app = createTestApp(db, orgRoutes, { env: adminEnv });
+    const res = await app(
+      new Request("https://x/v1/orgs/p2/promote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("404s for an unknown org", async () => {
+    const db = createTestDb();
+    const app = createTestApp(db, orgRoutes, { env: adminEnv });
+    const res = await app(
+      new Request("https://x/v1/orgs/nope/promote", { method: "POST", headers: auth }),
+    );
+    expect(res.status).toBe(404);
   });
 });
