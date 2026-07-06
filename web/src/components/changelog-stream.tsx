@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-import { remarkPlugins } from "@/lib/markdown-plugins";
-import { rehypeShikiPlugin } from "@/lib/shiki";
-import { markdownComponents } from "./markdown-components";
-import type { SourceChangelogResponse } from "@/lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+/**
+ * Shape returned by the `/api/orgs/[org]/sources/[source]/changelog` route
+ * handler: a slice pre-rendered to HTML server-side (`contentHtml`), plus the
+ * `nextOffset` cursor. The raw `content` markdown no longer rides the wire —
+ * rendering happens on the server so shiki + react-markdown stay out of this
+ * client bundle (#1919).
+ */
+interface ChangelogChunkResponse {
+  contentHtml: string;
+  nextOffset: number | null;
+}
 
 interface InitialSlice {
-  content: ReactNode;
+  /** The initial slice already rendered to sanitized HTML on the server. */
+  contentHtml: string;
   offset: number;
   limit: number;
   nextOffset: number | null;
@@ -26,7 +34,8 @@ interface ChangelogStreamProps {
 
 interface Chunk {
   id: number;
-  content: string;
+  /** Server-rendered, sanitized HTML for this lazily-loaded slice. */
+  contentHtml: string;
 }
 
 export function ChangelogStream({
@@ -57,17 +66,20 @@ export function ChangelogStream({
         `/api/orgs/${encodeURIComponent(orgSlug)}/sources/${encodeURIComponent(sourceSlug)}/changelog?${params.toString()}`,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: SourceChangelogResponse = await res.json();
+      const data: ChangelogChunkResponse = await res.json();
       nextChunkId.current += 1;
-      setChunks((prev) => [...prev, { id: nextChunkId.current, content: data.content }]);
-      setLoadedChars((prev) => prev + data.content.length);
+      setChunks((prev) => [...prev, { id: nextChunkId.current, contentHtml: data.contentHtml }]);
+      // `nextOffset` is the authoritative char cursor into the full file, so it
+      // doubles as "chars loaded so far" for the progress readout — no need to
+      // ship the raw slice back just to measure its length.
+      setLoadedChars(data.nextOffset ?? initial.totalChars);
       setNextOffset(data.nextOffset);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load more");
     } finally {
       setLoading(false);
     }
-  }, [loading, nextOffset, orgSlug, sourceSlug, initial.limit, activePath]);
+  }, [loading, nextOffset, orgSlug, sourceSlug, initial.limit, initial.totalChars, activePath]);
 
   useEffect(() => {
     if (nextOffset == null) return;
@@ -85,17 +97,19 @@ export function ChangelogStream({
 
   return (
     <>
-      <div className={markdownClassName}>{initial.content}</div>
+      {/* Both the initial slice and every lazily-loaded chunk arrive as HTML
+          already rendered (and sanitized — no `allowDangerousHtml`) by the
+          shared server pipeline, so shiki + react-markdown never load here. */}
+      <div
+        className={markdownClassName}
+        dangerouslySetInnerHTML={{ __html: initial.contentHtml }}
+      />
       {chunks.map((chunk) => (
-        <div key={chunk.id} className={markdownClassName}>
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={[rehypeShikiPlugin]}
-            components={markdownComponents}
-          >
-            {chunk.content}
-          </ReactMarkdown>
-        </div>
+        <div
+          key={chunk.id}
+          className={markdownClassName}
+          dangerouslySetInnerHTML={{ __html: chunk.contentHtml }}
+        />
       ))}
       {nextOffset != null && (
         <div

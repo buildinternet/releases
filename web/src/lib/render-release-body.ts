@@ -104,7 +104,17 @@ function rehypeReleaseBody(variant: BodyVariant) {
   };
 }
 
-function renderToHtml(content: string, variant: BodyVariant): string {
+/**
+ * Drive the shared markdown→HTML pipeline (remark → the shared `remarkPlugins`
+ * → rehype → the `markdownComponents` element overrides → shiki → stringify).
+ * Exported so the changelog viewer's server pipeline
+ * ({@link file://./render-changelog-html.ts}) can render full changelog slices
+ * through the exact same stack, keeping shiki + react-markdown off those routes'
+ * client bundles (#1919). The `"full"` variant reproduces
+ * `markdownComponents({ demoteHeadings: 2 })` byte-for-byte — same heading
+ * demotion, same image class, same external-link handling.
+ */
+export function renderBodyMarkdownToHtml(content: string, variant: BodyVariant): string {
   return unified()
     .use(remarkParse)
     .use(remarkPlugins)
@@ -134,7 +144,7 @@ export function renderReleaseBodyHtml(release: BodyRenderable, variant: BodyVari
   const base = originFromUrl(release.url);
   const content = base ? rewriteRelativeLinks(raw, base) : raw;
   if (!content.trim()) return "";
-  return renderToHtml(content, variant);
+  return renderBodyMarkdownToHtml(content, variant);
 }
 
 /**
@@ -150,7 +160,7 @@ export function renderReleaseFullBodyHtml(release: BodyRenderable): string {
   const base = originFromUrl(release.url);
   const content = base ? rewriteRelativeLinks(raw, base) : raw;
   if (!content.trim()) return "";
-  return renderToHtml(content, "full");
+  return renderBodyMarkdownToHtml(content, "full");
 }
 
 /**
