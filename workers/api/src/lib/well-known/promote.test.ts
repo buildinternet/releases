@@ -9,6 +9,7 @@ import {
 import { createTestDb } from "../../../test/setup.js";
 import { createStubOrg } from "./stub.js";
 import { promoteStubOrg } from "./promote.js";
+import { isReleasesError } from "@releases/lib/releases-error";
 
 // A probe that approves every locator without touching the network — lets the
 // tier-1 feed path create a source in-process.
@@ -134,5 +135,105 @@ describe("promoteStubOrg", () => {
     expect(after!.tier).toBe("stub");
     const srcs = await db.select().from(sources).where(eq(sources.orgId, org.id));
     expect(srcs.length).toBe(0);
+  });
+
+  describe("promotion claim (#1958)", () => {
+    it("blocks a concurrent second promotion while a fresh claim is held", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Zeta", slug: "zeta", locations: [{ feed: "https://zeta.com/feed.xml" }] },
+        { basis: "curator" },
+      );
+      // Simulate a concurrent in-flight run by pre-setting a fresh claim.
+      await db
+        .update(organizations)
+        .set({ promotingAt: new Date().toISOString() })
+        .where(eq(organizations.id, org.id));
+
+      let thrown: unknown;
+      try {
+        await promoteStubOrg(db as never, org.id, { probe: okProbe });
+      } catch (err) {
+        thrown = err;
+      }
+      expect(isReleasesError(thrown) && thrown.type === "conflict").toBe(true);
+
+      // Org is untouched — still stub, no sources created.
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.tier).toBe("stub");
+      const srcs = await db.select().from(sources).where(eq(sources.orgId, org.id));
+      expect(srcs.length).toBe(0);
+    });
+
+    it("allows the claim once it's older than the 10-minute TTL", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Eta", slug: "eta", locations: [{ feed: "https://eta.com/feed.xml" }] },
+        { basis: "curator" },
+      );
+      // A stale claim from a crashed run 11 minutes ago.
+      const staleClaim = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+      await db
+        .update(organizations)
+        .set({ promotingAt: staleClaim })
+        .where(eq(organizations.id, org.id));
+
+      const res = await promoteStubOrg(db as never, org.id, { probe: okProbe });
+      expect(res.promoted).toBe(true);
+
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.tier).toBe("tracked");
+      expect(after!.promotingAt).toBeNull();
+    });
+
+    it("releases the claim after a successful promotion", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Theta", slug: "theta", locations: [{ feed: "https://theta.com/feed.xml" }] },
+        { basis: "curator" },
+      );
+      await promoteStubOrg(db as never, org.id, { probe: okProbe });
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.promotingAt).toBeNull();
+    });
+
+    it("releases the claim after a thrown failure", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Iota", slug: "iota", locations: [{ feed: "https://iota.com/feed.xml" }] },
+        { basis: "curator" },
+      );
+      const failingProbe = async (): Promise<never> => {
+        throw new Error("probe boom");
+      };
+      await expect(promoteStubOrg(db as never, org.id, { probe: failingProbe })).rejects.toThrow(
+        "probe boom",
+      );
+
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.promotingAt).toBeNull();
+      // Failure never flipped the tier.
+      expect(after!.tier).toBe("stub");
+    });
+
+    it("dryRun never takes a claim", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Kappa", slug: "kappa", locations: [{ url: "https://kappa.com/x" }] },
+        { basis: "curator" },
+      );
+      await promoteStubOrg(db as never, org.id, { dryRun: true, probe: okProbe });
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.promotingAt).toBeNull();
+
+      // A concurrent real promotion is unaffected by the dry-run.
+      const res = await promoteStubOrg(db as never, org.id, { probe: okProbe });
+      expect(res.promoted).toBe(true);
+    });
   });
 });

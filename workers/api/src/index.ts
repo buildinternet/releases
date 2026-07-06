@@ -43,6 +43,7 @@ import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { sendStalenessDigest } from "./cron/send-staleness-digest.js";
+import { sweepStubDemotions } from "./cron/stub-demotion.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
 import { mobileAppDiscoverySweep } from "./cron/mobile-app-discovery.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
@@ -1128,6 +1129,22 @@ export default {
             EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
             EMAIL_FROM: env.EMAIL_FROM,
             WEB_BASE_URL: env.WEB_BASE_URL,
+          }),
+          alertEnv,
+        ),
+      );
+      // Stub-tier demotion sweep (#1958): same daily tick, independent of the
+      // staleness digest above — a `tracked` org that's lost every live
+      // source (but still has a live declared locator) flips back to
+      // `tier: "stub"`. Gated on the existing well-known-materialization flag.
+      ctx.waitUntil(
+        loggedDispatch(
+          "stub-demotion-cron",
+          sweepStubDemotions({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            FLAGS: env.FLAGS,
+            WELL_KNOWN_MATERIALIZATION_ENABLED: env.WELL_KNOWN_MATERIALIZATION_ENABLED,
           }),
           alertEnv,
         ),
