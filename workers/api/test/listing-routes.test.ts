@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach } from "bun:test";
+import { eq } from "drizzle-orm";
+import { organizations } from "@buildinternet/releases-core/schema";
 import { listingRoutes } from "../src/routes/listing.js";
 import { createTestDb, createTestApp } from "./setup";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
@@ -87,5 +89,92 @@ describe("POST /v1/listing/validate", () => {
       }),
     );
     expect([400, 422]).toContain(res.status);
+  });
+});
+
+describe("POST /v1/listing/activate", () => {
+  const activate = (db: ReturnType<typeof createTestDb>, body: unknown, env = {}) =>
+    app(
+      db,
+      env,
+    )(
+      new Request("https://x/v1/listing/activate", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body),
+      }),
+    );
+
+  it("creates a stub for an unlisted domain and returns the pointer", async () => {
+    mockManifestFetch(MANIFEST);
+    const db = createTestDb();
+    const res = await activate(db, { domain: "acme.com" });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      activated: boolean;
+      org: { slug: string; status: string; webUrl: string };
+      trackingRequested: boolean;
+    };
+    expect(body.activated).toBe(true);
+    expect(body.org.status).toBe("stub");
+    expect(body.trackingRequested).toBe(false);
+    const [org] = await db.select().from(organizations);
+    expect(org!.tier).toBe("stub");
+    expect(org!.trackingRequestedAt).toBeNull();
+  });
+
+  it("stamps tracking_requested_at when requested at creation", async () => {
+    mockManifestFetch(MANIFEST);
+    const db = createTestDb();
+    const res = await activate(db, { domain: "acme.com", requestTracking: true });
+    expect(res.status).toBe(201);
+    const [org] = await db.select().from(organizations);
+    expect(org!.trackingRequestedAt).not.toBeNull();
+  });
+
+  it("existing-stub carve-out: no new org, refreshes the tracking stamp", async () => {
+    mockManifestFetch(MANIFEST);
+    const db = createTestDb();
+    await activate(db, { domain: "acme.com" });
+    const res = await activate(db, { domain: "acme.com", requestTracking: true });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { activated: boolean; trackingRequested: boolean };
+    expect(body.activated).toBe(false);
+    expect(body.trackingRequested).toBe(true);
+    const rows = await db.select().from(organizations);
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.trackingRequestedAt).not.toBeNull();
+  });
+
+  it("409s a tracked (listed) domain with the org pointer in details", async () => {
+    mockManifestFetch(MANIFEST);
+    const db = createTestDb();
+    await activate(db, { domain: "acme.com" });
+    const [org] = await db.select().from(organizations);
+    await db.update(organizations).set({ tier: "tracked" }).where(eq(organizations.id, org!.id));
+    const res = await activate(db, { domain: "acme.com" });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { type: string; details?: { slug?: string } } };
+    expect(body.error.type).toBe("conflict");
+    expect(body.error.details?.slug).toBe(org!.slug);
+  });
+
+  it("400s an invalid manifest instead of writing", async () => {
+    mockManifestFetch({ version: 1 });
+    const db = createTestDb();
+    const res = await activate(db, { domain: "acme.com" });
+    expect(res.status).toBe(400);
+    expect((await db.select().from(organizations)).length).toBe(0);
+  });
+
+  it("429s when the per-domain limiter refuses", async () => {
+    const res = await activate(
+      createTestDb(),
+      { domain: "acme.com" },
+      {
+        LISTING_DOMAIN_RATE_LIMITER: noLimiter,
+      },
+    );
+    expect(res.status).toBe(429);
   });
 });
