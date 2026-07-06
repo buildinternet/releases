@@ -24,6 +24,8 @@ import type {
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
   OverviewCitationSchema,
+  OrgStatusSchema,
+  ReleaseLocationItemSchema,
 } from "./schemas/shared.js";
 import type {
   OrgListItemSchema,
@@ -263,6 +265,8 @@ export {
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
   OverviewCitationSchema,
+  OrgStatusSchema,
+  ReleaseLocationItemSchema,
   CategorySchema,
   NoticeSchema,
 } from "./schemas/shared.js";
@@ -525,6 +529,11 @@ export type { ResolveResponse } from "./schemas/resolve.js";
 // ── Media ──
 
 export type MediaItem = z.infer<typeof MediaItemSchema>;
+
+// ── Stub tier (#1947) ──
+
+export type OrgStatus = z.infer<typeof OrgStatusSchema>;
+export type ReleaseLocationItem = z.infer<typeof ReleaseLocationItemSchema>;
 
 // ── Stats ──
 

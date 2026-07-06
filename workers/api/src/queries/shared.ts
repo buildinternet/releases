@@ -42,6 +42,7 @@ export type OrgListRow = {
   category: string | null;
   avatar_url: string | null;
   featured: number;
+  tier: "stub" | "tracked";
   source_count: number;
   release_count: number;
   last_activity: string | null;

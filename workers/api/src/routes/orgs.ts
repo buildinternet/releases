@@ -40,6 +40,7 @@ import {
   type StubProductInput,
 } from "../lib/well-known/stub.js";
 import { promoteStubOrg } from "../lib/well-known/promote.js";
+import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
@@ -249,6 +250,7 @@ orgRoutes.get(
       category: row.category,
       avatarUrl: row.avatar_url,
       featured: Boolean(row.featured),
+      status: row.tier,
       sourceCount: row.source_count,
       releaseCount: row.release_count,
       recentReleaseCount: row.recent_release_count,
@@ -466,6 +468,10 @@ orgRoutes.get(
         }
       : null;
 
+    // Declared locations back the read contract for a stub (its `sources` array
+    // is empty). Only stubs carry locators, so the extra query is stub-only.
+    const locations = org.tier === "stub" ? await loadReleaseLocations(db, org.id) : undefined;
+
     const result = {
       id: org.id,
       slug: org.slug,
@@ -480,6 +486,8 @@ orgRoutes.get(
       featured: org.featured,
       fetchPaused: org.fetchPaused,
       discovery: org.discovery,
+      status: org.tier,
+      ...(locations ? { locations } : {}),
       tags: tagRows.map((t) => t.name),
       sourceCount: orgSources.length,
       releaseCount: totalReleases.n,

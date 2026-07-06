@@ -17,12 +17,14 @@ export async function getOrgsWithStats(
   const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
   // Drop orgs that haven't produced any visible releases yet (#746). Applied
   // post-aggregate via HAVING so the search-term filter still matches the
-  // same set of rows whether or not empties are included.
-  const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0`;
+  // same set of rows whether or not empties are included. Stub orgs (#1947)
+  // have no releases by design but ARE part of the directory (coverage breadth
+  // is the product), so they're kept regardless of the empty-org toggle.
+  const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0 OR o.tier = 'stub'`;
 
   return db.all<OrgListRow>(sql`
     SELECT
-      o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured,
+      o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured, o.tier,
       COUNT(DISTINCT s.id) AS source_count,
       COUNT(r.id) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
@@ -32,7 +34,7 @@ export async function getOrgsWithStats(
     LEFT JOIN sources_visible s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id
     ${where}
-    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured
+    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured, o.tier
     ${having}
     ORDER BY o.name, o.id
     ${page}
@@ -51,28 +53,37 @@ export async function countOrgsForList(
   opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
 ): Promise<{ totalItems: number; emptyOrgCount: number }> {
   const where = orgListWhere(q, opts.category, opts.featured);
-  // Two SUMs over the same per-org aggregate: orgs WITH ≥1 visible release vs
-  // orgs WITHOUT. `totalItems` picks whichever bucket(s) match the current
-  // filter; `emptyOrgCount` is always the empty bucket so the toggle CTA can
-  // label itself even when empties are excluded.
-  const [row] = await db.all<{ with_releases: number; without_releases: number }>(sql`
+  // Three buckets over the same per-org aggregate: orgs WITH ≥1 visible release,
+  // stub orgs (0 releases but shown by design, #1947), and other empties. The
+  // default list shows with-releases + stubs; `emptyOrgCount` is only the
+  // non-stub empties (the "Show empty orgs" toggle's real payload). Under
+  // `includeEmpty`, everything counts.
+  const [row] = await db.all<{
+    with_releases: number;
+    stub_empty: number;
+    other_empty: number;
+  }>(sql`
     SELECT
       SUM(CASE WHEN per_org.release_count > 0 THEN 1 ELSE 0 END) AS with_releases,
-      SUM(CASE WHEN per_org.release_count = 0 THEN 1 ELSE 0 END) AS without_releases
+      SUM(CASE WHEN per_org.release_count = 0 AND per_org.tier = 'stub' THEN 1 ELSE 0 END) AS stub_empty,
+      SUM(CASE WHEN per_org.release_count = 0 AND per_org.tier <> 'stub' THEN 1 ELSE 0 END) AS other_empty
     FROM (
-      SELECT o.id, COUNT(r.id) AS release_count
+      SELECT o.id, o.tier, COUNT(r.id) AS release_count
       FROM organizations_active o
       LEFT JOIN sources_visible s ON s.org_id = o.id
       LEFT JOIN releases_visible r ON r.source_id = s.id
       ${where}
-      GROUP BY o.id
+      GROUP BY o.id, o.tier
     ) AS per_org
   `);
   const withReleases = Number(row?.with_releases ?? 0);
-  const withoutReleases = Number(row?.without_releases ?? 0);
+  const stubEmpty = Number(row?.stub_empty ?? 0);
+  const otherEmpty = Number(row?.other_empty ?? 0);
   return {
-    totalItems: opts.includeEmpty ? withReleases + withoutReleases : withReleases,
-    emptyOrgCount: withoutReleases,
+    totalItems: opts.includeEmpty
+      ? withReleases + stubEmpty + otherEmpty
+      : withReleases + stubEmpty,
+    emptyOrgCount: otherEmpty,
   };
 }
 

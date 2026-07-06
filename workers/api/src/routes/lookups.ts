@@ -18,6 +18,7 @@ import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain } from "../queries/search.js";
+import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
 import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/lookup-related-org.js";
 import { readNegCache, writeNegCache } from "../lib/lookup-neg-cache.js";
 import { createDb } from "../db.js";
@@ -750,6 +751,18 @@ lookupRoutes.get(
       return respondError(c, new NotFoundError(`No org or product owns domain "${domain}"`));
     }
 
-    return c.json({ domain, org: orgRow, products: productRows });
+    // Surface the org's tier as `status`, and for a stub attach its declared
+    // release locations — the "check these locations" answer when the domain
+    // resolves to an org with no processed sources yet (#1947).
+    const { tier, ...orgFields } = orgRow ?? {};
+    const org = orgRow
+      ? {
+          ...orgFields,
+          status: tier,
+          ...(tier === "stub" ? { locations: await loadReleaseLocations(db, orgRow.id) } : {}),
+        }
+      : null;
+
+    return c.json({ domain, org, products: productRows });
   },
 );

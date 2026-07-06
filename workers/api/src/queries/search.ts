@@ -361,6 +361,7 @@ export interface OrgByDomainRow {
   description: string | null;
   category: string | null;
   avatarUrl: string | null;
+  tier: "stub" | "tracked";
   matchedVia: "primary" | "alias";
 }
 
@@ -563,6 +564,7 @@ export async function findOrgByDomain(db: D1Db, domain: string): Promise<OrgByDo
       description: organizationsActive.description,
       category: organizationsActive.category,
       avatarUrl: organizationsActive.avatarUrl,
+      tier: organizationsActive.tier,
       matchedVia: sql<
         "primary" | "alias"
       >`CASE WHEN ${organizationsActive.domain} = ${domain} THEN 'primary' ELSE 'alias' END`,

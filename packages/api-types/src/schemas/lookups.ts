@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { CategorySchema } from "./shared.js";
+import { CategorySchema, OrgStatusSchema, ReleaseLocationItemSchema } from "./shared.js";
 
 /**
  * Status flags returned by `POST /v1/lookups`:
@@ -104,6 +104,14 @@ export const DomainLookupOrgSchema = z.object({
   category: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   matchedVia: z.enum(["primary", "alias"]),
+  /** Org tier (#1947). Optional for mid-deploy tolerance; absent ⇒ `"tracked"`. */
+  status: OrgStatusSchema.optional(),
+  /**
+   * Declared release locations (#1947) for a stub org — the "check these
+   * locations" answer when the domain resolves to an org with no sources yet.
+   * Omitted/empty for a tracked org.
+   */
+  locations: z.array(ReleaseLocationItemSchema).optional(),
 });
 
 export const DomainLookupProductSchema = z.object({
