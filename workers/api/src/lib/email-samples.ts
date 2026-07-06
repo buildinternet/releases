@@ -3,6 +3,7 @@
  * route so operators can preview delivery without triggering real auth flows.
  */
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { Feedback, Recommendation } from "@buildinternet/releases-core/schema";
 import {
   changeEmailTemplate,
@@ -162,7 +163,7 @@ export type EmailSampleEnv = AuthEmailEnv &
   };
 
 function webOrigin(env: EmailSampleEnv): string {
-  const raw = env.WEB_BASE_URL ?? "https://releases.sh";
+  const raw = releaseWebBase(env);
   try {
     return new URL(raw).origin;
   } catch {

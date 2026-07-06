@@ -5,7 +5,11 @@ import {
   advanceDigestWatermark,
   type DigestRecipient,
 } from "../queries/digest-prefs.js";
-import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/releases.js";
+import {
+  getFollowedReleases,
+  mapLatestRowToReleaseItem,
+  releaseWebBase,
+} from "../queries/releases.js";
 import { sendDigestEmail, type DigestEmailEnv } from "../lib/digest-email.js";
 import { parsePositiveInt } from "./feed-enrich.js";
 import type { AuthEmailBinding } from "../auth/email.js";
@@ -56,7 +60,7 @@ export interface DigestDeliveryConfig {
 /** Resolve the per-run delivery config from the worker env (one place, no drift). */
 export function digestDeliveryConfig(env: SendDigestsEnv): DigestDeliveryConfig {
   return {
-    baseUrl: env.WEB_BASE_URL ?? "https://releases.sh",
+    baseUrl: releaseWebBase(env),
     apiOrigin: env.API_BASE_URL ?? "https://api.releases.sh",
     mediaOrigin: env.MEDIA_ORIGIN ?? "",
     maxReleases: parsePositiveInt(env.DIGEST_MAX_RELEASES, DEFAULT_MAX_RELEASES),
