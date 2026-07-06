@@ -44,6 +44,37 @@ export const VideoSourceInfoSchema = z.object({
   provider: z.enum(["youtube", "vimeo", "wistia"]),
 });
 
+/**
+ * Org tier surfaced on read paths (#1947). `stub` = known only by declared
+ * release locations (no processed sources yet); `tracked` = a normal org whose
+ * sources fetch. The column is `organizations.tier`; the wire name is `status`.
+ * Optional on the wire so a pinned client mid-deploy tolerates its absence —
+ * treat a missing value as `"tracked"`.
+ */
+export const OrgStatusSchema = z.enum(["stub", "tracked"]);
+
+/**
+ * A declared release location (#1947) — one `release_locations` row on the
+ * wire, the same shape a releases.json `releases[]` entry carries plus its
+ * provenance `basis` and, once promoted, the `sourceId` it materialized into.
+ * Surfaced on stub orgs so an agent gets "release info is published at these
+ * locations" instead of an empty sources list.
+ */
+export const ReleaseLocationItemSchema = z.object({
+  url: z.string().optional(),
+  feed: z.string().optional(),
+  github: z.string().optional(),
+  appstore: z.string().optional(),
+  file: z.string().optional(),
+  title: z.string().nullable().optional(),
+  canonical: z.boolean(),
+  basis: z.enum(["curator", "declared", "detected", "generated"]),
+  /** Owning product id when the locator is product-scoped, else null. */
+  productId: z.string().nullable(),
+  /** Set once the locator has been promoted into a source, else null. */
+  sourceId: z.string().nullable(),
+});
+
 export const PaginationSchema = z.object({
   page: z.number().int().min(1),
   pageSize: z.number().int().min(1),

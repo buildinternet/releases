@@ -102,7 +102,7 @@ export interface MaterializationOptions {
   repoSourceId?: string;
 }
 
-function normalizeUrl(value: string): string {
+export function normalizeUrl(value: string): string {
   try {
     const parsed = new URL(value);
     parsed.hash = "";

@@ -72,6 +72,9 @@ const ALLOWLIST = new Set<string>([
   "POST /orgs/:slug/avatar", // one-step avatar ingest (#1406); Bearer required, hide: hideInProduction
   "POST /orgs/:slug/sync-well-known", // .well-known reconcile; Bearer required, hide: hideInProduction
   "POST /orgs/:slug/discover-apps", // AASA/assetlinks mobile-app discovery (#1907); Bearer required, hide: hideInProduction
+  "POST /orgs/stub", // stub-org creation (#1947); admin required, hide: hideInProduction
+  "POST /orgs/stub-from-domain", // unlisted-domain stub creation (#1947); admin required, hide: hideInProduction
+  "POST /orgs/:slug/promote", // stub→tracked promotion (#1947); admin required, hide: hideInProduction
   "DELETE /orgs/:slug",
   "DELETE /orgs/:slug/accounts/:platform/:handle",
   "POST /orgs/:slug/accounts",

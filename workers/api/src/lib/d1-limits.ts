@@ -43,6 +43,12 @@ export const RELEASE_COVERAGE_INSERT_CHUNK_SIZE = 20;
 // 30 for headroom.
 export const ENTITY_TAG_INSERT_CHUNK_SIZE = 30;
 
+// `org_accounts` INSERT binds 5 placeholders per row: id ($defaultFn), org_id,
+// platform, handle, created_at. 18 rows * 5 = 90 bindings, under the 100 cap.
+// (Distinct from the 3-bind tag chunk — don't reuse ENTITY_TAG_INSERT_CHUNK_SIZE
+// here; 30 * 5 = 150 would blow the budget.)
+export const ORG_ACCOUNTS_INSERT_CHUNK_SIZE = 18;
+
 // `source_changelog_chunks` INSERT binds 11 placeholders per row: the nine
 // listed columns (source_changelog_file_id, source_id, offset, length,
 // tokens, content_hash, heading, vector_id, embedded_at — vectorId and
@@ -50,3 +56,11 @@ export const ENTITY_TAG_INSERT_CHUNK_SIZE = 30;
 // `created_at`, which Drizzle materializes from `$defaultFn` and binds
 // like any other value. 9 rows * 11 = 99 bindings.
 export const CHANGELOG_CHUNK_INSERT_CHUNK_SIZE = 9;
+
+// `release_locations` INSERT binds 16 placeholders per row when every row in
+// the batch carries a uniform column set (id, org_id, product_id, url, feed,
+// github, appstore, file, title, canonical, basis, evidence, source_id,
+// match_key, created_at, updated_at). deleted_at is the only column left as an
+// inline null. 6 rows * 16 = 96 bindings, under the 100 cap. Callers build
+// every row with the same keys so the prepared statement shape stays uniform.
+export const RELEASE_LOCATIONS_INSERT_CHUNK_SIZE = 6;

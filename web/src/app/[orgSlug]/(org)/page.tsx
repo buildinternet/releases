@@ -6,6 +6,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { OverviewView } from "@/components/overview-view";
 import { LatestReleasesTeaser } from "@/components/org/latest-releases-teaser";
 import { OrgActivityPanel } from "@/components/org/org-activity-panel";
+import { StubLocations } from "@/components/org/stub-locations";
 import { JsonLd } from "@/components/json-ld";
 
 import {
@@ -32,11 +33,15 @@ export async function generateMetadata({
   try {
     const org = await getOrg(orgSlug);
     const lastModified = lastModifiedAt(org);
-    const shouldNoIndex = org.discovery === "on_demand" || org.isHidden === true;
+    // A stub is a thin, near-duplicate page (no releases yet) — noindex AND
+    // nofollow it (#1947), stronger than the index:false/follow:true posture
+    // used for on_demand / hidden orgs.
+    const isStub = org.status === "stub";
+    const shouldNoIndex = isStub || org.discovery === "on_demand" || org.isHidden === true;
     return {
       title: `${org.name} Releases & Latest Updates · ${currentPeriod()}`,
       description: `Latest releases, product updates, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
-      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
+      ...(shouldNoIndex ? { robots: { index: false, follow: !isStub } } : {}),
       openGraph: {
         type: "website",
         url: `/${orgSlug}`,
@@ -66,12 +71,54 @@ export default async function OrgOverviewPage({
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let org;
+  try {
+    org = await getOrg(orgSlug);
+  } catch (err) {
+    if (err instanceof ApiSetupError) throw err;
+    notFound();
+  }
+
+  const orgUrl = `https://releases.sh/${orgSlug}`;
+  const orgNodeId = `${orgUrl}#org`;
+  const lastModified = lastModifiedAt(org);
+
+  // A stub org has no processed sources — skip the activity/heatmap/releases
+  // fetches entirely (they'd be discarded) and render declared locations.
+  if (org.status === "stub") {
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": orgNodeId,
+          name: org.name,
+          url: orgUrl,
+          ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
+          ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
+          ...(lastModified ? { dateModified: lastModified } : {}),
+        },
+        {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+            { "@type": "ListItem", position: 2, name: org.name, item: orgUrl },
+          ],
+        },
+      ],
+    };
+    return (
+      <>
+        <JsonLd data={jsonLd} />
+        <StubLocations orgName={org.name} locations={org.locations ?? []} />
+      </>
+    );
+  }
+
   let activityResult;
   let heatmapResult;
   let releasesResult;
   try {
-    [org, activityResult, heatmapResult, releasesResult] = await Promise.all([
-      getOrg(orgSlug),
+    [activityResult, heatmapResult, releasesResult] = await Promise.all([
       tryFetch(api.orgActivity(orgSlug, activityFrom), {
         route: `/${orgSlug}`,
         event: "org-activity-fetch-failed",
@@ -94,10 +141,7 @@ export default async function OrgOverviewPage({
   const activity = activityResult.data;
   const heatmap: OrgHeatmap | null = heatmapResult.data;
 
-  const orgUrl = `https://releases.sh/${orgSlug}`;
-  const orgNodeId = `${orgUrl}#org`;
   const releaseListId = `${orgUrl}#releases`;
-  const lastModified = lastModifiedAt(org);
   const releaseItems = releasesResult.data?.releases ?? [];
   // Declare the overview's provenance as internal release-page citations (#1934).
   const overviewCitationNode = org.overview

@@ -24,7 +24,7 @@ sitemapRoutes.get(
     tags: ["Sitemap"],
     summary: "Bulk URL payload for the web sitemap generator",
     description:
-      "Lists every visible org / source / product / collection slug paired with the timestamp the web uses to drive `<lastmod>`. Joined through `*_active` views, so soft-deleted and hidden (`is_hidden = 1`) rows are excluded. Sources also carry `hasChangelog` and `hasHighlights` flags so the web only emits `/{org}/{src}/changelog` and `/{org}/{src}/highlights` URLs when the corresponding routes resolve (#875).\n\nOrg id lookups are chunked to 90 at a time to stay under D1's 100-bound-parameter cap on prepared statements.",
+      "Lists every visible org / source / product / collection slug paired with the timestamp the web uses to drive `<lastmod>`. Joined through `*_active` views, so soft-deleted and hidden (`is_hidden = 1`) rows are excluded; stub-tier orgs (#1947) are excluded too (their pages are `noindex`). Sources also carry `hasChangelog` and `hasHighlights` flags so the web only emits `/{org}/{src}/changelog` and `/{org}/{src}/highlights` URLs when the corresponding routes resolve (#875).\n\nOrg id lookups are chunked to 90 at a time to stay under D1's 100-bound-parameter cap on prepared statements.",
     responses: {
       200: {
         description: "Bulk URL payload",
@@ -43,6 +43,10 @@ sitemapRoutes.get(
       })
       .from(organizationsPublic)
       .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsPublic.id))
+      // Stub orgs (#1947) are noindex thin pages — keep them out of the sitemap.
+      // Dropping them from orgRows also drops their products/sources below, which
+      // are keyed off this org-id set.
+      .where(eq(organizationsPublic.tier, "tracked"))
       .groupBy(organizationsPublic.id);
 
     // Collections are independent of orgs (they reference orgs but live as

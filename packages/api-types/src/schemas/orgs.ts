@@ -6,9 +6,11 @@ import {
   CategorySchema,
   ListResponseSchema,
   NoticeSchema,
+  OrgStatusSchema,
   OverviewPageItemSchema,
   PaginationSchema,
   ReleaseItemSchema,
+  ReleaseLocationItemSchema,
   VideoSourceInfoSchema,
 } from "./shared.js";
 import { SourceListItemSchema } from "./sources.js";
@@ -24,6 +26,12 @@ export const OrgListItemSchema = z.object({
   category: CategorySchema.nullable(),
   avatarUrl: z.string().nullable(),
   featured: z.boolean(),
+  /**
+   * Org tier (#1947). Optional for mid-deploy tolerance; absent ⇒ `"tracked"`.
+   * A `"stub"` org has no processed sources yet — the UI renders a badge and a
+   * stub is excluded from release-ranked surfaces.
+   */
+  status: OrgStatusSchema.optional(),
   sourceCount: z.number().int().min(0),
   releaseCount: z.number().int().min(0),
   recentReleaseCount: z.number().int().min(0),
@@ -480,6 +488,18 @@ export const OrgDetailSchema = z.object({
   fetchPaused: z.boolean().optional(),
   /** How the org row was created. `on_demand` orgs are excluded from overview generation regardless of `autoGenerateContent`. */
   discovery: z.enum(["curated", "agent", "on_demand"]).optional(),
+  /**
+   * Org tier (#1947). Optional for mid-deploy tolerance; absent ⇒ `"tracked"`.
+   * A `"stub"` org's `sources` array is empty — `locations` carries the declared
+   * release locations instead.
+   */
+  status: OrgStatusSchema.optional(),
+  /**
+   * Declared release locations (#1947), present (and non-empty) for stub orgs.
+   * Same shape as a releases.json `releases[]` entry plus `basis`/`sourceId`.
+   * Omitted or empty for a tracked org with no locators.
+   */
+  locations: z.array(ReleaseLocationItemSchema).optional(),
   tags: z.array(z.string()).optional(),
   sourceCount: z.number().int().min(0),
   releaseCount: z.number().int().min(0),

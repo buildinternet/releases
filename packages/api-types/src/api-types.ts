@@ -24,6 +24,8 @@ import type {
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
   OverviewCitationSchema,
+  OrgStatusSchema,
+  ReleaseLocationItemSchema,
 } from "./schemas/shared.js";
 import type {
   OrgListItemSchema,
@@ -263,6 +265,8 @@ export {
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
   OverviewCitationSchema,
+  OrgStatusSchema,
+  ReleaseLocationItemSchema,
   CategorySchema,
   NoticeSchema,
 } from "./schemas/shared.js";
@@ -308,6 +312,8 @@ export {
   WorkspaceProfileResponseSchema,
 } from "./schemas/account-profile.js";
 export {
+  CreateStubOrgBodySchema,
+  StubFromDomainBodySchema,
   ReleasesJsonConfigSchema,
   ReleasesJsonDomainReleaseSchema,
   ReleasesJsonDomainSchema,
@@ -319,6 +325,8 @@ export {
   SyncWellKnownResponseSchema,
 } from "./schemas/well-known.js";
 export type {
+  CreateStubOrgBody,
+  StubFromDomainBody,
   ReleasesJsonConfig,
   ReleasesJsonDomain,
   ReleasesJsonDomainRelease,
@@ -521,6 +529,11 @@ export type { ResolveResponse } from "./schemas/resolve.js";
 // ── Media ──
 
 export type MediaItem = z.infer<typeof MediaItemSchema>;
+
+// ── Stub tier (#1947) ──
+
+export type OrgStatus = z.infer<typeof OrgStatusSchema>;
+export type ReleaseLocationItem = z.infer<typeof ReleaseLocationItemSchema>;
 
 // ── Stats ──
 

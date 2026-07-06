@@ -17,6 +17,7 @@ import {
   products,
   productTags,
   domainAliases,
+  releaseLocations,
   sourceChangelogFiles,
   knowledgePages,
   collections,
@@ -313,17 +314,18 @@ async function findOrg(db: D1Db, identifier: string) {
     description: string | null;
     category: string | null;
     metadata: string | null;
+    tier: "stub" | "tracked";
   }>(sql`
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata, o.tier
     FROM organizations o
     WHERE o.id = ${id} OR o.slug = ${id} OR o.domain = ${id} OR LOWER(o.name) = LOWER(${id})
     UNION
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata, o.tier
     FROM organizations o
     JOIN domain_aliases da ON da.org_id = o.id
     WHERE da.domain = ${id}
     UNION
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata, o.tier
     FROM organizations o
     JOIN org_accounts oa ON oa.org_id = o.id
     WHERE oa.handle = ${id}
@@ -334,6 +336,25 @@ async function findOrg(db: D1Db, identifier: string) {
 
 function formatReleaseTitle(r: { title: string; type: ReleaseType }): string {
   return r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+}
+
+/** One declared release location (#1947) rendered for the stub read surface. */
+function formatLocationLine(row: typeof releaseLocations.$inferSelect): string {
+  const kind = row.feed
+    ? "feed"
+    : row.github
+      ? "github"
+      : row.appstore
+        ? "appstore"
+        : row.file
+          ? "file"
+          : "url";
+  const target = row.feed ?? row.github ?? row.appstore ?? row.file ?? row.url ?? "";
+  const title = row.title ? `${row.title} — ` : "";
+  const flags = [`${kind}`, ...(row.canonical ? ["canonical"] : []), `basis: ${row.basis}`].join(
+    ", ",
+  );
+  return `- ${title}${target} (${flags})`;
 }
 
 /** Chars of body inlined per release in a feed's model-facing text. */
@@ -910,6 +931,13 @@ export async function listOrganizations(
     : undefined;
   const category = categoryResolved?.ok ? categoryResolved.slug : undefined;
 
+  // Stub orgs (#1947) have no visible releases but belong in the directory
+  // (coverage breadth is the product), so the empty-org filter keeps them.
+  // The stub branch has no release/source join to implicitly gate soft-deleted
+  // rows the way ORG_HAS_VISIBLE_RELEASE does, so guard it explicitly — a
+  // tombstoned stub must not surface in the directory.
+  const visibleOrStub = sql`(${ORG_HAS_VISIBLE_RELEASE} OR (o.tier = 'stub' AND o.deleted_at IS NULL))`;
+
   let fromWhere = sql`FROM organizations o`;
   let distinct = false;
   if (q && params.platform) {
@@ -954,7 +982,7 @@ export async function listOrganizations(
   // in the count branch). When the base query has no WHERE clause (the
   // un-distinct no-q/no-platform branch), the filter needs to lead with
   // `WHERE` instead of `AND`.
-  const havingFrag = includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`;
+  const havingFrag = includeEmpty ? sql`` : sql`AND ${visibleOrStub}`;
   // Category filter is independent — appended after the empty-org fragment.
   // The `AND` connector is always correct here because filteredFromWhere always
   // contains a WHERE by the time categoryFrag is appended (either from the
@@ -965,9 +993,9 @@ export async function listOrganizations(
   let filteredFromWhere: SQL<unknown>;
   if (!distinct && !includeEmpty && category) {
     // No WHERE yet from q/platform, no empty-org filter — category must lead.
-    filteredFromWhere = sql`FROM organizations o WHERE ${ORG_HAS_VISIBLE_RELEASE} ${categoryFrag}`;
+    filteredFromWhere = sql`FROM organizations o WHERE ${visibleOrStub} ${categoryFrag}`;
   } else if (!distinct && !includeEmpty) {
-    filteredFromWhere = sql`FROM organizations o WHERE ${ORG_HAS_VISIBLE_RELEASE}`;
+    filteredFromWhere = sql`FROM organizations o WHERE ${visibleOrStub}`;
   } else if (!distinct && includeEmpty && category) {
     // No WHERE yet from q/platform, empty-org filter off — category must lead.
     filteredFromWhere = sql`FROM organizations o WHERE o.category = ${category}`;
@@ -976,10 +1004,10 @@ export async function listOrganizations(
   }
 
   const distinctKw = distinct ? sql`DISTINCT` : sql``;
-  type Row = { name: string; slug: string; domain: string | null };
+  type Row = { name: string; slug: string; domain: string | null; tier: "stub" | "tracked" };
   const [rows, totalRow] = await Promise.all([
     db.all<Row>(sql`
-      SELECT ${distinctKw} o.name, o.slug, o.domain
+      SELECT ${distinctKw} o.name, o.slug, o.domain, o.tier
       ${filteredFromWhere}
       ORDER BY o.name, o.slug
       LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
@@ -995,7 +1023,13 @@ export async function listOrganizations(
   if (totalItems === 0) return emptyListResult({ message: "No organizations found.", pagination });
 
   const body = rows
-    .map((o) => [`**${o.name}**`, `  Slug: ${o.slug}`, `  Domain: ${o.domain ?? "N/A"}`].join("\n"))
+    .map((o) =>
+      [
+        `**${o.name}**${o.tier === "stub" ? " _(stub)_" : ""}`,
+        `  Slug: ${o.slug}`,
+        `  Domain: ${o.domain ?? "N/A"}`,
+      ].join("\n"),
+    )
     .join("\n\n");
 
   return paginatedText({
@@ -1083,6 +1117,11 @@ export async function getOrganization(
   lines.push(
     `Slug: ${org.slug} | Domain: ${org.domain ?? "N/A"} | Category: ${org.category ?? "N/A"}`,
   );
+  if (org.tier === "stub") {
+    lines.push(
+      "Status: stub — not yet processed. Release info is published at the locations listed below.",
+    );
+  }
   if (org.description) lines.push(`Description: ${org.description}`);
   const notice = parseNotice(org.metadata);
   if (notice) lines.push(`Notice: ${formatNoticePointer(notice)}`);
@@ -1148,6 +1187,20 @@ export async function getOrganization(
       lines.push(`  Type: ${s.type} | URL: ${s.url}`);
       lines.push(`  Last fetched: ${s.lastFetchedAt ?? "Never"}`);
     }
+  } else if (org.tier === "stub") {
+    // A stub has no sources by design — its declared locations are the answer.
+    const locations = await db
+      .select()
+      .from(releaseLocations)
+      .where(and(eq(releaseLocations.orgId, org.id), isNull(releaseLocations.deletedAt)))
+      .orderBy(desc(releaseLocations.canonical), asc(releaseLocations.matchKey));
+    lines.push("");
+    if (locations.length > 0) {
+      lines.push("Declared release locations (not yet processed):");
+      for (const loc of locations) lines.push(formatLocationLine(loc));
+    } else {
+      lines.push("Declared release locations: none yet");
+    }
   } else {
     lines.push("");
     lines.push("Sources: none");
@@ -1181,6 +1234,7 @@ export async function lookupDomain(db: D1Db, params: { domain: string }): Promis
       domain: organizationsActive.domain,
       description: organizationsActive.description,
       category: organizationsActive.category,
+      tier: organizationsActive.tier,
       matchedVia: sql<
         "primary" | "alias"
       >`CASE WHEN ${organizationsActive.domain} = ${domain} THEN 'primary' ELSE 'alias' END`,
@@ -1222,6 +1276,22 @@ export async function lookupDomain(db: D1Db, params: { domain: string }): Promis
     );
     if (orgRow.category) lines.push(`Category: ${orgRow.category}`);
     if (orgRow.description) lines.push(orgRow.description);
+    if (orgRow.tier === "stub") {
+      const locations = await db
+        .select()
+        .from(releaseLocations)
+        .where(and(eq(releaseLocations.orgId, orgRow.id), isNull(releaseLocations.deletedAt)))
+        .orderBy(desc(releaseLocations.canonical), asc(releaseLocations.matchKey));
+      lines.push(
+        "",
+        "Status: stub — not yet processed. Release info is published at these locations:",
+      );
+      if (locations.length > 0) {
+        for (const loc of locations) lines.push(formatLocationLine(loc));
+      } else {
+        lines.push("- (none declared yet)");
+      }
+    }
   }
 
   if (productRows.length > 0) {
