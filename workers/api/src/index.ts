@@ -232,6 +232,13 @@ export type Env = {
     // because publicRateLimitMiddleware only covers safe methods.
     FEEDBACK_RATE_LIMIT_ENABLED?: string;
     FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Anonymous self-serve listing lane (/v1/listing validate + activate,
+    // #1947 phase 2). Kill switch + per-IP and per-domain rate limiters.
+    LISTING_SELF_SERVE_ENABLED?: string;
+    LISTING_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    LISTING_DOMAIN_RATE_LIMITER?: {
+      limit(options: { key: string }): Promise<{ success: boolean }>;
+    };
     // Per-sub / per-user caps on POST /v1/me/webhooks/:id/test (see test-rate-limit.ts).
     WEBHOOK_TEST_RATE_LIMIT_ENABLED?: string;
     WEBHOOK_TEST_SUB_RATE_LIMITER?: {

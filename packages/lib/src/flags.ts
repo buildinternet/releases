@@ -271,6 +271,15 @@ export const FLAGS = {
     description:
       "Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.",
   },
+  listingSelfServeEnabled: {
+    key: "listing-self-serve-enabled",
+    env: "LISTING_SELF_SERVE_ENABLED",
+    default: true,
+    kind: "kill-switch",
+    reads: ["api"],
+    description:
+      "Anonymous self-serve listing lane (/v1/listing validate + activate). Off = both routes refuse.",
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
