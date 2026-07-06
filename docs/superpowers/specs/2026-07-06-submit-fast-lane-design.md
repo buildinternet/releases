@@ -18,6 +18,10 @@ creates a stub and live tracking is a separate curator-gated rung.
 - **CLI scope is validate-only.** `releases listing validate <domain>` — read-only, the
   terminal/CI iterate loop. Activation stays web-only for now (no anonymous write verb in
   the CLI this phase).
+- **Default assumption: the visitor has never heard of `releases.json`.** The fast lane
+  leads with how to create the manifest — pointing at the existing `/docs/listing`
+  documentation, including the tell-your-agent path — and invites the domain check as the
+  step you take once you have one. The page teaches first, validates second.
 
 ## Web: `/submit` two-lane page
 
@@ -27,14 +31,19 @@ The existing `submit-source-form.tsx` is untouched.
 **Layout.** The page keeps its shell (sidebar + content panel). The content section becomes
 two lanes:
 
-1. **Fast lane (primary, top):** "Have a `releases.json`? Enter your domain."
-2. **Recommendation form (below, under a divider):** "No manifest? Suggest a changelog URL
-   instead" — the existing `SubmitSourceForm`.
+1. **Fast lane (primary, top):** leads with a short "get listed" explainer for visitors who
+   have never heard of `releases.json` — what the manifest is in one sentence, a prominent
+   link to `/docs/listing` for creating one (by hand or by telling your coding agent — the
+   docs cover both), and then the domain input framed as "Already publish one? Enter your
+   domain to check and activate your listing."
+2. **Recommendation form (below, under a divider):** "Not your product, or no manifest?
+   Suggest a changelog URL instead" — the existing `SubmitSourceForm`.
 
 Sidebar copy updates to lead with the fast lane; the existing "Own your listing" block and
 `/docs/listing` link remain.
 
-**Fast lane component** — one client component, three states:
+**Fast lane component** — one client component: a static explainer header (teach-first, per
+the decision above) over three interactive states:
 
 1. **Input.** Single domain field + "Check my listing" button. Client-side normalization of
    paste noise (strip scheme, path, trailing slash) before POSTing
