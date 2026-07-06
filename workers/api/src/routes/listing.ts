@@ -168,7 +168,18 @@ listingRoutes.post(
       // Every skip here is a manifest/fetch problem (org_exists was handled
       // above; a create race lands org_exists too — treat it as conflict).
       if (result.skippedReason === "org_exists") {
-        return respondError(c, new ConflictError("This domain is already listed."));
+        // A concurrent activation won the create race — re-resolve so this
+        // 409 carries the same org pointer the pre-check 409 does.
+        const winner = await resolveDomainOrg(db, domain);
+        return respondError(
+          c,
+          new ConflictError(
+            "This domain is already listed.",
+            winner
+              ? { details: { slug: winner.slug, webUrl: `${webBaseUrl}/${winner.slug}` } }
+              : {},
+          ),
+        );
       }
       return respondError(
         c,
