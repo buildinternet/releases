@@ -34,7 +34,7 @@ const PROMOTION_CLAIM_TTL_MS = 10 * 60 * 1000;
  * drizzle-orm/d1 adapter returns `{ meta: { changes } }`; the bun-sqlite
  * adapter used by tests returns `{ changes }` directly (no `meta` wrapper).
  */
-function affectedRows(result: unknown): number {
+export function affectedRows(result: unknown): number {
   const r = result as { changes?: number; meta?: { changes?: number } };
   return r.meta?.changes ?? r.changes ?? 0;
 }
@@ -125,6 +125,20 @@ export async function promoteStubOrg(
         ),
       );
     if (affectedRows(claimResult) === 0) {
+      // Distinguish the two ways the claim predicate can fail: another run
+      // finished promoting between our tier check and the claim (org is now
+      // `tracked` — report the same idempotent no-op success as the up-front
+      // check), vs. an in-flight run genuinely holding the claim.
+      const [current] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+      if (current?.tier === "tracked") {
+        return {
+          promoted: false,
+          alreadyTracked: true,
+          sourcesCreated: 0,
+          sourcesMatched: 0,
+          locatorsStamped: 0,
+        };
+      }
       throw new ConflictError("Promotion already in progress for this org", {
         code: "conflict",
         details: { orgId },

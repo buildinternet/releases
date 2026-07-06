@@ -944,8 +944,9 @@ export default {
     await handleQueueBatch(batch, env);
   },
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
-    // Daily retier runs at 03:00 UTC; the source staleness digest at 04:00 UTC;
-    // search-queries retention at 05:00 UTC; poll-and-fetch hourly.
+    // Daily retier runs at 03:00 UTC; the source staleness digest and the
+    // stub-demotion sweep at 04:00 UTC; search-queries retention at 05:00 UTC;
+    // poll-and-fetch hourly.
     // Build the alert env once for cron dispatches.
     const alertEnv: AlertEnv = {
       SEND_EMAIL: env.SEND_EMAIL,

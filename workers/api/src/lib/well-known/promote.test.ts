@@ -220,6 +220,73 @@ describe("promoteStubOrg", () => {
       expect(after!.tier).toBe("stub");
     });
 
+    it("a TTL-expired run's release does not clear a newer run's claim", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Mu", slug: "mu", locations: [{ feed: "https://mu.com/feed.xml" }] },
+        { basis: "curator" },
+      );
+      // Run A claims normally, then — mid-materialization, simulated inside
+      // the probe — run B steals the claim (as it may once A's stamp goes
+      // stale) and A dies. A's `finally` release is scoped to A's own stamp,
+      // so B's claim must survive.
+      const stolenStamp = new Date(Date.now() + 1000).toISOString();
+      const stealingProbe = async (): Promise<never> => {
+        await db
+          .update(organizations)
+          .set({ promotingAt: stolenStamp })
+          .where(eq(organizations.id, org.id));
+        throw new Error("run A dies after losing its claim");
+      };
+      await expect(promoteStubOrg(db as never, org.id, { probe: stealingProbe })).rejects.toThrow(
+        "run A dies",
+      );
+
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.promotingAt).toBe(stolenStamp);
+    });
+
+    it("returns alreadyTracked when the org was promoted between the tier check and the claim", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        { name: "Nu", slug: "nu", locations: [{ feed: "https://nu.com/feed.xml" }] },
+        { basis: "curator" },
+      );
+      // The org is actually tracked (a concurrent run just finished), but the
+      // first tier read raced ahead of that flip. Simulate by serving a stale
+      // `stub` row for the initial select only; the claim UPDATE and the
+      // post-claim re-read hit the real (tracked) state.
+      await db.update(organizations).set({ tier: "tracked" }).where(eq(organizations.id, org.id));
+      const [trackedRow] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, org.id));
+      let staleFirstRead = true;
+      const racingDb = new Proxy(db, {
+        get(target, prop, receiver) {
+          if (prop === "select" && staleFirstRead) {
+            staleFirstRead = false;
+            return () => ({
+              from: () => ({ where: async () => [{ ...trackedRow!, tier: "stub" }] }),
+            });
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+
+      const res = await promoteStubOrg(racingDb as never, org.id, { probe: okProbe });
+      expect(res.promoted).toBe(false);
+      expect(res.alreadyTracked).toBe(true);
+
+      // No claim left behind, no sources created by the losing run.
+      const [after] = await db.select().from(organizations).where(eq(organizations.id, org.id));
+      expect(after!.promotingAt).toBeNull();
+      const srcs = await db.select().from(sources).where(eq(sources.orgId, org.id));
+      expect(srcs.length).toBe(0);
+    });
+
     it("dryRun never takes a claim", async () => {
       const db = createTestDb();
       const { org } = await createStubOrg(

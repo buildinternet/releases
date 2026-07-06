@@ -24,11 +24,12 @@
  * story as promotion. Wired into the `0 4 * * *` daily-scan tick alongside
  * the other daily cron sweeps.
  */
-import { and, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, notExists } from "drizzle-orm";
 import { organizations, releaseLocations, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { createDb, type D1Db } from "../db.js";
+import { affectedRows } from "../lib/well-known/promote.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export interface StubDemotionEnv {
@@ -120,13 +121,32 @@ export async function sweepStubDemotions(env: StubDemotionEnv): Promise<StubDemo
 
   for (const orgId of eligibleOrgIds) {
     try {
+      // Guarded flip: the eligibility set is a snapshot, so re-assert the
+      // demotion condition inside the write itself — the org must still be
+      // `tracked` AND still have zero live sources (one may have been created
+      // or un-deleted since the scan). 0 rows affected = no longer eligible;
+      // skip without counting it as demoted.
       // oxlint-disable-next-line no-await-in-loop -- one org at a time; bounded by the daily candidate set
-      const cleared = await clearDeadLocatorStamps(db, orgId);
-      // oxlint-disable-next-line no-await-in-loop -- tier flip must follow the stamp clear for this org
-      await db
+      const flipResult = await db
         .update(organizations)
         .set({ tier: "stub", updatedAt: now })
-        .where(eq(organizations.id, orgId));
+        .where(
+          and(
+            eq(organizations.id, orgId),
+            eq(organizations.tier, "tracked"),
+            notExists(
+              db
+                .select({ id: sources.id })
+                .from(sources)
+                .where(and(eq(sources.orgId, orgId), isNull(sources.deletedAt))),
+            ),
+          ),
+        );
+      if (affectedRows(flipResult) === 0) continue;
+      // Stamp clear follows a successful flip so `stampsCleared` only counts
+      // work done for orgs that were actually demoted.
+      // oxlint-disable-next-line no-await-in-loop -- per-demoted-org cleanup
+      const cleared = await clearDeadLocatorStamps(db, orgId);
       demoted++;
       stampsCleared += cleared;
       logEvent("info", {
