@@ -91,6 +91,7 @@ describe("sweepOauthClients", () => {
     seedClient(db, { id: "abandoned", createdAt: OLD });
     await sweepOauthClients({
       DB: {} as never,
+      _now: NOW,
       CRON_ENABLED: "false",
       _drizzleOverride: db,
     });
@@ -115,6 +116,7 @@ describe("sweepOauthClients", () => {
     seedClient(db, { id: "abandoned", createdAt: OLD });
     await sweepOauthClients({
       DB: {} as never,
+      _now: NOW,
       OAUTH_CLIENT_REAPER_ENABLED: "true",
       _drizzleOverride: db,
     });
@@ -135,6 +137,7 @@ describe("sweepOauthClients", () => {
 
     await sweepOauthClients({
       DB: {} as never,
+      _now: NOW,
       OAUTH_CLIENT_REAPER_ENABLED: "true",
       _drizzleOverride: db,
     });
@@ -161,6 +164,7 @@ describe("sweepOauthClients", () => {
       .run();
     await sweepOauthClients({
       DB: {} as never,
+      _now: NOW,
       OAUTH_CLIENT_REAPER_ENABLED: "true",
       _drizzleOverride: db,
     });
