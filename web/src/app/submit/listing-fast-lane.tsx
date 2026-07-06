@@ -113,7 +113,7 @@ export function ListingFastLane() {
   const [state, setState] = useState<LaneState>({ phase: "idle" });
   const [domainInput, setDomainInput] = useState("");
 
-  async function checkDomain(event: React.FormEvent<HTMLFormElement>) {
+  async function checkDomain(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     const domain = normalizeDomain(domainInput);
     if (!domain) return;
@@ -229,10 +229,15 @@ export function ListingFastLane() {
               <ul className="mt-2 space-y-1.5 text-sm">
                 {state.result.errors.map((error, index) => (
                   <li key={`${error.path}-${index}`} className="text-stone-600 dark:text-stone-400">
-                    <span className="font-mono text-[0.85em] text-stone-500 dark:text-stone-500">
-                      {error.path}
-                    </span>{" "}
-                    &mdash; {error.message}
+                    {error.path && (
+                      <>
+                        <span className="font-mono text-[0.85em] text-stone-500 dark:text-stone-500">
+                          {error.path}
+                        </span>{" "}
+                        &mdash;{" "}
+                      </>
+                    )}
+                    {error.message}
                   </li>
                 ))}
               </ul>
