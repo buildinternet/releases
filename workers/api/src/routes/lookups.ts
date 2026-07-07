@@ -30,6 +30,7 @@ import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
+import { recordDomainDemand } from "../lib/listing/domain-demand.js";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import {
@@ -748,6 +749,23 @@ lookupRoutes.get(
     ]);
 
     if (!orgRow && productRows.length === 0) {
+      // Fire-and-forget demand signal (#1947): record the unresolved domain so the
+      // manifest sweep can later probe it. Fail-open — never affect the response,
+      // and c.executionCtx throws when absent (some test paths).
+      try {
+        c.executionCtx.waitUntil(
+          recordDomainDemand(db, domain).catch((err: unknown) => {
+            logEvent("warn", {
+              component: "listing",
+              event: "domain-demand-capture-failed",
+              domain,
+              err: err instanceof Error ? err : String(err),
+            });
+          }),
+        );
+      } catch {
+        // No execution context (e.g. some test paths) — skip capture silently.
+      }
       return respondError(c, new NotFoundError(`No org or product owns domain "${domain}"`));
     }
 
