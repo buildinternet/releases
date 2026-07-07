@@ -27,7 +27,7 @@ import {
 } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
-import { edgeCache } from "./middleware/edge-cache.js";
+import { LATEST_CACHE_TAG } from "./lib/latest-cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
 import { stagingAccessGate } from "./middleware/staging-access.js";
@@ -650,13 +650,12 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
 
 const v1 = new Hono<Env>();
 
-// Shared edge cache (Cache API), registered FIRST so it is the outermost v1
-// middleware: it short-circuits on a cache hit before auth/rate-limit/DB run,
-// and on a miss stores the response after the per-route `cacheControl(...)`
-// header below has been applied. Anonymous GETs only; reuses CACHE_DISABLED as
-// its kill switch. Without this the Cache-Control headers are inert at the
-// edge for a Workers route (issue #1800). See middleware/edge-cache.ts.
-v1.use("*", edgeCache());
+// Response caching at the edge is handled by Workers Cache (wrangler
+// `cache.enabled`, see wrangler.jsonc) reading the `Cache-Control` headers
+// the per-route `cacheControl(...)` middleware below sets — no in-worker
+// middleware needed; a cache hit never runs the Worker. This replaced the
+// hand-rolled `caches.default` edge-cache middleware (issue #1800 origin) once
+// Workers Cache reached GA. See .context/2026-07-07-workers-cache-migration.md.
 
 // `publicReadRoutes`, `adminRoutes`, and `publicWriteRoutes` are defined in
 // route-namespaces.ts so the CI coverage gate
@@ -789,11 +788,23 @@ v1.use(
 );
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/related/*", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+// Latest-releases feed: tagged so invalidateLatestCache (lib/latest-cache.ts)
+// can flush Workers Cache immediately via ctx.cache.purge({ tags: [...] })
+// after a publish, instead of waiting out max-age. Must be registered before
+// the /releases/:id mount below — both match this path (Hono composes every
+// matching `.use()` in registration order), and cacheControl no-ops once a
+// Cache-Control header is already set, so whichever mount runs first wins.
+v1.use(
+  "/releases/latest",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true, tags: [LATEST_CACHE_TAG] }),
+  varyOnAccept(),
+);
 // Single-release detail: same 60s/SWR-30 profile as the other single-entity
 // reads (/orgs/:slug, /sources/:slug, /products/:slug). The old 120s/SWR-60
 // let downstream caches serve up to ~3 minutes of staleness right after
-// generate-content / PATCH wrote title_short/summary (#1580). There is no
-// worker-side cache to bust — this header IS the freshness contract.
+// generate-content / PATCH wrote title_short/summary (#1580). Workers Cache
+// (wrangler `cache.enabled`) is what actually stores/serves this at the edge
+// — this header is the freshness contract it reads.
 v1.use(
   "/releases/:id",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),

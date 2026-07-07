@@ -8,6 +8,16 @@
   },
   "compatibility_date": "2026-03-27",
   "compatibility_flags": ["nodejs_compat"],
+  // Workers Cache (GA, requires wrangler 4.69+): a per-Worker tiered cache in
+  // front of fetch(), driven by the Cache-Control headers routes already set
+  // (middleware/cache.ts). Cache hits never run the Worker. Replaces the old
+  // hand-rolled caches.default edge-cache middleware (#1800 origin, retired
+  // here). The [env.staging] block below explicitly disables this — staging
+  // sits behind the STAGING_ACCESS_KEY gate and caching a gated response would
+  // make the gate's enforcement invisible to debugging (a cached 200 would
+  // outlive a key rotation) and complicate the read-surface iteration staging
+  // exists for. See docs/architecture and .context/2026-07-07-workers-cache-migration.md.
+  "cache": { "enabled": true },
   "observability": {
     "enabled": true,
     "logs": {
@@ -690,6 +700,12 @@
     "staging": {
       "name": "releases-api-staging",
       "routes": [{ "pattern": "api-staging.releases.sh", "custom_domain": true }],
+      // Explicit disable — env blocks do NOT inherit the top-level `cache`
+      // config. Kept off deliberately: staging sits behind STAGING_ACCESS_KEY
+      // (middleware/staging-access.ts), and Workers Cache would cache
+      // responses across access-key rotations / gate changes, undermining the
+      // gate as a debugging surface. See the top-level `cache` comment above.
+      "cache": { "enabled": false },
       "vars": {
         "CRON_ENABLED": "false",
         "FORCE_DRAIN_STALE_HOURS": "72",
