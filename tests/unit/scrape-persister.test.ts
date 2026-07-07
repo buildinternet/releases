@@ -134,4 +134,66 @@ describe("httpPersister", () => {
     });
     expect(typeof sent.lastFetchedAt).toBe("string");
   });
+
+  // #1970 — every fetch carries a bounded AbortSignal.timeout so a hung API
+  // response can't block the discovery worker indefinitely. A real
+  // never-resolving fetch is hard to test in bun, so assert the signal is
+  // present on the call args instead (tight budget for reads/log writes/
+  // updates, generous for insertReleases's large-batch R2 mirroring path).
+  describe("bounded fetch timeouts (#1970)", () => {
+    test("getSource passes an abort signal", async () => {
+      const { calls, fetcher } = recordingFetcher({
+        "/v1/sources/src_abc": { id: "src_abc", orgId: "org_y", slug: "s", type: "scrape" },
+      });
+      const p = httpPersister({ apiFetcher: fetcher, apiKey: "k" });
+      await p.getSource("src_abc");
+      expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    test("getKnownReleases passes an abort signal", async () => {
+      const { calls, fetcher } = recordingFetcher({
+        "/v1/orgs/org_y/sources/src_x/known-releases": [],
+      });
+      const p = httpPersister({ apiFetcher: fetcher, apiKey: "k" });
+      await p.getKnownReleases(SOURCE);
+      expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    test("updateSourceAfterFetch passes an abort signal", async () => {
+      const { calls, fetcher } = recordingFetcher({ "/v1/orgs/org_y/sources/src_x": {} });
+      const p = httpPersister({ apiFetcher: fetcher, apiKey: "k" });
+      await p.updateSourceAfterFetch(SOURCE);
+      expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    test("writeFetchLog passes an abort signal", async () => {
+      const { calls, fetcher } = recordingFetcher({ "/v1/admin/logs/fetch": {} });
+      const p = httpPersister({ apiFetcher: fetcher, apiKey: "k" });
+      await p.writeFetchLog("src_x", {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: 1,
+        status: "no_change",
+      });
+      expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    test("captureRawSnapshot passes an abort signal", async () => {
+      const { calls, fetcher } = recordingFetcher({
+        "/v1/orgs/org_y/sources/src_x/raw-snapshot": {},
+      });
+      const p = httpPersister({ apiFetcher: fetcher, apiKey: "k", captureRawSnapshots: true });
+      await p.captureRawSnapshot(SOURCE, "body");
+      expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    test("insertReleases passes an abort signal (generous budget)", async () => {
+      const { calls, fetcher } = recordingFetcher({
+        "/v1/orgs/org_y/sources/src_x/releases/batch": { inserted: 1, insertedIds: ["rel_a"] },
+      });
+      const p = httpPersister({ apiFetcher: fetcher, apiKey: "k" });
+      await p.insertReleases(SOURCE, [{ title: "t", content: "c" } as never]);
+      expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+    });
+  });
 });
