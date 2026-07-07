@@ -3,19 +3,22 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
-import { startClaim, verifyClaim, listClaims } from "@/lib/claim";
+import { startClaim, verifyClaim, listClaims, promoteListing } from "@/lib/claim";
 import { InlineCopyCode } from "@/components/inline-copy-code";
 import type {
   OrgClaim,
   ClaimVerifyResult,
   ClaimCheckOutcome,
+  ListingPromoteResult,
 } from "@buildinternet/releases-api-types";
 
 /**
  * Signed-in "Own this domain?" affordance for stub org pages (#1947). Starts a
  * claim, shows both proof options (well-known file OR DNS TXT — either
- * passes), and checks them on demand. Self-serve Tier-1 promotion for a
- * verified claim lands in a follow-up PR.
+ * passes), and checks them on demand. Once verified, offers self-serve
+ * Tier-1 promotion ("Enable tracking") — behind its own kill switch on the
+ * API side, so a verified-but-flag-off caller sees the promote 404 surfaced
+ * as a normal error message.
  */
 
 type PanelState =
@@ -25,7 +28,19 @@ type PanelState =
   | { phase: "pending"; claim: OrgClaim }
   | { phase: "verifying"; claim: OrgClaim }
   | { phase: "verified"; claim: OrgClaim }
+  | { phase: "promoting"; claim: OrgClaim }
+  | { phase: "promoted"; claim: OrgClaim; result: ListingPromoteResult }
   | { phase: "error"; message: string; claim?: OrgClaim };
+
+function promoteSummary(result: ListingPromoteResult): string {
+  if (result.alreadyTracked) return "This org is already tracked.";
+  const live = result.locators.filter((l) => l.outcome === "live").length;
+  const queued = result.locators.filter((l) => l.outcome === "queued-for-review").length;
+  const parts: string[] = [];
+  if (live > 0) parts.push(`${live} source${live === 1 ? "" : "s"} live`);
+  if (queued > 0) parts.push(`${queued} queued for curator review`);
+  return parts.length > 0 ? `Tracking enabled — ${parts.join(", ")}.` : "Tracking enabled.";
+}
 
 function outcomeMessage(
   mechanism: "wellKnown" | "dnsTxt",
@@ -104,6 +119,21 @@ export function ClaimPanel({ orgSlug, domain }: { orgSlug: string; domain: strin
     }
   }
 
+  async function onPromote(claim: OrgClaim) {
+    if (!domain) return;
+    setState({ phase: "promoting", claim });
+    try {
+      const result = await promoteListing(domain);
+      setState({ phase: "promoted", claim, result });
+    } catch (err) {
+      setState({
+        phase: "error",
+        claim,
+        message: err instanceof Error ? err.message : "Something went sideways. Please try again.",
+      });
+    }
+  }
+
   if (!domain || isPending || state.phase === "resolving") return null;
 
   if (!user) {
@@ -156,9 +186,37 @@ export function ClaimPanel({ orgSlug, domain }: { orgSlug: string; domain: strin
       )}
 
       {state.phase === "verified" && (
-        <p className="mt-2 text-[13.5px] text-[var(--good)]">
-          Verified via {state.claim.method === "dns-txt" ? "DNS TXT record" : "well-known file"}.
-        </p>
+        <div>
+          <p className="mt-2 text-[13.5px] text-[var(--good)]">
+            Verified via {state.claim.method === "dns-txt" ? "DNS TXT record" : "well-known file"}.
+          </p>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
+            Enable tracking to start fetching {domain}&apos;s releases automatically.
+          </p>
+          <button
+            type="button"
+            onClick={() => onPromote(state.claim)}
+            className="mt-3 inline-flex h-9 items-center justify-center rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3.5 text-[13px] font-medium text-[var(--fg)] transition-colors hover:border-[var(--fg-4)]"
+          >
+            Enable tracking
+          </button>
+        </div>
+      )}
+
+      {state.phase === "promoting" && (
+        <p className="mt-2 text-[13.5px] text-[var(--fg-3)]">Enabling tracking…</p>
+      )}
+
+      {state.phase === "promoted" && (
+        <div>
+          <p className="mt-2 text-[13.5px] text-[var(--good)]">{promoteSummary(state.result)}</p>
+          <Link
+            href={`/${state.claim.org.slug}`}
+            className="mt-2 inline-block text-[13px] font-medium underline underline-offset-2"
+          >
+            View {state.claim.org.name}
+          </Link>
+        </div>
       )}
 
       {state.phase === "error" && (
