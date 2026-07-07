@@ -69,7 +69,6 @@ export const SourceType = builder.objectType("Source", {
     isHidden: t.exposeBoolean("isHidden", { nullable: true }),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
     productId: t.exposeString("productId", { nullable: true }),
-    isHidden: t.field({ type: "Boolean", resolve: (s) => Boolean(s.isHidden) }),
 
     // Raw `metadata` JSON blob. Web reads admin-only sub-fields
     // (marketingFilter, feedContentDepth, appStore/video info) client-side —
@@ -116,30 +115,6 @@ export const SourceType = builder.objectType("Source", {
       resolve: (s, _args, ctx) => ctx.loaders.summariesBySourceId.load(s.id),
     }),
 
-    // Derived from the same recent-releases batch `releases` reads (dataloader
-    // cached — no extra query). Matches the REST first-page derivation in
-    // `buildSourceDetailPayload`: the most recent *dated* row's version wins,
-    // falling back to the newest row's version when no dated row exists.
-    latestVersion: t.field({
-      type: "String",
-      nullable: true,
-      resolve: async (s, _args, ctx) => {
-        const recent = await ctx.loaders.releasesBySourceId.load(s.id);
-        const latestDated = recent.find((r) => r.publishedAt !== null);
-        return latestDated?.version ?? recent[0]?.version ?? null;
-      },
-    }),
-
-    latestDate: t.field({
-      type: "DateTime",
-      nullable: true,
-      resolve: async (s, _args, ctx) => {
-        const recent = await ctx.loaders.releasesBySourceId.load(s.id);
-        const latestDated = recent.find((r) => r.publishedAt !== null);
-        return latestDated?.publishedAt ?? null;
-      },
-    }),
-
     kind: t.exposeString("kind", { nullable: true }),
     isPrimary: t.exposeBoolean("isPrimary", { nullable: true }),
     changeDetectedAt: t.expose("changeDetectedAt", { type: "DateTime", nullable: true }),
@@ -147,7 +122,6 @@ export const SourceType = builder.objectType("Source", {
     consecutiveErrors: t.exposeInt("consecutiveErrors", { nullable: true }),
     nextFetchAfter: t.expose("nextFetchAfter", { type: "DateTime", nullable: true }),
     lastRetieredAt: t.expose("lastRetieredAt", { type: "DateTime", nullable: true }),
-    metadata: t.exposeString("metadata", { nullable: true }),
     stars: t.exposeInt("stargazersCount", { nullable: true }),
     starsFetchedAt: t.expose("starsFetchedAt", { type: "DateTime", nullable: true }),
 

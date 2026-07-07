@@ -3,7 +3,12 @@ import type { MediaItem } from "@buildinternet/releases-api-types";
 import type { Notice } from "@buildinternet/releases-core/notice";
 import type { SourceType, SourceDiscovery } from "@buildinternet/releases-core/source-enums";
 import type { ReleaseType } from "@buildinternet/releases-core/schema";
+import { ApiNotFoundError } from "@/lib/api";
+import { graphqlRequest } from "@/lib/graphql/client";
+import { SourceDetailDocument } from "./__generated__/graphql";
 import type { SourceDetailQuery, ProductDetailQuery } from "./__generated__/graphql";
+
+const DEFAULT_RELEASE_LIMIT = 20;
 
 /**
  * Web-side shapes for GraphQL-sourced source/product detail. Deliberately
@@ -92,6 +97,27 @@ export type MappedProductDetail = {
   sources: MappedProductSource[];
 };
 
+function mapNotice(
+  notice:
+    | {
+        message: string;
+        linkText?: string | null;
+        coordinate?: string | null;
+        href?: string | null;
+      }
+    | null
+    | undefined,
+): Notice | null {
+  return notice
+    ? {
+        message: notice.message,
+        linkText: notice.linkText ?? undefined,
+        coordinate: notice.coordinate ?? undefined,
+        href: notice.href ?? undefined,
+      }
+    : null;
+}
+
 function mapRelease(
   r: NonNullable<SourceDetailQuery["source"]>["releases"][number],
 ): MappedRelease {
@@ -157,7 +183,7 @@ export function mapSourceDetail(
     type: source.type,
     url: source.url,
     productId: source.productId,
-    isHidden: source.isHidden,
+    isHidden: source.isHidden ?? false,
     // `Source.discovery` is a plain `String!` on the wire (not a GraphQL
     // enum — see workers/api/src/graphql/types/enums.ts's comment on why only
     // `Org.discovery` is typed today); narrow to the known value set here,
@@ -171,14 +197,7 @@ export function mapSourceDetail(
     trackingSince: source.trackingSince,
     latestVersion: source.latestVersion,
     latestDate: source.latestDate,
-    notice: source.notice
-      ? {
-          message: source.notice.message,
-          linkText: source.notice.linkText ?? undefined,
-          coordinate: source.notice.coordinate ?? undefined,
-          href: source.notice.href ?? undefined,
-        }
-      : null,
+    notice: mapNotice(source.notice),
     summaries: {
       rolling: source.summaries.rolling,
       monthly: source.summaries.monthly,
@@ -187,6 +206,26 @@ export function mapSourceDetail(
     releases: pageRows.map(mapRelease),
     pagination: { nextCursor, limit: requestedLimit },
   };
+}
+
+/**
+ * Fetches + maps a `SourceDetail` by id — shared by `/sources/:id` (id known
+ * up front) and the org-scoped `[orgSlug]/[slug]` source route (id resolved
+ * via REST `getResolved` first). Overfetches `releases` by one so
+ * `mapSourceDetail` can derive `pagination.nextCursor` without a second query.
+ */
+export async function fetchSourceDetail(
+  id: string,
+  notFoundMessage: string,
+): Promise<MappedSourceDetail> {
+  const data = await graphqlRequest(SourceDetailDocument, {
+    id,
+    releaseLimit: DEFAULT_RELEASE_LIMIT + 1,
+  });
+  if (!data.source) {
+    throw new ApiNotFoundError(notFoundMessage);
+  }
+  return mapSourceDetail(data.source, DEFAULT_RELEASE_LIMIT);
 }
 
 export function mapProductDetail(
@@ -200,14 +239,7 @@ export function mapProductDetail(
     description: product.description,
     category: product.category,
     tags: product.tags,
-    notice: product.notice
-      ? {
-          message: product.notice.message,
-          linkText: product.notice.linkText ?? undefined,
-          coordinate: product.notice.coordinate ?? undefined,
-          href: product.notice.href ?? undefined,
-        }
-      : null,
+    notice: mapNotice(product.notice),
     sources: product.sources.map((s) => ({
       id: s.id,
       slug: s.slug,
@@ -215,7 +247,7 @@ export function mapProductDetail(
       type: s.type,
       url: s.url,
       metadata: s.metadata,
-      isHidden: s.isHidden,
+      isHidden: s.isHidden ?? false,
     })),
   };
 }
