@@ -45,6 +45,7 @@ import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { sendStalenessDigest } from "./cron/send-staleness-digest.js";
 import { sweepStubDemotions } from "./cron/stub-demotion.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
+import { domainDemandSweep } from "./cron/domain-demand-sweep.js";
 import { mobileAppDiscoverySweep } from "./cron/mobile-app-discovery.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
@@ -1015,6 +1016,18 @@ export default {
             FLAGS: env.FLAGS,
             WELL_KNOWN_MATERIALIZATION_ENABLED: env.WELL_KNOWN_MATERIALIZATION_ENABLED,
             GITHUB_TOKEN: env.GITHUB_TOKEN,
+          }),
+          alertEnv,
+        ),
+      );
+      ctx.waitUntil(
+        loggedDispatch(
+          "domain-demand-sweep-cron",
+          domainDemandSweep({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            FLAGS: env.FLAGS,
+            LISTING_SELF_SERVE_ENABLED: env.LISTING_SELF_SERVE_ENABLED,
           }),
           alertEnv,
         ),
