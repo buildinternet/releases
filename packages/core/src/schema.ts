@@ -27,6 +27,7 @@ import {
   newSourceChangelogFileId,
   newSourceChangelogChunkId,
   newReleaseLocationId,
+  newOrgClaimId,
   newTelemetryEventId,
   newSearchQueryId,
   newWebhookSubscriptionId,
@@ -565,6 +566,40 @@ export const releaseLocations = sqliteTable(
 
 export type ReleaseLocation = typeof releaseLocations.$inferSelect;
 export type NewReleaseLocation = typeof releaseLocations.$inferInsert;
+
+// Ownership claim flow (#1947 epic item 2). A signed-in user proves control of
+// a listed domain via a well-known token file OR a DNS TXT record (either
+// passes); a verified claim unlocks self-serve Tier-1 promotion (PR B).
+// Multiple pending claims may coexist; at most one verified claim per
+// (org, user) is meaningful — re-verifying is idempotent at the route layer.
+export const orgClaims = sqliteTable(
+  "org_claims",
+  {
+    id: text("id").primaryKey().$defaultFn(newOrgClaimId),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    // Set only once verification succeeds; null while pending.
+    method: text("method", { enum: ["well-known", "dns-txt"] }),
+    token: text("token").notNull(),
+    status: text("status", { enum: ["pending", "verified", "expired"] })
+      .notNull()
+      .default("pending"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    verifiedAt: text("verified_at"),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    index("idx_org_claims_org_user").on(table.orgId, table.userId),
+    index("idx_org_claims_user").on(table.userId),
+  ],
+);
+
+export type OrgClaimRow = typeof orgClaims.$inferSelect;
+export type NewOrgClaimRow = typeof orgClaims.$inferInsert;
 
 export const releases = sqliteTable(
   "releases",

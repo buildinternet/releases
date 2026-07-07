@@ -380,6 +380,53 @@ duplicates) — instead `GET /v1/orgs?trackingRequested=1` on the canonical org 
 stub orgs with a stamped `trackingRequestedAt`, admin-gated inside the handler, ordered
 newest-first and carrying `trackingRequestedAt` per item.
 
+## Ownership claims (`/v1/listing/claim*`, #1947 phase 3a)
+
+A signed-in user can prove control of a listed (stub or tracked) domain and unlock self-serve
+Tier-1 promotion (PR B). Claims live in a new `org_claims` table (`clm_` + nanoid id,
+`org_id`/`user_id` FKs, `method`, `token`, `status: pending|verified|expired`, `expiresAt`) —
+distinct from the anonymous validate/activate lane above: claims bind to a **principal**, not just
+a host.
+
+- `POST /v1/listing/claim { domain }` — mints a `relv_`-prefixed token and returns both proof
+  instructions (idempotent: an existing `verified` claim for the caller short-circuits to a 200
+  instead of minting a new one). 404s an unlisted domain ("activate a listing first").
+- `POST /v1/listing/claim/verify { claimId }` — checks the proof and returns `200` whether or not
+  it verifies (`verified: false` is a valid outcome, not an error). The claim must belong to the
+  caller (404 otherwise — no existence oracle to probe other users' claims). An overdue pending
+  claim flips to `expired` on the check and returns a `409 ConflictError`.
+- `GET /v1/listing/claims` — the caller's own claims, org-pointer joined; lazily expires overdue
+  pending rows on read.
+
+**Token semantics.** One `relv_` token proves both mechanisms — the owner publishes whichever they
+can reach:
+
+- **Well-known file** — the token as the exact trimmed body of
+  `https://{domain}/.well-known/releases-verify.txt`.
+- **DNS TXT** — a record at `_releases-challenge.{domain}` whose value is the token, checked via
+  Cloudflare DoH JSON (`cloudflare-dns.com/dns-query`, `accept: application/dns-json`).
+
+**Either passes.** `verifyDomainControl` (`workers/api/src/lib/listing/claim-verify.ts`) always
+checks both mechanisms — well-known first — and verifies iff either comes back `ok`; `method` is
+stamped to whichever passed. The well-known fetch reuses the manifest-fetch guards (HTTPS-only,
+`isPrivateOrLocalHost` SSRF screen, size cap, 5s timeout).
+
+**Fail closed (repo convention).** Any ambiguous or unparseable response — an HTML anti-bot
+challenge page, a DoH 5xx, malformed `dns-json`, a body that doesn't match — counts as
+not-verified, never as verified; a `mismatch` is never silently upgraded to `ok`. The response's
+per-mechanism `checked: { wellKnown, dnsTxt }` (`ok | mismatch | unreachable`) lets the owner debug
+which proof failed and why, distinct from the aggregate `verified` boolean.
+
+**Auth + gates.** Same user-principal gate as `/v1/me/*` (Better Auth session OR Bearer `relu_` /
+OAuth JWT — machine `relk_` tokens and root do not claim). Reuses the `listing-self-serve-enabled`
+kill switch (same incident lane as validate/activate) rather than a new flag — claim/verify/list
+carry no extra spend risk over the existing zero-cost stub lane. `verify` additionally rate-limits
+per-domain (`LISTING_DOMAIN_RATE_LIMITER`, `claim-verify:<domain>`) so the token check can't be
+used as a hammering oracle.
+
+**A verified claim does not (yet) grant org edit rights or a public verified badge** — see PR B for
+the promotion unlock it does grant.
+
 ## Out of scope (phase 2+)
 
 - **CLI:** `releases json validate [path|domain]` (OSS repo, after the api-types publish).

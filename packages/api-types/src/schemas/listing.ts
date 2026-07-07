@@ -74,3 +74,65 @@ export const ListingActivateResultSchema = z.strictObject({
   trackingRequested: z.boolean(),
 });
 export type ListingActivateResult = z.infer<typeof ListingActivateResultSchema>;
+
+/**
+ * Ownership claim flow (#1947 epic item 2): a signed-in user proves control
+ * of a listed domain via a well-known token file OR a DNS TXT record.
+ */
+
+export const ListingClaimBodySchema = z.strictObject({
+  domain: z.string().min(1).max(255),
+});
+export type ListingClaimBody = z.infer<typeof ListingClaimBodySchema>;
+
+export const ListingClaimVerifyBodySchema = z.strictObject({
+  claimId: z.string().min(1),
+});
+export type ListingClaimVerifyBody = z.infer<typeof ListingClaimVerifyBodySchema>;
+
+export const OrgClaimStatusSchema = z.enum(["pending", "verified", "expired"]);
+export type OrgClaimStatus = z.infer<typeof OrgClaimStatusSchema>;
+
+export const ClaimMethodSchema = z.enum(["well-known", "dns-txt"]);
+export type ClaimMethod = z.infer<typeof ClaimMethodSchema>;
+
+/**
+ * `token` + `instructions` are only present while the claim is `pending` (or
+ * on mint) — once verified there's nothing left to prove, and an expired
+ * claim's token is stale.
+ */
+export const OrgClaimSchema = z.strictObject({
+  id: z.string(),
+  org: ListingOrgPointerSchema,
+  status: OrgClaimStatusSchema,
+  method: ClaimMethodSchema.optional(),
+  token: z.string().optional(),
+  createdAt: z.string(),
+  verifiedAt: z.string().optional(),
+  expiresAt: z.string(),
+  instructions: z
+    .strictObject({
+      wellKnownUrl: z.string(),
+      dnsRecordName: z.string(),
+    })
+    .optional(),
+});
+export type OrgClaim = z.infer<typeof OrgClaimSchema>;
+
+export const ClaimCheckOutcomeSchema = z.enum(["ok", "mismatch", "unreachable"]);
+export type ClaimCheckOutcome = z.infer<typeof ClaimCheckOutcomeSchema>;
+
+export const ClaimVerifyResultSchema = z.strictObject({
+  verified: z.boolean(),
+  checked: z.strictObject({
+    wellKnown: ClaimCheckOutcomeSchema,
+    dnsTxt: ClaimCheckOutcomeSchema,
+  }),
+  claim: OrgClaimSchema,
+});
+export type ClaimVerifyResult = z.infer<typeof ClaimVerifyResultSchema>;
+
+export const ListingClaimsResultSchema = z.strictObject({
+  claims: z.array(OrgClaimSchema),
+});
+export type ListingClaimsResult = z.infer<typeof ListingClaimsResultSchema>;

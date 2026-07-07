@@ -618,32 +618,70 @@ async function resolveBearerUser(c: Context<Env>, presented: string): Promise<Be
  * cookie — can manage their follows too. Session is tried first; the Bearer-user
  * lanes are the fallback. 401 when neither resolves.
  */
-export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) => {
+/** Outcome of resolving a `/v1/me/*`-style user principal (session or Bearer). */
+type FollowsPrincipalResolution =
+  | { kind: "user"; user: AuthSessionContext["user"] }
+  | { kind: "rate_limited" }
+  | { kind: "invalid_credential" }
+  | { kind: "none" };
+
+async function resolveFollowsPrincipal(c: Context<Env>): Promise<FollowsPrincipalResolution> {
   const auth = await getOrCreateAuth(c);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (session?.user?.id) {
-    c.set("session", {
+    return {
+      kind: "user",
       user: { id: session.user.id, email: session.user.email, name: session.user.name },
-    });
-    return next();
+    };
   }
   const presented = bearer(c);
   if (presented) {
     const resolved = await resolveBearerUser(c, presented);
-    if (resolved.kind === "user") {
-      c.set("session", { user: resolved.user });
-      return next();
-    }
-    if (resolved.kind === "rate_limited") {
-      // A rate-limited user key answers 429 (not 401), matching the catalog API.
-      return respondError(c, new RateLimitedError("API key rate limit exceeded"));
-    }
+    if (resolved.kind === "user") return { kind: "user", user: resolved.user };
+    if (resolved.kind === "rate_limited") return { kind: "rate_limited" };
+    return { kind: "invalid_credential" };
+  }
+  return { kind: "none" };
+}
+
+export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) => {
+  const resolved = await resolveFollowsPrincipal(c);
+  if (resolved.kind === "user") {
+    c.set("session", { user: resolved.user });
+    return next();
+  }
+  if (resolved.kind === "rate_limited") {
+    // A rate-limited user key answers 429 (not 401), matching the catalog API.
+    return respondError(c, new RateLimitedError("API key rate limit exceeded"));
+  }
+  if (resolved.kind === "invalid_credential") {
     // A credential was presented but mapped to no user — mark it invalid so a
     // Bearer client can tell "wrong/expired token" from "no token".
     c.header("WWW-Authenticate", 'Bearer realm="releases-api", error="invalid_token"');
     return respondError(c, new UnauthorizedError("Invalid credential"));
   }
   return respondError(c, new UnauthorizedError("Sign in required"));
+};
+
+/**
+ * Soft variant of {@link requireFollowsPrincipal} for namespaces that must
+ * stay reachable anonymously at the middleware layer (e.g. `/v1/listing/*`,
+ * where the flag-off 404 and the per-IP limiter must fire before any auth
+ * check, and unauthenticated is a valid outcome the handler itself reports).
+ * Sets `session` when a principal resolves; otherwise a no-op passthrough —
+ * NEVER 401s or 429s here. The handler is responsible for gating on
+ * `c.get("session")`.
+ */
+export const attachFollowsSession: MiddlewareHandler<Env> = async (c, next) => {
+  try {
+    const resolved = await resolveFollowsPrincipal(c);
+    if (resolved.kind === "user") c.set("session", { user: resolved.user });
+  } catch {
+    // Fail toward anonymous: an auth-layer error must not take down a lane
+    // whose handlers gate on `c.get("session")` themselves (they answer 401),
+    // and the flag-off 404 must stay reachable without working auth infra.
+  }
+  return next();
 };
 
 function createAuthMiddleware(opts: {
