@@ -17,8 +17,19 @@ afterEach(() => {
   globalThis.fetch = fetchGlobal.__REAL_FETCH__!;
 });
 
-// Stub out cloudflare:workers so Bun can import Durable Objects and
-// WorkflowEntrypoints outside a Worker runtime.
+// Records every `cache.purge(...)` call made through the `cloudflare:workers`
+// stub below (there is no real Workers Cache outside workerd). Tests read
+// this via `globalThis.__CACHE_PURGE_CALLS__`; cleared after each test so a
+// purge in one test can never leak into the next.
+const cachePurgeCalls: unknown[] = [];
+(globalThis as { __CACHE_PURGE_CALLS__?: unknown[] }).__CACHE_PURGE_CALLS__ = cachePurgeCalls;
+afterEach(() => {
+  cachePurgeCalls.length = 0;
+});
+
+// Stub out cloudflare:workers so Bun can import Durable Objects,
+// WorkflowEntrypoints, and the Workers Cache `cache.purge` API outside a
+// Worker runtime.
 mock.module("cloudflare:workers", () => ({
   DurableObject: class DurableObject {
     ctx: any;
@@ -35,6 +46,12 @@ mock.module("cloudflare:workers", () => ({
       this.ctx = ctx;
       this.env = env;
     }
+  },
+  cache: {
+    purge: async (options: unknown) => {
+      cachePurgeCalls.push(options);
+      return { success: true, errors: [] };
+    },
   },
 }));
 

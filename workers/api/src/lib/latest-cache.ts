@@ -9,10 +9,13 @@
 import { logEvent } from "@releases/lib/log-event";
 import { purgeKeysForHomepageTicker } from "../graphql/persisted.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
-import { buildEdgeCacheKey } from "../middleware/edge-cache.js";
 
-/** Canonical API origin for edge-cache purge keys (must match stored request host). */
-const EDGE_CACHE_ORIGIN = "https://api.releases.sh";
+/**
+ * Cache-Tag value applied to every /v1/releases/latest response (see the
+ * cacheControl(...) mount in index.ts). `invalidateLatestCache` purges
+ * Workers Cache by this tag after a publish, rather than waiting out max-age.
+ */
+export const LATEST_CACHE_TAG = "latest";
 
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
@@ -111,43 +114,30 @@ function defaultShapeKey(shape: { count: number; excludeSourceTypes: string[] })
   });
 }
 
-/** Public GET URL for one cacheable latest shape (edge-cache purge). */
-export function edgePurgeUrlForShape(shape: {
-  count: number;
-  excludeSourceTypes: string[];
-}): string {
-  const params = new URLSearchParams();
-  params.set("count", String(shape.count));
-  if (shape.excludeSourceTypes.length > 0) {
-    params.set("exclude", shape.excludeSourceTypes.join(","));
-  }
-  return `${EDGE_CACHE_ORIGIN}/v1/releases/latest?${params.toString()}`;
-}
-
-const EDGE_PURGE_ACCEPTS = ["application/json", "text/markdown"] as const;
-
 /**
- * Delete edge-cache entries for the given public GET URLs. Fail-open when
- * `caches.default` is absent (unit tests / non-workerd runtimes).
+ * Purge Workers Cache entries tagged `LATEST_CACHE_TAG` (every
+ * /v1/releases/latest shape, regardless of query params or Accept variant —
+ * tag purge doesn't need per-shape URLs the way the old Cache API delete
+ * loop did). Fail-open: `cache.purge` throwing (e.g. in a non-workerd test
+ * runtime, where it's stubbed) must not fail the caller's ingest path.
+ *
+ * `cloudflare:workers` is imported lazily: a static import breaks non-workerd
+ * consumers of this module that run without bun's test mock — notably the
+ * OpenAPI coverage-gate script in CI, which imports the route tree from plain
+ * bun.
  */
-export async function purgeEdgeCacheUrls(urls: string[]): Promise<void> {
-  if (typeof caches === "undefined") return;
-  const cache = (caches as unknown as { default: { delete: (k: Request) => Promise<boolean> } })
-    .default;
-  for (const url of urls) {
-    for (const accept of EDGE_PURGE_ACCEPTS) {
-      try {
-        const deleted = await cache.delete(buildEdgeCacheKey(url, accept));
-        logEvent("info", {
-          component: "invalidation",
-          event: deleted ? "edge-purged" : "edge-purge-miss",
-          url,
-          accept,
-        });
-      } catch (err) {
-        logEvent("warn", { component: "invalidation", event: "edge-purge-failed", url, err });
-      }
-    }
+export async function purgeLatestCacheTag(): Promise<void> {
+  try {
+    const { cache } = await import("cloudflare:workers");
+    const result = await cache.purge({ tags: [LATEST_CACHE_TAG] });
+    logEvent("info", {
+      component: "invalidation",
+      event: result.success ? "tag-purged" : "tag-purge-failed",
+      tag: LATEST_CACHE_TAG,
+      errors: result.success ? undefined : result.errors,
+    });
+  } catch (err) {
+    logEvent("warn", { component: "invalidation", event: "tag-purge-errored", err });
   }
 }
 
@@ -241,11 +231,11 @@ export async function invalidateLatestCache(
     return;
   }
 
-  const cache = env.LATEST_CACHE;
+  const kv = env.LATEST_CACHE;
   await Promise.all(
     keys.map(async (key) => {
       try {
-        await cache.delete(key);
+        await kv.delete(key);
         logEvent("info", { component: "invalidation", event: "purged", cacheKey: key });
       } catch (err) {
         logEvent("warn", { component: "invalidation", event: "purge-failed", err, cacheKey: key });
@@ -253,6 +243,10 @@ export async function invalidateLatestCache(
     }),
   );
 
-  const edgeUrls = CACHEABLE_DEFAULT_SHAPES.map(edgePurgeUrlForShape);
-  await purgeEdgeCacheUrls(edgeUrls);
+  // Workers Cache tag purge (see the `cacheControl(..., { tags: [LATEST_CACHE_TAG] })`
+  // mount in index.ts). `cache.purge` from `cloudflare:workers` doesn't need
+  // `ctx`/`ExecutionContext` in scope — it works the same from a request
+  // handler and from the cron poll-fetch path (cron/poll-fetch.ts), which has
+  // no Hono context to thread a purge object through.
+  await purgeLatestCacheTag();
 }

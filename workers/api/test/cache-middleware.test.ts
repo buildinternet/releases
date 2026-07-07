@@ -62,4 +62,24 @@ describe("cacheControl middleware", () => {
     const res = await app.request("http://x/releases/rel_1", {}, { CACHE_DISABLED: "true" });
     expect(res.headers.get("cache-control")).toBeNull();
   });
+
+  it("sets Cache-Tag (comma-joined) alongside Cache-Control when tags are given", async () => {
+    const app = appWith(cacheControl(60, { isPublic: true, tags: ["latest", "homepage"] }));
+    const res = await app.request("http://x/releases/rel_1", {}, {});
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(res.headers.get("cache-tag")).toBe("latest,homepage");
+  });
+
+  it("does not set Cache-Tag when no tags are given", async () => {
+    const app = appWith(cacheControl(60, { isPublic: true }));
+    const res = await app.request("http://x/releases/rel_1", {}, {});
+    expect(res.headers.get("cache-tag")).toBeNull();
+  });
+
+  it("does not set Cache-Tag when caching is disabled (kill switch also suppresses the tag)", async () => {
+    const app = appWith(cacheControl(60, { isPublic: true, tags: ["latest"] }));
+    const res = await app.request("http://x/releases/rel_1", {}, { CACHE_DISABLED: "true" });
+    expect(res.headers.get("cache-control")).toBeNull();
+    expect(res.headers.get("cache-tag")).toBeNull();
+  });
 });
