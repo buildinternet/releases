@@ -69,6 +69,16 @@ export function sourceSubpath(source: Source, sub?: string): string {
 }
 
 /**
+ * Per-method fetch timeout budgets for `httpPersister` (#1970 — CodeRabbit
+ * suggestion on #1965). Reads / log writes / small updates are tight so a
+ * hung API response can't block the discovery worker indefinitely;
+ * `insertReleases` gets a generous budget because large batch inserts run R2
+ * media mirroring inline in the request.
+ */
+const TIGHT_FETCH_TIMEOUT_MS = 30_000;
+const INSERT_RELEASES_TIMEOUT_MS = 5 * 60_000;
+
+/**
  * Default `ScrapePersister` — reproduces today's HTTP-via-API-worker
  * behavior exactly (moved, not rewritten, from `scrape-fetch.ts`). Two
  * additive deltas vs. the pre-seam helpers: `insertReleases` now returns
@@ -91,6 +101,7 @@ export function httpPersister(env: HttpPersisterEnv): ScrapePersister {
           : `https://api/v1/sources/${encodeURIComponent(identifier)}`;
       const res = await env.apiFetcher.fetch(url, {
         headers: { Authorization: `Bearer ${env.apiKey}` },
+        signal: AbortSignal.timeout(TIGHT_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) return null;
       return res.json() as Promise<Source>;
@@ -99,7 +110,10 @@ export function httpPersister(env: HttpPersisterEnv): ScrapePersister {
     async getKnownReleases(source) {
       const res = await env.apiFetcher.fetch(
         `https://api${sourceSubpath(source, "known-releases")}?limit=10`,
-        { headers: { Authorization: `Bearer ${env.apiKey}` } },
+        {
+          headers: { Authorization: `Bearer ${env.apiKey}` },
+          signal: AbortSignal.timeout(TIGHT_FETCH_TIMEOUT_MS),
+        },
       );
       if (!res.ok) return [];
       return (await res.json()) as KnownRelease[];
@@ -126,6 +140,7 @@ export function httpPersister(env: HttpPersisterEnv): ScrapePersister {
               media: JSON.stringify(r.media ?? []),
             })),
           }),
+          signal: AbortSignal.timeout(INSERT_RELEASES_TIMEOUT_MS),
         },
       );
 
@@ -155,6 +170,7 @@ export function httpPersister(env: HttpPersisterEnv): ScrapePersister {
           // waiting out a stale `next_fetch_after`.
           nextFetchAfter: null,
         }),
+        signal: AbortSignal.timeout(TIGHT_FETCH_TIMEOUT_MS),
       });
     },
 
@@ -177,6 +193,7 @@ export function httpPersister(env: HttpPersisterEnv): ScrapePersister {
             errorCategory: result.errorCategory ?? null,
             ...(result.wasFlagged ? { wasFlagged: true } : {}),
           }),
+          signal: AbortSignal.timeout(TIGHT_FETCH_TIMEOUT_MS),
         })
         .catch(() => {}); // best-effort
     },
@@ -190,6 +207,7 @@ export function httpPersister(env: HttpPersisterEnv): ScrapePersister {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.apiKey}` },
             body: JSON.stringify({ body, format: "markdown" }),
+            signal: AbortSignal.timeout(TIGHT_FETCH_TIMEOUT_MS),
           },
         );
         if (!res.ok) {

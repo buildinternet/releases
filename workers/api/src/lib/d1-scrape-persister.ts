@@ -25,6 +25,13 @@ export interface D1PersisterEnv extends BatchIngestEnv, BatchEffectsEnv, FetchLo
   RAW_SNAPSHOTS?: R2Bucket;
 }
 
+/**
+ * Resolves a genuine not-found to `null` (mirroring `httpPersister`'s
+ * `!res.ok -> null` for a 404) but rethrows on an actual DB error — a
+ * transient D1 outage must not be indistinguishable from "source not found",
+ * which would otherwise silently skip that source's post-insert steps
+ * (#1970). Logged at warn before rethrow so it's visible in Axiom.
+ */
 async function resolveSource(db: D1Db, identifier: string): Promise<Source | null> {
   try {
     if (identifier.startsWith("src_")) {
@@ -43,8 +50,14 @@ async function resolveSource(db: D1Db, identifier: string): Promise<Source | nul
 
     const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(identifier)).limit(1);
     return row ?? null;
-  } catch {
-    return null;
+  } catch (err) {
+    logEvent("warn", {
+      component: "d1-scrape-persister",
+      event: "d1-persister-source-lookup-failed",
+      identifier,
+      err: err instanceof Error ? err : String(err),
+    });
+    throw err;
   }
 }
 
