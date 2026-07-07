@@ -10,7 +10,7 @@ The repo is designed so contribution never requires access to the production inf
 
 - **No external accounts:** `bun install`, `bun run check`, and `bun test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `workers/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` / `preview:discovery` scripts are the plain-port fallback if you'd rather skip portless.
 - **Bring your own keys (feature-scoped):** `ANTHROPIC_API_KEY` for the AI passes (summaries, classification, extraction), `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` (any Cloudflare account) for Browser Rendering scrape fetches, `VOYAGE_API_KEY` for semantic search.
-- **Hosted-only (not reproducible by design):** the managed-agent discovery pipeline, email delivery, Firecrawl monitoring, and the production Secrets Store / D1 / KV / R2 bindings pinned in each `wrangler.jsonc` — those IDs belong to the canonical releases.sh deployment; a fork deploying its own workers must provision and substitute its own resources.
+- **Hosted-only (not reproducible by design):** the managed-agent discovery pipeline, email delivery, Firecrawl monitoring, and the production Secrets Store / D1 / KV / R2 bindings pinned in each `wrangler.jsonc` — those IDs belong to the canonical releases.sh deployment; a fork deploying its own workers must provision and substitute its own resources. Full inventory: [docs/architecture/deploy-coupling.md](docs/architecture/deploy-coupling.md).
 
 ## Setup
 
