@@ -424,8 +424,40 @@ carry no extra spend risk over the existing zero-cost stub lane. `verify` additi
 per-domain (`LISTING_DOMAIN_RATE_LIMITER`, `claim-verify:<domain>`) so the token check can't be
 used as a hammering oracle.
 
-**A verified claim does not (yet) grant org edit rights or a public verified badge** — see PR B for
+**A verified claim does not (yet) grant org edit rights or a public verified badge** — see below for
 the promotion unlock it does grant.
+
+## Self-serve Tier-1 promotion (`POST /v1/listing/promote`, #1947 PR B)
+
+A verified owner promotes their claimed stub straight to `tracked`, no curator round trip:
+
+- `POST /v1/listing/promote { domain }` — requires a user principal AND a `verified` `org_claims`
+  row for the caller on the resolved org (`ForbiddenError`/403 otherwise — "verified ownership
+  claim required"). Runs the existing `promoteStubOrg` (`workers/api/src/lib/well-known/promote.ts`,
+  #1958) exactly as the admin promote route does: atomic `promoting_at` claim (409 on contention),
+  tier-1 locators (feed/github/appstore) probed into live sources, tier-2 (bare url/file) landed
+  paused for curator review, locators stamped with the source they became, org flipped to
+  `tier: "tracked"`. Idempotent — an already-`tracked` org is a no-op `200`.
+- Returns a public projection (`ListingPromoteResult`), never the internal materialization plan:
+  `{ promoted, alreadyTracked?, sources: { created, matched }, locators: [{ locator, outcome }] }`
+  where `outcome` is `"live"` or `"queued-for-review"` (derived from each `plan.sources` entry's
+  `paused` flag).
+
+**Dedicated kill switch.** `listing-self-serve-promotion-enabled` (Flagship, default **off**) — a
+sibling of `listing-self-serve-enabled` but deliberately separate: promotion creates live fetching
+sources (real spend), unlike the zero-cost stub/claim lanes, so it warrants its own incident lever.
+Off ⇒ `404` (checked after the listing-lane flag, so a fully-off listing lane still 404s first).
+
+**Rate limit.** `LISTING_DOMAIN_RATE_LIMITER`, key `listing-promote:<domain>` — same 3/min-per-domain
+binding verify already uses, just a distinct key prefix.
+
+**Auth.** Same user-principal gate as claim/verify/list — root and `relk_` machine tokens don't
+carry a claim, so they keep using the admin `POST /v1/orgs/:slug/promote` route instead.
+
+**Web.** The claim panel's verified state (`web/src/components/org/claim-panel.tsx`) gains an
+"Enable tracking" button that calls `promoteListing()` (`web/src/lib/claim.ts`) and renders a
+locator-outcome summary ("N sources live, M queued for curator review") linking to the now-tracked
+org page on success.
 
 ## Out of scope (phase 2+)
 
