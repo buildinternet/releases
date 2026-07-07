@@ -173,6 +173,44 @@ describe("verifyDomainControl", () => {
     expect(result.method).toBe("dns-txt");
   });
 
+  it("well-known oversized streamed body is unreachable and the stream is cancelled early", async () => {
+    const CHUNK_SIZE = 8 * 1024;
+    // 64KB MAX_BYTES + a few chunks past it — if the reader were buffering
+    // the whole thing (e.g. via res.text()) before checking length, this
+    // would still pass; the point of this test is that we stop pulling
+    // chunks once the running total crosses MAX_BYTES.
+    const TOTAL_CHUNKS = 20;
+    let pulled = 0;
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (cancelled) return;
+        if (pulled >= TOTAL_CHUNKS) {
+          controller.close();
+          return;
+        }
+        pulled += 1;
+        controller.enqueue(new Uint8Array(CHUNK_SIZE).fill(97));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchImpl = fetchImplFor({
+      wellKnown: () =>
+        Promise.resolve(
+          new Response(stream, { status: 200, headers: { "content-type": "text/plain" } }),
+        ),
+      dns: () => dohResponse({ Status: 3 }),
+    });
+    const result = await verifyDomainControl(DOMAIN, TOKEN, { fetchImpl });
+    expect(result.checked.wellKnown).toBe("unreachable");
+    expect(result.verified).toBe(false);
+    // Bounded: reader should give up well before consuming every chunk.
+    expect(pulled).toBeLessThan(TOTAL_CHUNKS);
+    expect(cancelled).toBe(true);
+  });
+
   it("neither mechanism passing does not verify", async () => {
     const fetchImpl = fetchImplFor({
       wellKnown: () => textResponse("nope"),

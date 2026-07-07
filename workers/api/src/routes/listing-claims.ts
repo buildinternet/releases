@@ -152,6 +152,24 @@ listingClaimHandlers.post(
     }
 
     const now = new Date();
+    const nowIso = now.toISOString();
+    const [existingPending] = await db
+      .select()
+      .from(orgClaims)
+      .where(
+        and(
+          eq(orgClaims.orgId, org.id),
+          eq(orgClaims.userId, session.user.id),
+          eq(orgClaims.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (existingPending && existingPending.expiresAt >= nowIso) {
+      // Idempotent: a second claim attempt while one is still pending returns
+      // the existing claim (same token/instructions) rather than minting a
+      // duplicate row, matching the verified short-circuit above.
+      return c.json(projectClaim(existingPending, org, webBaseUrl), 200);
+    }
     const row: typeof orgClaims.$inferInsert = {
       id: newOrgClaimId(),
       orgId: org.id,
@@ -346,6 +364,12 @@ listingClaimHandlers.get(
  * flag-off 404s and rate limits fire before any 401.
  */
 export const listingClaimRoutes = new Hono<Env>();
-listingClaimRoutes.use("/listing/claim*", attachFollowsSession);
+// NB: Hono's wildcard needs an explicit path segment ("/listing/claim/*") —
+// a glued "/listing/claim*" is treated as a literal string and matches
+// nothing, silently skipping attachFollowsSession on /listing/claim and
+// /listing/claim/verify. "/listing/claim/*" covers both of those but not
+// /listing/claims (no trailing slash there), so that route still needs its
+// own registration.
+listingClaimRoutes.use("/listing/claim/*", attachFollowsSession);
 listingClaimRoutes.use("/listing/claims", attachFollowsSession);
 listingClaimRoutes.route("/", listingClaimHandlers);

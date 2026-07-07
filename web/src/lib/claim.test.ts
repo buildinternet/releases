@@ -82,6 +82,35 @@ describe("claim client", () => {
     await expect(startClaim("acme.com")).rejects.toThrow(/Too many attempts/);
   });
 
+  it("wraps a transport failure (offline/DNS) in a friendly message", async () => {
+    calls = [];
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    await expect(startClaim("acme.com")).rejects.toThrow(/Could not reach the server/);
+  });
+
+  it("verifyClaim passes through a verified:false result with mismatch/unreachable checks", async () => {
+    mockFetch({
+      verified: false,
+      checked: { wellKnown: "mismatch", dnsTxt: "unreachable" },
+      claim: {
+        id: "clm_1",
+        org: { slug: "acme", name: "Acme", webUrl: "https://releases.sh/acme" },
+        status: "pending",
+        method: null,
+        createdAt: "2026-07-07T00:00:00.000Z",
+        expiresAt: "2026-07-14T00:00:00.000Z",
+      },
+    });
+    const result = await verifyClaim("clm_1");
+    expect(result.verified).toBe(false);
+    expect(result.checked).toEqual({ wellKnown: "mismatch", dnsTxt: "unreachable" });
+    expect(result.claim.status).toBe("pending");
+    expect(result.claim).not.toHaveProperty("token");
+    expect(result.claim).not.toHaveProperty("instructions");
+  });
+
   it("verifies a claim via POST with the claim id", async () => {
     mockFetch({
       verified: true,

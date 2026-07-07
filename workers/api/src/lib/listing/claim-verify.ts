@@ -27,6 +27,49 @@ function looksLikeHtml(body: string): boolean {
   return head.startsWith("<!doctype") || head.startsWith("<html") || head.includes("<body");
 }
 
+/**
+ * Reads a response body via a streaming reader, aborting (cancelling the
+ * reader) as soon as the accumulated byte total exceeds MAX_BYTES instead of
+ * letting an unbounded body fully buffer via res.text() first. Returns null
+ * if the body is oversized or the stream can't be read.
+ */
+async function readBoundedText(res: Response): Promise<string | null> {
+  if (!res.body) {
+    // No readable stream available (e.g. some test doubles) — fall back to
+    // buffering, still bounded by a length check.
+    const text = await res.text();
+    return text.length > MAX_BYTES ? null : text;
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > MAX_BYTES) {
+          await reader.cancel();
+          return null;
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
 async function checkWellKnown(
   domain: string,
   token: string,
@@ -56,13 +99,13 @@ async function checkWellKnown(
     }
     if (res.status !== 200) return "unreachable";
 
-    let text: string;
+    let text: string | null;
     try {
-      text = await res.text();
+      text = await readBoundedText(res);
     } catch {
       return "unreachable";
     }
-    if (text.length > MAX_BYTES) return "unreachable";
+    if (text === null) return "unreachable";
     if (looksLikeHtml(text)) return "unreachable";
     return text.trim() === token ? "ok" : "mismatch";
   } finally {

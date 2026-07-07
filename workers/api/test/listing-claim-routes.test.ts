@@ -205,6 +205,55 @@ describe("POST /v1/listing/claim", () => {
     expect(body.status).toBe("verified");
     expect(body.token).toBeUndefined();
   });
+
+  it("is idempotent while pending — a repeat call returns the same claim, no duplicate row", async () => {
+    const a = withSession("u1");
+    const first = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      env(),
+    );
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { id: string; token: string };
+
+    const second = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      env(),
+    );
+    expect(second.status).toBe(200);
+    const secondBody = (await second.json()) as { id: string; token: string; status: string };
+    expect(secondBody.id).toBe(firstBody.id);
+    expect(secondBody.token).toBe(firstBody.token);
+    expect(secondBody.status).toBe("pending");
+
+    const rows = await h.db.select().from(orgClaims).where(eq(orgClaims.userId, "u1"));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("mints a fresh claim when the prior pending claim has expired", async () => {
+    const a = withSession("u1");
+    const first = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      env(),
+    );
+    const firstBody = (await first.json()) as { id: string; token: string };
+    await h.db
+      .update(orgClaims)
+      .set({ expiresAt: new Date(Date.now() - 1000).toISOString() })
+      .where(eq(orgClaims.id, firstBody.id));
+
+    const second = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      env(),
+    );
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { id: string; token: string };
+    expect(secondBody.id).not.toBe(firstBody.id);
+    expect(secondBody.token).not.toBe(firstBody.token);
+  });
 });
 
 describe("POST /v1/listing/claim/verify", () => {
@@ -464,6 +513,43 @@ describe("GET /v1/listing/claims", () => {
 });
 
 describe("wiring: claim routes ride the composed v1 router", () => {
+  it("attachFollowsSession is registered on a pattern that actually matches /listing/claim and /listing/claim/verify", async () => {
+    // Regression pin for a Hono routing footgun that CodeRabbit flagged as
+    // "redundant" registration but is actually the opposite: a glued
+    // wildcard ("/listing/claim*", no slash before the star) is treated as a
+    // literal string and matches nothing, silently skipping session
+    // attachment on POST /listing/claim and /listing/claim/verify. Hono only
+    // treats "*" as a wildcard when it is its own path segment
+    // ("/listing/claim/*"). This test exercises a spy middleware mounted with
+    // the exact patterns the route file uses and asserts it actually fires
+    // for both routes.
+    const spy = new Hono();
+    let hits = 0;
+    spy.use("/listing/claim/*", async (c, next) => {
+      hits += 1;
+      await next();
+    });
+    spy.use("/listing/claims", async (c, next) => {
+      hits += 1;
+      await next();
+    });
+    spy.get("/listing/claim", (c) => c.text("ok"));
+    spy.get("/listing/claim/verify", (c) => c.text("ok"));
+    spy.get("/listing/claims", (c) => c.text("ok"));
+
+    hits = 0;
+    await spy.request("/listing/claim");
+    expect(hits).toBe(1);
+
+    hits = 0;
+    await spy.request("/listing/claim/verify");
+    expect(hits).toBe(1);
+
+    hits = 0;
+    await spy.request("/listing/claims");
+    expect(hits).toBe(1);
+  });
+
   it("mounts through mountV1Routes and 404s deterministically with the switch off", async () => {
     const { mountV1Routes } = await import("../src/v1-routes.js");
     const v1 = new Hono();

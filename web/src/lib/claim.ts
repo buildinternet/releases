@@ -26,39 +26,56 @@ async function readClaimErrorMessage(res: Response, fallback: string): Promise<s
   }
 }
 
-export async function startClaim(domain: string): Promise<OrgClaim> {
-  const res = await fetch(`${apiBase()}/v1/listing/claim`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domain }),
-  });
-  if (!res.ok) {
-    throw new Error(await readClaimErrorMessage(res, "Could not start a claim. Please try again."));
+/**
+ * Shared fetch + JSON-decode wrapper for the claim lane. Wraps `fetch()`
+ * itself in a try/catch so a transport failure (offline, DNS, CORS) surfaces
+ * as the same friendly Error copy as a non-2xx API response, instead of
+ * bubbling the raw TypeError from `fetch`.
+ */
+async function requestClaimJson<T>(url: string, init: RequestInit, fallback: string): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch {
+    throw new Error("Could not reach the server. Please check your connection and try again.");
   }
-  return (await res.json()) as OrgClaim;
+  if (!res.ok) {
+    throw new Error(await readClaimErrorMessage(res, fallback));
+  }
+  return (await res.json()) as T;
+}
+
+export async function startClaim(domain: string): Promise<OrgClaim> {
+  return requestClaimJson<OrgClaim>(
+    `${apiBase()}/v1/listing/claim`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain }),
+    },
+    "Could not start a claim. Please try again.",
+  );
 }
 
 export async function verifyClaim(claimId: string): Promise<ClaimVerifyResult> {
-  const res = await fetch(`${apiBase()}/v1/listing/claim/verify`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ claimId }),
-  });
-  if (!res.ok) {
-    throw new Error(
-      await readClaimErrorMessage(res, "Could not check the claim. Please try again."),
-    );
-  }
-  return (await res.json()) as ClaimVerifyResult;
+  return requestClaimJson<ClaimVerifyResult>(
+    `${apiBase()}/v1/listing/claim/verify`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ claimId }),
+    },
+    "Could not check the claim. Please try again.",
+  );
 }
 
 export async function listClaims(): Promise<OrgClaim[]> {
-  const res = await fetch(`${apiBase()}/v1/listing/claims`, { credentials: "include" });
-  if (!res.ok) {
-    throw new Error(await readClaimErrorMessage(res, "Could not load your claims."));
-  }
-  const data = (await res.json()) as ListingClaimsResult;
+  const data = await requestClaimJson<ListingClaimsResult>(
+    `${apiBase()}/v1/listing/claims`,
+    { credentials: "include" },
+    "Could not load your claims.",
+  );
   return data.claims;
 }
