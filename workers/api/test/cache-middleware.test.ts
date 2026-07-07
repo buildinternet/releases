@@ -3,9 +3,9 @@ import { Hono } from "hono";
 import { cacheControl } from "../src/middleware/cache.js";
 
 /**
- * cacheControl is headers-only — there is no worker-side cache (no Cache API,
- * no KV) behind these routes, so the emitted Cache-Control header IS the
- * freshness contract any downstream HTTP cache is permitted to honor (#1580).
+ * cacheControl emits the Cache-Control header Workers Cache (wrangler
+ * `cache.enabled`) reads as its freshness contract (#1580); see the
+ * middleware's docstring for the Authorization exclusion rationale.
  */
 
 type Env = { CACHE_DISABLED?: string };
@@ -81,5 +81,31 @@ describe("cacheControl middleware", () => {
     const res = await app.request("http://x/releases/rel_1", {}, { CACHE_DISABLED: "true" });
     expect(res.headers.get("cache-control")).toBeNull();
     expect(res.headers.get("cache-tag")).toBeNull();
+  });
+
+  it("forces private, no-store (and no Cache-Tag) on requests bearing Authorization", async () => {
+    // RFC 9111 lets `public` override the shared-cache Authorization
+    // restriction, so an authed response must never advertise `public` —
+    // otherwise principal-shaped fields (playbook, include_hidden rows,
+    // admin projections) would land in the shared Workers Cache.
+    const app = appWith(
+      cacheControl(60, { staleWhileRevalidate: 30, isPublic: true, tags: ["latest"] }),
+    );
+    const res = await app.request(
+      "http://x/releases/rel_1",
+      { headers: { Authorization: "Bearer relk_test" } },
+      {},
+    );
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.get("cache-tag")).toBeNull();
+    expect(res.headers.get("vary")).toBeNull();
+  });
+
+  it("adds Vary: Authorization to anonymous cacheable responses", async () => {
+    // Keeps a stored anonymous entry from ever being served to an authed
+    // request (which would silently drop authed-only response fields).
+    const app = appWith(cacheControl(60, { isPublic: true }));
+    const res = await app.request("http://x/releases/rel_1", {}, {});
+    expect(res.headers.get("vary")).toContain("Authorization");
   });
 });
