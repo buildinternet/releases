@@ -9,8 +9,13 @@ import {
 } from "@buildinternet/releases-api-types";
 import { organizations, orgClaims, type OrgClaimRow } from "@buildinternet/releases-core/schema";
 import { newOrgClaimId, newClaimTokenId } from "@buildinternet/releases-core/id";
-import { ConflictError, NotFoundError, RateLimitedError } from "@releases/lib/releases-error";
-import { UnauthorizedError } from "@releases/lib/releases-error";
+import {
+  ConflictError,
+  NotFoundError,
+  RateLimitedError,
+  UnauthorizedError,
+  ValidationError,
+} from "@releases/lib/releases-error";
 import { logEvent } from "@releases/lib/log-event";
 import { attachFollowsSession } from "../middleware/auth.js";
 import type { Env } from "../index.js";
@@ -119,7 +124,7 @@ listingClaimHandlers.post(
 
     const { domain: rawDomain } = c.req.valid("json");
     const domain = normalizeListingDomain(rawDomain);
-    if (!domain) return respondError(c, new NotFoundError("Not a valid domain name."));
+    if (!domain) return respondError(c, new ValidationError("Not a valid domain name."));
 
     const db = createDb(c.env.DB);
     const webBaseUrl = c.env.WEB_BASE_URL ?? "https://releases.sh";

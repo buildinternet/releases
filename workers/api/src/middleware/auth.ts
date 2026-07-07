@@ -673,8 +673,14 @@ export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) =
  * `c.get("session")`.
  */
 export const attachFollowsSession: MiddlewareHandler<Env> = async (c, next) => {
-  const resolved = await resolveFollowsPrincipal(c);
-  if (resolved.kind === "user") c.set("session", { user: resolved.user });
+  try {
+    const resolved = await resolveFollowsPrincipal(c);
+    if (resolved.kind === "user") c.set("session", { user: resolved.user });
+  } catch {
+    // Fail toward anonymous: an auth-layer error must not take down a lane
+    // whose handlers gate on `c.get("session")` themselves (they answer 401),
+    // and the flag-off 404 must stay reachable without working auth infra.
+  }
   return next();
 };
 
