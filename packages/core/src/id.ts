@@ -32,6 +32,8 @@ export const newApiTokenId = () => `tok_${nanoid()}`;
 export const newFeedbackId = () => `fb_${nanoid()}`;
 export const newRecommendationId = () => `rec_${nanoid()}`;
 export const newRawSnapshotId = () => `snap_${nanoid()}`;
+export const newOrgClaimId = () => `clm_${nanoid()}`;
+export const newClaimTokenId = () => `relv_${nanoid()}`;
 
 export type EntityType =
   | "release"
