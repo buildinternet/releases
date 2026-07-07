@@ -6,7 +6,6 @@
  * v2: default response excludes prereleases (was previously unfiltered).
  */
 
-import { cache } from "cloudflare:workers";
 import { logEvent } from "@releases/lib/log-event";
 import { purgeKeysForHomepageTicker } from "../graphql/persisted.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
@@ -121,9 +120,15 @@ function defaultShapeKey(shape: { count: number; excludeSourceTypes: string[] })
  * tag purge doesn't need per-shape URLs the way the old Cache API delete
  * loop did). Fail-open: `cache.purge` throwing (e.g. in a non-workerd test
  * runtime, where it's stubbed) must not fail the caller's ingest path.
+ *
+ * `cloudflare:workers` is imported lazily: a static import breaks non-workerd
+ * consumers of this module that run without bun's test mock — notably the
+ * OpenAPI coverage-gate script in CI, which imports the route tree from plain
+ * bun.
  */
 export async function purgeLatestCacheTag(): Promise<void> {
   try {
+    const { cache } = await import("cloudflare:workers");
     const result = await cache.purge({ tags: [LATEST_CACHE_TAG] });
     logEvent("info", {
       component: "invalidation",
