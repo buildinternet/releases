@@ -24,7 +24,7 @@
     // Email alert bindings (see workers/webhooks/src/email.ts).
     // Gated by EMAIL_NOTIFY_ENABLED; absent SEND_EMAIL → silent no-op.
     "EMAIL_NOTIFY_ENABLED": "true",
-    "EMAIL_NOTIFY_TO": "zach@releases.sh",
+    "EMAIL_NOTIFY_TO": "admin@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
     "WEB_BASE_URL": "https://releases.sh",
   },

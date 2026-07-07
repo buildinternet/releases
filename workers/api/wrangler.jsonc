@@ -57,7 +57,7 @@
     // Recipient must be verified in Cloudflare Email Routing; sender domain
     // (releases.sh) must have Email Routing enabled.
     "EMAIL_NOTIFY_ENABLED": "true",
-    "EMAIL_NOTIFY_TO": "zach@releases.sh",
+    "EMAIL_NOTIFY_TO": "admin@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
     // Sender for user-facing auth email (AUTH_EMAIL binding; see src/auth/email.ts).
     "AUTH_EMAIL_FROM": "noreply@releases.sh",
@@ -718,7 +718,7 @@
         "LISTING_SELF_SERVE_ENABLED": "true",
         "LISTING_SELF_SERVE_PROMOTION_ENABLED": "false",
         "EMAIL_NOTIFY_ENABLED": "false",
-        "EMAIL_NOTIFY_TO": "zach@releases.sh",
+        "EMAIL_NOTIFY_TO": "admin@releases.sh",
         "EMAIL_FROM": "notifications@releases.sh",
         "AUTH_EMAIL_FROM": "noreply@releases.sh",
         "AUTH_EMAIL_FROM_NAME": "Releases",
