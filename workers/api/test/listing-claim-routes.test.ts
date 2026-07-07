@@ -129,6 +129,28 @@ describe("POST /v1/listing/claim", () => {
     expect(res.status).toBe(404);
   });
 
+  it("400s an unparseable domain via the standard envelope", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "not a domain!" }) },
+      env(),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { type: string } };
+    expect(body.error.type).toBe("validation");
+  });
+
+  it("429s when the per-IP listing limiter refuses", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      env({ LISTING_RATE_LIMITER: noLimiter }),
+    );
+    expect(res.status).toBe(429);
+  });
+
   it("404s an unlisted domain", async () => {
     const a = withSession("u1");
     const res = await a.request(
@@ -194,6 +216,16 @@ describe("POST /v1/listing/claim/verify", () => {
     );
     return (await res.json()) as { id: string; token: string };
   }
+
+  it("404s the lane when the kill switch is off", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/claim/verify",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ claimId: "clm_x" }) },
+      env({ LISTING_SELF_SERVE_ENABLED: "false" }),
+    );
+    expect(res.status).toBe(404);
+  });
 
   it("401s when unauthenticated", async () => {
     const a = withSession(null);
@@ -371,6 +403,16 @@ describe("POST /v1/listing/claim/verify", () => {
 });
 
 describe("GET /v1/listing/claims", () => {
+  it("404s the lane when the kill switch is off", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/claims",
+      {},
+      env({ LISTING_SELF_SERVE_ENABLED: "false" }),
+    );
+    expect(res.status).toBe(404);
+  });
+
   it("401s when unauthenticated", async () => {
     const a = withSession(null);
     const res = await a.request("/listing/claims", {}, env());
@@ -418,5 +460,41 @@ describe("GET /v1/listing/claims", () => {
     expect(body.claims[0]!.status).toBe("expired");
     const [row] = await h.db.select().from(orgClaims).where(eq(orgClaims.id, claim.id));
     expect(row!.status).toBe("expired");
+  });
+});
+
+describe("wiring: claim routes ride the composed v1 router", () => {
+  it("mounts through mountV1Routes and 404s deterministically with the switch off", async () => {
+    const { mountV1Routes } = await import("../src/v1-routes.js");
+    const v1 = new Hono();
+    mountV1Routes(v1 as never);
+    const composedApp = new Hono();
+    composedApp.route("/v1", v1);
+    // No Authorization header, no auth bindings: attachFollowsSession must
+    // fail toward anonymous and the handler's own kill-switch 404 must win.
+    const res = await composedApp.fetch(
+      new Request("https://x/v1/listing/claims"),
+      { DB: h.db, LISTING_SELF_SERVE_ENABLED: "false" },
+      { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("registers the three claim routes in the OpenAPI spec", async () => {
+    const { mountV1Routes } = await import("../src/v1-routes.js");
+    const v1 = new Hono();
+    mountV1Routes(v1 as never);
+    const composedApp = new Hono();
+    composedApp.route("/v1", v1);
+    const res = await composedApp.fetch(
+      new Request("https://x/v1/openapi.json"),
+      { ENVIRONMENT: "production" },
+      { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    const spec = (await res.json()) as { paths?: Record<string, Record<string, unknown>> };
+    expect(spec.paths?.["/listing/claim"]?.post).toBeTruthy();
+    expect(spec.paths?.["/listing/claim/verify"]?.post).toBeTruthy();
+    expect(spec.paths?.["/listing/claims"]?.get).toBeTruthy();
   });
 });
