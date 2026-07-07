@@ -1,5 +1,6 @@
 import SchemaBuilder from "@pothos/core";
 import type { MediaItem, Pagination } from "@buildinternet/releases-api-types";
+import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import type { D1Db } from "../db.js";
 import type { Loaders, Org, Product, Release, Source } from "./loaders.js";
 
@@ -19,9 +20,6 @@ export type AppStoreInfo = { platform: "ios" | "macos"; iconUrl: string | null }
 /** Video provider for `type: video` sources. Shape mirrors `videoSourceInfo`
  *  in packages/adapters and `VideoSourceInfoSchema`. */
 export type VideoInfo = { provider: "youtube" | "vimeo" | "wistia" };
-/** Per-category item counts for a release. Shape mirrors
- *  `ReleaseComposition` in @buildinternet/releases-core/composition. */
-export type ReleaseCompositionShape = { bugs: number; features: number; enhancements: number };
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
@@ -38,7 +36,7 @@ export const builder = new SchemaBuilder<{
     Media: MediaItem;
     AppStoreInfo: AppStoreInfo;
     VideoInfo: VideoInfo;
-    ReleaseComposition: ReleaseCompositionShape;
+    ReleaseComposition: ReleaseComposition;
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;
