@@ -48,10 +48,9 @@ Two independent pieces:
    one via the existing `createStubFromManifest`.
 
 ```
-GET /lookups/by-domain (404)  ─┐
-POST /v1/lookups (domain miss) ─┴─ waitUntil ─▶ domain_demand (upsert hit_count++)
+GET /lookups/by-domain (404) ── waitUntil ─▶ domain_demand (upsert hit_count++)
                                                       │
-                                          cron 0 4 * * *  (domain-demand-sweep)
+                                          cron 0 6 * * *  (well-known tick; domain-demand-sweep)
                                                       │
                                    candidates = unlisted, due, top hit_count
                                                       │
@@ -101,16 +100,19 @@ ON CONFLICT (domain) DO UPDATE
   SET hit_count = hit_count + 1, last_seen_at = excluded.last_seen_at
 ```
 
-Call sites (both fire-and-forget via `c.executionCtx.waitUntil(...)`, wrapped so a
+Call site (fire-and-forget via `c.executionCtx.waitUntil(...)`, wrapped so a
 failure is swallowed and logged at `warn` — same fail-open posture as the
 search-query log; capture must never add latency or a failure mode to a read):
 
-- **`GET /lookups/by-domain`** (`routes/lookups.ts`) — on the 404 branch, after
-  `normalizeDomain` yields a valid host. Record the normalized domain.
-- **`POST /v1/lookups`** (`routes/lookups.ts`) — on the domain-coordinate path
-  when it resolves to nothing.
+- **`GET /lookups/by-domain`** (`routes/lookups.ts`) — on the 404 branch
+  (`!orgRow && productRows.length === 0`), after `normalizeDomain` has already
+  yielded a valid host. Record the normalized domain.
 
-**Excluded:** `search?domain=` (search-narrowing param — noisier, lower intent).
+**Only one capture site.** `POST /v1/lookups` is a GitHub-coordinate
+materialization route (`provider: "github"`, `coordinate: owner/repo`) — it has
+no domain-lookup path, so there is nothing to capture there. `search?domain=` is
+also excluded (search-narrowing param — noisier, lower intent). `by-domain`'s
+404 is the single high-signal "who owns this domain, and nobody does" event.
 
 Only syntactically valid normalized hostnames are recorded (the routes already
 `normalizeDomain` and reject invalid input before the miss branch), which is the
@@ -118,8 +120,10 @@ first bound on junk accumulation.
 
 ## Demand sweep
 
-New file `workers/api/src/cron/domain-demand-sweep.ts`, wired into the daily
-`0 4 * * *` scheduled handler next to the existing sweeps.
+New file `workers/api/src/cron/domain-demand-sweep.ts`, dispatched from the
+existing `0 6 * * *` well-known tick in the scheduled handler (same
+domain-manifest lane as `wellKnownSync`), as a second `ctx.waitUntil(...)` in
+that cron block — no new cron trigger added to `wrangler.jsonc`.
 
 **Gate:** `listing-self-serve-enabled` (existing flag, `FLAGS.listingSelfServeEnabled`
 + `LISTING_SELF_SERVE_ENABLED` var). This is the same "create stubs from live
@@ -139,7 +143,7 @@ const PRUNE_STALE_DAYS = 30;  // age past which a single-hit, already-probed jun
 ```
 
 `MAX_PER_RUN = 100` (not 250) is deliberately modest: it leaves ample subrequest
-headroom for the sibling sweeps sharing the `0 4 * * *` tick, and — see the
+headroom for `wellKnownSync` sharing the `0 6 * * *` tick, and — see the
 rate-limit note below — it *is* the sweep's effective rate limit.
 
 **Candidate query** — unlisted, due, highest-demand-first, capped:
@@ -229,10 +233,9 @@ pruned.
 - **Schema/migration:** paired migration; `bun run db:reset:local` applies clean.
 - **Capture unit test:** `recordDomainDemand` inserts then increments `hit_count`
   / advances `last_seen_at` on conflict.
-- **Route capture tests:** `/lookups/by-domain` 404 and `POST /v1/lookups`
-  domain-miss each enqueue a demand row (in-process route smoke with a real
-  in-memory D1, asserting the row after `waitUntil` drains); a *hit* records
-  nothing.
+- **Route capture test:** `/lookups/by-domain` 404 enqueues a demand row
+  (in-process route smoke with a real in-memory D1, asserting the row after
+  `waitUntil` drains); a *hit* (resolvable domain) records nothing.
 - **Sweep tests** (`cron/domain-demand-sweep.test.ts`, injected `fetchImpl`):
   - valid manifest on an unlisted due domain → stub created, `swept_at` stamped;
   - domain already owning an org → excluded by the anti-join (no fetch);
@@ -247,10 +250,10 @@ pruned.
 - `packages/core/src/schema.ts` — `domainDemand` table + types.
 - `workers/api/migrations/2026070800…_add_domain_demand.sql` — paired migration.
 - `workers/api/src/lib/listing/domain-demand.ts` — `recordDomainDemand`.
-- `workers/api/src/routes/lookups.ts` — two `waitUntil` capture call sites.
+- `workers/api/src/routes/lookups.ts` — one `waitUntil` capture call site (by-domain 404).
 - `workers/api/src/cron/domain-demand-sweep.ts` — the sweep + prune.
-- Scheduled handler (`workers/api/src/index.ts` or wherever `0 4 * * *` fans out)
-  — wire `domainDemandSweep(env)` next to the existing sweeps.
+- `workers/api/src/index.ts` — dispatch `domainDemandSweep(env)` as a second
+  `ctx.waitUntil(...)` inside the existing `0 6 * * *` well-known cron block.
 - Tests as above.
 
 ## Rollout
