@@ -3,6 +3,14 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 6, 2026
+
+**Added**
+- Self-serve listing on `/submit` — enter your domain to validate your `releases.json` manifest and activate listing immediately; valid manifests show a plain-language preview of detected release locations with an activate button for unlisted domains; invalid manifests display field-level errors with a re-check loop. New `POST /v1/listing/validate` and `POST /v1/listing/activate` endpoints support the same flow for API and agent callers.
+
+**Changed**
+- Changelog pages load faster — `/changelog` routes now render markdown server-side; shiki and react-markdown no longer ship to the browser on these pages.
+
 ## July 5, 2026
 
 **Added**
