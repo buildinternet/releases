@@ -146,6 +146,4 @@ breakdown live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [Apache-2.0](LICENSE). The published npm packages
 ([`releases-core`](packages/core), [`api-types`](packages/api-types)) are
-deliberately MIT for maximum reuse. The "Releases" name, releases.sh domain, and
-registry branding are not part of the code grant — see
-[TRADEMARKS.md](TRADEMARKS.md).
+deliberately MIT for maximum reuse.
