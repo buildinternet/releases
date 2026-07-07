@@ -195,7 +195,8 @@ export const FLAGS = {
     default: false,
     kind: "kill-switch",
     reads: ["api"],
-    description: "Kill switch for `Cache-Control` response headers. false = caching active.",
+    description:
+      "Kill switch for `Cache-Control` response headers, which drive Workers Cache at the edge. Slow-drain: flipping true stops new entries; already-cached responses age out over their remaining `max-age`. false = caching active.",
   },
   indexingDisabled: {
     key: "indexing-disabled",
