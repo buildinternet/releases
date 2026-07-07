@@ -7,6 +7,7 @@ import { OverviewView } from "@/components/overview-view";
 import { LatestReleasesTeaser } from "@/components/org/latest-releases-teaser";
 import { OrgActivityPanel } from "@/components/org/org-activity-panel";
 import { StubLocations } from "@/components/org/stub-locations";
+import { ClaimPanel } from "@/components/org/claim-panel";
 import { JsonLd } from "@/components/json-ld";
 
 import {
@@ -110,6 +111,7 @@ export default async function OrgOverviewPage({
       <>
         <JsonLd data={jsonLd} />
         <StubLocations orgName={org.name} locations={org.locations ?? []} />
+        <ClaimPanel orgSlug={orgSlug} domain={org.domain} />
       </>
     );
   }
