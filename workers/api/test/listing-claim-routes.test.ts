@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, beforeEach } from "bun:test";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { organizations, orgClaims } from "@buildinternet/releases-core/schema";
+import { organizations, orgClaims, releaseLocations } from "@buildinternet/releases-core/schema";
+import { releaseLocationMatchKey } from "../src/lib/well-known/locator.js";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { listingClaimHandlers } from "../src/routes/listing-claims.js";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
@@ -509,6 +510,183 @@ describe("GET /v1/listing/claims", () => {
     expect(body.claims[0]!.status).toBe("expired");
     const [row] = await h.db.select().from(orgClaims).where(eq(orgClaims.id, claim.id));
     expect(row!.status).toBe("expired");
+  });
+});
+
+describe("POST /v1/listing/promote", () => {
+  const promoteEnv = (overrides: Record<string, unknown> = {}) =>
+    env({ LISTING_SELF_SERVE_PROMOTION_ENABLED: "true", ...overrides });
+
+  async function mintAndVerify(a: Hono, domain = "acme.com") {
+    const mint = await a.request(
+      "/listing/claim",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain }) },
+      env(),
+    );
+    const claim = (await mint.json()) as { id: string; token: string };
+    mockWellKnownFetch(claim.token);
+    await a.request(
+      "/listing/claim/verify",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ claimId: claim.id }) },
+      env(),
+    );
+    return claim;
+  }
+
+  async function seedStubWithLocators(
+    locators: Array<{ feed?: string; url?: string; file?: string }>,
+    orgId = "org_acme",
+  ) {
+    await h.db.update(organizations).set({ tier: "stub" }).where(eq(organizations.id, orgId));
+    for (const loc of locators) {
+      await h.db.insert(releaseLocations).values({
+        orgId,
+        basis: "declared",
+        matchKey: releaseLocationMatchKey(loc),
+        ...loc,
+      });
+    }
+  }
+
+  it("404s the lane when the listing kill switch is off", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv({ LISTING_SELF_SERVE_ENABLED: "false" }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("404s when the promotion flag is off (listing lane on)", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      env(), // no LISTING_SELF_SERVE_PROMOTION_ENABLED override → default false
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("401s when unauthenticated", async () => {
+    const a = withSession(null);
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv(),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("403s when the caller has no verified claim on the domain", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv(),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  // Tier-2 locators (bare url/file) are pended by the materializer without a
+  // network probe (see materialize.ts's tier-2 short-circuit in defaultProbe),
+  // so this stays hermetic — same convention as the admin promote route's own
+  // test (orgs-stub-routes.test.ts: "tier-2 locators, no network"). Tier-1
+  // (feed/github/appstore) live-source coverage lives at the lib level in
+  // promote.test.ts with an injected `probe`, deliberately avoiding a real
+  // `fetchAndParseFeed` call here — `poll-fetch-feed-characterization.test.ts`
+  // installs a process-global `mock.module` stub for `@releases/adapters/feed.js`
+  // (documented flake, #1553-adjacent) that leaks into any later file's real
+  // feed fetch when the full `workers/api` suite runs.
+  it("promotes tier-2 locators: bare url + file both queued for review", async () => {
+    const a = withSession("u1");
+    await seedStubWithLocators([{ url: "https://acme.com/blog" }, { file: "CHANGELOG.md" }]);
+    await mintAndVerify(a);
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      promoted: boolean;
+      sources: { created: number; matched: number };
+      locators: Array<{ locator: string; outcome: string }>;
+    };
+    expect(body.promoted).toBe(true);
+    expect(body.sources.created).toBe(2);
+    expect(body.locators.every((l) => l.outcome === "queued-for-review")).toBe(true);
+
+    const [org] = await h.db.select().from(organizations).where(eq(organizations.id, "org_acme"));
+    expect(org!.tier).toBe("tracked");
+  });
+
+  it("projection leaks no internal plan fields", async () => {
+    const a = withSession("u1");
+    await seedStubWithLocators([{ url: "https://acme.com/blog" }]);
+    await mintAndVerify(a);
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv(),
+    );
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(["locators", "promoted", "sources"]);
+    const locator = (body.locators as Array<Record<string, unknown>>)[0]!;
+    expect(Object.keys(locator).sort()).toEqual(["locator", "outcome"]);
+  });
+
+  it("already-tracked org is a no-op success", async () => {
+    const a = withSession("u1");
+    await mintAndVerify(a); // org_acme starts tier:"tracked" (schema default)
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { promoted: boolean; alreadyTracked?: boolean };
+    expect(body.promoted).toBe(false);
+    expect(body.alreadyTracked).toBe(true);
+  });
+
+  it("passes through 409 when promotion is already in progress for the org", async () => {
+    const a = withSession("u1");
+    await seedStubWithLocators([{ url: "https://acme.com/blog" }]);
+    await mintAndVerify(a);
+    // Simulate an in-flight promotion claim.
+    await h.db
+      .update(organizations)
+      .set({ promotingAt: new Date().toISOString() })
+      .where(eq(organizations.id, "org_acme"));
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv(),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("429s on the per-domain limiter", async () => {
+    const a = withSession("u1");
+    await seedStubWithLocators([{ url: "https://acme.com/blog" }]);
+    await mintAndVerify(a);
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "acme.com" }) },
+      promoteEnv({ LISTING_DOMAIN_RATE_LIMITER: noLimiter }),
+    );
+    expect(res.status).toBe(429);
+  });
+
+  it("404s an unlisted domain", async () => {
+    const a = withSession("u1");
+    const res = await a.request(
+      "/listing/promote",
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ domain: "nope.com" }) },
+      promoteEnv(),
+    );
+    expect(res.status).toBe(404);
   });
 });
 

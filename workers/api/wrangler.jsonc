@@ -38,6 +38,11 @@
     // Kill-switch for the anonymous self-serve listing lane (/v1/listing
     // validate + activate, #1947 phase 2). Off = both routes refuse.
     "LISTING_SELF_SERVE_ENABLED": "true",
+    // Kill-switch for self-serve Tier-1 promotion by verified owners
+    // (/v1/listing/promote, #1947 PR B). Off = route refuses. Distinct from
+    // LISTING_SELF_SERVE_ENABLED because promotion creates live fetching
+    // sources (real spend); off by default until the flow has been validated.
+    "LISTING_SELF_SERVE_PROMOTION_ENABLED": "false",
     // Email notifications (see src/lib/email.ts + src/lib/notifications.ts).
     // Recipient must be verified in Cloudflare Email Routing; sender domain
     // (releases.sh) must have Email Routing enabled.
@@ -695,6 +700,7 @@
         // Staging has no `unsafe` block (no ratelimit bindings); the listing
         // routes' limiter calls no-op there. Var kept for parity.
         "LISTING_SELF_SERVE_ENABLED": "true",
+        "LISTING_SELF_SERVE_PROMOTION_ENABLED": "false",
         "EMAIL_NOTIFY_ENABLED": "false",
         "EMAIL_NOTIFY_TO": "zach@releases.sh",
         "EMAIL_FROM": "notifications@releases.sh",

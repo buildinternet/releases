@@ -280,6 +280,15 @@ export const FLAGS = {
     description:
       "Anonymous self-serve listing lane (/v1/listing validate + activate). Off = both routes refuse.",
   },
+  listingSelfServePromotionEnabled: {
+    key: "listing-self-serve-promotion-enabled",
+    env: "LISTING_SELF_SERVE_PROMOTION_ENABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description:
+      "Self-serve Tier-1 promotion for verified owners (/v1/listing/promote). Off = route refuses. Creates live fetching sources, so this is a genuine incident lever distinct from the zero-cost listing lane.",
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
