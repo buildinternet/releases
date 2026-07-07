@@ -136,6 +136,11 @@ function truncate(text: string, maxLength: number): string {
   return text.slice(0, maxLength) + "…";
 }
 
+/** `env.DB`, falling back to the test-only drizzle override (#1970). */
+function resolveDb(env: { DB?: D1Database; _drizzleOverride?: unknown }): D1Database {
+  return env.DB ?? (env._drizzleOverride as D1Database);
+}
+
 export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
   DeterministicUpdateWorkflowEnv,
   DeterministicUpdateParams
@@ -178,7 +183,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
       );
       if (sourcesWithInserts.length > 0) {
         const stepEnv = this.buildStepEnv();
-        const db = stepEnv.DB ? createDb(stepEnv.DB) : createDb(env._drizzleOverride as D1Database);
+        const db = createDb(resolveDb(stepEnv));
         const fetchEnv = await resolveFetchEnv(stepEnv);
 
         for (const result of sourcesWithInserts) {
@@ -213,13 +218,28 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
                 )) as WorkflowStep["do"],
             } as WorkflowStep;
 
-            await runContentAndEmbedSteps(nsStep, {
-              db,
-              env: stepEnv,
-              source: sourceRow,
-              insertedIds,
-              fetchEnv,
-            });
+            // Content summarize + embed and cache invalidation are independent
+            // concerns (#1970) — a generate-content/embed failure must not
+            // also skip invalidation for a source that already got new
+            // releases persisted. Run each in its own try/catch so one
+            // failing doesn't shadow the other.
+            try {
+              await runContentAndEmbedSteps(nsStep, {
+                db,
+                env: stepEnv,
+                source: sourceRow,
+                insertedIds,
+                fetchEnv,
+              });
+            } catch (err) {
+              logEvent("warn", {
+                component: "deterministic-update",
+                event: "post-insert-steps-failed",
+                sessionId,
+                source: result.source,
+                err: err instanceof Error ? err : String(err),
+              });
+            }
             await runInvalidateLatestCacheStep(nsStep, stepEnv, sourceRow, insertedIds.length);
           } catch (err) {
             logEvent("warn", {
@@ -324,7 +344,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
       },
     };
 
-    const db = createDb(env.DB ?? (env._drizzleOverride as D1Database));
+    const db = createDb(resolveDb(env));
 
     return {
       cloudflareAccountId: cfAccountId,
@@ -360,7 +380,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
     const env = this.env;
     return {
       ...env,
-      DB: env.DB ?? (env._drizzleOverride as D1Database),
+      DB: resolveDb(env),
     } as unknown as PollAndFetchWorkflowEnv;
   }
 }

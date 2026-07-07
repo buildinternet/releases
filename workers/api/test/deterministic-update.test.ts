@@ -12,7 +12,9 @@
  *       `<source>:generate-content` + `<source>:invalidate-latest-cache`
  *       steps (embed is skipped — no RELEASES_INDEX truthy binding in env);
  *   (c) a throwing `generate-content` step doesn't fail the run — the run
- *       still reaches `session:complete`.
+ *       still reaches `session:complete`, and `invalidate-latest-cache`
+ *       still runs (#1970 — content/embed and cache invalidation are
+ *       independent concerns).
  */
 
 import { describe, it, expect, mock } from "bun:test";
@@ -198,9 +200,12 @@ describe("DeterministicUpdateWorkflow — direct-D1 persist + post-insert chain"
     );
 
     expect(names).toContain("acme-changelog:generate-content");
-    // invalidate-latest-cache never runs because the try/catch around the
-    // whole per-source post-insert block aborts after the throw — but the
-    // overall run still completes successfully (not session:error).
+    // invalidate-latest-cache still runs despite the generate-content throw —
+    // the two are independent concerns (#1970), so a summarize/embed failure
+    // must not also skip cache invalidation for a source that already
+    // persisted new releases. The overall run still completes successfully
+    // (not session:error).
+    expect(names).toContain("acme-changelog:invalidate-latest-cache");
     const complete = statusEvents.find((e) => e.type === "session:complete");
     expect(complete).toBeDefined();
     expect(statusEvents.some((e) => e.type === "session:error")).toBe(false);
