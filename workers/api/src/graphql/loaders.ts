@@ -161,6 +161,7 @@ export function createLoaders(db: D1Db) {
             titleGenerated: releasesVisible.titleGenerated,
             titleShort: releasesVisible.titleShort,
             breaking: releasesVisible.breaking,
+            migrationNotes: releasesVisible.migrationNotes,
             url: releasesVisible.url,
             contentHash: releasesVisible.contentHash,
             contentChars: releasesVisible.contentChars,

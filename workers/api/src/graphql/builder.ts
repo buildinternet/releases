@@ -19,6 +19,9 @@ export type AppStoreInfo = { platform: "ios" | "macos"; iconUrl: string | null }
 /** Video provider for `type: video` sources. Shape mirrors `videoSourceInfo`
  *  in packages/adapters and `VideoSourceInfoSchema`. */
 export type VideoInfo = { provider: "youtube" | "vimeo" | "wistia" };
+/** Per-category item counts for a release. Shape mirrors
+ *  `ReleaseComposition` in @buildinternet/releases-core/composition. */
+export type ReleaseCompositionShape = { bugs: number; features: number; enhancements: number };
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
@@ -35,6 +38,7 @@ export const builder = new SchemaBuilder<{
     Media: MediaItem;
     AppStoreInfo: AppStoreInfo;
     VideoInfo: VideoInfo;
+    ReleaseComposition: ReleaseCompositionShape;
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;

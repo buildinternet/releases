@@ -4,7 +4,10 @@ import { parseReleaseParam, releasePath } from "@buildinternet/releases-core/rel
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
-import { api, API_URL, ApiSetupError } from "@/lib/api";
+import { api, API_URL, ApiNotFoundError, ApiSetupError } from "@/lib/api";
+import { graphqlRequest } from "@/lib/graphql/client";
+import { ReleaseDetailDocument } from "@/lib/graphql/__generated__/graphql";
+import type { ReleaseDetailQuery } from "@/lib/graphql/__generated__/graphql";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { Header } from "@/components/header";
@@ -32,6 +35,20 @@ import { OrgAvatar } from "@/components/org-avatar";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
 
+/**
+ * Server-only GraphQL fetch of the release-detail primary data, shared by
+ * `generateMetadata` and the page body. `cache: "no-store"` mirrors the REST
+ * predecessor (`api.release`) — a deleted/suppressed release must 404 on the
+ * very next request, not on the next ISR revalidate cycle.
+ */
+async function fetchRelease(idOrUrl: string) {
+  const data = await graphqlRequest(ReleaseDetailDocument, { idOrUrl }, { cache: "no-store" });
+  if (!data.release) throw new ApiNotFoundError(`/v1/graphql release(${idOrUrl})`);
+  return data.release;
+}
+
+type Release = NonNullable<ReleaseDetailQuery["release"]>;
+
 export async function generateMetadata({
   params,
 }: {
@@ -40,7 +57,7 @@ export async function generateMetadata({
   const { id: rawParam } = await params;
   const { id } = parseReleaseParam(rawParam);
   try {
-    const release = await api.release(id);
+    const release = await fetchRelease(id);
     const { descriptive, versionLabel } = deriveFeedTitle(release);
     const heading = descriptive ?? versionLabel ?? release.title;
     // Keep the version discoverable in the title tag for version-specific search
@@ -52,12 +69,17 @@ export async function generateMetadata({
       .replace(/\s+/g, " ")
       .trim();
     const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
-    const shouldNoIndex = shouldNoIndexRelease(release);
+    const shouldNoIndex = shouldNoIndexRelease({
+      content: release.content,
+      summary: release.summary,
+      sourceIsHidden: release.source.isHidden,
+      org: release.source.org,
+    });
     return {
       // Clamp so the <title> doesn't run long enough for search engines to
       // truncate it; the global `%s — releases.sh` template still adds the brand.
-      title: clampTitle(`${titleHeading} — ${release.sourceName}`),
-      description: description || `${heading} release notes for ${release.sourceName}`,
+      title: clampTitle(`${titleHeading} — ${release.source.name}`),
+      description: description || `${heading} release notes for ${release.source.name}`,
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
         type: "article",
@@ -85,9 +107,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const { id: rawParam } = await params;
   const { id } = parseReleaseParam(rawParam);
 
-  let release;
+  let raw: Release;
   try {
-    release = await api.release(id);
+    raw = await fetchRelease(id);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -133,10 +155,34 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   // Friendly-URL canonicalization: bare-ID, stale-slug, and mangled-slug
   // segments all 308 to the current canonical `/release/<id>-<slug>` form.
   // The ID is the routing key; the slug is derived from the current title.
-  const canonicalPath = releasePath(release);
+  const canonicalPath = releasePath(raw);
   if (canonicalPath !== `/release/${rawParam}`) {
     permanentRedirect(canonicalPath);
   }
+
+  // Flatten the GraphQL `source { org, product, appStore, video }` nesting
+  // back onto the release-detail shape the rest of this page (and its shared
+  // helpers, e.g. `deriveFeedTitle`/`shouldNoIndexRelease`) were written
+  // against — this mirrors the REST `ReleaseDetail` wire shape 1:1.
+  const release = {
+    ...raw,
+    sourceSlug: raw.source.slug,
+    sourceName: raw.source.name,
+    sourceType: raw.source.type,
+    org: raw.source.org,
+    product: raw.source.product,
+    appStore: raw.source.appStore,
+    video: raw.source.video,
+    // GraphQL nulls out absent optional strings; the REST-derived MediaItem
+    // type (still used by ReleaseContent + related components) expects them
+    // omitted instead.
+    media: raw.media.map((m) => ({
+      type: m.type,
+      url: m.url,
+      ...(m.alt != null ? { alt: m.alt } : {}),
+      ...(m.r2Url != null ? { r2Url: m.r2Url } : {}),
+    })),
+  };
 
   const sourcePath = release.org
     ? `/${release.org.slug}/${release.sourceSlug}`
