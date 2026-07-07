@@ -18,7 +18,8 @@ import {
 } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
 import { enableOnDemandIsr } from "@/lib/static-params";
-import { getOrg } from "../_lib/org-data";
+import { getOrg, getOrgOverview } from "../_lib/org-data";
+import { getOrgReleases } from "../_lib/org-releases-data";
 
 // On-demand ISR: render once per org on first request, then serve from cache
 // (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
@@ -118,9 +119,10 @@ export default async function OrgOverviewPage({
 
   let activityResult;
   let heatmapResult;
-  let releasesResult;
+  let releaseItems: Awaited<ReturnType<typeof getOrgReleases>>["releases"];
+  let overview: Awaited<ReturnType<typeof getOrgOverview>>;
   try {
-    [activityResult, heatmapResult, releasesResult] = await Promise.all([
+    [activityResult, heatmapResult, releaseItems, overview] = await Promise.all([
       tryFetch(api.orgActivity(orgSlug, activityFrom), {
         route: `/${orgSlug}`,
         event: "org-activity-fetch-failed",
@@ -130,10 +132,10 @@ export default async function OrgOverviewPage({
         event: "org-heatmap-fetch-failed",
       }),
       // Drives the JSON-LD release ItemList only; a failure just drops the list.
-      tryFetch(api.orgReleases(orgSlug, { limit: 20 }), {
-        route: `/${orgSlug}`,
-        event: "org-releases-fetch-failed",
-      }),
+      getOrgReleases(orgSlug, 20)
+        .then((r) => r.releases)
+        .catch(() => []),
+      getOrgOverview(orgSlug),
     ]);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
@@ -144,10 +146,9 @@ export default async function OrgOverviewPage({
   const heatmap: OrgHeatmap | null = heatmapResult.data;
 
   const releaseListId = `${orgUrl}#releases`;
-  const releaseItems = releasesResult.data?.releases ?? [];
   // Declare the overview's provenance as internal release-page citations (#1934).
-  const overviewCitationNode = org.overview
-    ? buildOverviewCitationJsonLd(org.overview.citations, {
+  const overviewCitationNode = overview
+    ? buildOverviewCitationJsonLd(overview.citations, {
         orgName: org.name,
         aboutId: orgNodeId,
         dateModified: lastModified,
@@ -196,7 +197,7 @@ export default async function OrgOverviewPage({
   return (
     <>
       <JsonLd data={jsonLd} />
-      {org.overview && <OverviewView page={org.overview} variant="org" />}
+      {overview && <OverviewView page={overview} variant="org" />}
       {releaseItems.length > 0 && (
         <LatestReleasesTeaser orgSlug={orgSlug} releases={releaseItems} />
       )}
@@ -212,7 +213,7 @@ export default async function OrgOverviewPage({
           trackingSince={org.trackingSince}
         />
       )}
-      {!activity && !org.overview && activityResult.error && (
+      {!activity && !overview && activityResult.error && (
         <p className="py-4 text-sm text-[var(--fg-3)]">
           Couldn&apos;t load release activity. Try refreshing.
         </p>

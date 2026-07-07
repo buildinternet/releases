@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesFeedResponse } from "@/lib/api";
+import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { withReleaseBodyHtml, orgRowVariant } from "@/lib/render-release-body";
 import { OrgReleaseProductLinks } from "@/components/org/org-release-product-links";
@@ -9,6 +9,7 @@ import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
 import { getOrg } from "../../_lib/org-data";
+import { getOrgReleases } from "../../_lib/org-releases-data";
 import { enableOnDemandIsr } from "@/lib/static-params";
 
 // On-demand ISR: render once per org on first request, then serve from cache
@@ -54,9 +55,9 @@ export default async function OrgReleasesPage({
   const { orgSlug } = await params;
 
   let org;
-  let initialReleases: OrgReleasesFeedResponse;
+  let initialReleases: Awaited<ReturnType<typeof getOrgReleases>>;
   try {
-    [org, initialReleases] = await Promise.all([getOrg(orgSlug), api.orgReleases(orgSlug)]);
+    [org, initialReleases] = await Promise.all([getOrg(orgSlug), getOrgReleases(orgSlug)]);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     if (err instanceof ApiNotFoundError) notFound();
@@ -111,7 +112,7 @@ export default async function OrgReleasesPage({
       <OrgReleaseList
         orgSlug={orgSlug}
         initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
-        initialCursor={initialReleases.pagination.nextCursor}
+        initialCursor={initialReleases.nextCursor}
         multipleSourcesExist={org.sources.length > 1}
         availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
         orgAvatarUrl={orgAvatarUrl}

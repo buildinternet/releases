@@ -41,6 +41,18 @@ export const OrgDiscoveryEnum = builder.enumType("OrgDiscovery", {
   },
 });
 
+const ORG_STATUSES = ["stub", "tracked"] as const;
+export type OrgStatus = (typeof ORG_STATUSES)[number];
+
+// Wire name is `status`; the DB column is `tier` (see Org.status resolver).
+export const OrgStatusEnum = builder.enumType("OrgStatus", {
+  description:
+    "Org tier (#1947): `stub` has no processed sources yet (declared locations only); `tracked` is a normal org whose sources fetch and process.",
+  values: Object.fromEntries(ORG_STATUSES.map((v) => [v, { value: v }])) as {
+    [K in OrgStatus]: { value: K };
+  },
+});
+
 export const ReleaseTypeEnum = builder.enumType("ReleaseType", {
   description:
     "Whether a release is a normal feature/changelog entry or a seasonal/quarterly rollup catch-all.",

@@ -118,8 +118,8 @@ export default async function OrgLayout({
                 isHidden={org.isHidden ?? false}
                 autoGenerateContent={org.autoGenerateContent ?? false}
                 featured={org.featured ?? false}
-                discovery={org.discovery}
-                fetchPaused={org.fetchPaused}
+                discovery={org.discovery ?? undefined}
+                fetchPaused={org.fetchPaused ?? undefined}
                 notice={org.notice}
                 variant="subtle"
                 align="right"

@@ -1,0 +1,83 @@
+query OrgPage($idOrSlug: String!) {
+  org(idOrSlug: $idOrSlug) {
+    id
+    slug
+    name
+    domain
+    description
+    category
+    avatarUrl
+    isHidden
+    autoGenerateContent
+    overviewCadenceDays
+    featured
+    fetchPaused
+    discovery
+    status
+    locations
+    tags
+    aliases
+    notice
+    sourceCount
+    releaseCount
+    releasesLast30Days
+    avgReleasesPerWeek
+    lastFetchedAt
+    lastPolledAt
+    trackingSince
+    accounts {
+      platform
+      handle
+    }
+    products {
+      id
+      slug
+      name
+      url
+      description
+      kind
+      createdAt
+      sourceCount
+      releaseCount
+    }
+    sources {
+      id
+      slug
+      name
+      type
+      url
+      fetchPriority
+      lastFetchedAt
+      lastPolledAt
+      medianGapDays
+      discovery
+      createdAt
+      kind
+      isPrimary
+      isHidden
+      changeDetectedAt
+      consecutiveNoChange
+      consecutiveErrors
+      nextFetchAfter
+      lastRetieredAt
+      metadata
+      stars
+      starsFetchedAt
+      releaseCount
+      latestVersion
+      latestDate
+      latestAddedAt
+      appStore {
+        platform
+        iconUrl
+      }
+      video {
+        provider
+      }
+      product {
+        slug
+        name
+      }
+    }
+  }
+}

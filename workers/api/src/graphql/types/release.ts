@@ -22,6 +22,8 @@ export const ReleaseType = builder.objectType("Release", {
     url: t.exposeString("url", { nullable: true }),
     publishedAt: t.expose("publishedAt", { type: "DateTime", nullable: true }),
     fetchedAt: t.expose("fetchedAt", { type: "DateTime" }),
+    prerelease: t.exposeBoolean("prerelease", { nullable: true }),
+    breaking: t.exposeString("breaking", { nullable: true }),
 
     summary: t.exposeString("summary", {
       nullable: true,

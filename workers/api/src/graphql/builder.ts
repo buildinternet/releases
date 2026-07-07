@@ -20,6 +20,8 @@ export type AppStoreInfo = { platform: "ios" | "macos"; iconUrl: string | null }
 /** Video provider for `type: video` sources. Shape mirrors `videoSourceInfo`
  *  in packages/adapters and `VideoSourceInfoSchema`. */
 export type VideoInfo = { provider: "youtube" | "vimeo" | "wistia" };
+/** A linked social/platform account for an org. Mirrors `OrgAccountItemSchema`. */
+export type OrgAccount = { platform: string; handle: string };
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
@@ -37,6 +39,7 @@ export const builder = new SchemaBuilder<{
     AppStoreInfo: AppStoreInfo;
     VideoInfo: VideoInfo;
     ReleaseComposition: ReleaseComposition;
+    OrgAccount: OrgAccount;
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;

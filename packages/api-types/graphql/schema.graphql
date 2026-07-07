@@ -22,6 +22,11 @@ scalar JSON
 """An image, video, or GIF attached to a release."""
 type Media {
   alt: String
+
+  """
+  Human watch URL for a hosted-video card promoted from an inline body link (Wistia/Loom/Vimeo/YouTube); `url` holds the poster. Absent for ordinary image/gif media.
+  """
+  linkUrl: String
   r2Url: String
   type: MediaKind!
   url: String!
@@ -38,23 +43,50 @@ enum MediaKind {
 An organization (the entity that produces one or more products / sources).
 """
 type Org {
+  accounts: [OrgAccount!]!
+  aliases: [String!]!
+  autoGenerateContent: Boolean
   avatarUrl: String
+  avgReleasesPerWeek: Float!
   category: String
   createdAt: DateTime!
   description: String
   discovery: OrgDiscovery!
   domain: String
+  featured: Boolean
+  fetchPaused: Boolean
   id: ID!
   isHidden: Boolean!
+  lastFetchedAt: DateTime
+  lastPolledAt: DateTime
+
+  """
+  Declared release locations for a stub org (empty sources array). Null for tracked orgs.
+  """
+  locations: JSON
   name: String!
+  notice: JSON
+  overviewCadenceDays: Int
   products: [Product!]!
+  releaseCount: Int!
+  releasesLast30Days: Int!
   slug: String!
+  sourceCount: Int!
 
   """
   All non-hidden sources for the org. Use Product.sources for product-scoped lists.
   """
   sources: [Source!]!
+  status: OrgStatus!
+  tags: [String!]!
+  trackingSince: DateTime!
   updatedAt: DateTime!
+}
+
+"""A linked social/platform account for an org (e.g. github, x)."""
+type OrgAccount {
+  handle: String!
+  platform: String!
 }
 
 """Catalog-shaped page of organizations."""
@@ -70,6 +102,14 @@ enum OrgDiscovery {
   agent
   curated
   on_demand
+}
+
+"""
+Org tier (#1947): `stub` has no processed sources yet (declared locations only); `tracked` is a normal org whose sources fetch and process.
+"""
+enum OrgStatus {
+  stub
+  tracked
 }
 
 """Page-based pagination envelope. Mirrors REST's Pagination shape."""
@@ -88,9 +128,12 @@ type Product {
   createdAt: DateTime!
   description: String
   id: ID!
+  kind: String
   name: String!
   org: Org!
+  releaseCount: Int!
   slug: String!
+  sourceCount: Int!
   sources: [Source!]!
   url: String
 }
@@ -125,6 +168,8 @@ type Query {
 
 """A single release (changelog entry)."""
 type Release {
+  breaking: String
+
   """
   Per-category item counts from the AI release-content pass, when available.
   """
@@ -144,6 +189,7 @@ type Release {
   Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none.
   """
   migrationNotes: String
+  prerelease: Boolean
   publishedAt: DateTime
   source: Source!
 
@@ -198,22 +244,37 @@ type Source {
   Platform + icon for App Store sources; null for all other source types. #1206
   """
   appStore: AppStoreInfo
+  changeDetectedAt: DateTime
+  consecutiveErrors: Int
+  consecutiveNoChange: Int
   createdAt: DateTime!
   discovery: String!
   fetchPriority: String
   id: ID!
   isHidden: Boolean
+  isPrimary: Boolean
+  kind: String
   lastFetchedAt: DateTime
+  lastPolledAt: DateTime
+  lastRetieredAt: DateTime
+  latestAddedAt: DateTime
+  latestDate: DateTime
+  latestVersion: String
   medianGapDays: Float
+  metadata: String
   name: String!
+  nextFetchAfter: DateTime
   org: Org!
   product: Product
+  releaseCount: Int!
 
   """
   Recent non-suppressed releases, newest first. The loader fetches up to 50 per source per batch; `limit` clamps to that ceiling.
   """
   releases(limit: Int = 20): [Release!]!
   slug: String!
+  stars: Int
+  starsFetchedAt: DateTime
   type: SourceType!
   url: String!
 

@@ -12,6 +12,11 @@ export const MediaType = builder.objectType("Media", {
     url: t.exposeString("url"),
     alt: t.exposeString("alt", { nullable: true }),
     r2Url: t.exposeString("r2Url", { nullable: true }),
+    linkUrl: t.exposeString("linkUrl", {
+      nullable: true,
+      description:
+        "Human watch URL for a hosted-video card promoted from an inline body link (Wistia/Loom/Vimeo/YouTube); `url` holds the poster. Absent for ordinary image/gif media.",
+    }),
   }),
 });
 
