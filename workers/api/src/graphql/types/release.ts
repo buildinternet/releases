@@ -1,6 +1,16 @@
+import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseReleaseMedia } from "../../utils.js";
 import { builder } from "../builder.js";
 import { ReleaseTypeEnum } from "./enums.js";
+
+builder.objectType("ReleaseComposition", {
+  description: "Per-category item counts for a release ('12 fixes · 3 features · 1 enhancement').",
+  fields: (t) => ({
+    bugs: t.exposeInt("bugs"),
+    features: t.exposeInt("features"),
+    enhancements: t.exposeInt("enhancements"),
+  }),
+});
 
 export const ReleaseType = builder.objectType("Release", {
   description: "A single release (changelog entry).",
@@ -31,6 +41,18 @@ export const ReleaseType = builder.objectType("Release", {
     content: t.exposeString("content", {
       description:
         "Full markdown body. Often large — request only when you need it (this is the field-selection win).",
+    }),
+    migrationNotes: t.exposeString("migrationNotes", {
+      nullable: true,
+      description:
+        "Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none.",
+    }),
+
+    composition: t.field({
+      type: "ReleaseComposition",
+      nullable: true,
+      description: "Per-category item counts from the AI release-content pass, when available.",
+      resolve: (release) => parseCompositionFromMetadata(release.metadata ?? null),
     }),
 
     media: t.field({

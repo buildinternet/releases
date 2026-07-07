@@ -32,6 +32,7 @@ export const SourceType = builder.objectType("Source", {
     lastFetchedAt: t.expose("lastFetchedAt", { type: "DateTime", nullable: true }),
     medianGapDays: t.exposeFloat("medianGapDays", { nullable: true }),
     discovery: t.exposeString("discovery"),
+    isHidden: t.exposeBoolean("isHidden", { nullable: true }),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
 
     appStore: t.field({

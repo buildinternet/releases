@@ -1,0 +1,5 @@
+-- Marker migration (no DDL): adds `migrationNotes` to the `releasesVisible`
+-- type-level mirror in packages/core/src/schema.ts. The real `releases_visible`
+-- view is `SELECT releases.*`, so it already exposes `migration_notes`
+-- (added by 20260315000000_migration_notes) — this file exists only to pair
+-- the schema.ts edit with a migration per the CI "schema-change" gate.

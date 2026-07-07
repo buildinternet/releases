@@ -1,0 +1,51 @@
+query ReleaseDetail($idOrUrl: String!) {
+  release(idOrUrl: $idOrUrl) {
+    id
+    title
+    version
+    type
+    url
+    publishedAt
+    fetchedAt
+    summary
+    titleGenerated
+    titleShort
+    content
+    migrationNotes
+    composition {
+      bugs
+      features
+      enhancements
+    }
+    media {
+      type
+      url
+      alt
+      r2Url
+    }
+    source {
+      slug
+      name
+      type
+      isHidden
+      org {
+        slug
+        name
+        avatarUrl
+        isHidden
+        discovery
+      }
+      product {
+        slug
+        name
+      }
+      appStore {
+        platform
+        iconUrl
+      }
+      video {
+        provider
+      }
+    }
+  }
+}

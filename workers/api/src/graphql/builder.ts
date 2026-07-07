@@ -1,5 +1,6 @@
 import SchemaBuilder from "@pothos/core";
 import type { MediaItem, Pagination } from "@buildinternet/releases-api-types";
+import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import type { D1Db } from "../db.js";
 import type { Loaders, Org, Product, Release, Source } from "./loaders.js";
 
@@ -35,6 +36,7 @@ export const builder = new SchemaBuilder<{
     Media: MediaItem;
     AppStoreInfo: AppStoreInfo;
     VideoInfo: VideoInfo;
+    ReleaseComposition: ReleaseComposition;
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;

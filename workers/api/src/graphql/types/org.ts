@@ -12,6 +12,7 @@ export const OrgType = builder.objectType("Org", {
     category: t.exposeString("category", { nullable: true }),
     avatarUrl: t.exposeString("avatarUrl", { nullable: true }),
     discovery: t.field({ type: OrgDiscoveryEnum, resolve: (o) => o.discovery }),
+    isHidden: t.exposeBoolean("isHidden"),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
     updatedAt: t.expose("updatedAt", { type: "DateTime" }),
 

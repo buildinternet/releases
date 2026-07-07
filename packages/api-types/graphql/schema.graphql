@@ -45,6 +45,7 @@ type Org {
   discovery: OrgDiscovery!
   domain: String
   id: ID!
+  isHidden: Boolean!
   name: String!
   products: [Product!]!
   slug: String!
@@ -125,6 +126,11 @@ type Query {
 """A single release (changelog entry)."""
 type Release {
   """
+  Per-category item counts from the AI release-content pass, when available.
+  """
+  composition: ReleaseComposition
+
+  """
   Full markdown body. Often large — request only when you need it (this is the field-selection win).
   """
   content: String!
@@ -133,6 +139,11 @@ type Release {
 
   """Images / videos / GIFs attached to the release. Empty list if none."""
   media: [Media!]!
+
+  """
+  Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none.
+  """
+  migrationNotes: String
   publishedAt: DateTime
   source: Source!
 
@@ -154,6 +165,15 @@ type Release {
   type: ReleaseType!
   url: String
   version: String
+}
+
+"""
+Per-category item counts for a release ('12 fixes · 3 features · 1 enhancement').
+"""
+type ReleaseComposition {
+  bugs: Int!
+  enhancements: Int!
+  features: Int!
 }
 
 """
@@ -182,6 +202,7 @@ type Source {
   discovery: String!
   fetchPriority: String
   id: ID!
+  isHidden: Boolean
   lastFetchedAt: DateTime
   medianGapDays: Float
   name: String!
