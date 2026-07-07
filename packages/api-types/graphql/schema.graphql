@@ -15,6 +15,54 @@ enum AppStorePlatform {
   macos
 }
 
+"""
+A curated, named group of orgs/products (independent of the `category` taxonomy).
+"""
+type Collection {
+  description: String
+  isFeatured: Boolean!
+  memberCount: Int!
+  name: String!
+
+  """Up to 3 interleaved org/product members, for inline avatar chips."""
+  previewMembers: [CollectionMember!]!
+  slug: String!
+}
+
+"""
+One entry in a collection's `previewMembers` — either an org or a product.
+"""
+union CollectionMember = CollectionMemberOrg | CollectionMemberProduct
+
+"""An org as it appears in a collection's member preview."""
+type CollectionMemberOrg {
+  avatarUrl: String
+  description: String
+  domain: String
+  githubHandle: String
+  name: String!
+  slug: String!
+}
+
+"""A product as it appears in a collection's member preview."""
+type CollectionMemberProduct {
+  description: String
+  name: String!
+  org: CollectionMemberProductOrg!
+  slug: String!
+}
+
+"""
+Parent-org context on a product member, so the chip can render the org's avatar. Subset of CollectionMemberOrg — no `description`, matching REST's ProductParentOrg.
+"""
+type CollectionMemberProductOrg {
+  avatarUrl: String
+  domain: String
+  githubHandle: String
+  name: String!
+  slug: String!
+}
+
 scalar DateTime
 
 scalar JSON
@@ -57,6 +105,9 @@ type Org {
   fetchPaused: Boolean
   id: ID!
   isHidden: Boolean!
+
+  """Most recent release `publishedAt` across the org's sources."""
+  lastActivity: DateTime
   lastFetchedAt: DateTime
   lastPolledAt: DateTime
 
@@ -68,6 +119,9 @@ type Org {
   notice: JSON
   overviewCadenceDays: Int
   products: [Product!]!
+
+  """Releases published in the last 30 days."""
+  recentReleaseCount: Int!
   releaseCount: Int!
   releasesLast30Days: Int!
   slug: String!
@@ -77,8 +131,14 @@ type Org {
   All non-hidden sources for the org. Use Product.sources for product-scoped lists.
   """
   sources: [Source!]!
+
+  """30-day daily release counts, oldest first."""
+  sparkline: [Int!]!
   status: OrgStatus!
   tags: [String!]!
+
+  """Up to 3 product names, alphabetical."""
+  topProducts: [String!]!
   trackingSince: DateTime!
   updatedAt: DateTime!
 }
@@ -140,6 +200,14 @@ type Product {
 
 type Query {
   """
+  Curated collections with a member count and up to 3 preview members, ordered by name.
+  """
+  collections(
+    """Restrict to homepage-featured collections."""
+    featured: Boolean
+  ): [Collection!]!
+
+  """
   Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice.
   """
   latestReleases(
@@ -154,8 +222,20 @@ type Query {
   """Look up an organization by id (org_…) or slug."""
   org(idOrSlug: String!): Org
 
-  """Catalog-shaped page of organizations, newest first."""
-  orgs(limit: Int = 20, page: Int = 1): OrgConnection!
+  """
+  Directory-shaped page of organizations, ordered by name. Hidden orgs are always excluded; orgs with zero visible releases are excluded unless `includeEmpty` is set (stub-tier orgs are kept regardless — same semantics as REST `GET /v1/orgs`).
+  """
+  orgs(
+    """Restrict to orgs editorially promoted for the home page."""
+    featured: Boolean
+
+    """
+    Include orgs with zero visible releases (stub-tier orgs are always kept).
+    """
+    includeEmpty: Boolean = false
+    limit: Int = 20
+    page: Int = 1
+  ): OrgConnection!
 
   """Look up a release by id (rel_…) — or by url for legacy callers."""
   release(idOrUrl: String!): Release
@@ -164,6 +244,11 @@ type Query {
   Look up a source by id (src_…). Slug-only lookups require an org context.
   """
   source(id: String!): Source
+
+  """
+  Flat registry rollup (orgs/sources/releases) — the homepage banner shape.
+  """
+  stats: Stats!
 }
 
 """A single release (changelog entry)."""
@@ -292,6 +377,15 @@ enum SourceType {
   github
   scrape
   video
+}
+
+"""
+Flat registry rollup (the homepage banner shape). See REST `/v1/stats`.
+"""
+type Stats {
+  orgs: Int!
+  releases: Int!
+  sources: Int!
 }
 
 """

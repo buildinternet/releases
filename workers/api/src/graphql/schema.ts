@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, lte, not, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, lt, lte, not, or, sql } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
@@ -6,8 +6,10 @@ import { nowIso } from "@buildinternet/releases-core/dates";
 import {
   domainAliases,
   organizations,
+  organizationsActive,
   releasesVisible,
   sources,
+  sourcesActive,
 } from "@buildinternet/releases-core/schema";
 import { builder } from "./builder.js";
 import "./types/org.js";
@@ -15,7 +17,12 @@ import "./types/product.js";
 import "./types/source.js";
 import "./types/release.js";
 import "./types/media.js";
+import "./types/stats.js";
+import "./types/collection.js";
 import { SourceTypeEnum } from "./types/enums.js";
+import { getOrgIdsForList, countOrgsForList } from "../queries/orgs.js";
+import { getCollectionsList } from "../queries/collections.js";
+import type { CollectionMemberOrg, CollectionMemberProduct } from "./builder.js";
 
 const isOrgId = (s: string) => s.startsWith("org_");
 const isReleaseId = (s: string) => s.startsWith("rel_");
@@ -70,41 +77,92 @@ builder.queryType({
 
     orgs: t.field({
       type: "OrgConnection",
-      description: "Catalog-shaped page of organizations, newest first.",
+      description:
+        "Directory-shaped page of organizations, ordered by name. Hidden orgs are always " +
+        "excluded; orgs with zero visible releases are excluded unless `includeEmpty` is set " +
+        "(stub-tier orgs are kept regardless — same semantics as REST `GET /v1/orgs`).",
       args: {
         page: t.arg.int({ required: false, defaultValue: 1 }),
         limit: t.arg.int({ required: false, defaultValue: DEFAULT_PAGE_SIZE }),
+        featured: t.arg.boolean({
+          required: false,
+          description: "Restrict to orgs editorially promoted for the home page.",
+        }),
+        includeEmpty: t.arg.boolean({
+          required: false,
+          defaultValue: false,
+          description: "Include orgs with zero visible releases (stub-tier orgs are always kept).",
+        }),
       },
       resolve: async (_root, args, ctx) => {
         const pageSize = clampLimit(args.limit);
         const page = Math.max(1, args.page ?? 1);
         const offset = (page - 1) * pageSize;
-        const where = isNull(organizations.deletedAt);
-        const [items, [{ n: totalItems }]] = await Promise.all([
-          ctx.db
-            .select()
-            .from(organizations)
-            .where(where)
-            // Tiebreak on id: createdAt is millisecond-precision ISO strings
-            // and bulk inserts collide; without the secondary key, page
-            // boundaries shuffle between requests.
-            .orderBy(desc(organizations.createdAt), desc(organizations.id))
-            .limit(pageSize)
-            .offset(offset),
-          ctx.db
-            .select({ n: sql<number>`count(*)` })
-            .from(organizations)
-            .where(where),
+        const opts = {
+          includeEmpty: args.includeEmpty ?? false,
+          featured: args.featured ?? undefined,
+        };
+        const [ids, counts] = await Promise.all([
+          getOrgIdsForList(ctx.db, { limit: pageSize, offset }, opts),
+          countOrgsForList(ctx.db, undefined, opts),
         ]);
+        // orgById is a dataloader — calling `.load` for every id inside one
+        // Promise.all coalesces into a single batched query, and the
+        // resolved array preserves the ids' (name-ordered) sequence.
+        const items = (await Promise.all(ids.map((id) => ctx.loaders.orgById.load(id)))).filter(
+          (o): o is NonNullable<typeof o> => o !== null,
+        );
         return {
           items,
           pagination: computePagination({
             page,
             pageSize,
             returned: items.length,
-            totalItems: Number(totalItems),
+            totalItems: counts.totalItems,
           }),
         };
+      },
+    }),
+
+    stats: t.field({
+      type: "Stats",
+      description: "Flat registry rollup (orgs/sources/releases) — the homepage banner shape.",
+      resolve: async (_root, _args, ctx) => {
+        const [[orgCount], [sourceCount], [releaseCount]] = await Promise.all([
+          ctx.db.select({ n: count() }).from(organizationsActive),
+          ctx.db.select({ n: count() }).from(sourcesActive),
+          ctx.db
+            .select({ n: count() })
+            .from(releasesVisible)
+            .innerJoin(sourcesActive, eq(releasesVisible.sourceId, sourcesActive.id)),
+        ]);
+        return { orgs: orgCount.n, sources: sourceCount.n, releases: releaseCount.n };
+      },
+    }),
+
+    collections: t.field({
+      type: ["Collection"],
+      description:
+        "Curated collections with a member count and up to 3 preview members, ordered by name.",
+      args: {
+        featured: t.arg.boolean({
+          required: false,
+          description: "Restrict to homepage-featured collections.",
+        }),
+      },
+      resolve: async (_root, args, ctx) => {
+        const rows = await getCollectionsList(ctx.db, { featured: args.featured ?? false });
+        return rows.map((r) => ({
+          slug: r.slug,
+          name: r.name,
+          description: r.description,
+          memberCount: r.memberCount,
+          isFeatured: r.isFeatured,
+          previewMembers: (r.previewMembers ?? []) as (
+            | CollectionMemberOrg
+            | CollectionMemberProduct
+          )[],
+        }));
       },
     }),
 

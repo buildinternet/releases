@@ -27,6 +27,83 @@ export type SourceType = "agent" | "appstore" | "feed" | "github" | "scrape" | "
 /** Provider for a video source. */
 export type VideoProvider = "vimeo" | "wistia" | "youtube";
 
+export type HomepageAllOrgsQueryVariables = Exact<{
+  limit: number;
+}>;
+
+export type HomepageAllOrgsQuery = {
+  orgs: {
+    items: Array<{
+      slug: string;
+      name: string;
+      domain: string | null;
+      avatarUrl: string | null;
+      sourceCount: number;
+      releaseCount: number;
+      recentReleaseCount: number;
+      lastActivity: string | null;
+      topProducts: Array<string>;
+      sparkline: Array<number>;
+    }>;
+  };
+};
+
+export type HomepageCollectionsQueryVariables = Exact<{
+  featured?: boolean | null | undefined;
+}>;
+
+export type HomepageCollectionsQuery = {
+  collections: Array<{
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+    isFeatured: boolean;
+    previewMembers: Array<
+      | {
+          __typename: "CollectionMemberOrg";
+          slug: string;
+          name: string;
+          avatarUrl: string | null;
+          githubHandle: string | null;
+        }
+      | {
+          __typename: "CollectionMemberProduct";
+          slug: string;
+          name: string;
+          org: {
+            slug: string;
+            name: string;
+            avatarUrl: string | null;
+            githubHandle: string | null;
+          };
+        }
+    >;
+  }>;
+};
+
+export type HomepageOrgsStatsQueryVariables = Exact<{
+  featuredLimit: number;
+}>;
+
+export type HomepageOrgsStatsQuery = {
+  stats: { orgs: number; sources: number; releases: number };
+  featuredOrgs: {
+    items: Array<{
+      slug: string;
+      name: string;
+      domain: string | null;
+      avatarUrl: string | null;
+      sourceCount: number;
+      releaseCount: number;
+      recentReleaseCount: number;
+      lastActivity: string | null;
+      topProducts: Array<string>;
+      sparkline: Array<number>;
+    }>;
+  };
+};
+
 export type HomepageTickerQueryVariables = Exact<{
   limit: number;
   exclude: Array<SourceType> | SourceType;
@@ -202,6 +279,248 @@ export type ReleaseDetailQuery = {
   } | null;
 };
 
+export const HomepageAllOrgsDocument = {
+  __meta__: { hash: "sha256:b5f9fa07fd60f90839b1f976d116320290ce322946963b2d376139a8c7371b7e" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "HomepageAllOrgs" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "limit" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "orgs" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "includeEmpty" },
+                value: { kind: "BooleanValue", value: false },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: { kind: "Variable", name: { kind: "Name", value: "limit" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "domain" } },
+                      { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                      { kind: "Field", name: { kind: "Name", value: "sourceCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "releaseCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "recentReleaseCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "lastActivity" } },
+                      { kind: "Field", name: { kind: "Name", value: "topProducts" } },
+                      { kind: "Field", name: { kind: "Name", value: "sparkline" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<HomepageAllOrgsQuery, HomepageAllOrgsQueryVariables>;
+export const HomepageCollectionsDocument = {
+  __meta__: { hash: "sha256:eb30575702a89df06aadfc4035de798b950dadc12db002342012ab9ebe1ae3fb" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "HomepageCollections" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "featured" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "collections" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "featured" },
+                value: { kind: "Variable", name: { kind: "Name", value: "featured" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "memberCount" } },
+                { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "previewMembers" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "__typename" } },
+                      {
+                        kind: "InlineFragment",
+                        typeCondition: {
+                          kind: "NamedType",
+                          name: { kind: "Name", value: "CollectionMemberOrg" },
+                        },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "slug" } },
+                            { kind: "Field", name: { kind: "Name", value: "name" } },
+                            { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                            { kind: "Field", name: { kind: "Name", value: "githubHandle" } },
+                          ],
+                        },
+                      },
+                      {
+                        kind: "InlineFragment",
+                        typeCondition: {
+                          kind: "NamedType",
+                          name: { kind: "Name", value: "CollectionMemberProduct" },
+                        },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "slug" } },
+                            { kind: "Field", name: { kind: "Name", value: "name" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "org" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                  { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                                  { kind: "Field", name: { kind: "Name", value: "githubHandle" } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<HomepageCollectionsQuery, HomepageCollectionsQueryVariables>;
+export const HomepageOrgsStatsDocument = {
+  __meta__: { hash: "sha256:46fa99b87fe2392f5f59b0508a47fa516b4f994537ea5d8906f11e6da18a71fd" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "HomepageOrgsStats" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "featuredLimit" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "stats" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "orgs" } },
+                { kind: "Field", name: { kind: "Name", value: "sources" } },
+                { kind: "Field", name: { kind: "Name", value: "releases" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            alias: { kind: "Name", value: "featuredOrgs" },
+            name: { kind: "Name", value: "orgs" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "featured" },
+                value: { kind: "BooleanValue", value: true },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: { kind: "Variable", name: { kind: "Name", value: "featuredLimit" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "domain" } },
+                      { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                      { kind: "Field", name: { kind: "Name", value: "sourceCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "releaseCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "recentReleaseCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "lastActivity" } },
+                      { kind: "Field", name: { kind: "Name", value: "topProducts" } },
+                      { kind: "Field", name: { kind: "Name", value: "sparkline" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<HomepageOrgsStatsQuery, HomepageOrgsStatsQueryVariables>;
 export const HomepageTickerDocument = {
   __meta__: { hash: "sha256:eb15101c1fc45e4d3bc46bceb18b929e840f636c694ac36b498e32280e9873cc" },
   kind: "Document",

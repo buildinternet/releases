@@ -118,6 +118,37 @@ export const OrgType = builder.objectType("Org", {
         "All non-hidden sources for the org. Use Product.sources for product-scoped lists.",
       resolve: (org, _args, ctx) => ctx.loaders.sourcesByOrgId.load(org.id),
     }),
+
+    // List-stats fields below resolve through `orgListStatsByOrgId` /
+    // `orgSparklineByOrgId` — batched dataloaders, so a page of orgs costs one
+    // query per field, not N.
+    recentReleaseCount: t.field({
+      type: "Int",
+      description: "Releases published in the last 30 days.",
+      resolve: async (org, _args, ctx) =>
+        (await ctx.loaders.orgListStatsByOrgId.load(org.id)).recentReleaseCount,
+    }),
+
+    lastActivity: t.field({
+      type: "DateTime",
+      nullable: true,
+      description: "Most recent release `publishedAt` across the org's sources.",
+      resolve: async (org, _args, ctx) =>
+        (await ctx.loaders.orgListStatsByOrgId.load(org.id)).lastActivity,
+    }),
+
+    topProducts: t.field({
+      type: ["String"],
+      description: "Up to 3 product names, alphabetical.",
+      resolve: async (org, _args, ctx) =>
+        (await ctx.loaders.orgListStatsByOrgId.load(org.id)).topProducts,
+    }),
+
+    sparkline: t.field({
+      type: ["Int"],
+      description: "30-day daily release counts, oldest first.",
+      resolve: (org, _args, ctx) => ctx.loaders.orgSparklineByOrgId.load(org.id),
+    }),
   }),
 });
 

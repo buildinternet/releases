@@ -2,11 +2,27 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { OrgListItem } from "@/lib/api";
 import { HoverCard } from "@/components/hover-card";
 import { OrgAvatar } from "@/components/org-avatar";
 import { Sparkline } from "@/components/sparkline";
 import { AbsoluteDateTooltip } from "@/components/date-tooltip";
+
+/** Shape needed by the homepage org table — matches the `Org` fields selected
+ * by the `HomepageOrgsStats` / `HomepageAllOrgs` GraphQL queries. Structural
+ * (not a named import from either operation's generated type) so this
+ * component doesn't couple to a specific query's name. */
+export interface OrgListItem {
+  slug: string;
+  name: string;
+  domain: string | null;
+  avatarUrl: string | null;
+  sourceCount: number;
+  releaseCount: number;
+  recentReleaseCount: number;
+  lastActivity: string | null;
+  topProducts: string[];
+  sparkline: number[];
+}
 
 type SortKey = "name" | "recentReleaseCount" | "lastActivity";
 type SortDir = "asc" | "desc";

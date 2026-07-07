@@ -1,0 +1,16 @@
+query HomepageAllOrgs($limit: Int!) {
+  orgs(includeEmpty: false, limit: $limit) {
+    items {
+      slug
+      name
+      domain
+      avatarUrl
+      sourceCount
+      releaseCount
+      recentReleaseCount
+      lastActivity
+      topProducts
+      sparkline
+    }
+  }
+}

@@ -87,7 +87,71 @@ export async function countOrgsForList(
   };
 }
 
-function orgListWhere(q?: string, category?: string, featured?: boolean) {
+/**
+ * Ordered org ids for a directory-shaped list page (same filter semantics as
+ * `getOrgsWithStats`/`countOrgsForList`), without the per-org stats columns.
+ * Callers that need the stats fields resolve them separately (e.g. the
+ * GraphQL `orgs` query batches them through a dataloader so the same shape
+ * works for both the list and a single `org(idOrSlug)` lookup).
+ */
+export async function getOrgIdsForList(
+  db: D1Db,
+  pagination: { limit: number; offset: number },
+  opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
+): Promise<string[]> {
+  const where = orgListWhere(undefined, opts.category, opts.featured);
+  const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0 OR o.tier = 'stub'`;
+  const rows = await db.all<{ id: string }>(sql`
+    SELECT o.id
+    FROM organizations_active o
+    LEFT JOIN sources_visible s ON s.org_id = o.id
+    LEFT JOIN releases_visible r ON r.source_id = s.id
+    ${where}
+    GROUP BY o.id
+    ${having}
+    ORDER BY o.name, o.id
+    LIMIT ${pagination.limit} OFFSET ${pagination.offset}
+  `);
+  return rows.map((r) => r.id);
+}
+
+export type OrgStatsRow = {
+  id: string;
+  source_count: number;
+  release_count: number;
+  recent_release_count: number;
+  last_activity: string | null;
+  top_products: string | null;
+};
+
+/**
+ * Per-org stats (source/release counts, last activity, top products) for a
+ * batch of org ids — the GraphQL `Org` type's dataloader-backed fields
+ * resolve through this so a page of orgs costs one query, not N.
+ */
+export async function getOrgStatsByIds(
+  db: D1Db,
+  cutoff30d: string,
+  orgIds: string[],
+): Promise<OrgStatsRow[]> {
+  if (orgIds.length === 0) return [];
+  return db.all<OrgStatsRow>(sql`
+    SELECT
+      o.id,
+      COUNT(DISTINCT s.id) AS source_count,
+      COUNT(r.id) AS release_count,
+      MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
+      COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
+      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products
+    FROM organizations_active o
+    LEFT JOIN sources_visible s ON s.org_id = o.id
+    LEFT JOIN releases_visible r ON r.source_id = s.id
+    WHERE o.id IN ${orgIds}
+    GROUP BY o.id
+  `);
+}
+
+export function orgListWhere(q?: string, category?: string, featured?: boolean) {
   // Hidden orgs ("don't feature") never appear in the directory listing,
   // regardless of the empty-org toggle. is_hidden is NOT NULL so `= 0` is safe.
   const conds = [sql`o.is_hidden = 0`];

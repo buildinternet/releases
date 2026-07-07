@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
+import { DEFAULT_PAGE_SIZE } from "@buildinternet/releases-core/cli-contracts";
+import { ApiSetupError } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import { graphqlRequest } from "@/lib/graphql/client";
-import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
-import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
+import {
+  HomepageTickerDocument,
+  HomepageOrgsStatsDocument,
+  HomepageAllOrgsDocument,
+  HomepageCollectionsDocument,
+} from "@/lib/graphql/__generated__/graphql";
+import type {
+  HomepageTickerQuery,
+  HomepageOrgsStatsQuery,
+  HomepageCollectionsQuery,
+} from "@/lib/graphql/__generated__/graphql";
 import { ConveyorBackdrop } from "@/components/conveyor-backdrop";
 import { Header } from "@/components/header";
 import { SiteNotice } from "@/components/site-notice";
@@ -20,7 +30,9 @@ import { formatStars } from "@/lib/format-stars";
 import {
   FeaturedCollections,
   FeaturedCollectionsCollapsible,
+  type HomeCollectionListItem,
 } from "@/components/featured-collections";
+import type { OrgListItem } from "@/components/org-table";
 
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 
@@ -252,35 +264,59 @@ rel_CKUKVIG-gOOnIpjk0uC_x  Auto-review Run Mode                         2026-05-
 ];
 
 export default async function HomePage() {
-  let stats: Awaited<ReturnType<typeof api.stats>> | undefined;
-  let orgsForTable: Awaited<ReturnType<typeof api.orgs>>["items"] = [];
+  let stats: HomepageOrgsStatsQuery["stats"] | undefined;
+  let orgsForTable: OrgListItem[] = [];
   let latest: TickerItem[] = [];
-  let featuredCollections: CollectionListItem[] = [];
+  let featuredCollections: HomeCollectionListItem[] = [];
   try {
-    const [tickerResult, fetchedStats, featuredOrgsResult, fetchedFeatured] = await Promise.all([
+    // `orgsAndStats` folds stats + the featured-orgs page into one persisted
+    // operation: in the REST version these two calls already shared fate
+    // (both were plain `await`s in the same `Promise.all`, no independent
+    // `.catch`), so combining them preserves behavior while cutting a round
+    // trip. Ticker and collections keep their own operations — ticker
+    // degrades via `tryFetch` (empty ticker, page still renders) and
+    // collections degrades via `.catch(() => [])` (hidden promo block) —
+    // folding either into `orgsAndStats` would make a failure there also
+    // fail this now-combined query, breaking that independence.
+    const [tickerResult, orgsAndStatsResult, collectionsResult] = await Promise.all([
       tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 40, exclude: ["github"] }), {
         route: "/",
         event: "homepage-ticker-fetch-failed",
       }),
-      api.stats(),
-      api.orgs({ featured: true }),
+      // Degrades to an empty table + hidden stats banner rather than failing
+      // the render: the page is ISR'd (60s), so a transient API failure —
+      // including the deploy window where the web build runs before the API
+      // worker ships a new persisted query — self-heals on the next
+      // revalidate instead of failing the whole build.
+      tryFetch(graphqlRequest(HomepageOrgsStatsDocument, { featuredLimit: DEFAULT_PAGE_SIZE }), {
+        route: "/",
+        event: "homepage-orgs-stats-fetch-failed",
+      }),
       // Promo block is non-essential — a collections hiccup must never break
       // the homepage, so degrade to an empty (hidden) block on failure.
-      api.collections({ featured: true }).catch(() => [] as CollectionListItem[]),
+      graphqlRequest(HomepageCollectionsDocument, { featured: true }).catch(
+        () => ({ collections: [] }) as HomepageCollectionsQuery,
+      ),
     ]);
-    stats = fetchedStats;
+    // A misconfigured API base is a setup problem, not a degradable panel —
+    // surface the setup page like every other route.
+    if (orgsAndStatsResult.error instanceof ApiSetupError) throw orgsAndStatsResult.error;
+    stats = orgsAndStatsResult.data?.stats;
     latest = tickerResult.data?.latestReleases.items ?? [];
-    featuredCollections = fetchedFeatured;
+    featuredCollections = collectionsResult.collections;
 
     // Fallback: if no orgs have been editorially featured yet (true on first
     // deploy), fall back to the regular org list so the home page never renders
     // a blank table. Once orgs are curated via PATCH /v1/orgs/:slug { featured:
     // true } this branch will stop executing.
-    if (featuredOrgsResult.items.length > 0) {
-      orgsForTable = featuredOrgsResult.items;
+    if (orgsAndStatsResult.data && orgsAndStatsResult.data.featuredOrgs.items.length === 0) {
+      const allOrgsResult = await tryFetch(
+        graphqlRequest(HomepageAllOrgsDocument, { limit: DEFAULT_PAGE_SIZE }),
+        { route: "/", event: "homepage-all-orgs-fetch-failed" },
+      );
+      orgsForTable = allOrgsResult.data?.orgs.items ?? [];
     } else {
-      const allOrgsResult = await api.orgs({ includeEmpty: false });
-      orgsForTable = allOrgsResult.items;
+      orgsForTable = orgsAndStatsResult.data?.featuredOrgs.items ?? [];
     }
   } catch (err) {
     if (err instanceof ApiSetupError) {

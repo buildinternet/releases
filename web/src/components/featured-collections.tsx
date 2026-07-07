@@ -1,7 +1,51 @@
 import Link from "next/link";
-import type { CollectionListItem, CollectionMember } from "@/lib/api";
 import { OrgAvatar } from "@/components/org-avatar";
-import { memberKey } from "@/lib/member-key";
+
+/**
+ * Homepage-only collection member shapes, matching the `HomepageCollections`
+ * GraphQL operation's selection
+ * (`web/src/lib/graphql/operations/homepage-collections.graphql`). GraphQL
+ * unions discriminate on `__typename` rather than the REST wire's `kind`
+ * field — kept local to this component (rather than folded into the shared
+ * `@/lib/member-key`, which other non-homepage components still consume
+ * against the REST `CollectionMember` shape).
+ */
+export interface HomeCollectionMemberOrg {
+  __typename: "CollectionMemberOrg";
+  slug: string;
+  name: string;
+  avatarUrl: string | null;
+  githubHandle: string | null;
+}
+
+export interface HomeCollectionMemberProduct {
+  __typename: "CollectionMemberProduct";
+  slug: string;
+  name: string;
+  org: {
+    slug: string;
+    name: string;
+    avatarUrl: string | null;
+    githubHandle: string | null;
+  };
+}
+
+export type HomeCollectionMember = HomeCollectionMemberOrg | HomeCollectionMemberProduct;
+
+export interface HomeCollectionListItem {
+  slug: string;
+  name: string;
+  description: string | null;
+  memberCount: number;
+  isFeatured: boolean;
+  previewMembers: HomeCollectionMember[];
+}
+
+/** Mirrors `@/lib/member-key`'s `memberKey`, discriminating on `__typename`. */
+function homeMemberKey(m: HomeCollectionMember): string {
+  if (m.__typename === "CollectionMemberOrg") return `org:${m.slug}`;
+  return `product:${m.org.slug}/${m.slug}`;
+}
 
 /** How many collections the homepage promo block renders, regardless of how
  * many the API returns featured. Keeps the block "one or two". */
@@ -20,7 +64,7 @@ const MAX_AVATARS = 3;
  *
  * Both render nothing when there are no featured collections.
  */
-export function FeaturedCollections({ collections }: { collections: CollectionListItem[] }) {
+export function FeaturedCollections({ collections }: { collections: HomeCollectionListItem[] }) {
   const featured = collections.slice(0, MAX_FEATURED);
   if (featured.length === 0) return null;
 
@@ -35,7 +79,7 @@ export function FeaturedCollections({ collections }: { collections: CollectionLi
 export function FeaturedCollectionsCollapsible({
   collections,
 }: {
-  collections: CollectionListItem[];
+  collections: HomeCollectionListItem[];
 }) {
   const featured = collections.slice(0, MAX_FEATURED);
   if (featured.length === 0) return null;
@@ -73,7 +117,7 @@ function SectionLabel() {
 }
 
 /** The featured collection cards plus a "browse all" link — shared by both shells. */
-function FeaturedList({ collections }: { collections: CollectionListItem[] }) {
+function FeaturedList({ collections }: { collections: HomeCollectionListItem[] }) {
   return (
     <div className="space-y-4">
       <ul className="space-y-4">
@@ -107,7 +151,13 @@ function FeaturedList({ collections }: { collections: CollectionListItem[] }) {
 }
 
 /** Compact avatar stack + count for one collection's preview members. */
-function MemberChips({ members, totalCount }: { members: CollectionMember[]; totalCount: number }) {
+function MemberChips({
+  members,
+  totalCount,
+}: {
+  members: HomeCollectionMember[];
+  totalCount: number;
+}) {
   const shown = members.slice(0, MAX_AVATARS);
   const remaining = totalCount - shown.length;
   return (
@@ -115,13 +165,14 @@ function MemberChips({ members, totalCount }: { members: CollectionMember[]; tot
       <div className="flex -space-x-1.5">
         {shown.map((m) => {
           const avatar =
-            m.kind === "org"
+            m.__typename === "CollectionMemberOrg"
               ? { avatarUrl: m.avatarUrl, githubHandle: m.githubHandle, name: m.name }
               : { avatarUrl: m.org.avatarUrl, githubHandle: m.org.githubHandle, name: m.org.name };
-          const title = m.kind === "org" ? m.name : `${m.name} · ${m.org.name}`;
+          const title =
+            m.__typename === "CollectionMemberOrg" ? m.name : `${m.name} · ${m.org.name}`;
           return (
             <span
-              key={memberKey(m)}
+              key={homeMemberKey(m)}
               title={title}
               className="ring-2 ring-stone-50 dark:ring-stone-900 rounded-full"
             >

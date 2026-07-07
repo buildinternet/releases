@@ -1,0 +1,21 @@
+query HomepageOrgsStats($featuredLimit: Int!) {
+  stats {
+    orgs
+    sources
+    releases
+  }
+  featuredOrgs: orgs(featured: true, limit: $featuredLimit) {
+    items {
+      slug
+      name
+      domain
+      avatarUrl
+      sourceCount
+      releaseCount
+      recentReleaseCount
+      lastActivity
+      topProducts
+      sparkline
+    }
+  }
+}
