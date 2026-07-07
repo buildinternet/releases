@@ -16,6 +16,7 @@ import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type { D1Db } from "../db.js";
 import { RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { computeAvgPerWeek } from "../utils.js";
+import { getOrgStatsByIds, getOrgSparklines } from "../queries/orgs.js";
 
 type Org = typeof organizations.$inferSelect;
 type Product = typeof products.$inferSelect;
@@ -355,6 +356,25 @@ export function createLoaders(db: D1Db) {
       });
     }),
 
+    // Batches the source/release counts + top products behind Org's list-stats
+    // fields — one query per (chunked) page of orgs, whether resolving a
+    // single `org(idOrSlug)` or a full `orgs` list.
+    orgListStatsByOrgId: new DataLoader<string, OrgListStats>(async (ids) => {
+      const cutoff30d = daysAgoIso(30);
+      const rows = await chunkedFetch(ids, (chunk) => getOrgStatsByIds(db, cutoff30d, chunk));
+      const byId = new Map(rows.map((r) => [r.id, r] as const));
+      return ids.map((id) => {
+        const r = byId.get(id);
+        return {
+          sourceCount: Number(r?.source_count ?? 0),
+          releaseCount: Number(r?.release_count ?? 0),
+          recentReleaseCount: Number(r?.recent_release_count ?? 0),
+          lastActivity: r?.last_activity ?? null,
+          topProducts: r?.top_products ? r.top_products.split("||") : [],
+        };
+      });
+    }),
+
     // Mirrors `getOrgSourcesWithStats` (workers/api/src/queries/orgs.ts),
     // batched by source id instead of scoped to a single org so it composes
     // with the existing sourcesByOrgId / sourcesByProductId loaders.
@@ -414,7 +434,40 @@ export function createLoaders(db: D1Db) {
         return productIds.map((id) => byProductId.get(id) ?? { sourceCount: 0, releaseCount: 0 });
       },
     ),
+
+    // 30-day per-day release counts, aligned into a fixed 30-length array —
+    // mirrors the REST `/v1/orgs` sparkline shaping. `getOrgSparklines`
+    // already chunks internally past 90 ids.
+    orgSparklineByOrgId: new DataLoader<string, number[]>(async (ids) => {
+      const cutoff30d = daysAgoIso(30);
+      const rows = await getOrgSparklines(db, cutoff30d, ids as string[]);
+      const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+      const map = new Map<string, number[]>();
+      for (const row of rows) {
+        if (!map.has(row.org_id)) {
+          map.set(
+            row.org_id,
+            Array.from({ length: 30 }, () => 0),
+          );
+        }
+        const dayDate = new Date(row.date + "T00:00:00Z");
+        const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+        const idx = 29 - daysAgo;
+        if (idx >= 0 && idx < 30) map.get(row.org_id)![idx] = row.cnt;
+      }
+      return ids.map((id) => map.get(id) ?? Array.from({ length: 30 }, () => 0));
+    }),
   };
 }
+
+/** Org list-page aggregate — mirrors the REST `/v1/orgs` catalog stats
+ *  (`getOrgStatsByIds` in workers/api/src/queries/orgs.ts), batched by org id. */
+export type OrgListStats = {
+  sourceCount: number;
+  releaseCount: number;
+  recentReleaseCount: number;
+  lastActivity: string | null;
+  topProducts: string[];
+};
 
 export type { Org, Product, Source, Release };

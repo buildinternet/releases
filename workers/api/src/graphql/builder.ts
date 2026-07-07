@@ -1,5 +1,11 @@
 import SchemaBuilder from "@pothos/core";
-import type { MediaItem, Pagination } from "@buildinternet/releases-api-types";
+import type {
+  MediaItem,
+  Pagination,
+  CollectionMemberOrg as CollectionMemberOrgWire,
+  CollectionMemberProduct as CollectionMemberProductWire,
+  ProductParentOrg,
+} from "@buildinternet/releases-api-types";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import type { D1Db } from "../db.js";
 import type { Loaders, Org, Product, Release, Source } from "./loaders.js";
@@ -22,6 +28,21 @@ export type AppStoreInfo = { platform: "ios" | "macos"; iconUrl: string | null }
 export type VideoInfo = { provider: "youtube" | "vimeo" | "wistia" };
 /** A linked social/platform account for an org. Mirrors `OrgAccountItemSchema`. */
 export type OrgAccount = { platform: string; handle: string };
+/** Flat registry rollup — the wire shape the homepage banner reads. Subset of
+ *  REST `/v1/stats`'s back-compat flat fields; the richer `StatsSummary`
+ *  fields (sourceHealth, sourceActivity, …) aren't GraphQL homepage needs. */
+export type Stats = { orgs: number; sources: number; releases: number };
+export type CollectionMemberOrg = CollectionMemberOrgWire & { kind: "org" };
+export type CollectionMemberProduct = CollectionMemberProductWire & { kind: "product" };
+export type CollectionMember = CollectionMemberOrg | CollectionMemberProduct;
+export type Collection = {
+  slug: string;
+  name: string;
+  description: string | null;
+  memberCount: number;
+  isFeatured: boolean;
+  previewMembers: CollectionMember[];
+};
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
@@ -43,6 +64,11 @@ export const builder = new SchemaBuilder<{
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;
+    Stats: Stats;
+    Collection: Collection;
+    CollectionMemberOrg: CollectionMemberOrg;
+    CollectionMemberProduct: CollectionMemberProduct;
+    CollectionMemberProductOrg: ProductParentOrg;
   };
   Scalars: {
     ID: { Input: string; Output: string };

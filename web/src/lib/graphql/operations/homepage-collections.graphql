@@ -1,0 +1,28 @@
+query HomepageCollections($featured: Boolean) {
+  collections(featured: $featured) {
+    slug
+    name
+    description
+    memberCount
+    isFeatured
+    previewMembers {
+      __typename
+      ... on CollectionMemberOrg {
+        slug
+        name
+        avatarUrl
+        githubHandle
+      }
+      ... on CollectionMemberProduct {
+        slug
+        name
+        org {
+          slug
+          name
+          avatarUrl
+          githubHandle
+        }
+      }
+    }
+  }
+}
