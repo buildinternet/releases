@@ -350,6 +350,10 @@ export {
   ClaimCheckOutcomeSchema,
   ClaimVerifyResultSchema,
   ListingClaimsResultSchema,
+  ListingPromoteBodySchema,
+  ListingPromoteLocatorOutcomeSchema,
+  ListingPromoteLocatorSchema,
+  ListingPromoteResultSchema,
   type ListingValidateBody,
   type ListingActivateBody,
   type ListingIssue,
@@ -364,6 +368,10 @@ export {
   type ClaimCheckOutcome,
   type ClaimVerifyResult,
   type ListingClaimsResult,
+  type ListingPromoteBody,
+  type ListingPromoteLocatorOutcome,
+  type ListingPromoteLocator,
+  type ListingPromoteResult,
 } from "./schemas/listing.js";
 export {
   SourceListItemSchema,

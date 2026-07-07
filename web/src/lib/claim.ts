@@ -13,6 +13,7 @@ import type {
   OrgClaim,
   ClaimVerifyResult,
   ListingClaimsResult,
+  ListingPromoteResult,
 } from "@buildinternet/releases-api-types";
 import { apiBase } from "./user-api";
 
@@ -78,4 +79,22 @@ export async function listClaims(): Promise<OrgClaim[]> {
     "Could not load your claims.",
   );
   return data.claims;
+}
+
+/**
+ * Self-serve Tier-1 promotion (#1947 PR B). Requires a verified claim on the
+ * domain — the API 403s otherwise — and 404s when the promotion kill switch
+ * is off (distinct from the listing-lane switch).
+ */
+export async function promoteListing(domain: string): Promise<ListingPromoteResult> {
+  return requestClaimJson<ListingPromoteResult>(
+    `${apiBase()}/v1/listing/promote`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain }),
+    },
+    "Could not enable tracking. Please try again.",
+  );
 }

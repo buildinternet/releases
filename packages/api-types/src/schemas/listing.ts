@@ -136,3 +136,35 @@ export const ListingClaimsResultSchema = z.strictObject({
   claims: z.array(OrgClaimSchema),
 });
 export type ListingClaimsResult = z.infer<typeof ListingClaimsResultSchema>;
+
+/**
+ * Self-serve Tier-1 promotion (#1947 epic item 3, PR B): a verified owner
+ * promotes their claimed stub to `tracked`. Independent of the internal
+ * materialization plan — this is the stable public projection.
+ */
+
+export const ListingPromoteBodySchema = z.strictObject({
+  domain: z.string().min(1).max(255),
+});
+export type ListingPromoteBody = z.infer<typeof ListingPromoteBodySchema>;
+
+export const ListingPromoteLocatorOutcomeSchema = z.enum(["live", "queued-for-review"]);
+export type ListingPromoteLocatorOutcome = z.infer<typeof ListingPromoteLocatorOutcomeSchema>;
+
+export const ListingPromoteLocatorSchema = z.strictObject({
+  locator: z.string(),
+  outcome: ListingPromoteLocatorOutcomeSchema,
+});
+export type ListingPromoteLocator = z.infer<typeof ListingPromoteLocatorSchema>;
+
+export const ListingPromoteResultSchema = z.strictObject({
+  promoted: z.boolean(),
+  /** Present and true only for the idempotent already-`tracked` no-op. */
+  alreadyTracked: z.boolean().optional(),
+  sources: z.strictObject({
+    created: z.number(),
+    matched: z.number(),
+  }),
+  locators: z.array(ListingPromoteLocatorSchema),
+});
+export type ListingPromoteResult = z.infer<typeof ListingPromoteResultSchema>;

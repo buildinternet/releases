@@ -240,6 +240,9 @@ export type Env = {
     LISTING_DOMAIN_RATE_LIMITER?: {
       limit(options: { key: string }): Promise<{ success: boolean }>;
     };
+    // Self-serve Tier-1 promotion for verified owners (/v1/listing/promote,
+    // #1947 PR B). Off = route refuses. Reuses LISTING_DOMAIN_RATE_LIMITER.
+    LISTING_SELF_SERVE_PROMOTION_ENABLED?: string;
     // Per-sub / per-user caps on POST /v1/me/webhooks/:id/test (see test-rate-limit.ts).
     WEBHOOK_TEST_RATE_LIMIT_ENABLED?: string;
     WEBHOOK_TEST_SUB_RATE_LIMITER?: {

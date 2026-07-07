@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeEach } from "bun:test";
 const ORIG = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
 process.env.NEXT_PUBLIC_BETTER_AUTH_URL = "https://api.test";
 
-const { startClaim, verifyClaim, listClaims } = await import("./claim.js");
+const { startClaim, verifyClaim, listClaims, promoteListing } = await import("./claim.js");
 
 type Call = { url: string; init?: RequestInit };
 let calls: Call[] = [];
@@ -137,5 +137,65 @@ describe("claim client", () => {
     expect(claims).toEqual([]);
     expect(calls[0]!.url).toBe("https://api.test/v1/listing/claims");
     expect(calls[0]!.init?.credentials).toBe("include");
+  });
+
+  it("promotes a listing via POST with the domain", async () => {
+    mockFetch({
+      promoted: true,
+      sources: { created: 1, matched: 0 },
+      locators: [{ locator: "https://acme.com/feed.xml", outcome: "live" }],
+    });
+    const result = await promoteListing("acme.com");
+    expect(result.promoted).toBe(true);
+    expect(calls[0]!.url).toBe("https://api.test/v1/listing/promote");
+    expect(calls[0]!.init?.method).toBe("POST");
+    expect(calls[0]!.init?.credentials).toBe("include");
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({ domain: "acme.com" }));
+  });
+
+  it("decodes the 403 envelope when no verified claim exists", async () => {
+    mockFetch(
+      {
+        error: {
+          code: "forbidden",
+          type: "forbidden",
+          message: "verified ownership claim is required",
+        },
+      },
+      false,
+      403,
+    );
+    await expect(promoteListing("acme.com")).rejects.toThrow(/verified ownership claim/);
+  });
+
+  it("decodes the 409 envelope on promotion contention", async () => {
+    mockFetch(
+      { error: { code: "conflict", type: "conflict", message: "Promotion already in progress" } },
+      false,
+      409,
+    );
+    await expect(promoteListing("acme.com")).rejects.toThrow(/already in progress/);
+  });
+
+  it("falls back to a generic message when promote fails without a decodable body", async () => {
+    calls = [];
+    globalThis.fetch = (async () => {
+      return {
+        ok: false,
+        status: 404,
+        json: async () => {
+          throw new Error("not json");
+        },
+      } as unknown as Response;
+    }) as typeof fetch;
+    await expect(promoteListing("acme.com")).rejects.toThrow(/Could not enable tracking/);
+  });
+
+  it("wraps a transport failure on promote in the same friendly message", async () => {
+    calls = [];
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    await expect(promoteListing("acme.com")).rejects.toThrow(/Could not reach the server/);
   });
 });
