@@ -30,10 +30,49 @@ export const SourceType = builder.objectType("Source", {
     url: t.exposeString("url"),
     fetchPriority: t.exposeString("fetchPriority", { nullable: true }),
     lastFetchedAt: t.expose("lastFetchedAt", { type: "DateTime", nullable: true }),
+    lastPolledAt: t.expose("lastPolledAt", { type: "DateTime", nullable: true }),
     medianGapDays: t.exposeFloat("medianGapDays", { nullable: true }),
     discovery: t.exposeString("discovery"),
     isHidden: t.exposeBoolean("isHidden", { nullable: true }),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
+
+    kind: t.exposeString("kind", { nullable: true }),
+    isPrimary: t.exposeBoolean("isPrimary", { nullable: true }),
+    changeDetectedAt: t.expose("changeDetectedAt", { type: "DateTime", nullable: true }),
+    consecutiveNoChange: t.exposeInt("consecutiveNoChange", { nullable: true }),
+    consecutiveErrors: t.exposeInt("consecutiveErrors", { nullable: true }),
+    nextFetchAfter: t.expose("nextFetchAfter", { type: "DateTime", nullable: true }),
+    lastRetieredAt: t.expose("lastRetieredAt", { type: "DateTime", nullable: true }),
+    metadata: t.exposeString("metadata", { nullable: true }),
+    stars: t.exposeInt("stargazersCount", { nullable: true }),
+    starsFetchedAt: t.expose("starsFetchedAt", { type: "DateTime", nullable: true }),
+
+    releaseCount: t.field({
+      type: "Int",
+      resolve: async (source, _args, ctx) =>
+        (await ctx.loaders.sourceStatsBySourceId.load(source.id)).releaseCount,
+    }),
+
+    latestVersion: t.field({
+      type: "String",
+      nullable: true,
+      resolve: async (source, _args, ctx) =>
+        (await ctx.loaders.sourceStatsBySourceId.load(source.id)).latestVersion,
+    }),
+
+    latestDate: t.field({
+      type: "DateTime",
+      nullable: true,
+      resolve: async (source, _args, ctx) =>
+        (await ctx.loaders.sourceStatsBySourceId.load(source.id)).latestDate,
+    }),
+
+    latestAddedAt: t.field({
+      type: "DateTime",
+      nullable: true,
+      resolve: async (source, _args, ctx) =>
+        (await ctx.loaders.sourceStatsBySourceId.load(source.id)).latestAddedAt,
+    }),
 
     appStore: t.field({
       type: "AppStoreInfo",

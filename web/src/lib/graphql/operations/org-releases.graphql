@@ -1,0 +1,42 @@
+query OrgReleases($orgIdOrSlug: String!, $limit: Int!) {
+  latestReleases(orgIdOrSlug: $orgIdOrSlug, limit: $limit) {
+    nextCursor
+    items {
+      id
+      title
+      version
+      type
+      url
+      publishedAt
+      fetchedAt
+      summary
+      titleGenerated
+      titleShort
+      content
+      prerelease
+      breaking
+      media {
+        type
+        url
+        alt
+        r2Url
+      }
+      source {
+        slug
+        name
+        type
+        appStore {
+          platform
+          iconUrl
+        }
+        video {
+          provider
+        }
+        product {
+          slug
+          name
+        }
+      }
+    }
+  }
+}

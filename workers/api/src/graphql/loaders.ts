@@ -1,13 +1,21 @@
 import DataLoader from "dataloader";
-import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, max, min, sql } from "drizzle-orm";
 import {
+  domainAliases,
+  orgAccounts,
+  orgTags,
   organizations,
   products,
+  releases,
   releasesVisible,
   sources,
+  sourcesVisible,
+  tags,
 } from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type { D1Db } from "../db.js";
 import { RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { computeAvgPerWeek } from "../utils.js";
 
 type Org = typeof organizations.$inferSelect;
 type Product = typeof products.$inferSelect;
@@ -15,6 +23,27 @@ type Source = typeof sources.$inferSelect;
 type Release = typeof releasesVisible.$inferSelect;
 
 export type Loaders = ReturnType<typeof createLoaders>;
+
+/** Org-level aggregate stats — mirrors the REST `GET /v1/orgs/:slug` computation
+ *  (`workers/api/src/routes/orgs.ts`). Batched by org id via one grouped query
+ *  per stat family rather than N+1 per-org round trips. */
+export type OrgStats = {
+  releaseCount: number;
+  releasesLast30Days: number;
+  avgReleasesPerWeek: number;
+  lastFetchedAt: string | null;
+  lastPolledAt: string | null;
+  trackingSince: string;
+};
+
+/** Per-source release aggregate — mirrors `getOrgSourcesWithStats`
+ *  (`workers/api/src/queries/orgs.ts`), batched by source id. */
+export type SourceStats = {
+  releaseCount: number;
+  latestVersion: string | null;
+  latestDate: string | null;
+  latestAddedAt: string | null;
+};
 
 // Per-source cap for `Source.releases`. Enforced inside the batch query via
 // ROW_NUMBER() OVER (PARTITION BY source_id …) so each requested source gets
@@ -209,6 +238,182 @@ export function createLoaders(db: D1Db) {
       const byId = new Map(rows.map((r) => [r.id, r] as const));
       return ids.map((id) => byId.get(id) ?? null);
     }),
+
+    orgTagsByOrgId: new DataLoader<string, string[]>(async (orgIds) => {
+      const rows = await chunkedFetch(orgIds, (chunk) =>
+        db
+          .select({ orgId: orgTags.orgId, name: tags.name })
+          .from(orgTags)
+          .innerJoin(tags, eq(orgTags.tagId, tags.id))
+          .where(inArray(orgTags.orgId, chunk))
+          .orderBy(tags.name),
+      );
+      const grouped = new Map<string, string[]>();
+      for (const row of rows) {
+        const list = grouped.get(row.orgId) ?? [];
+        list.push(row.name);
+        grouped.set(row.orgId, list);
+      }
+      return orgIds.map((id) => grouped.get(id) ?? []);
+    }),
+
+    orgAliasesByOrgId: new DataLoader<string, string[]>(async (orgIds) => {
+      const rows = await chunkedFetch(orgIds, (chunk) =>
+        db
+          .select({ orgId: domainAliases.orgId, domain: domainAliases.domain })
+          .from(domainAliases)
+          .where(inArray(domainAliases.orgId, chunk))
+          .orderBy(domainAliases.domain),
+      );
+      const grouped = new Map<string, string[]>();
+      for (const row of rows) {
+        if (!row.orgId) continue;
+        const list = grouped.get(row.orgId) ?? [];
+        list.push(row.domain);
+        grouped.set(row.orgId, list);
+      }
+      return orgIds.map((id) => grouped.get(id) ?? []);
+    }),
+
+    orgAccountsByOrgId: new DataLoader<string, { platform: string; handle: string }[]>(
+      async (orgIds) => {
+        const rows = await chunkedFetch(orgIds, (chunk) =>
+          db
+            .select({
+              orgId: orgAccounts.orgId,
+              platform: orgAccounts.platform,
+              handle: orgAccounts.handle,
+            })
+            .from(orgAccounts)
+            .where(inArray(orgAccounts.orgId, chunk)),
+        );
+        const grouped = new Map<string, { platform: string; handle: string }[]>();
+        for (const row of rows) {
+          const list = grouped.get(row.orgId) ?? [];
+          list.push({ platform: row.platform, handle: row.handle });
+          grouped.set(row.orgId, list);
+        }
+        return orgIds.map((id) => grouped.get(id) ?? []);
+      },
+    ),
+
+    // Mirrors the metrics block of REST `GET /v1/orgs/:slug` (total release
+    // count, 30-day + 90-day windows for the avg/week figure, latest
+    // fetch/poll timestamps across sources, oldest published_at as
+    // trackingSince). One grouped query per stat family, batched by org id.
+    orgStatsByOrgId: new DataLoader<string, OrgStats>(async (orgIds) => {
+      const cutoff30d = daysAgoIso(30);
+      const cutoff90d = daysAgoIso(90);
+      const [totals, fetchPoll, orgRows] = await Promise.all([
+        chunkedFetch(orgIds, (chunk) =>
+          db
+            .select({
+              orgId: sources.orgId,
+              releaseCount: sql<number>`COUNT(${releases.id})`,
+              recent30d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff30d} THEN 1 END)`,
+              recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
+              oldest: min(releases.publishedAt),
+            })
+            .from(releases)
+            .innerJoin(sources, eq(releases.sourceId, sources.id))
+            .where(inArray(sources.orgId, chunk))
+            .groupBy(sources.orgId),
+        ),
+        chunkedFetch(orgIds, (chunk) =>
+          db
+            .select({
+              orgId: sources.orgId,
+              lastFetchedAt: max(sources.lastFetchedAt),
+              lastPolledAt: max(sources.lastPolledAt),
+            })
+            .from(sources)
+            .where(inArray(sources.orgId, chunk))
+            .groupBy(sources.orgId),
+        ),
+        chunkedFetch(orgIds, (chunk) =>
+          db
+            .select({ id: organizations.id, createdAt: organizations.createdAt })
+            .from(organizations)
+            .where(inArray(organizations.id, chunk)),
+        ),
+      ]);
+      const totalsById = new Map(totals.map((r) => [r.orgId, r] as const));
+      const fetchPollById = new Map(fetchPoll.map((r) => [r.orgId, r] as const));
+      const createdAtById = new Map(orgRows.map((r) => [r.id, r.createdAt] as const));
+      return orgIds.map((id) => {
+        const t = totalsById.get(id);
+        const fp = fetchPollById.get(id);
+        const oldest = t?.oldest ?? null;
+        return {
+          releaseCount: Number(t?.releaseCount ?? 0),
+          releasesLast30Days: Number(t?.recent30d ?? 0),
+          avgReleasesPerWeek: computeAvgPerWeek(Number(t?.recent90d ?? 0), oldest),
+          lastFetchedAt: fp?.lastFetchedAt ?? null,
+          lastPolledAt: fp?.lastPolledAt ?? null,
+          trackingSince: oldest ?? createdAtById.get(id) ?? new Date().toISOString(),
+        };
+      });
+    }),
+
+    // Mirrors `getOrgSourcesWithStats` (workers/api/src/queries/orgs.ts),
+    // batched by source id instead of scoped to a single org so it composes
+    // with the existing sourcesByOrgId / sourcesByProductId loaders.
+    sourceStatsBySourceId: new DataLoader<string, SourceStats>(async (sourceIds) => {
+      const rows = await chunkedFetch(sourceIds, (chunk) =>
+        db
+          .select({
+            sourceId: releasesVisible.sourceId,
+            releaseCount: sql<number>`COUNT(*)`,
+            latestDate: sql<
+              string | null
+            >`MAX(CASE WHEN ${releasesVisible.publishedAt} IS NOT NULL THEN ${releasesVisible.publishedAt} END)`,
+            latestAddedAt: sql<string | null>`MAX(${releasesVisible.fetchedAt})`,
+            packByDate: sql<
+              string | null
+            >`MAX(CASE WHEN ${releasesVisible.publishedAt} IS NOT NULL THEN ${releasesVisible.publishedAt} || '|' || COALESCE(${releasesVisible.version}, '') END)`,
+          })
+          .from(releasesVisible)
+          .where(inArray(releasesVisible.sourceId, chunk))
+          .groupBy(releasesVisible.sourceId),
+      );
+      const bySourceId = new Map(rows.map((r) => [r.sourceId, r] as const));
+      return sourceIds.map((id) => {
+        const r = bySourceId.get(id);
+        if (!r)
+          return { releaseCount: 0, latestVersion: null, latestDate: null, latestAddedAt: null };
+        const pack = r.packByDate;
+        const latestVersion = pack ? pack.slice(pack.indexOf("|") + 1) || null : null;
+        return {
+          releaseCount: Number(r.releaseCount),
+          latestVersion,
+          latestDate: r.latestDate ?? null,
+          latestAddedAt: r.latestAddedAt ?? null,
+        };
+      });
+    }),
+
+    // Mirrors the product-list subselects in REST `GET /v1/orgs/:slug`
+    // (products_active.sourceCount / releaseCount), batched by product id.
+    productStatsByProductId: new DataLoader<string, { sourceCount: number; releaseCount: number }>(
+      async (productIds) => {
+        const rows = await chunkedFetch(productIds, (chunk) =>
+          db
+            .select({
+              productId: sourcesVisible.productId,
+              sourceCount: sql<number>`COUNT(DISTINCT ${sourcesVisible.id})`,
+              releaseCount: sql<number>`COUNT(${releasesVisible.id})`,
+            })
+            .from(sourcesVisible)
+            .leftJoin(releasesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
+            .where(inArray(sourcesVisible.productId, chunk))
+            .groupBy(sourcesVisible.productId),
+        );
+        const byProductId = new Map(
+          rows.filter((r) => r.productId !== null).map((r) => [r.productId as string, r] as const),
+        );
+        return productIds.map((id) => byProductId.get(id) ?? { sourceCount: 0, releaseCount: 0 });
+      },
+    ),
   };
 }
 

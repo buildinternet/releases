@@ -3,7 +3,12 @@ import { GraphQLError } from "graphql";
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
 import { nowIso } from "@buildinternet/releases-core/dates";
-import { organizations, releasesVisible, sources } from "@buildinternet/releases-core/schema";
+import {
+  domainAliases,
+  organizations,
+  releasesVisible,
+  sources,
+} from "@buildinternet/releases-core/schema";
 import { builder } from "./builder.js";
 import "./types/org.js";
 import "./types/product.js";
@@ -48,10 +53,19 @@ builder.queryType({
       args: {
         idOrSlug: t.arg.string({ required: true }),
       },
-      resolve: (_root, args, ctx) =>
-        isOrgId(args.idOrSlug)
-          ? ctx.loaders.orgById.load(args.idOrSlug)
-          : ctx.loaders.orgBySlug.load(args.idOrSlug),
+      // Mirrors REST `GET /v1/orgs/:slug`: resolve by id/slug first, then fall
+      // back to a domain-alias lookup so a domain-as-slug hit still resolves.
+      resolve: async (_root, args, ctx) => {
+        if (isOrgId(args.idOrSlug)) return ctx.loaders.orgById.load(args.idOrSlug);
+        const bySlug = await ctx.loaders.orgBySlug.load(args.idOrSlug);
+        if (bySlug) return bySlug;
+        const [alias] = await ctx.db
+          .select({ orgId: domainAliases.orgId })
+          .from(domainAliases)
+          .where(eq(domainAliases.domain, args.idOrSlug))
+          .limit(1);
+        return alias?.orgId ? ctx.loaders.orgById.load(alias.orgId) : null;
+      },
     }),
 
     orgs: t.field({
