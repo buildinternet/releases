@@ -29,7 +29,7 @@ export const listingRoutes = new Hono<Env>();
  * anonymous — integrity comes from manifest host-scoping (you can only
  * declare a domain you control), the kill switch, and the rate limiters.
  */
-async function guardListing(c: Context<Env>): Promise<Response | null> {
+export async function guardListing(c: Context<Env>): Promise<Response | null> {
   const enabled = await flag(
     c.env.FLAGS,
     c.env.LISTING_SELF_SERVE_ENABLED,
@@ -50,7 +50,7 @@ async function guardListing(c: Context<Env>): Promise<Response | null> {
   return null;
 }
 
-async function requireListingEnabled(c: Context<Env>, next: () => Promise<void>) {
+export async function requireListingEnabled(c: Context<Env>, next: () => Promise<void>) {
   const guarded = await guardListing(c);
   if (guarded) return guarded;
   await next();
