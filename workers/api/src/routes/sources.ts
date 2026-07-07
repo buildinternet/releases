@@ -2063,6 +2063,7 @@ export async function buildSourceDetailPayload(
     hasChangelogFile,
     lastFetchedAt: src.lastFetchedAt,
     lastPolledAt: src.lastPolledAt,
+    changeDetectedAt: src.changeDetectedAt ?? null,
     trackingSince: earliest?.date ?? metrics.oldest ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { nextCursor, limit },

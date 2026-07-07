@@ -171,6 +171,8 @@ export const SourceDetailSchema = z.object({
   latestDate: z.string().nullable(),
   lastFetchedAt: z.string().nullable(),
   lastPolledAt: z.string().nullable(),
+  // #1969: additive so pinned old workers/clients degrade gracefully.
+  changeDetectedAt: z.string().nullable().optional(),
   trackingSince: z.string(),
   releases: z.array(ReleaseItemSchema),
   pagination: SourceFeedPaginationSchema,
