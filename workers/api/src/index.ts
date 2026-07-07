@@ -26,7 +26,7 @@ import {
   edgeRateLimitIpKey,
 } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
-import { cacheControl } from "./middleware/cache.js";
+import { cacheControl, cacheDefaultDeny } from "./middleware/cache.js";
 import { LATEST_CACHE_TAG } from "./lib/latest-cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
@@ -474,7 +474,20 @@ export type Env = {
 
 const app = new Hono<Env>();
 
-app.onError((err, c) => respondError(c, err));
+app.onError((err, c) => {
+  const res = respondError(c, err);
+  // Thrown errors bypass the default-deny middleware below (its post-next()
+  // code never runs on a throw), and Workers Cache heuristically caches some
+  // error statuses (404/410 ~3min) — stamp here too so error responses are
+  // never shared-cached.
+  if (!res.headers.get("cache-control")) res.headers.set("Cache-Control", "private, no-store");
+  return res;
+});
+
+// Workers Cache default-deny — registered FIRST so it wraps everything and
+// stamps last. See cacheDefaultDeny()'s docstring (middleware/cache.ts) for
+// the heuristic-caching rationale.
+app.use("*", cacheDefaultDeny());
 
 // Better Auth CORS — credentialed, first-party origins only. MUST come before
 // the global wildcard `cors()` so it owns the `/api/auth/*` preflight (the first

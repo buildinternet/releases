@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
-import { cacheControl } from "../src/middleware/cache.js";
+import { cacheControl, cacheDefaultDeny } from "../src/middleware/cache.js";
 
 /**
  * cacheControl emits the Cache-Control header Workers Cache (wrangler
@@ -107,5 +107,40 @@ describe("cacheControl middleware", () => {
     const app = appWith(cacheControl(60, { isPublic: true }));
     const res = await app.request("http://x/releases/rel_1", {}, {});
     expect(res.headers.get("vary")).toContain("Authorization");
+  });
+});
+
+describe("cacheDefaultDeny middleware", () => {
+  function appWithDeny() {
+    const app = new Hono();
+    app.use("*", cacheDefaultDeny());
+    app.get("/bare", (c) => c.json({ ok: true }));
+    app.get("/opted-in", cacheControl(60, { isPublic: true }), (c) => c.json({ ok: true }));
+    app.get("/handler-set", (c) => {
+      c.header("Cache-Control", "public, max-age=300");
+      return c.json({ ok: true });
+    });
+    return app;
+  }
+
+  it("stamps private, no-store on responses with no Cache-Control (blocks heuristic caching)", async () => {
+    const res = await appWithDeny().request("http://x/bare", {}, {});
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("stamps unmatched-route 404s (heuristically cacheable ~3min otherwise)", async () => {
+    const res = await appWithDeny().request("http://x/nope", {}, {});
+    expect(res.status).toBe(404);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("leaves cacheControl()-opted-in responses alone", async () => {
+    const res = await appWithDeny().request("http://x/opted-in", {}, {});
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60");
+  });
+
+  it("leaves handler-set Cache-Control alone", async () => {
+    const res = await appWithDeny().request("http://x/handler-set", {}, {});
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
   });
 });
