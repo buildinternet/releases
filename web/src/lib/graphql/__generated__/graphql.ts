@@ -191,7 +191,7 @@ export type OrgPageQuery = {
       consecutiveErrors: number | null;
       nextFetchAfter: string | null;
       lastRetieredAt: string | null;
-      metadata: string | null;
+      metadata: string;
       stars: number | null;
       starsFetchedAt: string | null;
       releaseCount: number;
@@ -240,6 +240,37 @@ export type OrgReleasesQuery = {
   };
 };
 
+export type ProductDetailQueryVariables = Exact<{
+  id: string;
+}>;
+
+export type ProductDetailQuery = {
+  product: {
+    id: string;
+    slug: string;
+    name: string;
+    url: string | null;
+    description: string | null;
+    category: string | null;
+    tags: Array<string>;
+    notice: {
+      message: string;
+      linkText: string | null;
+      coordinate: string | null;
+      href: string | null;
+    } | null;
+    sources: Array<{
+      id: string;
+      slug: string;
+      name: string;
+      type: SourceType;
+      url: string;
+      metadata: string;
+      isHidden: boolean | null;
+    }>;
+  } | null;
+};
+
 export type ReleaseDetailQueryVariables = Exact<{
   idOrUrl: string;
 }>;
@@ -276,6 +307,71 @@ export type ReleaseDetailQuery = {
       appStore: { platform: AppStorePlatform; iconUrl: string | null } | null;
       video: { provider: VideoProvider } | null;
     };
+  } | null;
+};
+
+export type SourceDetailQueryVariables = Exact<{
+  id: string;
+  releaseLimit: number;
+}>;
+
+export type SourceDetailQuery = {
+  source: {
+    id: string;
+    slug: string;
+    name: string;
+    type: SourceType;
+    url: string;
+    productId: string | null;
+    isHidden: boolean | null;
+    discovery: string;
+    metadata: string;
+    changelogUrl: string | null;
+    hasChangelogFile: boolean;
+    lastFetchedAt: string | null;
+    lastPolledAt: string | null;
+    trackingSince: string;
+    latestVersion: string | null;
+    latestDate: string | null;
+    notice: {
+      message: string;
+      linkText: string | null;
+      coordinate: string | null;
+      href: string | null;
+    } | null;
+    summaries: {
+      rolling: {
+        year: number | null;
+        month: number | null;
+        windowDays: number | null;
+        summary: string;
+        releaseCount: number;
+        generatedAt: string;
+      } | null;
+      monthly: Array<{
+        year: number | null;
+        month: number | null;
+        windowDays: number | null;
+        summary: string;
+        releaseCount: number;
+        generatedAt: string;
+      }>;
+    };
+    org: { id: string; slug: string; name: string };
+    releases: Array<{
+      id: string;
+      title: string;
+      version: string | null;
+      type: ReleaseType;
+      url: string | null;
+      publishedAt: string | null;
+      fetchedAt: string;
+      titleGenerated: string | null;
+      titleShort: string | null;
+      content: string;
+      summary: string | null;
+      media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
+    }>;
   } | null;
 };
 
@@ -948,6 +1044,84 @@ export const OrgReleasesDocument = {
     },
   ],
 } as unknown as DocumentNode<OrgReleasesQuery, OrgReleasesQueryVariables>;
+export const ProductDetailDocument = {
+  __meta__: { hash: "sha256:6791f51cdafe4def724d68b5a61f881624ca607ffab50baf2bf7fac5427929b5" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "ProductDetail" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "product" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "url" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+                { kind: "Field", name: { kind: "Name", value: "tags" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "notice" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "message" } },
+                      { kind: "Field", name: { kind: "Name", value: "linkText" } },
+                      { kind: "Field", name: { kind: "Name", value: "coordinate" } },
+                      { kind: "Field", name: { kind: "Name", value: "href" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "sources" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "type" } },
+                      { kind: "Field", name: { kind: "Name", value: "url" } },
+                      { kind: "Field", name: { kind: "Name", value: "metadata" } },
+                      { kind: "Field", name: { kind: "Name", value: "isHidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ProductDetailQuery, ProductDetailQueryVariables>;
 export const ReleaseDetailDocument = {
   __meta__: { hash: "sha256:1c550e19778eebf6f75b60652d1d327543320dc870cc5766c47a4189b7dfb7ac" },
   kind: "Document",
@@ -1086,3 +1260,173 @@ export const ReleaseDetailDocument = {
     },
   ],
 } as unknown as DocumentNode<ReleaseDetailQuery, ReleaseDetailQueryVariables>;
+export const SourceDetailDocument = {
+  __meta__: { hash: "sha256:a9b727e50ab142ce7aa42763f0faa91f1b26aa4b7a9e974064c19d4f164a4b84" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SourceDetail" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "source" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "type" } },
+                { kind: "Field", name: { kind: "Name", value: "url" } },
+                { kind: "Field", name: { kind: "Name", value: "productId" } },
+                { kind: "Field", name: { kind: "Name", value: "isHidden" } },
+                { kind: "Field", name: { kind: "Name", value: "discovery" } },
+                { kind: "Field", name: { kind: "Name", value: "metadata" } },
+                { kind: "Field", name: { kind: "Name", value: "changelogUrl" } },
+                { kind: "Field", name: { kind: "Name", value: "hasChangelogFile" } },
+                { kind: "Field", name: { kind: "Name", value: "lastFetchedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "lastPolledAt" } },
+                { kind: "Field", name: { kind: "Name", value: "trackingSince" } },
+                { kind: "Field", name: { kind: "Name", value: "latestVersion" } },
+                { kind: "Field", name: { kind: "Name", value: "latestDate" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "notice" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "message" } },
+                      { kind: "Field", name: { kind: "Name", value: "linkText" } },
+                      { kind: "Field", name: { kind: "Name", value: "coordinate" } },
+                      { kind: "Field", name: { kind: "Name", value: "href" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "summaries" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "rolling" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "year" } },
+                            { kind: "Field", name: { kind: "Name", value: "month" } },
+                            { kind: "Field", name: { kind: "Name", value: "windowDays" } },
+                            { kind: "Field", name: { kind: "Name", value: "summary" } },
+                            { kind: "Field", name: { kind: "Name", value: "releaseCount" } },
+                            { kind: "Field", name: { kind: "Name", value: "generatedAt" } },
+                          ],
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "monthly" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "year" } },
+                            { kind: "Field", name: { kind: "Name", value: "month" } },
+                            { kind: "Field", name: { kind: "Name", value: "windowDays" } },
+                            { kind: "Field", name: { kind: "Name", value: "summary" } },
+                            { kind: "Field", name: { kind: "Name", value: "releaseCount" } },
+                            { kind: "Field", name: { kind: "Name", value: "generatedAt" } },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "org" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releases" },
+                  arguments: [
+                    {
+                      kind: "Argument",
+                      name: { kind: "Name", value: "limit" },
+                      value: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "title" } },
+                      { kind: "Field", name: { kind: "Name", value: "version" } },
+                      { kind: "Field", name: { kind: "Name", value: "type" } },
+                      { kind: "Field", name: { kind: "Name", value: "url" } },
+                      { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
+                      { kind: "Field", name: { kind: "Name", value: "fetchedAt" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                      { kind: "Field", name: { kind: "Name", value: "content" } },
+                      { kind: "Field", name: { kind: "Name", value: "summary" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "media" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            { kind: "Field", name: { kind: "Name", value: "url" } },
+                            { kind: "Field", name: { kind: "Name", value: "alt" } },
+                            { kind: "Field", name: { kind: "Name", value: "r2Url" } },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<SourceDetailQuery, SourceDetailQueryVariables>;

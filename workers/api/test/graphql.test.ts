@@ -11,7 +11,14 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { applyMigrations } from "../../../tests/db-helper";
-import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  products,
+  releases,
+  releaseSummaries,
+  sourceChangelogFiles,
+  sources,
+} from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "../../../src/db/schema-coverage";
 import { graphql } from "graphql";
 import { schema } from "../src/graphql/schema.js";
@@ -648,5 +655,145 @@ describe("GraphQL spike", () => {
     });
     expect(r.errors).toBeDefined();
     expect(r.errors?.[0].extensions?.code).toBe("BAD_USER_INPUT");
+  });
+
+  // #1978 slice 3: source-page fields added for the web GraphQL migration.
+  describe("Source detail fields (#1978 slice 3)", () => {
+    it("resolves isHidden, notice, changelogUrl, hasChangelogFile, summaries, trackingSince", async () => {
+      await h.db
+        .update(sources)
+        .set({
+          isHidden: true,
+          metadata: JSON.stringify({
+            changelogUrl: "https://acme.test/CHANGELOG.md",
+            notice: { message: "Deprecated", linkText: "See replacement", href: "https://x.test" },
+          }),
+        })
+        .where(eq(sources.id, "src_a1_1"));
+
+      await h.db.insert(sourceChangelogFiles).values({
+        id: "scf_1",
+        sourceId: "src_a1_1",
+        path: "CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: "https://github.com/acme/a1/blob/HEAD/CHANGELOG.md",
+        rawUrl: "https://raw.githubusercontent.com/acme/a1/HEAD/CHANGELOG.md",
+        content: "# Changelog",
+        contentHash: "h1",
+        bytes: 12,
+      });
+
+      await h.db.insert(releaseSummaries).values([
+        {
+          id: "sum_rolling",
+          sourceId: "src_a1_1",
+          type: "rolling",
+          windowDays: 30,
+          summary: "Rolling summary",
+          releaseCount: 3,
+        },
+        {
+          id: "sum_monthly",
+          sourceId: "src_a1_1",
+          type: "monthly",
+          year: 2026,
+          month: 4,
+          summary: "April summary",
+          releaseCount: 5,
+        },
+      ]);
+
+      const result = await graphql({
+        schema,
+        source: `query {
+          source(id: "src_a1_1") {
+            isHidden
+            discovery
+            changelogUrl
+            hasChangelogFile
+            trackingSince
+            latestVersion
+            latestDate
+            notice { message linkText href }
+            summaries {
+              rolling { windowDays summary releaseCount }
+              monthly { year month summary releaseCount }
+            }
+          }
+        }`,
+        contextValue: ctx(h.db),
+      });
+      expect(result.errors).toBeUndefined();
+      const source = (result.data as { source: Record<string, unknown> }).source;
+      expect(source).toMatchObject({
+        isHidden: true,
+        discovery: "curated",
+        changelogUrl: "https://acme.test/CHANGELOG.md",
+        hasChangelogFile: true,
+        // Earliest seeded release for src_a1_1 is 2026-04-16.
+        trackingSince: "2026-04-16T00:00:00Z",
+        notice: { message: "Deprecated", linkText: "See replacement", href: "https://x.test" },
+        summaries: {
+          rolling: { windowDays: 30, summary: "Rolling summary", releaseCount: 3 },
+          monthly: [{ year: 2026, month: 4, summary: "April summary", releaseCount: 5 }],
+        },
+      });
+    });
+
+    it("defaults isHidden/hasChangelogFile/summaries for a plain source with no extras", async () => {
+      const result = await graphql({
+        schema,
+        source: `query {
+          source(id: "src_a2_1") {
+            isHidden
+            hasChangelogFile
+            notice { message }
+            summaries { rolling { summary } monthly { summary } }
+            metadata
+          }
+        }`,
+        contextValue: ctx(h.db),
+      });
+      expect(result.errors).toBeUndefined();
+      const source = (result.data as { source: Record<string, unknown> }).source;
+      expect(source).toMatchObject({
+        isHidden: false,
+        hasChangelogFile: false,
+        notice: null,
+        summaries: { rolling: null, monthly: [] },
+        metadata: "{}",
+      });
+    });
+  });
+
+  it("resolves Query.product by id, including tags and notice", async () => {
+    await h.db
+      .update(products)
+      .set({ metadata: JSON.stringify({ notice: { message: "Beta" } }) })
+      .where(eq(products.id, "prod_a1"));
+
+    const result = await graphql({
+      schema,
+      source: `query {
+        product(id: "prod_a1") {
+          id
+          slug
+          name
+          tags
+          notice { message }
+          sources { id slug }
+        }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.product).toMatchObject({
+      id: "prod_a1",
+      slug: "a1",
+      name: "A1",
+      tags: [],
+      notice: { message: "Beta" },
+      sources: [{ id: "src_a1_1", slug: "a1-1" }],
+    });
   });
 });

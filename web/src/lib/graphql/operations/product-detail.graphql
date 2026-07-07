@@ -1,0 +1,26 @@
+query ProductDetail($id: String!) {
+  product(id: $id) {
+    id
+    slug
+    name
+    url
+    description
+    category
+    tags
+    notice {
+      message
+      linkText
+      coordinate
+      href
+    }
+    sources {
+      id
+      slug
+      name
+      type
+      url
+      metadata
+      isHidden
+    }
+  }
+}

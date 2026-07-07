@@ -1,0 +1,68 @@
+query SourceDetail($id: String!, $releaseLimit: Int!) {
+  source(id: $id) {
+    id
+    slug
+    name
+    type
+    url
+    productId
+    isHidden
+    discovery
+    metadata
+    changelogUrl
+    hasChangelogFile
+    lastFetchedAt
+    lastPolledAt
+    trackingSince
+    latestVersion
+    latestDate
+    notice {
+      message
+      linkText
+      coordinate
+      href
+    }
+    summaries {
+      rolling {
+        year
+        month
+        windowDays
+        summary
+        releaseCount
+        generatedAt
+      }
+      monthly {
+        year
+        month
+        windowDays
+        summary
+        releaseCount
+        generatedAt
+      }
+    }
+    org {
+      id
+      slug
+      name
+    }
+    releases(limit: $releaseLimit) {
+      id
+      title
+      version
+      type
+      url
+      publishedAt
+      fetchedAt
+      titleGenerated
+      titleShort
+      content
+      summary
+      media {
+        type
+        url
+        alt
+        r2Url
+      }
+    }
+  }
+}

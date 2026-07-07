@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { type SourceDetail } from "@/lib/api";
+import { type MappedSourceDetail } from "@/lib/graphql/map-source";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
 import { withReleaseBodyHtml } from "@/lib/render-release-body";
@@ -48,7 +48,7 @@ function RelatedRails({
   );
 }
 
-export function SourceView({ orgSlug, source }: { orgSlug: string; source: SourceDetail }) {
+export function SourceView({ orgSlug, source }: { orgSlug: string; source: MappedSourceDetail }) {
   const sourceSlug = source.slug;
   const initialCursor = source.pagination.nextCursor;
 

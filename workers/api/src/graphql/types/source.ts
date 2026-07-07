@@ -2,6 +2,7 @@ import { builder } from "../builder.js";
 import { SourceTypeEnum, VideoProviderEnum, AppStorePlatformEnum } from "./enums.js";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { videoSourceInfo } from "@releases/adapters/source-meta";
+import { parseNotice } from "@buildinternet/releases-core/notice";
 
 builder.objectType("AppStoreInfo", {
   description:
@@ -20,6 +21,38 @@ builder.objectType("VideoInfo", {
   }),
 });
 
+// Shared by Source.notice and Product.notice — a small curator-set note
+// stored under the entity's `metadata.notice` key. See packages/core/src/notice.ts.
+builder.objectType("EntityNotice", {
+  description: "A small curator-set note attached to an org, product, or source.",
+  fields: (t) => ({
+    message: t.exposeString("message"),
+    linkText: t.exposeString("linkText", { nullable: true }),
+    coordinate: t.exposeString("coordinate", { nullable: true }),
+    href: t.exposeString("href", { nullable: true }),
+  }),
+});
+
+builder.objectType("ReleaseSummaryItem", {
+  description: "An AI-generated rolling or monthly summary for a source.",
+  fields: (t) => ({
+    year: t.exposeInt("year", { nullable: true }),
+    month: t.exposeInt("month", { nullable: true }),
+    windowDays: t.exposeInt("windowDays", { nullable: true }),
+    summary: t.exposeString("summary"),
+    releaseCount: t.exposeInt("releaseCount"),
+    generatedAt: t.expose("generatedAt", { type: "DateTime" }),
+  }),
+});
+
+builder.objectType("SourceSummaries", {
+  description: "Rolling (always-current) and monthly AI-generated summaries for a source.",
+  fields: (t) => ({
+    rolling: t.field({ type: "ReleaseSummaryItem", nullable: true, resolve: (s) => s.rolling }),
+    monthly: t.field({ type: ["ReleaseSummaryItem"], resolve: (s) => s.monthly }),
+  }),
+});
+
 export const SourceType = builder.objectType("Source", {
   description: "A changelog source (github / scrape / feed / agent).",
   fields: (t) => ({
@@ -35,6 +68,52 @@ export const SourceType = builder.objectType("Source", {
     discovery: t.exposeString("discovery"),
     isHidden: t.exposeBoolean("isHidden", { nullable: true }),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
+    productId: t.exposeString("productId", { nullable: true }),
+
+    // Raw `metadata` JSON blob. Web reads admin-only sub-fields
+    // (marketingFilter, feedContentDepth, appStore/video info) client-side —
+    // mirrors REST's `source.metadata` passthrough rather than exposing every
+    // sub-key as its own typed field.
+    metadata: t.field({ type: "String", resolve: (s) => s.metadata ?? "{}" }),
+
+    notice: t.field({
+      type: "EntityNotice",
+      nullable: true,
+      resolve: (s) => parseNotice(s.metadata),
+    }),
+
+    changelogUrl: t.field({
+      type: "String",
+      nullable: true,
+      resolve: (s) => {
+        try {
+          const parsed = JSON.parse(s.metadata || "{}") as { changelogUrl?: unknown };
+          return typeof parsed.changelogUrl === "string" ? parsed.changelogUrl : null;
+        } catch {
+          return null;
+        }
+      },
+    }),
+
+    hasChangelogFile: t.field({
+      type: "Boolean",
+      resolve: (s, _args, ctx) => ctx.loaders.hasChangelogFileBySourceId.load(s.id),
+    }),
+
+    trackingSince: t.field({
+      type: "DateTime",
+      description:
+        "Earliest published release date for this source, falling back to when the source row was created.",
+      resolve: async (s, _args, ctx) => {
+        const earliest = await ctx.loaders.trackingSinceBySourceId.load(s.id);
+        return earliest ?? s.createdAt;
+      },
+    }),
+
+    summaries: t.field({
+      type: "SourceSummaries",
+      resolve: (s, _args, ctx) => ctx.loaders.summariesBySourceId.load(s.id),
+    }),
 
     kind: t.exposeString("kind", { nullable: true }),
     isPrimary: t.exposeBoolean("isPrimary", { nullable: true }),
@@ -43,7 +122,6 @@ export const SourceType = builder.objectType("Source", {
     consecutiveErrors: t.exposeInt("consecutiveErrors", { nullable: true }),
     nextFetchAfter: t.expose("nextFetchAfter", { type: "DateTime", nullable: true }),
     lastRetieredAt: t.expose("lastRetieredAt", { type: "DateTime", nullable: true }),
-    metadata: t.exposeString("metadata", { nullable: true }),
     stars: t.exposeInt("stargazersCount", { nullable: true }),
     starsFetchedAt: t.expose("starsFetchedAt", { type: "DateTime", nullable: true }),
 

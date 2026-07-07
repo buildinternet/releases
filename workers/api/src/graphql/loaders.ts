@@ -1,13 +1,16 @@
 import DataLoader from "dataloader";
-import { and, eq, inArray, isNull, lte, max, min, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, max, min, sql } from "drizzle-orm";
 import {
   domainAliases,
   orgAccounts,
   orgTags,
   organizations,
   products,
+  productTags,
   releases,
   releasesVisible,
+  releaseSummaries,
+  sourceChangelogFiles,
   sources,
   sourcesVisible,
   tags,
@@ -17,6 +20,7 @@ import type { D1Db } from "../db.js";
 import { RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { computeAvgPerWeek } from "../utils.js";
 import { getOrgStatsByIds, getOrgSparklines } from "../queries/orgs.js";
+import type { ReleaseSummaryItem, SourceSummaries } from "./builder.js";
 
 type Org = typeof organizations.$inferSelect;
 type Product = typeof products.$inferSelect;
@@ -456,6 +460,98 @@ export function createLoaders(db: D1Db) {
         if (idx >= 0 && idx < 30) map.get(row.org_id)![idx] = row.cnt;
       }
       return ids.map((id) => map.get(id) ?? Array.from({ length: 30 }, () => 0));
+    }),
+
+    // Existence check for a source's mirrored GitHub CHANGELOG file(s)
+    // (`source_changelog_files`). Mirrors the `changelogExistsRows` probe in
+    // `buildSourceDetailPayload` (workers/api/src/routes/sources.ts).
+    hasChangelogFileBySourceId: new DataLoader<string, boolean>(async (sourceIds) => {
+      const rows = await chunkedFetch(sourceIds, (chunk) =>
+        db
+          .selectDistinct({ sourceId: sourceChangelogFiles.sourceId })
+          .from(sourceChangelogFiles)
+          .where(inArray(sourceChangelogFiles.sourceId, chunk)),
+      );
+      const present = new Set(rows.map((r) => r.sourceId));
+      return sourceIds.map((id) => present.has(id));
+    }),
+
+    // Rolling + monthly AI-generated summaries per source. Mirrors the
+    // `summaryRows` query in `buildSourceDetailPayload`.
+    summariesBySourceId: new DataLoader<string, SourceSummaries>(async (sourceIds) => {
+      const rows = await chunkedFetch(sourceIds, (chunk) =>
+        db
+          .select()
+          .from(releaseSummaries)
+          .where(inArray(releaseSummaries.sourceId, chunk))
+          .orderBy(desc(releaseSummaries.generatedAt)),
+      );
+      const grouped = new Map<string, typeof rows>();
+      for (const row of rows) {
+        if (!row.sourceId) continue;
+        const list = grouped.get(row.sourceId) ?? [];
+        list.push(row);
+        grouped.set(row.sourceId, list);
+      }
+      const toItem = (r: (typeof rows)[number]): ReleaseSummaryItem => ({
+        year: r.year,
+        month: r.month,
+        windowDays: r.windowDays,
+        summary: r.summary,
+        releaseCount: r.releaseCount,
+        generatedAt: r.generatedAt,
+      });
+      return sourceIds.map((id) => {
+        const list = grouped.get(id) ?? [];
+        const rolling = list.find((r) => r.type === "rolling");
+        const monthly = list.filter((r) => r.type === "monthly");
+        return { rolling: rolling ? toItem(rolling) : null, monthly: monthly.map(toItem) };
+      });
+    }),
+
+    // "When did we start tracking this source" — earliest published release
+    // date, falling back to the source's own `createdAt`. Mirrors the
+    // `earliest?.date ?? metrics.oldest ?? src.createdAt` fallback chain in
+    // `buildSourceDetailPayload` (the prerelease-exclusion nuance there is
+    // dropped here — a documented, low-impact simplification).
+    trackingSinceBySourceId: new DataLoader<string, string | null>(async (sourceIds) => {
+      const rows = await chunkedFetch(sourceIds, (chunk) =>
+        db
+          .select({
+            sourceId: releasesVisible.sourceId,
+            earliest: sql<string | null>`min(${releasesVisible.publishedAt})`,
+          })
+          .from(releasesVisible)
+          .where(
+            and(
+              inArray(releasesVisible.sourceId, chunk),
+              sql`${releasesVisible.publishedAt} IS NOT NULL`,
+            ),
+          )
+          .groupBy(releasesVisible.sourceId),
+      );
+      const byId = new Map(rows.map((r) => [r.sourceId, r.earliest] as const));
+      return sourceIds.map((id) => byId.get(id) ?? null);
+    }),
+
+    // Tag names attached to a product, alphabetized (mirrors the REST
+    // `buildProductDetailPayload` tag query).
+    tagsByProductId: new DataLoader<string, string[]>(async (productIds) => {
+      const rows = await chunkedFetch(productIds, (chunk) =>
+        db
+          .select({ productId: productTags.productId, name: tags.name })
+          .from(productTags)
+          .innerJoin(tags, eq(productTags.tagId, tags.id))
+          .where(inArray(productTags.productId, chunk))
+          .orderBy(tags.name),
+      );
+      const grouped = new Map<string, string[]>();
+      for (const row of rows) {
+        const list = grouped.get(row.productId) ?? [];
+        list.push(row.name);
+        grouped.set(row.productId, list);
+      }
+      return productIds.map((id) => grouped.get(id) ?? []);
     }),
   };
 }

@@ -176,6 +176,16 @@ builder.queryType({
       resolve: (_root, args, ctx) => ctx.loaders.sourceById.load(args.id),
     }),
 
+    product: t.field({
+      type: "Product",
+      nullable: true,
+      description: "Look up a product by id. Slug-only lookups require an org context.",
+      args: {
+        id: t.arg.string({ required: true }),
+      },
+      resolve: (_root, args, ctx) => ctx.loaders.productById.load(args.id),
+    }),
+
     release: t.field({
       type: "Release",
       nullable: true,

@@ -23,6 +23,7 @@ import { EntityNotice } from "@/components/entity-notice";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import { getResolved } from "./_lib/resolve";
+import { getSource } from "./_lib/source-data";
 
 const formatDate = formatSourceDate;
 
@@ -58,7 +59,21 @@ export default async function OrgSlugLayout({
     return <>{children}</>;
   }
 
-  const source = resolved.source;
+  let source;
+  try {
+    source = await getSource(orgSlug, slug);
+  } catch (err) {
+    if (err instanceof ApiSetupError) {
+      return (
+        <div className="min-h-screen">
+          <Header />
+          <SetupMessage message={err.message} steps={err.setup} />
+        </div>
+      );
+    }
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
+  }
   const sourceSlug = source.slug;
   const base = `/${orgSlug}/${sourceSlug}`;
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);

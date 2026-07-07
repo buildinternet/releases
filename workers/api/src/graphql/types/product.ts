@@ -1,4 +1,5 @@
 import { builder } from "../builder.js";
+import { parseNotice } from "@buildinternet/releases-core/notice";
 
 export const ProductType = builder.objectType("Product", {
   description: "Optional grouping layer between an Org and its Sources.",
@@ -22,6 +23,18 @@ export const ProductType = builder.objectType("Product", {
       type: "Int",
       resolve: async (product, _args, ctx) =>
         (await ctx.loaders.productStatsByProductId.load(product.id)).releaseCount,
+    }),
+
+    tags: t.field({
+      type: ["String"],
+      description: "Tag names attached to the product, alphabetized.",
+      resolve: (product, _args, ctx) => ctx.loaders.tagsByProductId.load(product.id),
+    }),
+
+    notice: t.field({
+      type: "EntityNotice",
+      nullable: true,
+      resolve: (product) => parseNotice(product.metadata),
     }),
 
     org: t.field({

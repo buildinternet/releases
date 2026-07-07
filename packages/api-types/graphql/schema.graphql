@@ -65,6 +65,14 @@ type CollectionMemberProductOrg {
 
 scalar DateTime
 
+"""A small curator-set note attached to an org, product, or source."""
+type EntityNotice {
+  coordinate: String
+  href: String
+  linkText: String
+  message: String!
+}
+
 scalar JSON
 
 """An image, video, or GIF attached to a release."""
@@ -190,11 +198,15 @@ type Product {
   id: ID!
   kind: String
   name: String!
+  notice: EntityNotice
   org: Org!
   releaseCount: Int!
   slug: String!
   sourceCount: Int!
   sources: [Source!]!
+
+  """Tag names attached to the product, alphabetized."""
+  tags: [String!]!
   url: String
 }
 
@@ -236,6 +248,9 @@ type Query {
     limit: Int = 20
     page: Int = 1
   ): OrgConnection!
+
+  """Look up a product by id. Slug-only lookups require an org context."""
+  product(id: String!): Product
 
   """Look up a release by id (rel_…) — or by url for legacy callers."""
   release(idOrUrl: String!): Release
@@ -315,6 +330,16 @@ type ReleaseFeed {
   nextCursor: String
 }
 
+"""An AI-generated rolling or monthly summary for a source."""
+type ReleaseSummaryItem {
+  generatedAt: DateTime!
+  month: Int
+  releaseCount: Int!
+  summary: String!
+  windowDays: Int
+  year: Int
+}
+
 """
 Whether a release is a normal feature/changelog entry or a seasonal/quarterly rollup catch-all.
 """
@@ -330,11 +355,13 @@ type Source {
   """
   appStore: AppStoreInfo
   changeDetectedAt: DateTime
+  changelogUrl: String
   consecutiveErrors: Int
   consecutiveNoChange: Int
   createdAt: DateTime!
   discovery: String!
   fetchPriority: String
+  hasChangelogFile: Boolean!
   id: ID!
   isHidden: Boolean
   isPrimary: Boolean
@@ -346,11 +373,13 @@ type Source {
   latestDate: DateTime
   latestVersion: String
   medianGapDays: Float
-  metadata: String
+  metadata: String!
   name: String!
   nextFetchAfter: DateTime
+  notice: EntityNotice
   org: Org!
   product: Product
+  productId: String
   releaseCount: Int!
 
   """
@@ -360,11 +389,25 @@ type Source {
   slug: String!
   stars: Int
   starsFetchedAt: DateTime
+  summaries: SourceSummaries!
+
+  """
+  Earliest published release date for this source, falling back to when the source row was created.
+  """
+  trackingSince: DateTime!
   type: SourceType!
   url: String!
 
   """Provider for video sources; null for all other source types. #1206"""
   video: VideoInfo
+}
+
+"""
+Rolling (always-current) and monthly AI-generated summaries for a source.
+"""
+type SourceSummaries {
+  monthly: [ReleaseSummaryItem!]!
+  rolling: ReleaseSummaryItem
 }
 
 """
