@@ -927,6 +927,29 @@ export const searchQueries = sqliteTable(
 export type SearchQuery = typeof searchQueries.$inferSelect;
 export type NewSearchQuery = typeof searchQueries.$inferInsert;
 
+export const domainDemand = sqliteTable(
+  "domain_demand",
+  {
+    // Normalized hostname (lowercased, no scheme/path/www) — the natural key.
+    domain: text("domain").primaryKey(),
+    // Epoch millis, matching search_queries. firstSeenAt is set once on insert;
+    // lastSeenAt advances on every repeat lookup miss.
+    firstSeenAt: integer("first_seen_at").notNull(),
+    lastSeenAt: integer("last_seen_at").notNull(),
+    hitCount: integer("hit_count").notNull().default(1),
+    // NULL = never probed by the sweep. Set on every sweep attempt regardless of
+    // outcome (the due-filter clock).
+    sweptAt: integer("swept_at"),
+  },
+  (table) => [
+    // Candidate ordering: highest demand, least-recently-probed first.
+    index("idx_domain_demand_hitcount_swept").on(table.hitCount, table.sweptAt),
+  ],
+);
+
+export type DomainDemand = typeof domainDemand.$inferSelect;
+export type NewDomainDemand = typeof domainDemand.$inferInsert;
+
 export const ignoredUrls = sqliteTable(
   "ignored_urls",
   {
