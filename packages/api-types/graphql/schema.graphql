@@ -15,66 +15,21 @@ enum AppStorePlatform {
   macos
 }
 
-"""
-A curated, named group of orgs/products (independent of the `category` taxonomy).
-"""
-type Collection {
-  description: String
-  isFeatured: Boolean!
-  memberCount: Int!
-  name: String!
-
-  """Up to 3 interleaved org/product members, for inline avatar chips."""
-  previewMembers: [CollectionMember!]!
-  slug: String!
-}
-
-"""
-One entry in a collection's `previewMembers` — either an org or a product.
-"""
-union CollectionMember = CollectionMemberOrg | CollectionMemberProduct
-
-"""An org as it appears in a collection's member preview."""
-type CollectionMemberOrg {
-  avatarUrl: String
-  description: String
-  domain: String
-  githubHandle: String
-  name: String!
-  slug: String!
-}
-
-"""A product as it appears in a collection's member preview."""
-type CollectionMemberProduct {
-  description: String
-  name: String!
-  org: CollectionMemberProductOrg!
-  slug: String!
-}
-
-"""
-Parent-org context on a product member, so the chip can render the org's avatar. Subset of CollectionMemberOrg — no `description`, matching REST's ProductParentOrg.
-"""
-type CollectionMemberProductOrg {
-  avatarUrl: String
-  domain: String
-  githubHandle: String
-  name: String!
-  slug: String!
-}
-
 scalar DateTime
+
+"""A small curator-set note attached to an org, product, or source."""
+type EntityNotice {
+  coordinate: String
+  href: String
+  linkText: String
+  message: String!
+}
 
 scalar JSON
 
 """An image, video, or GIF attached to a release."""
 type Media {
   alt: String
-
-  """
-  Human watch URL for a hosted-video card promoted from an inline body link (Wistia/Loom/Vimeo/YouTube); `url` holds the poster. Absent for ordinary image/gif media.
-  """
-  linkUrl: String
   r2Url: String
   type: MediaKind!
   url: String!
@@ -91,62 +46,22 @@ enum MediaKind {
 An organization (the entity that produces one or more products / sources).
 """
 type Org {
-  accounts: [OrgAccount!]!
-  aliases: [String!]!
-  autoGenerateContent: Boolean
   avatarUrl: String
-  avgReleasesPerWeek: Float!
   category: String
   createdAt: DateTime!
   description: String
   discovery: OrgDiscovery!
   domain: String
-  featured: Boolean
-  fetchPaused: Boolean
   id: ID!
-  isHidden: Boolean!
-
-  """Most recent release `publishedAt` across the org's sources."""
-  lastActivity: DateTime
-  lastFetchedAt: DateTime
-  lastPolledAt: DateTime
-
-  """
-  Declared release locations for a stub org (empty sources array). Null for tracked orgs.
-  """
-  locations: JSON
   name: String!
-  notice: JSON
-  overviewCadenceDays: Int
   products: [Product!]!
-
-  """Releases published in the last 30 days."""
-  recentReleaseCount: Int!
-  releaseCount: Int!
-  releasesLast30Days: Int!
   slug: String!
-  sourceCount: Int!
 
   """
   All non-hidden sources for the org. Use Product.sources for product-scoped lists.
   """
   sources: [Source!]!
-
-  """30-day daily release counts, oldest first."""
-  sparkline: [Int!]!
-  status: OrgStatus!
-  tags: [String!]!
-
-  """Up to 3 product names, alphabetical."""
-  topProducts: [String!]!
-  trackingSince: DateTime!
   updatedAt: DateTime!
-}
-
-"""A linked social/platform account for an org (e.g. github, x)."""
-type OrgAccount {
-  handle: String!
-  platform: String!
 }
 
 """Catalog-shaped page of organizations."""
@@ -162,14 +77,6 @@ enum OrgDiscovery {
   agent
   curated
   on_demand
-}
-
-"""
-Org tier (#1947): `stub` has no processed sources yet (declared locations only); `tracked` is a normal org whose sources fetch and process.
-"""
-enum OrgStatus {
-  stub
-  tracked
 }
 
 """Page-based pagination envelope. Mirrors REST's Pagination shape."""
@@ -188,25 +95,18 @@ type Product {
   createdAt: DateTime!
   description: String
   id: ID!
-  kind: String
   name: String!
+  notice: EntityNotice
   org: Org!
-  releaseCount: Int!
   slug: String!
-  sourceCount: Int!
   sources: [Source!]!
+
+  """Tag names attached to the product, alphabetized."""
+  tags: [String!]!
   url: String
 }
 
 type Query {
-  """
-  Curated collections with a member count and up to 3 preview members, ordered by name.
-  """
-  collections(
-    """Restrict to homepage-featured collections."""
-    featured: Boolean
-  ): [Collection!]!
-
   """
   Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice.
   """
@@ -222,20 +122,11 @@ type Query {
   """Look up an organization by id (org_…) or slug."""
   org(idOrSlug: String!): Org
 
-  """
-  Directory-shaped page of organizations, ordered by name. Hidden orgs are always excluded; orgs with zero visible releases are excluded unless `includeEmpty` is set (stub-tier orgs are kept regardless — same semantics as REST `GET /v1/orgs`).
-  """
-  orgs(
-    """Restrict to orgs editorially promoted for the home page."""
-    featured: Boolean
+  """Catalog-shaped page of organizations, newest first."""
+  orgs(limit: Int = 20, page: Int = 1): OrgConnection!
 
-    """
-    Include orgs with zero visible releases (stub-tier orgs are always kept).
-    """
-    includeEmpty: Boolean = false
-    limit: Int = 20
-    page: Int = 1
-  ): OrgConnection!
+  """Look up a product by id. Slug-only lookups require an org context."""
+  product(id: String!): Product
 
   """Look up a release by id (rel_…) — or by url for legacy callers."""
   release(idOrUrl: String!): Release
@@ -244,22 +135,10 @@ type Query {
   Look up a source by id (src_…). Slug-only lookups require an org context.
   """
   source(id: String!): Source
-
-  """
-  Flat registry rollup (orgs/sources/releases) — the homepage banner shape.
-  """
-  stats: Stats!
 }
 
 """A single release (changelog entry)."""
 type Release {
-  breaking: String
-
-  """
-  Per-category item counts from the AI release-content pass, when available.
-  """
-  composition: ReleaseComposition
-
   """
   Full markdown body. Often large — request only when you need it (this is the field-selection win).
   """
@@ -269,12 +148,6 @@ type Release {
 
   """Images / videos / GIFs attached to the release. Empty list if none."""
   media: [Media!]!
-
-  """
-  Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none.
-  """
-  migrationNotes: String
-  prerelease: Boolean
   publishedAt: DateTime
   source: Source!
 
@@ -299,20 +172,21 @@ type Release {
 }
 
 """
-Per-category item counts for a release ('12 fixes · 3 features · 1 enhancement').
-"""
-type ReleaseComposition {
-  bugs: Int!
-  enhancements: Int!
-  features: Int!
-}
-
-"""
 Feed-shaped page of releases. `nextCursor` is null when the feed is exhausted.
 """
 type ReleaseFeed {
   items: [Release!]!
   nextCursor: String
+}
+
+"""An AI-generated rolling or monthly summary for a source."""
+type ReleaseSummaryItem {
+  generatedAt: DateTime!
+  month: Int
+  releaseCount: Int!
+  summary: String!
+  windowDays: Int
+  year: Int
 }
 
 """
@@ -329,42 +203,49 @@ type Source {
   Platform + icon for App Store sources; null for all other source types. #1206
   """
   appStore: AppStoreInfo
-  changeDetectedAt: DateTime
-  consecutiveErrors: Int
-  consecutiveNoChange: Int
+  changelogUrl: String
   createdAt: DateTime!
   discovery: String!
   fetchPriority: String
+  hasChangelogFile: Boolean!
   id: ID!
-  isHidden: Boolean
-  isPrimary: Boolean
-  kind: String
+  isHidden: Boolean!
   lastFetchedAt: DateTime
   lastPolledAt: DateTime
-  lastRetieredAt: DateTime
-  latestAddedAt: DateTime
   latestDate: DateTime
   latestVersion: String
   medianGapDays: Float
-  metadata: String
+  metadata: String!
   name: String!
-  nextFetchAfter: DateTime
+  notice: EntityNotice
   org: Org!
   product: Product
-  releaseCount: Int!
+  productId: String
 
   """
   Recent non-suppressed releases, newest first. The loader fetches up to 50 per source per batch; `limit` clamps to that ceiling.
   """
   releases(limit: Int = 20): [Release!]!
   slug: String!
-  stars: Int
-  starsFetchedAt: DateTime
+  summaries: SourceSummaries!
+
+  """
+  Earliest published release date for this source, falling back to when the source row was created.
+  """
+  trackingSince: DateTime!
   type: SourceType!
   url: String!
 
   """Provider for video sources; null for all other source types. #1206"""
   video: VideoInfo
+}
+
+"""
+Rolling (always-current) and monthly AI-generated summaries for a source.
+"""
+type SourceSummaries {
+  monthly: [ReleaseSummaryItem!]!
+  rolling: ReleaseSummaryItem
 }
 
 """
@@ -377,15 +258,6 @@ enum SourceType {
   github
   scrape
   video
-}
-
-"""
-Flat registry rollup (the homepage banner shape). See REST `/v1/stats`.
-"""
-type Stats {
-  orgs: Int!
-  releases: Int!
-  sources: Int!
 }
 
 """

@@ -7,6 +7,7 @@ import type {
   ProductParentOrg,
 } from "@buildinternet/releases-api-types";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
+import type { Notice } from "@buildinternet/releases-core/notice";
 import type { D1Db } from "../db.js";
 import type { Loaders, Org, Product, Release, Source } from "./loaders.js";
 
@@ -43,6 +44,16 @@ export type Collection = {
   isFeatured: boolean;
   previewMembers: CollectionMember[];
 };
+/** A rolling or monthly AI-generated summary row. Mirrors `ReleaseSummaryItemSchema`. */
+export type ReleaseSummaryItem = {
+  year: number | null;
+  month: number | null;
+  windowDays: number | null;
+  summary: string;
+  releaseCount: number;
+  generatedAt: string;
+};
+export type SourceSummaries = { rolling: ReleaseSummaryItem | null; monthly: ReleaseSummaryItem[] };
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
@@ -69,6 +80,9 @@ export const builder = new SchemaBuilder<{
     CollectionMemberOrg: CollectionMemberOrg;
     CollectionMemberProduct: CollectionMemberProduct;
     CollectionMemberProductOrg: ProductParentOrg;
+    EntityNotice: Notice;
+    ReleaseSummaryItem: ReleaseSummaryItem;
+    SourceSummaries: SourceSummaries;
   };
   Scalars: {
     ID: { Input: string; Output: string };

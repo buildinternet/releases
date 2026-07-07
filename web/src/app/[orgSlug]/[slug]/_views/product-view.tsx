@@ -2,13 +2,13 @@ import Link from "next/link";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import {
   api,
-  type ProductDetail,
   type OrgReleasesFeedResponse,
   type OverviewPageItem,
   type OrgActivity,
   type OrgHeatmap,
   type CollectionListItem,
 } from "@/lib/api";
+import type { MappedProductDetail } from "@/lib/graphql/map-source";
 import { tryFetch } from "@/lib/ssr-fetch";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { Header } from "@/components/header";
@@ -40,7 +40,7 @@ export async function ProductView({
   orgSlug: string;
   orgName: string;
   orgId?: string;
-  product: ProductDetail;
+  product: MappedProductDetail;
 }) {
   const productSlug = product.slug;
   const devAdmin = isLocalAdminEnabled();

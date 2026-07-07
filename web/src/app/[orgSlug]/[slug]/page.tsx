@@ -4,6 +4,8 @@ import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { currentPeriod } from "@/lib/schema-org";
 import { getOrg } from "../_lib/org-data";
 import { getResolved } from "./_lib/resolve";
+import { getSource } from "./_lib/source-data";
+import { getProductById } from "./_lib/product-data";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
@@ -98,12 +100,15 @@ export default async function OrgSlugPage({
     if (org.products.length <= 1) {
       permanentRedirect(`/${orgSlug}`);
     }
-    return (
-      <ProductView orgSlug={orgSlug} orgName={org.name} orgId={org.id} product={resolved.product} />
-    );
+    // Product identity/description fetched via GraphQL (Query.product); the
+    // release feed + overview + activity + heatmap + collections stay REST
+    // inside ProductView — see `_lib/product-data.ts`.
+    const product = await getProductById(resolved.product.id);
+    return <ProductView orgSlug={orgSlug} orgName={org.name} orgId={org.id} product={product} />;
   }
 
   // Source branch. Legacy `?tab=highlights|changelog` deep-links are redirected
   // to the path-based sub-tabs in the routing middleware (`src/proxy.ts`).
-  return <SourceView orgSlug={orgSlug} source={resolved.source} />;
+  const source = await getSource(orgSlug, slug);
+  return <SourceView orgSlug={orgSlug} source={source} />;
 }
