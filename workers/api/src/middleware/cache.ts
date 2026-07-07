@@ -37,6 +37,28 @@ type Env = { Bindings: { CACHE_DISABLED?: string; FLAGS?: FlagshipBinding } };
  * Cookies don't need the same treatment: no cached route reads them, and
  * responses that set cookies auto-bypass Workers Cache.
  */
+/**
+ * Default-deny for Workers Cache — register FIRST on the root app so it wraps
+ * every route. Workers Cache applies HEURISTIC freshness to responses that
+ * carry NO Cache-Control header at all (200 → ~2h, 404/410 → ~3min, ...), and
+ * inbound Cookie headers do not bypass — so an un-headered route is shared-
+ * cacheable by default. That bit us live: /api/auth/get-session (Better Auth
+ * sets no Cache-Control) was heuristically cached and served a stale
+ * anonymous session to cookie-bearing callers. Fail closed instead: any
+ * response without an explicit Cache-Control gets `private, no-store`, so
+ * ONLY routes that opt in (a cacheControl(...) mount or a handler-set header)
+ * are ever cached. 101 (WebSocket upgrade) is skipped — headers immutable.
+ */
+export function cacheDefaultDeny(): MiddlewareHandler {
+  return async (c, next) => {
+    await next();
+    if (c.res.status === 101) return;
+    if (!c.res.headers.get("cache-control")) {
+      c.res.headers.set("Cache-Control", "private, no-store");
+    }
+  };
+}
+
 export function cacheControl(
   maxAge: number,
   options?: { staleWhileRevalidate?: number; isPublic?: boolean; tags?: string[] },
