@@ -87,16 +87,14 @@ export async function listClaims(): Promise<OrgClaim[]> {
  * is off (distinct from the listing-lane switch).
  */
 export async function promoteListing(domain: string): Promise<ListingPromoteResult> {
-  const res = await fetch(`${apiBase()}/v1/listing/promote`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domain }),
-  });
-  if (!res.ok) {
-    throw new Error(
-      await readClaimErrorMessage(res, "Could not enable tracking. Please try again."),
-    );
-  }
-  return (await res.json()) as ListingPromoteResult;
+  return requestClaimJson<ListingPromoteResult>(
+    `${apiBase()}/v1/listing/promote`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain }),
+    },
+    "Could not enable tracking. Please try again.",
+  );
 }

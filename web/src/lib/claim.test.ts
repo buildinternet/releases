@@ -190,4 +190,12 @@ describe("claim client", () => {
     }) as typeof fetch;
     await expect(promoteListing("acme.com")).rejects.toThrow(/Could not enable tracking/);
   });
+
+  it("wraps a transport failure on promote in the same friendly message", async () => {
+    calls = [];
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    await expect(promoteListing("acme.com")).rejects.toThrow(/Could not reach the server/);
+  });
 });
