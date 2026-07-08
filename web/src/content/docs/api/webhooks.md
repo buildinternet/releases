@@ -110,6 +110,9 @@ Operators with admin API access can manage org-scoped subscriptions via `POST /v
 
 ## Slack delivery
 
+New to this? The [Send releases to Slack](/docs/integrations/slack) guide walks through it
+step by step. The reference below covers the API/CLI details.
+
 Set `format: "slack"` (or `--format slack` on the CLI) and point the subscription
 at a [Slack incoming webhook](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
 URL (`https://hooks.slack.com/services/...`). Each release is posted as a compact
