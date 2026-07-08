@@ -27,10 +27,10 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
 import { inArray } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
+import { createDb } from "./db.js";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
 import { queryCandidates } from "./lib/drain-candidates.js";
 import {
@@ -53,7 +53,7 @@ export interface OrgActorEnv extends UpdateDispatchEnv {
 export class OrgActor extends DurableObject<OrgActorEnv> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private db(): any {
-    return this.env._drizzleOverride ?? drizzle(this.env.DB);
+    return this.env._drizzleOverride ?? createDb(this.env.DB);
   }
 
   /** Idempotent: store the org id and arm the drain alarm (jittered) if unset. */

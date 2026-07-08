@@ -24,7 +24,7 @@
  */
 
 import { and, lt, or, eq, isNull, inArray } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { logEvent } from "@releases/lib/log-event";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import {
@@ -49,7 +49,7 @@ export type SweepOauthClientsEnv = {
   FLAGS?: FlagshipBinding;
   OAUTH_CLIENT_REAPER_ENABLED?: string;
   OAUTH_CLIENT_REAPER_RETENTION_DAYS?: string;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+  /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   // oxlint-disable-next-line no-explicit-any -- test seam, mirrors sibling sweeps
   _drizzleOverride?: any;
   /**
@@ -73,7 +73,7 @@ export async function sweepOauthClients(env: SweepOauthClientsEnv): Promise<void
     return;
   }
 
-  const db = env._drizzleOverride ?? drizzle(env.DB);
+  const db = env._drizzleOverride ?? createDb(env.DB);
   const now = env._now ?? new Date();
   const retentionDays = parseRetentionDays(env.OAUTH_CLIENT_REAPER_RETENTION_DAYS);
   // `oauth_client.created_at` is an integer-timestamp column (schema-auth uses

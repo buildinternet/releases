@@ -21,7 +21,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { and, eq, sql } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
@@ -140,7 +140,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
     const { sinceDays = 1, orgs, trigger } = event.payload;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern
-    const db: any = drizzle(env.DB);
+    const db: any = createDb(env.DB);
 
     // ── Step 1: collect-eligible ───────────────────────────────────────────
 

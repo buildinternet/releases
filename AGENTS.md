@@ -134,6 +134,7 @@ Deep dives live in `docs/architecture/`. A reader's guide with task-based entry 
 
 - [deploy-coupling.md](docs/architecture/deploy-coupling.md) — account-scoped wrangler bindings and open-core boundary for forks/self-hosters.
 - [remote-mode.md](docs/architecture/remote-mode.md) — D1, auth model (scoped API tokens), rate limiting, migrations, sessions, cron polling + retier, workflows-based ingest, discovery guardrails.
+- [storage-portability.md](docs/architecture/storage-portability.md) — where SQLite/D1 assumptions live, the `createDb` construction seam, and what an optional future Postgres backend would cost (aspirational, not in progress).
 - [ingest.md](docs/architecture/ingest.md) — ingest pipeline: source-type adapters, dedup + D1 batching, smart-fetch backoff, URL exclusion / suppression, and the ingest-time AI passes (summarization, marketing classifier, feed enrichment).
 - [logging.md](docs/architecture/logging.md) — per-runtime logging: `logEvent()` for workers vs. the `fs`-backed logger for CLI/neutral packages, payload conventions, severity, `Error` unwrapping.
 - [routing.md](docs/architecture/routing.md) — REST route surface: naming buckets, org-scoped routes + dual-registration, the `/v1/lookups` resolver family + on-demand GitHub materialization, org catalog, entity resolution, pagination shape, OpenAPI coverage gate.

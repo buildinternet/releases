@@ -29,7 +29,7 @@ import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import type Anthropic from "@anthropic-ai/sdk";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { eq, inArray } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -166,7 +166,7 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
     const sourceIds = event.payload.sourceIds ?? [];
     const dryRun = event.payload.dryRun === true;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern
-    const db: any = env._drizzleOverride ?? drizzle(env.DB);
+    const db: any = env._drizzleOverride ?? createDb(env.DB);
 
     const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
     const rawLimit = event.payload.limit ?? BATCH_ENRICH_DEFAULT_LIMIT;

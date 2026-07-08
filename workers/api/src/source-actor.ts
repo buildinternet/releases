@@ -23,7 +23,7 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "./db.js";
 import { eq, sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -113,7 +113,7 @@ export interface SourceActorEnv {
 export class SourceActor extends DurableObject<SourceActorEnv> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private db(): any {
-    return this.env._drizzleOverride ?? drizzle(this.env.DB);
+    return this.env._drizzleOverride ?? createDb(this.env.DB);
   }
 
   /**
