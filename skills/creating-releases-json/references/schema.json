@@ -1,0 +1,330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://releases.sh/schemas/releases.json",
+  "title": "releases.json v2 manifest",
+  "description": "Owner-declared products and release locations. Host at https://{domain}/.well-known/releases.json (org scope) or in a repository root as releases.json (repository scope).",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "format": "uri"
+        },
+        "version": {
+          "type": "number",
+          "const": 2
+        },
+        "registries": {
+          "type": "object",
+          "properties": {
+            "releases.sh": {
+              "type": "object",
+              "properties": {
+                "org": {
+                  "type": "string",
+                  "pattern": "^org_[A-Za-z0-9]+$"
+                },
+                "product": {
+                  "type": "string",
+                  "pattern": "^prd_[A-Za-z0-9]+$"
+                },
+                "verification": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": {}
+        },
+        "releases": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "feed": {
+                "type": "string",
+                "format": "uri"
+              },
+              "appstore": {
+                "type": "string",
+                "format": "uri"
+              },
+              "file": {
+                "type": "string",
+                "format": "uri"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "canonical": {
+                "type": "boolean"
+              },
+              "github": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+$"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "avatar": {
+          "type": "string",
+          "format": "uri"
+        },
+        "tags": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          }
+        },
+        "social": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "products": {
+          "maxItems": 24,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "website": {
+                "type": "string",
+                "format": "uri"
+              },
+              "docs": {
+                "type": "string",
+                "format": "uri"
+              },
+              "support": {
+                "type": "string",
+                "format": "uri"
+              },
+              "social": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "archived": {
+                "type": "boolean"
+              },
+              "releases": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "feed": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "appstore": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "file": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "canonical": {
+                      "type": "boolean"
+                    },
+                    "github": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+$"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["version"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "format": "uri"
+        },
+        "version": {
+          "type": "number",
+          "const": 2
+        },
+        "registries": {
+          "type": "object",
+          "properties": {
+            "releases.sh": {
+              "type": "object",
+              "properties": {
+                "org": {
+                  "type": "string",
+                  "pattern": "^org_[A-Za-z0-9]+$"
+                },
+                "product": {
+                  "type": "string",
+                  "pattern": "^prd_[A-Za-z0-9]+$"
+                },
+                "verification": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": {}
+        },
+        "product": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "slug": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": ["name"],
+          "additionalProperties": false
+        },
+        "releases": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "feed": {
+                "type": "string",
+                "format": "uri"
+              },
+              "appstore": {
+                "type": "string",
+                "format": "uri"
+              },
+              "file": {
+                "type": "string",
+                "format": "uri"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "canonical": {
+                "type": "boolean"
+              },
+              "github": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "self"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+$"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["version"],
+      "additionalProperties": false
+    }
+  ]
+}

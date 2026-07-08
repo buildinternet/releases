@@ -1,0 +1,31 @@
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "name": "Acme",
+  "description": "CI for teams that ship.",
+  "category": "developer-tools",
+  "tags": ["ci", "observability"],
+  "avatar": "https://acme.com/logo.png",
+  "social": { "github": "acme", "twitter": "acmehq" },
+  "products": [
+    {
+      "name": "Acme Cloud",
+      "description": "Managed CI runners.",
+      "website": "https://acme.com/cloud",
+      "docs": "https://docs.acme.com/cloud",
+      "releases": [
+        {
+          "url": "https://acme.com/whats-new",
+          "feed": "https://acme.com/whats-new/rss.xml",
+          "canonical": true
+        },
+        { "github": "acme/cloud-sdk" }
+      ]
+    },
+    { "name": "Acme Legacy Agent", "archived": true }
+  ],
+  "releases": [{ "url": "https://updates.acme.com" }],
+  "registries": {
+    "releases.sh": { "org": "org_abc123" }
+  }
+}

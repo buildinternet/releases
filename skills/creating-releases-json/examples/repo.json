@@ -1,0 +1,6 @@
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "product": { "name": "Acme Cloud", "slug": "acme-cloud" },
+  "releases": [{ "url": "https://acme.com/whats-new", "canonical": true }, { "github": "self" }]
+}
