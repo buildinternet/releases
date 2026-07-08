@@ -17,6 +17,7 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
+import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import { releaseCoverage } from "./schema-coverage.js";
 
 export interface EligibilityOptions {
@@ -142,20 +143,20 @@ export async function fetchEligibleReleases(
     return rows;
   }
 
-  // Org-filter path: chunk at 90 to stay under D1's 100 bind-param cap.
-  // Each chunk is sorted by publishedAt DESC and capped at safeMax. This is
-  // safe because the global top-N is always a subset of ⋃(chunk_i_top_N):
-  // any row in the final slice must be in at least one chunk's top-safeMax.
-  // All chunks are merged, deduped, globally sorted, then sliced to safeMax.
+  // Org-filter path: chunk via IN_ARRAY_CHUNK_SIZE to stay under D1's
+  // bind-param cap. Each chunk is sorted by publishedAt DESC and capped at
+  // safeMax. This is safe because the global top-N is always a subset of
+  // ⋃(chunk_i_top_N): any row in the final slice must be in at least one
+  // chunk's top-safeMax. All chunks are merged, deduped, globally sorted,
+  // then sliced to safeMax.
   //
   // publishedAt is fetched for sorting only and is stripped from the output.
   type ChunkRow = EligibleRow & { publishedAt: string | null };
-  const CHUNK_SIZE = 90;
   const seen = new Set<string>();
   const all: ChunkRow[] = [];
 
-  for (let i = 0; i < orgSlugs.length; i += CHUNK_SIZE) {
-    const chunk = orgSlugs.slice(i, i + CHUNK_SIZE).map((s) => s.toLowerCase());
+  for (let i = 0; i < orgSlugs.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = orgSlugs.slice(i, i + IN_ARRAY_CHUNK_SIZE).map((s) => s.toLowerCase());
     // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
     const chunkRows: ChunkRow[] = await db
       .select({

@@ -18,6 +18,7 @@ Imported as `@buildinternet/releases-core/<subpath>`.
 | `slug`            | Slug generation.                                                                                           |
 | `tokens`          | Token counting (tiktoken-backed).                                                                          |
 | `cli-contracts`   | Shared `--json` envelope types for the CLI.                                                                |
+| `d1-limits`       | Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) for single-column `IN` chunking.    |
 
 Published from the [`buildinternet/releases`](https://github.com/buildinternet/releases) monorepo. The upstream `packages/core/` directory is the single source of truth; both the monorepo and the OSS CLI consume this package from npm.
 

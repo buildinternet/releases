@@ -289,7 +289,7 @@ describe("upsertOrgOverview", () => {
   });
 
   it("resolves releaseIds across the 90-bind URL-lookup chunk boundary", async () => {
-    // URL_LOOKUP_CHUNK_SIZE = 90; 91 unique URLs forces a two-chunk SELECT in
+    // IN_ARRAY_CHUNK_SIZE = 90; 91 unique URLs forces a two-chunk SELECT in
     // resolveReleaseIdsByUrl. CITATIONS_CHUNK_SIZE = 10 also forces multi-chunk
     // citation inserts.
     const N = 91;

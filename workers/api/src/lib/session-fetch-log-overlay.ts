@@ -37,18 +37,14 @@
 import type { Session } from "@buildinternet/releases-api-types";
 import { fetchLog } from "@buildinternet/releases-core/schema";
 import { inArray } from "drizzle-orm";
-
-// D1 caps prepared statements at 100 bind parameters. This query binds only
-// the `inArray` IDs, so 90 leaves headroom matching the project-wide
-// convention documented in CLAUDE.md ("`inArray(...)` lookups chunk at 90").
-const SESSION_ID_CHUNK_SIZE = 90;
+import { IN_ARRAY_CHUNK_SIZE } from "./d1-limits.js";
 
 type FetchLogRow = { sessionId: string | null; status: string };
 
 /**
  * Apply the fetch_log overlay to a session list in place and return it.
- * Performs at most ceil(N/90) batched `inArray` lookups regardless of how
- * many candidate sessions are passed.
+ * Performs at most ceil(N/IN_ARRAY_CHUNK_SIZE) batched `inArray` lookups
+ * regardless of how many candidate sessions are passed.
  */
 export async function applyFetchLogOverlay<T extends Session>(
   // D1 drizzle and bun:sqlite drizzle don't share a public type, and the test
@@ -62,8 +58,8 @@ export async function applyFetchLogOverlay<T extends Session>(
 
   const sessionIds = candidates.map((s) => s.sessionId);
   const rows: FetchLogRow[] = [];
-  for (let i = 0; i < sessionIds.length; i += SESSION_ID_CHUNK_SIZE) {
-    const chunk = sessionIds.slice(i, i + SESSION_ID_CHUNK_SIZE);
+  for (let i = 0; i < sessionIds.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = sessionIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
     // oxlint-disable-next-line no-await-in-loop -- sequential chunks: each statement stays under D1's 100-bind cap; parallel fan-out would race the same connection without benefit
     const chunkRows: FetchLogRow[] = await db
       .select({

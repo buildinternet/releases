@@ -41,7 +41,8 @@
     "./web-bot-auth": "./src/web-bot-auth.ts",
     "./notice": "./src/notice.ts",
     "./site-notice": "./src/site-notice.ts",
-    "./title-dedup": "./src/title-dedup.ts"
+    "./title-dedup": "./src/title-dedup.ts",
+    "./d1-limits": "./src/d1-limits.ts"
   },
   "files": [
     "src",

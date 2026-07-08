@@ -25,6 +25,7 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { newKnowledgePageId, newKnowledgePageCitationId } from "@buildinternet/releases-core/id";
+import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle generic
 type AnyDb = DrizzleD1Database<any>;
@@ -37,9 +38,6 @@ type AnyDb = DrizzleD1Database<any>;
  * migration drops the columns. Chunked at 10 rows → 90 binds, under D1's cap.
  */
 const CITATIONS_CHUNK_SIZE = 10;
-
-/** Max URLs per IN-clause lookup. D1's 100-bind cap, with headroom. */
-const URL_LOOKUP_CHUNK_SIZE = 90;
 
 export interface OverviewCitationInput {
   sourceUrl: string;
@@ -154,8 +152,8 @@ export async function resolveReleaseIdsByUrl(
   const lowered = Array.from(new Set(urls.map((u) => u.toLowerCase())));
 
   // Pass 1: exact match.
-  for (let i = 0; i < lowered.length; i += URL_LOOKUP_CHUNK_SIZE) {
-    const chunk = lowered.slice(i, i + URL_LOOKUP_CHUNK_SIZE);
+  for (let i = 0; i < lowered.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = lowered.slice(i, i + IN_ARRAY_CHUNK_SIZE);
     // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked SELECT
     const rows: Array<{ id: string; urlLower: string }> = await db
       .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
@@ -180,8 +178,8 @@ export async function resolveReleaseIdsByUrl(
 
   const bases = Array.from(new Set(stripped.map((s) => s.base)));
   const baseToReleaseId = new Map<string, string>();
-  for (let i = 0; i < bases.length; i += URL_LOOKUP_CHUNK_SIZE) {
-    const chunk = bases.slice(i, i + URL_LOOKUP_CHUNK_SIZE);
+  for (let i = 0; i < bases.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = bases.slice(i, i + IN_ARRAY_CHUNK_SIZE);
     // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked SELECT
     const rows: Array<{ id: string; urlLower: string }> = await db
       .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
