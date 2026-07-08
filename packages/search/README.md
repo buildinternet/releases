@@ -4,13 +4,17 @@ Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog
 
 ## Exports
 
-- `@releases/search/embed-changelog-pipeline` — chunk + embed + upsert pipeline for CHANGELOG files, ordered D1-first then Vectorize to avoid orphaned vectors.
-- `@releases/search/embed-changelogs` — pure chunking + diffing of CHANGELOG files ahead of embedding, using heading-aware slicing and tiktoken counts.
-- `@releases/search/embed-entities` — embed + upsert helper for entity rows (orgs, products, sources, collections) sharing one Vectorize index, keyed by natural ID for idempotent re-embedding.
-- `@releases/search/embed-releases` — embed + upsert helper for release rows; embedding failures never fail the write (rows stay `embedded_at = NULL` for later backfill unless `throwOnError` is set).
-- `@releases/search/embedding-cache` — KV-backed cache for single-query embeddings, keyed by provider/model/dimensionality; search-query path only.
-- `@releases/search/embeddings` — embedding provider abstraction (voyage, openai, workers-ai) behind a single `embedBatch` function, with internal batch-size splitting.
-- `@releases/search/hybrid-search-worker` — worker-side hybrid search helper wrapping `vector-search` with D1/Vectorize bindings and embedding config; single source of truth for the API and MCP workers.
-- `@releases/search/vector-search` — hybrid search orchestration: runs FTS5 and Vectorize indexes in parallel and merges results with Reciprocal Rank Fusion.
+Imported as `@releases/search/<subpath>`.
 
-**Private, workspace-only — imported via `@releases/search`, not published to npm.**
+| Subpath                    | Purpose                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `embeddings`               | Embedding provider abstraction (voyage, openai, workers-ai) behind one `embedBatch`.       |
+| `embedding-cache`          | KV-backed cache for single-query embeddings, keyed by provider/model/dims.                 |
+| `embed-releases`           | Embed + upsert helper for release rows; embedding failures never fail the write.           |
+| `embed-entities`           | Embed + upsert helper for entity rows (orgs, products, sources, collections).              |
+| `embed-changelogs`         | Pure heading-aware chunking + diffing of CHANGELOG files ahead of embedding.               |
+| `embed-changelog-pipeline` | Chunk + embed + upsert pipeline for CHANGELOG files (D1-first to avoid orphaned vectors).  |
+| `vector-search`            | Hybrid orchestration — FTS5 + Vectorize in parallel, merged with Reciprocal Rank Fusion.   |
+| `hybrid-search-worker`     | Worker-side wrapper over `vector-search` with bindings/config (API + MCP source of truth). |
+
+**Private, workspace-only — not published to npm.**
