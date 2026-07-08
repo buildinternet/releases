@@ -33,3 +33,9 @@ changeset for the co-bump.
 3. **Merging that PR** bumps `package.json` + writes `CHANGELOG.md`. The version
    change then triggers the existing OIDC `publish-core.yml` /
    `publish-api-types.yml` workflows, which do the actual `npm publish`.
+
+## Changelog format
+
+Entries are rendered by `./changelog.js` (a local fork of
+`@changesets/changelog-github`). Each line links the PR and commit; it does
+**not** append `Thanks @author!` — that was pure noise for this monorepo.
