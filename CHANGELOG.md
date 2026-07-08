@@ -3,6 +3,20 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 7, 2026
+
+**Added**
+- Domain ownership claims — a new "Own this domain?" panel on listing pages lets signed-in users prove control via a `.well-known/releases-verify.txt` file or a DNS TXT record; once verified, a single click enables live release tracking and materializes sources without waiting for curator review.
+- Slack notifications are now a first-class setup path — a new guide at `/docs/integrations/slack` walks through connecting a Slack incoming webhook, and the notifications page gains a dedicated section to paste, test, and remove a hook without going into the advanced webhooks form.
+- Unlisted domains that are frequently searched now auto-create stub listings — domain lookup misses are captured as demand signals and a daily sweep probes high-demand unlisted domains for a `releases.json` manifest, creating stubs automatically.
+
+**Changed**
+- Anonymous API reads are now served from Cloudflare Workers Cache — a global tiered cache rather than per-datacenter, so catalog, org, and search responses warm once and hit worldwide.
+
+**Fixed**
+- Auth sessions are no longer cached — a Workers Cache heuristic was letting `GET /api/auth/get-session` responses land in the shared cache, causing signed-in users to appear signed out for up to two hours.
+- Admin-gated and authorization-required API responses are no longer stored in shared cache — a gap where write-scoped and admin responses could be served to anonymous callers has been closed.
+
 ## July 6, 2026
 
 **Added**
