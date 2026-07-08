@@ -49,7 +49,8 @@ import {
   type SummarizeReleaseInput,
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
-import { anthropicTextModel } from "@releases/ai-internal/text-model";
+import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
+import { buildLaneAnthropicModel } from "@releases/adapters/lane-model";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 import { adminPatch, adminPost } from "./lib/admin-client.js";
 
@@ -427,14 +428,16 @@ async function runBatch(
 // Route through the CF AI Gateway when ANTHROPIC_BASE_URL is set (so this tool's
 // spend is attributed alongside the worker paths); falls back to direct Anthropic
 // when unset, so local runs are unchanged. Same pattern as scripts/run-eval-task.ts.
-const client = buildAnthropicClient({
-  apiKey,
+const anthropicGateway = {
   baseURL: process.env.ANTHROPIC_BASE_URL,
   gatewayToken: process.env.AI_GATEWAY_TOKEN,
-});
-// The real-time path runs `summarizeRelease` through the TextModel seam; the batch
-// path stays on the Anthropic Batches API (no OpenRouter batch equivalent).
-const realtimeModel = anthropicTextModel(client, MODEL);
+};
+const client = buildAnthropicClient({ apiKey, ...anthropicGateway });
+// Real-time path: AI SDK TextModel seam. Batch path: Anthropic Batches API (no OR batch).
+const realtimeModel = aisdkTextModel(
+  buildLaneAnthropicModel({ apiKey, model: MODEL, ...anthropicGateway }),
+  `anthropic:${MODEL}`,
+);
 
 const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${noBatch ? "real-time" : "batched"})`;
 

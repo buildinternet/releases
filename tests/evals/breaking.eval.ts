@@ -13,7 +13,7 @@
  * plus a PRECISION guard (a `none`/`unknown` truth answered `minor`/`major` is a
  * false alarm — the costliest error per managed-agents/src/shared/rubrics/breaking.md).
  */
-import Anthropic from "@anthropic-ai/sdk";
+
 import { summarizeRelease, MODEL as SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { BREAKING_FIXTURES, type BreakingFixture } from "./breaking-fixtures";
@@ -67,12 +67,10 @@ async function main() {
     process.exit(0);
   }
 
-  const client = new Anthropic({ apiKey });
   const model: TextModel = resolveEvalModel({
     anthropicModel: SUMMARIZE_MODEL,
     generationName: "breaking-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
-    client,
   })!.model;
   console.error(`model under test: ${model.id}`);
 
