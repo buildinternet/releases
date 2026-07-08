@@ -1,0 +1,58 @@
+name: Release (version PR)
+
+# Version-only changesets flow. On every push to main this opens or updates a
+# bot "Version Packages" PR that accumulates pending changesets. Merging that PR
+# bumps the version field of the published packages (packages/core,
+# packages/api-types), which in turn triggers the existing OIDC publish-*.yml
+# workflows that do the actual `npm publish`.
+#
+# We deliberately do NOT run `changeset publish` here — that writes a token-based
+# ~/.npmrc, which is incompatible with the tokenless OIDC trusted publishing the
+# publish-*.yml workflows use. Publishing stays entirely on those workflows.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # commit the version bump + push the Version Packages branch
+  pull-requests: write # open/update the Version Packages PR
+
+env:
+  BUN_VERSION: "1.3.14"
+
+jobs:
+  version:
+    name: Maintain the Version Packages PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0 # changesets needs full history to compute status
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      # Versioning only. With changesets present this opens/updates the
+      # "Version Packages" PR; with none it no-ops. No `publish:` input on
+      # purpose — see the header comment.
+      - name: Create/update the Version Packages PR
+        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
+        with:
+          version: bun run changeset:version
+          commit: "chore: version packages"
+          title: "chore: version packages"
+          # The publish-*.yml workflows tag a GitHub release per package on
+          # publish; per-package releases here would just be noise.
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
