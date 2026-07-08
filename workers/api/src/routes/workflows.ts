@@ -71,7 +71,7 @@ import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
 import { clusterAndPersistCascades, DECIDED_BY_CHANGESETS } from "../lib/cluster-cascades.js";
 import { clusterChangesets } from "@releases/core-internal/changesets-cluster";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import {
   mergeEnrichmentMarker,

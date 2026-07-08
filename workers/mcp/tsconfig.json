@@ -18,7 +18,6 @@
       "@releases/lib/*": ["../../packages/lib/src/*"],
       "@releases/rendering/*": ["../../packages/rendering/src/*"],
       "@releases/search/*": ["../../packages/search/src/*"],
-      "@releases/*": ["../../src/*"],
       "drizzle-orm": ["../../node_modules/drizzle-orm"],
       "drizzle-orm/*": ["../../node_modules/drizzle-orm/*"]
     }

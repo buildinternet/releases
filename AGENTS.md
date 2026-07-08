@@ -56,7 +56,7 @@ The root `test` script runs `workers/api` in its **own `bun test` process**, aft
 Shared code is split between published npm packages (`@buildinternet/releases-*`) and private in-tree packages (`packages/`):
 
 - `packages/core/` → published as **`@buildinternet/releases-core`** from this monorepo. Pure, runtime-neutral helpers shared with the OSS CLI: DB schema (source of truth), `categories`, `dates`, `changelog-range`, `changelog-slice`, `overview`, `id`, `slug`, `tokens`, `cli-contracts`, `lookup-coordinate`, `fts` (FTS5 query sanitizer — wraps tokens in phrase quotes so `org/repo` and similar punctuation don't error). Consumed here via `workspace:*`; the OSS CLI pulls the published npm version. Schema changes land here first, then get picked up by the CLI on the next version bump.
-- `packages/core-internal/` → imported as **`@releases/core-internal`**. Private, workspace-only. DB-coupled / worker-only helpers the thin client doesn't need: `release-upsert` (drizzle upsert config), `hash` (node crypto), `webhook-sign` (HMAC for the webhook subsystem).
+- `packages/core-internal/` → imported as **`@releases/core-internal`**. Private, workspace-only. DB-coupled / worker-only helpers the thin client doesn't need: `release-upsert` (drizzle upsert config), `hash` (node crypto), `webhook-sign` (HMAC for the webhook subsystem), `schema-coverage` (the `release_coverage` table, part of the drizzle composite schema).
 - `packages/api-types/` → published as **`@buildinternet/releases-api-types`** from this monorepo. Wire protocol — request/response shapes served by the API worker, consumed by the MCP worker, web frontend, and the OSS CLI. Consumed here via `workspace:*`; the OSS CLI pulls the published npm version. Wire changes land here first; the CLI bumps its pin when adopting new shapes. Additive by default — renames/removals go through a one-minor-version deprecation alias before removal.
 - `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, `crawl`, and `feed` adapters, plus the shared scrape/agent fetch orchestration (`scrape-fetch` / `extract-deps-worker` / `deterministic-update`, persisting via an injected API fetcher — used by the API worker's update workflow and discovery's onboarding tool, #1946). All pure / worker-safe.
 - `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table), `release-content` (Haiku 4.5 summarization for `title_generated` / `title_short` / `summary` — shared by `scripts/generate-release-content.ts` and the ingest-time hook), `marketing-classifier` (Haiku 4.5 binary verdict on whether a feed item is real product news vs. marketing — used by `fetchOne` when `metadata.marketingFilter` is set). Worker-safe; caller passes the Anthropic client.
@@ -64,11 +64,14 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 - `packages/search/` → imported as **`@releases/search/*`**. Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
 - `packages/lib/` — slim private utilities (`config`, `errors`, `source-edit`, Anthropic client/error helpers, managed-agent rate limits, `anthropic-pricing` for list-price cost estimates on managed-agent sessions, `spend-cap` daily-spend KV gate, `session-error-classify`). `logger` is published as `@buildinternet/releases-lib/logger`.
 
-## Surviving `src/` tree
+## Managed-agents harness (`managed-agents/`)
 
-- `src/db/schema-coverage.ts` — release_coverage schema (part of the drizzle composite schema).
-- `src/agent/` — managed-agents harness (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `discovery.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
-- `src/shared/` — shared prompts and typed tools used by both agents and the API worker.
+The `managed-agents/` directory holds both the deployed agent definitions (`*.agent.yaml`, `*.environment.yaml`) and the harness code that drives them, under `managed-agents/src/`:
+
+- `managed-agents/src/agent/` — the harness itself (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `discovery.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
+- `managed-agents/src/shared/` — prompts, typed tools (`agent-tools.ts`), and grader rubrics (`rubrics/*.md`) shared by the harness, the discovery worker, and the eval suite. Imported by workers as `@releases/shared/*` (a bundler/tsconfig alias, not a workspace package).
+
+The `release_coverage` schema lives with the rest of the DB-coupled internals in `packages/core-internal/src/schema-coverage.ts` (imported as `@releases/core-internal/schema-coverage`), not at the repo root.
 
 ## Conventions
 

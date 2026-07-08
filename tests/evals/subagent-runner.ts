@@ -131,7 +131,16 @@ function prepSummary(useJudge: boolean) {
   // rubric-grader agent — the same judge + artifact shape as overview/metered.
   const rubricText = useJudge
     ? readFileSync(
-        join(import.meta.dir, "..", "..", "src", "shared", "rubrics", "release-summary.md"),
+        join(
+          import.meta.dir,
+          "..",
+          "..",
+          "managed-agents",
+          "src",
+          "shared",
+          "rubrics",
+          "release-summary.md",
+        ),
         "utf8",
       )
     : null;

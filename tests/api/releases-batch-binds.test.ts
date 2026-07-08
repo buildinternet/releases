@@ -8,7 +8,7 @@ import {
   sourceChangelogChunks,
   orgTags,
 } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "../../src/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import {
   D1_MAX_BINDINGS,

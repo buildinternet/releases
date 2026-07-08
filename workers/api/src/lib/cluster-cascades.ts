@@ -1,5 +1,5 @@
 import { clusterChangesets, type ClusterInput } from "@releases/core-internal/changesets-cluster";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { logEvent } from "@releases/lib/log-event";
 import { RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "./d1-limits.js";
 
@@ -17,7 +17,7 @@ type ClusterDb = { insert: (table: typeof releaseCoverage) => any };
  * `decided_by` tag for coverage rows written by the automatic changesets
  * cascade detector. Kept distinct from `human:cli` and `agent:<model>` so
  * admin tooling can audit (or unlink) auto-decisions separately. Lives
- * here rather than alongside the other tags in `src/db/schema-coverage.ts`
+ * here rather than alongside the other tags in `packages/core-internal/src/schema-coverage.ts`
  * because the CI schema-pairing gate treats edits to that file as schema
  * changes requiring a paired migration.
  */

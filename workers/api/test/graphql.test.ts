@@ -19,7 +19,7 @@ import {
   sourceChangelogFiles,
   sources,
 } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "../../../src/db/schema-coverage";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { graphql } from "graphql";
 import { schema } from "../src/graphql/schema.js";
 import { createLoaders } from "../src/graphql/loaders.js";

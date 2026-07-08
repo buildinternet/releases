@@ -16,8 +16,7 @@
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],
       "@releases/rendering/*": ["../../packages/rendering/src/*"],
-      "@releases/search/*": ["../../packages/search/src/*"],
-      "@releases/*": ["../../src/*"]
+      "@releases/search/*": ["../../packages/search/src/*"]
     },
     "resolveJsonModule": true
   },

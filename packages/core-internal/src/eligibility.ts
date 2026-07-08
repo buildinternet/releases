@@ -17,11 +17,7 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
-// Relative import to the root src/ so this resolves correctly in both
-// production (workers/api workspace) and bun test runs. The @releases alias
-// is a wrangler-only resolution; packages can't use it.
-// Path: packages/core-internal/src/ → ../../.. → repo root → src/db/...
-import { releaseCoverage } from "../../../src/db/schema-coverage.js";
+import { releaseCoverage } from "./schema-coverage.js";
 
 export interface EligibilityOptions {
   /** ISO cutoff: only return releases with `published_at >= cutoffIso`. */

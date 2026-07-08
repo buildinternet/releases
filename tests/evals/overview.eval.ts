@@ -2,7 +2,7 @@
  * Org-overview regression eval. LOCAL, AD-HOC ONLY — calls the real Anthropic
  * API. Run: `bun run eval:overview` (Tier-1 structural + citation integrity) or
  * `bun run eval:overview -- --judge` (adds the rubric faithfulness check against
- * src/shared/rubrics/overview.md — judged by Gemini 2.5 Flash via OpenRouter by
+ * managed-agents/src/shared/rubrics/overview.md — judged by Gemini 2.5 Flash via OpenRouter by
  * default; see ./judge-model.ts). Never part of `bun test`.
  *
  * Each fixture is a single JSON file under fixtures/overviews/ carrying the

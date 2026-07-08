@@ -16,9 +16,8 @@
       "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],
-      "@releases/rendering/*": ["../../packages/rendering/src/*"],
-      "@releases/*": ["../../src/*"]
+      "@releases/rendering/*": ["../../packages/rendering/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "../../src/shared/**/*.ts"]
+  "include": ["src/**/*.ts"]
 }

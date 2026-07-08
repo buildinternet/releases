@@ -28,7 +28,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { summarizeRelease } from "@releases/ai-internal/release-content";

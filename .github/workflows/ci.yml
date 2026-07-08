@@ -145,7 +145,7 @@ jobs:
           # ship without a paired wrangler migration.
           schema_changed=$(git diff --name-only "origin/$BASE_REF"...HEAD -- \
             'packages/core/src/schema.ts' \
-            'src/db/schema-coverage.ts' \
+            'packages/core-internal/src/schema-coverage.ts' \
             'workers/api/src/db/schema-cron.ts' \
             'workers/api/src/db/schema-auth.ts' \
             'workers/api/src/db/schema-follows.ts' || true)

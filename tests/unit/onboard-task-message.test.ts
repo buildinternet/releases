@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildOnboardTaskMessage } from "../../src/shared/onboard-task-message.js";
+import { buildOnboardTaskMessage } from "../../managed-agents/src/shared/onboard-task-message.js";
 
 describe("buildOnboardTaskMessage", () => {
   it("emits the bare task block when no scope or seeds are supplied", () => {

@@ -152,7 +152,7 @@ export function gradeStructural(
 
 // ── Overview structural grading (org overviews, Tier 1) ─────────────
 //
-// The deterministic half of the overview rubric (src/shared/rubrics/overview.md).
+// The deterministic half of the overview rubric (managed-agents/src/shared/rubrics/overview.md).
 // The judgment-heavy criteria — synthesis across sources, weighting, voice,
 // faithfulness — are left to the optional Sonnet judge in overview.eval.ts.
 // These checks are the ones a regex can settle without an API call.

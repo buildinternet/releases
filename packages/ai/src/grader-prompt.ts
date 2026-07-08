@@ -25,7 +25,7 @@ export interface BuildGraderPromptInput {
   artifact: string;
   /**
    * Optional path or identifier for the rubric, surfaced in the prompt so the
-   * grader can cite it in evidence (e.g. `src/shared/rubrics/overview.md`).
+   * grader can cite it in evidence (e.g. `managed-agents/src/shared/rubrics/overview.md`).
    */
   rubricLabel?: string;
   /** Optional path or identifier for the artifact (e.g. `/tmp/vercel.md`). */

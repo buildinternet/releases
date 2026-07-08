@@ -20,7 +20,7 @@ import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { and, asc, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { releases, sourcesActive, organizationsActive } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { resolveUpgradeRange } from "@buildinternet/releases-core/upgrade-range";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
