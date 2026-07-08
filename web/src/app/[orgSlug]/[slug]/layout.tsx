@@ -20,6 +20,7 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { EntityNotice } from "@/components/entity-notice";
+import { ReportIssue } from "@/components/report-issue";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import { getResolved } from "./_lib/resolve";
@@ -144,19 +145,30 @@ export default async function OrgSlugLayout({
           <SourceTypeIcon type={source.type} size={18} />
           {appInfo && <PlatformBadge label={appInfo.label} />}
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
-          <AdminOnly devAdmin={devAdmin}>
-            <SourceAdminMenu
-              orgSlug={source.org?.slug ?? orgSlug}
-              sourceSlug={source.slug}
-              name={source.name}
-              marketingFilter={sourceMeta.marketingFilter === true}
-              marketingFilterHint={sourceMeta.marketingFilterHint ?? null}
-              feedContentDepth={sourceMeta.feedContentDepth ?? null}
-              discovery={source.discovery}
-              isHidden={source.isHidden ?? false}
-              notice={source.notice}
+          <span className="ml-auto flex items-center gap-3">
+            <ReportIssue
+              context={{
+                kind: "source",
+                name: source.name,
+                id: source.id,
+                slug: source.slug,
+                path: base,
+              }}
             />
-          </AdminOnly>
+            <AdminOnly devAdmin={devAdmin}>
+              <SourceAdminMenu
+                orgSlug={source.org?.slug ?? orgSlug}
+                sourceSlug={source.slug}
+                name={source.name}
+                marketingFilter={sourceMeta.marketingFilter === true}
+                marketingFilterHint={sourceMeta.marketingFilterHint ?? null}
+                feedContentDepth={sourceMeta.feedContentDepth ?? null}
+                discovery={source.discovery}
+                isHidden={source.isHidden ?? false}
+                notice={source.notice}
+              />
+            </AdminOnly>
+          </span>
         </div>
         <CliCommand identifier={source.slug} />
         <EntityNotice notice={source.notice} />

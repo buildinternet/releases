@@ -28,6 +28,7 @@ import { ProductAdminMenu } from "@/components/product-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
+import { ReportIssue } from "@/components/report-issue";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { formatSourceDate, shortUrl } from "@/lib/source-display";
 
@@ -197,6 +198,15 @@ export async function ProductView({
                   label={product.name}
                   parentOrgId={orgId}
                   parentOrgName={orgName}
+                />
+                <ReportIssue
+                  context={{
+                    kind: "product",
+                    name: product.name,
+                    id: product.id,
+                    slug: productSlug,
+                    path: `/${orgSlug}/${productSlug}`,
+                  }}
                 />
                 <AdminOnly devAdmin={devAdmin}>
                   <ProductAdminMenu

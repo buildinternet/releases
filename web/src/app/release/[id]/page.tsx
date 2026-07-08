@@ -32,6 +32,7 @@ import { clampTitle, deriveFeedTitle } from "@/lib/release-title";
 import { VideoEmbed } from "@/components/video-embed";
 import { resolveVideoEmbed } from "@/lib/video-source";
 import { OrgAvatar } from "@/components/org-avatar";
+import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
 
@@ -362,6 +363,14 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 View original ↗
               </a>
             )}
+            <ReportIssue
+              context={{
+                kind: "release",
+                name: heading,
+                id: release.id,
+                path: releasePath(release),
+              }}
+            />
             <AdminOnly devAdmin={devAdmin}>
               <span className="ml-auto">
                 <ReleaseAdminMenu
