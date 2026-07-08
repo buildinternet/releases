@@ -70,10 +70,12 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": [
       "oxlint --no-error-on-unmatched-pattern",
-      "oxfmt --write"
+      "oxfmt --write",
+      "oxfmt --check"
     ],
     "*.{json,jsonc,yml,yaml,css}": [
-      "oxfmt --write"
+      "oxfmt --write",
+      "oxfmt --check"
     ]
   },
   "workspaces": [
