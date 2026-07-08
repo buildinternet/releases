@@ -36,19 +36,19 @@
     "./deterministic-update": "./src/deterministic-update.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.8",
+    "@ai-sdk/anthropic": "^4.0.9",
     "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-core": "workspace:*",
     "@openrouter/ai-sdk-provider": "^2.10",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "@rowanmanning/feed-parser": "^2.1.3",
-    "ai": "^7.0.15",
+    "ai": "^7.0.17",
     "fast-xml-parser": "^5.9.3",
     "jsonpath-plus": "^10.4.0",
-    "linkedom": "^0.18.12",
+    "linkedom": "^0.18.13",
     "partial-json": "^0.1.7",
-    "tldts": "^7.4.6",
+    "tldts": "^7.4.7",
     "turndown": "^7.2.4"
   },
   "devDependencies": {

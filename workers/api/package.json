@@ -12,7 +12,7 @@
     "@anthropic-ai/sdk": "catalog:",
     "@better-auth/api-key": "^1.6.23",
     "@better-auth/core": "^1.6.23",
-    "@better-auth/infra": "^0.3.4",
+    "@better-auth/infra": "^0.3.5",
     "@better-auth/oauth-provider": "^1.6.23",
     "@better-auth/passkey": "^1.6.23",
     "@better-auth/stripe": "^1.6.23",
@@ -31,15 +31,15 @@
     "dataloader": "^2.2.3",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.21.2",
-    "hono": "^4.12.27",
-    "hono-openapi": "^1.3.0",
+    "hono": "^4.12.28",
+    "hono-openapi": "^1.3.1",
     "mimetext": "^3.0.24",
     "stripe": "^22.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260704.1",
+    "@cloudflare/workers-types": "^5.20260707.1",
     "jose": "^6.2.3",
-    "wrangler": "^4.107.0"
+    "wrangler": "^4.108.0"
   }
 }
