@@ -5,6 +5,19 @@ import * as schema from "@buildinternet/releases-core/schema";
 export type D1Db = ReturnType<typeof drizzle<typeof schema>>;
 
 /**
+ * Max bound parameters to place in a single `IN (...)` list against the
+ * relational backend. D1's hard ceiling is 100 bound parameters per prepared
+ * statement; 90 leaves headroom for the other binds a query carries alongside
+ * the `IN` list (FTS match text, `LIMIT`, date bounds, org scope, …).
+ *
+ * This is a backend *capability*, not a magic number: a higher-limit backend
+ * (Postgres allows tens of thousands) can raise it in this one place. Callers
+ * that may exceed it chunk their ID list and union the results (see
+ * `getOrgSparklines` in `workers/api/src/queries/orgs.ts`).
+ */
+export const D1_MAX_IN_PARAMS = 90;
+
+/**
  * A drizzle SQLite handle widened across all four generic slots. `D1Db` (the prod
  * D1 handle) is a strict subtype; the widening is needed by query helpers that
  * also run against the `bun:sqlite`-backed test handle (a different result-kind).

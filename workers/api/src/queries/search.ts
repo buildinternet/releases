@@ -9,6 +9,7 @@ import {
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
+import { D1_MAX_IN_PARAMS } from "../db.js";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type {
@@ -89,21 +90,30 @@ type ScopeOpts = {
    * to its source list and passes the IDs through here so both the FTS path
    * and the entity-enrichment path stay scoped.
    *
-   * Chunked at 90 IDs per `IN` clause to stay inside D1's 100-bound limit.
-   * When the array is empty (product has no sources) the query returns no
-   * release hits — mirrors the "no matching org sources" behaviour.
+   * Capped at `D1_MAX_IN_PARAMS` IDs per `IN` clause to stay inside D1's
+   * 100-bound limit. When the array is empty (product has no sources) the
+   * query returns no release hits — mirrors the "no matching org sources"
+   * behaviour.
    */
   sourceIds?: string[];
 };
 
 /**
- * Build an `IN (...)` value list from a `sourceIds` scope, chunked at 90 IDs
- * to stay inside D1's 100-bound limit. Callers guard the empty-array case
- * before reaching here (an empty product returns no hits, not `IN ()`).
+ * Build an `IN (...)` value list from a `sourceIds` scope. Callers guard the
+ * empty-array case before reaching here (an empty product returns no hits, not
+ * `IN ()`).
+ *
+ * The list is *capped* at `D1_MAX_IN_PARAMS` rather than chunked-and-unioned
+ * like `getOrgSparklines`: these are ranked, `LIMIT`-ed FTS queries, so
+ * ranking and `LIMIT` apply per statement and a UNION across chunks would
+ * mis-rank results. The cap is a deliberate scope ceiling — a single product
+ * owning >90 sources is not a shape we serve — not a silently-lossy bug. If
+ * that ever changes, the fix is to rank in TS across per-chunk result sets,
+ * not to raise the cap.
  */
 function sourceIdInList(sourceIds: string[]) {
   return sql`(${sql.join(
-    sourceIds.slice(0, 90).map((id) => sql`${id}`),
+    sourceIds.slice(0, D1_MAX_IN_PARAMS).map((id) => sql`${id}`),
     sql`, `,
   )})`;
 }
