@@ -249,7 +249,17 @@ export async function ProductView({
               availableSourceTypes={availableSourceTypes}
             />
           </div>
-          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${productSlug}`} />
+          <Sidebar
+            sections={sidebarSections}
+            formatPath={`/${orgSlug}/${productSlug}`}
+            report={{
+              kind: "product",
+              name: product.name,
+              id: product.id,
+              slug: productSlug,
+              path: `/${orgSlug}/${productSlug}`,
+            }}
+          />
         </div>
       </div>
     </div>

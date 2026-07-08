@@ -158,6 +158,13 @@ export default async function OrgLayout({
             trackingSince={org.trackingSince}
             lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
             formatPath={`/${orgSlug}`}
+            report={{
+              kind: "org",
+              name: org.name,
+              id: org.id,
+              slug: org.slug,
+              path: `/${org.slug}`,
+            }}
           />
         </div>
       </div>

@@ -53,6 +53,12 @@ describe("formatFeedbackEmail", () => {
     const { text } = formatFeedbackEmail({ ...base, contact: "zach@example.com" });
     expect(text).toContain("Contact: zach@example.com");
   });
+
+  it("includes the surface and names it in the footer reason", () => {
+    const { text } = formatFeedbackEmail({ ...base, surface: "web" });
+    expect(text).toContain("Surface: web");
+    expect(text).toContain("via web");
+  });
 });
 
 describe("withinNotifyBudget", () => {

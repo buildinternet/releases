@@ -52,6 +52,7 @@ export function formatFeedbackEmail(row: Feedback): { subject: string; text: str
     "—",
     `Contact: ${row.contact ?? "(none)"}`,
     `Type: ${row.type}`,
+    `Surface: ${row.surface}`,
     `ID: ${row.id}`,
     `CLI: ${row.cliVersion ?? "(unknown)"}`,
     `Client: ${row.clientKind}`,
@@ -60,7 +61,7 @@ export function formatFeedbackEmail(row: Feedback): { subject: string; text: str
     `Received: ${new Date(row.createdAt).toISOString()}`,
   ].join("\n");
   const text = appendTextFooter(body, {
-    reason: "Internal notification from Releases — feedback submitted via the CLI.",
+    reason: `Internal notification from Releases — feedback submitted via ${row.surface}.`,
   });
   return { subject, text };
 }
