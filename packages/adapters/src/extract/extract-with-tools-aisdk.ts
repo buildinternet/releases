@@ -1,9 +1,9 @@
 /**
- * The OpenRouter / Vercel-AI-SDK extraction path — a provider-agnostic port of
- * `extract-with-tools.ts` (the Anthropic-SDK large-body tool-loop). The worker
- * resolves an OpenRouter `LanguageModel` (DeepSeek) when the `openrouter-enabled`
- * flag is on + an `EXTRACT_MODEL` + key are configured, and routes the tool-loop
- * here instead of the Anthropic SDK loop; off, the Anthropic path is unchanged.
+ * The AI-SDK extraction path — a provider-agnostic port of `extract-with-tools.ts`
+ * (the legacy Anthropic-SDK large-body tool-loop). The worker resolves an
+ * OpenRouter `LanguageModel` when the flag + `EXTRACT_MODEL` + key are set,
+ * otherwise an Anthropic `LanguageModel` via `buildLaneAnthropicModel`; both
+ * route the tool-loop here.
  *
  * Driving the loop through a provider-agnostic SDK makes DeepSeek-via-OpenRouter
  * a model swap, not a rewrite — WITHOUT losing the two things that make the lane

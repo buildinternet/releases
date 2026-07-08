@@ -398,7 +398,7 @@ export async function generateOverview(
   ): Promise<{ body: string; citations: RawOverviewCitation[]; truncated: boolean }> => {
     const res = await generateText({
       model,
-      system: SYSTEM_PROMPT,
+      instructions: SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
       output: Output.object({ schema: OVERVIEW_OUTPUT_SCHEMA }),

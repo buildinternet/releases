@@ -219,7 +219,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
     // window — the flag + secret reads shouldn't repeat each iteration. Inert on
     // this path today: backfill never sets `useToolLoop`, so extraction always
     // takes the one-shot Anthropic tier; wired for consistency + future use.
-    const aiSdk = await resolveExtractAiSdkModel(env);
+    const aiSdk = await resolveExtractAiSdkModel(env, BACKFILL_EXTRACT_MODEL);
 
     // ── Steps 4+: extract-window-N ──────────────────────────────────────────
     // Each window is its own step.do so Cloudflare can retry or resume at the

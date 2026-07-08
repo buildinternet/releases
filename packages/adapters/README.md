@@ -29,8 +29,8 @@ Imported as `@releases/adapters/<subpath>`.
 | `extract`              | AI-driven changelog extraction strategies, shared by the CLI and discovery worker.               |
 | `extract/shared`       | Pure extraction helpers (version sanitization, tagged-entry parsing).                            |
 | `extract/types`        | Types for the extract package (`ExtractedEntry`, `KnownRelease`, deps interfaces).               |
-| `extract/aisdk`        | OpenRouter / Vercel-AI-SDK large-body tool-loop extraction path.                                 |
-| `overview-model`       | Builds the AI-SDK `LanguageModel` for the org-overview structured-output lane.                   |
+| `extract/aisdk`        | AI SDK large-body tool-loop (`extractWithToolsAiSdk`) — OpenRouter or Anthropic.                 |
+| `lane-model`           | Shared AI-SDK `LanguageModel` builders for cheap-call lanes and structured-output (overview).    |
 | `github-probe`         | Lightweight GitHub repo probe (exists / has-releases / has-changelog).                           |
 | `scrape-fetch`         | Extraction entry point for the discovery worker; routes `scrape`/`agent` sources.                |
 | `scrape-persister`     | Persistence seam for `scrapeFetch` (release insert, fetch-log, source updates).                  |

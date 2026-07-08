@@ -15,18 +15,14 @@
  * falls through to Anthropic here; a runtime OpenRouter throw is caught by the
  * caller's per-item try/catch (poll-fetch), which inserts the item visibly.
  */
+import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
 import {
-  anthropicTextModel,
-  openRouterTextModel,
   withUsageLogging,
   type TextModel,
   type TextModelUsage,
 } from "@releases/ai-internal/text-model";
 import type { OverviewCallUsage } from "@releases/ai-internal/overview-content";
-import {
-  buildOverviewOpenRouterModel,
-  buildOverviewAnthropicModel,
-} from "@releases/adapters/overview-model";
+import { buildLaneAnthropicModel, buildLaneOpenRouterModel } from "@releases/adapters/lane-model";
 import type { LanguageModel } from "ai";
 import type {
   OpenRouterProviderPrefs,
@@ -35,7 +31,6 @@ import type {
 import { MODEL as ANTHROPIC_MARKETING_MODEL } from "@releases/ai-internal/marketing-classifier";
 import { MODEL as ANTHROPIC_SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import { MODEL as ANTHROPIC_ARTICLE_MODEL } from "@releases/ai-internal/article-extract";
-import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { estimateCost } from "@releases/lib/anthropic-pricing";
@@ -57,7 +52,7 @@ export interface TextModelEnv extends AnthropicEnv {
    *  the lane stays on Anthropic Haiku. Read by `resolveArticleExtractModel`. */
   FEED_ENRICH_MODEL?: string;
   /** OpenRouter model for the large-body extraction tool-loop (issue #1536); empty
-   *  → extraction stays on Anthropic. Read by `resolveExtractAiSdkModel`, not here. */
+   *  → extraction stays on Anthropic AI SDK. Read by `resolveExtractAiSdkModel`. */
   EXTRACT_MODEL?: string;
   /** Single switch for the secondary AI lanes. Flagship-driven; var optional. */
   OPENROUTER_ENABLED?: string;
@@ -147,27 +142,24 @@ async function resolveTextModel(
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
       return withLaneUsageLogging(
-        openRouterTextModel({
-          apiKey: orKey,
-          model,
-          ...(baseURL ? { baseURL } : {}),
-          ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
-          ...(opts.provider ? { provider: opts.provider } : {}),
-          ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
-          referer: "https://releases.sh",
-          title: APP_TITLE,
-          // Stable per-lane sticky-routing key: every call in a lane shares the
-          // same static system prompt, so pinning the lane to one OpenRouter
-          // upstream lets that prefix be read from the provider's cache instead
-          // of re-billed. The generationName is the lane's natural stable id; it
-          // doubles as the Broadcast grouping id (inert until Broadcast is on),
-          // which intentionally collapses a lane's traffic into one trace group.
-          sessionId: opts.generationName,
-          trace: {
-            generationName: opts.generationName,
-            ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
-          },
-        }),
+        aisdkTextModel(
+          buildLaneOpenRouterModel({
+            apiKey: orKey,
+            model,
+            ...(baseURL ? { baseURL } : {}),
+            ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
+            ...(opts.provider ? { providerPrefs: opts.provider as Record<string, unknown> } : {}),
+            referer: "https://releases.sh",
+            title: APP_TITLE,
+            sessionId: opts.generationName,
+            trace: {
+              generationName: opts.generationName,
+              ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
+            },
+          }),
+          `openrouter:${model}`,
+          opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : undefined,
+        ),
         opts.generationName,
         env,
       );
@@ -192,9 +184,17 @@ async function resolveTextModel(
   // Key + gateway opts are independent secret/var reads — resolve concurrently.
   const [apiKey, gatewayOpts] = await Promise.all([getAnthropicKey(env), resolveGatewayOpts(env)]);
   if (!apiKey) return null;
-  const client = buildAnthropicClient({ apiKey, ...gatewayOpts });
   return withLaneUsageLogging(
-    anthropicTextModel(client, opts.anthropicModel),
+    aisdkTextModel(
+      buildLaneAnthropicModel({
+        apiKey,
+        model: opts.anthropicModel,
+        ...(gatewayOpts.baseURL ? { baseURL: gatewayOpts.baseURL } : {}),
+        ...(gatewayOpts.gatewayToken ? { gatewayToken: gatewayOpts.gatewayToken } : {}),
+      }),
+      `anthropic:${opts.anthropicModel}`,
+      opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : undefined,
+    ),
     opts.generationName,
     env,
   );
@@ -323,7 +323,7 @@ export async function resolveOverviewModel(
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
       return {
-        model: buildOverviewOpenRouterModel({
+        model: buildLaneOpenRouterModel({
           apiKey: orKey,
           model,
           ...(baseURL ? { baseURL } : {}),
@@ -354,7 +354,7 @@ export async function resolveOverviewModel(
   const [apiKey, gatewayOpts] = await Promise.all([getAnthropicKey(env), resolveGatewayOpts(env)]);
   if (!apiKey) return null;
   return {
-    model: buildOverviewAnthropicModel({
+    model: buildLaneAnthropicModel({
       apiKey,
       model: ANTHROPIC_SUMMARIZE_MODEL,
       ...(gatewayOpts.baseURL ? { baseURL: gatewayOpts.baseURL } : {}),

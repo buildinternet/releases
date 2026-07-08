@@ -25,10 +25,7 @@ import {
   openRouterTextModel,
   type TextModel,
 } from "@releases/ai-internal/text-model";
-import {
-  buildOverviewOpenRouterModel,
-  buildOverviewAnthropicModel,
-} from "@releases/adapters/overview-model";
+import { buildLaneOpenRouterModel, buildLaneAnthropicModel } from "@releases/adapters/lane-model";
 import type { LanguageModel } from "ai";
 
 /**
@@ -111,7 +108,7 @@ export function resolveEvalModel(
  * `LanguageModel`. This mirrors production `resolveOverviewModel`
  * (workers/api/src/lib/text-model.ts): OpenRouter when the candidate model env var
  * + `OPENROUTER_API_KEY` are set, else the Anthropic baseline via
- * `buildOverviewAnthropicModel`. Kept separate so the shared `resolveEvalModel`
+ * `buildLaneAnthropicModel`. Kept separate so the shared `resolveEvalModel`
  * stays a `TextModel` for the other suites. Returns null only when no provider is
  * usable (no OpenRouter pair and no Anthropic key).
  */
@@ -130,7 +127,7 @@ export function resolveOverviewEvalModel(opts: {
   if (orKey && orModel) {
     const baseURL = process.env.OPENROUTER_BASE_URL?.trim();
     return {
-      model: buildOverviewOpenRouterModel({
+      model: buildLaneOpenRouterModel({
         apiKey: orKey,
         model: orModel,
         ...(baseURL ? { baseURL } : {}),
@@ -146,7 +143,7 @@ export function resolveOverviewEvalModel(opts: {
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY?.trim();
   if (apiKey) {
     return {
-      model: buildOverviewAnthropicModel({ apiKey, model: opts.anthropicModel }),
+      model: buildLaneAnthropicModel({ apiKey, model: opts.anthropicModel }),
       label: `anthropic:${opts.anthropicModel}`,
     };
   }

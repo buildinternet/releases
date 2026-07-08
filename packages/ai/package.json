@@ -17,7 +17,8 @@
     "./release-content": "./src/release-content.ts",
     "./overview-content": "./src/overview-content.ts",
     "./overview-citations": "./src/overview-citations.ts",
-    "./text-model": "./src/text-model.ts"
+    "./text-model": "./src/text-model.ts",
+    "./aisdk-text-model": "./src/aisdk-text-model.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",

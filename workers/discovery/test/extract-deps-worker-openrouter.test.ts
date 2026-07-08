@@ -1,11 +1,12 @@
 /**
- * `resolveAiSdkExtractModel` (issue #1536 / #1878 workstream 2) decides
- * whether the large-body extraction tool-loop routes through OpenRouter
- * (DeepSeek) or stays on the Anthropic SDK. It isn't exported directly, but
- * its result surfaces on `ExtractDeps.aiSdkModel` / `aiSdkModelLabel`, so we
- * exercise it through `buildWorkerExtractDeps`. Every condition must hold —
- * `openrouterEnabled`, a non-empty `extractModel`, and a resolvable
- * `openRouterApiKey` — otherwise the lane fails open to Anthropic (unset).
+ * `resolveAiSdkExtractModel` (issue #1536 / #1878 workstream 2) decides which
+ * AI-SDK model backs the large-body extraction tool-loop. It isn't exported
+ * directly, but its result surfaces on `ExtractDeps.aiSdkModel` /
+ * `aiSdkModelLabel`, so we exercise it through `buildWorkerExtractDeps`.
+ *
+ * OpenRouter when `openrouterEnabled` + a non-empty `extractModel` + a
+ * resolvable `openRouterApiKey` are all set; otherwise Anthropic AI SDK
+ * (always when `anthropicApiKey` is present).
  */
 import { describe, it, expect } from "bun:test";
 import { buildWorkerExtractDeps, type WorkerDepsEnv } from "@releases/adapters/extract-deps-worker";
@@ -36,7 +37,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     expect(deps.aiSdkModelLabel).toBe("deepseek/deepseek-v4-pro");
   });
 
-  it("fails open to Anthropic when openrouterEnabled is false", async () => {
+  it("falls back to Anthropic AI SDK when openrouterEnabled is false", async () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: false,
@@ -45,11 +46,11 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
       }),
     );
 
-    expect(deps.aiSdkModel).toBeUndefined();
-    expect(deps.aiSdkModelLabel).toBeUndefined();
+    expect(deps.aiSdkModel).toBeDefined();
+    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5");
   });
 
-  it("fails open to Anthropic when extractModel is empty", async () => {
+  it("falls back to Anthropic AI SDK when extractModel is empty", async () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
@@ -58,10 +59,11 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
       }),
     );
 
-    expect(deps.aiSdkModel).toBeUndefined();
+    expect(deps.aiSdkModel).toBeDefined();
+    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5");
   });
 
-  it("fails open to Anthropic when the OpenRouter key does not resolve", async () => {
+  it("falls back to Anthropic AI SDK when the OpenRouter key does not resolve", async () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
@@ -70,10 +72,11 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
       }),
     );
 
-    expect(deps.aiSdkModel).toBeUndefined();
+    expect(deps.aiSdkModel).toBeDefined();
+    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5");
   });
 
-  it("fails open to Anthropic when no OpenRouter key binding is provided at all", async () => {
+  it("falls back to Anthropic AI SDK when no OpenRouter key binding is provided", async () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
@@ -81,6 +84,31 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
       }),
     );
 
+    expect(deps.aiSdkModel).toBeDefined();
+    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5");
+  });
+
+  it("uses a custom agentModel for the Anthropic fallback label", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        openrouterEnabled: false,
+        agentModel: "claude-custom-agent",
+      }),
+    );
+
+    expect(deps.aiSdkModel).toBeDefined();
+    expect(deps.aiSdkModelLabel).toBe("claude-custom-agent");
+  });
+
+  it("returns no aiSdkModel when no Anthropic key is configured", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        anthropicApiKey: "",
+        openrouterEnabled: false,
+      }),
+    );
+
     expect(deps.aiSdkModel).toBeUndefined();
+    expect(deps.aiSdkModelLabel).toBeUndefined();
   });
 });

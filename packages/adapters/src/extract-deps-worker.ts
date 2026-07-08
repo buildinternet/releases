@@ -7,7 +7,7 @@
 import { buildAnthropicClient } from "@releases/lib/anthropic-client";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
-import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
+import { resolveToolLoopAiSdkModel } from "@releases/adapters/extract";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ExtractDeps, ExtractRepo, UsageEntry } from "@releases/adapters/extract";
 import { buildPlaybookMarkdown, type PlaybookPage } from "./playbook-block.js";
@@ -28,12 +28,11 @@ export interface WorkerDepsEnv {
   sessionId?: string;
   extractToolLoopEnabled?: boolean;
   /**
-   * OpenRouter extraction lane (issue #1536). When `openrouterEnabled` (the
-   * resolved `openrouter-enabled` flag) is true AND `extractModel` is non-empty
-   * AND `openRouterApiKey` resolves, the large-body tool-loop routes through the
-   * AI-SDK path on this model instead of the Anthropic SDK loop. Any missing
-   * piece → Anthropic path (fail open). The flag is resolved once per session by
-   * the caller (mirrors `extractToolLoopEnabled`).
+   * Extraction tool-loop model (issue #1536). OpenRouter when `openrouterEnabled`
+   * + `extractModel` + `openRouterApiKey` resolve; otherwise Anthropic via the
+   * AI SDK. Either way the large-body tool-loop runs `extractWithToolsAiSdk`.
+   * The flag is resolved once per session by the caller (mirrors
+   * `extractToolLoopEnabled`).
    * `OPENROUTER_API_KEY` is bound and `EXTRACT_MODEL` is set in the discovery
    * worker's wrangler.jsonc (prod + staging, #1878 workstream 2) — the only
    * remaining switch is flipping `openrouter-enabled` on in both Flagship apps.
@@ -168,50 +167,34 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
   };
 }
 
-/**
- * Resolve the OpenRouter extraction model, or `undefined` to keep the Anthropic
- * tool-loop. Fail-open at every step: flag off, no `EXTRACT_MODEL`, an
- * unresolvable/missing key, or any throw → `undefined` (Anthropic path).
- */
 async function resolveAiSdkExtractModel(
   env: WorkerDepsEnv,
 ): Promise<{ model: unknown; label: string } | undefined> {
+  const anthropicModel = env.agentModel ?? DEFAULT_AGENT_MODEL;
+  let openRouterApiKey: string | null = null;
   try {
-    if (!env.openrouterEnabled) return undefined; // off by default — silent (expected path)
-    const model = env.extractModel?.trim();
-    if (!model) {
-      // Flag on but lane not finished — warn so the silent Anthropic fallback is diagnosable.
-      logEvent("warn", {
-        component: "extract-deps",
-        event: "openrouter-misconfigured",
-        reason: "EXTRACT_MODEL empty",
-      });
-      return undefined;
+    if (env.openrouterEnabled && env.openRouterApiKey) {
+      openRouterApiKey = await getSecret(env.openRouterApiKey).catch(() => null);
     }
-    const apiKey = await getSecret(env.openRouterApiKey).catch(() => null);
-    if (!apiKey) {
-      logEvent("warn", {
-        component: "extract-deps",
-        event: "openrouter-misconfigured",
-        reason: "OPENROUTER_API_KEY unresolved",
-        model,
-      });
-      return undefined;
-    }
-    const baseURL = env.openRouterBaseURL?.trim();
-    return {
-      model: buildOpenRouterExtractModel({ apiKey, model, ...(baseURL ? { baseURL } : {}) }),
-      label: model,
-    };
   } catch (err) {
-    // Any unexpected failure → Anthropic path (fail open).
     logEvent("warn", {
       component: "extract-deps",
       event: "openrouter-resolve-failed",
       err: err instanceof Error ? err : String(err),
     });
-    return undefined;
   }
+
+  return resolveToolLoopAiSdkModel({
+    openrouterEnabled: env.openrouterEnabled ?? false,
+    extractModel: env.extractModel,
+    openRouterApiKey,
+    openRouterBaseURL: env.openRouterBaseURL,
+    anthropicApiKey: env.anthropicApiKey || undefined,
+    anthropicModel,
+    anthropicBaseURL: env.anthropicBaseURL,
+    aiGatewayToken: env.aiGatewayToken,
+    logComponent: "extract-deps",
+  });
 }
 
 export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<ExtractDeps> {

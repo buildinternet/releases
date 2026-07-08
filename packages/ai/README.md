@@ -20,6 +20,7 @@ Imported as `@releases/ai-internal/<subpath>`.
 | `grader-prompt`        | Builds the rubric-grading prompt the local grader subagent uses to score an artifact.               |
 | `batch`                | Anthropic Message Batches API helpers (submit/poll/collect).                                        |
 | `openrouter-client`    | Worker-safe transport to OpenRouter's OpenAI-compatible chat-completions API.                       |
-| `text-model`           | Provider-agnostic text-completion seam (`TextModel`) with Anthropic + OpenRouter adapters.          |
+| `aisdk-text-model`     | Wraps an AI SDK `LanguageModel` as a `TextModel` via `generateText` — worker cheap-lane path.       |
+| `text-model`           | `TextModel` interface + legacy `anthropicTextModel` / `openRouterTextModel` (scripts/evals).        |
 
 **Private, workspace-only — not published to npm.**
