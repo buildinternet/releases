@@ -19,13 +19,9 @@
  * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-4-6` to go
  * back to Sonnet, or `JUDGE_MODEL=google/gemini-2.5-flash-lite` for cheaper.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import {
-  anthropicTextModel,
-  openRouterTextModel,
-  type TextModel,
-} from "@releases/ai-internal/text-model";
 import { buildLaneOpenRouterModel, buildLaneAnthropicModel } from "@releases/adapters/lane-model";
+import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
+import type { TextModel } from "@releases/ai-internal/text-model";
 import type { LanguageModel } from "ai";
 
 /**
@@ -52,11 +48,11 @@ export interface EvalModelOptions {
   /** Env var naming the OpenRouter candidate model — `EVAL_MODEL` or `EVAL_OPENROUTER_MODEL`. */
   orModelEnvVar: string;
   /**
-   * Reuse an existing Anthropic client (e.g. the one a judged eval already built)
-   * instead of constructing one from `ANTHROPIC_API_KEY`. When provided, the
-   * Anthropic fallback is always available, so the result is never null.
+   * Reuse an existing Anthropic API key (e.g. one the caller already validated)
+   * instead of reading `ANTHROPIC_API_KEY` again. When provided, the Anthropic
+   * fallback is always available, so the result is never null.
    */
-  client?: Anthropic;
+  apiKey?: string;
 }
 
 /**
@@ -66,7 +62,7 @@ export interface EvalModelOptions {
  * against the same prompt + fixtures (`OPENROUTER_BASE_URL` optionally routes
  * through an AI Gateway sub-path). The returned `label` is the `<provider>:<model>`
  * id used for run attribution. Returns null only when no provider key is
- * available (no `client` and no `ANTHROPIC_API_KEY`) — the caller skips the run.
+ * available (no `apiKey` and no `ANTHROPIC_API_KEY`) — the caller skips the run.
  */
 export function resolveEvalModel(
   opts: EvalModelOptions,
@@ -74,27 +70,30 @@ export function resolveEvalModel(
   const orKey = process.env.OPENROUTER_API_KEY?.trim();
   const orModel = process.env[opts.orModelEnvVar]?.trim();
   if (orKey && orModel) {
+    const baseURL = process.env.OPENROUTER_BASE_URL?.trim();
+    const label = `openrouter:${orModel}`;
     return {
-      model: openRouterTextModel({
-        apiKey: orKey,
-        model: orModel,
-        ...(process.env.OPENROUTER_BASE_URL?.trim()
-          ? { baseURL: process.env.OPENROUTER_BASE_URL.trim() }
-          : {}),
-        referer: "https://releases.sh",
-        title: "Releases",
-        // Tag eval runs so Broadcast traces stay separate from prod traffic.
-        trace: { generationName: opts.generationName, environment: "eval" },
-      }),
-      label: `openrouter:${orModel}`,
+      model: aisdkTextModel(
+        buildLaneOpenRouterModel({
+          apiKey: orKey,
+          model: orModel,
+          ...(baseURL ? { baseURL } : {}),
+          sessionId: opts.generationName,
+          referer: "https://releases.sh",
+          title: "Releases",
+          trace: { generationName: opts.generationName, environment: "eval" },
+        }),
+        label,
+      ),
+      label,
     };
   }
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const client = opts.client ?? (apiKey ? new Anthropic({ apiKey }) : null);
-  if (client) {
+  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY?.trim();
+  if (apiKey) {
+    const label = `anthropic:${opts.anthropicModel}`;
     return {
-      model: anthropicTextModel(client, opts.anthropicModel),
-      label: `anthropic:${opts.anthropicModel}`,
+      model: aisdkTextModel(buildLaneAnthropicModel({ apiKey, model: opts.anthropicModel }), label),
+      label,
     };
   }
   return null;
@@ -134,7 +133,6 @@ export function resolveOverviewEvalModel(opts: {
         sessionId: opts.generationName,
         referer: "https://releases.sh",
         title: "Releases",
-        // Tag eval runs so Broadcast traces stay separate from prod traffic.
         trace: { generationName: opts.generationName, environment: "eval" },
       }),
       label: `openrouter:${orModel}`,
@@ -158,10 +156,16 @@ export const DEFAULT_JUDGE_MODEL = "google/gemini-2.5-flash";
  * `JUDGE_MODEL` overrides it. An `claude-…` id routes through the Anthropic SDK;
  * any other id is an OpenRouter slug (requires `OPENROUTER_API_KEY`).
  */
-export function resolveJudgeModel(client: Anthropic): TextModel {
+export function resolveJudgeModel(apiKey?: string): TextModel {
   const id = process.env.JUDGE_MODEL?.trim() || DEFAULT_JUDGE_MODEL;
   if (id.startsWith("claude-")) {
-    return anthropicTextModel(client, id);
+    const key = apiKey ?? process.env.ANTHROPIC_API_KEY?.trim();
+    if (!key) {
+      throw new Error(
+        `Judge model "${id}" needs ANTHROPIC_API_KEY. Set it, or pick an OpenRouter judge instead.`,
+      );
+    }
+    return aisdkTextModel(buildLaneAnthropicModel({ apiKey: key, model: id }), `anthropic:${id}`);
   }
   const orKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!orKey) {
@@ -170,14 +174,17 @@ export function resolveJudgeModel(client: Anthropic): TextModel {
         `JUDGE_MODEL=claude-sonnet-4-6 to judge with Anthropic instead.`,
     );
   }
-  return openRouterTextModel({
-    apiKey: orKey,
-    model: id,
-    referer: "https://releases.sh",
-    title: "Releases",
-    // Tag eval runs so Broadcast traces stay separate from prod traffic.
-    trace: { generationName: "rubric-judge-eval", environment: "eval" },
-  });
+  return aisdkTextModel(
+    buildLaneOpenRouterModel({
+      apiKey: orKey,
+      model: id,
+      sessionId: "rubric-judge-eval",
+      referer: "https://releases.sh",
+      title: "Releases",
+      trace: { generationName: "rubric-judge-eval", environment: "eval" },
+    }),
+    `openrouter:${id}`,
+  );
 }
 
 /**

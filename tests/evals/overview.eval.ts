@@ -13,7 +13,7 @@
  * an OpenRouter candidate against the same fixtures.
  */
 import { readFileSync } from "fs";
-import Anthropic from "@anthropic-ai/sdk";
+
 import {
   generateOverview,
   releaseSource,
@@ -62,8 +62,6 @@ async function main() {
   }
 
   const fixtures = loadOverviewFixtures();
-  const client = new Anthropic({ apiKey });
-
   // Model under test: OpenRouter candidate when OVERVIEW_EVAL_MODEL is set,
   // else the Anthropic Haiku production baseline (MODEL). Returns an AI SDK
   // `LanguageModel` (the structured-output path), mirroring production
@@ -83,7 +81,7 @@ async function main() {
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
   // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
-  const judgeModel = useJudge ? resolveJudgeModel(client) : null;
+  const judgeModel = useJudge ? resolveJudgeModel(apiKey) : null;
 
   let allPassed = true;
   console.error(`\n${"=".repeat(60)}`);

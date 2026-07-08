@@ -49,7 +49,8 @@ import {
   type SummarizeReleaseInput,
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
-import { anthropicTextModel } from "@releases/ai-internal/text-model";
+import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
+import { buildLaneAnthropicModel } from "@releases/adapters/lane-model";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 import { adminPatch, adminPost } from "./lib/admin-client.js";
 
@@ -432,9 +433,17 @@ const client = buildAnthropicClient({
   baseURL: process.env.ANTHROPIC_BASE_URL,
   gatewayToken: process.env.AI_GATEWAY_TOKEN,
 });
-// The real-time path runs `summarizeRelease` through the TextModel seam; the batch
-// path stays on the Anthropic Batches API (no OpenRouter batch equivalent).
-const realtimeModel = anthropicTextModel(client, MODEL);
+// The real-time path runs `summarizeRelease` through the AI SDK TextModel seam; the
+// batch path stays on the Anthropic Batches API (no OpenRouter batch equivalent).
+const realtimeModel = aisdkTextModel(
+  buildLaneAnthropicModel({
+    apiKey,
+    model: MODEL,
+    baseURL: process.env.ANTHROPIC_BASE_URL,
+    gatewayToken: process.env.AI_GATEWAY_TOKEN,
+  }),
+  `anthropic:${MODEL}`,
+);
 
 const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${noBatch ? "real-time" : "batched"})`;
 

@@ -8,7 +8,7 @@
  * Results are persisted to ~/.releases/evals/results/collection-summary-*.json.
  */
 import { readFileSync } from "fs";
-import Anthropic from "@anthropic-ai/sdk";
+
 import {
   summarizeCollectionDay,
   type CollectionSummaryResult,
@@ -204,17 +204,15 @@ async function main() {
     process.exit(0);
   }
 
-  const client = new Anthropic({ apiKey });
-
   const summaryModel: TextModel = resolveEvalModel({
     anthropicModel: COLLECTION_MODEL,
     generationName: "collection-summary-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
-    client,
+    apiKey,
   })!.model;
   console.error(`model under test: ${summaryModel.id}`);
 
-  const judgeModel = useJudge ? resolveJudgeModel(client) : null;
+  const judgeModel = useJudge ? resolveJudgeModel(apiKey) : null;
   if (judgeModel) console.error(`judge model: ${judgeModel.id}`);
 
   let allPassed = true;
