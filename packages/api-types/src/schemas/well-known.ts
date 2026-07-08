@@ -8,9 +8,14 @@ const MAX_FILE_RELEASES = 32;
 const SocialValueSchema = z.string().min(1).max(200);
 const SocialSchema = z.record(z.string().min(1).max(40), SocialValueSchema);
 
-const HttpsUrlSchema = z
-  .url()
-  .refine((url) => url.startsWith("https://"), "locator must be an https URL");
+// `z.url().startsWith(...)` keeps the runtime URL + https check AND serializes to
+// JSON Schema as `format: "uri"` + `pattern: "^https://"` — so the generated
+// public schema rejects non-https schemes too (a plain `.refine()` would be
+// silently dropped by z.toJSONSchema).
+const HttpsUrlSchema = z.url().startsWith("https://", "locator must be an https URL");
+
+/** Shared tag-array bounds — kept identical for org-level and product-level tags. */
+const TagsSchema = z.array(z.string().min(1).max(60)).max(50);
 
 const ReleaseLocationFields = {
   url: HttpsUrlSchema.optional(),
@@ -87,6 +92,7 @@ export const ReleasesJsonProductSchema = z.strictObject({
   docs: z.url().optional(),
   support: z.url().optional(),
   social: SocialSchema.optional(),
+  tags: TagsSchema.optional(),
   archived: z.boolean().optional(),
   releases: DomainProductReleasesSchema.optional(),
 });
@@ -138,7 +144,7 @@ export const ReleasesJsonDomainSchema = z
     description: z.string().max(2000).optional(),
     category: z.string().min(1).max(120).optional(),
     avatar: HttpsUrlSchema.optional(),
-    tags: z.array(z.string().min(1).max(60)).max(50).optional(),
+    tags: TagsSchema.optional(),
     social: SocialSchema.optional(),
     products: z.array(ReleasesJsonProductSchema).max(MAX_PRODUCTS).optional(),
   })
@@ -184,7 +190,7 @@ export const CreateStubOrgBodySchema = z.strictObject({
   description: z.string().max(2000).optional(),
   category: z.string().min(1).max(120).optional(),
   avatar: HttpsUrlSchema.optional(),
-  tags: z.array(z.string().min(1).max(60)).max(50).optional(),
+  tags: TagsSchema.optional(),
   social: SocialSchema.optional(),
   products: z.array(ReleasesJsonProductSchema).max(MAX_PRODUCTS).optional(),
   releases: DomainReleasesSchema.optional(),

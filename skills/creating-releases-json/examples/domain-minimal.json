@@ -1,0 +1,5 @@
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "releases": [{ "url": "https://updates.acme.com", "feed": "https://updates.acme.com/rss.xml" }]
+}

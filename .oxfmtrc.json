@@ -22,6 +22,7 @@
     "package-lock.json",
     "**/migrations/**/*.sql",
     "plugins/claude-code/skills",
+    "skills",
     "packages/*/dist",
     "tests/evals/fixtures/tool-ux/runs",
     "packages/api-types/graphql/schema.graphql",
