@@ -12,6 +12,7 @@ code, or any MCP client. Readable by you and your agent.
 
 <p>
   <a href="https://releases.sh"><b>releases.sh</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/buildinternet/releases-cli"><b>CLI repo →</b></a> &nbsp;·&nbsp;
   <a href="#use-it">Use it</a> &nbsp;·&nbsp;
   <a href="#whats-in-this-repo">What's in this repo</a> &nbsp;·&nbsp;
   <a href="#local-development">Develop</a>
@@ -19,10 +20,17 @@ code, or any MCP client. Readable by you and your agent.
 
 <p>
   <a href="https://github.com/buildinternet/releases/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/buildinternet/releases/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/buildinternet/releases-cli"><img alt="CLI repo" src="https://img.shields.io/badge/CLI-buildinternet%2Freleases--cli-24292e?logo=github"></a>
   <a href="https://www.npmjs.com/package/@buildinternet/releases"><img alt="npm (CLI)" src="https://img.shields.io/npm/v/@buildinternet/releases?color=cb3837&label=%40buildinternet%2Freleases&logo=npm"></a>
   <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp"><img alt="MCP server" src="https://img.shields.io/badge/exposes-MCP_server-000"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
 </p>
+
+<p><sub>
+  This repo is the <b>backend</b> for <a href="https://releases.sh">releases.sh</a> (API · MCP · web · ingest).
+  The user-facing command-line tool lives in its own repo →
+  <a href="https://github.com/buildinternet/releases-cli"><b>buildinternet/releases-cli</b></a>.
+</sub></p>
 
 </div>
 
