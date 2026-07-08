@@ -49,6 +49,9 @@ export function aisdkTextModel(
           : req.system,
         prompt: req.user,
         maxOutputTokens: req.maxTokens,
+        // Callers (poll-fetch, marketing classifier, …) own per-item retry/fail-open;
+        // internal SDK retries would amplify cost and stall workflow tests.
+        maxRetries: 0,
         ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
       });
       return { text: res.text, usage: usageFromGenerateText(res) };
