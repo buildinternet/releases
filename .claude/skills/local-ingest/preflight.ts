@@ -3,12 +3,17 @@
  * local-ingest preflight — robots.txt / Content-Signal safety gate.
  *
  * Run BEFORE fetching or extracting any page in the local-ingest skill. It is
- * the mandatory opt-out check: if a publisher declares `ai-input=no` or
- * `ai-train=no` via Cloudflare's Content Signals policy in robots.txt, the
- * local-ingest path must STOP rather than silently spend tokens or ingest
- * content against the opt-out. (This is the Conductor lesson — `conductor.build`
- * serves `Content-Signal: ai-train=no, search=yes, ai-input=no` and must be
- * refused.)
+ * the mandatory opt-out check: if a publisher declares `ai-input=no` via
+ * Cloudflare's Content Signals policy in robots.txt, the local-ingest path must
+ * STOP rather than silently spend tokens or ingest content against the opt-out.
+ *
+ * We gate on `ai-input` only, NOT `ai-train`: local-ingest performs AI search /
+ * input ingestion (feeding a search index), which is exactly what `ai-input`
+ * governs. `ai-train=no` opts out of model *training* — a different use we don't
+ * perform — so a publisher permitting `ai-input=yes` while setting `ai-train=no`
+ * (e.g. `vercel.com`) must be allowed through, not refused. (The Conductor case —
+ * `conductor.build` serves `Content-Signal: ai-train=no, search=yes, ai-input=no`
+ * — is still correctly refused, via its `ai-input=no`.)
  *
  * The refusal is a POLICY choice, not a technical limit: `web_fetch` and CF
  * Browser Rendering can still retrieve these pages. Honor the signal anyway.
@@ -20,7 +25,7 @@
  *
  * Exit codes (so callers can gate deterministically):
  *   0  proceed  — permissive or absent Content-Signal
- *   1  refuse   — ai-input=no or ai-train=no
+ *   1  refuse   — ai-input=no
  *   2  unknown  — could not fetch/parse robots.txt; surface to the user, do not assume proceed
  *
  * Dependency-free: fetch + string parsing only. Runs anywhere bun runs.
@@ -41,7 +46,9 @@ interface PreflightResult {
 // Mirrors WEB_BOT_AUTH_USER_AGENT (packages/core web-bot-auth) — kept inline so this
 // stays dependency-free and runnable standalone (the thin-client CLI mirrors the same value).
 const UA = "releases/0.1 (+https://releases.sh)";
-const BLOCKING_SIGNALS = ["ai-input", "ai-train"] as const;
+// Gate on ai-input only — local-ingest is search/input ingestion, not model
+// training. ai-train=no alone must NOT refuse (see the docstring above).
+const BLOCKING_SIGNALS = ["ai-input"] as const;
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   proceed: "PROCEED",
@@ -172,7 +179,7 @@ async function preflight(input: string): Promise<PreflightResult> {
     return {
       ...base,
       verdict: "refuse",
-      reason: `Content-Signal opt-out: ${blocked.join(", ")}. Publisher disallows AI input/training. STOP — do not fetch or write without explicit permission.`,
+      reason: `Content-Signal opt-out: ${blocked.join(", ")}. Publisher disallows AI input. STOP — do not fetch or write without explicit permission.`,
     };
   }
   if (!contentSignal) {
@@ -185,7 +192,7 @@ async function preflight(input: string): Promise<PreflightResult> {
   return {
     ...base,
     verdict: "proceed",
-    reason: "Content-Signal present and permissive for ai-input/ai-train.",
+    reason: "Content-Signal present and permissive for ai-input.",
   };
 }
 
