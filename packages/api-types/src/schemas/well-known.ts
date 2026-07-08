@@ -87,6 +87,7 @@ export const ReleasesJsonProductSchema = z.strictObject({
   docs: z.url().optional(),
   support: z.url().optional(),
   social: SocialSchema.optional(),
+  tags: z.array(z.string().min(1).max(60)).max(50).optional(),
   archived: z.boolean().optional(),
   releases: DomainProductReleasesSchema.optional(),
 });

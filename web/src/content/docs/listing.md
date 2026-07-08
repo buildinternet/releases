@@ -75,7 +75,7 @@ When one link isn't enough — you ship several products, each with its own chan
 A few things worth knowing:
 
 - **Top-level `releases` and `products` coexist.** Plenty of companies have a combined firehose _and_ per-product feeds (Cloudflare, for one). Declare both; the registry handles the overlap.
-- **Products take `description`, `website`, `docs`, `support`, and `social`** — useful when a product has its own site or social presence separate from the company's.
+- **Products take `description`, `website`, `docs`, `support`, `social`, and `tags`** — useful when a product has its own site, social presence, or descriptive labels separate from the company's.
 - **`"archived": true`** marks a discontinued product so it's presented as historical rather than active.
 - **Company fields are optional.** `name`, `description`, `category`, `tags`, `avatar`, and `social` shape how you appear, but the file is useful with none of them — the locations are the point.
 

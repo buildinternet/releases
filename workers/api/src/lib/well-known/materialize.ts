@@ -3,12 +3,14 @@ import {
   blockedUrls,
   ignoredUrls,
   orgAccounts,
+  productTags,
   products,
   sources,
 } from "@buildinternet/releases-core/schema";
 import { newProductId, newSourceId } from "@buildinternet/releases-core/id";
 import { isValidKind } from "@buildinternet/releases-core/kinds";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { getOrCreateTagsD1 } from "../../utils.js";
 import type {
   ReleasesJsonDomain,
   ReleasesJsonDomainRelease,
@@ -60,6 +62,8 @@ export interface ProductMaterializationPlan {
   productId?: string;
   matchBy?: "stable_id" | "locator" | "name";
   fills: string[];
+  /** Declared tags associated with the product this run (additive). */
+  tags?: string[];
   archived: boolean;
   note?: string;
 }
@@ -389,6 +393,23 @@ async function applyProductFills(
   return fields;
 }
 
+/**
+ * Associate declared product tags with a product row. Additive and idempotent —
+ * like org tags, product tags are never subject to the no-clobber precedence
+ * rule, so a manifest can only ever add tags, never remove a curator's. Returns
+ * the tag names applied (for the plan/observability).
+ */
+async function applyProductTags(db: Db, productId: string, tagNames: string[]): Promise<string[]> {
+  if (tagNames.length === 0) return [];
+  const tagRows = await getOrCreateTagsD1(db, tagNames);
+  const now = new Date().toISOString();
+  await db
+    .insert(productTags)
+    .values(tagRows.map((t) => ({ productId, tagId: t.id, createdAt: now })))
+    .onConflictDoNothing();
+  return tagNames;
+}
+
 function skipPlan(
   classified: ClassifiedLocation,
   title: string,
@@ -691,6 +712,20 @@ export async function reconcileDomainEntities(
       }
     }
 
+    // Additive product tags (create + match paths; never on skip/dry-run).
+    const declaredTags = declaration.tags ?? [];
+    let tagsApplied: string[] = [];
+    if (
+      !opts.dryRun &&
+      action !== "skip" &&
+      productId &&
+      !productId.startsWith("planned:") &&
+      declaredTags.length > 0
+    ) {
+      tagsApplied = await applyProductTags(db, productId, declaredTags);
+      if (tagsApplied.length > 0) applied = true;
+    }
+
     plan.products.push({
       action,
       name: declaration.name,
@@ -698,6 +733,7 @@ export async function reconcileDomainEntities(
       productId: productId ?? undefined,
       matchBy,
       fills,
+      ...(declaredTags.length > 0 ? { tags: declaredTags } : {}),
       archived: declaration.archived === true,
       note,
     });

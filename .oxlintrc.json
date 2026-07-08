@@ -111,6 +111,7 @@
     "**/migrations/**",
     "**/*.d.ts",
     "plugins/claude-code/skills/**",
+    "skills/**",
     "packages/*/dist/**",
     "scripts/**",
     "drizzle.config.ts",

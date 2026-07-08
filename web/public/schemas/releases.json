@@ -173,6 +173,15 @@
                   "maxLength": 200
                 }
               },
+              "tags": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60
+                }
+              },
               "archived": {
                 "type": "boolean"
               },

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
-import { organizations, sources } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  productTags,
+  products,
+  sources,
+  tags,
+} from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../test/setup.js";
 import {
   classifyLocation,
@@ -124,5 +130,61 @@ describe("well-known materialization helpers", () => {
     expect(plan.sources[1]!.note).toBe("duplicate_location");
     const rows = await db.select().from(sources).where(eq(sources.orgId, "org_a"));
     expect(rows.length).toBe(1);
+  });
+
+  it("associates declared product tags into product_tags additively", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
+    const { plan, applied } = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      {
+        version: 2,
+        products: [
+          {
+            name: "Acme Cloud",
+            tags: ["ci", "cloud"],
+            releases: [{ feed: "https://acme.com/feed.xml" }],
+          },
+        ],
+      },
+      {
+        dryRun: false,
+        enabled: true,
+        source: "well-known",
+        probe: async () => ({ ok: true }),
+        resolveCategory: async () => null,
+      },
+    );
+    expect(applied).toBe(true);
+    expect(plan.products[0]).toMatchObject({ action: "create", tags: ["ci", "cloud"] });
+
+    const [product] = await db.select().from(products).where(eq(products.orgId, "org_a"));
+    const links = await db
+      .select({ slug: tags.slug })
+      .from(productTags)
+      .innerJoin(tags, eq(productTags.tagId, tags.id))
+      .where(eq(productTags.productId, product!.id));
+    expect(links.map((r) => r.slug).toSorted()).toEqual(["ci", "cloud"]);
+
+    // Dry-run must never write tag associations.
+    const dry = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      {
+        version: 2,
+        products: [{ name: "Acme Two", tags: ["x"], releases: [{ github: "acme/x" }] }],
+      },
+      {
+        dryRun: true,
+        enabled: true,
+        source: "well-known",
+        probe: async () => ({ ok: true }),
+        resolveCategory: async () => null,
+      },
+    );
+    expect(dry.plan.products[0]).toMatchObject({ tags: ["x"] });
+    const allLinks = await db.select().from(productTags);
+    expect(allLinks.length).toBe(2); // still only ci + cloud from the applied run
   });
 });

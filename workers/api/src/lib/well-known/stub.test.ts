@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import {
   organizations,
   products,
+  productTags,
   sources,
+  tags,
   releaseLocations,
 } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../test/setup.js";
@@ -44,7 +46,13 @@ describe("createStubOrg", () => {
         slug: "acme",
         domain: "acme.com",
         category: null,
-        products: [{ name: "Widget", locations: [{ feed: "https://acme.com/widget.xml" }] }],
+        products: [
+          {
+            name: "Widget",
+            tags: ["hardware", "iot"],
+            locations: [{ feed: "https://acme.com/widget.xml" }],
+          },
+        ],
         locations: [{ url: "https://acme.com/blog" }, { feed: "https://acme.com/feed.xml" }],
       },
       { basis: "curator", evidence: { curator: true } },
@@ -71,6 +79,13 @@ describe("createStubOrg", () => {
     const [prod] = await db.select().from(products).where(eq(products.orgId, res.org.id));
     expect(locs.filter((l) => l.productId === prod!.id).length).toBe(1);
     expect(locs.filter((l) => l.productId === null).length).toBe(2);
+    // Declared product tags are associated into product_tags.
+    const tagLinks = await db
+      .select({ slug: tags.slug })
+      .from(productTags)
+      .innerJoin(tags, eq(productTags.tagId, tags.id))
+      .where(eq(productTags.productId, prod!.id));
+    expect(tagLinks.map((r) => r.slug).toSorted()).toEqual(["hardware", "iot"]);
   });
 
   it("dedups by match_key within a single create (first wins)", async () => {

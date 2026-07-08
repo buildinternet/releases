@@ -169,9 +169,10 @@ Rules to honor (the validator in Step 4 enforces all of these):
   (singular) and `github: "self"`.
 - **Products carry a fixed, small set of fields** and nothing else — the schema is strict and
   rejects unknown keys. A product may have: `name` (required), `slug`, `kind`, `category`,
-  `description`, `website`, `docs`, `support`, `social`, `archived`, `releases`. In
-  particular **`tags` is an org-level field only — products have no `tags`** (a common
-  mistake that fails validation). Put company-wide tags at the root, not on products.
+  `description`, `website`, `docs`, `support`, `social`, `tags`, `archived`, `releases`.
+  Put company-wide tags at the root; use a product's `tags` only for labels specific to that
+  product. Any key outside this set (or the org-only fields like `products`/`avatar`) fails
+  validation.
 - **Taxonomy is advisory.** `category`, `kind`, `tags` are suggestions; unrecognized values
   are ignored by the registry, never an error. Don't agonize over exact values.
 

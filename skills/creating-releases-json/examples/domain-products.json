@@ -13,6 +13,7 @@
       "description": "Managed CI runners.",
       "website": "https://acme.com/cloud",
       "docs": "https://docs.acme.com/cloud",
+      "tags": ["ci", "cloud"],
       "releases": [
         {
           "url": "https://acme.com/whats-new",

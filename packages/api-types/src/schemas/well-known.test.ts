@@ -41,6 +41,7 @@ describe("releases.json v2 schemas", () => {
           docs: "https://docs.acme.com/cloud",
           support: "https://acme.com/support",
           social: { twitter: "acmecloud" },
+          tags: ["ci", "cloud"],
           archived: true,
           releases: [{ github: "acme/cloud", canonical: true }],
         },
@@ -56,7 +57,31 @@ describe("releases.json v2 schemas", () => {
     });
 
     expect(parsed.products?.[0]?.kind).toBe("future-kind");
+    expect(parsed.products?.[0]?.tags).toEqual(["ci", "cloud"]);
     expect(parsed.registries?.["example.com"]).toEqual({ anything: "goes" });
+  });
+
+  it("accepts product-level tags and enforces the same bounds as org tags", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        products: [{ name: "Cloud", tags: ["analytics", "sdk"] }],
+      }).success,
+    ).toBe(true);
+    // too many tags (> 50)
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        products: [{ name: "Cloud", tags: Array.from({ length: 51 }, (_, i) => `tag-${i}`) }],
+      }).success,
+    ).toBe(false);
+    // empty tag string
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        products: [{ name: "Cloud", tags: [""] }],
+      }).success,
+    ).toBe(false);
   });
 
   it("accepts the repo variant including github self", () => {

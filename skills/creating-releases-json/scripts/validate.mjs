@@ -61,6 +61,12 @@ function checkSocial(path, social) {
   }
 }
 
+function checkTags(path, tags) {
+  if (!Array.isArray(tags)) return err(path, "must be an array");
+  if (tags.length > 50) err(path, "may hold at most 50 tags");
+  tags.forEach((t, i) => checkStr(`${path}[${i}]`, t, { min: 1, max: 60 }));
+}
+
 function checkRegistries(path, reg) {
   if (!isObject(reg)) return err(path, "must be an object");
   const rsh = reg["releases.sh"];
@@ -116,6 +122,7 @@ function checkProduct(path, p) {
     "docs",
     "support",
     "social",
+    "tags",
     "archived",
     "releases",
   ]);
@@ -127,6 +134,7 @@ function checkProduct(path, p) {
   for (const key of ["website", "docs", "support"])
     if (p[key] !== undefined && !isUrl(p[key])) err(`${path}.${key}`, "must be a URL");
   if (p.social !== undefined) checkSocial(`${path}.social`, p.social);
+  if (p.tags !== undefined) checkTags(`${path}.tags`, p.tags);
   if (p.archived !== undefined && typeof p.archived !== "boolean")
     err(`${path}.archived`, "must be true or false");
   if (p.releases !== undefined)
@@ -154,13 +162,7 @@ function validateDomain(m) {
   if (m.description !== undefined) checkStr("description", m.description, { max: 2000 });
   if (m.category !== undefined) checkStr("category", m.category, { min: 1, max: 120 });
   if (m.avatar !== undefined && !isHttpsUrl(m.avatar)) err("avatar", "must be an https:// URL");
-  if (m.tags !== undefined) {
-    if (!Array.isArray(m.tags)) err("tags", "must be an array");
-    else {
-      if (m.tags.length > 50) err("tags", "may hold at most 50 tags");
-      m.tags.forEach((t, i) => checkStr(`tags[${i}]`, t, { min: 1, max: 60 }));
-    }
-  }
+  if (m.tags !== undefined) checkTags("tags", m.tags);
   if (m.social !== undefined) checkSocial("social", m.social);
 
   let totalReleases = 0;

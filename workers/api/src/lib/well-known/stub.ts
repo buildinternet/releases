@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import {
   organizations,
   products,
+  productTags,
   domainAliases,
   releaseLocations,
   orgTags,
@@ -44,6 +45,8 @@ export interface StubProductInput {
   description?: string | null;
   url?: string | null;
   archived?: boolean;
+  /** Additive product tags (declared), associated after insert. */
+  tags?: string[];
   locations: DeclaredLocation[];
 }
 
@@ -198,6 +201,19 @@ export async function createStubOrg(
       kind: product.kind && isValidKind(product.kind) ? product.kind : null,
       createdAt: now,
     });
+    // Additive product tags (mirrors the org-tag block above).
+    if (product.tags && product.tags.length > 0) {
+      // oxlint-disable-next-line no-await-in-loop -- getOrCreateTagsD1 must resolve before linking
+      const tagRows = await getOrCreateTagsD1(db, product.tags);
+      const links = tagRows.map((t) => ({ productId, tagId: t.id, createdAt: now }));
+      for (let i = 0; i < links.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+        // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100-bind cap)
+        await db
+          .insert(productTags)
+          .values(links.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE))
+          .onConflictDoNothing();
+      }
+    }
     productIdByIndex.push(productId);
   }
 
@@ -317,6 +333,7 @@ export async function manifestToStubInput(
       description: product.description ?? null,
       url: product.website ?? null,
       archived: product.archived === true,
+      tags: product.tags,
       locations: product.releases ?? [],
     });
   }

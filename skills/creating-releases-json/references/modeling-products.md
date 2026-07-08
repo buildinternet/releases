@@ -116,7 +116,7 @@ release location the others don't share.
 - Is there a product per programming language? Merge into one SDK product.
 - Does every product entry have at least one locator the top-level array doesn't already
   cover? If not, you probably don't need `products[]` at all.
-- Did you put `tags` (or any non-schema field) on a product? Products only accept
-  `name`, `slug`, `kind`, `category`, `description`, `website`, `docs`, `support`, `social`,
-  `archived`, `releases`. `tags` is an **org-level** field. This is a frequent validation
-  failure — the validator will flag it, but avoid it up front.
+- Did you put a non-schema field on a product? Products accept only `name`, `slug`, `kind`,
+  `category`, `description`, `website`, `docs`, `support`, `social`, `tags`, `archived`,
+  `releases`. Product `tags` are for labels specific to that product; company-wide tags go at
+  the root. Anything else (e.g. `products`/`avatar`, which are org-only) fails validation.
