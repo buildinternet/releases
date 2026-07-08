@@ -128,13 +128,18 @@ agent entry point for working in this repo. Architecture deep-dives are in
 core loop:
 
 ```bash
-bun install
+bun run bootstrap        # one-command setup: tooling, deps, env files, local D1
+bun run doctor           # diagnose the setup — reports what's missing and how to fix it
+
 bun run check            # lint + type-check + format (the CI gate)
 bun test                 # full test suite, secret-free
-bun run db:reset:local   # build a local D1 from migrations
 bun run dev:api          # API worker on local D1
 bun run dev:web          # Next.js frontend
 ```
+
+`bootstrap` is idempotent (safe to re-run; never overwrites your env files or
+wipes the local DB) and `doctor` is read-only. Prefer the manual steps? They're
+`bun install`, copy each `*.example` env file, then `bun run db:reset:local`.
 
 AI passes, scrape fetches, and semantic search take your own keys
 (`ANTHROPIC_API_KEY`, Cloudflare Browser Rendering, `VOYAGE_API_KEY`) and

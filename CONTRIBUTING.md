@@ -15,8 +15,15 @@ The repo is designed so contribution never requires access to the production inf
 ## Setup
 
 ```bash
-bun install
+bun run bootstrap   # tooling (Bun, portless), bun install, scaffold every env
+                    # file from its *.example, mint a local auth secret, and
+                    # build the local D1 — idempotent, never clobbers real files
+bun run doctor      # read-only diagnosis: what's present, what's missing, the fix
 ```
+
+`bun run bootstrap --skip-db` stops after tooling + deps + env (no local D1), and
+`bun run doctor --strict` treats warnings as failures (handy as a pre-flight gate).
+Both live in [`scripts/bootstrap.sh`](scripts/bootstrap.sh) and [`scripts/doctor.sh`](scripts/doctor.sh); if you'd rather set things up by hand, `bun install` plus the env-file and D1 steps below do the same work.
 
 Working in a git worktree? Claude Code worktrees are self-bootstrapping: env files (`.env`, `web/.env.local`, `.dev.vars`) are copied from the main checkout via [`.worktreeinclude`](.worktreeinclude), and the dependency install runs automatically via a `SessionStart` hook. For terminal-driven worktrees created with a plain `git worktree add` (where neither hook fires), run `./scripts/setup-worktree.sh` once to install dependencies and copy the same env files.
 
