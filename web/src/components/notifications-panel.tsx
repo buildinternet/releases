@@ -343,7 +343,20 @@ function SlackSection() {
                 {slackRowLabel(slackHook)}
               </div>
               <div className="mt-0.5 text-[12.5px] text-stone-400 dark:text-stone-500">
-                Connected — receiving everything you follow.
+                {slackHook.enabled ? (
+                  "Connected — receiving everything you follow."
+                ) : (
+                  <>
+                    Paused after delivery failures — remove and reconnect, or manage it in{" "}
+                    <Link
+                      href="/account/webhooks"
+                      className="underline underline-offset-2 hover:text-stone-900 dark:hover:text-stone-100"
+                    >
+                      Webhooks &amp; API
+                    </Link>
+                    .
+                  </>
+                )}
               </div>
             </div>
             <div className="flex shrink-0 gap-3 text-[13px]">
