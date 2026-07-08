@@ -11,6 +11,13 @@ import {
   mintFeedToken,
   revokeFeedToken,
 } from "@/lib/follows";
+import {
+  listWebhooks,
+  createWebhook,
+  testWebhook,
+  deleteWebhook,
+  type UserWebhookListItem,
+} from "@/lib/webhooks";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import {
   PanelGrid,
@@ -215,6 +222,194 @@ function FeedTokenSection() {
   );
 }
 
+const SLACK_HOSTS = new Set(["hooks.slack.com", "hooks.slack-gov.com"]);
+
+function isSlackWebhookUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw.trim());
+    return u.protocol === "https:" && SLACK_HOSTS.has(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function slackRowLabel(hook: UserWebhookListItem): string {
+  return hook.description?.trim() || "Slack channel";
+}
+
+function SlackSection() {
+  const [hooks, setHooks] = useState<UserWebhookListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  async function refresh() {
+    setHooks(await listWebhooks());
+  }
+
+  useEffect(() => {
+    listWebhooks()
+      .then(setHooks)
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to load Slack settings."),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  const slackHook = hooks.find((h) => h.format === "slack" && h.scope === "follows") ?? null;
+  const followsTakenByOther = !slackHook && hooks.some((h) => h.scope === "follows");
+
+  async function onCreate() {
+    if (busy) return;
+    if (!isSlackWebhookUrl(url)) {
+      setError("Enter a Slack incoming webhook URL (hooks.slack.com).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await createWebhook({ url: url.trim(), scope: "follows", format: "slack" });
+      setUrl("");
+      setSuccess("Slack connected.");
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to connect Slack.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onTest() {
+    if (!slackHook || busy) return;
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await testWebhook(slackHook.id);
+      setSuccess("Sent a test message to Slack.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to send test message.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRemove() {
+    if (!slackHook || busy) return;
+    if (!window.confirm("Remove this Slack connection? Releases will stop posting to it.")) return;
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await deleteWebhook(slackHook.id);
+      setSuccess(null);
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to remove Slack connection.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+
+  return (
+    <section>
+      <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">Slack</div>
+      <p className="mt-1 mb-3.5 text-[13px] text-stone-500 dark:text-stone-400">
+        Post a message to a Slack channel whenever something you follow ships.{" "}
+        <Link
+          href="/docs/integrations/slack"
+          className="underline underline-offset-2 hover:text-stone-900 dark:hover:text-stone-100"
+        >
+          How to get a Slack webhook URL
+        </Link>
+      </p>
+      {error && (
+        <div className="mb-3">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
+      {success && <p className="mb-3 text-[12.5px] text-[var(--accent)]">{success}</p>}
+
+      {slackHook ? (
+        <div className={listCardClass}>
+          <div className={listRowClass}>
+            <div className="flex-1">
+              <div className="text-[13.5px] font-medium text-stone-900 dark:text-stone-100">
+                {slackRowLabel(slackHook)}
+              </div>
+              <div className="mt-0.5 text-[12.5px] text-stone-400 dark:text-stone-500">
+                Connected — receiving everything you follow.
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-3 text-[13px]">
+              <button
+                type="button"
+                onClick={() => void onTest()}
+                disabled={busy}
+                className="text-stone-500 hover:text-stone-900 disabled:opacity-50 dark:text-stone-400 dark:hover:text-stone-100"
+              >
+                Test
+              </button>
+              <button
+                type="button"
+                onClick={() => void onRemove()}
+                disabled={busy}
+                className={dangerLinkClass}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : followsTakenByOther ? (
+        <p className="text-[13px] text-stone-500 dark:text-stone-400">
+          You already have a follows webhook. Manage it — or switch it to Slack — in{" "}
+          <Link
+            href="/account/webhooks"
+            className="underline underline-offset-2 hover:text-stone-900 dark:hover:text-stone-100"
+          >
+            Webhooks &amp; API
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="flex items-center gap-2.5">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://hooks.slack.com/services/…"
+            className="h-10 min-w-0 flex-1 rounded-[9px] border border-stone-200 bg-white px-3 font-mono text-[12.5px] text-stone-700 placeholder:text-stone-400 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-200"
+          />
+          <button
+            type="button"
+            onClick={() => void onCreate()}
+            disabled={busy || !url.trim()}
+            className={`${smallButtonClass} h-10 shrink-0`}
+          >
+            {busy ? "Connecting…" : "Create"}
+          </button>
+        </div>
+      )}
+
+      <p className="mt-2.5 text-[12.5px] text-stone-400 dark:text-stone-500">
+        Need org-specific alerts, filters, or the JSON payload?{" "}
+        <Link
+          href="/account/webhooks"
+          className="underline underline-offset-2 hover:text-stone-700 dark:hover:text-stone-300"
+        >
+          Advanced options
+        </Link>
+      </p>
+    </section>
+  );
+}
+
 export function NotificationsPanel() {
   const { data: sessionData, isPending } = useSession();
   const user = sessionData?.user;
@@ -238,6 +433,7 @@ export function NotificationsPanel() {
       <div className="flex flex-col gap-9">
         <EmailSection />
         <FeedTokenSection />
+        <SlackSection />
       </div>
     </PanelGrid>
   );
