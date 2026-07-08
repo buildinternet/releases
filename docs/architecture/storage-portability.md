@@ -134,7 +134,16 @@ The forcing function is concrete: a paying self-hoster, an OSS PR, or a D1 ceili
 1. ~~**Hoist `createDb` into a shared package**~~ — **done** ([#2002](https://github.com/buildinternet/releases/issues/2002)).
    `createDb` now lives in `@releases/lib/db`; all four consumers (`api`, `mcp`,
    `webhooks`, `packages/search`) build through it — removing the 3× duplication and the
-   `log-search.ts` boundary violation.
+   `log-search.ts` boundary violation. It landed in `packages/lib` (private,
+   `db-errors`-adjacent) rather than a dedicated `@releases/db` package deliberately: a
+   single ~30-line factory doesn't earn its own package, and `packages/lib` is already a
+   dep of every consumer with no publish/CLI-install cost (it's `private`, and exports are
+   per-entrypoint so importing `@releases/lib/logger` never pulls `drizzle-orm`).
+   **Promote `@releases/lib/db` → a dedicated `@releases/db` package when phase 2/3 lands**
+   (a `pgTable` schema variant behind a dialect switch, a parallel Postgres migration set,
+   an FTS abstraction) — that's when a package named for its job stops being over-engineering
+   and starts paying for itself. The move is mechanical: rename the export, update ~4 import
+   sites.
 2. **Parameterize the D1 100-bound-param chunking** (seam #6) behind a named constant so
    it reads as a backend capability, not a magic 90.
 3. **Track FTS5's hybrid-search coupling** (seam #4) as the single highest-risk item for
