@@ -10,7 +10,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -63,7 +63,7 @@ export type OnboardSourceWorkflowEnv = InvalidationEnv &
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
     /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
-    /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+    /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
   };
 
@@ -100,7 +100,7 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
     const { sourceId, skipBackfill = false } = event.payload;
     const scheduledTime = event.timestamp.getTime();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db: any = env._drizzleOverride ?? drizzle(env.DB);
+    const db: any = env._drizzleOverride ?? createDb(env.DB);
 
     let currentStep = "load-source";
 

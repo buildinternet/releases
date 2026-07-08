@@ -36,7 +36,7 @@ import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namesp
 import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "./db.js";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
 import { retierSources } from "./cron/retier.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
@@ -1383,7 +1383,7 @@ const SOURCE_ACTOR_ENSURE_CONCURRENCY = 20;
  * alarm re-reads D1 and runs the ingest workflow; the cron never fetches here.
  */
 async function fanOutPollAndFetch(env: Env["Bindings"]): Promise<void> {
-  const db = drizzle(env.DB);
+  const db = createDb(env.DB);
   const startedAt = new Date().toISOString();
   // Reserve a `running` cron_runs row up front so the dispatch is visible on
   // /status?tab=cron even if the fan-out crashes before finalize. The row is

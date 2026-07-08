@@ -23,7 +23,7 @@
  * the `source-staleness` component; the daily {@link sendStalenessDigest}
  * cron rolls first-party + Firecrawl flags into an operator email.
  */
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
@@ -51,7 +51,7 @@ export interface SourceStalenessEnv {
    * backoff (up to 48h) with margin. Older → not actively monitored, skipped.
    */
   SOURCE_STALE_POLL_RECENCY_DAYS?: string;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+  /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   _drizzleOverride?: unknown;
 }
 
@@ -92,7 +92,7 @@ export async function scanStaleSources(
   if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0, entries: [] };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the firecrawl scan
-  const db: any = env._drizzleOverride ?? drizzle(env.DB);
+  const db: any = env._drizzleOverride ?? createDb(env.DB);
   const floorDays = parsePositiveInt(env.SOURCE_STALE_FLOOR_DAYS, DEFAULT_FLOOR_DAYS);
   const multiplier = parsePositiveInt(env.SOURCE_STALE_MULTIPLIER, DEFAULT_MULTIPLIER);
   const recencyDays = parsePositiveInt(

@@ -1,4 +1,4 @@
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { eq, sql } from "drizzle-orm";
 import { sources, releases } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
@@ -27,7 +27,7 @@ export async function retierSources(env: { DB: D1Database; CRON_ENABLED?: string
     return;
   }
 
-  const db = drizzle(env.DB);
+  const db = createDb(env.DB);
   const now = new Date().toISOString();
   const cutoff = new Date(Date.now() - LOOKBACK_DAYS * 86400_000).toISOString();
 

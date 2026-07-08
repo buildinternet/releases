@@ -10,7 +10,7 @@
  */
 
 import { lt } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { searchQueries } from "@buildinternet/releases-core/schema";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -23,7 +23,7 @@ export type SweepSearchQueriesEnv = {
   DB: D1Database;
   CRON_ENABLED?: string;
   SEARCH_QUERY_RETENTION_DAYS?: string;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+  /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
 };
 
@@ -38,7 +38,7 @@ export async function sweepSearchQueries(env: SweepSearchQueriesEnv): Promise<vo
     return;
   }
 
-  const db = env._drizzleOverride ?? drizzle(env.DB);
+  const db = env._drizzleOverride ?? createDb(env.DB);
   const now = new Date();
   const retentionDays = parseRetentionDays(env.SEARCH_QUERY_RETENTION_DAYS);
 

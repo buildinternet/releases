@@ -12,7 +12,7 @@
  */
 
 import { and, eq, lt, isNotNull, isNull, inArray, notInArray, type Column } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
@@ -26,7 +26,7 @@ export type SweepTombstonesEnv = {
   CRON_ENABLED?: string;
   TOMBSTONE_RETENTION_DAYS?: string;
   RELEASES_INDEX?: VectorizeIndex;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+  /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
 };
 
@@ -41,7 +41,7 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
     return;
   }
 
-  const db = env._drizzleOverride ?? drizzle(env.DB);
+  const db = env._drizzleOverride ?? createDb(env.DB);
   const now = new Date();
   const retentionDays = parseRetentionDays(env.TOMBSTONE_RETENTION_DAYS);
   const cutoff = daysAgoIso(retentionDays);

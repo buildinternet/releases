@@ -9,7 +9,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -129,7 +129,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
     const env = this.env;
     const { sourceId, maxWindows, dryRun, suppliedMarkdown } = event.payload;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as poll-and-fetch
-    const db: any = env._drizzleOverride ?? drizzle(env.DB);
+    const db: any = env._drizzleOverride ?? createDb(env.DB);
 
     // ── Step 1: load-source ─────────────────────────────────────────────────
     const source = await step.do("load-source", RETRY_POLL, async () => {

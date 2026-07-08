@@ -1,5 +1,5 @@
 import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb, type D1Db } from "../db.js";
 import {
   sources,
   sourcesVisible,
@@ -130,7 +130,7 @@ export async function pollAndFetch(
     return;
   }
 
-  const db = drizzle(env.DB);
+  const db = createDb(env.DB);
   const now = new Date();
   // Scrape/agent change-detection (#517) is always on now.
   const changeDetectEnabled = true;
@@ -265,7 +265,7 @@ export async function pollAndFetch(
 // ── Query due sources ──
 
 export async function queryDueSources(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   now: Date,
   opts?: { changeDetectEnabled?: boolean },
 ): Promise<Source[]> {
@@ -343,7 +343,7 @@ interface PollResult {
  * to materialize a full `Source` to use it.
  */
 export async function loadPlaybookNotesForSources(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   sourceLike: ReadonlyArray<{ orgId: string | null }>,
 ): Promise<Map<string, string | null>> {
   const orgIds = [...new Set(sourceLike.map((s) => s.orgId).filter((id): id is string => !!id))];
@@ -366,7 +366,7 @@ export async function loadPlaybookNotesForSources(
 }
 
 export async function pollOne(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   now: Date,
   opts?: {
@@ -529,7 +529,7 @@ function isStale(lastFetchedAt: string | null, now: Date, staleHours: number): b
  * of truth for what happened on this cron tick.
  */
 async function pollScrapeOrAgentByQuirk(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   meta: SourceMetadata,
   now: Date,
@@ -794,7 +794,7 @@ export function shouldDelegateToCrawl(
 const DELEGATION_REFUSAL_COOLDOWN_MS = 30 * 60_000;
 
 export async function delegateScrapeToUpdateWorkflow(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   env: FetchOneEnv,
 ): Promise<FetchOneResult> {
@@ -1019,7 +1019,7 @@ export function extractCandidateLinks(markdown: string, baseUrl: string): string
  * never mutates source state or inserts releases.
  */
 export async function renderCheckOne(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   env: RenderCheckEnv,
 ): Promise<RenderCheckResult> {
@@ -1096,7 +1096,7 @@ export async function renderCheckOne(
  * were new — so the fetch_log row stays honest about what we saw.
  */
 async function recordNoChange(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   opts: { sessionId: string | null; start: number; releasesFound: number },
 ): Promise<FetchOneResult> {
@@ -1158,7 +1158,7 @@ const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
  * too. Lookups are chunked under D1's 100-bind cap.
  */
 async function selectNewReleaseIndices(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   sourceId: string,
   rawReleases: readonly RawRelease[],
 ): Promise<number[]> {
@@ -1204,7 +1204,7 @@ async function selectNewReleaseIndices(
  * isolate-wide, so it doesn't depend on call ordering.
  */
 async function classifyMarketingForReleases(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   meta: SourceMetadata,
   rawReleases: readonly RawRelease[],
@@ -1324,7 +1324,7 @@ export interface IngestResult {
 }
 
 export async function ingestRawReleases(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   rawReleases: RawRelease[],
   env: FetchOneEnv,
@@ -1575,7 +1575,7 @@ export async function ingestRawReleases(
 }
 
 export async function fetchOne(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   env: FetchOneEnv,
   opts?: {
@@ -2238,7 +2238,7 @@ async function fetchOneFile(
  * #486 so the embed retry is independent of the file refresh retry).
  */
 export async function refreshChangelogFile(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   token: string | undefined,
   env: FetchOneEnv,
@@ -2502,7 +2502,7 @@ async function fetchRepoStars(repoUrl: string, token?: string): Promise<number |
 // need to try/catch.
 
 export async function embedReleasesForSource(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   releaseIds: string[],
   env: FetchOneEnv,
@@ -2581,10 +2581,7 @@ type ChunkOffsetUpdate = DiffResult["unchanged"][number];
  * offsets. Returned as plain statements so callers can fold them into a
  * larger `db.batch`.
  */
-function buildChunkOffsetUpdateStatements(
-  db: ReturnType<typeof drizzle>,
-  unchanged: ReadonlyArray<ChunkOffsetUpdate>,
-) {
+function buildChunkOffsetUpdateStatements(db: D1Db, unchanged: ReadonlyArray<ChunkOffsetUpdate>) {
   if (unchanged.length === 0) return [];
   const parkOps = unchanged.map((u, i) =>
     db
@@ -2612,7 +2609,7 @@ function buildChunkOffsetUpdateStatements(
  * in isolation; production code calls {@link applyOnDiff} instead.
  */
 export async function applyChunkOffsetUpdates(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   unchanged: ReadonlyArray<ChunkOffsetUpdate>,
 ): Promise<void> {
   const ops = buildChunkOffsetUpdateStatements(db, unchanged);
@@ -2633,7 +2630,7 @@ export async function applyChunkOffsetUpdates(
  * constraint.
  */
 export async function applyOnDiff(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   params: {
     fileId: string;
     sourceId: string;
@@ -2702,7 +2699,7 @@ export async function applyOnDiff(
  * produces the same vectorId and the upsert is idempotent. See #620.
  */
 export async function setChunkVectorIds(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   params: {
     fileId: string;
     now: string;
@@ -2727,7 +2724,7 @@ export async function setChunkVectorIds(
 }
 
 export async function embedChangelogFileForSource(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   file: { fileId: string; content: string; contentHash: string },
   env: FetchOneEnv,
@@ -2782,7 +2779,7 @@ export async function embedChangelogFileForSource(
 }
 
 async function buildEnrichMap(
-  db: ReturnType<typeof drizzle>,
+  db: D1Db,
   source: Source,
   meta: SourceMetadata,
   rawReleases: readonly RawRelease[],

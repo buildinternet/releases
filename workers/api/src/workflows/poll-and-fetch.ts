@@ -9,7 +9,7 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -113,7 +113,7 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     MEDIA?: R2Bucket;
     /** Staleness horizon for the poll-path self-flag producer (default 72h). */
     FORCE_DRAIN_STALE_HOURS?: string;
-    /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+    /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
   };
 
@@ -169,7 +169,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
 
     const { sourceId, scheduledTime } = event.payload;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db: any = env._drizzleOverride ?? drizzle(env.DB);
+    const db: any = env._drizzleOverride ?? createDb(env.DB);
 
     // Skipped under tests via _drizzleOverride so suites don't pay the sleep cost.
     if (!env._drizzleOverride) {

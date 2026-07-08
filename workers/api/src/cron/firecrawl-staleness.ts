@@ -17,7 +17,7 @@
  * isn't false-flagged. A source within the floor window needs no schedule read
  * at all, so the only `getMonitor` calls are for sources already past the floor.
  */
-import { drizzle } from "drizzle-orm/d1";
+import { createDb } from "../db.js";
 import { eq, sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
@@ -40,7 +40,7 @@ export interface FirecrawlStalenessEnv {
    * floor, i.e. the original fixed-window behavior.
    */
   FIRECRAWL_API_KEY?: SecretBinding;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+  /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   _drizzleOverride?: unknown;
   /** TEST-ONLY: inject a Firecrawl client instead of building one from the key. */
   _firecrawlClientOverride?: FirecrawlClient;
@@ -154,7 +154,7 @@ export async function scanStaleFirecrawlSources(
   if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0, entries: [] };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the workflows
-  const db: any = env._drizzleOverride ?? drizzle(env.DB);
+  const db: any = env._drizzleOverride ?? createDb(env.DB);
   const parsed = Number(env.FIRECRAWL_STALE_HOURS);
   const floorHours = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_STALE_HOURS;
   const floorCutoff = new Date(now.getTime() - floorHours * 3600_000).toISOString();
