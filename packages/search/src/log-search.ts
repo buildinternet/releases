@@ -9,7 +9,7 @@
  * response never waits on the insert and never fails because of it.
  */
 
-import { type AnyD1Database, drizzle } from "drizzle-orm/d1";
+import { type AnyD1Database } from "drizzle-orm/d1";
 
 import {
   searchQueries,
@@ -19,6 +19,7 @@ import {
   type SearchSurface,
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
+import { createDb } from "@releases/lib/db";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
@@ -226,7 +227,7 @@ export async function logMcpSearch(env: SearchLogEnv, input: McpLogSearchInput):
 
 async function writeRow(env: SearchLogEnv, row: NewSearchQuery): Promise<void> {
   try {
-    const db = drizzle(env.DB);
+    const db = createDb(env.DB);
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a search response on a logging failure.

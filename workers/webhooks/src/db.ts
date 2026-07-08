@@ -1,8 +1,5 @@
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@buildinternet/releases-core/schema";
-
-export type D1Db = ReturnType<typeof createDb>;
-
-export function createDb(d1: D1Database) {
-  return drizzle(d1, { schema });
-}
+// The DB-construction factory lives in `@releases/lib/db` so all workers and
+// packages build their Drizzle handle through one seam (see
+// docs/architecture/storage-portability.md). Re-exported here to preserve the
+// `./db` import sites in this worker.
+export { createDb, type AnyDb, type D1Db } from "@releases/lib/db";
