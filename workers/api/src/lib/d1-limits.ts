@@ -4,8 +4,15 @@
 // Drizzle insert shape means recomputing these — the bind-budget invariant
 // tests in tests/api/releases-batch-binds.test.ts fail loudly when a bump
 // would push a statement past the cap.
+//
+// Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) live
+// in `@buildinternet/releases-core/d1-limits` so packages below the worker
+// (core-internal eligibility / overview-upsert) share one source of truth.
+// Re-exported here so existing worker import paths keep working.
 
-export const D1_MAX_BINDINGS = 100;
+import { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+
+export { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE };
 
 // `releases` INSERT binds up to 17 placeholders per row when the caller
 // provides the full sources-batch payload. Drizzle binds everything that has
@@ -19,14 +26,9 @@ export const D1_MAX_BINDINGS = 100;
 export const RELEASES_BATCH_CHUNK_SIZE = 5;
 
 // IN-clause chunk for id lookups/updates on releases. An UPDATE adds one
-// SET binding, so 90 + 1 = 91 stays comfortably under the cap; a SELECT
-// with 90 ids is 90.
-export const RELEASES_ID_IN_CHUNK_SIZE = 90;
-
-// Generic IN-clause chunk for single-column `inArray(...)` SELECTs on any
-// table — same 90-bind budget as the releases lookups. Use when callers
-// can supply an unbounded list (URLs, slugs, ids).
-export const IN_ARRAY_CHUNK_SIZE = 90;
+// SET binding, so IN_ARRAY_CHUNK_SIZE + 1 stays under the cap; a SELECT
+// with that many ids is pure IN-list. Same budget as the generic IN-array chunk.
+export const RELEASES_ID_IN_CHUNK_SIZE = IN_ARRAY_CHUNK_SIZE;
 
 // `knowledge_page_citations` INSERT binds 9 placeholders per row: id,
 // knowledge_page_id, start_index, end_index, source_url, title, cited_text,
