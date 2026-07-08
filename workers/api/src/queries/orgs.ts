@@ -3,7 +3,8 @@ import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { nowIso } from "@buildinternet/releases-core/dates";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
-import { D1_MAX_IN_PARAMS, type D1Db } from "../db.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
 
 export async function getOrgsWithStats(
@@ -220,13 +221,13 @@ export async function getOrgSparklines(
   orgIds?: string[],
 ): Promise<OrgSparklineRow[]> {
   if (orgIds && orgIds.length === 0) return [];
-  if (!orgIds || orgIds.length <= D1_MAX_IN_PARAMS) {
+  if (!orgIds || orgIds.length <= IN_ARRAY_CHUNK_SIZE) {
     return getOrgSparklinesChunk(db, cutoff30d, orgIds);
   }
 
   const chunks: string[][] = [];
-  for (let i = 0; i < orgIds.length; i += D1_MAX_IN_PARAMS)
-    chunks.push(orgIds.slice(i, i + D1_MAX_IN_PARAMS));
+  for (let i = 0; i < orgIds.length; i += IN_ARRAY_CHUNK_SIZE)
+    chunks.push(orgIds.slice(i, i + IN_ARRAY_CHUNK_SIZE));
   const rows = await Promise.all(
     chunks.map((chunk) => getOrgSparklinesChunk(db, cutoff30d, chunk)),
   );

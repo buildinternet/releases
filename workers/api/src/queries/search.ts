@@ -9,7 +9,7 @@ import {
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
-import { D1_MAX_IN_PARAMS } from "../db.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type {
@@ -90,10 +90,9 @@ type ScopeOpts = {
    * to its source list and passes the IDs through here so both the FTS path
    * and the entity-enrichment path stay scoped.
    *
-   * Capped at `D1_MAX_IN_PARAMS` IDs per `IN` clause to stay inside D1's
-   * 100-bound limit. When the array is empty (product has no sources) the
-   * query returns no release hits — mirrors the "no matching org sources"
-   * behaviour.
+   * Capped at `IN_ARRAY_CHUNK_SIZE` IDs per `IN` clause (see `sourceIdInList`).
+   * When the array is empty (product has no sources) the query returns no
+   * release hits — mirrors the "no matching org sources" behaviour.
    */
   sourceIds?: string[];
 };
@@ -103,17 +102,20 @@ type ScopeOpts = {
  * empty-array case before reaching here (an empty product returns no hits, not
  * `IN ()`).
  *
- * The list is *capped* at `D1_MAX_IN_PARAMS` rather than chunked-and-unioned
- * like `getOrgSparklines`: these are ranked, `LIMIT`-ed FTS queries, so
- * ranking and `LIMIT` apply per statement and a UNION across chunks would
- * mis-rank results. The cap is a deliberate scope ceiling — a single product
- * owning >90 sources is not a shape we serve — not a silently-lossy bug. If
- * that ever changes, the fix is to rank in TS across per-chunk result sets,
- * not to raise the cap.
+ * This is a deliberate **product-scope ceiling**, not a silently-lossy bug:
+ * the list is *capped* at `IN_ARRAY_CHUNK_SIZE` rather than chunked-and-unioned
+ * like `getOrgSparklines`. The scope originates from `?product=`, which
+ * pre-resolves one product to its source list, and a single product owning
+ * more than `IN_ARRAY_CHUNK_SIZE` sources is not a shape we serve — so every
+ * caller (`searchProducts` / `searchSources` / the release FTS helpers) shares
+ * the same ceiling. Chunk-unioning wouldn't be a drop-in fix anyway: the
+ * release helpers are ranked and `LIMIT`-ed, so a UNION across chunks would
+ * mis-rank; lifting the ceiling would mean ranking in TS across per-chunk
+ * result sets.
  */
 function sourceIdInList(sourceIds: string[]) {
   return sql`(${sql.join(
-    sourceIds.slice(0, D1_MAX_IN_PARAMS).map((id) => sql`${id}`),
+    sourceIds.slice(0, IN_ARRAY_CHUNK_SIZE).map((id) => sql`${id}`),
     sql`, `,
   )})`;
 }
