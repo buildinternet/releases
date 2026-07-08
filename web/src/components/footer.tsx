@@ -1,6 +1,8 @@
 import Link from "next/link";
 
-const GITHUB_REPO_URL = "https://github.com/buildinternet/releases-cli";
+// Primary project repo — the open-source backend monorepo. The CLI ships from
+// its own repo (buildinternet/releases-cli), reachable from the docs.
+const GITHUB_REPO_URL = "https://github.com/buildinternet/releases";
 
 type FooterLink = { label: string; href: string; external?: boolean };
 type FooterColumn = { title: string; links: FooterLink[] };
