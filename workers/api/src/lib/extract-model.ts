@@ -1,20 +1,16 @@
 /**
- * Resolve the OpenRouter (DeepSeek) extraction model for the large-body
- * tool-loop (issue #1536). Mirrors the provider-selection precedent in
- * `text-model.ts` (`resolveTextModel`): the single `openrouter-enabled` Flagship
- * switch governs the lane, and per-lane control is the model var (`EXTRACT_MODEL`,
- * empty → stay on Anthropic). Returns `undefined` to keep the Anthropic SDK loop.
- *
- * Fail-open at every step: flag off, empty `EXTRACT_MODEL`, an unresolvable
- * `OPENROUTER_API_KEY`, or any throw → `undefined`, so the caller's `extractDeps`
- * carries no `aiSdkModel` and `extractFromBody` runs the unchanged Anthropic loop.
+ * Resolve the AI-SDK extraction model for the large-body tool-loop (issue #1536).
+ * OpenRouter when the `openrouter-enabled` flag + `EXTRACT_MODEL` + key are set;
+ * otherwise Anthropic via `buildLaneAnthropicModel` so `extractFromBody` always
+ * routes the tool-loop through `extractWithToolsAiSdk`.
  */
-import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
+import { resolveToolLoopAiSdkModel } from "@releases/adapters/extract";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
+import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
 
-export interface ExtractModelEnv {
+export interface ExtractModelEnv extends AnthropicEnv {
   FLAGS?: FlagshipBinding;
   OPENROUTER_ENABLED?: string;
   OPENROUTER_API_KEY?: SecretBinding;
@@ -22,49 +18,39 @@ export interface ExtractModelEnv {
   EXTRACT_MODEL?: string;
 }
 
-/**
- * @returns `{ model, label }` when the OpenRouter extraction lane is fully
- *   configured + enabled, else `undefined` (Anthropic path). `model` is an
- *   AI-SDK `LanguageModel` typed `unknown` here to keep the `ai` types off this
- *   surface; `label` is the model id, reported as `modelUsed`.
- */
+/** @returns `{ model, label }` for the tool-loop, or `undefined` when no key is usable. */
 export async function resolveExtractAiSdkModel(
   env: ExtractModelEnv,
+  anthropicModel: string,
 ): Promise<{ model: unknown; label: string } | undefined> {
+  let openrouterEnabled = false;
+  let openRouterApiKey: string | null = null;
   try {
-    const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
-    if (!useOpenRouter) return undefined; // off by default — silent (expected path)
-    const model = env.EXTRACT_MODEL?.trim();
-    if (!model) {
-      // Flag on but lane not finished — warn so the silent Anthropic fallback is diagnosable.
-      logEvent("warn", {
-        component: "extract-model",
-        event: "openrouter-misconfigured",
-        reason: "EXTRACT_MODEL empty",
-      });
-      return undefined;
+    openrouterEnabled = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
+    if (openrouterEnabled) {
+      openRouterApiKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
     }
-    const apiKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
-    if (!apiKey) {
-      logEvent("warn", {
-        component: "extract-model",
-        event: "openrouter-misconfigured",
-        reason: "OPENROUTER_API_KEY unresolved",
-        model,
-      });
-      return undefined;
-    }
-    const baseURL = env.OPENROUTER_BASE_URL?.trim();
-    return {
-      model: buildOpenRouterExtractModel({ apiKey, model, ...(baseURL ? { baseURL } : {}) }),
-      label: model,
-    };
   } catch (err) {
     logEvent("warn", {
       component: "extract-model",
       event: "openrouter-resolve-failed",
       err: err instanceof Error ? err : String(err),
     });
-    return undefined;
   }
+
+  const [anthropicApiKey, gatewayOpts] = await Promise.all([
+    getAnthropicKey(env),
+    resolveGatewayOpts(env),
+  ]);
+  return resolveToolLoopAiSdkModel({
+    openrouterEnabled,
+    extractModel: env.EXTRACT_MODEL,
+    openRouterApiKey,
+    openRouterBaseURL: env.OPENROUTER_BASE_URL,
+    anthropicApiKey: anthropicApiKey ?? undefined,
+    anthropicModel,
+    anthropicBaseURL: gatewayOpts.baseURL,
+    aiGatewayToken: gatewayOpts.gatewayToken,
+    logComponent: "extract-model",
+  });
 }

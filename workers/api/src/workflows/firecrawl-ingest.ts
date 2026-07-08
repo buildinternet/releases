@@ -186,7 +186,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
         // OpenRouter extraction lane (issue #1536) — undefined unless the flag is
         // on + EXTRACT_MODEL + key are set. Inert here today (firecrawl extraction
         // never opts into the tool-loop), threaded for consistency + future use.
-        const aiSdk = await resolveExtractAiSdkModel(env);
+        const aiSdk = await resolveExtractAiSdkModel(env, FIRECRAWL_EXTRACT_MODEL);
         const result = await extractFirecrawlMarkdown(
           markdown,
           source,

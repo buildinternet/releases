@@ -27,7 +27,7 @@
     "./extract/shared": "./src/extract/shared.ts",
     "./extract/types": "./src/extract/types.ts",
     "./extract/aisdk": "./src/extract/extract-with-tools-aisdk.ts",
-    "./overview-model": "./src/overview-model.ts",
+    "./lane-model": "./src/lane-model.ts",
     "./github-probe": "./src/github-probe.ts",
     "./scrape-fetch": "./src/scrape-fetch.ts",
     "./scrape-persister": "./src/scrape-persister.ts",
