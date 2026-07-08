@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { AccountLink } from "./account-link";
 import { InfoTooltip } from "./info-tooltip";
+import { ReportIssue } from "@/components/report-issue";
+import type { ReportContext } from "@/lib/report-issue";
 import { formatDate, formatRelativeDate } from "@/lib/formatters";
 
 const STALE_AFTER_DAYS = 14;
@@ -34,6 +36,8 @@ interface SidebarProps {
   lastFetchedAt?: string | null;
   /** ISO timestamp for when tracking began — rendered as a small footnote at the bottom. */
   trackingSince?: string | null;
+  /** Optional issue-report target for product/source pages using this sidebar. */
+  report?: ReportContext;
 }
 
 export function Sidebar({
@@ -43,6 +47,7 @@ export function Sidebar({
   lastCheckedAt,
   lastFetchedAt,
   trackingSince,
+  report,
 }: SidebarProps) {
   const stale = isStale(lastCheckedAt);
   return (
@@ -163,6 +168,14 @@ export function Sidebar({
           )}
         </div>
       )}
+      {report ? (
+        <div className="border-t border-stone-200 dark:border-stone-800 pt-4">
+          <ReportIssue
+            context={report}
+            className="text-[12px] text-stone-400 transition-colors hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 underline-offset-2 hover:underline"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

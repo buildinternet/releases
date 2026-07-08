@@ -4,6 +4,8 @@ import { toSlug } from "@buildinternet/releases-core/slug";
 import type { CollectionListItem } from "@buildinternet/releases-api-types";
 import { accountUrl, AccountIcon, formatAccountHandle } from "@/components/account-link";
 import { ExternalLinkIcon } from "@/components/account/icons";
+import { ReportIssue } from "@/components/report-issue";
+import type { ReportContext } from "@/lib/report-issue";
 import { domainHref } from "@/lib/source-display";
 import { formatRelativeDate, formatMonthYear } from "@/lib/formatters";
 import { GlobeIcon } from "./icons";
@@ -23,6 +25,7 @@ export function OrgContextRail({
   trackingSince,
   lastCheckedAt,
   formatPath,
+  report,
 }: {
   domain: string | null | undefined;
   category: string | null | undefined;
@@ -33,6 +36,8 @@ export function OrgContextRail({
   lastCheckedAt: string | null | undefined;
   /** Path the export links hang off, e.g. `/anthropic` → `/anthropic.json`. */
   formatPath: string;
+  /** Optional issue-report target for this org page. */
+  report?: ReportContext;
 }) {
   const chips: { label: string; href: string }[] = [];
   if (category)
@@ -146,6 +151,15 @@ export function OrgContextRail({
           ))}
         </div>
       </div>
+
+      {report ? (
+        <div className="mt-1 ml-0.5">
+          <ReportIssue
+            context={report}
+            className="text-[12.5px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)] underline-offset-2 hover:underline"
+          />
+        </div>
+      ) : null}
     </aside>
   );
 }

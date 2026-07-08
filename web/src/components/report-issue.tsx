@@ -25,10 +25,19 @@ function errorMessage(code: string | undefined): string {
  */
 export function ReportIssue({
   context,
+  label = "Report a problem",
   className,
+  align = "left",
+  placement = "above",
 }: {
   context: ReportContext;
+  /** Trigger text. Sidebar uses the default sentence; header chrome can pass "Report". */
+  label?: string;
   className?: string;
+  /** Horizontal panel anchor. */
+  align?: "left" | "right";
+  /** Open above (sidebar footer) or below (inline header) the trigger. */
+  placement?: "above" | "below";
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -124,7 +133,7 @@ export function ReportIssue({
         aria-haspopup="dialog"
         className={className ?? TRIGGER}
       >
-        Report
+        {label}
       </button>
 
       {open ? (
@@ -133,7 +142,11 @@ export function ReportIssue({
           role="dialog"
           aria-modal="false"
           aria-labelledby={titleId}
-          className="absolute right-0 top-full z-50 mt-2 w-[min(100vw-2rem,22rem)] rounded-lg border border-stone-200 bg-white p-4 text-left shadow-lg dark:border-stone-700 dark:bg-stone-950"
+          className={[
+            "absolute z-50 w-[min(100vw-2rem,22rem)] rounded-lg border border-stone-200 bg-white p-4 text-left shadow-lg dark:border-stone-700 dark:bg-stone-950",
+            align === "right" ? "right-0" : "left-0",
+            placement === "above" ? "bottom-full mb-2" : "top-full mt-2",
+          ].join(" ")}
         >
           {done ? (
             <p className="text-sm text-emerald-600 dark:text-emerald-400" role="status">

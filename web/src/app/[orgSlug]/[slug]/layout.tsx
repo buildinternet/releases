@@ -154,6 +154,9 @@ export default async function OrgSlugLayout({
                 slug: source.slug,
                 path: base,
               }}
+              label="Report"
+              align="right"
+              placement="below"
             />
             <AdminOnly devAdmin={devAdmin}>
               <SourceAdminMenu

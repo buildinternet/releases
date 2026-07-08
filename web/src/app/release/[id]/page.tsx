@@ -370,6 +370,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 id: release.id,
                 path: releasePath(release),
               }}
+              label="Report"
+              align="right"
+              placement="below"
             />
             <AdminOnly devAdmin={devAdmin}>
               <span className="ml-auto">

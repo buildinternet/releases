@@ -11,7 +11,6 @@ import { OrgAdminMenu } from "@/components/org-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
-import { ReportIssue } from "@/components/report-issue";
 import { OrgInstallCommand } from "@/components/org/org-install-command";
 import { AgentCopyButton } from "@/components/org/agent-copy-button";
 import { OrgContextRail } from "@/components/org/org-context-rail";
@@ -112,16 +111,6 @@ export default async function OrgLayout({
           </div>
           <div className="flex shrink-0 items-center gap-2.5">
             {org.id && <FollowButton targetType="org" targetId={org.id} label={org.name} />}
-            <ReportIssue
-              context={{
-                kind: "org",
-                name: org.name,
-                id: org.id,
-                slug: org.slug,
-                path: `/${org.slug}`,
-              }}
-              className="text-[13px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
-            />
             <AdminOnly devAdmin={devAdmin}>
               <OrgAdminMenu
                 orgSlug={org.slug}
@@ -169,6 +158,13 @@ export default async function OrgLayout({
             trackingSince={org.trackingSince}
             lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
             formatPath={`/${orgSlug}`}
+            report={{
+              kind: "org",
+              name: org.name,
+              id: org.id,
+              slug: org.slug,
+              path: `/${org.slug}`,
+            }}
           />
         </div>
       </div>
