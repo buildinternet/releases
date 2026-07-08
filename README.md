@@ -117,6 +117,23 @@ How it fits together:
 - **AI** — changelog parsing, summarization, grouping, and org overviews run in the API worker as direct Anthropic SDK calls.
 - **Agents** — discovery + worker run as Anthropic-hosted managed agents; definitions auto-deploy on merge when their source changes.
 
+## Contributor mental model
+
+This repo has four kinds of code:
+
+| Area               | Paths                                                                            | What to know                                                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Product surfaces   | `workers/api/`, `workers/mcp/`, `workers/webhooks/`, `web/`                      | The API worker is the data plane. Web, MCP, CLI, and webhooks read from or route through it.                                 |
+| Shared packages    | `packages/core/`, `packages/api-types/`, private `packages/*`                    | `core` owns schema and pure helpers; `api-types` owns wire shapes. Change these first when shared contracts move.            |
+| Hosted operations  | `workers/discovery/`, `managed-agents/`, `.claude/skills/`, `.claude/workflows/` | These power the canonical releases.sh ingest and operator loop. Some paths need hosted credentials, but local work does not. |
+| Historical context | `docs/architecture/`, `docs/plans/`, `docs/superpowers/`                         | Architecture docs are maintained references. Plans and specs are point-in-time design history.                               |
+
+For normal contributions, start with `bun run bootstrap`, `bun run check`, and
+`bun test`. You do not need production Cloudflare, Anthropic, Vercel, email, or
+Firecrawl access to work on the core loop. If you are trying to fork or
+self-host the full service, read
+[deploy-coupling.md](docs/architecture/deploy-coupling.md).
+
 Per-package detail and project conventions live in [AGENTS.md](AGENTS.md) — the
 agent entry point for working in this repo. Architecture deep-dives are in
 [docs/architecture/](docs/architecture/), with a reader's guide at

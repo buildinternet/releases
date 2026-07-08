@@ -1,10 +1,23 @@
 # Deploy coupling and open-core boundary
 
-Everything here is Apache-2.0 and runnable locally for contribution — `bun test`, `bun run check`, and `dev:api` + `dev:web` on miniflare-backed D1 need no production credentials. The canonical [releases.sh](https://releases.sh) deployment pins Cloudflare resource IDs, custom domains, Anthropic managed-agent resources, and observability sinks in `workers/{api,mcp,discovery,webhooks}/wrangler.jsonc`.
+Everything here is Apache-2.0 and runnable locally for contribution. The
+canonical [releases.sh](https://releases.sh) deployment pins Cloudflare resource
+IDs, custom domains, Anthropic managed-agent resources, and observability sinks
+in `workers/{api,mcp,discovery,webhooks}/wrangler.jsonc`.
 
 This doc is what a **fork or self-hoster** must replace. It inventories account-scoped bindings; it does not parameterize them. For local setup, see [CONTRIBUTING.md](../../CONTRIBUTING.md). Staging mirrors prod with different IDs — [AGENTS.md → Staging](../../AGENTS.md#staging).
 
-## Open-core boundary
+## The short version
+
+You can contribute locally without production infrastructure. `bun test`,
+`bun run check`, and `dev:api` + `dev:web` on miniflare-backed D1 need no
+production credentials.
+
+Self-hosting the full releases.sh stack means replacing account-scoped
+Cloudflare, Anthropic, Vercel, email, Firecrawl, and observability resources.
+Most contributors never need this inventory; self-hosters do.
+
+## What works locally
 
 | Surface                                                   | Without prod bindings | Degrades to                                      |
 | --------------------------------------------------------- | --------------------- | ------------------------------------------------ |
@@ -15,9 +28,26 @@ This doc is what a **fork or self-hoster** must replace. It inventories account-
 
 **Rule of thumb:** third-party control planes (Anthropic agents, Firecrawl, Stripe, Axiom) and outbound email are infrastructure-bound. D1 reads/writes through the API worker are reproducible once you provision your own D1 + workers.
 
-## Account-scoped IDs (prod)
+## Replacement checklist
 
-Source of truth for names, comments, and staging overrides: the wrangler files. Replace these values in a fork:
+1. Provision Cloudflare resources: D1, KV, R2, Vectorize, Queues, Secrets Store,
+   Flagship apps, rate limiters, and email.
+2. Replace IDs, routes, `store_id`, service bindings, and custom domains in the
+   worker `wrangler.jsonc` files.
+3. Populate secrets from the checked-in `.dev.vars.example` files.
+4. Run `./scripts/create-vectorize-indexes.sh`, then `bun run db:migrate:remote`,
+   then `bun run deploy`.
+5. Deploy managed agents with `bun run deploy:agents` if you are using the
+   hosted discovery flow.
+6. Point Vercel or your web host at the new API, then re-register OAuth, MCP,
+   and inbound webhooks for your domains.
+
+## Full binding inventory
+
+Source of truth for names, comments, and staging overrides: the wrangler files.
+Replace these values in a fork.
+
+### Account-scoped IDs (prod)
 
 | Resource                             | Prod identifier                                                         | Workers                                                          |
 | ------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -75,10 +105,3 @@ Staging uses a separate agent/env/vault/memstore set in `[env.staging]`. API wor
 - **Web (Vercel):** `web/.env.example` — `NEXT_PUBLIC_BETTER_AUTH_URL`, `RELEASES_API_URL`, `INDEXNOW_KEY` (must match api secret).
 - **MCP Registry:** `sh.releases/mcp` — domain auth via `/.well-known/mcp-registry-auth`; CI secret `MCP_REGISTRY_PRIVATE_KEY_PEM`.
 - **Security disclosure:** `security@releases.sh`, [releases.sh/.well-known/security.txt](https://releases.sh/.well-known/security.txt) (no root `SECURITY.md`).
-
-## Fork checklist
-
-1. Provision D1, KV, R2, Vectorize, Queues, Secrets Store, Flagship apps, email.
-2. Replace IDs/routes/`store_id` in wrangler; populate secrets from `.dev.vars.example`.
-3. `./scripts/create-vectorize-indexes.sh` → `bun run db:migrate:remote` → `bun run deploy` (+ `deploy:agents` if using MAs).
-4. Point Vercel (or your web host) at the new API; re-register OAuth, MCP, and inbound webhooks.
