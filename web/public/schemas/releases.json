@@ -48,19 +48,23 @@
             "properties": {
               "url": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "feed": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "appstore": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "file": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "title": {
                 "type": "string",
@@ -94,7 +98,8 @@
         },
         "avatar": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "pattern": "^https:\\/\\/.*"
         },
         "tags": {
           "maxItems": 50,
@@ -193,19 +198,23 @@
                   "properties": {
                     "url": {
                       "type": "string",
-                      "format": "uri"
+                      "format": "uri",
+                      "pattern": "^https:\\/\\/.*"
                     },
                     "feed": {
                       "type": "string",
-                      "format": "uri"
+                      "format": "uri",
+                      "pattern": "^https:\\/\\/.*"
                     },
                     "appstore": {
                       "type": "string",
-                      "format": "uri"
+                      "format": "uri",
+                      "pattern": "^https:\\/\\/.*"
                     },
                     "file": {
                       "type": "string",
-                      "format": "uri"
+                      "format": "uri",
+                      "pattern": "^https:\\/\\/.*"
                     },
                     "title": {
                       "type": "string",
@@ -293,19 +302,23 @@
             "properties": {
               "url": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "feed": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "appstore": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "file": {
                 "type": "string",
-                "format": "uri"
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
               },
               "title": {
                 "type": "string",

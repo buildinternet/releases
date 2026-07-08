@@ -11,6 +11,7 @@ import { newProductId, newSourceId } from "@buildinternet/releases-core/id";
 import { isValidKind } from "@buildinternet/releases-core/kinds";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { getOrCreateTagsD1 } from "../../utils.js";
+import { ENTITY_TAG_INSERT_CHUNK_SIZE } from "../d1-limits.js";
 import type {
   ReleasesJsonDomain,
   ReleasesJsonDomainRelease,
@@ -403,10 +404,16 @@ async function applyProductTags(db: Db, productId: string, tagNames: string[]): 
   if (tagNames.length === 0) return [];
   const tagRows = await getOrCreateTagsD1(db, tagNames);
   const now = new Date().toISOString();
-  await db
-    .insert(productTags)
-    .values(tagRows.map((t) => ({ productId, tagId: t.id, createdAt: now })))
-    .onConflictDoNothing();
+  const links = tagRows.map((t) => ({ productId, tagId: t.id, createdAt: now }));
+  // Chunk to stay under D1's 100-bind cap (3 binds/row); a product can declare
+  // up to 50 tags.
+  for (let i = 0; i < links.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100-bind cap)
+    await db
+      .insert(productTags)
+      .values(links.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE))
+      .onConflictDoNothing();
+  }
   return tagNames;
 }
 

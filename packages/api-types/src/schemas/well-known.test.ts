@@ -95,6 +95,21 @@ describe("releases.json v2 schemas", () => {
     ).toBe(true);
   });
 
+  it("requires https for locator URLs and avatar", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, releases: [{ url: "https://acme.com/x" }] })
+        .success,
+    ).toBe(true);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, releases: [{ url: "http://acme.com/x" }] })
+        .success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, avatar: "http://acme.com/logo.png" })
+        .success,
+    ).toBe(false);
+  });
+
   it("requires the version 2 literal with no v1 compatibility", () => {
     expect(ReleasesJsonConfigSchema.safeParse({ releases: [location(1)] }).success).toBe(false);
     expect(ReleasesJsonConfigSchema.safeParse({ version: 1 }).success).toBe(false);
