@@ -23,15 +23,15 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { stringify } from "yaml";
-import { buildDiscoverySystemPrompt } from "../managed-agents/managed-agents/src/shared/discovery-prompt.js";
-import { buildWorkerSystemPrompt } from "../managed-agents/managed-agents/src/shared/worker-prompt.js";
-import { buildCoordinatorSystemPrompt } from "../managed-agents/managed-agents/src/shared/coordinator-prompt.js";
+import { buildDiscoverySystemPrompt } from "../managed-agents/src/shared/discovery-prompt.js";
+import { buildWorkerSystemPrompt } from "../managed-agents/src/shared/worker-prompt.js";
+import { buildCoordinatorSystemPrompt } from "../managed-agents/src/shared/coordinator-prompt.js";
 import {
   AGENT_TOOLS,
   buildMcpToolset,
   buildMcpServerDefinition,
   type AgentEnv,
-} from "../managed-agents/managed-agents/src/shared/agent-tools.js";
+} from "../managed-agents/src/shared/agent-tools.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
