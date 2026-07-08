@@ -5,6 +5,8 @@
   "description": "Changelog indexer and registry for AI agents and developers",
   "type": "module",
   "scripts": {
+    "bootstrap": "./scripts/bootstrap.sh",
+    "doctor": "./scripts/doctor.sh",
     "dev:web": "cd web && portless run --name ${PORTLESS_NAME:-releases} sh -c 'bun run dev -- --port $PORT'",
     "dev:api": "bun run db:migrate:local && portless run --name api.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:discovery": "portless run --name discovery.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/discovery/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
