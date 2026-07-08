@@ -40,4 +40,4 @@ The URL host must be `hooks.slack.com` (standard and Enterprise Grid) or `hooks.
 ## Need more control?
 
 For org-specific alerts, release-type filters, or the raw signed JSON payload, use
-[Webhooks &amp; API](/account/webhooks).
+[Webhooks & API](/account/webhooks).
