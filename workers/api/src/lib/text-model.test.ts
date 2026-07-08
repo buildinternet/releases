@@ -18,6 +18,15 @@ function flagsBinding(values: Record<string, boolean>): FlagshipBinding {
 
 const secret = (v: string | null) => ({ get: async () => v });
 
+/** Minimal OpenRouter chat-completions body the AI SDK provider accepts in tests. */
+function openRouterOkResponse() {
+  return {
+    id: "gen_test",
+    choices: [{ message: { role: "assistant", content: "x" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  };
+}
+
 /**
  * Resolve a model, call `.complete()` once with `global.fetch` stubbed, and
  * return the parsed OpenRouter request body so a test can assert what the lane
@@ -31,7 +40,7 @@ async function captureOpenRouterBody(
   let captured: Record<string, unknown> = {};
   globalThis.fetch = (async (_url: string, init: RequestInit) => {
     captured = JSON.parse(init.body as string);
-    return new Response(JSON.stringify({ choices: [{ message: { content: "x" } }], usage: {} }), {
+    return new Response(JSON.stringify(openRouterOkResponse()), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
