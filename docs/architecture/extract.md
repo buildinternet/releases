@@ -15,20 +15,22 @@ Empirical distribution (90 days of `usage_log.operation="agent-ingest"` and `"in
 ```text
 extractFromBody(body, ...)
   │
-  ├── useToolLoop && approxTokens > 50K ──► extractWithTools(body, ...)
-  │                                         (multi-round tool-use loop)
-  │                                          │
-  │                                          ├── success  ─► return entries
-  │                                          └── failure  ─► fall back to runOneShot
+  ├── useToolLoop && approxTokens > 50K ──► extractWithToolsAiSdk(body, ...)  [default]
+  │       │                                 extractWithTools(body, ...)       [no aiSdkModel]
+  │       │                                 (multi-round tool-use loop)
+  │       ├── success  ─► return entries
+  │       └── failure  ─► fall back to runOneShot
   │
   └── else ─► runOneShot(body, ...)    (legacy inline extraction — unchanged)
 ```
+
+When `ExtractDeps.aiSdkModel` is set (the normal worker path — OpenRouter when `openrouter-enabled` + `EXTRACT_MODEL` + key are configured, otherwise Anthropic via `buildLaneAnthropicModel`), the tool-loop routes through `extract-with-tools-aisdk.ts`. The hand-rolled Anthropic SDK loop in `extract-with-tools.ts` remains only as a fallback when no AI-SDK model resolves.
 
 The tier gate requires both `useToolLoop === true` (set by the caller from `env.EXTRACT_TOOLLOOP_ENABLED` or the per-source override `source.metadata.extractStrategy === "toolloop"`) AND the approximate token count exceeding `LARGE_BODY_TOKEN_THRESHOLD = 50_000`. Below the threshold, every body keeps taking the legacy path regardless of the flag.
 
 ## Tool-loop mechanics
 
-The loop (`packages/adapters/src/extract/extract-with-tools.ts`) registers three tools on the same `/v1/messages` endpoint we already use:
+Production runs the loop through AI SDK `generateText` (`packages/adapters/src/extract/extract-with-tools-aisdk.ts`), with provider-agnostic tool schemas and Anthropic cache breakpoints replicated via `providerOptions` + `prepareStep`. The legacy controller (`extract-with-tools.ts`) is the same contract on the direct Anthropic `/v1/messages` endpoint — used only when `aiSdkModel` is unset. Both register three tools:
 
 | Tool                       | Offered when                            | Purpose                                                                                                                                                        |
 | -------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -105,7 +107,9 @@ The AI Gateway dashboard surfaces cost/token deltas per call; SQL rollups on `us
 ## Files
 
 - `packages/adapters/src/extract/extract-from-body.ts` — tier gate + `runOneShot` helper
-- `packages/adapters/src/extract/extract-with-tools.ts` — loop controller + `LoopFallbackError`
+- `packages/adapters/src/extract/extract-with-tools-aisdk.ts` — production loop (AI SDK; OpenRouter or Anthropic)
+- `packages/adapters/src/extract/resolve-tool-loop-model.ts` — shared OpenRouter → Anthropic model resolver (`resolveToolLoopAiSdkModel`)
+- `packages/adapters/src/extract/extract-with-tools.ts` — legacy Anthropic SDK loop + `LoopFallbackError`
 - `packages/adapters/src/extract/preview-builder.ts` — JSON schema sketch (strict + partial) and HTML preview
 - `packages/adapters/src/extract/tool-handlers.ts` — `handleGetSlice`, `handleQueryJson`
 - `packages/adapters/src/extract/shared.ts` — tool schemas + loop constants
