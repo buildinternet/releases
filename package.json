@@ -119,7 +119,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.5.1",
     "@changesets/cli": "^2.29.7",
     "@types/bun": "^1.3.14",
     "drizzle-kit": "^0.31.10",

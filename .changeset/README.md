@@ -33,3 +33,10 @@ changeset for the co-bump.
 3. **Merging that PR** bumps `package.json` + writes `CHANGELOG.md`. The version
    change then triggers the existing OIDC `publish-core.yml` /
    `publish-api-types.yml` workflows, which do the actual `npm publish`.
+
+## Changelog format
+
+Same as the CLI monorepo: the default `@changesets/cli/changelog` generator
+(`- <short-sha>: summary`). We intentionally do **not** use
+`@changesets/changelog-github` — it hardcodes a `Thanks @author!` credit on
+every line with no way to turn it off.
