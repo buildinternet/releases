@@ -28,6 +28,7 @@ import {
   SyncWellKnownResponseSchema,
   CreateStubOrgBodySchema,
   StubFromDomainBodySchema,
+  ReleasesJsonDomainSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 import { avatarRejectToError, ingestOrgAvatar } from "../lib/avatar-ingest.js";
@@ -41,6 +42,7 @@ import {
 } from "../lib/well-known/stub.js";
 import { promoteStubOrg } from "../lib/well-known/promote.js";
 import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
+import { buildOrgManifest } from "../lib/well-known/export-manifest.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc, isNotNull, isNull } from "drizzle-orm";
@@ -1324,6 +1326,34 @@ orgRoutes.delete(
 // by entry type; `?kind=<entity-kind>` narrows by entity kind (platform/sdk/…);
 // `?limit=N` is per-entryType (capped [1, 500]); invalid values return 400.
 const CATALOG_ENTRY_TYPES = new Set(["source", "product"]);
+orgRoutes.get(
+  "/orgs/:slug/manifest",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Export the org as a releases.json manifest",
+    description:
+      "Reconstructs an owner-declared `releases.json` v2 domain manifest from the org's live products + sources — the inverse of the well-known materializer. Each source becomes a release locator (github/appstore/feed/url, mirroring fetch routing), nested under its product or top-level; the primary source is marked `canonical`. Intended as an editable baseline an owner can host at `/.well-known/releases.json`; the output validates against the v2 schema and round-trips through the fill-if-empty well-known sweep for enrichment. Hidden/soft-deleted entities are excluded.",
+    responses: {
+      200: {
+        description: "The reconstructed releases.json domain manifest",
+        content: { "application/json": { schema: resolver(ReleasesJsonDomainSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
+    const manifest = await buildOrgManifest(db, org);
+    return c.json(manifest);
+  },
+);
+
 orgRoutes.get(
   "/orgs/:slug/catalog",
   describeRoute({
