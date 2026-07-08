@@ -57,11 +57,15 @@ new event; clients dedupe by `release.id`.
 
 - The stream route is mounted in the no-auth group but is nested under
   `/releases/*`, which is also covered by `publicReadAuthMiddleware`,
-  `publicRateLimitMiddleware`, and `dbHealthCheck`. Today `RATE_LIMIT_ENABLED`
-  is off in production, so this is a no-op; if we later enable the limiter,
-  `/v1/releases/stream` will count WebSocket upgrades against the 120/min/IP
-  cap. Either exempt the stream path from the public-read middleware chain
-  at that point, or raise the cap for stream connects specifically.
+  `publicRateLimitMiddleware`, and `dbHealthCheck`. Rate limiting is now a
+  tiered, multi-gate system (`selectTierLimiters` in
+  `workers/api/src/middleware/rate-limit.ts`) rather than a single switch:
+  `RATE_LIMIT_ENABLED` gates only the anonymous/account tier, alongside
+  independent gates (`TOKEN_RATE_LIMIT_ENABLED`, `AUTH_EDGE_RATE_LIMIT_ENABLED`,
+  …). Wherever a limiter tier is active, `/v1/releases/stream` will count
+  WebSocket upgrades against that tier's cap (anonymous IP = 120/min). Either
+  exempt the stream path from the public-read middleware chain, or raise the
+  cap for stream connects specifically.
 
 ## Cost envelope (initial rollout)
 
@@ -86,10 +90,15 @@ on disconnect. Implemented in the OSS CLI at
 ### Webhooks (`workers/webhooks`)
 
 Per-subscription HTTPS POST consumer. The publisher in
-`workers/api/src/events/publish.ts` calls `expandAndEnqueue` alongside
-`ReleaseHub.publish`; the consumer Worker drains `webhook-delivery`,
-signs payloads, retries on transient failures, and DLQs on retry
-exhaustion. Fan-out matches org-scoped subscriptions by `(orgId, sourceId)`
+`workers/api/src/events/publish.ts` calls `fanoutWebhooks`
+(`queues/enqueue-release-fanout.ts`) alongside the `ReleaseHub` publish;
+that enqueues onto the release-fanout queue, whose consumer
+(`queues/release-fanout-consumer.ts`) calls `expandAndEnqueue`
+(`webhooks/expand-and-enqueue.ts`) to match subscriptions and enqueue
+per-subscription `webhook-delivery` messages (with an inline fallback when
+the fan-out queue send fails). The `workers/webhooks` consumer Worker then
+drains `webhook-delivery`, signs payloads, retries on transient failures,
+and DLQs on retry exhaustion. Fan-out matches org-scoped subscriptions by `(orgId, sourceId)`
 and follows-scoped self-serve subscriptions by the owner's live
 `user_follows` graph (same predicate as `/v1/me/feed`). See
 [docs/webhooks.md](../webhooks.md) for the public subscriber contract.

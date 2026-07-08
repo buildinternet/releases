@@ -55,7 +55,7 @@ them):
 
 ### Where each surface emits
 
-- **MCP** (`workers/mcp/src/index.ts`): one event per **billable** call. Protocol
+- **MCP** (`workers/mcp/src/auth.ts`): one event per **billable** call. Protocol
   overhead (`initialize` / `tools/list` / `ping` / `notifications/*`) is excluded
   via the shared `isBillableMethod` peek. **Anonymous calls ARE counted** — on an
   agent-native surface, an anonymous MCP `tools/call` _is_ agent consumption.

@@ -80,12 +80,12 @@ The one structural rule to internalize: **the API worker is the only data plane.
 - **[runbooks/](runbooks/)** — operational procedures: auth-audit monitors, the trusted-proxy WAF rule, Verified Bot registration, the demand dashboard.
 - **[superpowers/](superpowers/)** — historical design specs and implementation plans. Architecture docs link into these for rationale; they are point-in-time documents, not maintained references.
 
-### Design documents (not shipped)
+### Design documents (historical)
 
-Two files in `architecture/` describe proposals, not running systems — both say so at the top, but it's worth knowing before you cite them:
+Two point-in-time design/plan documents live under `plans/`. The work they describe has since shipped (see remote-mode.md for the running system); they are kept as history, not maintained references:
 
-- **[durable-objects-exploration.md](architecture/durable-objects-exploration.md)** — the per-entity actor design exploration (parts of which later shipped as SourceActor/OrgActor, documented in remote-mode.md).
-- **[sourceactor-delegation-plan.md](architecture/sourceactor-delegation-plan.md)** — the staged plan for moving scrape/agent delegation onto SourceActor.
+- **[durable-objects-exploration.md](plans/durable-objects-exploration.md)** — the per-entity actor design exploration (parts of which later shipped as SourceActor/OrgActor).
+- **[sourceactor-delegation-plan.md](plans/sourceactor-delegation-plan.md)** — the staged plan for moving scrape/agent delegation onto SourceActor.
 
 ## Writing these docs
 

@@ -1,6 +1,6 @@
 # Release coverage and grouping
 
-Multiple releases can cover the same underlying launch (marketing post + platform changelog + app version note). The `release_coverage` table (source in `src/db/schema-coverage.ts`) records the canonical release and its coverage items with an audit trail (`decided_by = human:cli | agent:<model>`, `decided_at`).
+Multiple releases can cover the same underlying launch (marketing post + platform changelog + app version note). The `release_coverage` table (source in `packages/core-internal/src/schema-coverage.ts`, imported as `@releases/core-internal/schema-coverage`) records the canonical release and its coverage items with an audit trail (`decided_by = human:cli | agent:<model>`, `decided_at`).
 
 ## API surface
 
@@ -18,20 +18,17 @@ Read paths (`latest`, `list`, search, MCP) hide coverage-side rows by default; p
 
 ## Cron observability
 
-Every scheduled-event execution of the scrape-no-feed agent sweep writes one row to the `cron_runs` table (generic over `cron_name` so future crons can retrofit). `/status` → Cron tab shows the last 50 rows; filter `?status=aborted,dispatch_failed` for "things worth looking at."
+Scheduled crons write one row per execution to the generic `cron_runs` table (`workers/api/src/db/schema-cron.ts`, keyed on `cron_name` so any cron can retrofit into it — current writers include the tombstone, OAuth-client, and search-query sweeps). `/status` → Cron tab shows the last 50 rows; filter `?status=aborted,dispatch_failed` for "things worth looking at." The status enum is `running | done | degraded | dispatch_failed | aborted`.
 
-Escalation signals:
+Escalation signal: two consecutive `dispatch_failed` rows for the same `cron_name` means escalate — the likely cause is a bad deploy of a downstream worker.
 
-- Two consecutive `dispatch_failed` rows for the same `cron_name` means escalate — the likely cause is a bad deploy of the downstream worker.
-- `aborted` with `abort_reason='anthropic_auth'` means replace the `ANTHROPIC_API_KEY` secret.
-- `anthropic_credits` means top up the account.
-- Stale-running rows (reconciled by the next sweep with `abort_reason='stale_running'`) are informational.
+Admin API: `GET /v1/admin/cron-runs{,/:id}`.
 
-Admin API: `GET /v1/admin/cron-runs{,/:id}`. The scrape-no-feed sweep fires daily at 01:00 UTC; worst-case sessions per sweep capped by `SCRAPE_AGENT_MAX_SESSIONS` (initial deploy ships at 5, steady state 20).
+> The daily scrape-no-feed **agent sweep** that originally owned this table was retired when the scrape/agent drain moved onto the `OrgActor` DO (#1822/#1946); the `cron_runs` observability + email plumbing it introduced remains as shared infrastructure. See [remote-mode.md → OrgActor drain](remote-mode.md).
 
 ### Email notifications
 
-After each run finalizes, the sweep sends a summary email via Cloudflare Email Routing (`send_email` binding) — one report per run, regardless of status. The subject prefixes `[degraded]` / `[failed]` / `[aborted]` so inbox filters can surface failures without parsing the body. Implementation is generic (`workers/api/src/lib/{email,cron-report,notifications}.ts`); future crons can call `sendCronReport(env, report)` after their own `finalizeRunRow` with zero new plumbing.
+A cron can send a summary email via Cloudflare Email Routing (`send_email` binding) by calling `sendCronReport(env, report)` after finalizing its run row — one report per run, regardless of status. The subject prefixes `[degraded]` / `[failed]` / `[aborted]` so inbox filters can surface failures without parsing the body. Implementation is generic (`workers/api/src/lib/{email,cron-report,notifications}.ts`).
 
 Configuration (all in `workers/api/wrangler.jsonc` under `vars`):
 
