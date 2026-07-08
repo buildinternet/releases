@@ -172,16 +172,30 @@ function readNestedApiError(
 export type FetchCacheInit = { cache?: RequestCache; next?: { revalidate?: number | false } };
 
 /**
- * Apply cache-or-ISR options to a RequestInit, defaulting to 60s revalidate
- * so reads stay aligned with the API's own KV cache TTLs. Shared by REST and
- * GraphQL transports — drift here would mean two caches with different lifetimes.
+ * Default Data Cache / ISR revalidate window (seconds) for API reads.
+ *
+ * A statically-rendered route's regeneration frequency is the MIN of its
+ * `export const revalidate` and every fetch revalidate on it, so this default
+ * governs how often the org/source/product ISR pages regenerate (and thus their
+ * Vercel ISR write volume). It MUST stay in sync with the `revalidate = 900`
+ * literals on those pages — a lower value here silently overrides them. 15 min
+ * keeps freshly-ingested releases visible quickly (ingestion writes via the API
+ * worker, not Next's revalidatePath) while keeping regeneration writes bounded.
+ */
+const DEFAULT_REVALIDATE_SECONDS = 900;
+
+/**
+ * Apply cache-or-ISR options to a RequestInit, defaulting to
+ * DEFAULT_REVALIDATE_SECONDS so reads stay aligned with the API's own KV cache
+ * TTLs. Shared by REST and GraphQL transports — drift here would mean two
+ * caches with different lifetimes.
  */
 export function applyCacheInit(target: RequestInit, init?: FetchCacheInit): void {
   if (init?.cache) {
     target.cache = init.cache;
   } else {
     (target as RequestInit & { next?: FetchCacheInit["next"] }).next = init?.next ?? {
-      revalidate: 60,
+      revalidate: DEFAULT_REVALIDATE_SECONDS,
     };
   }
 }

@@ -22,8 +22,10 @@ import { getOrg, getOrgOverview } from "../_lib/org-data";
 import { getOrgReleases } from "../_lib/org-releases-data";
 
 // On-demand ISR: render once per org on first request, then serve from cache
-// (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
-export const revalidate = 60;
+// (revalidated every 15 min). See `enableOnDemandIsr`. (#1607)
+// Keep in sync with applyCacheInit's default (src/lib/api.ts): the route
+// revalidates at the min() of this and every fetch revalidate on it.
+export const revalidate = 900;
 export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
