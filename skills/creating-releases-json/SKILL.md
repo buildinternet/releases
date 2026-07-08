@@ -4,13 +4,15 @@ description: >-
   Create or update a releases.json manifest so registries and agents can find
   where a company or project publishes its release notes. Use this whenever
   someone wants to "list our product on Releases", "add a releases.json", "get
-  indexed on releases.sh", declare a changelog / updates page / RSS feed /
-  GitHub releases / App Store listing / CHANGELOG for discovery, publish a
-  /.well-known/releases.json, or edit an existing one — even if they don't say
-  "releases.json" by name. The manifest is a small, schema-validated file the
-  owner hosts on their own domain or repo; this skill discovers the real publish
-  locations, writes the correctly-scoped file, validates it locally, and guides
-  publishing it.
+  indexed on releases.sh", "here's our website, make us a manifest", declare a
+  changelog / updates page / RSS feed / GitHub releases / App Store listing /
+  CHANGELOG for discovery, publish a /.well-known/releases.json, or edit an
+  existing one — even if they don't say "releases.json" by name. The usual input
+  is just a company website or domain (no codebase required); the manifest is a
+  small, schema-validated file the owner hosts on their domain or repo. This
+  skill discovers the real publish locations, models products without
+  over-fragmenting, writes the correctly-scoped file, validates it locally, and
+  guides publishing it.
 ---
 
 # Creating a releases.json manifest
@@ -28,8 +30,21 @@ from the owner instead of guessing.
 trust model — if you can publish the file at the URL, you can declare what it says.
 
 Your job with this skill: figure out which scope applies, discover the locations
-where release notes **actually** live (never invent them), write a correctly-shaped
-file, validate it, and help get it published.
+where release notes **actually** live (never invent them), model the company's
+products without over-fragmenting, write a correctly-shaped file, validate it, and
+help get it published.
+
+## How you'll be asked to run this
+
+Most of the time there is **no codebase** — someone just says *"here's our website,
+make us a releases.json"*. That's the primary path: you work from the live site (and
+GitHub org), browsing to find where updates are published, and you hand back a finished
+file plus instructions on where to host it. You cannot commit it for them.
+
+Less often you're working **inside a repo** — the one that serves the company's site, or
+a single product/library repo — in which case you can also read the codebase and write
+the file into place. Both paths use the same steps below; only Step 1 (scope) and Step 5
+(publish) differ.
 
 ## The one rule that matters most
 
@@ -41,16 +56,18 @@ location, leave it out and say so.
 
 ## Step 1 — Choose the scope
 
-Decide which file you're writing. They share one schema but declare different things:
+There are two scopes. They share one schema but declare different things:
 
-| You're working in…                                    | Write…                                  | It declares                                                       |
-| ----------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------- |
-| The repo that serves the company **website / domain** | `public/.well-known/releases.json` (or wherever that domain serves `/.well-known/`) | Company identity, `products[]`, and top-level `releases[]`        |
-| A **single product / library repo**                   | `releases.json` at the **repo root**    | A `product` binding + where **this repo's** releases land         |
+| Scope      | Lives at                                                 | Declares                                                    |
+| ---------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| **Domain** | `https://{domain}/.well-known/releases.json`             | Company identity, `products[]`, and top-level `releases[]`  |
+| **Repo**   | `releases.json` at a repository root                     | A `product` binding + where **this repo's** releases land   |
 
-If unsure, ask: "Is this the repo that serves your marketing/docs domain, or a single
-product repo?" A repo file **cannot** declare company identity; a domain file cannot
-speak for a repo it doesn't host.
+**Default to domain scope** — it's what "here's our website, make us a manifest" wants, and
+it's the only scope that can describe the whole company and multiple products. Choose repo
+scope only when you're clearly operating inside one product/library repo and the goal is to
+bind *that repo* to a product. A repo file **cannot** declare company identity; a domain
+file cannot speak for a repo it doesn't host. If genuinely unsure, ask which one they want.
 
 ## Step 2 — Discover the real publish locations
 
@@ -85,6 +102,47 @@ scope**).
 `source.url` is for humans. If a URL is purely a machine endpoint nobody would visit,
 it belongs in `feed`/`file`, not `url`.
 
+## Step 2b — Model products correctly (don't over-fragment)
+
+This is where agents most often go wrong. **`products[]` is optional, and a manifest with
+just a top-level `releases[]` is often the *right* answer.** Only reach for `products[]`
+when the company genuinely ships multiple things that publish releases in *different*
+places. The test for whether something deserves its own product entry is simple:
+
+> **Does it have its own release location?** A product earns an entry only if it has a
+> release stream distinct from the company changelog — its own repo, its own feed, its own
+> changelog page, or its own App Store listing.
+
+Marketing structure is **not** release structure. Companies segment their site into
+"capabilities", "solutions", or "modules" for buyers; that segmentation almost never maps
+to distinct release feeds. Follow where the *releases* are published, not how the *site*
+is organized.
+
+**Two anti-patterns to actively avoid:**
+
+- **One product per marketing capability, all pointing at the same changelog.** If you find
+  yourself writing eight products — "Analytics", "Session Replay", "Experiment", …— that all
+  carry the identical `url`/`feed`, stop. Those aren't eight products; they're one company
+  with one changelog. Declare it once in the top-level `releases[]` and drop the redundant
+  product entries. Duplicated locators just dedup back to one source and add noise.
+- **One product per language SDK.** A company with client libraries in Python, JS, Swift,
+  Kotlin, Go, … has **one** developer/SDK offering, not one product per language. Bundle
+  the libraries as multiple `github` locators under a single product (e.g. `"API & SDKs"` or
+  `"SDKs"`), mark the primary/most-active one `canonical`. If there are more than 8 repos
+  (the per-product cap), list the most active or the monorepo — don't spill into extra
+  products to fit them all.
+
+**When separate products *are* right:** each has its own release location. Vercel is the
+model — Next.js (`github: vercel/next.js`), Turborepo (`vercel/turborepo`), the AI SDK
+(`vercel/ai`), and v0 (`v0.app/changelog`) each publish releases independently, so each is
+a real product entry with its own `canonical` locator.
+
+**Rule of thumb:** if every product entry you're about to write shares one changelog, you
+want zero products and one top-level `releases[]`. Add products only for the pieces that
+break out into their own release stream.
+
+For worked before/after examples of all three cases, see `references/modeling-products.md`.
+
 ## Step 3 — Write the file
 
 Start from the matching example in `examples/` and adapt it:
@@ -109,6 +167,11 @@ Rules to honor (the validator in Step 4 enforces all of these):
 - **Domain scope is flat** — no `org` wrapper; the root object *is* the org. Only a domain
   file may use `products[]`, `name`, `avatar`, `tags`. Only a repo file may use `product`
   (singular) and `github: "self"`.
+- **Products carry a fixed, small set of fields** and nothing else — the schema is strict and
+  rejects unknown keys. A product may have: `name` (required), `slug`, `kind`, `category`,
+  `description`, `website`, `docs`, `support`, `social`, `archived`, `releases`. In
+  particular **`tags` is an org-level field only — products have no `tags`** (a common
+  mistake that fails validation). Put company-wide tags at the root, not on products.
 - **Taxonomy is advisory.** `category`, `kind`, `tags` are suggestions; unrecognized values
   are ignored by the registry, never an error. Don't agonize over exact values.
 
@@ -143,13 +206,22 @@ at `https://releases.sh/schemas/releases.json`.
 
 ## Step 5 — Publish and confirm it's live
 
-Serve the validated file at its scope's location:
+**If you don't have the repo** (the common "here's our website" case), you can't publish it
+for them — hand back the finished file and tell them exactly where it goes:
 
-- **Domain scope:** `https://{domain}/.well-known/releases.json`. Where the file goes in the
-  repo depends on the framework — e.g. Next.js `public/.well-known/releases.json`, a static
-  site's public root, or an app route that serves that exact path with
-  `Content-Type: application/json`. Match how the project already serves `/.well-known/` or
-  `robots.txt`.
+- Save the file where they can grab it and tell them its target URL:
+  `https://{domain}/.well-known/releases.json`.
+- Explain the one requirement: it must be served at that exact path, over HTTPS, with
+  `Content-Type: application/json` and no auth wall or redirect. How they do that depends on
+  their host (a `public/.well-known/` directory for most static/Next.js sites, an app route,
+  or their CDN's static-file rules — the same mechanism that serves their `robots.txt`).
+- Then Step 2 of the confirmation below is something *they* run after deploying.
+
+**If you do have the repo,** write it into place:
+
+- **Domain scope:** wherever that project serves `/.well-known/` — e.g. Next.js
+  `public/.well-known/releases.json`, a static site's public root, or an app route serving
+  that exact path. Match how it already serves `robots.txt`.
 - **Repo scope:** commit `releases.json` at the repository root.
 
 After it's deployed and publicly reachable, confirm it end-to-end:
@@ -186,10 +258,14 @@ The file is fill-if-empty and never overwrites curator decisions, so it's safe t
 
 ## Reference
 
+- `references/modeling-products.md` — worked good/bad examples of the product-modeling rules
+  in Step 2b (capability sprawl, one-product-per-SDK, and when separate products are right).
+  Read it when a company has many offerings and you're unsure how to split them.
 - `references/schema.json` — the bundled JSON Schema snapshot (canonical:
   `https://releases.sh/schemas/releases.json`).
 - `examples/` — minimal domain, full domain-with-products, and repo-root files.
-- Owner-facing prose docs: `https://releases.sh/docs/listing`.
+- Owner-facing prose docs: `https://releases.sh/docs/listing` (fuller narrative + a
+  copy-paste agent prompt; this skill is the operational version of that guidance).
 - To get an org into the registry in the first place (if it isn't listed yet), the owner can
   submit a changelog URL at `https://releases.sh/submit`, or the live-domain
   `POST /v1/listing/validate` → `activate` lane can create a listing from a published file.
