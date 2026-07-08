@@ -69,17 +69,10 @@ async function main() {
 
   const dir = join(import.meta.dir, "fixtures", "summaries");
   const fixtures = loadFixtures(dir);
-  // The model under test. Defaults to Anthropic Haiku (the production baseline);
-  // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY
-  // eval an OpenRouter candidate for the summarizer lane. Reuses `apiKey` for the
-  // Anthropic fallback — guaranteed non-null here since ANTHROPIC_API_KEY is
-  // already validated above. The judge (when --judge) is selected independently
-  // via JUDGE_MODEL. See ./judge-model.ts.
   const summaryModel: TextModel = resolveEvalModel({
     anthropicModel: SUMMARY_MODEL,
     generationName: "summarize-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
-    apiKey,
   })!.model;
   console.error(`model under test: ${summaryModel.id}`);
   const rubric = useJudge
@@ -99,7 +92,7 @@ async function main() {
     : "";
   // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
-  const judgeModel = useJudge ? resolveJudgeModel(apiKey) : null;
+  const judgeModel = useJudge ? resolveJudgeModel() : null;
   if (judgeModel) console.error(`judge model: ${judgeModel.id}`);
 
   let allPassed = true;

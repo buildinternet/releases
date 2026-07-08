@@ -428,20 +428,14 @@ async function runBatch(
 // Route through the CF AI Gateway when ANTHROPIC_BASE_URL is set (so this tool's
 // spend is attributed alongside the worker paths); falls back to direct Anthropic
 // when unset, so local runs are unchanged. Same pattern as scripts/run-eval-task.ts.
-const client = buildAnthropicClient({
-  apiKey,
+const anthropicGateway = {
   baseURL: process.env.ANTHROPIC_BASE_URL,
   gatewayToken: process.env.AI_GATEWAY_TOKEN,
-});
-// The real-time path runs `summarizeRelease` through the AI SDK TextModel seam; the
-// batch path stays on the Anthropic Batches API (no OpenRouter batch equivalent).
+};
+const client = buildAnthropicClient({ apiKey, ...anthropicGateway });
+// Real-time path: AI SDK TextModel seam. Batch path: Anthropic Batches API (no OR batch).
 const realtimeModel = aisdkTextModel(
-  buildLaneAnthropicModel({
-    apiKey,
-    model: MODEL,
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-    gatewayToken: process.env.AI_GATEWAY_TOKEN,
-  }),
+  buildLaneAnthropicModel({ apiKey, model: MODEL, ...anthropicGateway }),
   `anthropic:${MODEL}`,
 );
 

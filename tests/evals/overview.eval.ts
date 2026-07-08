@@ -70,7 +70,6 @@ async function main() {
     anthropicModel: MODEL,
     generationName: "org-overview-eval",
     orModelEnvVar: "OVERVIEW_EVAL_MODEL",
-    apiKey,
   });
   if (!resolved) {
     console.error("No generation model available — skipping overview eval.");
@@ -81,7 +80,7 @@ async function main() {
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
   // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
-  const judgeModel = useJudge ? resolveJudgeModel(apiKey) : null;
+  const judgeModel = useJudge ? resolveJudgeModel() : null;
 
   let allPassed = true;
   console.error(`\n${"=".repeat(60)}`);

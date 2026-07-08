@@ -71,7 +71,6 @@ async function main() {
     anthropicModel: SUMMARIZE_MODEL,
     generationName: "breaking-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
-    apiKey,
   })!.model;
   console.error(`model under test: ${model.id}`);
 
