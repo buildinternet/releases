@@ -9,6 +9,7 @@ import {
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type {
@@ -89,7 +90,7 @@ type ScopeOpts = {
    * to its source list and passes the IDs through here so both the FTS path
    * and the entity-enrichment path stay scoped.
    *
-   * Chunked at 90 IDs per `IN` clause to stay inside D1's 100-bound limit.
+   * Capped at `IN_ARRAY_CHUNK_SIZE` IDs per `IN` clause (see `sourceIdInList`).
    * When the array is empty (product has no sources) the query returns no
    * release hits — mirrors the "no matching org sources" behaviour.
    */
@@ -97,13 +98,24 @@ type ScopeOpts = {
 };
 
 /**
- * Build an `IN (...)` value list from a `sourceIds` scope, chunked at 90 IDs
- * to stay inside D1's 100-bound limit. Callers guard the empty-array case
- * before reaching here (an empty product returns no hits, not `IN ()`).
+ * Build an `IN (...)` value list from a `sourceIds` scope. Callers guard the
+ * empty-array case before reaching here (an empty product returns no hits, not
+ * `IN ()`).
+ *
+ * This is a deliberate **product-scope ceiling**, not a silently-lossy bug:
+ * the list is *capped* at `IN_ARRAY_CHUNK_SIZE` rather than chunked-and-unioned
+ * like `getOrgSparklines`. The scope originates from `?product=`, which
+ * pre-resolves one product to its source list, and a single product owning
+ * more than `IN_ARRAY_CHUNK_SIZE` sources is not a shape we serve — so every
+ * caller (`searchProducts` / `searchSources` / the release FTS helpers) shares
+ * the same ceiling. Chunk-unioning wouldn't be a drop-in fix anyway: the
+ * release helpers are ranked and `LIMIT`-ed, so a UNION across chunks would
+ * mis-rank; lifting the ceiling would mean ranking in TS across per-chunk
+ * result sets.
  */
 function sourceIdInList(sourceIds: string[]) {
   return sql`(${sql.join(
-    sourceIds.slice(0, 90).map((id) => sql`${id}`),
+    sourceIds.slice(0, IN_ARRAY_CHUNK_SIZE).map((id) => sql`${id}`),
     sql`, `,
   )})`;
 }
