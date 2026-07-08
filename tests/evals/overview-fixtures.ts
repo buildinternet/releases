@@ -27,7 +27,16 @@ export function overviewFixturesDir(): string {
 
 /** Absolute path to the Tier-2 grading rubric. */
 export function overviewRubricPath(): string {
-  return join(import.meta.dir, "..", "..", "src", "shared", "rubrics", "overview.md");
+  return join(
+    import.meta.dir,
+    "..",
+    "..",
+    "managed-agents",
+    "src",
+    "shared",
+    "rubrics",
+    "overview.md",
+  );
 }
 
 export function loadOverviewFixtures(dir: string = overviewFixturesDir()): OverviewFixture[] {

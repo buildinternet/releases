@@ -36,7 +36,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { parse } from "yaml";
-import type { AgentEnv } from "../src/shared/agent-tools.js";
+import type { AgentEnv } from "../managed-agents/src/shared/agent-tools.js";
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
 

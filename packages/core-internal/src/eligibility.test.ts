@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 // Root src/ is 3 levels up from packages/core-internal/src/
-import { releaseCoverage } from "../../../src/db/schema-coverage.js";
+import { releaseCoverage } from "./schema-coverage.js";
 import { fetchEligibleReleases } from "./eligibility.js";
 
 // Cast bun-sqlite TestDb to the DrizzleD1Database shape our helpers accept.

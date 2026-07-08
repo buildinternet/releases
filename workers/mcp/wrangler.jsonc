@@ -3,7 +3,6 @@
   "name": "releases-mcp",
   "main": "src/index.ts",
   "alias": {
-    "@releases": "../../src",
     "bun:sqlite": "./src/stubs/bun-sqlite.ts",
     "drizzle-orm": "../../node_modules/drizzle-orm",
   },

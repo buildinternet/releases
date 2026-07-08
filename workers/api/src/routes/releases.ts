@@ -11,7 +11,7 @@ import {
   sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseTimeWindow } from "../utils.js";
 import {

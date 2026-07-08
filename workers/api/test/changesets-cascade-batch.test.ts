@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "bun:test";
 import { organizations, sources, releasesVisible } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { eq } from "drizzle-orm";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { createTestDb as mkDb, createTestApp } from "./setup";

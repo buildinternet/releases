@@ -155,7 +155,7 @@ function gradeCollectionSummary(result: CollectionSummaryResult): {
 
 // ── Judge helper ───────────────────────────────────────────────────────────
 
-// Wired to the rubric FILE (src/shared/rubrics/collection-summary.md), the same
+// Wired to the rubric FILE (managed-agents/src/shared/rubrics/collection-summary.md), the same
 // pattern overview.eval.ts uses — the rubric is the single source of truth for
 // what "good" means, shared by grader and the production prompt's intent.
 const COLLECTION_JUDGE_RUBRIC = readFileSync(collectionSummaryRubricPath(), "utf8");

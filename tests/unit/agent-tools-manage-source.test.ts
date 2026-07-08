@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { createTypedExecutor } from "../../src/shared/agent-tools.js";
+import { createTypedExecutor } from "../../managed-agents/src/shared/agent-tools.js";
 
 interface RecordedRequest {
   method: string;

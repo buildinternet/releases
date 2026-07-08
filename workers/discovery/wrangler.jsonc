@@ -5,7 +5,7 @@
   "compatibility_date": "2026-03-27",
   "compatibility_flags": ["nodejs_compat"],
   "alias": {
-    "@releases": "../../src",
+    "@releases/shared": "../../managed-agents/src/shared",
     "bun:sqlite": "./src/stubs/bun-sqlite.ts",
   },
   "observability": {

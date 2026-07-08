@@ -11,7 +11,7 @@
  *
  * The verdict is a closed enum, so the grade is deterministic: exact accuracy
  * plus a PRECISION guard (a `none`/`unknown` truth answered `minor`/`major` is a
- * false alarm — the costliest error per src/shared/rubrics/breaking.md).
+ * false alarm — the costliest error per managed-agents/src/shared/rubrics/breaking.md).
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { summarizeRelease, MODEL as SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";

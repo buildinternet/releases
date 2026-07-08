@@ -1,0 +1,7 @@
+-- Marker migration (no DDL): the `release_coverage` table definition moved
+-- from the (now-deleted) root `src/db/schema-coverage.ts` to
+-- `packages/core-internal/src/schema-coverage.ts` as part of removing the
+-- vestigial root `src/` tree (#1994). The table DDL is byte-identical — this
+-- is a pure file relocation with no schema change — so this file exists only
+-- to pair the tracked schema-file change with a migration per the CI
+-- "schema-change" gate.

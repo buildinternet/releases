@@ -20,8 +20,8 @@
       "@releases/lib/*": ["../../packages/lib/src/*"],
       "@releases/rendering/*": ["../../packages/rendering/src/*"],
       "@releases/search/*": ["../../packages/search/src/*"],
-      "@releases/*": ["../../src/*"]
+      "@releases/shared/*": ["../../managed-agents/src/shared/*"]
     }
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "../../src/shared/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "../../managed-agents/src/shared/**/*.ts"]
 }

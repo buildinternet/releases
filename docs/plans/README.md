@@ -5,7 +5,7 @@ runs. Each executor: read the plan fully before starting, honor its STOP
 conditions, and update your row when done.
 
 > Note on location: this repo's documented convention puts local design specs in
-> `.context/` (gitignored, ticket-ID-prefixed). These are placed under `plans/`
+> `.context/` (gitignored, ticket-ID-prefixed). These are placed under `docs/plans/`
 > instead so they're shareable/reviewable as a set; move or mirror into
 > `.context/` if you prefer the local convention.
 
@@ -286,12 +286,12 @@ included — an anonymous MCP `tools/call` is agent consumption); **API**
 web traffic, counted elsewhere). `principal` is a TYPE, `operation` a
 low-cardinality tool name / route family — never ids/tokens/IPs. North-star
 named: **programmatic queries answered per week**; APL + field-path caveat in
-[consumption-telemetry.md](../docs/architecture/consumption-telemetry.md). Tests
+[consumption-telemetry.md](../architecture/consumption-telemetry.md). Tests
 are the emit-gating + PII guards (`workers/mcp/test/consumption.test.ts`,
 `workers/api/test/consumption-telemetry.test.ts`). **Deferred:** distinct active
 consumers (needs a hashed `consumerRef`; volume north-star needs none).
 **Dashboard live:** [Agent demand (#1700)](https://app.axiom.co/releasessh-fbxi/dashboards/og0XbnPgbk7em1bNyd) — runbook
-[consumption-demand-dashboard.md](../docs/runbooks/consumption-demand-dashboard.md).
+[consumption-demand-dashboard.md](../runbooks/consumption-demand-dashboard.md).
 
 ### Run 1 dependency notes
 

@@ -13,7 +13,7 @@ import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { releaseRoutes } from "../../workers/api/src/routes/releases.js";
 import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "../../src/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { eq } from "drizzle-orm";
 
 let testDb: TestDatabase;

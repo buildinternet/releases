@@ -18,7 +18,7 @@
 import { describe, it, expect } from "bun:test";
 import { eq } from "drizzle-orm";
 import { organizations, sources, releases, fetchLog } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { MappedEntry } from "@releases/adapters/extract";
 import { httpPersister, type ScrapePersister } from "@releases/adapters/scrape-persister";
 import { d1ScrapePersister, type D1PersisterEnv } from "../src/lib/d1-scrape-persister.js";

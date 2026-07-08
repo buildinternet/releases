@@ -9,7 +9,7 @@ export default defineConfig({
   dialect: "sqlite",
   schema: [
     "./packages/core/src/schema.ts",
-    "./src/db/schema-coverage.ts",
+    "./packages/core-internal/src/schema-coverage.ts",
     "./workers/api/src/db/schema-cron.ts",
   ],
   out: "./.drizzle-out",

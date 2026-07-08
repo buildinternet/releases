@@ -18,7 +18,10 @@
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { createTypedExecutor, handleCustomToolUse } from "../src/shared/agent-tools.ts";
+import {
+  createTypedExecutor,
+  handleCustomToolUse,
+} from "../managed-agents/src/shared/agent-tools.ts";
 import { TASKS } from "../tests/evals/fixtures/tool-ux/tasks.ts";
 
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;

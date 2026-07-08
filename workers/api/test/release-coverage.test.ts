@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { releaseRoutes } from "../src/routes/releases.js";
 import { createTestDb as mkDb, createTestApp } from "./setup";
 

@@ -88,7 +88,16 @@ async function main() {
   console.error(`model under test: ${summaryModel.id}`);
   const rubric = useJudge
     ? readFileSync(
-        join(import.meta.dir, "..", "..", "src", "shared", "rubrics", "release-summary.md"),
+        join(
+          import.meta.dir,
+          "..",
+          "..",
+          "managed-agents",
+          "src",
+          "shared",
+          "rubrics",
+          "release-summary.md",
+        ),
         "utf8",
       )
     : "";
