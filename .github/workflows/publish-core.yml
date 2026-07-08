@@ -77,10 +77,10 @@ jobs:
         working-directory: packages/core
         env:
           DRY_RUN: ${{ inputs.dry-run }}
-          # Source repo is private — npm provenance is unsupported from private
-          # repos, and trusted publishing would otherwise try to attach it and
-          # fail. OIDC still provides the (tokenless) publish credential.
-          NPM_CONFIG_PROVENANCE: "false"
+          # Source repo is public — npm provenance attestations are supported.
+          # Trusted publishing (OIDC) provides the tokenless credential and
+          # attaches the provenance statement on publish.
+          NPM_CONFIG_PROVENANCE: "true"
         run: |
           if [ "${DRY_RUN}" = "true" ]; then
             npm publish --dry-run
