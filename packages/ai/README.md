@@ -21,6 +21,6 @@ Imported as `@releases/ai-internal/<subpath>`.
 | `batch`                | Anthropic Message Batches API helpers (submit/poll/collect).                                        |
 | `openrouter-client`    | Worker-safe transport to OpenRouter's OpenAI-compatible chat-completions API.                       |
 | `aisdk-text-model`     | Wraps an AI SDK `LanguageModel` as a `TextModel` via `generateText` — worker cheap-lane path.       |
-| `text-model`           | `TextModel` interface + legacy `anthropicTextModel` / `openRouterTextModel` (scripts/evals).        |
+| `text-model`           | `TextModel` interface + `withUsageLogging` / `splitModelId` helpers.                                |
 
 **Private, workspace-only — not published to npm.**
