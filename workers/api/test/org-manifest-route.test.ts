@@ -15,15 +15,13 @@ describe("GET /v1/orgs/:slug/manifest", () => {
     await db
       .insert(organizations)
       .values({ id: "org_acme", slug: "acme", name: "Acme", category: "developer-tools" });
-    await db
-      .insert(products)
-      .values({
-        id: "prd_api",
-        orgId: "org_acme",
-        slug: "acme-api",
-        name: "Acme API",
-        kind: "platform",
-      });
+    await db.insert(products).values({
+      id: "prd_api",
+      orgId: "org_acme",
+      slug: "acme-api",
+      name: "Acme API",
+      kind: "platform",
+    });
     await db.insert(sources).values([
       {
         id: "src_gh",
