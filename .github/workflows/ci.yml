@@ -29,6 +29,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       schema_inputs: ${{ steps.filter.outputs.schema_inputs }}
       codegen_inputs: ${{ steps.filter.outputs.codegen_inputs }}
+      publishable: ${{ steps.filter.outputs.publishable }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -58,6 +59,11 @@ jobs:
             codegen_inputs:
               - 'web/**'
               - 'packages/api-types/graphql/schema.graphql'
+            # The two packages published to npm. A PR touching them should
+            # carry a changeset — the changeset-check job below only warns.
+            publishable:
+              - 'packages/core/**'
+              - 'packages/api-types/**'
 
   lint:
     name: Lint & Format
@@ -208,3 +214,38 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+  # Non-blocking reminder: a PR that touches a published package (packages/core,
+  # packages/api-types) should usually add a changeset so the release notes +
+  # version bump are captured. `continue-on-error` makes this advisory — a
+  # missing changeset surfaces as a warning but never fails the PR. Do NOT add
+  # this to branch protection.
+  changeset-check:
+    name: Changeset present?
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.publishable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check for a changeset
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if bunx changeset status --since="origin/$BASE_REF"; then
+            echo "Changeset present (or no publishable change detected)."
+          else
+            echo "::warning::This PR changes a published package but adds no changeset. Run 'bun run changeset' to capture the version bump + changelog. (Advisory — not required to merge.)"
+          fi
