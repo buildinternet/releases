@@ -4,24 +4,26 @@ Remote MCP server at `mcp.releases.sh` — serves the AI tool surface (search, c
 
 ## Layout
 
-- `index.ts` — worker entrypoint / routing
-- `mcp-agent.ts` — MCP agent definition, tool registration
-- `tools.ts` — core tool surface (search, catalog, lookups)
-- `follows-tools.ts` — follows/feed tools
-- `whats-changed-tool.ts` — `whats_changed` tool
-- `auth.ts` — token/JWT verification, scope enforcement
-- `rate-limit.ts` — per-tier rate limiting
-- `resources.ts` — MCP resources
-- `well-known.ts` — `.well-known` handlers
-- `slug-completion.ts` — slug autocomplete helper
-- `landing.ts` — landing/info page
-- `prompts.ts` — MCP prompts
-- `ui-bundles.ts` — MCP App UI bundle serving
-- `db.ts` — D1 query helpers
-- `scope-error.ts` — scope-enforcement error type
-- `stubs/` — type stubs for the carved-out workspace
+| Path                    | Purpose                                       |
+| ----------------------- | --------------------------------------------- |
+| `index.ts`              | Worker entrypoint / routing.                  |
+| `mcp-agent.ts`          | MCP agent definition, tool registration.      |
+| `tools.ts`              | Core tool surface (search, catalog, lookups). |
+| `follows-tools.ts`      | Follows/feed tools.                           |
+| `whats-changed-tool.ts` | `whats_changed` tool.                         |
+| `auth.ts`               | Token/JWT verification, scope enforcement.    |
+| `rate-limit.ts`         | Per-tier rate limiting.                       |
+| `resources.ts`          | MCP resources.                                |
+| `well-known.ts`         | `.well-known` handlers.                       |
+| `slug-completion.ts`    | Slug autocomplete helper.                     |
+| `landing.ts`            | Landing/info page.                            |
+| `prompts.ts`            | MCP prompts.                                  |
+| `ui-bundles.ts`         | MCP App UI bundle serving.                    |
+| `db.ts`                 | D1 query helpers.                             |
+| `scope-error.ts`        | Scope-enforcement error type.                 |
+| `stubs/`                | Type stubs for the carved-out workspace.      |
 
-This workspace is intentionally excluded from the root Bun workspace and root oxlint; it type-checks separately via `npx tsc --noEmit` (see repo root `AGENTS.md`).
+> This workspace is intentionally excluded from the root Bun workspace and root oxlint; it type-checks separately via `npx tsc --noEmit` (see repo root [`AGENTS.md`](../../AGENTS.md)).
 
 ## Deploy
 
@@ -36,5 +38,7 @@ Local dev: `bun run dev:mcp` (served via portless at `https://mcp.releases.local
 
 ## Docs
 
-- [../../docs/architecture/mcp.md](../../docs/architecture/mcp.md) — remote MCP server, scope enforcement, WebMCP parity, MCP Registry listing
-- [../../docs/architecture/remote-mode.md](../../docs/architecture/remote-mode.md) — D1, auth model, rate limiting, OAuth
+| Doc                                                      | Covers                                                                     |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [mcp.md](../../docs/architecture/mcp.md)                 | Remote MCP server, scope enforcement, WebMCP parity, MCP Registry listing. |
+| [remote-mode.md](../../docs/architecture/remote-mode.md) | D1, auth model, rate limiting, OAuth.                                      |

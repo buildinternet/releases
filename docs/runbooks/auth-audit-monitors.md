@@ -12,7 +12,7 @@ field shapes.
 ## The monitors (live in Axiom)
 
 All three are **created and live** (#1432), as **Threshold** monitors routed to the shared team
-notifier `sajiFns75aNFy3xSXH` (the "Email" notifier → zach@releases.sh, the same channel as the
+notifier `sajiFns75aNFy3xSXH` (the "Email" notifier → ops@releases.sh, the same channel as the
 existing managed-agent monitors):
 
 | Monitor                     | ID                   | Run window / every | Alert when     |

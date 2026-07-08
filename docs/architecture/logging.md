@@ -4,7 +4,7 @@ Logging splits by runtime. Pick the helper by where the code runs, not by what i
 
 ## CLI + runtime-neutral packages
 
-`packages/adapters/`, `packages/ai/`, `packages/lib/`, `scripts/`, `tests/evals/`, and `src/agent/` log via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`). The logger writes to stderr **and** persists per-day files under `~/.releases/logs/` — that's the whole point of using it, and it only makes sense in a Node/Bun runtime.
+`packages/adapters/`, `packages/ai/`, `packages/lib/`, `scripts/`, `tests/evals/`, and `managed-agents/src/agent/` log via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`). The logger writes to stderr **and** persists per-day files under `~/.releases/logs/` — that's the whole point of using it, and it only makes sense in a Node/Bun runtime.
 
 ## Worker code
 

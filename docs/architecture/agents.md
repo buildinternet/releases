@@ -4,10 +4,10 @@ Most ingest is deterministic code, but the judgment-heavy work — onboarding a 
 
 The two agents share the same tools (`AGENT_TOOLS`) and skills:
 
-- **Discovery agent** (`claude-sonnet-5`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
-- **Worker agent** (`claude-haiku-4-5`) — Fetches, updates, and mechanical operations at ~3x lower cost. System prompt: `src/shared/worker-prompt.ts`. The discovery worker DO routes `mode: "update"` sessions to this agent via `ANTHROPIC_WORKER_AGENT_ID`.
+- **Discovery agent** (`claude-sonnet-5`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `managed-agents/src/shared/discovery-prompt.ts`.
+- **Worker agent** (`claude-haiku-4-5`) — Mechanical operations at ~3x lower cost. System prompt: `managed-agents/src/shared/worker-prompt.ts`; deployed via `ANTHROPIC_WORKER_AGENT_ID`. Note: routine `update` sessions no longer dispatch to this agent — since #1946 they run as the API worker's `DeterministicUpdateWorkflow` (see [remote-mode.md → Deterministic update runs](remote-mode.md)), and the discovery worker serves onboarding only.
 
-Both agents are auto-deployed by `.github/workflows/deploy-managed-agents.yml` on any push to `main` that touches `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `.claude/skills/**`, or `scripts/sync-agent-skills.ts` — live Anthropic state stays in lockstep with `main`. For local / ad-hoc deploys: `bun run deploy:agents` (both), `deploy:agents:discovery`, or `deploy:agents:worker`. Agent IDs and skill mappings live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
+Both agents are auto-deployed by `.github/workflows/deploy-managed-agents.yml` on any push to `main` that touches `managed-agents/src/shared/agent-tools.ts`, `managed-agents/src/shared/worker-prompt.ts`, `managed-agents/src/shared/discovery-prompt.ts`, `.claude/skills/**`, or `scripts/sync-agent-skills.ts` — live Anthropic state stays in lockstep with `main`. For local / ad-hoc deploys: `bun run deploy:agents` (both), `deploy:agents:discovery`, or `deploy:agents:worker`. Agent IDs and skill mappings live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
 
 ### Per-environment agents
 
@@ -81,10 +81,10 @@ After each managed-agent session ends — both successful completions and termin
 
 Managed agents operate against two tool surfaces. They share the same tool-use protocol from the model's perspective but are executed completely differently — the MCP surface is a public Worker, the custom-tool surface runs inside the discovery DO. Contributors frequently conflate them.
 
-| Surface          | Declared in                                     | Executed by                           | Writes? |
-| ---------------- | ----------------------------------------------- | ------------------------------------- | ------- |
-| **MCP tools**    | `workers/mcp/src/mcp-agent.ts` (`createServer`) | `mcp.releases.sh` — remote MCP server | No      |
-| **Custom tools** | `src/shared/agent-tools.ts` (`AGENT_TOOLS`)     | Discovery DO (`ManagedAgentsSession`) | Yes     |
+| Surface          | Declared in                                                | Executed by                           | Writes? |
+| ---------------- | ---------------------------------------------------------- | ------------------------------------- | ------- |
+| **MCP tools**    | `workers/mcp/src/mcp-agent.ts` (`createServer`)            | `mcp.releases.sh` — remote MCP server | No      |
+| **Custom tools** | `managed-agents/src/shared/agent-tools.ts` (`AGENT_TOOLS`) | Discovery DO (`ManagedAgentsSession`) | Yes     |
 
 Custom tools are plain Anthropic tool definitions ([Managed Agents → Custom tools](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)) that aren't served by any worker. When the model emits an `agent.custom_tool_use` event, the DO intercepts it, dispatches to `createTypedExecutor`, and sends the result back via `user.custom_tool_result`. Every write the agent performs (`manage_source`, `manage_playbook`, `manage_org`, `manage_product`, etc.) is a custom tool — writes run inside the trust boundary using the shared admin API key, not through the public MCP server.
 
@@ -121,7 +121,7 @@ sequenceDiagram
 
 ### Where to look
 
-- **Add / edit a custom tool** — append to `AGENT_TOOLS` in `src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call. Merging to `main` auto-deploys both managed agents; `bun run deploy:agents` is only needed for local iteration or staging.
+- **Add / edit a custom tool** — append to `AGENT_TOOLS` in `managed-agents/src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call. Merging to `main` auto-deploys both managed agents; `bun run deploy:agents` is only needed for local iteration or staging.
 - **Add / edit an MCP tool** — register it inside `createServer` in `workers/mcp/src/mcp-agent.ts`, deploy the `mcp` worker.
 - **DO interception point** — `workers/discovery/src/managed-agents-session.ts`, the `agent.custom_tool_use` case inside `runSession()`.
 
@@ -136,7 +136,7 @@ Each agent must register two things at create/update time for the MCP read surfa
 1. **`mcp_servers`** — `[{ name: "releases", type: "url", url: "https://mcp.releases.sh" }]` (or `mcp-staging.releases.sh` in staging). Names the server inside the agent definition.
 2. **`mcp_toolset`** in `tools` — `{ type: "mcp_toolset", mcp_server_name: "releases", default_config: { enabled: true, permission_policy: { type: "always_allow" } } }`. Without this entry the platform never registers MCP tools with the model. Without `always_allow`, the platform's default `always_ask` policy resolves to deny in non-interactive sessions and every MCP call comes back as `Permission to use <tool> has been denied`.
 
-`scripts/sync-agent-skills.ts` builds both via `buildMcpServerDefinition(env)` and `buildMcpToolset()` from `src/shared/agent-tools.ts`. The vault attached to each session (`vault_ids: [...]`) carries the bearer credential the platform uses when calling out to the MCP server — the credential entry must be named to match `mcp_servers.name` (`"releases"`) so the platform pairs them up.
+`scripts/sync-agent-skills.ts` builds both via `buildMcpServerDefinition(env)` and `buildMcpToolset()` from `managed-agents/src/shared/agent-tools.ts`. The vault attached to each session (`vault_ids: [...]`) carries the bearer credential the platform uses when calling out to the MCP server — the credential entry must be named to match `mcp_servers.name` (`"releases"`) so the platform pairs them up.
 
 ### Discovery column and on-demand rows
 
@@ -175,7 +175,7 @@ The monorepo's Claude Code assets live under `.claude/` and auto-load on a trust
 **Components:**
 
 - `.claude/skills/` — every skill; the canonical source for BOTH managed agents and local Claude Code (see below).
-- `.claude/agents/` — local eval/grader subagents (`rubric-grader`, `overview-writer`). The production discovery/worker prompts live in `managed-discovery.ts` and the `src/shared/*-prompt.ts` builders, not here; the OSS CLI's `releases-admin` plugin ships the operator-facing `discovery`/`worker` agents.
+- `.claude/agents/` — local eval/grader subagents (`rubric-grader`, `overview-writer`). The production discovery/worker prompts live in `managed-discovery.ts` and the `managed-agents/src/shared/*-prompt.ts` builders, not here; the OSS CLI's `releases-admin` plugin ships the operator-facing `discovery`/`worker` agents.
 - `.claude/commands/` — repo-local slash commands (e.g. `/discover-changelog`). The consumer-facing `/releases` lookup command is not here — it ships in the public `releases` plugin from the OSS CLI marketplace, so duplicating it in the monorepo only invited drift.
 - `.mcp.json` (repo root) — points Claude Code at `mcp.releases.sh`.
 
