@@ -36,6 +36,7 @@ changeset for the co-bump.
 
 ## Changelog format
 
-Entries are rendered by `./changelog.js` (a local fork of
-`@changesets/changelog-github`). Each line links the PR and commit; it does
-**not** append `Thanks @author!` — that was pure noise for this monorepo.
+Same as the CLI monorepo: the default `@changesets/cli/changelog` generator
+(`- <short-sha>: summary`). We intentionally do **not** use
+`@changesets/changelog-github` — it hardcodes a `Thanks @author!` credit on
+every line with no way to turn it off.
