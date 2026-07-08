@@ -1,10 +1,10 @@
 ---
-title: "Get Listed — releases.json"
+title: "Listing your product — releases.json"
 description: "One small file that tells the Releases registry — and any agent — where you publish product updates. Point at your changelog, feed, or GitHub releases, and optionally break it down by product."
 adminOnly: false
 ---
 
-# Get Listed
+# Listing your product
 
 Every company posts product updates somewhere — a changelog, an updates page, a blog, GitHub releases, an RSS feed. `releases.json` is one small file on your domain that says where. Publish it once, and any registry or agent that reads the format — starting with this one — learns where your release notes live directly from you, instead of guessing.
 

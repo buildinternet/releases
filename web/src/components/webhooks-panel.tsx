@@ -549,7 +549,10 @@ export function WebhooksPanel() {
           {format === "slack" && (
             <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
               Posts a formatted message to a Slack incoming webhook URL (hooks.slack.com). No
-              signature is sent.
+              signature is sent.{" "}
+              <Link href="/docs/integrations/slack" className="underline underline-offset-2">
+                Setup guide
+              </Link>
             </p>
           )}
         </div>
