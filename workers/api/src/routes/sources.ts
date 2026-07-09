@@ -37,6 +37,7 @@ import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dat
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseNotice, setNoticeInMetadata } from "@buildinternet/releases-core/notice";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
+import { recomputeReleaseEffectiveCategoryForSource } from "@releases/core-internal/effective-category";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
@@ -2722,6 +2723,21 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   if (src.orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, src.orgId));
+
+  // Category denorm (#886): product or org re-parenting changes COALESCE(p, o).
+  // Fail-open — source re-parent already committed; stale denorm is recoverable.
+  if (body.productId !== undefined || body.orgId !== undefined) {
+    try {
+      await recomputeReleaseEffectiveCategoryForSource(db, src.id);
+    } catch (err) {
+      logEvent("warn", {
+        component: "sources",
+        event: "effective-category-recompute-failed",
+        sourceId: src.id,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
+  }
 
   // Re-parenting / tier-change hook (#1776 stub): a PATCH that changes this
   // source's parent (org/product) or fetch tier notifies its SourceActor so a

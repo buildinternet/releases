@@ -526,7 +526,7 @@ taxonomyRoutes.get(
     tags: ["Taxonomy"],
     summary: "Cross-org release feed scoped to a category",
     description:
-      "Aggregated release feed for a category rollup. Mirrors `/v1/collections/:slug/releases` (cursor pagination, content negotiation). Effective category resolution: `COALESCE(product.category, org.category)` — see `@releases/core-internal/category-feed`.\n\nNon-canonical slugs that match a known alias resolve to the canonical category internally (no redirect — feeds aren't bookmarked). Content negotiation: `Accept: text/markdown` returns a Markdown-rendered version.",
+      "Aggregated release feed for a category rollup. Mirrors `/v1/collections/:slug/releases` (cursor pagination, content negotiation). Effective category is denormalized on `releases.effective_category` (`COALESCE(product.category, org.category)` stamped at insert / recompute) so the feed can seek by category instead of full-scanning releases (#886).\n\nNon-canonical slugs that match a known alias resolve to the canonical category internally (no redirect — feeds aren't bookmarked). Content negotiation: `Accept: text/markdown` returns a Markdown-rendered version.",
     parameters: [
       {
         name: "cursor",

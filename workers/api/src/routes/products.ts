@@ -21,6 +21,7 @@ import {
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
+import { recomputeReleaseEffectiveCategoryForProduct } from "@releases/core-internal/effective-category";
 import { validateJson } from "../lib/validate.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError, NotFoundError, ConflictError } from "@releases/lib/releases-error";
@@ -735,6 +736,21 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
       .set(updates)
       .where(eq(products.id, product.id))
       .returning();
+  }
+
+  // Category denorm (#886): restamp releases under this product's sources.
+  // Fail-open — category column already committed; stale denorm is recoverable.
+  if (body.category !== undefined) {
+    try {
+      await recomputeReleaseEffectiveCategoryForProduct(db, product.id);
+    } catch (err) {
+      logEvent("warn", {
+        component: "products",
+        event: "effective-category-recompute-failed",
+        productId: product.id,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
   }
 
   if (body.tags !== undefined) {

@@ -8,17 +8,11 @@ export type CategoryReleaseRow = AggregateReleaseRow;
 /**
  * Aggregated release feed for all orgs/products with a given category.
  *
- * Effective category = `COALESCE(p.category, o.category)`. A product's own
- * category overrides its parent org's, so a multi-product org can distribute
- * its sources across categories — e.g. Vercel (cloud) → Next.js (framework).
- *
- * The predicate is expanded into `(p.category = ? OR (p.category IS NULL AND
- * o.category = ?))` rather than `COALESCE(p.category, o.category) = ?` so each
- * branch references a single indexed column, letting SQLite consider
- * `idx_products_category` / `idx_organizations_category` for sparse-category
- * lookups. `p.category IS NULL` correctly covers both "source has no product"
- * (LEFT JOIN null-pad) and "product row exists with NULL category" — the same
- * two cases COALESCE falls through.
+ * Effective category is denormalized on `releases.effective_category`
+ * (`COALESCE(product.category, org.category)` stamped at insert / recompute)
+ * so this query can `SEARCH` `idx_releases_eff_cat_published` instead of
+ * full-scanning `releases` and post-filtering on joined org/product columns
+ * (#886 — ~100k rows_read → ~limit-sized reads).
  *
  * `category` is typed as `Category` so callers must narrow via
  * `isValidCategory` (or the `CATEGORIES` literal union) before invoking. The
@@ -69,7 +63,7 @@ export async function getCategoryReleasesFeed(
     INNER JOIN sources_active s ON s.id = r.source_id
     INNER JOIN organizations_public o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE (p.category = ${category} OR (p.category IS NULL AND o.category = ${category}))
+    WHERE r.effective_category = ${category}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
       ${sourceTypeWhere}

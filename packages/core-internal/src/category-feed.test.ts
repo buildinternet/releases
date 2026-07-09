@@ -3,9 +3,18 @@ import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/
 import { organizations, sources, releases, products } from "@buildinternet/releases-core/schema";
 import { getCategoryReleasesFeed } from "./category-feed.js";
 import { buildFeedCursor } from "./collection-feed.js";
+import { recomputeReleaseEffectiveCategoryForOrg } from "./effective-category.js";
 import type { D1Db } from "../../../workers/api/src/db.js";
 
 const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;
+
+/** Stamp denormalized category after fixture inserts (mirrors migration backfill). */
+async function stampCategories(db: D1Db, orgIds: string[]) {
+  for (const orgId of orgIds) {
+    // oxlint-disable-next-line no-await-in-loop -- test helper; few orgs
+    await recomputeReleaseEffectiveCategoryForOrg(db, orgId);
+  }
+}
 
 describe("getCategoryReleasesFeed", () => {
   let tdb: TestDatabase;
@@ -97,7 +106,7 @@ describe("getCategoryReleasesFeed", () => {
       },
     ]);
     await tdb.db.insert(releases).values([
-      // ai org — 3 releases
+      // ai org — 3 releases (effective_category stamped after insert)
       {
         id: "rel_ai_1",
         sourceId: "src_ai",
@@ -166,6 +175,7 @@ describe("getCategoryReleasesFeed", () => {
         fetchedAt: "2026-01-07T00:00:00Z",
       },
     ]);
+    await stampCategories(asD1(tdb.db), ["org_ai", "org_mx", "org_ds"]);
   }
 
   it("includes only org-category sources without a product-category override", async () => {
@@ -239,6 +249,7 @@ describe("getCategoryReleasesFeed", () => {
       publishedAt: "2026-02-01T00:00:00Z",
       fetchedAt: "2026-02-01T00:00:00Z",
     });
+    await stampCategories(asD1(tdb.db), ["org_ds2"]);
 
     const rows = await getCategoryReleasesFeed(asD1(tdb.db), "design", null, 50);
     expect(rows.map((r) => r.id)).toEqual(["rel_ds2_1"]);
@@ -320,6 +331,7 @@ describe("getCategoryReleasesFeed", () => {
           fetchedAt: "2026-01-03T00:00:00Z",
         },
       ]);
+      await stampCategories(asD1(tdb.db), ["org_ai", "org_ai2"]);
     }
 
     it("narrows to a single source type when sourceTypes is set", async () => {
