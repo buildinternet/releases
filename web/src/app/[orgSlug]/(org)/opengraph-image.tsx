@@ -1,13 +1,5 @@
-import { categoryDisplayName } from "@buildinternet/releases-core/categories";
-import { api } from "@/lib/api";
-import {
-  OG_CONTENT_TYPE,
-  OG_SIZE,
-  formatCount,
-  renderOgFallback,
-  renderOgImage,
-  resolveAvatarUrl,
-} from "@/lib/og";
+import { OG_CONTENT_TYPE, OG_SIZE, renderOgFallback, renderOgImage } from "@/lib/og";
+import { buildOrgOgProps } from "@/lib/org-og-card";
 
 export const alt = "Organization on releases.sh";
 export const size = OG_SIZE;
@@ -17,22 +9,8 @@ export const revalidate = 86400;
 export default async function Image({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
   try {
-    const org = await api.orgDetail(orgSlug);
-    const avatarUrl = await resolveAvatarUrl(org);
-    const description =
-      org.description ?? (org.domain ? `Changelog activity from ${org.domain}` : undefined);
-    return renderOgImage({
-      eyebrow: "Organization",
-      title: org.name,
-      subtitle: org.category ? categoryDisplayName(org.category) : undefined,
-      description,
-      metrics: [
-        { label: "Sources", value: formatCount(org.sourceCount) },
-        { label: "Releases", value: formatCount(org.releaseCount) },
-        { label: "Last 30d", value: formatCount(org.releasesLast30Days) },
-      ],
-      avatarUrl,
-    });
+    const props = await buildOrgOgProps(orgSlug);
+    return renderOgImage(props);
   } catch {
     return renderOgFallback();
   }

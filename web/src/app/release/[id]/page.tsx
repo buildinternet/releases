@@ -34,6 +34,7 @@ import { OrgAvatar } from "@/components/org-avatar";
 import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
+import { buildReleaseOpenGraph } from "./release-og";
 
 type GqlRelease = NonNullable<ReleaseDetailQuery["release"]>;
 type GqlReleaseSource = GqlRelease["source"];
@@ -160,11 +161,10 @@ export async function generateMetadata({
       title: clampTitle(`${titleHeading} — ${release.source.name}`),
       description: description || `${heading} release notes for ${release.source.name}`,
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
-      openGraph: {
-        type: "article",
-        url: releasePath(release),
-        publishedTime: release.publishedAt ?? undefined,
-      },
+      openGraph: buildReleaseOpenGraph(releasePath(release), {
+        publishedAt: release.publishedAt,
+        orgSlug: release.source.org?.slug ?? null,
+      }),
       alternates: { canonical: releasePath(release) },
     };
   } catch {
