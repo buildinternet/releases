@@ -10,6 +10,7 @@ import { ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { CollectionPageDocument } from "@/lib/graphql/__generated__/graphql";
 import type { CollectionPageQuery } from "@/lib/graphql/__generated__/graphql";
+import { mapMediaItems } from "@/lib/graphql/map-feed";
 
 const DEFAULT_RELEASE_LIMIT = 20;
 
@@ -34,15 +35,15 @@ function mapMember(m: GqlMember): CollectionMember {
       },
     };
   }
-  // CollectionMemberOrg (or unexpected — treat as org for fail-soft).
+  // CollectionMemberOrg (union default after product branch).
   return {
     kind: "org",
     slug: m.slug,
     name: m.name,
-    domain: "domain" in m ? m.domain : null,
-    avatarUrl: "avatarUrl" in m ? m.avatarUrl : null,
-    githubHandle: "githubHandle" in m ? m.githubHandle : null,
-    description: "description" in m ? m.description : null,
+    domain: m.domain,
+    avatarUrl: m.avatarUrl,
+    githubHandle: m.githubHandle,
+    description: m.description,
   };
 }
 
@@ -59,12 +60,7 @@ function mapRelease(r: GqlRelease): CollectionReleaseItem {
     titleGenerated: r.titleGenerated,
     titleShort: r.titleShort,
     prerelease: r.prerelease,
-    media: r.media.map((m) => ({
-      type: m.type,
-      url: m.url,
-      alt: m.alt ?? undefined,
-      r2Url: m.r2Url ?? undefined,
-    })),
+    media: mapMediaItems(r.media),
     source: {
       slug: r.source.slug,
       name: r.source.name,
@@ -95,14 +91,10 @@ export type CollectionPageData = {
 };
 
 /**
- * Collection detail critical path via the persisted `CollectionPage` query
- * (#2047): identity + full members + first feed page + daily summaries.
- * Client load-more stays on REST (`/api/collection-releases/...`).
+ * Collection detail critical path via `CollectionPage` (#2047): identity +
+ * members + first feed page + daily summaries. Client load-more stays on REST.
  */
 export const getCollectionPage = cache(async (slug: string): Promise<CollectionPageData> => {
-  // Overfetch by one so we can derive nextCursor when GraphQL returns a full
-  // page; the resolver also does limit+1 and returns nextCursor, so either
-  // path works — prefer the server-provided REST-compatible cursor.
   const data = await graphqlRequest(CollectionPageDocument, {
     slug,
     releaseLimit: DEFAULT_RELEASE_LIMIT,
@@ -112,31 +104,32 @@ export const getCollectionPage = cache(async (slug: string): Promise<CollectionP
   }
   const c = data.collection;
   const members = c.members.map(mapMember);
-  const detail: CollectionDetail = {
-    slug: c.slug,
-    name: c.name,
-    description: c.description,
-    isFeatured: c.isFeatured,
-    dailySummaryEnabled: c.dailySummaryEnabled,
-    members,
-    // Legacy org-only subset for back-compat with CollectionDetail schema.
-    orgs: members
-      .filter((m): m is Extract<CollectionMember, { kind: "org" }> => m.kind === "org")
-      .map(({ kind: _k, ...rest }) => rest),
-  };
-  const releases: CollectionReleasesResponse = {
-    releases: c.releases.items.map(mapRelease),
-    pagination: {
-      nextCursor: c.releases.nextCursor,
-      limit: DEFAULT_RELEASE_LIMIT,
+  return {
+    detail: {
+      slug: c.slug,
+      name: c.name,
+      description: c.description,
+      isFeatured: c.isFeatured,
+      dailySummaryEnabled: c.dailySummaryEnabled,
+      members,
+      // Legacy org-only subset for CollectionDetail back-compat.
+      orgs: members
+        .filter((m): m is Extract<CollectionMember, { kind: "org" }> => m.kind === "org")
+        .map(({ kind: _k, ...rest }) => rest),
     },
+    releases: {
+      releases: c.releases.items.map(mapRelease),
+      pagination: {
+        nextCursor: c.releases.nextCursor,
+        limit: DEFAULT_RELEASE_LIMIT,
+      },
+    },
+    summaries: c.dailySummaries.map((s) => ({
+      date: s.date,
+      title: s.title,
+      summary: s.summary,
+      takeaways: s.takeaways,
+      releaseCount: s.releaseCount,
+    })),
   };
-  const summaries: CollectionDailySummary[] = c.dailySummaries.map((s) => ({
-    date: s.date,
-    title: s.title,
-    summary: s.summary,
-    takeaways: s.takeaways,
-    releaseCount: s.releaseCount,
-  }));
-  return { detail, releases, summaries };
 });

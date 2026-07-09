@@ -7,6 +7,7 @@ import {
 } from "../../queries/collection-summaries.js";
 import { getCollectionReleasesFeed } from "../../queries/orgs.js";
 import { buildFeedCursor, formatAggregateReleaseRow } from "../../utils.js";
+import type { D1Db } from "../../db.js";
 
 const CollectionMemberOrgType = builder.objectType("CollectionMemberOrg", {
   description: "An org as it appears in a collection's member preview.",
@@ -22,8 +23,8 @@ const CollectionMemberOrgType = builder.objectType("CollectionMemberOrg", {
 
 const CollectionMemberProductOrgType = builder.objectType("CollectionMemberProductOrg", {
   description:
-    "Parent-org context on a product member, so the chip can render the org's avatar. " +
-    "Subset of CollectionMemberOrg — no `description`, matching REST's ProductParentOrg.",
+    "Parent-org context on a product member (avatar chip). Subset of CollectionMemberOrg — " +
+    "no `description`, matching REST ProductParentOrg.",
   fields: (t) => ({
     slug: t.exposeString("slug"),
     name: t.exposeString("name"),
@@ -39,19 +40,17 @@ const CollectionMemberProductType = builder.objectType("CollectionMemberProduct"
     slug: t.exposeString("slug"),
     name: t.exposeString("name"),
     description: t.exposeString("description", { nullable: true }),
-    org: t.field({ type: CollectionMemberProductOrgType, resolve: (p) => p.org }),
+    org: t.expose("org", { type: CollectionMemberProductOrgType }),
   }),
 });
 
-/** Mixed-kind member entry — discriminate on `__typename` client-side
- *  (`... on CollectionMemberOrg` / `... on CollectionMemberProduct`). */
+/** Discriminate on `__typename` (`CollectionMemberOrg` / `CollectionMemberProduct`). */
 export const CollectionMemberUnion = builder.unionType("CollectionMember", {
   description: "One entry in a collection's `previewMembers` — either an org or a product.",
   types: [CollectionMemberOrgType, CollectionMemberProductType],
   resolveType: (m) => (m.kind === "org" ? CollectionMemberOrgType : CollectionMemberProductType),
 });
 
-/** Slim org identity on a collection-feed release (matches REST CollectionReleaseItem.org). */
 const CollectionReleaseOrgType = builder.objectType("CollectionReleaseOrg", {
   description: "Parent org on a cross-member collection release row.",
   fields: (t) => ({
@@ -60,7 +59,6 @@ const CollectionReleaseOrgType = builder.objectType("CollectionReleaseOrg", {
   }),
 });
 
-/** Slim source identity on a collection-feed release. */
 const CollectionReleaseSourceType = builder.objectType("CollectionReleaseSource", {
   description: "Source on a cross-member collection release row.",
   fields: (t) => ({
@@ -70,10 +68,8 @@ const CollectionReleaseSourceType = builder.objectType("CollectionReleaseSource"
   }),
 });
 
-/** Slim product identity on a collection-feed release. */
 const CollectionReleaseProductType = builder.objectType("CollectionReleaseProduct", {
-  description:
-    "Product on a cross-member collection release row, when the source is product-bound.",
+  description: "Product on a collection-feed release when the source is product-bound.",
   fields: (t) => ({
     slug: t.exposeString("slug"),
     name: t.exposeString("name"),
@@ -81,11 +77,9 @@ const CollectionReleaseProductType = builder.objectType("CollectionReleaseProduc
 });
 
 /**
- * One row of a collection's interleaved release feed. Mirrors REST
- * `CollectionReleaseItem` so the web CollectionTimeline can consume GraphQL
- * SSR output without a second shape. Distinct from the catalog `Release` type
- * (which nests via Source loaders) because the feed query already projects
- * org/source/product denormalized.
+ * Collection feed row — REST CollectionReleaseItem shape for SSR without a
+ * second map. Distinct from catalog `Release` (which nests via Source loaders)
+ * because the feed query already projects org/source/product denormalized.
  */
 export const CollectionReleaseType = builder.objectType("CollectionRelease", {
   description:
@@ -102,41 +96,21 @@ export const CollectionReleaseType = builder.objectType("CollectionRelease", {
     titleGenerated: t.exposeString("titleGenerated", { nullable: true }),
     titleShort: t.exposeString("titleShort", { nullable: true }),
     prerelease: t.exposeBoolean("prerelease"),
-    media: t.field({
-      type: ["Media"],
-      resolve: (r) => r.media,
-    }),
-    source: t.field({
-      type: CollectionReleaseSourceType,
-      resolve: (r) => r.source,
-    }),
-    org: t.field({
-      type: CollectionReleaseOrgType,
-      resolve: (r) => r.org,
-    }),
-    product: t.field({
-      type: CollectionReleaseProductType,
-      nullable: true,
-      resolve: (r) => r.product,
-    }),
+    media: t.expose("media", { type: ["Media"] }),
+    source: t.expose("source", { type: CollectionReleaseSourceType }),
+    org: t.expose("org", { type: CollectionReleaseOrgType }),
+    product: t.expose("product", { type: CollectionReleaseProductType, nullable: true }),
     groupSlug: t.exposeString("groupSlug"),
     groupName: t.exposeString("groupName"),
     coverageCount: t.exposeInt("coverageCount"),
-    composition: t.field({
-      type: "ReleaseComposition",
-      nullable: true,
-      resolve: (r) => r.composition,
-    }),
+    composition: t.expose("composition", { type: "ReleaseComposition", nullable: true }),
   }),
 });
 
 export const CollectionReleaseFeedType = builder.objectType("CollectionReleaseFeed", {
   description: "Cursor-paginated collection release feed (SSR first page + load-more cursor).",
   fields: (t) => ({
-    items: t.field({
-      type: [CollectionReleaseType],
-      resolve: (f) => f.items,
-    }),
+    items: t.expose("items", { type: [CollectionReleaseType] }),
     nextCursor: t.exposeString("nextCursor", { nullable: true }),
   }),
 });
@@ -155,7 +129,19 @@ export const CollectionDailySummaryType = builder.objectType("CollectionDailySum
 const MAX_RELEASE_LIMIT = 50;
 const DEFAULT_RELEASE_LIMIT = 20;
 
-/** Map REST wire row → GraphQL parent with required fields filled. */
+/** Prefer parent `id` when present; fall back to slug lookup (list previews). */
+async function resolveCollectionId(
+  db: D1Db,
+  c: { id?: string; slug: string },
+): Promise<string | null> {
+  if (c.id) return c.id;
+  return (await getCollectionBySlug(db, c.slug))?.id ?? null;
+}
+
+/**
+ * REST wire row → GraphQL parent. `formatAggregateReleaseRow` always fills
+ * these; defaults only satisfy optional REST mid-deploy fields.
+ */
 function toCollectionRelease(row: ReturnType<typeof formatAggregateReleaseRow>): CollectionRelease {
   return {
     id: row.id ?? "",
@@ -173,8 +159,8 @@ function toCollectionRelease(row: ReturnType<typeof formatAggregateReleaseRow>):
     source: row.source,
     org: row.org,
     product: row.product ?? null,
-    groupSlug: row.groupSlug ?? row.product?.slug ?? row.source.slug,
-    groupName: row.groupName ?? row.product?.name ?? row.source.name,
+    groupSlug: row.groupSlug ?? row.source.slug,
+    groupName: row.groupName ?? row.source.name,
     coverageCount: row.coverageCount ?? 0,
     composition: row.composition ?? null,
   };
@@ -191,8 +177,8 @@ export const CollectionType = builder.objectType("Collection", {
     dailySummaryEnabled: t.field({
       type: "Boolean",
       description:
-        "Whether the nightly collection-summaries cron is enabled for this collection. " +
-        "Defaults false when the parent object was loaded as a list preview without the column.",
+        "Whether the nightly collection-summaries cron is enabled. Defaults false when the " +
+        "parent was loaded as a list preview without the column.",
       resolve: async (c, _args, ctx) => {
         if (typeof c.dailySummaryEnabled === "boolean") return c.dailySummaryEnabled;
         const row = await getCollectionBySlug(ctx.db, c.slug);
@@ -210,7 +196,7 @@ export const CollectionType = builder.objectType("Collection", {
         "Full ordered membership for the collection detail page. Mirrors REST " +
         "`GET /v1/collections/:slug` members.",
       resolve: async (c, _args, ctx) => {
-        const id = c.id ?? (await getCollectionBySlug(ctx.db, c.slug))?.id;
+        const id = await resolveCollectionId(ctx.db, c);
         if (!id) return [];
         return getCollectionFullMembers(ctx.db, id);
       },
@@ -219,13 +205,12 @@ export const CollectionType = builder.objectType("Collection", {
       type: CollectionReleaseFeedType,
       description:
         "Interleaved cross-member release feed (newest first). SSR first page only — " +
-        "client load-more stays on REST. Cursor shape matches REST " +
-        "`publishedAt|fetchedAt|id`.",
+        "client load-more stays on REST. Cursor shape matches REST `publishedAt|fetchedAt|id`.",
       args: {
         limit: t.arg.int({ required: false, defaultValue: DEFAULT_RELEASE_LIMIT }),
       },
       resolve: async (c, args, ctx) => {
-        const id = c.id ?? (await getCollectionBySlug(ctx.db, c.slug))?.id;
+        const id = await resolveCollectionId(ctx.db, c);
         if (!id) return { items: [] as CollectionRelease[], nextCursor: null };
         const pageSize = Math.max(
           1,
@@ -248,16 +233,13 @@ export const CollectionType = builder.objectType("Collection", {
     dailySummaries: t.field({
       type: [CollectionDailySummaryType],
       description:
-        "AI daily summaries for the last 30 ET days (newest first). Fail-soft empty " +
-        "when none exist — same default window as REST " +
-        "`GET /v1/collections/:slug/daily-summaries`.",
+        "AI daily summaries for the last 30 ET days (newest first). Fail-soft empty when " +
+        "none exist — same default window as REST `GET /v1/collections/:slug/daily-summaries`.",
       resolve: async (c, _args, ctx) => {
-        const id = c.id ?? (await getCollectionBySlug(ctx.db, c.slug))?.id;
+        const id = await resolveCollectionId(ctx.db, c);
         if (!id) return [];
-        const now = new Date();
-        const to = etDayKey(now);
-        const from = addDaysToDateKey(to, -30);
-        return listCollectionDailySummaries(ctx.db, id, from, to);
+        const to = etDayKey(new Date());
+        return listCollectionDailySummaries(ctx.db, id, addDaysToDateKey(to, -30), to);
       },
     }),
   }),

@@ -4,6 +4,7 @@ import { builder } from "../builder.js";
 import { OrgDiscoveryEnum, OrgStatusEnum } from "./enums.js";
 import { loadReleaseLocations } from "../../lib/well-known/read-locations.js";
 import { listCollectionsWhere } from "../../queries/collections.js";
+import { collectionFromListItem } from "../collection-parent.js";
 
 export const OrgType = builder.objectType("Org", {
   description: "An organization (the entity that produces one or more products / sources).",
@@ -126,7 +127,7 @@ export const OrgType = builder.objectType("Org", {
       description:
         "Curated collections that pin this org or any of its products, ordered by name. " +
         "Mirrors REST `GET /v1/orgs/:slug/collections` for the org-page 'Featured in' " +
-        "sidebar. Preview members omitted (empty) — sidebar only needs identity fields.",
+        "sidebar. Preview members omitted (empty) — sidebar needs identity only.",
       resolve: async (org, _args, ctx) => {
         const rows = await listCollectionsWhere(
           ctx.db,
@@ -136,14 +137,7 @@ export const OrgType = builder.objectType("Org", {
                OR cm.product_id IN (SELECT id FROM products_active WHERE org_id = ${org.id})
           )`,
         );
-        return rows.map((r) => ({
-          slug: r.slug,
-          name: r.name,
-          description: r.description,
-          memberCount: r.memberCount,
-          isFeatured: r.isFeatured,
-          previewMembers: [],
-        }));
+        return rows.map(collectionFromListItem);
       },
     }),
 

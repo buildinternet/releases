@@ -36,10 +36,10 @@ export async function ProductView({
   orgName,
   orgId,
   product,
-  /** Pre-fetched product-scoped feed from the ProductPage GraphQL op (#2047). */
+  /** From ProductPage GraphQL (critical path). */
   initialReleases,
-  /** Pre-fetched collection membership from the ProductPage GraphQL op (#2047). */
-  collections: collectionsFromGql,
+  /** From ProductPage GraphQL (critical path). */
+  collections,
 }: {
   orgSlug: string;
   orgName: string;
@@ -53,9 +53,7 @@ export async function ProductView({
   const productRef = { orgSlug, productSlug };
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
-  // Fail-open aggregates only — critical path (identity + feed + collections)
-  // arrives via GraphQL ProductPage. Overview / activity / heatmap have
-  // independent SLAs and stay on REST (#2047).
+  // Fail-open REST aggregates only — identity/feed/collections already GraphQL (#2047).
   const [overviewResult, activityResult, heatmapResult] = await Promise.allSettled([
     api.productOverview(product.id),
     tryFetch(api.productActivity(productRef, activityFrom), {
@@ -105,10 +103,6 @@ export async function ProductView({
   const availableSourceTypes = Array.from(
     new Set(product.sources.map((s) => s.type)),
   ) as SourceType[];
-
-  // Collections this product is pinned in (e.g. "coding agents" → Claude Code).
-  // Also surfaced on the parent org page, which merges org + product membership.
-  const collections = collectionsFromGql;
 
   const latestPublishedAt = initialReleases.releases[0]?.publishedAt ?? null;
   const primaryItems = [

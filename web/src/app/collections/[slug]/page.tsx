@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ApiSetupError, ApiNotFoundError, type CollectionDailySummary } from "@/lib/api";
+import { ApiSetupError, type CollectionDailySummary } from "@/lib/api";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
@@ -57,13 +57,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
         </div>
       );
     }
-    if (err instanceof ApiNotFoundError) notFound();
     notFound();
   }
 
   const { detail, releases, summaries } = page;
-  // Summaries are on the same GraphQL document; empty list when none exist
-  // (fail-soft — same as the prior REST `.catch` path).
+  // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
 
   const collectionUrl = `https://releases.sh/collections/${slug}`;

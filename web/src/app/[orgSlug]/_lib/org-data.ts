@@ -11,6 +11,7 @@ import { api, ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { OrgPageDocument } from "@/lib/graphql/__generated__/graphql";
 import type { OrgPageQuery } from "@/lib/graphql/__generated__/graphql";
+import { mapCollectionListItem } from "@/lib/graphql/map-feed";
 
 type GqlOrg = NonNullable<OrgPageQuery["org"]>;
 type GqlOrgSource = GqlOrg["sources"][number];
@@ -116,13 +117,7 @@ export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
     sources: sources.map(mapSource),
     locations: (locations as ReleaseLocationItem[] | null) ?? undefined,
     notice: notice as Notice | null,
-    collections: collections.map((c) => ({
-      slug: c.slug,
-      name: c.name,
-      description: c.description,
-      memberCount: c.memberCount,
-      isFeatured: c.isFeatured,
-    })),
+    collections: collections.map(mapCollectionListItem),
   };
 });
 

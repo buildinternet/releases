@@ -178,8 +178,7 @@ builder.queryType({
       resolve: async (_root, args, ctx) => {
         const row = await getCollectionBySlug(ctx.db, args.slug);
         if (!row) return null;
-        // memberCount is not needed for detail chrome (timeline uses members.length);
-        // compute a cheap placeholder — full count is available via members.length if wanted.
+        // Detail path: id + dailySummaryEnabled present; memberCount unused by chrome.
         return {
           id: row.id,
           slug: row.slug,
