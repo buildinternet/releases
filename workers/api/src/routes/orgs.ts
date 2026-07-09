@@ -270,6 +270,7 @@ orgRoutes.get(
         recentReleaseCount: 0,
         lastActivity: null,
         topProducts: [],
+        aliasDomains: [],
         sparkline: Array.from({ length: 30 }, () => 0),
         trackingRequestedAt: row.trackingRequestedAt,
       }));
@@ -344,6 +345,7 @@ orgRoutes.get(
       recentReleaseCount: row.recent_release_count,
       lastActivity: row.last_activity ?? null,
       topProducts: row.top_products ? row.top_products.split("||") : [],
+      aliasDomains: row.alias_domains ? row.alias_domains.split("||") : [],
       sparkline: sparklineMap.get(row.id) ?? Array.from({ length: 30 }, () => 0),
     }));
 

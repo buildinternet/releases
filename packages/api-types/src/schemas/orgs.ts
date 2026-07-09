@@ -37,6 +37,13 @@ export const OrgListItemSchema = z.object({
   recentReleaseCount: z.number().int().min(0),
   lastActivity: z.string().nullable(),
   topProducts: z.array(z.string()),
+  /**
+   * Org-level alternate domains (`domain_aliases`, product-scoped aliases
+   * excluded), sorted. Surfaced next to the primary `domain` in catalog rows so
+   * a self-declared name reads against every domain the org actually controls.
+   * Optional for mid-deploy tolerance; absent ⇒ treat as none.
+   */
+  aliasDomains: z.array(z.string()).optional(),
   sparkline: z.array(z.number().int().min(0)).length(30),
   /**
    * Additive, admin-only field (#1947 phase 2). Only populated on the

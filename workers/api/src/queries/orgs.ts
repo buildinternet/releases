@@ -30,7 +30,8 @@ export async function getOrgsWithStats(
       COUNT(r.id) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
       COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
-      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products
+      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products,
+      (SELECT GROUP_CONCAT(d.domain, '||') FROM (SELECT domain FROM domain_aliases WHERE org_id = o.id AND product_id IS NULL ORDER BY domain) d) AS alias_domains
     FROM organizations_active o
     LEFT JOIN sources_visible s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id
@@ -143,7 +144,8 @@ export async function getOrgStatsByIds(
       COUNT(r.id) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
       COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
-      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products
+      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products,
+      (SELECT GROUP_CONCAT(d.domain, '||') FROM (SELECT domain FROM domain_aliases WHERE org_id = o.id AND product_id IS NULL ORDER BY domain) d) AS alias_domains
     FROM organizations_active o
     LEFT JOIN sources_visible s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id

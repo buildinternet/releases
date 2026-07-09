@@ -81,12 +81,23 @@ export function OrgCatalog({ groups }: { groups: OrgLetterGroup[] }) {
                       <span className="truncate font-medium text-stone-900 dark:text-stone-100">
                         {org.name}
                       </span>
-                      {org.status === "stub" && org.domain && (
+                      {org.domain && (
                         <span
-                          className="hidden max-w-[45%] shrink-0 truncate font-mono text-xs text-stone-500 sm:inline dark:text-stone-400"
-                          title={org.domain}
+                          className="hidden max-w-[45%] shrink-0 items-baseline gap-1 sm:inline-flex"
+                          title={
+                            org.aliasDomains && org.aliasDomains.length > 0
+                              ? `Domains: ${[org.domain, ...org.aliasDomains].join(", ")}`
+                              : org.domain
+                          }
                         >
-                          {org.domain}
+                          <span className="truncate font-mono text-xs text-stone-500 dark:text-stone-400">
+                            {org.domain}
+                          </span>
+                          {org.aliasDomains && org.aliasDomains.length > 0 && (
+                            <span className="shrink-0 font-mono text-[10px] font-medium text-stone-400 dark:text-stone-500">
+                              +{org.aliasDomains.length}
+                            </span>
+                          )}
                         </span>
                       )}
                       <StubBadge status={org.status} className="shrink-0" />
