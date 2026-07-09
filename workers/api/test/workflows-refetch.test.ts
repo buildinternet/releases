@@ -220,6 +220,73 @@ describe("POST /v1/workflows/refetch-release", () => {
     expect(res.status).toBe(502);
   });
 
+  it("502s on placeholder content instead of writing it (#2077)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const res = await post(mkApp(db, hooks({ ...FULL_POST, content: "<UNKNOWN>" })), {
+      releaseId: "rel_thin0000000000000000",
+      url: `${SRC_URL}/real-post`,
+      dryRun: false,
+    });
+    expect(res.status).toBe(502);
+    const [row] = await db
+      .select()
+      .from(releases)
+      .where(eq(releases.id, "rel_thin0000000000000000"));
+    expect(row!.content).toBe("Two-line teaser."); // untouched
+  });
+
+  it("refuses a >50% shrink without force, allows it with force (#2077)", async () => {
+    const db = mkDb();
+    const longBody = "A ".repeat(300).trim(); // 599 chars, above the 200-char guard floor
+    await seed(db, { url: `${SRC_URL}/real-post`, content: longBody, contentChars: 599 });
+    const shrunk = { ...FULL_POST, content: "Much shorter body now." };
+
+    const refused = await post(mkApp(db, hooks(shrunk)), {
+      releaseId: "rel_thin0000000000000000",
+      dryRun: false,
+    });
+    expect(refused.status).toBe(400);
+    const { error } = (await refused.json()) as { error: { message: string } };
+    expect(error.message).toContain("force");
+
+    const forced = await post(mkApp(db, hooks(shrunk)), {
+      releaseId: "rel_thin0000000000000000",
+      dryRun: false,
+      force: true,
+    });
+    expect(forced.status).toBe(200);
+    const [row] = await db
+      .select()
+      .from(releases)
+      .where(eq(releases.id, "rel_thin0000000000000000"));
+    expect(row!.content).toBe("Much shorter body now.");
+  });
+
+  it("dry-run flags a would-be shrink with wouldRequireForce instead of refusing", async () => {
+    const db = mkDb();
+    const longBody = "B ".repeat(300).trim();
+    await seed(db, { url: `${SRC_URL}/real-post`, content: longBody, contentChars: 599 });
+    const res = await post(mkApp(db, hooks({ ...FULL_POST, content: "Tiny." })), {
+      releaseId: "rel_thin0000000000000000",
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { dryRun: boolean; wouldRequireForce?: boolean };
+    expect(json.dryRun).toBe(true);
+    expect(json.wouldRequireForce).toBe(true);
+  });
+
+  it("does not trip the shrink guard when healing an already-thin row", async () => {
+    const db = mkDb();
+    await seed(db); // 16-char teaser, below the 200-char guard floor
+    const res = await post(mkApp(db, hooks({ ...FULL_POST, content: "Short but real." })), {
+      releaseId: "rel_thin0000000000000000",
+      url: `${SRC_URL}/real-post`,
+      dryRun: false,
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("replaces media when extraction returns items (no MEDIA bucket → stored verbatim)", async () => {
     const db = mkDb();
     await seed(db);

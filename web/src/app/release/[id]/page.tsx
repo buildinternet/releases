@@ -61,6 +61,7 @@ function mapReleaseFromRest(r: Awaited<ReturnType<typeof api.release>>): Release
     titleShort: r.titleShort ?? null,
     content: r.content,
     migrationNotes: r.migrationNotes ?? null,
+    ogImageUrl: r.ogImageUrl ?? null,
     composition: r.composition
       ? {
           bugs: r.composition.bugs,
@@ -164,6 +165,16 @@ export async function generateMetadata({
         type: "article",
         url: releasePath(release),
         publishedTime: release.publishedAt ?? undefined,
+        // Explicit `images` (#2066) short-circuits Next's opengraph-image
+        // file-convention merge (`mergeStaticMetadata` in
+        // next/dist/lib/metadata/resolve-metadata.js only applies the
+        // co-located file when `openGraph.images` is NOT already set) —
+        // pointing crawlers at the pre-rendered R2 object instead of the
+        // per-request Satori render. When no mirrored image exists yet
+        // (`ogImageUrl` null — not yet ingested, or a pre-#2066 release),
+        // omitting `images` here lets the file convention take over exactly
+        // as before, so there is no broken/missing og:image in the gap.
+        ...(release.ogImageUrl ? { images: [release.ogImageUrl] } : {}),
       },
       alternates: { canonical: releasePath(release) },
     };

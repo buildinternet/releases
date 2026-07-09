@@ -389,6 +389,11 @@ type Release {
   Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none.
   """
   migrationNotes: String
+
+  """
+  Absolute media.releases.sh URL for the release's mirrored OpenGraph image (#2066), when one has been generated. Null when no mirrored image exists yet — the on-demand opengraph-image route stays the fallback.
+  """
+  ogImageUrl: String
   prerelease: Boolean
   publishedAt: DateTime
   source: Source!

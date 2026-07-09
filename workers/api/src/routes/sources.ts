@@ -102,6 +102,7 @@ import {
   heatmapDateRange,
   hydrateMediaUrls,
   parseReleaseMedia,
+  resolveR2Url,
   parseBoolParam,
   parseEnumParam,
   parseSortDir,
@@ -160,6 +161,7 @@ import { materializeVideoSource } from "../lib/video-materialize.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
+import { parseOgImageFromMetadata } from "../lib/og-mirror.js";
 import { respondError } from "../lib/error-response.js";
 import {
   ConflictError,
@@ -3216,6 +3218,8 @@ sourceRoutes.get(
 
     const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
     const composition = parseCompositionFromMetadata(release.metadata as string | null);
+    const ogImage = parseOgImageFromMetadata(release.metadata as string | null);
+    const ogImageUrl = ogImage ? resolveR2Url(ogImage.key, mediaOrigin) : null;
 
     // Strip the raw `metadata` blob from the spread — it's not in
     // ReleaseDetailResponseSchema and would leak internal storage shape (and,
@@ -3248,6 +3252,7 @@ sourceRoutes.get(
         title: release.title,
         version: release.version,
       }),
+      ogImageUrl: ogImageUrl ?? null,
     };
 
     if (wantsMarkdown(c)) {

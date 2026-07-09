@@ -894,6 +894,12 @@ export interface ReleaseDetail {
    * title slug). Additive — older servers omit it.
    */
   webUrl?: string;
+  /**
+   * Absolute `media.releases.sh` URL for the release's mirrored OpenGraph
+   * image (#2066), when one exists. `null`/absent means callers should fall
+   * back to the on-demand `opengraph-image` route. Additive.
+   */
+  ogImageUrl?: string | null;
   media: MediaItem[];
   publishedAt: string | null;
   fetchedAt: string;
