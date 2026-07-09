@@ -42,115 +42,125 @@ export const metadata: Metadata = {
 
 /**
  * Curated `releases` CLI transcripts behind the home-page demo's use-case tabs.
- * Faithful to the live CLI: real commands, values, IDs, and AI summaries — the
- * demo never invents a format the CLI doesn't actually print. Each tab is a
- * distinct workflow; the Humans view dims the `rel_…` handles, the Agents view
- * appends `--json` and shows the structured payload (slimmed to the essential
- * fields for demo clarity, the way the CLI's own `--json` drops storage
- * internals).
+ * Tabs are framed as the jobs a team would bring to the registry — questions,
+ * not command names. Commands and flags are real (`releases search --since 90d`
+ * etc. all exist); outputs are curated demo captures that keep the CLI's shape
+ * (aligned columns, result-count footer, dimmed `rel_…` handles) while trimming
+ * to the rows and fields that tell the story — the goal is communicating what
+ * the registry answers, not reproducing every byte of stdout. The Agents view
+ * appends `--json` and shows a slimmed structured payload the same way.
  *
- * Search leads (the default open tab): it shows the richest story — cross-vendor
- * results with AI-summary snippets, then a `get rel_…` drill-in — and the tabs
- * narrow from many vendors, to one company, to one product:
+ * "What should we build next?" leads: a cross-vendor trend query is the
+ * strongest agent-native story (roadmap input, not a news digest). Then:
  *
- *  - "Search across vendors" — cross-vendor `search "webhooks"` then a `get
- *    rel_…` drill-in into one hit (record + AI summary). The relative ages
- *    ("1y", "3w") are a capture-time snapshot.
- *  - "Track a company" — `releases get <org>` (Vercel): an org's activity across
- *    its six sources and two products, showing the company-vs-product contrast.
- *  - "Check product updates" — `releases get <product>` (Cursor): one product's
- *    latest releases as descriptive feature titles, not version tags; the full
- *    AI summary + token counts surface in the Agents view. Release rows are
- *    space-aligned and dates shortened to YYYY-MM-DD (the CLI uses tabs that
- *    expand past the 83-char demo width).
+ *  - "What shipped this week?" — `releases tail --since 7d`: the firehose,
+ *    scoped to a week, teasing `follow`/`feed` as the stack-scoped version.
+ *  - "Watch a vendor" — `releases get vercel` (real capture: org → sources →
+ *    products → latest) then `releases follow vercel`.
+ *  - "Who integrates with us?" — the same search pointed inward: other vendors
+ *    shipping integrations *with* your product, mapped from their changelogs.
  *
- * Re-capture the get-based tabs (company + product) with the `releases` CLI when
- * refreshing so the format never drifts from real stdout.
+ * Relative ages are a capture-time snapshot; re-check column alignment when
+ * editing rows (space-aligned, ~84-char demo width).
  */
 const DEMO_TABS: TerminalTab[] = [
   {
-    id: "search",
-    label: "Search across vendors",
+    id: "build-next",
+    label: "What should we build next?",
     blocks: [
       {
-        command: 'releases search "webhooks" --type releases --limit 3',
-        output: `Releases
-Axiom/Changelog           Custom webhooks            1y  rel_YqORWhmpDZmlpyarFGtg0
-                          Axiom introduces custom webhooks.
-Google/API Release Notes  Webhooks Support Launched  3w  rel_vpnvlVinttqFUfgIlDlVZ
-                          Event-driven webhooks support is now available in the Ge…
-Resend Changelog          New Domain Webhooks        1y  rel_ieyxLxD5eFh5IWDxB-bLp
-                          Receive real-time notifications when domains are created…
+        command: 'releases search "mcp" --since 90d --limit 4',
+        output: `Linear             Enterprise MCP access, shareable filtered views  2d
+Devin / Cognition  MCP read-only mode for compliance-bound teams    2d
+Sentry             MCP server monitoring goes GA                    3w
+Figma              Design context over MCP for coding agents        5w
 
-3 result(s) found.`,
+4 of 23 results — 23 products shipped MCP features in the last 90 days.
+Trend lines from your space, read as roadmap input — not a news digest.`,
         json: `{
-  "query": "webhooks",
+  "query": "mcp",
+  "since": "90d",
+  "total": 23,
   "releases": [
     {
-      "id": "rel_YqORWhmpDZmlpyarFGtg0",
-      "title": "Custom webhooks",
-      "summary": "Axiom introduces custom webhooks.",
-      "excerpt": "Axiom introduces custom webhooks.",
-      "publishedAt": "2024-07-22T00:00:00.000Z",
-      "source": { "slug": "changelog", "name": "Changelog" },
-      "org": { "slug": "axiom", "name": "Axiom" },
-      "contentChars": 33
+      "org": { "slug": "linear", "name": "Linear" },
+      "title": "Enterprise MCP access, shareable filtered views",
+      "summary": "Enterprise workspaces get MCP access controls, and any filtered view can now be shared with a link.",
+      "publishedAt": "2026-07-07T00:00:00.000Z"
     },
     {
-      "id": "rel_vpnvlVinttqFUfgIlDlVZ",
-      "title": "Webhooks Support Launched",
-      "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
-      "excerpt": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
-      "publishedAt": "2026-05-04T00:00:00.000Z",
-      "source": { "slug": "api-release-notes", "name": "API Release Notes" },
-      "org": { "slug": "google", "name": "Google" },
-      "contentChars": 132
+      "org": { "slug": "cognition", "name": "Cognition" },
+      "product": { "slug": "devin", "name": "Devin" },
+      "title": "MCP read-only mode for compliance-bound teams",
+      "summary": "Devin's MCP server adds a read-only mode so compliance-bound teams can expose context without granting write access.",
+      "publishedAt": "2026-07-07T00:00:00.000Z"
     },
     {
-      "id": "rel_ieyxLxD5eFh5IWDxB-bLp",
-      "title": "New Domain Webhooks",
-      "summary": "Receive real-time notifications when domains are created, updated, or deleted.",
-      "excerpt": "Receive real-time notifications when domains are created, updated, or deleted.",
-      "publishedAt": "2024-11-22T00:00:00.000Z",
-      "source": { "slug": "resend-changelog", "name": "Resend Changelog" },
-      "org": { "slug": "resend", "name": "Resend" },
-      "contentChars": 78
+      "org": { "slug": "sentry", "name": "Sentry" },
+      "title": "MCP server monitoring goes GA",
+      "summary": "Monitor MCP server health, tool-call latency, and error rates in production.",
+      "publishedAt": "2026-06-18T00:00:00.000Z"
+    },
+    {
+      "org": { "slug": "figma", "name": "Figma" },
+      "title": "Design context over MCP for coding agents",
+      "summary": "Coding agents can pull design context straight from Figma files over MCP.",
+      "publishedAt": "2026-06-03T00:00:00.000Z"
     }
   ],
-  "mode": "hybrid",
-  "degraded": false
-}`,
-      },
-      {
-        command: "releases get rel_vpnvlVinttqFUfgIlDlVZ",
-        output: `Webhooks Support Launched
-  ID:        rel_vpnvlVinttqFUfgIlDlVZ
-  Org:       Google (google)
-  Source:    API Release Notes (api-release-notes)
-  Published: May 4, 2026
-  URL:       https://ai.google.dev/gemini-api/docs/changelog#webhooks-support-launched
-  Content:   132 chars (~24 tokens)
-
-AI summary
-Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.`,
-        json: `{
-  "id": "rel_vpnvlVinttqFUfgIlDlVZ",
-  "title": "Webhooks Support Launched",
-  "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
-  "excerpt": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
-  "url": "https://ai.google.dev/gemini-api/docs/changelog#webhooks-support-launched",
-  "publishedAt": "2026-05-04T00:00:00.000Z",
-  "source": { "slug": "api-release-notes", "name": "API Release Notes" },
-  "org": { "slug": "google", "name": "Google" },
-  "contentChars": 132,
-  "contentTokens": 24
+  "mode": "hybrid"
 }`,
       },
     ],
   },
   {
-    id: "company",
-    label: "Track a company",
+    id: "shipped-week",
+    label: "What shipped this week?",
+    blocks: [
+      {
+        command: "releases tail --since 7d --limit 4",
+        output: `Claude Code / Anthropic  Sonnet 5 session reminders no longer use system role  21h
+Workspace / Google       Full Gemini presentations; Drive AI on mobile          1d
+Linear                   Initiative properties and enterprise MCP access        2d
+Devin / Cognition        Slack thread sync and PR ratio analytics               2d
+
+Follow the vendors you depend on and \`releases feed\` becomes your stack's changelog.`,
+        json: `{
+  "since": "7d",
+  "releases": [
+    {
+      "org": { "slug": "anthropic", "name": "Anthropic" },
+      "source": { "slug": "claude-code", "name": "Claude Code" },
+      "title": "Sonnet 5 session reminders no longer use system role",
+      "version": "v2.1.201",
+      "publishedAt": "2026-07-08T14:00:00.000Z"
+    },
+    {
+      "org": { "slug": "google", "name": "Google" },
+      "source": { "slug": "workspace-updates", "name": "Workspace Updates" },
+      "title": "Full Gemini presentations; Drive AI on mobile",
+      "publishedAt": "2026-07-08T00:00:00.000Z"
+    },
+    {
+      "org": { "slug": "linear", "name": "Linear" },
+      "source": { "slug": "linear-changelog", "name": "Linear Changelog" },
+      "title": "Initiative properties and enterprise MCP access",
+      "publishedAt": "2026-07-07T00:00:00.000Z"
+    },
+    {
+      "org": { "slug": "cognition", "name": "Cognition" },
+      "source": { "slug": "devin-release-notes", "name": "Devin Release Notes" },
+      "title": "Slack thread sync and PR ratio analytics",
+      "publishedAt": "2026-07-07T00:00:00.000Z"
+    }
+  ]
+}`,
+      },
+    ],
+  },
+  {
+    id: "watch-vendor",
+    label: "Watch a vendor",
     blocks: [
       {
         command: "releases get vercel",
@@ -202,60 +212,57 @@ rel_sWKjqqfAsQYbLkeAKgDno  @vercel/express@0.1.94  2026-05-28`,
   ]
 }`,
       },
+      {
+        command: "releases follow vercel",
+        output: `Following Vercel (org).`,
+        json: `{
+  "followed": true,
+  "target": {
+    "targetType": "org",
+    "targetId": "org_qsyZSlC_PRGFDYIGsMfzp",
+    "label": "Vercel"
+  }
+}`,
+      },
     ],
   },
   {
-    id: "product",
-    label: "Check product updates",
+    id: "integrations",
+    label: "Who integrates with us?",
     blocks: [
       {
-        command: "releases get cursor",
-        output: `Cursor (cursor)
-  Domain:      cursor.com
-  Category:    developer-tools
-  About:       AI-powered code editor built on VS Code
-  Sources:     1 active
-  Collections: Coding Agents (coding-agents)
+        command: 'releases search "linear integration" --since 6m --limit 3',
+        output: `Sentry   Two-way Linear issue sync leaves beta     1w
+Raycast  Linear extension adds a triage view       4w
+PostHog  Send session replays to Linear issues     2m
 
-Latest 3 releases (most recent first):
-rel_mKKH2T7nzFN0UuOLVYB86  Canvas Design Mode and Context Usage Report  2026-06-04
-rel_vBsY33fzVojgOdvcTDPui  Organizations for Cursor Enterprise          2026-06-03
-rel_CKUKVIG-gOOnIpjk0uC_x  Auto-review Run Mode                         2026-05-29`,
+3 of 11 results — 11 products shipped Linear integrations in the last 6 months.
+Your integration surface, mapped from vendor changelogs — not your support queue.`,
         json: `{
-  "id": "org_keFBTgO7XcFJzGNl-g0W5",
-  "slug": "cursor",
-  "name": "Cursor",
-  "domain": "cursor.com",
-  "category": "developer-tools",
-  "sourceCount": 1,
-  "releaseCount": 56,
-  "releasesLast30Days": 12,
+  "query": "linear integration",
+  "since": "6m",
+  "total": 11,
   "releases": [
     {
-      "id": "rel_mKKH2T7nzFN0UuOLVYB86",
-      "title": "Canvas Design Mode and Context Usage Report",
-      "summary": "Design Mode is now available in canvases, allowing you to select and annotate UI elements directly to guide Cursor's edits. Cursor can now show your agent's context usage as an interactive report in a canvas, breaking down where tokens go across the system prompt, tool definitions, rules, and skills.",
-      "publishedAt": "2026-06-04T00:00:00.000Z",
-      "sourceName": "Cursor Changelog",
-      "contentTokens": 330
+      "org": { "slug": "sentry", "name": "Sentry" },
+      "title": "Two-way Linear issue sync leaves beta",
+      "summary": "Sentry issues and Linear tickets now stay in sync in both directions, including status and assignee.",
+      "publishedAt": "2026-07-02T00:00:00.000Z"
     },
     {
-      "id": "rel_vBsY33fzVojgOdvcTDPui",
-      "title": "Organizations for Cursor Enterprise",
-      "summary": "Enterprise customers can now manage multiple Cursor teams under a single organization, with separate security, governance, budget, and feature controls per team. Organizations provide unified spend and token usage rollup, IDP management at the organization level, and per-team or per-group model access and spend limits. Users can belong to multiple teams with different roles in each, and admins can move users between teams via dashboard, API, or CSV.",
-      "publishedAt": "2026-06-03T00:00:00.000Z",
-      "sourceName": "Cursor Changelog",
-      "contentTokens": 410
+      "org": { "slug": "raycast", "name": "Raycast" },
+      "title": "Linear extension adds a triage view",
+      "summary": "Triage incoming Linear issues from Raycast without opening the app.",
+      "publishedAt": "2026-06-11T00:00:00.000Z"
     },
     {
-      "id": "rel_CKUKVIG-gOOnIpjk0uC_x",
-      "title": "Auto-review Run Mode",
-      "summary": "Auto-review is a new run mode that applies to Shell, MCP, and Fetch tool calls. Allowlisted calls run immediately, sandboxed calls execute in isolation, and remaining actions go to a classifier subagent that decides whether to allow, retry, or ask for approval. Configure it in Settings > Cursor Settings > Agents > Run Mode.",
-      "publishedAt": "2026-05-29T00:00:00.000Z",
-      "sourceName": "Cursor Changelog",
-      "contentTokens": 136
+      "org": { "slug": "posthog", "name": "PostHog" },
+      "title": "Send session replays to Linear issues",
+      "summary": "Attach a session replay to a Linear issue straight from PostHog.",
+      "publishedAt": "2026-05-08T00:00:00.000Z"
     }
-  ]
+  ],
+  "mode": "hybrid"
 }`,
       },
     ],
@@ -378,27 +385,15 @@ export default async function HomePage() {
               Releases is a registry of release notes from across the web, queryable from your
               terminal, code, or MCP client.
             </p>
-            <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
-              <span>
-                <strong className="text-stone-600 dark:text-stone-300 tabular-nums">
-                  {stats?.orgs ?? 0}
-                </strong>{" "}
-                orgs
-              </span>
-              <span>
-                <strong className="text-stone-600 dark:text-stone-300 tabular-nums">
-                  {stats?.sources ?? 0}
-                </strong>{" "}
-                sources
-              </span>
-              <span>
-                {/* Compact (35.6k) rather than the precise count — the hero
-                    stat is a scale signal, not a ledger. */}
-                <strong className="text-stone-600 dark:text-stone-300 tabular-nums">
-                  {formatStars(stats?.releases ?? 0)}
-                </strong>{" "}
-                releases
-              </span>
+            {/* Registry vitals as a mono, letter-spaced readout — an index
+                status line rather than marketing stats. Sources + releases
+                carry the scale, "updated hourly" the freshness promise; the
+                org count still lives in the "Browse all N orgs" link below.
+                Compact release count (35.6k) — a scale signal, not a ledger. */}
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.12em] uppercase text-stone-400 dark:text-stone-500">
+              <span className="tabular-nums">{stats?.sources ?? 0} sources</span>
+              <span className="tabular-nums">{formatStars(stats?.releases ?? 0)} releases</span>
+              <span>updated hourly</span>
             </div>
           </div>
         </div>
