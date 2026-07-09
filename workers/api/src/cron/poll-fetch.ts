@@ -1456,9 +1456,22 @@ export async function ingestRawReleases(
     mediaJsonByIndex[index] = JSON.stringify(finalMedia);
   }
 
-  // Denormalized category for category-feed index seeks (#886).
-  const effectiveCategory =
-    (await fetchEffectiveCategoryBySourceIds(db, [source.id])).get(source.id) ?? null;
+  // Denormalized category for category-feed index seeks (#886). Fail-open so a
+  // transient lookup failure doesn't drop an otherwise-valid poll-fetch insert.
+  let effectiveCategory: string | null = null;
+  if (rawReleases.length > 0) {
+    try {
+      effectiveCategory =
+        (await fetchEffectiveCategoryBySourceIds(db, [source.id])).get(source.id) ?? null;
+    } catch (err) {
+      logEvent("warn", {
+        component: "cron-poll-fetch",
+        event: "effective-category-fetch-failed",
+        sourceSlug: source.slug,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
+  }
 
   const rows = rawReleases.map((raw, index) => {
     const enrich = enrichMap.get(index);

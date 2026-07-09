@@ -739,8 +739,18 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   }
 
   // Category denorm (#886): restamp releases under this product's sources.
+  // Fail-open — category column already committed; stale denorm is recoverable.
   if (body.category !== undefined) {
-    await recomputeReleaseEffectiveCategoryForProduct(db, product.id);
+    try {
+      await recomputeReleaseEffectiveCategoryForProduct(db, product.id);
+    } catch (err) {
+      logEvent("warn", {
+        component: "products",
+        event: "effective-category-recompute-failed",
+        productId: product.id,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
   }
 
   if (body.tags !== undefined) {

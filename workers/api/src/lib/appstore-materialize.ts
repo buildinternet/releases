@@ -24,7 +24,11 @@ import { toSlug } from "@buildinternet/releases-core/slug";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
-import { fetchEffectiveCategoryBySourceIds } from "@releases/core-internal/effective-category";
+import {
+  fetchEffectiveCategoryBySourceIds,
+  type EffectiveCategoryDb,
+} from "@releases/core-internal/effective-category";
+import { logEvent } from "@releases/lib/log-event";
 import type { createDb } from "../db.js";
 
 type Db = ReturnType<typeof drizzle>;
@@ -249,8 +253,24 @@ export async function materializeAppStoreSource(
 
   // First release.
   const raw = mapListingToRawReleases(listing, coord);
-  const effectiveCategory =
-    (await fetchEffectiveCategoryBySourceIds(db as never, [sourceId])).get(sourceId) ?? null;
+  // Fail-open: category stamp must not leave a source with zero releases if the
+  // lookup hiccups after org/product/source already committed.
+  let effectiveCategory: string | null = null;
+  try {
+    // Callers pass a createDb()/D1 handle that satisfies EffectiveCategoryDb;
+    // local `Db` is the generic drizzle type without `.all` on the type surface.
+    effectiveCategory =
+      (
+        await fetchEffectiveCategoryBySourceIds(db as unknown as EffectiveCategoryDb, [sourceId])
+      ).get(sourceId) ?? null;
+  } catch (err) {
+    logEvent("warn", {
+      component: "appstore-materialize",
+      event: "effective-category-fetch-failed",
+      sourceId,
+      err: err instanceof Error ? err : String(err),
+    });
+  }
   const rows = raw.map((r) => {
     const size = computeContentSize(r.content);
     return {

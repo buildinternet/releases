@@ -112,6 +112,32 @@ describe("recomputeReleaseEffectiveCategory", () => {
     expect(map.get("src_org")).toBe("cloud");
   });
 
+  it("maps unknown source ids to null (documented contract)", async () => {
+    await seed();
+    const map = await fetchEffectiveCategoryBySourceIds(asD1(tdb.db), ["src_prod", "src_missing"]);
+    expect(map.has("src_missing")).toBe(true);
+    expect(map.get("src_missing")).toBeNull();
+    expect(map.get("src_prod")).toBe("framework");
+  });
+
+  it("chunks large source-id lists", async () => {
+    const { IN_ARRAY_CHUNK_SIZE } = await import("@buildinternet/releases-core/d1-limits");
+    const ids = Array.from({ length: IN_ARRAY_CHUNK_SIZE + 3 }, (_, i) => `src_x_${i}`);
+    let chunkCalls = 0;
+    const counting = {
+      async all<T>(_q: unknown): Promise<T[]> {
+        chunkCalls += 1;
+        return [] as T[];
+      },
+      async run() {},
+    };
+    const map = await fetchEffectiveCategoryBySourceIds(counting, ids);
+    expect(chunkCalls).toBe(2);
+    expect(map.size).toBe(ids.length);
+    expect(map.get(ids[0]!)).toBeNull();
+    expect(map.get(ids[ids.length - 1]!)).toBeNull();
+  });
+
   it("recompute for org stamps both product-override and org-fallback", async () => {
     await seed();
     await recomputeReleaseEffectiveCategoryForOrg(asD1(tdb.db), "org_1");

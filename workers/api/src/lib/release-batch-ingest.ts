@@ -172,9 +172,23 @@ export async function ingestReleaseBatch(
   // those omit `content` (the publish payload doesn't need it).
   const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
 
-  // Stamp denormalized category for category-feed seeks (#886).
-  const effectiveCategory =
-    (await fetchEffectiveCategoryBySourceIds(db, [src.id])).get(src.id) ?? null;
+  // Stamp denormalized category for category-feed seeks (#886). Fail-open:
+  // a transient lookup failure shouldn't sink an otherwise-valid batch.
+  // Skip the round trip when filters left nothing to insert.
+  let effectiveCategory: string | null = null;
+  if (releasesInput.length > 0) {
+    try {
+      effectiveCategory =
+        (await fetchEffectiveCategoryBySourceIds(db, [src.id])).get(src.id) ?? null;
+    } catch (err) {
+      logEvent("warn", {
+        component: "sources-batch",
+        event: "effective-category-fetch-failed",
+        sourceId: src.id,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
+  }
 
   // Ingest-time R2 media upload (#1177). When the `MEDIA` bucket is bound,
   // drop junk and mirror surviving images to `released-media` before insert

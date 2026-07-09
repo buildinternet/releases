@@ -1235,8 +1235,18 @@ orgRoutes.patch(
       .returning();
 
     // Category denorm (#886): restamp releases for all sources under this org.
+    // Fail-open — org.category already committed; stale denorm is recoverable.
     if (body.category !== undefined) {
-      await recomputeReleaseEffectiveCategoryForOrg(db, org.id);
+      try {
+        await recomputeReleaseEffectiveCategoryForOrg(db, org.id);
+      } catch (err) {
+        logEvent("warn", {
+          component: "orgs",
+          event: "effective-category-recompute-failed",
+          orgId: org.id,
+          err: err instanceof Error ? err : String(err),
+        });
+      }
     }
 
     // Only purge when visibility actually flips — a no-op toggle shouldn't

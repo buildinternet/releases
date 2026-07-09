@@ -34,6 +34,8 @@ export async function fetchEffectiveCategoryBySourceIds(
 ): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   if (sourceIds.length === 0) return out;
+  // Documented contract: every requested id is present; unknown/missing → null.
+  for (const id of sourceIds) out.set(id, null);
   for (let i = 0; i < sourceIds.length; i += IN_ARRAY_CHUNK_SIZE) {
     const chunk = sourceIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
     const idList = sql`(${sql.join(
