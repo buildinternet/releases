@@ -86,7 +86,6 @@ const BG_RADIAL =
 
 function BrandBar({ avatarUrl, bleed }: { avatarUrl?: string | null; bleed?: boolean }) {
   const borderColor = bleed ? "rgba(255,255,255,0.2)" : "#44403c";
-  const pillColor = bleed ? "#e7e5e4" : "#a8a29e";
   return (
     <div
       style={{
@@ -106,22 +105,6 @@ function BrandBar({ avatarUrl, bleed }: { avatarUrl?: string | null; bleed?: boo
           }}
         >
           releases.sh
-        </div>
-        <div
-          style={{
-            display: "flex",
-            fontSize: "12px",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            color: pillColor,
-            border: `1px solid ${borderColor}`,
-            borderRadius: "4px",
-            padding: "5px 9px",
-            lineHeight: 1,
-          }}
-        >
-          preview
         </div>
       </div>
       {avatarUrl ? (
