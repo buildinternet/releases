@@ -3,5 +3,11 @@
   "framework": "nextjs",
   "installCommand": "bun install",
   "outputDirectory": ".next",
-  "ignoreCommand": "git fetch origin \"$VERCEL_GIT_PREVIOUS_SHA\" --depth=1 -q 2>/dev/null; git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- :/web :/packages :/scripts :/bun.lock :/package.json || exit 1"
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true
+    }
+  },
+  "ignoreCommand": "if [ \"$VERCEL_ENV\" != \"production\" ]; then echo 'skip: non-production'; exit 0; fi; git fetch origin \"$VERCEL_GIT_PREVIOUS_SHA\" --depth=1 -q 2>/dev/null; if git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- :/web :/packages :/scripts :/bun.lock :/package.json; then echo 'skip: no web-relevant changes'; exit 0; fi; echo 'build: web inputs changed (or diff unavailable)'; exit 1"
 }
