@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
+import { StubBadge } from "@/components/stub-badge";
 import { formatRelativeDate } from "@/lib/formatters";
 import { CATALOG_LETTERS, type OrgLetterGroup } from "@/lib/group-orgs";
 
@@ -80,6 +81,7 @@ export function OrgCatalog({ groups }: { groups: OrgLetterGroup[] }) {
                       <span className="truncate font-medium text-stone-900 dark:text-stone-100">
                         {org.name}
                       </span>
+                      <StubBadge status={org.status} className="shrink-0" />
                     </span>
                     <span className="hidden w-20 text-right font-mono text-xs tabular-nums text-stone-600 sm:block dark:text-stone-400">
                       {org.recentReleaseCount > 0 ? org.recentReleaseCount.toLocaleString() : "—"}
