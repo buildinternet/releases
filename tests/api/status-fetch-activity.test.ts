@@ -161,6 +161,39 @@ describe("GET /v1/status/fetch-activity", () => {
     expect(body.buckets[0]!.no_change).toBe(2);
     expect(body.buckets[0]!.releasesInserted).toBe(3);
   });
+
+  it("filters status counts and topOrgs by org (innerJoin path)", async () => {
+    const db = mkDb();
+    await seedActivity(db);
+    const app = mkApp(db);
+    const res = await app.request(
+      "/v1/status/fetch-activity?after=2026-04-01T10:00:00.000Z&before=2026-04-01T11:59:00.000Z&bucket=hour&org=acme",
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ActivityBody;
+    expect(body.buckets.length).toBe(2);
+
+    const h10 = body.buckets.find((b) => b.t.startsWith("2026-04-01T10:"));
+    const h11 = body.buckets.find((b) => b.t.startsWith("2026-04-01T11:"));
+    expect(h10).toBeDefined();
+    expect(h11).toBeDefined();
+
+    // Acme only: 1 success + 1 no_change in 10:00 (beta's no_change excluded).
+    expect(h10!.success).toBe(1);
+    expect(h10!.no_change).toBe(1);
+    expect(h10!.total).toBe(2);
+    expect(h10!.releasesInserted).toBe(1);
+    expect(h10!.orgCount).toBe(1);
+    expect(h10!.topOrgs.map((o) => o.slug)).toEqual(["acme"]);
+
+    // Acme only in 11:00: 1 success (beta's error excluded).
+    expect(h11!.success).toBe(1);
+    expect(h11!.error).toBe(0);
+    expect(h11!.total).toBe(1);
+    expect(h11!.releasesInserted).toBe(2);
+    expect(h11!.orgCount).toBe(1);
+    expect(h11!.topOrgs.map((o) => o.slug)).toEqual(["acme"]);
+  });
 });
 
 describe("GET /v1/status/fetch-log?excludeStatus=", () => {
