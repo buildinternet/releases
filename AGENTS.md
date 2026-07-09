@@ -22,30 +22,7 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 
 ## Local development
 
-Worker runtime secrets for local `wrangler dev` live in each worker's git-ignored `.dev.vars`. Copy the matching `.dev.vars.example` to get started — `workers/api` (required for `dev:api` / sign-in), `workers/mcp`, `workers/discovery`, and `workers/webhooks` each enumerate keys with placeholder values and a short comment per key.
-
-The four `dev:*` scripts (`dev:web`, `dev:api`, `dev:mcp`, `dev:discovery`) run each service through [portless](https://github.com/vercel-labs/portless) (^0.15) so they're reachable on stable HTTPS subdomains instead of port numbers — `https://releases.localhost` for the web frontend, `https://{api,mcp,discovery}.releases.localhost` for the workers. First run trusts a local CA and starts a daemon on port 443; subsequent runs reuse it. Apps mapping lives in `portless.json` for direct `portless` invocations from a workspace dir; the actual dev scripts pass `--name` explicitly so `portless run` picks up the override even outside a workspace. **Requires Node.js 24+** (portless ≥0.13 enforces this — run `bunx portless doctor` if dev URLs fail to resolve).
-
-- **Worktrees:** linked git worktrees are detected automatically and the branch name is prepended (`feat-x.releases.localhost`, `feat-x.api.releases.localhost`, …) so multiple checkouts coexist without collision. No config needed — this is built into `portless run`.
-- **Fresh-worktree bootstrap:** a new worktree has no `node_modules` (Bun would otherwise resolve `@buildinternet/releases-*` to the main checkout). `.worktreeinclude` copies env files and a SessionStart hook runs `./scripts/setup-worktree.sh` (`bun install` + copy the gitignored env files from the main checkout) — but that hook only fires at **session start**, not on a mid-session `EnterWorktree` (the background-agent path). So **after creating a worktree via the `EnterWorktree` tool, run `./scripts/setup-worktree.sh`** (idempotent) before type-checking or testing.
-- **Worktree teardown + cleanup:** a SessionEnd hook runs `./scripts/session-teardown.sh`, which tears down **only the ending session's own** worktree — kills its dev-server processes (`wrangler`/`workerd`/`next-server`/…) and `git worktree remove`s it **only if it's clean** (dirty trees and the main checkout are never touched; the branch is always preserved). For the broader sweep, **`bun run clean:worktrees`** (`--dry-run` to preview) reclaims every worktree whose PR has merged or closed plus any orphaned dev servers under the repo's worktree dirs.
-- **Override:** set `PORTLESS_NAME=foo` to swap the base name across all four services in one go (`foo.localhost`, `api.foo.localhost`, …). Useful when sharing a machine, demoing on a custom domain, or sidestepping a stuck route. Worktree prefixing still applies on top.
-- **Custom TLD (OAuth dev):** Google/Apple reject `*.localhost`, so local OAuth uses a real TLD — e.g. `PORTLESS_TLD=dev` + `PORTLESS_NAME=releases.local.buildinternet` → `https://releases.local.buildinternet.dev`. The proxy **locks its TLD at start**; after changing `PORTLESS_TLD`, run `portless proxy stop` then restart a `dev:*` script (or `portless proxy start --tld <tld>`). Portless 0.15+ accepts comma-separated TLDs (`PORTLESS_TLD=localhost,dev`) when you need both URL styles on one proxy.
-- **Ports:** wrangler is invoked with `--port $PORT --ip 127.0.0.1` so it binds to the ephemeral port portless assigns; Next.js gets `--port $PORT` via `bun run dev`. Don't hard-code dev ports in wrangler.jsonc — portless's auto-assignment is what avoids conflicts when multiple services run simultaneously.
-- **Troubleshooting:** `bunx portless doctor` (proxy, DNS, CA trust, Node version); `bunx portless prune` kills orphaned dev servers left by crashed sessions (complements `bun run clean:worktrees`).
-
-### Local D1 schema parity
-
-The miniflare-backed local D1 (`workers/api/.wrangler/state/v3/d1`) only gets migrations when something runs them locally — prod/staging get them on deploy. `dev:api` runs `db:migrate:local` on startup, so pending migrations apply automatically (idempotent, ~1s no-op when current; wrangler may prompt y/n in a TTY when migrations are pending). If you still hit a missing table/column 500 on `/api/auth/*` (`no such table: rate_limit`, `no such column: last_active_at`, …) — e.g. migrations landed while `dev:api` was already running, or the DB predates the squash baseline — recover it:
-
-- **`bun run db:reset:local`** — wipes the local D1 and re-applies every migration from the squash baseline. This is the reliable path: a _fresh_ DB applies the baseline cleanly, whereas `bun run db:migrate:local` against a pre-squash local DB dies on `no such column: product_id` (the baseline indexes a column old-timeline local tables lack). Schema only, no data — restart `dev:api` afterward.
-- **`bun run db:pull`** — same rebuild, then imports a prod **content** subset (orgs/sources/releases/…) for realistic local data. **Auth tables (`user`/`session`/`account`/`verification`/`rate_limit`) are deliberately never synced** — real user data / OAuth tokens / password hashes stay off laptops; sign up locally instead.
-
-Don't `wrangler d1 execute --local --file <migration>` to patch a single table — it lands the schema but not the `d1_migrations` log row, compounding the drift (same trap as the staging note below). Use `db:reset:local`.
-
-Auth brute-force **rate limiting** is two-layer and **fail-closed in deployed prod** (on whenever `ENVIRONMENT === "production"`, never coupled to the signing secret — a broken secret must not silently drop protection). To skip Better Auth's per-key limiter during local sign-in testing, set `AUTH_RATE_LIMIT_DISABLED=true` in `workers/api/.dev.vars` (explicit opt-out; defaults OFF so prod stays protected). The two layers (#1728): **(1) edge** — a per-IP CF-native limiter (`AUTH_RATE_LIMITER`, 30/60s, kill switch `AUTH_EDGE_RATE_LIMIT_ENABLED` default-on) fronts POST `/api/auth/*` in the handler, shedding floods before any DB/KV touch (GET session reads exempt); **(2) per-key** — Better Auth's own limiter, now **off D1**: when `AUTH_RATE_LIMIT_KV` is bound its counters land on a dedicated KV namespace via `rateLimit.customStorage` (`auth/rate-limit-kv.ts`), so a distributed attack no longer write-amplifies into the shared D1. Both layers are no-ops where their binding is absent (local dev / staging → per-key falls back to `storage: "database"`, mirroring prod once the `rate_limit` table exists via `db:reset:local`).
-
-The Better Auth **signing secret** in local dev comes from `BETTER_AUTH_SECRET_DEV` in `workers/api/.dev.vars`, NOT `BETTER_AUTH_SECRET`: the latter is a Secrets Store binding that `wrangler dev` can't resolve locally, and a same-named plain `.dev.vars` line is shadowed by the binding, so the worker silently fell back to an ephemeral per-restart secret (#1425). Set a stable `BETTER_AUTH_SECRET_DEV=<any-string>` to keep local sessions across `dev:api` restarts and make HS256 tokens forgeable for tests; `resolveSigningSecret` prefers it only when the binding is unresolvable (never in prod, where the binding resolves and the var is unset). Never put the prod `BETTER_AUTH_SECRET` on a laptop — it signs every prod session.
+Running the four `dev:*` services behind portless, fresh-worktree bootstrap, worktree teardown, and local D1 schema parity (`db:reset:local` / `db:pull`) and auth rate-limit / signing-secret notes: [local-development.md](docs/architecture/local-development.md).
 
 ## Workspaces and carved-out packages
 
@@ -132,6 +109,8 @@ The `release_coverage` schema lives with the rest of the DB-coupled internals in
 
 Deep dives live in `docs/architecture/`. A reader's guide with task-based entry points is at [docs/README.md](docs/README.md).
 
+- [local-development.md](docs/architecture/local-development.md) — portless dev URLs, worktree bootstrap/teardown, local D1 schema parity, auth rate limiting and the local signing secret.
+- [staging.md](docs/architecture/staging.md) — the staging read-surface: hosts, per-environment managed agents, disabled crons, access gate, deploy and prod-sync commands.
 - [deploy-coupling.md](docs/architecture/deploy-coupling.md) — account-scoped wrangler bindings and open-core boundary for forks/self-hosters.
 - [remote-mode.md](docs/architecture/remote-mode.md) — D1, auth model (scoped API tokens), rate limiting, migrations, sessions, cron polling + retier, workflows-based ingest, discovery guardrails.
 - [storage-portability.md](docs/architecture/storage-portability.md) — where SQLite/D1 assumptions live, the `createDb` construction seam, and what an optional future Postgres backend would cost (aspirational, not in progress).
@@ -163,40 +142,7 @@ Do not edit `.env` directly. Required vars are documented in `.env.example`. App
 
 ## Staging
 
-The `api`, `mcp`, and `discovery` workers have a `[env.staging]` block in their `wrangler.jsonc`. Webhooks, crons, and Vectorize are intentionally absent — staging is a read-surface for UI/API iteration plus an agent-iteration sandbox, not a full replica.
-
-- **Hosts:** `api-staging.releases.sh`, `mcp-staging.releases.sh`
-- **Deployed as:** `releases-api-staging`, `releases-mcp-staging`, `releases-discovery-staging`
-- **Managed agents:** separate Anthropic discovery + worker agents, environment, and vault. Skills are deployed as distinct staging resources (display title suffix `(staging)`) so iteration does not affect prod. See [docs/architecture/agents.md](docs/architecture/agents.md#per-environment-agents). There is no CLI trigger for staging discovery sessions yet — the worker is reachable only via direct POST to `releases-discovery-staging` or scrape-agent cron sweeps (and those are disabled in staging).
-- **DB:** `released-db-staging` (separate D1), refreshed on demand from prod
-- **Crons:** disabled (`CRON_ENABLED=false`, no cron triggers)
-- **Vectorize:** no bindings — search degrades to FTS; `/v1/related/*` returns `degraded: true`
-- **R2:** reuses `released-media` (read-only in practice; no cron writes)
-- **KV:** reuses the existing preview namespaces, so `wrangler dev` and staging share cache
-- **Indexing:** `INDEXING_DISABLED=true` — every response carries `X-Robots-Tag: noindex, nofollow` and `/robots.txt` returns `Disallow: /`
-- **Access gate:** both hosts require the staging access key on every request. Missing/invalid → 401. The gate runs before routing, so public-read and admin endpoints are equally protected; CORS preflight (OPTIONS) passes through, as does `/api/auth/jwks` (public key material a resource server fetches server-to-server to verify OAuth JWTs — `STAGING_GATE_EXEMPT_PATHS`). The secret is bound via Secrets Store (`STAGING_ACCESS_KEY`) in `workers/api/wrangler.jsonc`, `workers/mcp/wrangler.jsonc`, and `workers/discovery/wrangler.jsonc` staging blocks — `workers/discovery` attaches it to outbound calls to `api-staging` so service-bound requests clear the gate. `api-staging` accepts the key via `X-Releases-Staging-Key` only. `mcp-staging` accepts it via `X-Releases-Staging-Key` or `Authorization: Bearer <key>` — the Bearer form lets Anthropic managed-agent vault credentials (OAuth or Bearer only; no custom-header support) reach the server. Cloudflare Access (SSO) is still the long-term target — see issue #444.
-
-Deploy:
-
-```bash
-# From workflow_dispatch on deploy-workers.yml with environment=staging, or:
-bunx wrangler deploy --env staging --config workers/api/wrangler.jsonc
-bunx wrangler deploy --env staging --config workers/mcp/wrangler.jsonc
-bunx wrangler deploy --env staging --config workers/discovery/wrangler.jsonc
-```
-
-Refresh staging data from prod:
-
-```bash
-# Locally (requires `wrangler whoami` in the Build Internet account):
-./scripts/sync-staging-db.sh
-
-# Or via GH Actions: run the "Sync staging DB" workflow with confirm="yes".
-```
-
-The sync script copies a content subset — orgs, products, sources, releases, tags, media, knowledge pages, source changelog files, coverage — and skips observability/webhook/vectorize tables (see the TABLES list at the top of `scripts/sync-staging-db.sh`). It also copies `d1_migrations` so staging's wrangler log mirrors prod's; this self-heals the "schema is ahead of the migration log" drift that happens when DDL gets applied to staging out-of-band.
-
-When iterating on a new migration against staging, use `bunx wrangler d1 migrations apply DB --env staging --remote --config workers/api/wrangler.jsonc` — this applies the SQL and records the row in `d1_migrations`. Don't `wrangler d1 execute --env staging --file workers/api/migrations/...` to test a migration; that lands the schema but not the log row, and the next CI deploy fails with `duplicate column`/`already exists`.
+Staging is a read-surface for UI/API iteration plus an agent-iteration sandbox, not a full replica — no crons, no webhooks, no Vectorize, access-key gated. Hosts, deploy commands, and the prod-sync script: [staging.md](docs/architecture/staging.md).
 
 ## Legacy naming
 
