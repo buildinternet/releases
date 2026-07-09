@@ -332,6 +332,25 @@ If you encounter a source with `discovery = 'on_demand'` during an agent task:
 - To promote it to a fully indexed curated source: `manage_source` action "edit" with `discovery: 'curated'` and flip `isHidden` to false. Also edit the name if it was auto-generated from the coordinate.
 - The org created alongside the source may also be `discovery = 'on_demand'`. Promote it with `manage_org` action "edit" with `discovery: 'curated'`.
 
+## Self-Serve Listing Triage
+
+Owners can activate a stub for their own domain via the anonymous self-serve lane (`POST /v1/listing/{validate,activate}`); an activation with `requestTracking: true` stamps `tracking_requested_at` — a demand signal, not an auto-onboard. Reviewing that queue is a curator task:
+
+1. **List the queue:** `GET /v1/orgs?trackingRequested=1` (admin-gated). Rows carry `trackingRequestedAt` and zeroed stats.
+2. **Per org:** fetch its manifest (`https://<domain>/.well-known/releases.json`), then run the normal onboarding ladder (`finding-changelogs`) over the declared locators. Materialization is fill-if-empty and never clobbers curator fields.
+3. **Ownership claims** (`relv_` token via `.well-known/releases-verify.txt` or DNS TXT) prove domain control for self-serve Tier-1 promotion — a verified claim raises confidence but doesn't skip source vetting.
+
+## Mobile-App Discovery Candidates
+
+The AASA/assetlinks scan (`docs/architecture/well-known-config.md` → Mobile-app discovery) lands a domain's iOS apps as **paused, hidden** `appstore` candidates (`discovery: "on_demand"`, `isHidden: true`, `fetchPriority: "paused"`) — deliberately off every public surface until reviewed, because app-site associations routinely include third-party apps (SSO/wallet integrations). Reviewing a candidate:
+
+1. Confirm the app actually belongs to the org (open the App Store listing; check the seller name) — the association file alone is not proof of ownership.
+2. To go live: `manage_source` action "edit" (or `releases admin source update`) flipping `fetchPriority` to `normal`, `isHidden` to false, and `discovery` to `curated`; fix the auto-derived name per the naming rules above.
+3. Third-party or irrelevant app → leave it paused+hidden (the posture is the containment) or delete the row.
+4. Android package names are only an internal hint (`org.metadata.discoveredApps`) — there is no Play Store source type; don't try to materialize one.
+
+On-demand re-scan for one org: `POST /v1/orgs/:slug/discover-apps` (write scope, `?dryRun=1` to preview).
+
 ## Duplicate Detection
 
 Before adding sources, search for overlapping URLs.
