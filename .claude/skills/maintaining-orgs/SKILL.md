@@ -297,8 +297,21 @@ What to capture, specific to overview regen:
 - **Agents that bailed**: which orgs fell back to in-session generation, and whether citations survived (a refresh that drops `--citations-file` silently strips every link).
 - **Fetch errors surfaced**: orgs where `source fetch` exited non-zero and regen was correctly skipped rather than run on stale data.
 
+## Triaging the Staleness Digest
+
+The daily `0 4 * * *` scans email operators a rollup of overdue sources: first-party (`source-staleness` — established cadence, actively polled, yet newest release older than `max(14d, 3× medianGapDays)`) and Firecrawl (`firecrawl-staleness`). A digest entry means "we're fetching but nothing lands" — triage per source, in this order:
+
+1. **Read the fetch log** — `releases admin source fetch-log <slug> --json`. Errors point at the adapter/challenge; clean `no_change` rows point at detection or rendering.
+2. **Clean `no_change` on a scrape source → render dry-run**: `releases source fetch <source> --dry-run` renders the index once (no extraction, no MA cost) and reports candidate-link counts. Dozens of candidates = the pipeline can see the page; ~0 / `rendered: false` = empty-shell render — the client-rendered-SPA trap (`finding-changelogs` → Rendering Optimization) applies: look for a feed/`.md`/GitHub alternative, or escalate to `firecrawl-monitoring`.
+3. **Suspect the change detector** — a `changeDetector: unreliable` quirk (playbook YAML frontmatter, see `managing-sources`) makes the cron silently skip; an ETag/content-length detector on a page with rotating chrome never trips. Fix the quirk value rather than force-fetching around it.
+4. **Cadence was wrong, not the source** — a genuinely slow publisher trips the floor occasionally. No action; the multiplier windows self-correct as history accrues.
+5. **Dead surface** — page 404s or moved: update `source.url` (and playbook), or pause with the blocker recorded (`managing-sources` add-and-pause).
+
+Firecrawl-side digest entries have their own runbook: `firecrawl-monitoring` → "Triage: a Firecrawl source went quiet".
+
 ## Composing With Other Skills
 
 - **`regenerating-overviews`** — the AI prompt + workflow for the overview step. Required reading for any sub-agent doing the second step above.
 - **`parsing-changelogs`** — what `admin source fetch` does under the hood. Useful when fetches misbehave.
 - **`managing-sources`** — for adding, hiding, or pausing sources before a refresh.
+- **`firecrawl-monitoring`** — triage and lifecycle for Firecrawl-backed sources flagged in the digest.

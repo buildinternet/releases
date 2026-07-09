@@ -27,7 +27,8 @@
         "regenerating-overviews",
         "generating-release-content",
         "seeding-playbooks",
-        "grouping-releases"
+        "grouping-releases",
+        "firecrawl-monitoring"
       ]
     }
   ]

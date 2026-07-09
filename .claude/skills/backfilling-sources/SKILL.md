@@ -83,6 +83,17 @@ The same page can be split at very different altitudes — per **feature**, per 
 
 The Workflow records the run under `~/.releases/work/` in an **isolated** run dir it mints itself (summary per source, cost line grounded in `budget.spent()`, cross-run sweep report). It deliberately does **not** use `releases admin work start` / the shared `.current-run` pointer — that pointer is global and leaks across concurrent sessions (#1396), so an automated sweep that held it would absorb an unrelated session's mutations. A sweep threads its run dir to each nested source; per-source summaries are namespaced `summary-<slug>.md` to avoid clobbering. Because no pointer is set, these runs don't appear in `releases admin work status`. Review the cross-run report (`reports/<date>-backfill-sweep.md`) for data-quality findings (empty content, thin pages, deferred-for-budget pages). See [maintenance-workspace.md → Concurrency](../../../../docs/architecture/maintenance-workspace.md).
 
+## Media and content backfills (server-side, no local extraction)
+
+The local Workflows above rebuild release *rows*. Four admin routes heal what's already stored — all idempotent, all `dryRun`-defaulting where noted, none on any cron:
+
+- **`POST /v1/workflows/backfill-media { sourceId?, all?, limit?, dryRun? }`** — R2-mirrors media stored before ingest-time mirroring was active (third-party URLs, no `r2Key`). This is the ONLY path that re-mirrors populated media — the ingest upsert never overwrites non-empty `media`. Bounded per call; `remaining` in the report tells you to loop. `dryRun` default.
+- **`POST /v1/workflows/backfill-video { releaseId?|sourceId?|all?, limit?, dryRun? }`** — re-runs inline-video detection (Wistia/Loom/Vimeo/YouTube) over stored bodies and APPENDS the `type:"video"` poster card to `media[]` (dedup by `linkUrl`). For rows ingested before #1549.
+- **`POST /v1/workflows/reextract-source { sourceId, snapshotId?, maxWindows?, dryRun? }`** — re-runs extraction from a stored raw snapshot (`released-raw`, 90-day lifecycle → 410 `snapshot_expired`) with no live scrape. Use when parse logic improved and you want history reprocessed without re-fetching.
+- **`POST /v1/workflows/refetch-release { releaseId, url?, dryRun?, force? }`** — heals ONE release in place from its live page (same `rel_` id, title/content/date replaced, AI fields nulled for regen; media replaced only on extractor hit). A stored `#fragment` URL requires an explicit same-host `url`; placeholder content is refused, and a >50% body shrink needs `force: true`. The fix for thin index-scrape rows left by a crawl-mode flip.
+
+Rule of thumb: wrong/missing **media** → the two media routes; stale **extraction** with captured raw → `reextract-source`; one bad **row** → `refetch-release`; missing **history** → the local backfill Workflows above.
+
 ## Related
 
 - **`local-ingest`** — the primitives this wraps (preflight, `/batch`, parity); use it for one-off interactive ingests.
