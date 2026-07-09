@@ -32,7 +32,7 @@ export interface DigestEmailContent {
 export type DigestEmailInput = DigestEmailContent & { to: string };
 
 const DEFAULT_FROM = "digests@releases.sh";
-const FROM_NAME = "Releases";
+const FROM_NAME = "Releases.sh";
 
 function bestTitle(r: ReleaseLatestItem): string {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Update";

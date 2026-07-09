@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
+import { type Kind, isValidKind } from "@buildinternet/releases-core/kinds";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
@@ -33,6 +34,10 @@ export type LatestReleaseRow = {
   org_github_handle: string | null;
   product_slug: string | null;
   product_name: string | null;
+  /** `sources.kind` — SDK/platform/docs classification, NULL when unset. */
+  source_kind: string | null;
+  /** `products.kind` — fallback classification when the source has no kind. */
+  product_kind: string | null;
   type: string;
   coverage_count: number;
   content_chars: number | null;
@@ -130,6 +135,7 @@ export async function getLatestReleasesAcross(
               WHERE org_id = o.id AND platform = 'github'
               ORDER BY created_at, id LIMIT 1) AS org_github_handle,
            p.slug AS product_slug, p.name AS product_name,
+           s.kind AS source_kind, p.kind AS product_kind,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
@@ -156,6 +162,12 @@ export async function getLatestReleasesAcross(
 // it from this module.
 export { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 
+// Normalize a free-text `kind` column to the enum. A NULL (unset) or stray/unknown
+// value maps to `undefined` — the field is omitted from the wire rather than shipping
+// a null or a schema-invalid string, mirroring how `breaking` drops absent (#1710).
+const normKind = (raw: string | null): Kind | undefined =>
+  raw && isValidKind(raw) ? raw : undefined;
+
 /**
  * Map a raw `LatestReleaseRow` (from D1 or bun:sqlite) to the wire-protocol
  * `ReleaseLatestItem` shape. Extracted so both the `/releases/latest` handler
@@ -166,6 +178,10 @@ export function mapLatestRowToReleaseItem(
   mediaOrigin: string,
   webBase?: string,
 ): ReleaseLatestItem {
+  // Grouping identity the web feed keys SDK/package rollups on (#1234): product
+  // when the source is bound to one, else the source itself.
+  const groupSlug = r.product_slug ?? r.source_slug;
+  const groupName = r.product_name ?? r.source_name;
   return {
     id: r.id,
     version: r.version,
@@ -196,10 +212,17 @@ export function mapLatestRowToReleaseItem(
       orgName: r.org_name,
       orgAvatarUrl: r.org_avatar_url,
       orgGithubHandle: r.org_github_handle,
+      kind: normKind(r.source_kind),
     },
     product: r.product_slug
-      ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
+      ? {
+          slug: r.product_slug,
+          name: r.product_name ?? r.product_slug,
+          kind: normKind(r.product_kind),
+        }
       : null,
+    groupSlug,
+    groupName,
     coverageCount: r.coverage_count,
     contentChars: r.content_chars,
     contentTokens: r.content_tokens,
@@ -256,6 +279,7 @@ export async function getFollowedReleases(
            o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
            NULL AS org_github_handle,
            p.slug AS product_slug, p.name AS product_name,
+           s.kind AS source_kind, p.kind AS product_kind,
            0 AS coverage_count
     FROM releases_visible r
     INNER JOIN sources_active s ON s.id = r.source_id
