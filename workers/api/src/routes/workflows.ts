@@ -83,6 +83,7 @@ import {
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { getSourceMeta, htmlToMarkdown } from "@releases/adapters/feed.js";
+import { PLACEHOLDER_RE } from "@releases/adapters/extract";
 import { createFirecrawlClient } from "@releases/adapters/firecrawl.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { getSecret } from "@releases/lib/secrets";
@@ -2264,11 +2265,19 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
 // Body: { releaseId, url?, dryRun? }
 
 const REFETCH_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+// Shrink guard (#2077): refuse a write that shrinks the body below this
+// fraction of its current size, unless the current body is already tiny
+// (below the min) — re-fetching a thin teaser SHOULD be allowed to land a
+// body of any size, and healing a 40-char stub must never trip the guard.
+const REFETCH_SHRINK_RATIO = 0.5;
+const REFETCH_SHRINK_MIN_CURRENT_CHARS = 200;
 
 interface RefetchReleaseBody {
   releaseId?: string;
   url?: string;
   dryRun?: boolean;
+  /** Override the #2077 shrink guard on the write path. */
+  force?: boolean;
 }
 
 type RefetchBodyOverride = { markdown: string; via: BackfillBodyVia };
@@ -2412,11 +2421,21 @@ workflowsRoutes.post("/workflows/refetch-release", async (c) => {
     extracted = result.releases;
   }
   const post = extracted[0];
-  if (!post || !post.content?.trim()) {
+  // Placeholder content (`<UNKNOWN>`, `n/a`, …) is an extraction failure, not a
+  // body — the model emits it instead of omitting the field on pages it can't
+  // parse (#2077; 6 WorkOS pages wrote it over real teasers on 2026-07-09).
+  // Same placeholder set the ingest routes strip from versions.
+  if (!post || !post.content?.trim() || PLACEHOLDER_RE.test(post.content.trim())) {
     return respondError(
       c,
       new UpstreamError(`No release content extracted from ${fetchUrl}`, {
-        details: { via: resolved.via, extractedCount: extracted.length },
+        details: {
+          via: resolved.via,
+          extractedCount: extracted.length,
+          ...(post?.content && PLACEHOLDER_RE.test(post.content.trim())
+            ? { placeholderContent: post.content.trim() }
+            : {}),
+        },
       }),
     );
   }
@@ -2447,6 +2466,16 @@ workflowsRoutes.post("/workflows/refetch-release", async (c) => {
     url: newUrl,
   };
 
+  // Shrink guard (#2077): an in-place re-fetch should almost never make a
+  // release materially smaller — a big shrink usually means the fetch/extract
+  // captured the wrong thing (index page, nav shell, teaser). Refuse the write
+  // unless the caller passes `force: true`; dry-run still previews and carries
+  // a `wouldRequireForce` flag so operators see it coming.
+  const currentChars = row.contentChars ?? row.content?.length ?? 0;
+  const shrinks =
+    currentChars >= REFETCH_SHRINK_MIN_CURRENT_CHARS &&
+    size.contentChars < currentChars * REFETCH_SHRINK_RATIO;
+
   if (dryRun) {
     return c.json({
       dryRun: true,
@@ -2455,13 +2484,24 @@ workflowsRoutes.post("/workflows/refetch-release", async (c) => {
       via: resolved.via,
       current: {
         title: row.title,
-        contentChars: row.contentChars ?? row.content?.length ?? 0,
+        contentChars: currentChars,
         mediaCount: hasStoredMedia(row.media) ? JSON.parse(row.media as string).length : 0,
         publishedAt: row.publishedAt,
         url: row.url,
       },
       proposed,
+      ...(shrinks ? { wouldRequireForce: true } : {}),
     });
+  }
+
+  if (shrinks && body.force !== true) {
+    return respondError(
+      c,
+      new ValidationError(
+        `Refusing to shrink this release from ${currentChars} to ${size.contentChars} chars — a large shrink usually means the wrong content was extracted. Pass \`force: true\` to override.`,
+        { code: "bad_request" },
+      ),
+    );
   }
 
   // Media: replace only when extraction returned any; mirror not-yet-hosted
