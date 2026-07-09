@@ -1,4 +1,4 @@
-import { sql, type SQL } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import {
   collections,
   collectionMembers,
@@ -13,6 +13,9 @@ import type {
   ProductParentOrg,
 } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
+
+/** Row shape of the `collections` table (subset used by GraphQL detail). */
+export type CollectionRow = typeof collections.$inferSelect;
 
 /**
  * Collections matching `where` (a predicate over the `collections c` alias),
@@ -315,4 +318,52 @@ export async function getCollectionsList(
       previewOrgs,
     };
   });
+}
+
+/** Lookup a collection by slug. Shared by GraphQL `Query.collection` and REST. */
+export async function getCollectionBySlug(db: D1Db, slug: string): Promise<CollectionRow | null> {
+  const [row] = await db.select().from(collections).where(eq(collections.slug, slug)).limit(1);
+  return row ?? null;
+}
+
+/**
+ * Full ordered member list for a collection detail page. Same joins / interleave
+ * as REST `GET /v1/collections/:slug` (orgs via `organizations_public`, products
+ * via `products_active` + visible parent org). Shared with GraphQL
+ * `Collection.members` (#2047).
+ */
+export async function getCollectionFullMembers(
+  db: D1Db,
+  collectionId: string,
+): Promise<CollectionMember[]> {
+  const [orgsList, productsList] = await Promise.all([
+    db.all<OrgMemberRow>(sql`
+      SELECT cm.position AS position,
+             op.slug AS slug, op.name AS name, op.domain AS domain,
+             op.avatar_url AS avatarUrl, op.description AS description,
+             (SELECT handle FROM org_accounts
+                WHERE org_id = op.id AND platform = 'github'
+                ORDER BY created_at, id LIMIT 1) AS githubHandle
+      FROM ${collectionMembers} cm
+      INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+      WHERE cm.collection_id = ${collectionId}
+      ORDER BY cm.position, op.name, op.slug
+    `),
+    db.all<ProductMemberRow>(sql`
+      SELECT cm.position AS position,
+             pa.slug AS productSlug, pa.name AS productName,
+             pa.description AS productDescription,
+             op.slug AS parentOrgSlug, op.name AS parentOrgName,
+             op.domain AS parentOrgDomain, op.avatar_url AS parentOrgAvatarUrl,
+             (SELECT handle FROM org_accounts
+                WHERE org_id = op.id AND platform = 'github'
+                ORDER BY created_at, id LIMIT 1) AS parentOrgGithubHandle
+      FROM ${collectionMembers} cm
+      INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
+      INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
+      WHERE cm.collection_id = ${collectionId}
+      ORDER BY cm.position, pa.name, pa.slug
+    `),
+  ]);
+  return interleaveMembers(orgsList, productsList);
 }

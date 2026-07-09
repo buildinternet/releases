@@ -38,13 +38,20 @@ export type OrgPageProduct = {
  * (`@buildinternet/releases-api-types`) MINUS `overview` and `playbook` —
  * those stay on REST (see `getOrgOverview` below): the overview knowledge-page
  * projection joins `knowledge_pages` + citation rows + a playbook-only auth
- * branch, none of which are ported to GraphQL for this slice (#1978).
+ * branch, none of which are ported to GraphQL for this slice (#1978 / #2047).
+ *
+ * `collections` is nested on the OrgPage GraphQL op (#2047) so the layout no
+ * longer needs a second REST hop for the sidebar.
  */
-export type OrgPageData = Omit<GqlOrg, "products" | "sources" | "locations" | "notice"> & {
+export type OrgPageData = Omit<
+  GqlOrg,
+  "products" | "sources" | "locations" | "notice" | "collections"
+> & {
   products: OrgPageProduct[];
   sources: SourceListItem[];
   locations?: ReleaseLocationItem[];
   notice?: Notice | null;
+  collections: CollectionListItem[];
 };
 
 function mapSource(s: GqlOrgSource): SourceListItem {
@@ -94,40 +101,46 @@ function mapProduct(p: GqlOrgProduct): OrgPageProduct {
 }
 
 /**
- * Primary org record + products + sources, fetched via one persisted GraphQL
- * query (`Query.org`) instead of the REST `GET /v1/orgs/:slug` round trip.
- * `overview` and stats-heavy REST-only aggregates the GraphQL schema doesn't
- * cover (org overview knowledge-page content, its citations, the playbook
- * scope) stay off this object — see `getOrgOverview`.
+ * Primary org record + products + sources + collections, fetched via one
+ * persisted GraphQL query (`Query.org`) instead of REST
+ * `GET /v1/orgs/:slug` + `GET /v1/orgs/:slug/collections`. Overview stays on
+ * the thin REST overview route — see `getOrgOverview`.
  */
 export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
   const data = await graphqlRequest(OrgPageDocument, { idOrSlug: slug });
   if (!data.org) throw new ApiNotFoundError(`/v1/orgs/${slug}`);
-  const { products, sources, locations, notice, ...rest } = data.org;
+  const { products, sources, locations, notice, collections, ...rest } = data.org;
   return {
     ...rest,
     products: products.map(mapProduct),
     sources: sources.map(mapSource),
     locations: (locations as ReleaseLocationItem[] | null) ?? undefined,
     notice: notice as Notice | null,
+    collections: collections.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      description: c.description,
+      memberCount: c.memberCount,
+      isFeatured: c.isFeatured,
+    })),
   };
 });
 
+/** Collections for the org sidebar — already on the OrgPage GraphQL response. */
 export const getOrgCollections = cache(async (slug: string): Promise<CollectionListItem[]> => {
-  return api.orgCollections(slug).catch(() => [] as CollectionListItem[]);
+  try {
+    const org = await getOrg(slug);
+    return org.collections;
+  } catch {
+    return [];
+  }
 });
 
 /**
  * Org overview knowledge-page content (AI-generated summary + citations).
- * Deliberately left on REST (#1978 slice 2) — the REST projection joins
- * `knowledge_pages` with per-citation release rows and builds canonical
- * `releaseWebUrl`s server-side; porting that to a GraphQL resolver is a
- * separate, disproportionate lift for this pass. Only used by the org
- * overview page (`(org)/page.tsx`), not layout/releases/sources.
+ * Uses the thin REST `GET /v1/orgs/:slug/overview` — not the full orgDetail
+ * shell (#2047). Only used by the org overview page and `/updates`.
  */
 export const getOrgOverview = cache(async (slug: string): Promise<OverviewPageItem | null> => {
-  return api
-    .orgDetail(slug)
-    .then((o) => o.overview ?? null)
-    .catch(() => null);
+  return api.orgOverview(slug).catch(() => null);
 });

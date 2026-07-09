@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { api } from "@/lib/api";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { OverviewView } from "@/components/overview-view";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { withReleaseBodyHtml, orgRowVariant } from "@/lib/render-release-body";
 import { orgAvatarSrc } from "@/components/org-avatar";
+import { getOrg, getOrgOverview } from "@/app/[orgSlug]/_lib/org-data";
+import { getOrgReleases } from "@/app/[orgSlug]/_lib/org-releases-data";
 
 // releases.sh publishes its own product changelog through its own registry.
 // The `releases-sh` org is the canonical home; `/updates` is the branded face
@@ -35,12 +36,12 @@ export const metadata: Metadata = {
 };
 
 export default async function UpdatesPage() {
-  // The changelog feed itself (OrgReleaseList) is what users come here for, so
-  // seed it server-side exactly like the org releases page does. The org
-  // overview rides along as a short briefing above the feed.
-  const [org, initialReleases] = await Promise.all([
-    api.orgDetail(ORG_SLUG),
-    api.orgReleases(ORG_SLUG),
+  // Reuse the org GraphQL ops (OrgPage + OrgReleases) plus the thin overview
+  // REST route — no full orgDetail over-fetch (#2047).
+  const [org, initialReleases, overview] = await Promise.all([
+    getOrg(ORG_SLUG),
+    getOrgReleases(ORG_SLUG),
+    getOrgOverview(ORG_SLUG),
   ]);
 
   const githubHandle = org.accounts?.find((a) => a.platform === "github")?.handle ?? null;
@@ -67,16 +68,16 @@ export default async function UpdatesPage() {
             {DESCRIPTION}
           </p>
         </header>
-        {org.overview && (
+        {overview && (
           <div className="mt-5">
-            <OverviewView page={org.overview} />
+            <OverviewView page={overview} />
           </div>
         )}
         <div className="mt-5">
           <OrgReleaseList
             orgSlug={ORG_SLUG}
             initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
-            initialCursor={initialReleases.pagination.nextCursor}
+            initialCursor={initialReleases.nextCursor}
             multipleSourcesExist={org.sources.length > 1}
             hideSourceByline
             availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}

@@ -21,7 +21,7 @@ import "./types/stats.js";
 import "./types/collection.js";
 import { SourceTypeEnum } from "./types/enums.js";
 import { getOrgIdsForList, countOrgsForList } from "../queries/orgs.js";
-import { getCollectionsList } from "../queries/collections.js";
+import { getCollectionsList, getCollectionBySlug } from "../queries/collections.js";
 import type { CollectionMemberOrg, CollectionMemberProduct } from "./builder.js";
 
 const isOrgId = (s: string) => s.startsWith("org_");
@@ -163,6 +163,33 @@ builder.queryType({
             | CollectionMemberProduct
           )[],
         }));
+      },
+    }),
+
+    collection: t.field({
+      type: "Collection",
+      nullable: true,
+      description:
+        "Look up a collection by slug for the collection detail page (members + feed + " +
+        "daily summaries via nested fields). #2047",
+      args: {
+        slug: t.arg.string({ required: true }),
+      },
+      resolve: async (_root, args, ctx) => {
+        const row = await getCollectionBySlug(ctx.db, args.slug);
+        if (!row) return null;
+        // memberCount is not needed for detail chrome (timeline uses members.length);
+        // compute a cheap placeholder — full count is available via members.length if wanted.
+        return {
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          description: row.description,
+          memberCount: 0,
+          isFeatured: row.isFeatured,
+          dailySummaryEnabled: row.dailySummaryEnabled,
+          previewMembers: [],
+        };
       },
     }),
 

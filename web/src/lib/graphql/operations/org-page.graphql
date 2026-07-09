@@ -40,6 +40,13 @@ query OrgPage($idOrSlug: String!) {
       sourceCount
       releaseCount
     }
+    collections {
+      slug
+      name
+      description
+      memberCount
+      isFeatured
+    }
     sources {
       id
       slug
