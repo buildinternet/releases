@@ -49,13 +49,13 @@ Host this at `https://yourdomain.com/.well-known/releases.json`:
 
 Each `releases[]` entry needs **at least one** locator:
 
-| Key        | Use it for                                              |
-| ---------- | ------------------------------------------------------- |
-| `url`      | Page a person reads (changelog / what's-new)            |
-| `feed`     | RSS/Atom feed                                           |
+| Key        | Use it for                                                      |
+| ---------- | --------------------------------------------------------------- |
+| `url`      | Page a person reads (changelog / what's-new)                    |
+| `feed`     | RSS/Atom feed                                                   |
 | `github`   | Repo Releases — `"acme/cloud-sdk"` (or `"self"` in a repo file) |
-| `appstore` | App Store listing                                       |
-| `file`     | Hosted raw changelog (e.g. `CHANGELOG.md` URL)          |
+| `appstore` | App Store listing                                               |
+| `file`     | Hosted raw changelog (e.g. `CHANGELOG.md` URL)                  |
 
 Optional: `title` on a location; `"canonical": true` on the primary one per scope.
 
@@ -72,7 +72,11 @@ Add `products[]` only when each product has **its own** release location (don't 
     {
       "name": "Acme Cloud",
       "releases": [
-        { "url": "https://acme.com/whats-new", "feed": "https://acme.com/whats-new/rss.xml", "canonical": true },
+        {
+          "url": "https://acme.com/whats-new",
+          "feed": "https://acme.com/whats-new/rss.xml",
+          "canonical": true
+        },
         { "github": "acme/cloud-sdk" }
       ]
     }
