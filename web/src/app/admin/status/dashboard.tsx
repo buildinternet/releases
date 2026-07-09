@@ -26,6 +26,7 @@ import {
   type IncidentGroup,
 } from "./session-error-display";
 import { formatStatusTimestamp } from "./status-shared";
+import { FetchActivityChart, type SelectedWindow } from "./fetch-activity-chart";
 
 interface SessionState {
   sessionId: string;
@@ -267,6 +268,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     field: "createdAt",
     dir: "desc",
   });
+  /** When set (e.g. chart "Open in Fetch Log"), narrows the fetch-log table to this window. */
+  const [fetchLogWindow, setFetchLogWindow] = useState<SelectedWindow | null>(null);
   const [sessionPage, setSessionPage] = useState(0);
   const pageSize = 25;
   const fetchLogPrependRef = useRef<((entry: FetchLogEntry) => void) | null>(null);
@@ -569,6 +572,16 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
       {/* Force-drain sweep summary (#518) */}
 
+      {/* Fetch activity chart — shared across tabs; fixed height so selection doesn't reflow */}
+      <FetchActivityChart
+        after={after}
+        dateRange={dateRange}
+        onOpenFetchLog={(win) => {
+          setFetchLogWindow(win);
+          setTab("fetch-log");
+        }}
+      />
+
       {/* Date range + Tabs */}
       <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 mb-4">
         <div className="flex gap-1">
@@ -594,6 +607,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
               onClick={() => {
                 setDateRange(range);
                 setSessionPage(0);
+                setFetchLogWindow(null);
               }}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 dateRange === range
@@ -640,7 +654,10 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       )}
       {tab === "fetch-log" && (
         <FetchLogTable
-          after={after}
+          after={fetchLogWindow?.after ?? after}
+          before={fetchLogWindow?.before ?? null}
+          windowLabel={fetchLogWindow?.label ?? null}
+          onClearWindow={fetchLogWindow ? () => setFetchLogWindow(null) : undefined}
           prependRef={fetchLogPrependRef}
           sort={fetchLogSort}
           onSortChange={setFetchLogSort}
@@ -1177,11 +1194,17 @@ function SessionLogPanel({
 
 function FetchLogTable({
   after,
+  before,
+  windowLabel,
+  onClearWindow,
   prependRef,
   sort,
   onSortChange,
 }: {
   after: string | null;
+  before?: string | null;
+  windowLabel?: string | null;
+  onClearWindow?: () => void;
   prependRef: React.RefObject<((entry: FetchLogEntry) => void) | null>;
   sort: SortState<FetchLogSortField>;
   onSortChange: (next: SortState<FetchLogSortField>) => void;
@@ -1190,7 +1213,11 @@ function FetchLogTable({
   const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } =
     useFetchLog({
       after,
+      before,
       status: filter,
+      // When drilled in from the activity chart, drop the no-change wall so the
+      // log matches the signal-first chart selection.
+      excludeStatus: before ? "no_change" : undefined,
       sort: sort.field,
       dir: sort.dir,
     });
@@ -1223,20 +1250,37 @@ function FetchLogTable({
   }
 
   return (
-    <FetchLogList
-      entries={entries}
-      totalCount={totalCount}
-      statusCounts={statusCounts}
-      hasMore={hasMore}
-      loading={loading}
-      filter={filter}
-      onFilterChange={setFilter}
-      onLoadMore={loadMore}
-      sort={sort}
-      onSortChange={onSortChange}
-      formatTime={formatStatusTimestamp}
-      showOrg
-    />
+    <div>
+      {windowLabel && onClearWindow && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-violet-200 dark:border-violet-900/50 bg-violet-50 dark:bg-violet-950/30 px-3 py-2 text-xs text-violet-900 dark:text-violet-200">
+          <span>
+            Filtered to chart window · <span className="font-medium">{windowLabel}</span>
+            <span className="text-violet-600/80 dark:text-violet-300/80"> · no-change hidden</span>
+          </span>
+          <button
+            type="button"
+            onClick={onClearWindow}
+            className="shrink-0 font-medium hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+      <FetchLogList
+        entries={entries}
+        totalCount={totalCount}
+        statusCounts={statusCounts}
+        hasMore={hasMore}
+        loading={loading}
+        filter={filter}
+        onFilterChange={setFilter}
+        onLoadMore={loadMore}
+        sort={sort}
+        onSortChange={onSortChange}
+        formatTime={formatStatusTimestamp}
+        showOrg
+      />
+    </div>
   );
 }
 

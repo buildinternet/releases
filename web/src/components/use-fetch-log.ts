@@ -15,6 +15,8 @@ interface Params {
   before?: string | null;
   org?: string;
   status: FetchLogStatusFilter;
+  /** Comma-separated statuses to drop (e.g. "no_change") — mirrors API excludeStatus. */
+  excludeStatus?: string | null;
   pageSize?: number;
   sort?: FetchLogSortField;
   dir?: "asc" | "desc";
@@ -42,6 +44,7 @@ export function useFetchLog({
   before,
   org,
   status,
+  excludeStatus,
   pageSize = 25,
   sort = "createdAt",
   dir = "desc",
@@ -66,6 +69,7 @@ export function useFetchLog({
           before: before ?? undefined,
           org,
           status: status === "all" ? undefined : status,
+          excludeStatus: excludeStatus ?? undefined,
           limit: String(pageSize),
           cursor: cursor ?? undefined,
           sort: sort === "createdAt" ? undefined : sort,
@@ -92,7 +96,7 @@ export function useFetchLog({
         }));
       }
     },
-    [after, before, org, status, pageSize, sort, dir],
+    [after, before, org, status, excludeStatus, pageSize, sort, dir],
   );
 
   useEffect(() => {

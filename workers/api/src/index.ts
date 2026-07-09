@@ -824,6 +824,7 @@ v1.use(
   varyOnAccept(),
 );
 v1.use("/status/fetch-log", cacheControl(15));
+v1.use("/status/fetch-activity", cacheControl(30));
 v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
