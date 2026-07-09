@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
+    "./content-quality": "./src/content-quality.ts",
     "./embed-changelog-pipeline": "./src/embed-changelog-pipeline.ts",
     "./embed-changelogs": "./src/embed-changelogs.ts",
     "./embed-entities": "./src/embed-entities.ts",

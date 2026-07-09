@@ -10,6 +10,16 @@ All 512-dim cosine, bound on both the API and MCP workers:
 - `entities-v1` — one vector per org/product/source (name + description + category + domain), used by the `search` tool's catalog path
 - `changelog-chunks-v1` — heading-aware ~500-token chunks of stored CHANGELOG.md files, interleaved with release hits in `search` results
 
+## Empty-body filter (search + related)
+
+Hybrid hydration drops releases whose display body is **empty-tier**
+(`@releases/search/content-quality` — same classifier as related rails):
+placeholder titles/summaries (`test`), short "no user-facing changes" notes,
+URL-only "Full Changelog" stubs. Empty vectors otherwise cluster together and
+pollute RRF for unrelated entity queries (observed: `langfuse:test` as hybrid
+#1 for `vercel` / `ollama` / `stripe`). Thin (short-but-real) bodies stay
+eligible; only empty is hard-excluded from search hits.
+
 ## Provisioning
 
 Run `./scripts/create-vectorize-indexes.sh` once per account (idempotent). The default provider is Voyage `voyage-4-lite`, which defaults to 1024-dim vectors but supports Matryoshka-style `output_dimension` — `packages/search/src/embeddings.ts` requests 512 explicitly so the vectors match the Vectorize indexes. `VOYAGE_API_KEY` lives in Cloudflare's Secrets Store and is bound to both workers under `secrets_store_secrets` in `workers/{api,mcp}/wrangler.jsonc`; to rotate, update the value in the dashboard and redeploy. To switch providers, change `EMBEDDING_PROVIDER` in both `wrangler.jsonc` files (`voyage` | `openai` | `workers-ai`) and recreate the indexes if vector dimensionality differs.

@@ -40,6 +40,7 @@ import {
   type EmbeddingProvider,
 } from "./embeddings.js";
 import { withEmbedCache, type EmbedCacheBinding } from "./embedding-cache.js";
+import { isEmptyReleaseContent } from "./content-quality.js";
 
 // Max ids per `IN (...)` clause. D1's hard cap is 100 binds per prepared
 // statement (per `AGENTS.md`); 90 leaves headroom for any other binds the
@@ -778,6 +779,23 @@ async function buildReleaseHits(
     // dropped — an undated release can't sit inside a window.
     if (params.since && (row.publishedAt === null || row.publishedAt < params.since)) continue;
     if (params.until && (row.publishedAt === null || row.publishedAt > params.until)) continue;
+    // Drop empty / placeholder bodies so thin vectors (e.g. title+summary
+    // "test") cannot surface via the semantic leg of hybrid RRF. Same
+    // classifier as related rails — see content-quality.ts. Lexical-only
+    // matches of pure junk are also filtered; callers that need every row
+    // should hit entity/release detail routes, not search.
+    if (
+      isEmptyReleaseContent({
+        title: row.title,
+        summary: row.summary,
+        contentChars:
+          row.content != null && row.content !== ""
+            ? row.content.length
+            : (row.summary?.length ?? null),
+      })
+    ) {
+      continue;
+    }
     out.push({
       kind: "release",
       score: entry.score,

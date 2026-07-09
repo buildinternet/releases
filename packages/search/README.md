@@ -8,6 +8,7 @@ Imported as `@releases/search/<subpath>`.
 
 | Subpath                    | Purpose                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `content-quality`          | Empty/thin/full classification for release bodies (search + related-rails ranking).        |
 | `embeddings`               | Embedding provider abstraction (voyage, openai, workers-ai) behind one `embedBatch`.       |
 | `embedding-cache`          | KV-backed cache for single-query embeddings, keyed by provider/model/dims.                 |
 | `embed-releases`           | Embed + upsert helper for release rows; embedding failures never fail the write.           |
