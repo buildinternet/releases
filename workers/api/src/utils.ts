@@ -88,6 +88,25 @@ export function parseReleaseMedia(raw: string | null, mediaOrigin: string): Medi
 }
 
 /**
+ * Pick the first image-like media entry from a `releases.media` JSON blob and
+ * reduce it to a display thumbnail. Returns null when the row has no usable
+ * image/gif — compact card consumers then render a text-only row. Shared by the
+ * related, coverage, and lookup surfaces so every rail derives thumbnails the
+ * same way.
+ */
+export function firstImageThumbnail(
+  raw: string | null,
+  mediaOrigin: string,
+): { url: string; alt?: string } | null {
+  const media = parseReleaseMedia(raw, mediaOrigin);
+  const first = media.find((m) => m.type === "image" || m.type === "gif");
+  if (!first) return null;
+  const url = first.r2Url ?? first.url;
+  if (!url) return null;
+  return first.alt ? { url, alt: first.alt } : { url };
+}
+
+/**
  * Resolve a source by ID (`src_` prefix). Id-only — the slug branch lives
  * in `sourceMatchByIdOrSlug` (legacy fallback) or `findSourceForOrgSlug`
  * (org-scoped). Excludes soft-deleted rows by default (#666); pass

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { parseReleaseMedia } from "./utils.js";
+import { describe, expect, it, test } from "bun:test";
+import { firstImageThumbnail, parseReleaseMedia } from "./utils.js";
 
 const ORIGIN = "https://media.releases.sh";
 
@@ -51,5 +51,38 @@ describe("parseReleaseMedia — image-proxy unwrapping", () => {
 
   test("non-array JSON collapses to an empty list", () => {
     expect(parseReleaseMedia('{"url":"x"}', ORIGIN)).toEqual([]);
+  });
+});
+
+describe("firstImageThumbnail", () => {
+  const origin = "https://media.releases.sh";
+
+  it("returns null for empty/null media", () => {
+    expect(firstImageThumbnail(null, origin)).toBeNull();
+    expect(firstImageThumbnail("[]", origin)).toBeNull();
+  });
+
+  it("picks the first image entry and prefers a plain url when no r2Key", () => {
+    const raw = JSON.stringify([
+      { type: "image", url: "https://cdn.example.com/a.png", alt: "Shot" },
+    ]);
+    expect(firstImageThumbnail(raw, origin)).toEqual({
+      url: "https://cdn.example.com/a.png",
+      alt: "Shot",
+    });
+  });
+
+  it("picks a gif and omits alt when absent", () => {
+    const raw = JSON.stringify([{ type: "gif", url: "https://cdn.example.com/a.gif" }]);
+    expect(firstImageThumbnail(raw, origin)).toEqual({ url: "https://cdn.example.com/a.gif" });
+  });
+
+  it("skips video-only media", () => {
+    const raw = JSON.stringify([{ type: "video", url: "https://x/poster.jpg" }]);
+    expect(firstImageThumbnail(raw, origin)).toBeNull();
+  });
+
+  it("returns null on malformed json", () => {
+    expect(firstImageThumbnail("{not json", origin)).toBeNull();
   });
 });
