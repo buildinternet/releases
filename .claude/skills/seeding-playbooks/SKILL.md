@@ -29,7 +29,7 @@ Find orgs that need playbooks. Run this to check coverage:
 
 ```bash
 bun -e "
-const orgs = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'org', 'list', '--json'], { stderr: 'ignore' }).stdout.toString());
+const orgs = JSON.parse(Bun.spawnSync(['releases', 'admin', 'org', 'list', '--json'], { stderr: 'ignore' }).stdout.toString());
 const active = orgs.filter(o => o.sourceCount > 0).sort((a,b) => b.releaseCount - a.releaseCount);
 for (const org of active) {
   const playbook = JSON.parse(Bun.spawnSync(['releases', 'admin', 'playbook', org.slug, '--json'], { stderr: 'ignore' }).stdout.toString());
@@ -48,7 +48,7 @@ Before dispatching agents, collect source metadata for the target orgs. Each age
 ```bash
 for org in <slugs>; do
   echo "=== $org ==="
-  bun src/index.ts admin org get "$org" --json 2>/dev/null | bun -e "
+  releases admin org get "$org" --json 2>/dev/null | bun -e "
     const d = JSON.parse(await Bun.stdin.text());
     const products = d.products?.map(p => p.name + ' (' + p.slug + ')').join(', ') || 'none';
     console.log('Products:', products);
@@ -130,10 +130,10 @@ Playbooks are **skills for agents that will fetch from this org**. Write in impe
 
 ## Step 1: Gather data (run all of these)
 
-bun src/index.ts admin org get {slug} --json 2>/dev/null
+releases admin org get {slug} --json 2>/dev/null
 {for each source:}
-bun src/index.ts list {source-slug} --json 2>/dev/null
-bun src/index.ts admin source fetch-log {source-slug} --json 2>/dev/null
+releases list {source-slug} --json 2>/dev/null
+releases admin source fetch-log {source-slug} --json 2>/dev/null
 
 ## Step 2: Analyze what you found
 
@@ -200,7 +200,7 @@ After all agents complete, verify coverage in bulk:
 bun -e "
 const orgs = [{target slugs}];
 for (const org of orgs) {
-  const proc = Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'content', 'playbook', org, '--json'], { stderr: 'ignore' });
+  const proc = Bun.spawnSync(['releases', 'admin', 'playbook', org, '--json'], { stderr: 'ignore' });
   try {
     const d = JSON.parse(proc.stdout.toString());
     const len = d.notes?.length ?? 0;

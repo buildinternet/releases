@@ -1,35 +1,35 @@
 ---
 name: backfilling-sources
-description: Backfill a changelog source's full history locally in Claude Code via the backfill-source / backfill-sweep dynamic Workflows — preflight-gated, window-capped, budget-gated extraction written through the idempotent /batch upsert, with no managed-agent inference bill. Use when a source has a lot of history to pull in and dispatching the managed agent would be too expensive. Local Claude Code only.
+description: Backfill a changelog source's full history locally in Claude Code via the backfill-source / backfill-sweep dynamic Workflows — preflight-gated, window-capped, budget-gated extraction written through the idempotent /batch upsert, with no remote extraction inference bill. Use when a source has a lot of history to pull in and running the remote update workflow per window would be too expensive. Local Claude Code only.
 ---
 
 # Backfilling Sources
 
-Backfill a source's changelog history **without the managed-agent (MA) inference bill**, using the `backfill-source` dynamic Workflow (and `backfill-sweep` for several at once). The Workflow wraps the `local-ingest` primitives — preflight, fetch + extract, `/batch` upsert, parity rules — in a deterministic harness that owns the window cap, the budget gate, the dedup, and the safety gate, so the disciplines that are fragile when left to prose are enforced in code.
+Backfill a source's changelog history **without the remote extraction inference bill** (the update workflow's server-side Haiku / tool-loop passes), using the `backfill-source` dynamic Workflow (and `backfill-sweep` for several at once). The Workflow wraps the `local-ingest` primitives — preflight, fetch + extract, `/batch` upsert, parity rules — in a deterministic harness that owns the window cap, the budget gate, the dedup, and the safety gate, so the disciplines that are fragile when left to prose are enforced in code.
 
-**Local Claude Code only.** The Workflow fans out `agent()` sub-agents and relies on a persistent local filesystem (`~/.releases/work/`) and the CLI's `RELEASES_API_*` env. It is not deployed to the MA fleet.
+**Local Claude Code only.** The Workflow fans out `agent()` sub-agents and relies on a persistent local filesystem (`~/.releases/work/`) and the CLI's `RELEASES_API_*` env. It is not deployed to the managed-agent fleet.
 
 ## When to use
 
-- A source has substantial history to backfill and dispatching the MA per window is too expensive.
+- A source has substantial history to backfill and running the remote update workflow per window is too expensive.
 - A remote fetch burned an extraction loop and wrote 0 releases — extracting locally sidesteps the loop.
 
 ## When NOT to use
 
 - A clean feed / GitHub source — just add it (`managing-sources`) and let cron fetch it.
-- Inside an MA session — this is local-only.
+- Inside a managed-agent session — this is local-only.
 - A publisher opt-out — the preflight gate refuses it (see below).
 
 ## Cost contract
 
 - **Spends:** your Claude Code session tokens for the `agent()` sub-agents, hard-capped by the turn's `budget.total` (set with a `+Nk` directive). Extraction runs at Sonnet; the mechanical phases (preflight, run-setup, write, validate, report) run at Haiku.
-- **Does NOT spend:** no MA coordinator-Sonnet, no Haiku worker loop, no metered Anthropic API bill. `POST /v1/workflows/update` is never called. `/batch` runs no AI on insert.
+- **Does NOT spend:** no server-side extraction (the update workflow's incremental-Haiku / tool-loop passes), no metered Anthropic API bill. `POST /v1/workflows/update` is never called. `/batch` runs no AI on insert.
 - Always **dry-run first** (the default) — it maps + estimates and writes nothing.
 - **When a dry-run is worth it:** on **index → detail** sources, where it enumerates the per-release pages it would pull and shows how many are new vs already-ingested. For a known **single-page** source it adds little — it can only confirm shape/reachability, not preview record counts (those need extraction), and the workflow already routes single-page through a lighter recon path (no run-setup or known-URL agent on the way to the estimate). Going straight to `dryRun: false` with a turn budget is reasonable there.
 
 ## Preflight gate (non-negotiable)
 
-The Workflow runs `local-ingest`'s `preflight.ts` first and **fails closed**: `refuse` (an `ai-input=no` / `ai-train=no` opt-out) or a persistent `unknown` stops the run before any fetch or write. `conductor.build` (`Content-Signal: ai-train=no, ai-input=no`) is the regression target — it must be refused. Override only with explicit, documented publisher permission.
+The Workflow runs `local-ingest`'s `preflight.ts` first and **fails closed**: `refuse` (an `ai-input=no` opt-out — the gate is on `ai-input` only; `ai-train=no` alone proceeds) or a persistent `unknown` stops the run before any fetch or write. `conductor.build` (`Content-Signal: ai-train=no, ai-input=no`) is the regression target — it must be refused, via its `ai-input=no`. Override only with explicit, documented publisher permission.
 
 ## Launch recipe
 

@@ -1,6 +1,6 @@
 # Local ingest
 
-A **local-ingest path** for onboarding a changelog: a local Claude Code agent fetches the pages, extracts release records itself (optionally fanning out to parallel sub-agents), and writes them through the existing batch-upsert endpoint — **without dispatching the remote managed agent (MA)**.
+A **local-ingest path** for onboarding a changelog: a local Claude Code agent fetches the pages, extracts release records itself (optionally fanning out to parallel sub-agents), and writes them through the existing batch-upsert endpoint — **without dispatching the remote update workflow**.
 
 This is an assembly of production-tested building blocks, not new infrastructure. The capability lives in the **`local-ingest` skill** (`.claude/skills/local-ingest/`), a Claude-Code-local operator skill alongside `seeding-playbooks`. A companion `--local` handoff flag on `releases admin source fetch` lives in the OSS CLI repo ([buildinternet/releases-cli](https://github.com/buildinternet/releases-cli)) and only stages the work — no extraction in the thin client.
 
@@ -22,7 +22,7 @@ flowchart TD
 
     Op -->|local| L1[local-ingest skill]
     L1 --> L2{preflight: robots.txt / Content-Signal}
-    L2 -->|ai-input=no / ai-train=no| STOP([REFUSE — surface to user])
+    L2 -->|ai-input=no| STOP([REFUSE — surface to user])
     L2 -->|permissive| L3[agent fetches + extracts<br/>± parallel sub-agents]
     L3 --> L4["POST /v1/sources/:slug/releases/batch<br/>insert + waitUntil embed — NO AI on insert"]
     L4 --> DB
@@ -51,7 +51,7 @@ The batch endpoint deliberately omits the AI fields (`title_generated` / `title_
 
 The skill's mandatory first step is `.claude/skills/local-ingest/preflight.ts <url>` — it fetches `robots.txt` (following apex→www redirects), parses Cloudflare's [Content Signals](https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/) policy, and gates on exit code: `0` proceed, `1` refuse, `2` unknown (surface to user).
 
-It **refuses** when the publisher declares `ai-input=no` or `ai-train=no` anywhere in robots.txt. `conductor.build` (`Content-Signal: ai-train=no, search=yes, ai-input=no`) is the regression target and must be refused.
+It **refuses** when the publisher declares `ai-input=no` anywhere in robots.txt. The gate is on `ai-input` only: local ingest is search/input ingestion, which is what `ai-input` governs; `ai-train=no` opts out of model _training_ — a use this path doesn't perform — so `ai-train=no` alone (e.g. `vercel.com`) proceeds. `conductor.build` (`Content-Signal: ai-train=no, search=yes, ai-input=no`) is the regression target and must be refused, via its `ai-input=no`.
 
 This is a **policy** choice, not a technical limit. Only Cloudflare's `/crawl` endpoint hard-enforced the signal for Conductor; `web_fetch` and CF Browser Rendering still retrieved the page. A local onboard must not silently spend tokens or ingest content against an opt-out — so the gate refuses by default, with an explicit-permission escape hatch (the CLI exposes `--force`; the skill requires a documented human go-ahead). The `conductor` org/source is already in the registry, paused for exactly this reason.
 

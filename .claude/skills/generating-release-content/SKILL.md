@@ -21,6 +21,8 @@ Populate the four AI-generated fields on a release:
 
 The fields are the same whether you're generating for the first time or rewriting after a prompt change. There is no "new vs. regen" branch in the pipeline — last write wins.
 
+**The production prompt emits two more tags this skill does not persist.** Since #1696 the shared prompt also outputs `<breaking>` (upgrade-risk verdict: `major`/`minor`/`none`/`unknown`) and `<migration>` (≤3-sentence upgrade steps), persisted at ingest to `releases.breaking` / `releases.migration_notes`. The write paths this skill uses can't carry them: `PATCH /v1/releases/:id` is `.strict()` and rejects `breaking`/`migrationNotes`, and the bulk script's UPDATE only sets the four fields above. Parse and discard them locally (they'll appear in the raw output); regenerating them is ingest-only for now.
+
 ## Prompt is canonical in code, not in this skill
 
 The system prompt and all parsing rules live in `packages/ai/src/release-content.ts`. Read it directly; do **not** paraphrase it back into the user message. The same module is consumed by the ingest worker (`workers/api/src/workflows/poll-and-fetch.ts`), the Batches script (`scripts/generate-release-content.ts`), and this skill, so any drift between local-agent output and ingest-time output starts there.
@@ -30,8 +32,8 @@ Re-export from that file:
 - `SYSTEM_PROMPT` — pass verbatim as the system message, with `cache_control: { type: "ephemeral" }`
 - `buildReleaseBlock(input)` — build the user message body from a `SummarizeReleaseInput` (org slug, source name, product name, title, version, url, content)
 - `isEmptyContent(body)` — short-circuit boilerplate-only bodies; skip the model and write NULLs
-- `parseReleaseContent(text)` — pull `<title>`, `<title_short>`, `<summary>`, `<composition>` out of a response
-- `MODEL` (`claude-haiku-4-5`), `MAX_OUTPUT_TOKENS` (280), `MAX_BODY_CHARS` (8000)
+- `parseReleaseContent(text)` — pull `<title>`, `<title_short>`, `<summary>`, `<composition>` (plus `<breaking>`/`<migration>`, which this skill's write paths drop — see above) out of a response
+- `MODEL` (`claude-haiku-4-5`), `MAX_OUTPUT_TOKENS` (420 — 280 pre-#1696 cap + buffer for the breaking/migration tags), `MAX_BODY_CHARS` (8000)
 
 For experiments that change the prompt, edit `SYSTEM_PROMPT` in place on a branch and run this skill against a small org — that's exactly what the upstream module exists for.
 
@@ -121,13 +123,15 @@ Generate AI fields for {N} release rows from the Releases registry.
 
 Read these two files first:
 1. `packages/ai/src/release-content.ts` (absolute path) — contains the canonical
-   SYSTEM_PROMPT and the four output tags (<title>, <title_short>, <summary>,
-   <composition>). Apply that prompt verbatim — do not paraphrase.
+   SYSTEM_PROMPT and its output tags. Apply that prompt verbatim — do not
+   paraphrase. Only four tags are persisted here (<title>, <title_short>,
+   <summary>, <composition>); discard <empty>, <breaking>, and <migration>
+   after parsing — the write path does not accept them.
 2. `{path to candidates JSON}` (absolute path) — the {N} rows to process.
 
 For each row, build the user message per `buildReleaseBlock` (Org / Source /
 Product? / Title / Version? / URL? / blank line / Body:), apply the
-SYSTEM_PROMPT, parse the four output tags, and produce the JSON described
+SYSTEM_PROMPT, parse the four persisted tags, and produce the JSON described
 below. Apply `isEmptyContent`'s logic before generating — if a row would
 short-circuit, return all-null fields with `skipped: true`.
 
