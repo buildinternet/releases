@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/header";
-import { ListingFastLane } from "./listing-fast-lane";
-import { SubmitSourceForm } from "./submit-source-form";
+import { SubmitLanes } from "./submit-lanes";
 
 export const metadata: Metadata = {
   title: "Submit Your Product",
@@ -25,11 +24,11 @@ export default function SubmitPage() {
             Submit Your Product
           </h1>
           <p className="mt-4 leading-6">
-            Publish a{" "}
+            List your product from a{" "}
             <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
               releases.json
-            </code>{" "}
-            on your domain and activate here — or suggest a changelog URL for a curator.{" "}
+            </code>
+            , or suggest a changelog URL.{" "}
             <Link
               href="/docs/listing"
               className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
@@ -39,22 +38,8 @@ export default function SubmitPage() {
           </p>
         </aside>
 
-        <section className="space-y-10">
-          <div className="border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
-            <ListingFastLane />
-          </div>
-
-          <div className="border-t border-stone-200 pt-8 dark:border-stone-800">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-              Not your product, or no manifest?
-            </p>
-            <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-              Suggest a changelog, feed, or GitHub releases URL and a curator will take a look.
-            </p>
-            <div className="mt-5 border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
-              <SubmitSourceForm />
-            </div>
-          </div>
+        <section className="min-w-0">
+          <SubmitLanes />
         </section>
       </div>
     </div>

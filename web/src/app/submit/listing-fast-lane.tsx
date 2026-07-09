@@ -95,15 +95,15 @@ function ManifestPreview({ result }: { result: ListingValidationResult }) {
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-stone-400 dark:text-stone-500">
             Release locations
           </p>
-          <ul className="mt-1.5 divide-y divide-stone-200 border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+          <ul className="mt-1.5 divide-y divide-stone-100 dark:divide-stone-800/80">
             {result.locations.map((location, index) => (
               <li
                 key={`${location.kind}:${location.locator}:${index}`}
-                className="flex flex-col gap-1 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                className="flex flex-col gap-1 py-2.5 first:pt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
               >
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="inline-flex shrink-0 items-center rounded border border-stone-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:border-stone-700 dark:text-stone-400">
+                    <span className="inline-flex shrink-0 items-center font-mono text-[10px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
                       {KIND_LABEL[location.kind]}
                     </span>
                     <span className="truncate font-mono text-[0.8em] text-stone-700 dark:text-stone-300">
@@ -139,49 +139,39 @@ function ManifestPreview({ result }: { result: ListingValidationResult }) {
   );
 }
 
-function AgentPromptCopy({ domain }: { domain: string }) {
+/** Compact agent affordance — no nested card chrome. */
+function AgentPromptRow({ domain }: { domain: string }) {
   const { copied, copy } = useCopyToClipboard();
   const { copied: skillCopied, copy: copySkill } = useCopyToClipboard();
   const prompt = useMemo(() => buildAgentPrompt(normalizeDomain(domain) || undefined), [domain]);
 
   return (
-    <div className="mt-5 rounded-md border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-950">
-      <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
-        Prefer your coding agent?
-      </p>
-      <p className="mt-1 text-sm leading-6 text-stone-600 dark:text-stone-400">
-        Install the{" "}
-        <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
+    <div className="mt-8 flex flex-col gap-2 border-t border-stone-100 pt-5 dark:border-stone-800/80 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <p className="text-sm text-stone-500 dark:text-stone-400">
+        Prefer an agent? Install{" "}
+        <code className="font-mono text-[0.85em] text-stone-600 dark:text-stone-300">
           creating-releases-json
         </code>{" "}
-        skill, then paste a short prompt. Full format notes live in the{" "}
-        <Link
-          href="/docs/listing"
-          className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-        >
-          listing docs
-        </Link>
-        .
+        and paste a short prompt.
       </p>
-
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => copySkill(SKILL_INSTALL_CMD)}
-          className="inline-flex min-w-0 items-center gap-1.5 rounded border border-stone-200 bg-stone-50 px-2.5 py-1.5 font-mono text-[11px] text-stone-700 transition hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800"
+          className="inline-flex items-center gap-1.5 rounded border border-stone-200 px-2.5 py-1.5 font-mono text-[11px] text-stone-600 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-900"
           aria-label={skillCopied ? "Copied install command" : "Copy skill install command"}
           title={skillCopied ? "Copied" : "Copy install command"}
         >
-          <span className="min-w-0 truncate">{SKILL_INSTALL_CMD}</span>
+          <span className="max-w-[14rem] truncate sm:max-w-[18rem]">{SKILL_INSTALL_CMD}</span>
           <CopyIcon copied={skillCopied} size={12} />
         </button>
         <button
           type="button"
           onClick={() => copy(prompt)}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 bg-stone-950 px-3 text-sm font-semibold text-white transition hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-white"
+          className="inline-flex items-center gap-1.5 rounded border border-stone-200 px-2.5 py-1.5 text-[12px] font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
         >
-          <CopyIcon copied={copied} size={14} />
-          {copied ? "Copied prompt" : "Copy agent prompt"}
+          <CopyIcon copied={copied} size={12} />
+          {copied ? "Copied" : "Copy prompt"}
         </button>
       </div>
     </div>
@@ -240,44 +230,31 @@ export function ListingFastLane() {
 
   const checking = state.phase === "checking";
   const activating = state.phase === "activating";
+  const showForm =
+    state.phase === "idle" ||
+    state.phase === "checking" ||
+    state.phase === "error" ||
+    state.phase === "result" ||
+    state.phase === "activating";
 
   return (
     <div>
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
-        Publish a{" "}
-        <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-          releases.json
-        </code>{" "}
-        on your domain, then check it here to activate your listing.{" "}
+        Enter the domain that serves{" "}
+        <code className="font-mono text-[0.85em] text-stone-700 dark:text-stone-300">
+          /.well-known/releases.json
+        </code>
+        .{" "}
         <Link
           href="/docs/listing"
           className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
         >
-          How to get listed
+          How to create one
         </Link>
       </p>
 
-      <AgentPromptCopy domain={domainInput} />
-
-      <div className="mt-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Already have a manifest?
-        </p>
-        <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
-          Enter the domain that serves{" "}
-          <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-            /.well-known/releases.json
-          </code>
-          .
-        </p>
-      </div>
-
-      {(state.phase === "idle" ||
-        state.phase === "checking" ||
-        state.phase === "error" ||
-        state.phase === "result" ||
-        state.phase === "activating") && (
-        <form onSubmit={checkDomain} className="mt-3 flex flex-col gap-3 sm:flex-row">
+      {showForm && (
+        <form onSubmit={checkDomain} className="mt-4 flex flex-col gap-3 sm:flex-row">
           <label htmlFor="listing-domain" className="sr-only">
             Domain
           </label>
@@ -289,7 +266,7 @@ export function ListingFastLane() {
             placeholder="example.com"
             value={domainInput}
             onChange={(event) => setDomainInput(event.target.value)}
-            className="w-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 px-3 py-2.5 text-sm text-stone-900 dark:text-stone-100 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            className="w-full border border-stone-300 bg-transparent px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-stone-700 dark:text-stone-100"
           />
           <button
             type="submit"
@@ -308,7 +285,7 @@ export function ListingFastLane() {
       )}
 
       {(state.phase === "result" || state.phase === "activating") && (
-        <div className="mt-5 border-t border-stone-200 pt-5 dark:border-stone-800">
+        <div className="mt-6">
           {!state.result.valid ? (
             <div>
               <p className="text-sm font-medium text-red-600 dark:text-red-400">
@@ -381,7 +358,7 @@ export function ListingFastLane() {
       )}
 
       {state.phase === "activated" && (
-        <div className="mt-5 border-t border-stone-200 pt-5 dark:border-stone-800">
+        <div className="mt-6">
           <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
             {state.result.org.name} is listed.
           </p>
@@ -397,6 +374,8 @@ export function ListingFastLane() {
           </Link>
         </div>
       )}
+
+      {showForm && <AgentPromptRow domain={domainInput} />}
     </div>
   );
 }
