@@ -55,6 +55,7 @@ import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
+import { withDoRetry } from "@releases/lib/do-retry";
 import { getSecret } from "@releases/lib/secrets";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { NotFoundError } from "@releases/lib/releases-error";
@@ -1442,9 +1443,7 @@ async function fanOutPollAndFetch(env: Env["Bindings"]): Promise<void> {
       // oxlint-disable-next-line no-await-in-loop -- bounded waves; each wave runs in parallel
       await Promise.all(
         batch.map((s) =>
-          actor
-            .getByName(s.id)
-            .ensureScheduled(s.id)
+          withDoRetry(() => actor.getByName(s.id).ensureScheduled(s.id))
             .then(() => {
               seeded += 1;
             })

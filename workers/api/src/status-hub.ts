@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { buildListResponse, parseListPagination, slicePage } from "./lib/pagination.js";
+import { enableWsPingPong } from "./lib/ws-auto-response.js";
 
 const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -185,6 +186,7 @@ export class StatusHub extends DurableObject {
     // WebSocket upgrade for browser clients
     if (request.headers.get("Upgrade") === "websocket") {
       const pair = new WebSocketPair();
+      enableWsPingPong(this.ctx);
       this.ctx.acceptWebSocket(pair[1]);
       const sessions = await this.getSessions();
       pair[1].send(JSON.stringify({ type: "init", sessions }));
