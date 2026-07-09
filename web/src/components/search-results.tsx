@@ -342,9 +342,10 @@ function ResultCard({
 function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: string[] }) {
   // Prefer `summary` (the list projection). Full `content` is only present when
   // the API was called with `?include_content=true`; `||` still covers an empty
-  // summary falling back to body so a card never renders blank.
+  // summary falling back to body so a card never renders blank. Coalesce to ""
+  // so the type matches `stripLeadingTitle` when both fields are absent.
   const body = useMemo(
-    () => stripLeadingTitle(hit.summary || hit.content, hit.title),
+    () => stripLeadingTitle(hit.summary || hit.content || "", hit.title),
     [hit.content, hit.summary, hit.title],
   );
   const thumbnail = useMemo(() => {
