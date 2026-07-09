@@ -53,7 +53,7 @@ import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate"
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { videoSourceInfo } from "@releases/adapters/source-meta";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
 
@@ -574,6 +574,12 @@ searchRoutes.get(
             name: organizationsActive.name,
             domain: organizationsActive.domain,
             category: organizationsActive.category,
+            status: organizationsActive.tier,
+            // Org-level aliases only (product-scoped excluded), sorted — the
+            // `+N` hover shape mirrored from the catalog row (#2031/#2034).
+            aliasConcat: sql<
+              string | null
+            >`(SELECT GROUP_CONCAT(d.domain) FROM (SELECT domain FROM domain_aliases WHERE org_id = ${organizationsActive.id} AND product_id IS NULL ORDER BY domain) d)`,
           })
           .from(organizationsActive)
           .where(eq(organizationsActive.id, scopeOrgId))
@@ -589,6 +595,8 @@ searchRoutes.get(
               domain: scopedOrgRow.domain,
               avatarUrl: null,
               category: scopedOrgRow.category,
+              status: scopedOrgRow.status,
+              aliasDomains: scopedOrgRow.aliasConcat ? scopedOrgRow.aliasConcat.split(",") : [],
             },
           ])
         : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty }),

@@ -3,6 +3,7 @@ import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
   AppStoreSourceInfoSchema,
   MediaItemSchema,
+  OrgStatusSchema,
   ReleaseTypeSchema,
   VideoSourceInfoSchema,
 } from "./shared.js";
@@ -27,6 +28,17 @@ export const SearchOrgHitSchema = z.object({
   domain: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   category: z.string().nullable(),
+  /**
+   * Org tier (#1947/#2034). Optional for mid-deploy tolerance; absent ⇒
+   * `"tracked"`. Lets search render the icon-only stub marker (#2031 parity).
+   */
+  status: OrgStatusSchema.optional(),
+  /**
+   * Org-level alternate domains (product-scoped aliases excluded, sorted),
+   * for the `+N` hover on the origin domain — the anti-impersonation anchor
+   * mirrored from the catalog row (#2031/#2034). Optional; absent ⇒ none.
+   */
+  aliasDomains: z.array(z.string()).optional(),
 });
 
 /**

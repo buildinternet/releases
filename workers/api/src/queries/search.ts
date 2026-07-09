@@ -152,9 +152,17 @@ export async function searchOrgs(
         WHERE s2.org_id = o.id
       )`;
 
-  const candidates = await db.all<SearchOrgHit & { aliasDomains: string | null }>(sql`
-    SELECT o.slug, o.name, o.domain, o.avatar_url as avatarUrl, o.category,
-           GROUP_CONCAT(da.domain) as aliasDomains
+  // `aliasConcat` carries every alias (product-scoped included) for ranking —
+  // an alias LIKE-match should still surface the org. `orgAliasConcat` is the
+  // subset surfaced on the wire: org-level only (product_id IS NULL), matching
+  // the catalog row's `+N` hover (#2031/#2034). GROUP_CONCAT skips the NULLs the
+  // CASE emits for product-scoped rows.
+  const candidates = await db.all<
+    SearchOrgHit & { aliasConcat: string | null; orgAliasConcat: string | null }
+  >(sql`
+    SELECT o.slug, o.name, o.domain, o.avatar_url as avatarUrl, o.category, o.tier as status,
+           GROUP_CONCAT(da.domain) as aliasConcat,
+           GROUP_CONCAT(CASE WHEN da.product_id IS NULL THEN da.domain END) as orgAliasConcat
     FROM organizations_active o
     LEFT JOIN domain_aliases da ON da.org_id = o.id
     WHERE (${likeContains(sql`o.name`, query)} OR ${likeContains(sql`o.slug`, query)}
@@ -168,9 +176,17 @@ export async function searchOrgs(
   return rankEntityCandidates(candidates, query, limit, (c) => ({
     name: c.name,
     slug: c.slug,
-    domains: [c.domain, ...splitConcat(c.aliasDomains)],
+    domains: [c.domain, ...splitConcat(c.aliasConcat)],
     categories: [c.category],
-  })).map(({ aliasDomains: _drop, ...hit }) => hit);
+  })).map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    domain: c.domain,
+    avatarUrl: c.avatarUrl,
+    category: c.category,
+    status: c.status,
+    aliasDomains: splitConcat(c.orgAliasConcat),
+  }));
 }
 
 export async function searchProducts(
