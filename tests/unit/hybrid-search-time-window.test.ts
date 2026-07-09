@@ -16,6 +16,8 @@ import type { HybridSearchEnv } from "../../workers/mcp/src/lib/search-hybrid.js
 
 const minimalEnv: HybridSearchEnv = {};
 const TOKEN = "quantumflux";
+/** Body long enough to clear empty-tier hydrate filter (MIN_CONTENT_CHARS). */
+const BODY = `${TOKEN} release notes with enough text to stay searchable`;
 
 let testDb: TestDatabase;
 
@@ -50,7 +52,7 @@ async function seed(db: TestDatabase["db"]) {
       id: jan,
       sourceId: srcId,
       title: `${TOKEN} jan`,
-      content: `${TOKEN}`,
+      content: BODY,
       publishedAt: "2026-01-01T00:00:00Z",
       type: "feature",
     },
@@ -58,7 +60,7 @@ async function seed(db: TestDatabase["db"]) {
       id: mar,
       sourceId: srcId,
       title: `${TOKEN} mar`,
-      content: `${TOKEN}`,
+      content: BODY,
       publishedAt: "2026-03-01T00:00:00Z",
       type: "feature",
     },
@@ -66,7 +68,7 @@ async function seed(db: TestDatabase["db"]) {
       id: may,
       sourceId: srcId,
       title: `${TOKEN} may`,
-      content: `${TOKEN}`,
+      content: BODY,
       publishedAt: "2026-05-01T00:00:00Z",
       type: "feature",
     },
@@ -74,7 +76,7 @@ async function seed(db: TestDatabase["db"]) {
       id: undated,
       sourceId: srcId,
       title: `${TOKEN} undated`,
-      content: `${TOKEN}`,
+      content: BODY,
       publishedAt: null,
       type: "feature",
     },

@@ -60,6 +60,7 @@
     "eval:extraction": "bun tests/evals/extraction.eval.ts",
     "eval:summary": "bun tests/evals/release-summary.eval.ts",
     "eval:overview": "bun tests/evals/overview.eval.ts",
+    "eval:search": "bun tests/evals/search.eval.ts",
     "eval:tool-ux-report": "bun tests/evals/tool-ux-report.ts",
     "gen:releases-schema": "bun scripts/gen-releases-json-schema.ts",
     "flags:docs": "bun scripts/gen-flag-docs.ts",

@@ -57,11 +57,14 @@ export function mkFakeStep() {
   return { step, records };
 }
 
+/** Body text long enough to clear the empty-tier embed/search gate (MIN_CONTENT_CHARS). */
+const ATOM_ENTRY_BODY = "Release notes for this version with enough text to embed and search.";
+
 export function atomBody(entries: Array<{ id: string; title: string }>) {
   const items = entries
     .map(
       (e) =>
-        `<entry><id>${e.id}</id><title>${e.title}</title><link href="${e.id}"/><updated>2026-01-01T00:00:00Z</updated><content>body</content></entry>`,
+        `<entry><id>${e.id}</id><title>${e.title}</title><link href="${e.id}"/><updated>2026-01-01T00:00:00Z</updated><content>${ATOM_ENTRY_BODY}</content></entry>`,
     )
     .join("");
   return `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>acme</id><title>Acme</title>${items}</feed>`;

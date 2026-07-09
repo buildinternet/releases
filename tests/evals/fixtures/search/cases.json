@@ -1,0 +1,319 @@
+[
+  {
+    "id": "entity-vercel",
+    "query": "vercel",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "notes": "From top query log; majority org catches hybrid pollution",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "anySlugInTop": ["vercel"], "minHits": 1 },
+      "catalog": { "anyOrgSlugInTop": ["vercel"], "minHits": 1 },
+      "releases": {
+        "anyOrgSlugInTop": ["vercel"],
+        "majorityOrgInTop": { "slug": "vercel", "minFraction": 0.6 },
+        "mustNotOrgSlugInTop": ["langfuse"],
+        "minHits": 1,
+        "topK": 5
+      }
+    }
+  },
+  {
+    "id": "entity-openai",
+    "query": "openai",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "anySlugInTop": ["openai"], "minHits": 1 },
+      "releases": {
+        "anyOrgSlugInTop": ["openai"],
+        "majorityOrgInTop": { "slug": "openai", "minFraction": 0.6 },
+        "minHits": 1,
+        "topK": 5
+      }
+    }
+  },
+  {
+    "id": "entity-docker",
+    "query": "docker",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "anySlugInTop": ["docker"], "minHits": 1 },
+      "releases": {
+        "anyOrgSlugInTop": ["docker"],
+        "majorityOrgInTop": { "slug": "docker", "minFraction": 0.6 },
+        "minHits": 1,
+        "topK": 5
+      }
+    }
+  },
+  {
+    "id": "entity-planetscale",
+    "query": "planetscale",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "notes": "Typeahead completion chain plant→planet→planetscale in logs",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "anySlugInTop": ["planetscale"], "minHits": 1 },
+      "releases": {
+        "anyOrgSlugInTop": ["planetscale"],
+        "majorityOrgInTop": { "slug": "planetscale", "minFraction": 0.6 },
+        "minHits": 1,
+        "topK": 5
+      }
+    }
+  },
+  {
+    "id": "entity-codex",
+    "query": "codex",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "notes": "Product/feature name more than org; OpenAI Codex releases should surface",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 1,
+        "topK": 5,
+        "anyOrgSlugInTop": ["openai"],
+        "majorityOrgInTop": { "slug": "openai", "minFraction": 0.8 },
+        "anyTextContainsAny": ["codex"]
+      }
+    }
+  },
+  {
+    "id": "entity-ollama",
+    "query": "ollama",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "notes": "Typeahead o→oll→olla→ollama; was polluted by langfuse:test",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "minHits": 1 },
+      "releases": {
+        "minHits": 1,
+        "topK": 5,
+        "anyTextContainsAny": ["ollama"],
+        "majorityOrgInTop": { "slug": "ollama", "minFraction": 0.6 },
+        "mustNotOrgSlugInTop": ["langfuse"]
+      }
+    }
+  },
+  {
+    "id": "entity-stripe",
+    "query": "stripe",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "anySlugInTop": ["stripe"], "minHits": 1 },
+      "releases": {
+        "anyOrgSlugInTop": ["stripe"],
+        "majorityOrgInTop": { "slug": "stripe", "minFraction": 0.6 },
+        "mustNotOrgSlugInTop": ["langfuse"],
+        "minHits": 1,
+        "topK": 5
+      }
+    }
+  },
+  {
+    "id": "entity-nextjs",
+    "query": "next.js",
+    "intent": "entity_lookup",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "catalog": {
+        "minHits": 1,
+        "anyTextContainsAny": ["next"]
+      },
+      "releases": {
+        "minHits": 1,
+        "topK": 10,
+        "anyOrgSlugInTop": ["vercel"],
+        "anyTextContainsAny": ["next"]
+      }
+    }
+  },
+  {
+    "id": "concept-rate-limiting",
+    "query": "rate limiting",
+    "intent": "concept",
+    "severity": "must",
+    "notes": "Concept query from logs; no org/catalog hits expected",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["rate limit", "rate-limit", "rate limiting", "throttl"]
+      }
+    }
+  },
+  {
+    "id": "concept-slack-integration",
+    "query": "slack integration",
+    "intent": "concept",
+    "severity": "must",
+    "notes": "Also seen as slack integration&since=90d in logs (query string glue)",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["slack"]
+      }
+    }
+  },
+  {
+    "id": "concept-observability",
+    "query": "observability",
+    "intent": "concept",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "orgs": {
+        "anySlugInTop": ["datadog", "axiom", "dash0", "honeycomb", "grafana", "langfuse"],
+        "minHits": 1
+      },
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["observab", "monitor", "tracing", "telemetry", "metrics", "logs"]
+      }
+    }
+  },
+  {
+    "id": "concept-image-optimization",
+    "query": "image optimization",
+    "intent": "concept",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["image", "images", "optimization", "transform", "cdn", "resize"]
+      }
+    }
+  },
+  {
+    "id": "concept-coding-agents",
+    "query": "coding agents",
+    "intent": "concept",
+    "severity": "must",
+    "notes": "Live-graded hybrid top-5 was strong (OpenAI/Google/GitHub/HF)",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["agent", "coding", "cursor", "devtools"]
+      }
+    }
+  },
+  {
+    "id": "concept-dark-mode",
+    "query": "dark mode",
+    "intent": "concept",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["dark mode", "dark-mode", "dark theme"]
+      }
+    }
+  },
+  {
+    "id": "concept-passkeys",
+    "query": "passkeys",
+    "intent": "concept",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 2,
+        "topK": 10,
+        "anyTextContainsAny": ["passkey", "webauthn", "fido"]
+      }
+    }
+  },
+  {
+    "id": "concept-vector-search",
+    "query": "vector search",
+    "intent": "concept",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["vector", "embedding", "semantic"]
+      }
+    }
+  },
+  {
+    "id": "concept-webhooks",
+    "query": "webhooks",
+    "intent": "concept",
+    "severity": "must",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 3,
+        "topK": 10,
+        "anyTextContainsAny": ["webhook"]
+      }
+    }
+  },
+  {
+    "id": "feature-ai",
+    "query": "ai",
+    "intent": "concept",
+    "severity": "must",
+    "notes": "Highest-count 30d query; expect dense multi-section hits, not empty",
+    "expect": {
+      "notDegraded": true,
+      "orgs": { "minHits": 3 },
+      "releases": { "minHits": 5 },
+      "collections": { "minHits": 1 }
+    }
+  },
+  {
+    "id": "concept-headless-browser",
+    "query": "headless browser scraping",
+    "intent": "concept",
+    "severity": "should",
+    "notes": "Stretch: firecrawl/browserbase are indexed by name but multi-word concept fails all modes. Tracks retrieval gap.",
+    "expect": {
+      "notDegraded": true,
+      "releases": {
+        "minHits": 1,
+        "topK": 10,
+        "anyOrgSlugInTop": [
+          "firecrawl",
+          "browserbase",
+          "cloudflare",
+          "playwright",
+          "puppeteer",
+          "browserless"
+        ]
+      }
+    }
+  },
+  {
+    "id": "noise-example-search-term",
+    "query": "example search term",
+    "intent": "noise",
+    "severity": "should",
+    "notes": "MCP client smoke query in logs; zero hits is acceptable",
+    "expect": {
+      "notDegraded": true
+    }
+  }
+]

@@ -23,6 +23,7 @@
 
 import { embedBatch, type EmbeddingConfig } from "./embeddings.js";
 import type { VectorizeIndex, VectorMetadataValue } from "./vector-search.js";
+import { isEmptyReleaseContent } from "./content-quality.js";
 
 export interface EmbedReleaseInput {
   id: string;
@@ -63,6 +64,17 @@ export interface EmbedAndUpsertReleasesOptions {
 const CONTENT_FALLBACK_CHARS = 4_000;
 
 /**
+ * Body candidate used for both the embed blob and the empty-content gate —
+ * summary when present, otherwise a content prefix (same as buildReleaseText).
+ */
+function releaseBodyForEmbed(row: EmbedReleaseInput): string {
+  return (row.summary && row.summary.trim().length > 0 ? row.summary : (row.content ?? "")).slice(
+    0,
+    CONTENT_FALLBACK_CHARS,
+  );
+}
+
+/**
  * Build the text blob to embed. Structure matters less than the content
  * mix — we concatenate title, version, and a body candidate separated by
  * newlines so the embedding captures both the label and the substance.
@@ -70,11 +82,19 @@ const CONTENT_FALLBACK_CHARS = 4_000;
 function buildReleaseText(row: EmbedReleaseInput): string {
   const parts: string[] = [row.title];
   if (row.version) parts.push(row.version);
-  const body = (
-    row.summary && row.summary.trim().length > 0 ? row.summary : (row.content ?? "")
-  ).slice(0, CONTENT_FALLBACK_CHARS);
+  const body = releaseBodyForEmbed(row);
   if (body.length > 0) parts.push(body);
   return parts.join("\n");
+}
+
+/** True when this row would only produce a noise vector (placeholder/empty). */
+export function shouldSkipReleaseEmbed(row: EmbedReleaseInput): boolean {
+  const body = releaseBodyForEmbed(row);
+  return isEmptyReleaseContent({
+    title: row.title,
+    summary: body,
+    contentChars: body.length > 0 ? body.length : (row.title?.length ?? 0),
+  });
 }
 
 function buildMetadata(row: EmbedReleaseInput): Record<string, VectorMetadataValue> {
@@ -106,51 +126,91 @@ export async function embedAndUpsertReleases(opts: EmbedAndUpsertReleasesOptions
   // end to avoid double-logging the same error through a wrapping catch.
   let innerErr: unknown;
 
-  let vectors: number[][];
-  try {
-    const texts = releases.map(buildReleaseText);
-    ({ vectors } = await embedBatch(texts, embedConfig));
-  } catch (err) {
-    logger.warn(
-      `[embed-releases] embed pipeline failed: ${err instanceof Error ? err.message : String(err)}`,
+  // Empty / placeholder bodies (title+summary "test", short "no changes", …)
+  // produce magnet vectors that pollute hybrid RRF. Skip the embed API,
+  // best-effort delete any existing Vectorize row, and still mark persisted
+  // so backfill does not loop forever. Search hydration also drops empty
+  // tier — this stops new junk from entering the index.
+  const toEmbed: EmbedReleaseInput[] = [];
+  const skippedEmpty: EmbedReleaseInput[] = [];
+  for (const row of releases) {
+    if (shouldSkipReleaseEmbed(row)) skippedEmpty.push(row);
+    else toEmbed.push(row);
+  }
+
+  if (skippedEmpty.length > 0) {
+    logger.debug?.(
+      `[embed-releases] skipping ${skippedEmpty.length} empty-body release(s): ${skippedEmpty
+        .map((r) => r.id)
+        .join(", ")}`,
     );
-    if (throwOnError) throw err;
-    return;
-  }
-
-  if (vectors.length !== releases.length) {
-    const msg = `[embed-releases] vector count mismatch (${vectors.length} vs ${releases.length}) — skipping upsert`;
-    logger.warn(msg);
-    if (throwOnError) throw new Error(msg);
-    return;
-  }
-
-  // Vectorize v1 caps upserts at 1000 vectors per call (April 2026). Keep
-  // well under that with a conservative chunk size — most ingest batches
-  // are much smaller anyway.
-  const UPSERT_CHUNK = 500;
-  const persisted: string[] = [];
-  for (let i = 0; i < releases.length; i += UPSERT_CHUNK) {
-    const chunk = releases.slice(i, i + UPSERT_CHUNK);
-    const chunkVectors = vectors.slice(i, i + UPSERT_CHUNK);
-    const upsertPayload = chunk.map((r, idx) => ({
-      id: r.id,
-      values: chunkVectors[idx],
-      metadata: buildMetadata(r),
-    }));
     try {
-      // oxlint-disable-next-line no-await-in-loop -- Vectorize D1 chunking; chunks must be upserted sequentially to respect batch limits
-      await vectorIndex.upsert(upsertPayload);
-      persisted.push(...chunk.map((r) => r.id));
+      await vectorIndex.deleteByIds(skippedEmpty.map((r) => r.id));
     } catch (err) {
+      // Missing vectors or transient Vectorize errors — not fatal; search
+      // still filters empty at hydrate time.
       logger.warn(
-        `[embed-releases] Vectorize upsert failed for chunk of ${chunk.length}: ${
+        `[embed-releases] Vectorize delete for empty-body releases failed: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
       innerErr ??= err;
     }
   }
+
+  const persisted: string[] = [];
+
+  if (toEmbed.length > 0) {
+    let vectors: number[][];
+    try {
+      const texts = toEmbed.map(buildReleaseText);
+      ({ vectors } = await embedBatch(texts, embedConfig));
+    } catch (err) {
+      logger.warn(
+        `[embed-releases] embed pipeline failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      if (throwOnError) throw err;
+      // Still try to mark empty skips persisted below when throwOnError is off.
+      vectors = [];
+    }
+
+    if (vectors.length > 0 && vectors.length !== toEmbed.length) {
+      const msg = `[embed-releases] vector count mismatch (${vectors.length} vs ${toEmbed.length}) — skipping upsert`;
+      logger.warn(msg);
+      if (throwOnError) throw new Error(msg);
+    } else if (vectors.length === toEmbed.length) {
+      // Vectorize v1 caps upserts at 1000 vectors per call (April 2026). Keep
+      // well under that with a conservative chunk size — most ingest batches
+      // are much smaller anyway.
+      const UPSERT_CHUNK = 500;
+      for (let i = 0; i < toEmbed.length; i += UPSERT_CHUNK) {
+        const chunk = toEmbed.slice(i, i + UPSERT_CHUNK);
+        const chunkVectors = vectors.slice(i, i + UPSERT_CHUNK);
+        const upsertPayload = chunk.map((r, idx) => ({
+          id: r.id,
+          values: chunkVectors[idx],
+          metadata: buildMetadata(r),
+        }));
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- Vectorize D1 chunking; chunks must be upserted sequentially to respect batch limits
+          await vectorIndex.upsert(upsertPayload);
+          persisted.push(...chunk.map((r) => r.id));
+        } catch (err) {
+          logger.warn(
+            `[embed-releases] Vectorize upsert failed for chunk of ${chunk.length}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          innerErr ??= err;
+        }
+      }
+    }
+  }
+
+  // Mark empty skips as "done" so admin embed backfill does not re-queue them.
+  // They have no vector (deleted above); FTS may still match but search
+  // hydration drops empty-tier hits.
+  persisted.push(...skippedEmpty.map((r) => r.id));
 
   if (persisted.length > 0 && onPersisted) {
     try {
