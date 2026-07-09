@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import {
+  EXTERNAL_UGC_REL,
+  isFragmentHref,
+  isInternalHref,
+  isSafeHref,
+  isSafeImgSrc,
+} from "@/lib/sanitize";
 import { HeadingAnchor } from "./heading-anchor";
 import { youtubeEmbedUrl, youtubeVideoId } from "@/lib/video-source";
 import { MEDIA_VIDEO_ON, shouldRenderAsVideo } from "@/lib/media";
@@ -91,6 +97,14 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
       // Same-page fragment link (heading anchor / TOC target). Stays in-document,
       // so no `target="_blank"` and no external-UGC rel.
       if (isFragmentHref(href)) {
+        return <a href={href}>{children}</a>;
+      }
+
+      // Same-origin app path (`/submit`, `/docs/listing`). Author-controlled
+      // docs/pages must navigate in-app — opening `/submit` in a new tab with
+      // the external-UGC rel was treating our own submission CTA like scraped
+      // third-party content.
+      if (isInternalHref(href)) {
         return <a href={href}>{children}</a>;
       }
 
@@ -204,6 +218,7 @@ export const collapsedMarkdownComponents: Record<string, any> = {
     const href = props.href as string | undefined;
     const children = props.children;
     if (!isSafeHref(href)) return <>{children}</>;
+    if (isFragmentHref(href) || isInternalHref(href)) return <a href={href}>{children}</a>;
     if (/youtube|vimeo|loom/i.test(href)) return <>{children}</>;
     if (/\.(mp4|webm)(\?.*)?$/i.test(href)) return null;
     return (

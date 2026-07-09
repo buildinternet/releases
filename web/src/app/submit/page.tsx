@@ -25,8 +25,11 @@ export default function SubmitPage() {
             Submit Your Product
           </h1>
           <p className="mt-4 leading-6">
-            List your product in the registry from your own domain, or suggest a changelog URL for a
-            curator to review.{" "}
+            Publish a{" "}
+            <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
+              releases.json
+            </code>{" "}
+            on your domain and activate here — or suggest a changelog URL for a curator.{" "}
             <Link
               href="/docs/listing"
               className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"

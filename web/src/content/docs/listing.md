@@ -98,39 +98,34 @@ A repo file can't define your company identity, and a domain file can't speak fo
 
 ## Let an agent write it
 
-If an agent works in your codebase, you can hand this off entirely — this page and the schema are machine-readable. Paste this prompt:
+If an agent works in your codebase — or you just have a website URL — hand this off with the `creating-releases-json` skill. Install it, then paste a short prompt:
 
-```text
-Create a releases.json manifest for this project so registries and agents can
-find where we publish release notes.
-
-1. Read the format at https://releases.sh/docs/listing.md and the JSON Schema
-   at https://releases.sh/schemas/releases.json.
-2. Search this codebase and our site for the places we actually publish
-   product updates: changelog or what's-new pages, RSS/Atom feeds, GitHub
-   repos with Releases, App Store listings, or a hosted CHANGELOG file.
-   Verify every URL responds. Only declare locations that really exist —
-   never guess or invent.
-3. If this repo serves our website, write the file so it's served at
-   /.well-known/releases.json: set "version": 2, add a releases[] array of
-   the locations you found, and optionally our company fields (name,
-   description, category, tags, avatar, social). Use products[] only if we
-   have distinct products with separate release locations.
-4. If this repo is a single product or library, write releases.json at the
-   repo root instead, with an optional product block and a releases[] array.
-   Use { "github": "self" } if this repo's GitHub Releases are the record.
-5. Every releases[] entry needs at least one of: url, feed, github, appstore,
-   file. If you list several locations, mark the primary one with
-   "canonical": true.
-6. Validate against the schema, confirm the JSON parses, and show me the file
-   and the URL it will be served from before committing anything.
+```bash
+npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
 ```
 
-The prompt works with any agent that can read your project — the important part is step 2: the file should state where your release notes _actually_ live, not aspirationally.
+```text
+Create a releases.json manifest for our product so registries and agents can
+find where we publish release notes.
+
+1. Install the creating-releases-json skill:
+   npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
+2. Follow that skill end-to-end: discover the real places we publish updates
+   (changelog, feed, GitHub Releases, App Store, CHANGELOG file), write a
+   valid v2 manifest, and show me the finished file plus the URL it should be
+   served from (usually https://{domain}/.well-known/releases.json).
+3. Only declare locations that actually exist — never invent URLs.
+
+Our website is: <your website or domain>
+```
+
+The skill covers domain vs repo scope, product modeling (when not to over-split), validation, and publishing. You can also copy both the install command and this prompt from the [submit page](/submit).
 
 ## What happens after you publish
 
-The registry re-reads your file on a regular sweep, so edits show up without you doing anything else. When it finds locations it doesn't already know about:
+Once the file is live at `/.well-known/releases.json`, [check and activate your listing on the submit page](/submit) — enter your domain, review the identity, products, and release locations the registry parsed, and activate if you aren't listed yet.
+
+The registry also re-reads your file on a regular sweep, so later edits show up without you doing anything else. When it finds locations it doesn't already know about:
 
 - **Feeds, GitHub repos, and App Store listings go live automatically** once a quick check confirms they're real (the feed parses, the repo exists).
 - **Plain web pages are reviewed by a person first.** We never start crawling a page just because a file mentioned it.
@@ -142,7 +137,7 @@ And the file is safe to publish and leave in place:
 - `category`, `kind`, and `tags` are suggestions. An unrecognized value is ignored, never an error.
 - A missing, invalid, oversized, or unreachable file is a no-op. A broken file never breaks your listing.
 
-If your company isn't in the registry yet, [submit your changelog URL](/submit) — then publish the file to shape how you appear.
+If you don't have a manifest yet, you can still [suggest a changelog URL on the submit page](/submit) for a curator to review.
 
 ## Pinning your listing
 

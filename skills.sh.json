@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Listing",
+      "description": "Owner-facing skills for declaring products and release-note locations on releases.sh.",
+      "skills": ["creating-releases-json"]
+    }
+  ]
+}

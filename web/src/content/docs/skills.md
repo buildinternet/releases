@@ -52,10 +52,23 @@ Triggers on competitive-intelligence asks — "what is X shipping lately", "how 
 
 Triggers when you point an agent at a product URL and ask "where's their changelog?". Looks for feeds, known providers, and common paths before falling back to scraping.
 
+### creating-releases-json
+
+Triggers when you want to **list your own product** — "add a releases.json", "get indexed on releases.sh", "make us a manifest for our website." Discovers real publish locations, models products without over-fragmenting, writes a valid v2 manifest, and guides publishing to `/.well-known/releases.json`.
+
+Install just this skill (or grab the copy buttons on the [submit page](/submit)):
+
+```bash
+npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
+```
+
+See [Listing your product](/docs/listing) for the format and the paste-ready agent prompt.
+
 ## Operator skills
 
-The bundle also ships skills for people running their own ingest — `managing-sources`, `parsing-changelogs`, `classify-media-relevance`, `seeding-playbooks`. They stay inert unless an operator-shaped task triggers them.
+The CLI bundle also ships skills for people running their own ingest — `managing-sources`, `parsing-changelogs`, `classify-media-relevance`, `seeding-playbooks`. They stay inert unless an operator-shaped task triggers them.
 
 ## Source
 
-The skill files live in the open-source CLI repo: [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `skills/`.
+- **CLI / agent skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `skills/`.
+- **Owner manifest skill** (`creating-releases-json`): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `skills/creating-releases-json/`. Repo page grouping lives in root [`skills.sh.json`](https://github.com/buildinternet/releases/blob/main/skills.sh.json) ([skills.sh customize](https://www.skills.sh/docs/customize)).
