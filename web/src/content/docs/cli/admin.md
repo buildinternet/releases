@@ -118,7 +118,10 @@ releases admin org link vercel --platform github --handle vercel
 releases admin org list
 releases admin org list --json --page-all   # Stream every org as NDJSON
 releases admin org get vercel
+releases admin org get vercel.com            # …or resolve by a bare domain
 ```
+
+`org get` accepts an org slug, an `org_…` ID, or a bare domain (primary or alias). For a stub-tier org (declared via a `releases.json` manifest but not yet tracked), it flags the `stub · not yet tracked` status and lists the declared release locations instead of sources.
 
 ## Products
 
