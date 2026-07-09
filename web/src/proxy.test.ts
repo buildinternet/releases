@@ -49,6 +49,10 @@ describe("proxy legacy ?tab= redirects", () => {
       status: 308,
       location: "https://releases.sh/vercel/fetch-log",
     });
+    expect(locationOf("/vercel?tab=admin")).toEqual({
+      status: 308,
+      location: "https://releases.sh/vercel/admin",
+    });
   });
 
   it("308s a source-level legacy tab on the org-scoped path", () => {

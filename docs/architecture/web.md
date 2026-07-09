@@ -23,7 +23,7 @@ Because a **shadowed** source's slug _is_ its product's slug, product-first reso
 
 - **Seam:** `web/src/lib/links.ts` is the single path builder for the web component tree — `productPath` emits bare, `sourceIdPath(id)` → `/sources/:id`. Server-rendered markdown/XML (`packages/rendering/src/formatters.ts`), the rename `revalidatePath`, and IndexNow construct product URLs independently and were swept to bare alongside the flip.
 - **Machine format routes stay at `/product/`:** `/api/format/[orgSlug]/product/[productSlug]` (and the matching `Sidebar formatPath`) are download surfaces, intentionally not moved.
-- **Reserved nested slugs** (`@buildinternet/releases-core/reserved-slugs`) gained `product`/`products`/`playbook`/`fetch-log` so no slug can shadow a static second-segment route. Creating a product whose slug shadows a same-org source **warns but allows** (the intended "wrap" mechanism).
+- **Reserved nested slugs** (`@buildinternet/releases-core/reserved-slugs`) gained `product`/`products`/`playbook`/`fetch-log`/`admin` so no slug can shadow a static second-segment route. Creating a product whose slug shadows a same-org source **warns but allows** (the intended "wrap" mechanism).
 
 **Deferred edges:** `/[org]/[productSlug]/changelog` 404s (products have no changelog view); changelog _chunk_ deep-links for the ~11 shadowed-with-changelog sources stay on the bare `sourcePath` (rerouting them to `/sources/:id/changelog` needs a `sourceId`-on-hit wire change). Both ride with the product-scoped-views follow-up (#1191-adjacent).
 
@@ -180,7 +180,8 @@ registry path (`org` / `org/slug`) and `href` is an external URL — at most one
 - **Read:** the org/product/source detail responses return a typed `notice`
   field (raw `metadata` is not surfaced on products).
 - **Web:** `EntityNotice` renders a compact banner under the entity header.
-  Curators set / edit / clear it from each entity's local-dev admin menu via the
+  Curators set / edit / clear it from the org Admin tab (`/{org}/admin`), the
+  product Admin page (`/{org}/{product}/admin`), and source admin menus via the
   shared `NoticeForm` (message + an Internal-coordinate vs External-URL toggle),
   which calls the `set{Org,Product,Source}NoticeAction` server actions.
 - **MCP:** `get_organization` emits `Notice: <message> → <coordinate>` so an

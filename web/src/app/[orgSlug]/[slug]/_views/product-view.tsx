@@ -24,7 +24,6 @@ import { buildReleaseItemListJsonLd } from "@/lib/schema-org";
 import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
 import { sourceIdPath } from "@/lib/links";
-import { ProductAdminMenu } from "@/components/product-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
@@ -199,14 +198,12 @@ export async function ProductView({
                   parentOrgName={orgName}
                 />
                 <AdminOnly devAdmin={devAdmin}>
-                  <ProductAdminMenu
-                    orgSlug={orgSlug}
-                    productSlug={productSlug}
-                    name={product.name}
-                    notice={product.notice}
-                    variant="subtle"
-                    align="right"
-                  />
+                  <Link
+                    href={`/${orgSlug}/${productSlug}/admin`}
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full px-3 text-[13px] font-medium text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-700 dark:text-stone-400 dark:hover:bg-stone-800/60 dark:hover:text-stone-200"
+                  >
+                    Admin
+                  </Link>
                 </AdminOnly>
               </div>
             </div>

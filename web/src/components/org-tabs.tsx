@@ -22,7 +22,7 @@ function CodeBrackets() {
   );
 }
 
-type OrgTab = "overview" | "releases" | "sources" | "playbook" | "fetch-log";
+type OrgTab = "overview" | "releases" | "sources" | "playbook" | "fetch-log" | "admin";
 
 function resolveActiveTab(pathname: string, orgSlug: string): OrgTab {
   const base = `/${orgSlug}`;
@@ -31,6 +31,7 @@ function resolveActiveTab(pathname: string, orgSlug: string): OrgTab {
   if (pathname === `${base}/sources`) return "sources";
   if (pathname === `${base}/playbook`) return "playbook";
   if (pathname === `${base}/fetch-log`) return "fetch-log";
+  if (pathname === `${base}/admin`) return "admin";
   return "overview";
 }
 
@@ -134,12 +135,34 @@ export function OrgTabs({
       </Link>
       {showAdminTabs && (
         <div className="flex shrink-0 items-center gap-5 sm:ml-auto">
-          <Link href={`${base}/fetch-log`} className={railLinkClass} scroll={false}>
+          <Link
+            href={`${base}/fetch-log`}
+            className={
+              activeTab === "fetch-log" ? `${railLinkClass} text-[var(--fg)]` : railLinkClass
+            }
+            scroll={false}
+            aria-current={activeTab === "fetch-log" ? "page" : undefined}
+          >
             <CodeBrackets />
             Fetch Log
           </Link>
-          <Link href={`${base}/playbook`} className={railLinkClass} scroll={false}>
+          <Link
+            href={`${base}/playbook`}
+            className={
+              activeTab === "playbook" ? `${railLinkClass} text-[var(--fg)]` : railLinkClass
+            }
+            scroll={false}
+            aria-current={activeTab === "playbook" ? "page" : undefined}
+          >
             Playbook
+          </Link>
+          <Link
+            href={`${base}/admin`}
+            className={activeTab === "admin" ? `${railLinkClass} text-[var(--fg)]` : railLinkClass}
+            scroll={false}
+            aria-current={activeTab === "admin" ? "page" : undefined}
+          >
+            Admin
           </Link>
         </div>
       )}

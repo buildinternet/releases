@@ -37,6 +37,7 @@ export async function setOrgHiddenAction(input: {
   // Bust the homepage (ticker + directory table) and the org detail page.
   revalidatePath("/");
   revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
   return { ok: true };
 }
 
@@ -69,6 +70,7 @@ export async function setOrgAutoGenerateContentAction(input: {
 
   // Auto-content state shows on the org detail page only.
   revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
   return { ok: true };
 }
 
@@ -102,6 +104,7 @@ export async function setOrgFeaturedAction(input: {
   // Bust the home page (featured rail) and the org detail page.
   revalidatePath("/");
   revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
   return { ok: true };
 }
 
@@ -139,6 +142,7 @@ export async function setOrgNoticeAction(input: {
 
   // The notice renders on the org detail page only.
   revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
   return { ok: true };
 }
 
@@ -176,5 +180,82 @@ export async function renameOrgAction(input: {
   // Bust the homepage (ticker + directory) and the org detail page.
   revalidatePath("/");
   revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
+  return { ok: true };
+}
+
+/**
+ * Pause or unpause poll-fetch for an org via `PATCH /v1/orgs/:slug`.
+ * When paused, sources stay listed but the ingest loop skips them.
+ */
+export async function setOrgFetchPausedAction(input: {
+  slug: string;
+  paused: boolean;
+}): Promise<ActionResult> {
+  const env = await adminActionEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}/v1/orgs/${encodeURIComponent(input.slug)}`, {
+      method: "PATCH",
+      headers: webApiHeaders({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.bearer}`,
+      }),
+      body: JSON.stringify({ fetchPaused: input.paused }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+
+  revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
+  return { ok: true };
+}
+
+/**
+ * Set overview regen cadence (days) or clear to system default via
+ * `PATCH /v1/orgs/:slug { overviewCadenceDays: n | null }`. API bounds are 1–90.
+ */
+export async function setOrgOverviewCadenceDaysAction(input: {
+  slug: string;
+  days: number | null;
+}): Promise<ActionResult> {
+  const env = await adminActionEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
+  if (input.days !== null && (!Number.isInteger(input.days) || input.days < 1 || input.days > 90)) {
+    return { ok: false, error: "Cadence must be an integer from 1 to 90, or null for default." };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}/v1/orgs/${encodeURIComponent(input.slug)}`, {
+      method: "PATCH",
+      headers: webApiHeaders({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.bearer}`,
+      }),
+      body: JSON.stringify({ overviewCadenceDays: input.days }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+
+  revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.slug}/admin`);
   return { ok: true };
 }
