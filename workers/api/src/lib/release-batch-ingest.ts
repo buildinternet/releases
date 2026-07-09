@@ -36,8 +36,38 @@ import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup"
 import { selectExistingReleaseKeys } from "./title-dedup.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "./media-ingest.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
+import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { normalizeMediaBind } from "./media-bind.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "./d1-limits.js";
+
+/**
+ * Shape-coerce media via {@link normalizeMediaBind}, then rewrite each item's
+ * `url` through {@link normalizeMediaUrl} (image-proxy unwrap + #1943
+ * float-zero path repair). Always runs on the batch write path so scrape/agent
+ * inserts store clean URLs even when R2 mirroring is off.
+ */
+function normalizeMediaUrlsInBind(media: unknown): string {
+  const bound = normalizeMediaBind(media);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bound);
+  } catch {
+    return bound;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return bound;
+  let changed = false;
+  // oxlint-disable-next-line no-map-spread -- copy-on-write; must not mutate agent-provided media objects
+  const next = parsed.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const m = item as { url?: unknown };
+    if (typeof m.url !== "string") return item;
+    const url = normalizeMediaUrl(m.url);
+    if (url === m.url) return item;
+    changed = true;
+    return { ...m, url };
+  });
+  return changed ? JSON.stringify(next) : bound;
+}
 import { clusterAndPersistCascades } from "./cluster-cascades.js";
 import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
 import { publishReleaseEvents, type PublishEnv } from "../events/publish.js";
@@ -203,7 +233,11 @@ export async function ingestReleaseBatch(
     (await flag(env.FLAGS, env.MEDIA_GIF_TRANSCODE_ENABLED, FLAGS.mediaGifTranscodeEnabled));
   // Coerce array/object media to a JSON string so a non-primitive bind can't
   // 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
-  const mediaJsonByIndex = releasesInput.map((r) => normalizeMediaBind(r.media));
+  // Then run `normalizeMediaUrl` on every item so the scrape/agent batch path
+  // matches poll-fetch: unwrap image-proxy URLs and repair known path
+  // corruptions (#1943 float-zero separators). Without this, bad extract URLs
+  // were stored verbatim, 404'd, and never R2-mirrored.
+  const mediaJsonByIndex = releasesInput.map((r) => normalizeMediaUrlsInBind(r.media));
   if (r2UploadEnabled) {
     // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
     // the `media` column on conflict, so mirroring their images to R2 would
@@ -220,8 +254,8 @@ export async function ingestReleaseBatch(
     for (let i = 0; i < releasesInput.length; i++) {
       const rel = releasesInput[i]!;
       if (rel.url != null && existingMediaUrls.has(rel.url)) continue;
-      const rawMedia = rel.media;
-      if (!rawMedia) continue;
+      const rawMedia = mediaJsonByIndex[i];
+      if (!rawMedia || rawMedia === "[]") continue;
       let parsed: Array<{
         type: "image" | "video" | "gif";
         url: string;

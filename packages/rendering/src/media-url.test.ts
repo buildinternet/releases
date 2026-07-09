@@ -168,4 +168,28 @@ describe("normalizeMediaUrl", () => {
   test("returns a malformed (non-parseable) URL unchanged", () => {
     expect(normalizeMediaUrl("not a url")).toBe("not a url");
   });
+
+  // #1943 — AI-extracted x.ai media had every path `/` replaced by `0.000000`
+  // (printf %f / float-zero). Repair reconstructs the real asset path.
+  test("repairs float-zero path separators (x.ai media corruption)", () => {
+    expect(
+      normalizeMediaUrl("https://x.ai/0.000000images0.000000news0.000000composer-2-5-og.png"),
+    ).toBe("https://x.ai/images/news/composer-2-5-og.png");
+  });
+
+  test("repairs float-zero path separators with multi-segment nested paths", () => {
+    expect(
+      normalizeMediaUrl("https://x.ai/0.000000images0.000000grok-office0.000000grok-ppt.webp"),
+    ).toBe("https://x.ai/images/grok-office/grok-ppt.webp");
+  });
+
+  test("leaves 0.000000 in query strings alone (not path corruption)", () => {
+    const url = "https://cdn.example.com/img.png?scale=0.000000&w=100";
+    expect(normalizeMediaUrl(url)).toBe(url);
+  });
+
+  test("float-zero repair is idempotent on already-correct paths", () => {
+    const url = "https://x.ai/images/news/composer-2-5-og.png";
+    expect(normalizeMediaUrl(url)).toBe(url);
+  });
 });

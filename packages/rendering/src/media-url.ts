@@ -83,9 +83,34 @@ export function unwrapImageProxyUrls(content: string): string {
 const IMAGE_PROXY_PATHS = ["/_next/image", "/_vercel/image"];
 
 /**
+ * Repair path separators that were replaced by the literal string `0.000000`
+ * (printf `%f` / float-zero formatting). Observed on AI-extracted scrape media
+ * for x.ai (#1943):
+ *
+ *   https://x.ai/0.000000images0.000000news0.000000composer-2-5-og.png
+ *   → https://x.ai/images/news/composer-2-5-og.png
+ *
+ * Only rewrites when `0.000000` appears in the *pathname* (query values like
+ * `?scale=0.000000` are left alone). Collapses doubled slashes after the
+ * repair. Idempotent on already-correct URLs.
+ */
+function repairFloatZeroPathSeparators(url: string): string {
+  if (!url.includes("0.000000")) return url;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.pathname.includes("0.000000")) return url;
+    parsed.pathname = parsed.pathname.replaceAll("0.000000", "/").replace(/\/{2,}/g, "/");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Unwraps Next.js / Vercel image optimizer URLs to the underlying asset.
  * Matches exact path or any basePath-prefixed variant (e.g. Ramp's
  * `/product-releases/_next/image` when Next is mounted under a `basePath`).
+ * Also repairs the float-zero path-separator corruption (#1943).
  * Returns the input unchanged for non-proxy or malformed URLs.
  */
 export function normalizeMediaUrl(url: string): string {
@@ -97,7 +122,7 @@ export function normalizeMediaUrl(url: string): string {
     if (isProxy) {
       const inner = parsed.searchParams.get("url");
       if (inner) return new URL(inner, parsed.origin).toString();
-      return url;
+      return repairFloatZeroPathSeparators(url);
     }
     // Fallback for mangled proxy URLs where the optimizer path landed in the
     // query string instead of the pathname — happens when a relative
@@ -110,9 +135,9 @@ export function normalizeMediaUrl(url: string): string {
       const inner = new URLSearchParams(marker[1]).get("url");
       if (inner) return new URL(inner, parsed.origin).toString();
     }
-    return url;
+    return repairFloatZeroPathSeparators(url);
   } catch {
-    return url;
+    return repairFloatZeroPathSeparators(url);
   }
 }
 
