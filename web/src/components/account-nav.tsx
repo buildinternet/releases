@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
 import { AUTH_CONFIGURED, displayEmailOf } from "@/lib/auth-ui";
 import { computeIsAdmin } from "@/components/admin-only";
+import { adminDefaultHref } from "@/lib/account-nav";
 import { useWorkspaces } from "@/components/account/use-workspaces";
 import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import {
@@ -222,6 +223,7 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
   const user = data?.user;
   const role = (user as { role?: string } | undefined)?.role ?? null;
   const showAdmin = computeIsAdmin(role, devAdmin);
+  const adminHref = showAdmin ? adminDefaultHref() : null;
 
   if (variant === "mobile") {
     if (!user) {
@@ -254,9 +256,9 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
         >
           Following
         </Link>
-        {showAdmin && (
+        {adminHref && (
           <Link
-            href="/admin"
+            href={adminHref}
             className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
           >
             Admin
@@ -339,9 +341,9 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
                 <HeartIcon className={menuIconClass} />
                 Following
               </Link>
-              {showAdmin && (
+              {adminHref && (
                 <Link
-                  href="/admin"
+                  href={adminHref}
                   role="menuitem"
                   onClick={() => setOpen(false)}
                   className={menuLinkClass}

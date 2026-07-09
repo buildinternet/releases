@@ -23,6 +23,7 @@ code, or any MCP client. Readable by you and your agent.
   <a href="https://github.com/buildinternet/releases-cli"><img alt="CLI repo" src="https://img.shields.io/badge/CLI-buildinternet%2Freleases--cli-24292e?logo=github"></a>
   <a href="https://www.npmjs.com/package/@buildinternet/releases"><img alt="npm (CLI)" src="https://img.shields.io/npm/v/@buildinternet/releases?color=cb3837&label=%40buildinternet%2Freleases&logo=npm"></a>
   <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp"><img alt="MCP server" src="https://img.shields.io/badge/exposes-MCP_server-000"></a>
+  <a href="https://deepwiki.com/buildinternet/releases"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
 </p>
 
