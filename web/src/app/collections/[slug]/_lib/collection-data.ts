@@ -6,7 +6,7 @@ import type {
   CollectionReleaseItem,
   CollectionReleasesResponse,
 } from "@/lib/api";
-import { ApiNotFoundError } from "@/lib/api";
+import { api, ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { CollectionPageDocument } from "@/lib/graphql/__generated__/graphql";
 import type { CollectionPageQuery } from "@/lib/graphql/__generated__/graphql";
@@ -93,8 +93,31 @@ export type CollectionPageData = {
 /**
  * Collection detail critical path via `CollectionPage` (#2047): identity +
  * members + first feed page + daily summaries. Client load-more stays on REST.
+ *
+ * Falls back to REST when GraphQL fails (#2056) — prefer degraded feed/summaries
+ * over a hard 500; real 404s still surface as `ApiNotFoundError`.
  */
 export const getCollectionPage = cache(async (slug: string): Promise<CollectionPageData> => {
+  try {
+    return await getCollectionPageGraphql(slug);
+  } catch (err) {
+    if (err instanceof ApiNotFoundError) throw err;
+    console.warn(
+      JSON.stringify({
+        component: "web-ssr",
+        event: "collection-page-graphql-fallback",
+        route: `/collections/${slug}`,
+        err: {
+          message: err instanceof Error ? err.message : String(err),
+          name: err instanceof Error ? err.name : undefined,
+        },
+      }),
+    );
+    return getCollectionPageRest(slug);
+  }
+});
+
+async function getCollectionPageGraphql(slug: string): Promise<CollectionPageData> {
   const data = await graphqlRequest(CollectionPageDocument, {
     slug,
     releaseLimit: DEFAULT_RELEASE_LIMIT,
@@ -132,4 +155,32 @@ export const getCollectionPage = cache(async (slug: string): Promise<CollectionP
       releaseCount: s.releaseCount,
     })),
   };
-});
+}
+
+/** REST twin of CollectionPage — used when the persisted op fails or is missing. */
+async function getCollectionPageRest(slug: string): Promise<CollectionPageData> {
+  // Identity is primary; feed + summaries degrade to empty if those REST
+  // routes fail independently (prefer partial page over 500).
+  const [detail, releases, summariesRes] = await Promise.all([
+    api.collectionDetail(slug),
+    api.collectionReleases(slug, { limit: DEFAULT_RELEASE_LIMIT }).catch(
+      (): CollectionReleasesResponse => ({
+        releases: [],
+        pagination: { nextCursor: null, limit: DEFAULT_RELEASE_LIMIT },
+      }),
+    ),
+    api.collectionDailySummaries(slug).catch(() => ({ summaries: [] as CollectionDailySummary[] })),
+  ]);
+
+  return {
+    detail,
+    releases: {
+      releases: releases.releases,
+      pagination: {
+        nextCursor: releases.pagination?.nextCursor ?? null,
+        limit: releases.pagination?.limit ?? DEFAULT_RELEASE_LIMIT,
+      },
+    },
+    summaries: summariesRes.summaries,
+  };
+}

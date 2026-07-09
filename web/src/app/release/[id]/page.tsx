@@ -35,19 +35,98 @@ import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
 
+type GqlRelease = NonNullable<ReleaseDetailQuery["release"]>;
+type GqlReleaseSource = GqlRelease["source"];
+/** GraphQL types `source.org` non-null; REST can return independent rows with null org. */
+type ReleaseSource = Omit<GqlReleaseSource, "org"> & {
+  org: GqlReleaseSource["org"] | null;
+};
+type Release = Omit<GqlRelease, "source"> & { source: ReleaseSource };
+
+/**
+ * Map REST `ReleaseDetail` onto the nested GraphQL shape the page body was
+ * written against (source { org, product, appStore, video }).
+ */
+function mapReleaseFromRest(r: Awaited<ReturnType<typeof api.release>>): Release {
+  return {
+    id: r.id,
+    title: r.title,
+    version: r.version,
+    type: (r.type ?? "feature") as Release["type"],
+    url: r.url,
+    publishedAt: r.publishedAt,
+    fetchedAt: r.fetchedAt,
+    summary: r.summary,
+    titleGenerated: r.titleGenerated ?? null,
+    titleShort: r.titleShort ?? null,
+    content: r.content,
+    migrationNotes: r.migrationNotes ?? null,
+    composition: r.composition
+      ? {
+          bugs: r.composition.bugs,
+          features: r.composition.features,
+          enhancements: r.composition.enhancements,
+        }
+      : null,
+    media: (r.media ?? []).map((m) => ({
+      type: m.type as Release["media"][number]["type"],
+      url: m.url,
+      alt: m.alt ?? null,
+      r2Url: m.r2Url ?? null,
+    })),
+    source: {
+      slug: r.sourceSlug,
+      name: r.sourceName,
+      type: r.sourceType as Release["source"]["type"],
+      isHidden: r.sourceIsHidden ?? false,
+      org: r.org
+        ? {
+            slug: r.org.slug,
+            name: r.org.name,
+            avatarUrl: r.org.avatarUrl ?? null,
+            isHidden: r.org.isHidden ?? false,
+            discovery: (r.org.discovery ?? "curated") as NonNullable<
+              ReleaseSource["org"]
+            >["discovery"],
+          }
+        : null,
+      product: r.product ?? null,
+      appStore: (r.appStore as Release["source"]["appStore"]) ?? null,
+      video: (r.video as Release["source"]["video"]) ?? null,
+    },
+  };
+}
+
 /**
  * Server-only GraphQL fetch of the release-detail primary data, shared by
  * `generateMetadata` and the page body. `cache: "no-store"` mirrors the REST
  * predecessor (`api.release`) — a deleted/suppressed release must 404 on the
  * very next request, not on the next ISR revalidate cycle.
+ *
+ * Falls back to REST when GraphQL fails (#2056). Real 404s rethrow.
  */
-async function fetchRelease(idOrUrl: string) {
-  const data = await graphqlRequest(ReleaseDetailDocument, { idOrUrl }, { cache: "no-store" });
-  if (!data.release) throw new ApiNotFoundError(`/v1/graphql release(${idOrUrl})`);
-  return data.release;
+async function fetchRelease(idOrUrl: string): Promise<Release> {
+  try {
+    const data = await graphqlRequest(ReleaseDetailDocument, { idOrUrl }, { cache: "no-store" });
+    if (!data.release) throw new ApiNotFoundError(`/v1/graphql release(${idOrUrl})`);
+    return data.release;
+  } catch (err) {
+    if (err instanceof ApiNotFoundError) throw err;
+    console.warn(
+      JSON.stringify({
+        component: "web-ssr",
+        event: "release-detail-graphql-fallback",
+        route: `/release/${idOrUrl}`,
+        err: {
+          message: err instanceof Error ? err.message : String(err),
+          name: err instanceof Error ? err.name : undefined,
+        },
+      }),
+    );
+    const rest = await api.release(idOrUrl);
+    return mapReleaseFromRest(rest);
+  }
 }
-
-type Release = NonNullable<ReleaseDetailQuery["release"]>;
 
 export async function generateMetadata({
   params,
