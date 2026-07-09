@@ -25,13 +25,14 @@ import { readNegCache, writeNegCache } from "../lib/lookup-neg-cache.js";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
-import { ValidationError, NotFoundError } from "@releases/lib/releases-error";
+import { ValidationError, NotFoundError, RateLimitedError } from "@releases/lib/releases-error";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
 import { recordDomainDemand } from "../lib/listing/domain-demand.js";
+import { tryDomainManifestJit } from "../lib/listing/domain-jit.js";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import {
@@ -698,11 +699,12 @@ lookupRoutes.get(
 );
 
 /**
- * Domain → canonical owner lookup. Pure resolution; unlike the GitHub
- * coordinate path (`POST /v1/lookups`), an unknown domain is just
- * `404 not_found` — never probed or materialized. The product list is
- * separate because a domain alias can target a product directly; we
- * return both shapes so the caller doesn't round-trip again.
+ * Domain → canonical owner lookup. Resolves against `organizations.domain`
+ * (primary) and `domain_aliases.domain` (alias). On a complete miss, when
+ * self-serve listing is enabled, may just-in-time fetch
+ * `/.well-known/releases.json` and materialize a stub (#2030) — the sync
+ * counterpart to the nightly domainDemandSweep. Demand is always recorded
+ * on miss so the cron remains a backstop.
  */
 lookupRoutes.get(
   "/lookups/by-domain",
@@ -710,7 +712,7 @@ lookupRoutes.get(
     tags: ["Lookups"],
     summary: "Resolve a domain to its owning org and any matching products",
     description:
-      "Pure resolution: normalizes the input domain (lowercased, no scheme/path/www), exact-matches against `organizations.domain` (primary) and `domain_aliases.domain` (alias for either an org or a product), and returns whatever it finds. Unknown domains return 404 — there is no on-demand probing for domains, unlike the GitHub coordinate path on `POST /v1/lookups`.\n\nProducts can be populated even when `org` is null — a product alias may point at a domain its parent org doesn't claim as primary.",
+      "Normalizes the input domain (lowercased, no scheme/path/www), exact-matches against `organizations.domain` (primary) and `domain_aliases.domain` (alias for either an org or a product), and returns whatever it finds.\n\nOn a complete miss, when `listing-self-serve-enabled` is on, the handler may probe `https://{domain}/.well-known/releases.json` in-request and materialize a stub org (basis: declared) via the same core as the listing activate path and the domain-demand cron. Probe budget is per-domain (a few attempts per ~10 min rolling window) plus a per-IP rate limit on the outbound branch; budget exhaustion returns 404 (not 429). Misses still record `domain_demand` for the nightly sweep backstop.\n\nProducts can be populated even when `org` is null — a product alias may point at a domain its parent org doesn't claim as primary.",
     parameters: [
       {
         name: "domain",
@@ -722,7 +724,7 @@ lookupRoutes.get(
     ],
     responses: {
       200: {
-        description: "Resolved org and/or product matches",
+        description: "Resolved org and/or product matches (including a just-materialized stub)",
         content: { "application/json": { schema: resolver(DomainLookupResponseSchema) } },
       },
       400: {
@@ -730,7 +732,12 @@ lookupRoutes.get(
         content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
-        description: "Domain doesn't match any registered org or product",
+        description:
+          "Domain doesn't match any registered org or product (and JIT found no valid manifest)",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+      429: {
+        description: "Per-IP rate limit on the outbound JIT probe branch",
         content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
@@ -745,7 +752,7 @@ lookupRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const [orgRow, productRows] = await Promise.all([
+    let [orgRow, productRows] = await Promise.all([
       findOrgByDomain(db, domain),
       db
         .select({
@@ -782,7 +789,20 @@ lookupRoutes.get(
       } catch {
         // No execution context (e.g. some test paths) — skip capture silently.
       }
-      return respondError(c, new NotFoundError(`No org or product owns domain "${domain}"`));
+
+      // Just-in-time manifest discovery (#2030). Misses / budget skips → 404.
+      const jit = await tryDomainManifestJit(c.env, db, domain, {
+        ip: c.req.header("cf-connecting-ip") ?? undefined,
+      });
+      if (jit === "rate_limited") {
+        return respondError(c, new RateLimitedError("Too many domain lookup probes; slow down."));
+      }
+      if (jit === "materialized") {
+        orgRow = await findOrgByDomain(db, domain);
+      }
+      if (!orgRow && productRows.length === 0) {
+        return respondError(c, new NotFoundError(`No org or product owns domain "${domain}"`));
+      }
     }
 
     // Surface the org's tier as `status`, and for a stub attach its declared

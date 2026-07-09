@@ -18,20 +18,21 @@ import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { createDb, type D1Db } from "../db.js";
 import { createStubFromManifest } from "../lib/well-known/stub.js";
 import { affectedRows } from "../lib/well-known/promote.js";
+import { makeBotFetch, type WebBotAuthEnv } from "../lib/web-bot-auth-fetch.js";
 
 const SWEEP_RETRY_DAYS = 7; // re-probe cadence for a domain the sweep found nothing on
 const MAX_PER_RUN = 100; // effective per-run stub-creation cap; << CF 1000-subrequest ceiling
 const PRUNE_STALE_DAYS = 30; // age past which a single-hit, already-probed junk row is deleted
 const DAY_MS = 86_400_000;
 
-export interface DomainDemandSweepEnv {
+export interface DomainDemandSweepEnv extends WebBotAuthEnv {
   DB: D1Database;
   CRON_ENABLED?: string;
   FLAGS?: FlagshipBinding;
   LISTING_SELF_SERVE_ENABLED?: string;
   /** TEST-ONLY: use this drizzle handle instead of createDb(env.DB). */
   _drizzleOverride?: D1Db;
-  /** TEST-ONLY / injectable: manifest fetch. */
+  /** TEST-ONLY / injectable: manifest fetch. When omitted, uses makeBotFetch. */
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
 }
 
@@ -69,6 +70,8 @@ export async function domainDemandSweep(
   const db = env._drizzleOverride ?? createDb(env.DB);
   const now = Date.now();
   const cutoff = now - SWEEP_RETRY_DAYS * DAY_MS;
+  // Prefer injectable fetch (tests); otherwise sign with the registered bot identity.
+  const fetchImpl = env.fetchImpl ?? (await makeBotFetch(env));
 
   // Candidates: unlisted (anti-join organizations.domain), due, highest-demand
   // then least-recently-probed. NULL swept_at sorts first under ASC in SQLite.
@@ -94,7 +97,7 @@ export async function domainDemandSweep(
   for (const { domain } of candidates) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- sequential per-domain manifest fetch; bounded by MAX_PER_RUN
-      const r = await createStubFromManifest(db, domain, { fetchImpl: env.fetchImpl });
+      const r = await createStubFromManifest(db, domain, { fetchImpl });
       if (r.created) {
         created++;
         logEvent("info", {

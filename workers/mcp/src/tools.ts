@@ -1225,7 +1225,8 @@ export async function getOrganization(
  * `organizations.domain` and `domain_aliases.domain`, and return the
  * matching org (with aliases) plus any products whose alias targets the
  * domain. Mirrors `GET /v1/lookups/by-domain` on the API. Unknown domains
- * surface as a "not found" message — no on-demand probing for domains.
+ * surface as a "not found" message unless the API just-in-time materializes
+ * a stub from `/.well-known/releases.json` (#2030).
  */
 export async function lookupDomain(db: D1Db, params: { domain: string }): Promise<ToolResult> {
   const domain = normalizeDomain(params.domain);

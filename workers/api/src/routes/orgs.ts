@@ -43,6 +43,7 @@ import {
 import { promoteStubOrg } from "../lib/well-known/promote.js";
 import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
 import { buildOrgManifest } from "../lib/well-known/export-manifest.js";
+import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc, isNotNull, isNull } from "drizzle-orm";
@@ -1060,7 +1061,8 @@ orgRoutes.post(
     const { domain } = c.req.valid("json");
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
 
-    const result = await createStubFromManifest(db, domain, { dryRun });
+    const botFetch = await makeBotFetch(c.env);
+    const result = await createStubFromManifest(db, domain, { dryRun, fetchImpl: botFetch });
     return c.json(result);
   },
 );

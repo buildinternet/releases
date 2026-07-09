@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { WEB_BOT_AUTH_USER_AGENT } from "@buildinternet/releases-core/web-bot-auth";
 import { fetchReleasesJson } from "./fetch.js";
 
 function resp(body: string, init: ResponseInit = {}): Response {
@@ -16,6 +17,18 @@ describe("fetchReleasesJson", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.json).toEqual({ name: "Acme" });
+  });
+
+  it("sends the registered bot User-Agent", async () => {
+    const seen: string[] = [];
+    await fetchReleasesJson("https://acme.com/.well-known/releases.json", {
+      fetchImpl: async (_url, init) => {
+        const headers = new Headers(init?.headers);
+        seen.push(headers.get("user-agent") ?? "");
+        return resp(JSON.stringify({ name: "Acme" }));
+      },
+    });
+    expect(seen[0]).toBe(WEB_BOT_AUTH_USER_AGENT);
   });
 
   it("no-ops on 404", async () => {
