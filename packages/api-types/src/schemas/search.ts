@@ -108,6 +108,11 @@ export const SearchReleaseHitSchema = z.object({
   summary: z.string(),
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
+  /**
+   * Full markdown body. Omitted on list hits by default (summary + media
+   * cover the card/snippet surfaces). Opt in with `?include_content=true`
+   * on `/v1/search`. Fetch full body via `GET /v1/releases/:id` otherwise.
+   */
   content: z.string().optional(),
   media: z.array(MediaItemSchema).optional(),
   publishedAt: z.string().nullable(),

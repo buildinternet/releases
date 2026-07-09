@@ -78,9 +78,10 @@ function deriveClientKind(userAgent: string | null): string | null {
 
 /**
  * Lift a raw SQL row to the wire shape. JSON-parses media, rewrites any
- * media URLs inside the markdown body through MEDIA_ORIGIN, and resolves
- * r2Url for each media item — so the web can render release hits with the
- * same markdown + thumbnail treatment used in org/source feeds.
+ * media URLs inside the markdown body through MEDIA_ORIGIN (when body was
+ * selected via `include_content`), and resolves r2Url for each media item —
+ * so the web can render release hits with the same thumbnail treatment used
+ * in org/source feeds. Full body is omitted by default; summary covers cards.
  */
 export function hydrateReleaseHit(
   // Hybrid hits arrive with `appStore` already resolved by `buildReleaseHits`;
@@ -107,6 +108,12 @@ export function hydrateReleaseHit(
   } catch {
     // Keep media empty — a malformed row shouldn't break the whole response.
   }
+  // Only project content when the row carried it (include_content opt-in).
+  // Leaving the key off keeps the wire lean and matches the optional schema.
+  const content =
+    row.content != null && row.content !== ""
+      ? hydrateMediaUrls(row.content, mediaOrigin)
+      : undefined;
   return {
     id: row.id,
     sourceSlug: row.sourceSlug,
@@ -122,7 +129,7 @@ export function hydrateReleaseHit(
     summary: row.summary,
     titleGenerated: row.titleGenerated,
     titleShort: row.titleShort,
-    content: hydrateMediaUrls(row.content, mediaOrigin),
+    ...(content !== undefined ? { content } : {}),
     media,
     publishedAt: row.publishedAt,
     type: row.type,
@@ -331,6 +338,14 @@ searchRoutes.get(
         description: "Include coverage-side rows that normally roll up into a canonical release.",
       },
       {
+        name: "include_content",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description:
+          "Include full markdown `content` on each release hit. Default false — hits ship `summary` + `media` only (list/card surfaces). Use `GET /v1/releases/:id` for the full body when not opted in.",
+      },
+      {
         name: "include_empty",
         in: "query",
         required: false,
@@ -398,6 +413,7 @@ searchRoutes.get(
     const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
     const mode = parseMode(c.req.query("mode"));
     const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+    const includeContent = parseBoolParam(c.req.query("include_content"));
     const includeEmpty = parseBoolParam(c.req.query("include_empty"));
     const rawDomain = c.req.query("domain");
     const kindFilter = parseKindParam(c.req.query("kind"));
@@ -646,6 +662,7 @@ searchRoutes.get(
     if (mode === "lexical") {
       const ftsRows = await searchReleasesFts(db, q, limit, offset, {
         includeCoverage,
+        includeContent,
         orgId: scopeOrgId,
         sourceIds: productSourceIds,
         kind: kindFilter,
@@ -662,7 +679,14 @@ searchRoutes.get(
           orgs.map((o) => o.slug),
           catalog.filter((p) => p.entryType !== "source").map((p) => p.slug),
           limit,
-          { includeCoverage, sourceIds: productSourceIds, kind: kindFilter, since, until },
+          {
+            includeCoverage,
+            includeContent,
+            sourceIds: productSourceIds,
+            kind: kindFilter,
+            since,
+            until,
+          },
         );
       }
       const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
@@ -742,6 +766,7 @@ searchRoutes.get(
           topK: limit,
           mode,
           includeCoverage,
+          includeContent,
           // Domain narrowing reaches into the hybrid layer via the existing
           // `orgSourceIds` filter so vector + FTS results both stay scoped.
           ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
@@ -773,7 +798,7 @@ searchRoutes.get(
             summary: h.release.summary,
             titleGenerated: h.release.titleGenerated,
             titleShort: h.release.titleShort,
-            content: h.release.content,
+            content: h.release.content ?? null,
             media: h.release.media,
             publishedAt: h.release.publishedAt,
             type: h.release.type,

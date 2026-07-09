@@ -340,10 +340,11 @@ function ResultCard({
 }
 
 function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: string[] }) {
-  // `||` (not `??`) so an empty content string still falls back to the
-  // summary — a card with a title but no snippet reads as broken.
+  // Prefer `summary` (the list projection). Full `content` is only present when
+  // the API was called with `?include_content=true`; `||` still covers an empty
+  // summary falling back to body so a card never renders blank.
   const body = useMemo(
-    () => stripLeadingTitle(hit.content || hit.summary, hit.title),
+    () => stripLeadingTitle(hit.summary || hit.content, hit.title),
     [hit.content, hit.summary, hit.title],
   );
   const thumbnail = useMemo(() => {
