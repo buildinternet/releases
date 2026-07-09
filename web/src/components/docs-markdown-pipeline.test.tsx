@@ -41,6 +41,19 @@ describe("docs markdown pipeline", () => {
     expect(html).not.toContain('target="_blank"');
   });
 
+  it("keeps same-origin app paths as in-document links (e.g. /submit)", () => {
+    const html = renderDoc("Then [check and activate](/submit) your listing.");
+    expect(html).toContain('href="/submit"');
+    expect(html).not.toContain('target="_blank"');
+    expect(html).not.toContain("nofollow");
+  });
+
+  it("still opens external https links in a new tab", () => {
+    const html = renderDoc("See [the schema](https://releases.sh/schemas/releases.json).");
+    expect(html).toContain('href="https://releases.sh/schemas/releases.json"');
+    expect(html).toContain('target="_blank"');
+  });
+
   it("dedupes repeated heading text into distinct ids", () => {
     const html = renderDoc("## Setup\n\ntext\n\n## Setup\n\nmore");
     expect(html).toContain('id="setup"');

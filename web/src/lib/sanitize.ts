@@ -30,6 +30,16 @@ export function isFragmentHref(href: string | undefined | null): boolean {
   return typeof href === "string" && href.trim().startsWith("#");
 }
 
+/** Same-origin app paths (`/submit`, `/docs/listing`, `/foo#bar`). These should
+ *  stay in-document navigation in author-controlled markdown (docs, pages) —
+ *  no `target="_blank"`, no external-UGC rel. Protocol-relative `//…` is
+ *  deliberately excluded (that's `isSafeHref`'s job to reject). */
+export function isInternalHref(href: string | undefined | null): boolean {
+  if (!href || typeof href !== "string") return false;
+  const trimmed = href.trim();
+  return trimmed.startsWith("/") && !trimmed.startsWith("//");
+}
+
 /** Returns true if the src is safe for use in an <img> tag. */
 export function isSafeImgSrc(src: string | undefined | null): src is string {
   if (!src || typeof src !== "string") return false;

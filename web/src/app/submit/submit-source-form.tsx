@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 type SubmitState =
@@ -75,20 +74,24 @@ export function SubmitSourceForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate={false}>
+      <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+        Suggest a changelog, feed, or GitHub releases URL and a curator will take a look.
+      </p>
+
       <div>
         <label
           htmlFor="url"
           className="block text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400"
         >
-          Product or releases.json URL <span className="text-blue-500">*</span>
+          Product or release notes URL <span className="text-blue-500">*</span>
         </label>
         <input
           id="url"
           name="url"
           type="url"
           required
-          placeholder="https://example.com/.well-known/releases.json"
-          className="mt-2 w-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 px-3 py-2.5 text-sm text-stone-900 dark:text-stone-100 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          placeholder="https://example.com/changelog"
+          className="mt-2 w-full border border-stone-300 bg-transparent px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-stone-700 dark:text-stone-100"
         />
       </div>
 
@@ -105,7 +108,7 @@ export function SubmitSourceForm() {
           name="contactEmail"
           type="email"
           placeholder="you@example.com"
-          className="mt-2 w-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 px-3 py-2.5 text-sm text-stone-900 dark:text-stone-100 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          className="mt-2 w-full border border-stone-300 bg-transparent px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-stone-700 dark:text-stone-100"
         />
       </div>
 
@@ -120,21 +123,7 @@ export function SubmitSourceForm() {
           }`}
           role={state.status === "error" ? "alert" : "status"}
         >
-          {state.message ?? (
-            <>
-              Prefer{" "}
-              <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-                releases.json
-              </code>{" "}
-              on your domain?{" "}
-              <Link
-                href="/docs/listing"
-                className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-              >
-                How to get listed
-              </Link>
-            </>
-          )}
+          {state.message ?? "A curator will review the URL and may add it to the registry."}
         </p>
         <button
           type="submit"

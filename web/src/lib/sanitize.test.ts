@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isFragmentHref, isSafeHref } from "./sanitize";
+import { isFragmentHref, isInternalHref, isSafeHref } from "./sanitize";
 
 // Same-page fragment links (`#section`) must survive the markdown link
 // sanitizer so heading anchors / TOC targets work (#1912). They carry no
@@ -34,5 +34,22 @@ describe("isFragmentHref", () => {
     expect(isFragmentHref("/docs/listing#section")).toBe(false);
     expect(isFragmentHref(undefined)).toBe(false);
     expect(isFragmentHref(null)).toBe(false);
+  });
+});
+
+describe("isInternalHref", () => {
+  test("true for same-origin absolute paths (including fragments)", () => {
+    expect(isInternalHref("/submit")).toBe(true);
+    expect(isInternalHref("/docs/listing")).toBe(true);
+    expect(isInternalHref("/docs/listing#let-an-agent-write-it")).toBe(true);
+    expect(isInternalHref("  /submit")).toBe(true);
+  });
+
+  test("false for external, protocol-relative, fragments, and empty", () => {
+    expect(isInternalHref("https://releases.sh/submit")).toBe(false);
+    expect(isInternalHref("//evil.example.com")).toBe(false);
+    expect(isInternalHref("#section")).toBe(false);
+    expect(isInternalHref(undefined)).toBe(false);
+    expect(isInternalHref("")).toBe(false);
   });
 });
