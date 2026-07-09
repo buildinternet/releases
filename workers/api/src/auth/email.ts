@@ -72,7 +72,7 @@ export type SendAuthEmailResult =
   | { sent: false; reason: "no_binding" | "error" };
 
 const DEFAULT_FROM = "noreply@releases.sh";
-const DEFAULT_FROM_NAME = "Releases";
+const DEFAULT_FROM_NAME = "Releases.sh";
 
 /**
  * Pull the first http(s) URL out of a rendered text body so the dev log can carry a
