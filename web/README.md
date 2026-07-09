@@ -21,11 +21,14 @@ webhooks, API keys, workspaces). Talks to the API worker at `api.releases.sh` (R
 - `next.config.ts` — Next.js config
 - `codegen.ts` — GraphQL Codegen config (`bun run codegen`, generates typed documents against the
   API worker's GraphQL schema)
-- `vercel.json` — Vercel framework/build settings, including an `ignoreCommand` that skips builds
-  when a deploy has no changes under `web/`, `packages/`, `scripts/`, `bun.lock`, or `package.json`
+- `vercel.json` — Vercel framework/build settings; `ignoreCommand` runs
+  `scripts/vercel-ignore.sh` (kept as a script so the command stays under Vercel's 256-char
+  schema limit) and skips builds when a deploy has no changes under `web/`, `packages/`,
+  `scripts/`, `bun.lock`, or `package.json`
 - `public/` — static assets
 - `scripts/build-well-known.ts` — build-time script (run from the `build` script) that generates
   the `.well-known` config output
+- `scripts/vercel-ignore.sh` — ignored-build-step logic for Vercel (prod-only + path-filtered skip)
 
 ## Develop
 
