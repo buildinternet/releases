@@ -1,31 +1,24 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { Header } from "@/components/header";
-import { StatusDashboard } from "./dashboard";
-import { isAdminViewer } from "@/lib/server-session";
+import { SettingsSection } from "@releases/design-system";
+import { navItem } from "@/lib/account-nav";
 import { apiBaseUrl } from "@/lib/env";
+import { StatusDashboard } from "./dashboard";
 
-export const metadata: Metadata = { title: "Status" };
+const item = navItem("admin-status");
 
-export default async function StatusPage() {
-  if (!(await isAdminViewer())) notFound();
+export const metadata: Metadata = {
+  title: item.label,
+  description: item.description,
+  robots: { index: false, follow: false },
+};
 
-  // apiUrl is only used client-side for the WebSocket connection to /v1/status/ws,
-  // which has no auth. Admin HTTP calls go through /api/proxy/... so the bearer
-  // never crosses server→client.
+export default function StatusPage() {
+  // Public WS endpoint only; admin HTTP goes through /api/proxy so the bearer stays server-side.
   const apiUrl = apiBaseUrl() ?? "http://localhost:3456";
 
   return (
-    <div className="min-h-screen">
-      <Header />
-      <div className="max-w-5xl mx-auto px-6 pt-8 pb-12">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
-            Status
-          </h1>
-        </div>
-        <StatusDashboard apiUrl={apiUrl} />
-      </div>
-    </div>
+    <SettingsSection group={item.group} title={item.label} description={item.description}>
+      <StatusDashboard apiUrl={apiUrl} />
+    </SettingsSection>
   );
 }

@@ -15,7 +15,7 @@ import { OrgInstallCommand } from "@/components/org/org-install-command";
 import { AgentCopyButton } from "@/components/org/agent-copy-button";
 import { OrgContextRail } from "@/components/org/org-context-rail";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
-import { formatMonthYear } from "@/lib/formatters";
+import { domainHref } from "@/lib/source-display";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
 
 /** Most recent release timestamp across all sources (drives the Releases "new" dot). */
@@ -56,11 +56,19 @@ export default async function OrgLayout({
 
   const githubHandle = org.accounts.find((a) => a.platform === "github")?.handle ?? null;
   const hasAvatar = Boolean(org.avatarUrl || githubHandle);
-  const trackingSince = formatMonthYear(org.trackingSince);
+  // Domain + category only; "Tracking since" is in the context rail About card.
   const metaParts = [
-    org.domain ? <span className="font-mono">{org.domain}</span> : null,
+    org.domain ? (
+      <a
+        href={domainHref(org.domain)}
+        target="_blank"
+        rel="nofollow noopener noreferrer"
+        className="font-mono transition-colors hover:text-[var(--fg-2)]"
+      >
+        {org.domain}
+      </a>
+    ) : null,
     org.category ? <span>{categoryDisplayName(org.category)}</span> : null,
-    trackingSince ? <span>Tracking since {trackingSince}</span> : null,
   ].filter(Boolean) as ReactNode[];
 
   return (

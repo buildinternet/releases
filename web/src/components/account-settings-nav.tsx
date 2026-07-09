@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { visibleNavGroups } from "@/lib/account-nav";
+import { ADMIN_GROUP_LABEL, navItemForPath, visibleNavGroups } from "@/lib/account-nav";
 import { ErrorText, eyebrowClass } from "@releases/design-system";
+import { useIsAdmin } from "@/components/admin-only";
 import { useWorkspaces } from "@/components/account/use-workspaces";
 import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import {
@@ -15,10 +16,8 @@ import {
 } from "@/components/account/icons";
 
 /**
- * Account settings sidebar: a "SETTINGS" kicker, a workspace context selector,
- * and the Personal / Workspace nav groups from {@link visibleNavGroups}. Active
- * item gets an accent-soft pill + accent icon. Renders a sticky rail on desktop
- * and a collapsible `<details>` on mobile, sharing one body.
+ * Settings sidebar: workspace selector + Personal / Workspace / (admin-only) Admin
+ * groups. Active item gets an accent-soft pill. Sticky on desktop; collapsible on mobile.
  */
 
 function WorkspaceSelector() {
@@ -152,11 +151,19 @@ function WorkspaceSelector() {
   );
 }
 
-function NavBody({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function NavBody({
+  pathname,
+  includeAdmin,
+  onNavigate,
+}: {
+  pathname: string;
+  includeAdmin: boolean;
+  onNavigate?: () => void;
+}) {
   return (
     <div>
       <WorkspaceSelector />
-      {visibleNavGroups().map((group) => (
+      {visibleNavGroups({ includeAdmin }).map((group) => (
         <div key={group.label} className="mb-5 last:mb-0">
           <div
             className={`${eyebrowClass} mb-2 ml-2.5 text-[10.5px] text-stone-400 dark:text-stone-500`}
@@ -165,7 +172,7 @@ function NavBody({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
           </div>
           <ul className="flex flex-col gap-0.5">
             {group.items.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.Icon;
               return (
                 <li key={item.key}>
@@ -201,12 +208,13 @@ function NavBody({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
   );
 }
 
-export function AccountSettingsNav() {
+export function AccountSettingsNav({ devAdmin = false }: { devAdmin?: boolean }) {
   const pathname = usePathname();
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  const groups = visibleNavGroups();
+  const includeAdmin = useIsAdmin(devAdmin);
   const currentLabel =
-    groups.flatMap((g) => g.items).find((i) => i.href === pathname)?.label ?? "Settings";
+    navItemForPath(pathname)?.label ??
+    (pathname.startsWith("/admin") ? ADMIN_GROUP_LABEL : "Settings");
 
   useEffect(() => {
     if (detailsRef.current) detailsRef.current.open = false;
@@ -225,6 +233,7 @@ export function AccountSettingsNav() {
         <nav className="border-t border-stone-200 px-4 pb-4 pt-3 dark:border-stone-800">
           <NavBody
             pathname={pathname}
+            includeAdmin={includeAdmin}
             onNavigate={() => {
               if (detailsRef.current) detailsRef.current.open = false;
             }}
@@ -236,7 +245,7 @@ export function AccountSettingsNav() {
         <div className={`${eyebrowClass} mb-4 ml-0.5 text-stone-400 dark:text-stone-500`}>
           Settings
         </div>
-        <NavBody pathname={pathname} />
+        <NavBody pathname={pathname} includeAdmin={includeAdmin} />
       </nav>
     </>
   );

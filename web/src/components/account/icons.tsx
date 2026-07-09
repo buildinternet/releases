@@ -249,3 +249,21 @@ export function CloseIcon(p: IconProps) {
     </Icon>
   );
 }
+
+export function NoticeIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <path d="M4 10v4a2 2 0 0 0 2 2h2l4 4V4L8 8H6a2 2 0 0 0-2 2z" />
+      <path d="M15.5 8.5a4 4 0 0 1 0 7M18 6a7 7 0 0 1 0 12" />
+    </Icon>
+  );
+}
+
+export function StatusIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <path d="M4 14l4-4 3 3 5-6 4 4" />
+      <path d="M4 19h16" />
+    </Icon>
+  );
+}
