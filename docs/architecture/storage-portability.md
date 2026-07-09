@@ -30,11 +30,11 @@ dominated by FTS, raw SQL dialect, and schema builders — not by switching UUID
 **Single typed nanoid = primary key = public ID.** Registry entities use one string
 identity end-to-end:
 
-| Layer | Value |
-| --- | --- |
-| Generation | App code via `@buildinternet/releases-core/id` (`newReleaseId()`, …) |
-| Storage | `TEXT` PK / FK (SQLite today; `text` on any future SQL backend) |
-| API / MCP / CLI / webhooks / URLs | Same string (`rel_…`, `src_…`, `org_…`, `prod_…`, …) |
+| Layer                             | Value                                                                |
+| --------------------------------- | -------------------------------------------------------------------- |
+| Generation                        | App code via `@buildinternet/releases-core/id` (`newReleaseId()`, …) |
+| Storage                           | `TEXT` PK / FK (SQLite today; `text` on any future SQL backend)      |
+| API / MCP / CLI / webhooks / URLs | Same string (`rel_…`, `src_…`, `org_…`, `prod_…`, …)                 |
 
 Prefixes are load-bearing product surface (`getEntityType`, bare-path rules, release
 URL parsing as `rel_` + 21 chars). They are not a display veneer over a second
@@ -86,16 +86,16 @@ there is one production shape (D1). Self-host / Postgres rows are the intended
 future matrix — fill them in when a second backend is real; until then they mark
 degradation points honestly.
 
-| Capability | Production (D1) | Portable constant / owner | Self-host SQLite (future) | Postgres (future) |
-| --- | --- | --- | --- | --- |
-| Relational driver | `drizzle-orm/d1` via `createDb` | `@releases/lib/db` | file / LiteFS + sqlite driver | `postgres-js` / `node-postgres` branch in `createDb` |
-| Schema dialect | `sqliteTable`, integer bool/ts, text json | `packages/core/src/schema.ts` | same as D1 | parallel `pgTable` (phase 2) |
-| Migrations | hand-written SQLite `.sql` | `workers/api/migrations/` | same set or subset | parallel PG set (phase 2) |
-| Bound-param ceiling | 100 / statement | `@buildinternet/releases-core/d1-limits` | likely higher; keep chunking | higher; raise constants |
-| Multi-statement batch | D1 `.batch()` | call sites + test `ensureBatchShim` | transaction | transaction analog |
-| Lexical full-text | FTS5 `releases_fts` + triggers | [Lexical search](#lexical-search-ownership) | FTS5 if available | `tsvector` / `pg_trgm` or degrade |
-| Semantic search | Vectorize | `packages/search` | optional / off | optional / off / other vector store |
-| Entity IDs | typed nanoid `TEXT` | `@buildinternet/releases-core/id` | same | same (`text`; dual-ID optional later) |
+| Capability            | Production (D1)                           | Portable constant / owner                   | Self-host SQLite (future)     | Postgres (future)                                    |
+| --------------------- | ----------------------------------------- | ------------------------------------------- | ----------------------------- | ---------------------------------------------------- |
+| Relational driver     | `drizzle-orm/d1` via `createDb`           | `@releases/lib/db`                          | file / LiteFS + sqlite driver | `postgres-js` / `node-postgres` branch in `createDb` |
+| Schema dialect        | `sqliteTable`, integer bool/ts, text json | `packages/core/src/schema.ts`               | same as D1                    | parallel `pgTable` (phase 2)                         |
+| Migrations            | hand-written SQLite `.sql`                | `workers/api/migrations/`                   | same set or subset            | parallel PG set (phase 2)                            |
+| Bound-param ceiling   | 100 / statement                           | `@buildinternet/releases-core/d1-limits`    | likely higher; keep chunking  | higher; raise constants                              |
+| Multi-statement batch | D1 `.batch()`                             | call sites + test `ensureBatchShim`         | transaction                   | transaction analog                                   |
+| Lexical full-text     | FTS5 `releases_fts` + triggers            | [Lexical search](#lexical-search-ownership) | FTS5 if available             | `tsvector` / `pg_trgm` or degrade                    |
+| Semantic search       | Vectorize                                 | `packages/search`                           | optional / off                | optional / off / other vector store                  |
+| Entity IDs            | typed nanoid `TEXT`                       | `@buildinternet/releases-core/id`           | same                          | same (`text`; dual-ID optional later)                |
 
 **Orthogonal (not relational):** KV, R2, Durable Objects, Flagship, managed agents.
 A self-host without those bindings degrades features; it does not change entity ID
@@ -117,13 +117,13 @@ bypass these helpers behind the same call sites.
 
 ### Production `MATCH` call sites (closed set)
 
-| File | Role |
-| --- | --- |
-| [`workers/api/src/queries/search.ts`](../../workers/api/src/queries/search.ts) | Primary release FTS for `/v1/search` |
-| [`workers/api/src/queries/orgs.ts`](../../workers/api/src/queries/orgs.ts) | Org-scoped release filter (`MATCH ?` fragment) |
-| [`workers/api/src/queries/sources.ts`](../../workers/api/src/queries/sources.ts) | Source-scoped release filter (`MATCH ?` fragment) |
-| [`packages/search/src/hybrid-search-worker.ts`](../../packages/search/src/hybrid-search-worker.ts) | Hybrid RRF lexical leg (IDs only, then rehydrate) |
-| [`workers/mcp/src/tools.ts`](../../workers/mcp/src/tools.ts) | MCP search path (prefer converging onto `queries/search` over time) |
+| File                                                                                               | Role                                                                |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [`workers/api/src/queries/search.ts`](../../workers/api/src/queries/search.ts)                     | Primary release FTS for `/v1/search`                                |
+| [`workers/api/src/queries/orgs.ts`](../../workers/api/src/queries/orgs.ts)                         | Org-scoped release filter (`MATCH ?` fragment)                      |
+| [`workers/api/src/queries/sources.ts`](../../workers/api/src/queries/sources.ts)                   | Source-scoped release filter (`MATCH ?` fragment)                   |
+| [`packages/search/src/hybrid-search-worker.ts`](../../packages/search/src/hybrid-search-worker.ts) | Hybrid RRF lexical leg (IDs only, then rehydrate)                   |
+| [`workers/mcp/src/tools.ts`](../../workers/mcp/src/tools.ts)                                       | MCP search path (prefer converging onto `queries/search` over time) |
 
 Schema / sync (not query):
 
@@ -217,7 +217,7 @@ graph TD
 | 1   | **Client / driver**       | Easy (done)             | Single `createDb` factory in `@releases/lib/db` + `_drizzleOverride`, shared by all four consumers (`api`, `mcp`, `webhooks`, `packages/search`). A Postgres backend branches here on `drizzle-orm/postgres-js` (or `node-postgres`) — one edit, not 3–4.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 2   | **Schema dialect**        | Medium-large            | [`packages/core/src/schema.ts`](../../packages/core/src/schema.ts) (~36 `sqliteTable`s + 6 `sqliteView`s) plus aux schema in `workers/api/src/db/schema-*.ts` and [`packages/core-internal`](../../packages/core-internal/). SQLite-isms: `integer({ mode: "boolean" })`, `integer({ mode: "timestamp" })`, `text({ mode: "json" })`, `AUTOINCREMENT`. Postgres wants native `boolean` / `timestamptz` / `jsonb` / identity. Drizzle is multi-dialect but the `sqliteTable`/`pgTable` builders are **not shared** — this is a real port, not a config flag.                                                                                                                                                                                                                                                                       |
 | 3   | **Migrations**            | Medium                  | [`workers/api/migrations/`](../../workers/api/migrations/) — 52 hand-written, timestamp-prefixed SQLite `.sql` files (incremental `add_*`/`marker_*`, plus a squashed baseline with `AUTOINCREMENT`, `CREATE VIRTUAL TABLE … fts5`, `CREATE VIEW`, `CREATE TRIGGER`, `PRAGMA`). A Postgres backend needs a parallel migration set; these are not reusable as-is.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 4   | **FTS5 full-text search** | **Large, highest-risk** | `releases_fts` virtual table + three sync triggers + the query builder in [`packages/core/src/fts.ts`](../../packages/core/src/fts.ts) + every `MATCH` site. No structural Postgres equivalent — must be reimplemented on `tsvector`/`tsquery` or `pg_trgm`. **Mitigant:** search is already _hybrid_ (FTS5 + Vectorize), so a Postgres port can lean harder on the vector leg and degrade lexical search rather than block on a full FTS rewrite. Ownership rules: [Lexical search](#lexical-search-ownership).                                                                                                                                                                                                                                                                                                              |
+| 4   | **FTS5 full-text search** | **Large, highest-risk** | `releases_fts` virtual table + three sync triggers + the query builder in [`packages/core/src/fts.ts`](../../packages/core/src/fts.ts) + every `MATCH` site. No structural Postgres equivalent — must be reimplemented on `tsvector`/`tsquery` or `pg_trgm`. **Mitigant:** search is already _hybrid_ (FTS5 + Vectorize), so a Postgres port can lean harder on the vector leg and degrade lexical search rather than block on a full FTS rewrite. Ownership rules: [Lexical search](#lexical-search-ownership).                                                                                                                                                                                                                                                                                                                  |
 | 5   | **Raw SQL**               | Large, diffuse          | ~430 `sql\`\`` fragments, heaviest in [`workers/mcp/src/tools.ts`](../../workers/mcp/src/tools.ts) and [`workers/api/src/queries/`](../../workers/api/src/queries/). Most idioms survive; SQLite-isms need case-by-case audit: `LOWER(...) LIKE`, integer-boolean predicates (`IS NULL OR = 0`), `db.all/get/run`result shapes, and D1's`.batch()`(needs a Postgres transaction analog; tests use`ensureBatchShim`).                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 6   | **D1 quirk assumptions**  | Small (parameterized)   | The 100-bound-parameter limit and the generic `IN`-clause chunk live as named capabilities in [`@buildinternet/releases-core/d1-limits`](../../packages/core/src/d1-limits.ts) (`D1_MAX_BINDINGS = 100`, `IN_ARRAY_CHUNK_SIZE = 90`), re-exported from [`workers/api/src/lib/d1-limits.ts`](../../workers/api/src/lib/d1-limits.ts) (which keeps the per-statement INSERT chunk sizes + bind-budget invariant tests). Shared with `packages/core-internal` (eligibility + overview-upsert) so a higher-limit backend can bump both layers in one place. (`search.ts` deliberately _caps_ its product-scoped `sourceIds` list rather than chunk-unions — a single product owning >90 sources is not a served shape.) The per-INSERT `.batch()` chunk sizes stay distinct constants by design — each divisor is row-shape-specific. |
 
