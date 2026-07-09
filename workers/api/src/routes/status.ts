@@ -115,6 +115,15 @@ statusRoutes.get("/status/fetch-log", async (c) => {
       sourceSlug: sources.slug,
       orgName: organizations.name,
       orgSlug: organizations.slug,
+      // Status chart drill facepile — same fields OrgAvatar uses on the web.
+      orgAvatarUrl: organizations.avatarUrl,
+      // Correlated handle for github.com/<handle>.png fallback when avatar_url is null.
+      // Backed by idx_org_accounts_org_platform (#1800).
+      orgGithubHandle: sql<string | null>`(
+        SELECT handle FROM org_accounts
+        WHERE org_id = ${organizations.id} AND platform = 'github'
+        ORDER BY created_at, id LIMIT 1
+      )`.mapWith((v) => (v == null ? null : String(v))),
       releasesFound: fetchLog.releasesFound,
       releasesInserted: fetchLog.releasesInserted,
       durationMs: fetchLog.durationMs,

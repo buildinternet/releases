@@ -20,10 +20,12 @@ const ROLES = [
 export function MembersPanel() {
   const { data, isPending } = useSession();
   const user = data?.user;
-  const { active, workspaces } = useWorkspaces();
-  const current = active ?? workspaces[0] ?? null;
+  const { active, workspaces, isLoading: workspacesLoading } = useWorkspaces();
+  const current = active ?? (!workspacesLoading ? (workspaces[0] ?? null) : null);
 
-  if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  if (isPending || (user && workspacesLoading && !current)) {
+    return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  }
 
   if (!user) {
     return (

@@ -42,10 +42,14 @@ function profileForm(res: WorkspaceProfileResponse): ProfileForm {
 export function GeneralPanel() {
   const { data: sessionData, isPending } = useSession();
   const user = sessionData?.user;
-  const { workspaces, active, refetch } = useWorkspaces();
-  const current = active ?? workspaces[0] ?? null;
+  const { workspaces, active, isLoading: workspacesLoading, refetch } = useWorkspaces();
+  // Don't fall back to list[0] while hooks are still resolving (avoids a wrong
+  // workspace flash). Cache-backed `active` from useWorkspaces covers first paint.
+  const current = active ?? (!workspacesLoading ? (workspaces[0] ?? null) : null);
 
   const [name, setName] = useState("");
+  // Seeded from workspace list/cache; refined by profile fetch. Never start at
+  // null when `current.logo` is already known — that was the letter→photo flash.
   const [logo, setLogo] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileForm>(EMPTY_PROFILE);
   const [savedProfile, setSavedProfile] = useState<ProfileForm>(EMPTY_PROFILE);
@@ -53,6 +57,8 @@ export function GeneralPanel() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const displayLogo = logo ?? current?.logo ?? null;
 
   const loadProfile = useCallback(async (workspaceId: string) => {
     setProfileLoading(true);
@@ -63,7 +69,7 @@ export function GeneralPanel() {
       setProfile(fields);
       setSavedProfile(fields);
     } catch {
-      setLogo(null);
+      // Keep seeded logo from the workspace list/cache; only clear form fields.
       setProfile(EMPTY_PROFILE);
       setSavedProfile(EMPTY_PROFILE);
     } finally {
@@ -72,11 +78,19 @@ export function GeneralPanel() {
   }, []);
 
   useEffect(() => {
-    setName(current?.name ?? "");
-    if (current?.id) void loadProfile(current.id);
+    if (!current) return;
+    setName(current.name);
+    // Paint list/cache logo immediately; profile fetch may refine it.
+    setLogo(current.logo ?? null);
+    void loadProfile(current.id);
+    // Only re-seed when the active workspace identity changes — not on every
+    // logo string churn from the list hook (that would fight the profile fetch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: current.logo seed on id change only
   }, [current?.id, current?.name, loadProfile]);
 
-  if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  if (isPending || (user && workspacesLoading && !current)) {
+    return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  }
 
   if (!user) {
     return (
@@ -170,7 +184,7 @@ export function GeneralPanel() {
           </div>
           <div className="flex items-center gap-[18px]">
             <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[var(--accent)] text-2xl font-semibold text-[var(--on-accent)]">
-              <WorkspaceAvatar name={current.name} logo={logo} />
+              <WorkspaceAvatar name={current.name} logo={displayLogo} />
             </span>
             <AvatarUploadButton
               disabled={profileLoading}

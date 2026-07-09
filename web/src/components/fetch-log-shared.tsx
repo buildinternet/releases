@@ -8,6 +8,10 @@ export interface FetchLogEntry {
   sourceSlug?: string;
   orgName?: string;
   orgSlug?: string;
+  /** Owning org avatar URL when the row is joined to an organization. */
+  orgAvatarUrl?: string | null;
+  /** Optional GitHub handle for OrgAvatar fallback (`github.com/<handle>.png`). */
+  orgGithubHandle?: string | null;
   releasesFound: number;
   releasesInserted: number;
   durationMs?: number;

@@ -21,7 +21,7 @@ import {
  */
 
 function WorkspaceSelector() {
-  const { workspaces, active, busy, error, switchTo, create } = useWorkspaces();
+  const { workspaces, active, isLoading, busy, error, switchTo, create } = useWorkspaces();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -47,7 +47,8 @@ function WorkspaceSelector() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const current = active ?? workspaces[0] ?? null;
+  // Prefer active (live or cached); only fall back to list[0] once the list is ready.
+  const current = active ?? (!isLoading ? (workspaces[0] ?? null) : null);
 
   return (
     <div className="relative mb-6" ref={boxRef}>
@@ -56,18 +57,44 @@ function WorkspaceSelector() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-busy={isLoading && !current}
         className="flex w-full items-center gap-2.5 rounded-[10px] border border-stone-200 bg-white p-2.5 text-left transition hover:border-stone-300 dark:border-stone-800 dark:bg-stone-900 dark:hover:border-stone-700"
       >
         <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--accent)] text-[13px] font-semibold text-[var(--on-accent)]">
-          <WorkspaceAvatar name={current?.name ?? "Workspace"} logo={current?.logo} />
+          {current ? (
+            <WorkspaceAvatar name={current.name} logo={current.logo} />
+          ) : (
+            <span
+              className="h-full w-full animate-pulse bg-[var(--accent)]/40"
+              aria-hidden="true"
+            />
+          )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold text-stone-900 dark:text-stone-100">
-            {current?.name ?? "Personal"}
-          </span>
-          <span className="block truncate text-[11.5px] text-stone-400 dark:text-stone-500">
-            {current ? "Workspace" : "No workspace"}
-          </span>
+          {current ? (
+            <>
+              <span className="block truncate text-[13.5px] font-semibold text-stone-900 dark:text-stone-100">
+                {current.name}
+              </span>
+              <span className="block truncate text-[11.5px] text-stone-400 dark:text-stone-500">
+                Workspace
+              </span>
+            </>
+          ) : isLoading ? (
+            <>
+              <span className="mb-1 block h-3.5 w-24 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
+              <span className="block h-3 w-16 animate-pulse rounded bg-stone-100 dark:bg-stone-900" />
+            </>
+          ) : (
+            <>
+              <span className="block truncate text-[13.5px] font-semibold text-stone-900 dark:text-stone-100">
+                Personal
+              </span>
+              <span className="block truncate text-[11.5px] text-stone-400 dark:text-stone-500">
+                No workspace
+              </span>
+            </>
+          )}
         </span>
         <ChevronSelectorIcon className="h-[15px] w-[15px] shrink-0 text-stone-400 dark:text-stone-500" />
       </button>

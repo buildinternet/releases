@@ -16,50 +16,48 @@ import {
 } from "@releases/design-system";
 import { AvatarUploadButton } from "@/components/avatar-upload-button";
 import { uploadUserAvatar } from "@/lib/account-profile-api";
-
-function ProfileAvatar({
-  user,
-}: {
-  user: { name?: string | null; email: string; image?: string | null };
-}) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => setBroken(false), [user.image]);
-  if (user.image && !broken) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={user.image}
-        alt=""
-        referrerPolicy="no-referrer"
-        decoding="async"
-        onError={() => setBroken(true)}
-        className="h-full w-full object-cover"
-      />
-    );
-  }
-  const source = (user.name ?? "").trim() || user.email;
-  return <span aria-hidden="true">{source.slice(0, 1).toUpperCase()}</span>;
-}
+import { UserAvatar } from "@/components/account/user-avatar";
+import {
+  readUserDisplayCache,
+  writeUserDisplayCache,
+  type CachedUserDisplay,
+} from "@/components/account/user-display-cache";
 
 export function ProfilePanel() {
   const { data: sessionData, isPending, refetch } = useSession();
   const user = sessionData?.user;
+  const [cached, setCached] = useState<CachedUserDisplay | null>(() => readUserDisplayCache());
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => readUserDisplayCache()?.name ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   // Seed the editable field once the session resolves / changes.
   useEffect(() => {
-    setName(user?.name ?? "");
+    if (user?.name != null) setName(user.name);
   }, [user?.name]);
 
-  if (isPending) {
+  useEffect(() => {
+    if (!user) return;
+    const next: CachedUserDisplay = {
+      id: user.id,
+      name: user.name ?? null,
+      email: user.email,
+      image: user.image ?? null,
+    };
+    writeUserDisplayCache(next);
+    setCached(next);
+  }, [user?.id, user?.name, user?.email, user?.image]);
+
+  // Prefer live session; fall back to last-known display while session is pending.
+  const displayUser = user ?? (isPending ? cached : null);
+
+  if (isPending && !displayUser) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
   }
 
-  if (!user) {
+  if (!displayUser) {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
@@ -71,11 +69,13 @@ export function ProfilePanel() {
     );
   }
 
-  const dirty = name.trim() !== (user.name ?? "").trim();
+  const baselineName = (user?.name ?? displayUser.name ?? "").trim();
+  const dirty = name.trim() !== baselineName;
+  const sessionReady = Boolean(user);
 
   async function onSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (saving || !dirty) return;
+    if (!sessionReady || saving || !dirty) return;
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -119,9 +119,10 @@ export function ProfilePanel() {
           </p>
           <div className="flex items-center gap-[18px]">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--accent)] text-2xl font-semibold text-[var(--on-accent)]">
-              <ProfileAvatar user={user} />
+              <UserAvatar user={displayUser} />
             </span>
             <AvatarUploadButton
+              disabled={!sessionReady}
               onUpload={async (file) => {
                 await uploadUserAvatar(file);
                 await refetch?.();
@@ -138,6 +139,7 @@ export function ProfilePanel() {
             <input
               id="display-name"
               value={name}
+              disabled={!sessionReady}
               onChange={(e) => {
                 setName(e.target.value);
                 setSaved(false);
@@ -150,14 +152,18 @@ export function ProfilePanel() {
         </div>
 
         <section className="flex items-center gap-2.5">
-          <button type="submit" disabled={saving || !dirty} className={primaryButtonClass}>
+          <button
+            type="submit"
+            disabled={!sessionReady || saving || !dirty}
+            className={primaryButtonClass}
+          >
             {saving ? "Saving…" : "Save changes"}
           </button>
-          {dirty && (
+          {dirty && sessionReady && (
             <button
               type="button"
               onClick={() => {
-                setName(user.name ?? "");
+                setName(user?.name ?? displayUser.name ?? "");
                 setError(null);
                 setSaved(false);
               }}
@@ -171,7 +177,7 @@ export function ProfilePanel() {
         <section>
           <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">Email</div>
           <p className="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
-            {displayEmailOf(user)}
+            {displayEmailOf(displayUser)}
           </p>
           <Link
             href="/account/security"
