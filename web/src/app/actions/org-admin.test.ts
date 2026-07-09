@@ -15,6 +15,8 @@ let setOrgAutoGenerateContentAction: (typeof import("./org-admin"))["setOrgAutoG
 let setOrgFeaturedAction: (typeof import("./org-admin"))["setOrgFeaturedAction"];
 let setOrgNoticeAction: (typeof import("./org-admin"))["setOrgNoticeAction"];
 let renameOrgAction: (typeof import("./org-admin"))["renameOrgAction"];
+let setOrgFetchPausedAction: (typeof import("./org-admin"))["setOrgFetchPausedAction"];
+let setOrgOverviewCadenceDaysAction: (typeof import("./org-admin"))["setOrgOverviewCadenceDaysAction"];
 
 describe("org-admin actions", () => {
   beforeAll(async () => {
@@ -24,6 +26,8 @@ describe("org-admin actions", () => {
       setOrgFeaturedAction,
       setOrgNoticeAction,
       renameOrgAction,
+      setOrgFetchPausedAction,
+      setOrgOverviewCadenceDaysAction,
     } = await import("./org-admin"));
   });
 
@@ -48,7 +52,7 @@ describe("org-admin actions", () => {
       expect(recorded[0]?.url).toBe("http://api.test.local/v1/orgs/acme");
       expect(recorded[0]?.headers.authorization).toBe("Bearer test-admin-key");
       expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ isHidden: true });
-      expect(revalidatedPaths).toEqual(["/", "/acme"]);
+      expect(revalidatedPaths).toEqual(["/", "/acme", "/acme/admin"]);
     });
 
     it("API error: maps a non-ok response to ok:false without revalidating", async () => {
@@ -93,7 +97,7 @@ describe("org-admin actions", () => {
       expect(recorded[0]?.method).toBe("PATCH");
       expect(recorded[0]?.url).toBe("http://api.test.local/v1/orgs/acme");
       expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ autoGenerateContent: false });
-      expect(revalidatedPaths).toEqual(["/acme"]);
+      expect(revalidatedPaths).toEqual(["/acme", "/acme/admin"]);
     });
   });
 
@@ -106,7 +110,7 @@ describe("org-admin actions", () => {
       expect(result).toEqual({ ok: true });
       expect(recorded[0]?.method).toBe("PATCH");
       expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ featured: true });
-      expect(revalidatedPaths).toEqual(["/", "/acme"]);
+      expect(revalidatedPaths).toEqual(["/", "/acme", "/acme/admin"]);
     });
   });
 
@@ -123,7 +127,7 @@ describe("org-admin actions", () => {
 
       expect(result).toEqual({ ok: true });
       expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ notice });
-      expect(revalidatedPaths).toEqual(["/acme"]);
+      expect(revalidatedPaths).toEqual(["/acme", "/acme/admin"]);
     });
 
     it("clears the notice by sending null", async () => {
@@ -144,7 +148,49 @@ describe("org-admin actions", () => {
 
       expect(result).toEqual({ ok: true });
       expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ name: "Acme Corp" });
-      expect(revalidatedPaths).toEqual(["/", "/acme"]);
+      expect(revalidatedPaths).toEqual(["/", "/acme", "/acme/admin"]);
+    });
+  });
+
+  describe("setOrgFetchPausedAction", () => {
+    it("happy path: PATCH /v1/orgs/:slug with fetchPaused", async () => {
+      const recorded = stubFetch([new Response(null, { status: 200 })]);
+
+      const result = await setOrgFetchPausedAction({ slug: "acme", paused: true });
+
+      expect(result).toEqual({ ok: true });
+      expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ fetchPaused: true });
+      expect(revalidatedPaths).toEqual(["/acme", "/acme/admin"]);
+    });
+  });
+
+  describe("setOrgOverviewCadenceDaysAction", () => {
+    it("happy path: PATCH with a day count", async () => {
+      const recorded = stubFetch([new Response(null, { status: 200 })]);
+
+      const result = await setOrgOverviewCadenceDaysAction({ slug: "acme", days: 14 });
+
+      expect(result).toEqual({ ok: true });
+      expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ overviewCadenceDays: 14 });
+      expect(revalidatedPaths).toEqual(["/acme", "/acme/admin"]);
+    });
+
+    it("happy path: clear override with null", async () => {
+      const recorded = stubFetch([new Response(null, { status: 200 })]);
+
+      const result = await setOrgOverviewCadenceDaysAction({ slug: "acme", days: null });
+
+      expect(result).toEqual({ ok: true });
+      expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ overviewCadenceDays: null });
+    });
+
+    it("rejects out-of-range values without calling the API", async () => {
+      const recorded = stubFetch([]);
+
+      const result = await setOrgOverviewCadenceDaysAction({ slug: "acme", days: 0 });
+
+      expect(result.ok).toBe(false);
+      expect(recorded).toHaveLength(0);
     });
   });
 });

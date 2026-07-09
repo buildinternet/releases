@@ -35,7 +35,7 @@ export function AgentCopyButton({
   };
 
   // Dismiss the dropdown on Escape and return focus to its trigger — mirrors the
-  // keyboard behavior of OrgAdminMenu. Click-outside is handled by the backdrop.
+  // keyboard behavior. Click-outside is handled by the backdrop.
   useEffect(() => {
     if (!menuOpen) return;
     function onKey(e: KeyboardEvent) {

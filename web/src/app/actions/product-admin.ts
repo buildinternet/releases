@@ -43,6 +43,7 @@ export async function setProductNoticeAction(input: {
   }
 
   revalidatePath(`/${input.orgSlug}/${input.productSlug}`);
+  revalidatePath(`/${input.orgSlug}/${input.productSlug}/admin`);
   return { ok: true };
 }
 
@@ -81,6 +82,8 @@ export async function renameProductAction(input: {
   }
 
   revalidatePath(`/${input.orgSlug}/${input.productSlug}`);
+  revalidatePath(`/${input.orgSlug}/${input.productSlug}/admin`);
   revalidatePath(`/${input.orgSlug}`);
+  revalidatePath(`/${input.orgSlug}/admin`);
   return { ok: true };
 }

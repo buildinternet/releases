@@ -3,7 +3,7 @@ import { isReservedSlug } from "./reserved-slugs";
 
 describe("isReservedSlug nested scope — product-first additions", () => {
   it("reserves the static second-segment routes that bare = product introduces", () => {
-    for (const slug of ["product", "products", "playbook", "fetch-log"]) {
+    for (const slug of ["product", "products", "playbook", "fetch-log", "admin"]) {
       expect(isReservedSlug(slug, "nested")).toBe(true);
     }
   });
