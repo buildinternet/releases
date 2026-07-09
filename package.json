@@ -106,7 +106,6 @@
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@buildinternet/releases-lib": "^0.68.0",
-    "@buildinternet/releases-skills": "^0.68.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openrouter/ai-sdk-provider": "^2.10.0",
     "@releases/adapters": "workspace:*",

@@ -12,10 +12,6 @@
       "skillId": "skill_01DRRRcUsqActnc7ZY8u3HhE",
       "localDir": "parsing-changelogs"
     },
-    "Analyzing Releases": {
-      "skillId": "skill_014ZJKDrrxBrcQvy2J6XbZqW",
-      "localDir": "analyzing-releases"
-    },
     "Classify Media Relevance": {
       "skillId": "skill_01HygPTYkj76j7RHibSwvA47",
       "localDir": "classify-media-relevance"

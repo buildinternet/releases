@@ -48,10 +48,6 @@ Triggers when you mention the `releases` CLI or run a `releases` command. Helps 
 
 Triggers on competitive-intelligence asks — "what is X shipping lately", "how does X compare to Y", "what's new in observability." Picks a cohort, fetches recent releases, and summarizes themes.
 
-### finding-changelogs
-
-Triggers when you point an agent at a product URL and ask "where's their changelog?". Looks for feeds, known providers, and common paths before falling back to scraping.
-
 ### creating-releases-json
 
 Triggers when you want to **list your own product** — "add a releases.json", "get indexed on releases.sh", "make us a manifest for our website." Discovers real publish locations, models products without over-fragmenting, writes a valid v2 manifest, and guides publishing to `/.well-known/releases.json`.
@@ -66,9 +62,16 @@ See [Listing your product](/docs/listing) for the format and the paste-ready age
 
 ## Operator skills
 
-The CLI bundle also ships skills for people running their own ingest — `managing-sources`, `parsing-changelogs`, `classify-media-relevance`, `seeding-playbooks`. They stay inert unless an operator-shaped task triggers them.
+Skills for people running or maintaining the registry itself — onboarding sources (`finding-changelogs`, `managing-sources`), the parse pipeline (`parsing-changelogs`, `classify-media-relevance`), and bulk maintenance (`seeding-playbooks` and friends) — live with the backend in the [releases monorepo](https://github.com/buildinternet/releases) under `.claude/skills/`. They're picked up automatically by Claude Code in a checkout, or installable anywhere:
+
+```bash
+npx skills add buildinternet/releases
+```
+
+Most need an admin API key to do anything.
 
 ## Source
 
-- **CLI / agent skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `skills/`.
+- **Reader skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `skills/`.
+- **Operator skills**: [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `.claude/skills/`.
 - **Owner manifest skill** (`creating-releases-json`): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `skills/creating-releases-json/`. Repo page grouping lives in root [`skills.sh.json`](https://github.com/buildinternet/releases/blob/main/skills.sh.json) ([skills.sh customize](https://www.skills.sh/docs/customize)).
