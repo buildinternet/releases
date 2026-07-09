@@ -81,6 +81,14 @@ export function OrgCatalog({ groups }: { groups: OrgLetterGroup[] }) {
                       <span className="truncate font-medium text-stone-900 dark:text-stone-100">
                         {org.name}
                       </span>
+                      {org.status === "stub" && org.domain && (
+                        <span
+                          className="hidden max-w-[45%] shrink-0 truncate font-mono text-xs text-stone-500 sm:inline dark:text-stone-400"
+                          title={org.domain}
+                        >
+                          {org.domain}
+                        </span>
+                      )}
                       <StubBadge status={org.status} className="shrink-0" />
                     </span>
                     <span className="hidden w-20 text-right font-mono text-xs tabular-nums text-stone-600 sm:block dark:text-stone-400">
