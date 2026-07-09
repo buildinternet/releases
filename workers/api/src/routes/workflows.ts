@@ -88,7 +88,9 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { getSecret } from "@releases/lib/secrets";
 import { FirecrawlError } from "@releases/lib/errors";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { extractChangelogAllWindows } from "../lib/firecrawl-extract.js";
+import { extractChangelogAllWindows, extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
+import { processMediaForR2 } from "../lib/media-ingest.js";
+import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { logUsage } from "../lib/usage-log.js";
 import {
   runSourceBackfill,
@@ -2234,6 +2236,319 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
     ...report,
   });
   return c.json({ scope, ...report });
+});
+
+// ── POST /workflows/refetch-release ──────────────────────────────────────────
+//
+// Operator-triggered in-place re-fetch of ONE release from its live page: fetch
+// the post as markdown, run the single-post body-preserving extraction
+// (CRAWL_PAGE_SYSTEM_PROMPT, same path as Firecrawl crawl monitors), and update
+// the existing row — same `rel_` id — with the full body/media/date. Built for
+// thin index-scrape rows (teaser body + synthesized `#fragment` URL) so healing
+// them no longer requires delete + re-fetch, which mints new ids and kills web
+// links.
+//
+// Policy (curator action, unlike ingest's fill-if-empty):
+//   - title/content/publishedAt are REPLACED from the fetched page; media is
+//     replaced only when extraction returns any (an extractor miss must not
+//     wipe curated images); summary/titleGenerated/titleShort/embeddedAt are
+//     nulled so the AI passes regenerate over the richer body.
+//   - a release whose stored URL carries a `#fragment` (a synthesized index
+//     anchor) REQUIRES an explicit `url` — fetching the fragment URL would
+//     ingest the index page itself.
+//   - `url` must stay on the source's host (fail-closed against pulling
+//     content from an arbitrary domain into an existing row) and, when given,
+//     REPLACES the stored URL — that canonical-permalink rewrite is the point.
+//   - `dryRun` (default) previews current vs. proposed without writing.
+//
+// Body: { releaseId, url?, dryRun? }
+
+const REFETCH_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+
+interface RefetchReleaseBody {
+  releaseId?: string;
+  url?: string;
+  dryRun?: boolean;
+}
+
+type RefetchBodyOverride = { markdown: string; via: BackfillBodyVia };
+type RefetchExtractOverride = (markdown: string, src: Source) => Promise<RawRelease[]>;
+
+workflowsRoutes.post("/workflows/refetch-release", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await parseJsonBody<RefetchReleaseBody>(c);
+
+  const releaseId = body.releaseId?.trim();
+  if (!releaseId || !releaseId.startsWith("rel_")) {
+    return respondError(
+      c,
+      new ValidationError("Pass a typed release ID (rel_…)", { code: "bad_request" }),
+    );
+  }
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const [row] = await db.select().from(releases).where(eq(releases.id, releaseId)).limit(1);
+  if (!row) return respondError(c, new NotFoundError("Release not found"));
+  const [src] = await db.select().from(sources).where(eq(sources.id, row.sourceId)).limit(1);
+  if (!src) return respondError(c, new NotFoundError("Source not found for release"));
+
+  // ── Resolve the page URL to fetch ───────────────────────────────────────
+  const sourceHost = (() => {
+    try {
+      return new URL(src.url).host;
+    } catch {
+      return null;
+    }
+  })();
+  let fetchUrl: string;
+  const override = body.url?.trim();
+  if (override) {
+    let parsed: URL;
+    try {
+      parsed = new URL(override);
+    } catch {
+      return respondError(
+        c,
+        new ValidationError("`url` must be an absolute http(s) URL", { code: "bad_request" }),
+      );
+    }
+    if (!/^https?:$/.test(parsed.protocol) || (sourceHost && parsed.host !== sourceHost)) {
+      return respondError(
+        c,
+        new ValidationError(
+          `\`url\` must be an http(s) URL on the source's host (${sourceHost ?? "unknown"})`,
+          { code: "bad_request" },
+        ),
+      );
+    }
+    fetchUrl = parsed.href;
+  } else {
+    if (row.url == null || row.url.includes("#")) {
+      return respondError(
+        c,
+        new ValidationError(
+          "This release's stored URL is a synthesized index anchor (or missing) — fetching it would ingest the index page. Pass the post's canonical `url` explicitly.",
+          { code: "bad_request" },
+        ),
+      );
+    }
+    fetchUrl = row.url;
+  }
+
+  // ── Acquire the page as markdown ────────────────────────────────────────
+  const meta = getSourceMeta(src);
+  const bodyOverride = (c.env as { _refetchBodyOverride?: RefetchBodyOverride })
+    ._refetchBodyOverride;
+  let resolved: { markdown: string; via: BackfillBodyVia };
+  if (bodyOverride) {
+    resolved = bodyOverride;
+  } else if (meta.firecrawl?.enabled) {
+    const apiKey = await getSecret(c.env.FIRECRAWL_API_KEY);
+    if (!apiKey) {
+      return respondError(c, new ServiceUnavailableError("FIRECRAWL_API_KEY not configured"));
+    }
+    try {
+      const client = createFirecrawlClient({ apiKey });
+      const md = await client.scrapeOnce(fetchUrl, { proxy: meta.firecrawl?.proxy });
+      if (!md) return respondError(c, new UpstreamError(`Empty Firecrawl scrape for ${fetchUrl}`));
+      resolved = { markdown: md, via: "firecrawl" };
+    } catch (err) {
+      const status = err instanceof FirecrawlError ? err.status : null;
+      return respondError(
+        c,
+        new UpstreamError(`Firecrawl scrape failed${status ? ` (${status})` : ""}`, {
+          details: { upstream: "firecrawl", firecrawlStatus: status },
+        }),
+      );
+    }
+  } else {
+    try {
+      const res = await fetch(fetchUrl, { headers: { "User-Agent": RELEASES_BOT_UA } });
+      const md = res.ok ? htmlToMarkdown(await res.text()) : "";
+      if (!md.trim()) {
+        return respondError(
+          c,
+          new ValidationError(
+            `Could not fetch a usable body for ${fetchUrl} (SSR/static pages only on this path; enable Firecrawl on the source for rendered pages).`,
+            { code: "bad_request" },
+          ),
+        );
+      }
+      resolved = { markdown: md, via: "fetch" };
+    } catch {
+      return respondError(
+        c,
+        new ValidationError(`Could not fetch ${fetchUrl}`, { code: "bad_request" }),
+      );
+    }
+  }
+
+  // ── Single-post extraction (body-preserving) ────────────────────────────
+  const extractOverride = (c.env as { _refetchExtractOverride?: RefetchExtractOverride })
+    ._refetchExtractOverride;
+  let extracted: RawRelease[];
+  if (extractOverride) {
+    extracted = await extractOverride(resolved.markdown, src);
+  } else {
+    const apiKey = await getAnthropicKey(c.env);
+    if (!apiKey) {
+      return respondError(c, new ServiceUnavailableError("ANTHROPIC_API_KEY not configured"));
+    }
+    const anthropicClient = buildAnthropicClient({
+      apiKey,
+      ...(await resolveGatewayOpts(c.env)),
+    });
+    const result = await extractFirecrawlMarkdown(
+      resolved.markdown,
+      src,
+      {
+        anthropicClient,
+        agentModel: REFETCH_EXTRACT_MODEL,
+        logger: backfillLogger,
+        logUsageFn: (entry) => logUsage(db, { ...entry, sourceId: src.id }, "refetch-release"),
+      },
+      { pageUrl: fetchUrl },
+    );
+    extracted = result.releases;
+  }
+  const post = extracted[0];
+  if (!post || !post.content?.trim()) {
+    return respondError(
+      c,
+      new UpstreamError(`No release content extracted from ${fetchUrl}`, {
+        details: { via: resolved.via, extractedCount: extracted.length },
+      }),
+    );
+  }
+
+  // ── Build the in-place update ───────────────────────────────────────────
+  const newUrl = override ? fetchUrl : row.url;
+  if (newUrl && newUrl !== row.url) {
+    // Rewriting the stored URL must not collide with another row's dedup slot.
+    const [conflict] = await db
+      .select({ id: releases.id })
+      .from(releases)
+      .where(and(eq(releases.sourceId, src.id), eq(releases.url, newUrl)))
+      .limit(1);
+    if (conflict && conflict.id !== releaseId) {
+      return respondError(
+        c,
+        new ConflictError(`Another release (${conflict.id}) already stores ${newUrl}`),
+      );
+    }
+  }
+  const newPublishedAt = post.publishedAt ? post.publishedAt.toISOString() : row.publishedAt;
+  const size = computeContentSize(post.content);
+  const proposed = {
+    title: post.title,
+    contentChars: size.contentChars,
+    mediaCount: post.media?.length ?? 0,
+    publishedAt: newPublishedAt,
+    url: newUrl,
+  };
+
+  if (dryRun) {
+    return c.json({
+      dryRun: true,
+      releaseId,
+      fetchUrl,
+      via: resolved.via,
+      current: {
+        title: row.title,
+        contentChars: row.contentChars ?? row.content?.length ?? 0,
+        mediaCount: hasStoredMedia(row.media) ? JSON.parse(row.media as string).length : 0,
+        publishedAt: row.publishedAt,
+        url: row.url,
+      },
+      proposed,
+    });
+  }
+
+  // Media: replace only when extraction returned any; mirror not-yet-hosted
+  // items to R2 exactly like ingest and the manual media PATCH.
+  let mediaJson: string | undefined;
+  if (post.media && post.media.length > 0) {
+    // oxlint-disable-next-line no-map-spread
+    const normalized = post.media.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
+    if (c.env.MEDIA != null) {
+      const processed = await processMediaForR2(filterJunkMedia(normalized), {
+        db,
+        bucket: c.env.MEDIA,
+        sourceId: src.id,
+        releaseId,
+        mediaTransform: c.env.MEDIA_TRANSFORM,
+        transcodeGif:
+          c.env.MEDIA_TRANSFORM != null &&
+          (await flag(
+            c.env.FLAGS,
+            c.env.MEDIA_GIF_TRANSCODE_ENABLED,
+            FLAGS.mediaGifTranscodeEnabled,
+          )),
+      });
+      mediaJson = JSON.stringify(processed);
+    } else {
+      mediaJson = JSON.stringify(normalized);
+    }
+  }
+
+  const [updated] = await db
+    .update(releases)
+    .set({
+      title: post.title,
+      content: post.content,
+      contentChars: size.contentChars,
+      contentTokens: size.contentTokens,
+      contentHash: contentHash({
+        title: post.title,
+        version: row.version ?? undefined,
+        publishedAt: newPublishedAt ? new Date(newPublishedAt) : undefined,
+        content: post.content,
+      }),
+      publishedAt: newPublishedAt,
+      ...(newUrl && newUrl !== row.url ? { url: newUrl } : {}),
+      ...(mediaJson !== undefined ? { media: mediaJson } : {}),
+      // Force the AI passes + embedding to regenerate over the richer body.
+      summary: null,
+      titleGenerated: null,
+      titleShort: null,
+      embeddedAt: null,
+    })
+    .where(eq(releases.id, releaseId))
+    .returning();
+  if (!updated) return respondError(c, new NotFoundError("Release not found"));
+
+  // poll-and-fetch.js pulls `cloudflare:workers` — import it only on the write
+  // path so Bun-loaded route smoke tests never trip on it (same pattern as
+  // backfill-source above). The `_refetchPostProcessOverride` hook lets tests
+  // exercise the DB write without loading that module.
+  const postProcess = (c.env as { _refetchPostProcessOverride?: (ids: string[]) => Promise<void> })
+    ._refetchPostProcessOverride;
+  if (postProcess) {
+    await postProcess([releaseId]);
+  } else {
+    const { resolveFetchEnv, generateContentForReleases } =
+      await import("../workflows/poll-and-fetch.js");
+    const fetchEnv = await resolveFetchEnv(c.env as never);
+    if (c.env.RELEASES_INDEX) {
+      await embedReleasesForSource(db as never, src as never, [releaseId], fetchEnv, {
+        throwOnError: false,
+      });
+    }
+    await generateContentForReleases(db as never, c.env as never, src as never, [releaseId]);
+  }
+
+  logEvent("info", {
+    component: "refetch-release",
+    event: "done",
+    releaseId,
+    sourceSlug: src.slug,
+    via: resolved.via,
+    fetchUrl,
+    urlRewritten: newUrl !== row.url,
+    contentChars: size.contentChars,
+    mediaReplaced: mediaJson !== undefined,
+  });
+  return c.json({ dryRun: false, releaseId, fetchUrl, via: resolved.via, updated: proposed });
 });
 
 // ── POST /workflows/backfill-source ──────────────────────────────────────────
