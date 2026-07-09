@@ -128,6 +128,8 @@ describe("mapLatestRowToReleaseItem webUrl", () => {
     org_github_handle: null,
     product_slug: null,
     product_name: null,
+    source_kind: null,
+    product_kind: null,
     type: "feature",
     coverage_count: 0,
     content_chars: null,

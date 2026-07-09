@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
   AppStoreSourceInfoSchema,
   MediaItemSchema,
@@ -37,11 +38,20 @@ export const ReleaseLatestSourceSchema = z.object({
   /** Owning org's GitHub handle, used to derive `github.com/<handle>.png` as the
    *  avatar fallback when `orgAvatarUrl` is unset. Additive — older responses omit it. */
   orgGithubHandle: z.string().nullable().optional(),
+  /** Source classification (`sdk`, `platform`, `docs`, …) from `sources.kind`.
+   *  Null when the source has no explicit kind — resolve against the product's
+   *  kind via `resolveSourceKind`. Additive — older responses omit it. Lets read
+   *  surfaces (e.g. the digest email) deprioritize/cluster SDK releases the way
+   *  the web sources table does. */
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 export const ReleaseLatestProductSchema = z.object({
   slug: z.string(),
   name: z.string(),
+  /** Product classification from `products.kind`; the fallback `resolveSourceKind`
+   *  consults when the source itself has no kind. Additive — older responses omit it. */
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 export const ReleaseLatestItemSchema = z.object({
@@ -75,6 +85,16 @@ export const ReleaseLatestItemSchema = z.object({
    * omit this field; treat `undefined` as `null`. #1217.
    */
   product: ReleaseLatestProductSchema.nullable().optional(),
+  /**
+   * Server-resolved grouping identity — `product.slug ?? source.slug` /
+   * `product.name ?? source.name`. The web releases feed keys and labels
+   * SDK/package-cluster rollups on these instead of reconstructing
+   * `product ?? source` client-side; the digest email mirrors that. Optional on
+   * the wire: older workers omit them, so clients fall back to deriving from
+   * `product ?? source`. Never null when present (`source` is always set). #1234
+   */
+  groupSlug: z.string().optional(),
+  groupName: z.string().optional(),
   coverageCount: z.number().int().min(0).optional(),
   // Cached release-body size hint — see {@link ReleaseItemSchema} for the
   // same fields on the org / collection feeds. #958.
