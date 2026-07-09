@@ -177,8 +177,12 @@ export interface HybridReleaseHit {
     url: string | null;
     publishedAt: string | null;
     summary: string;
-    /** Raw markdown body; media URLs still need MEDIA_ORIGIN rewriting. */
-    content: string;
+    /**
+     * Raw markdown body; media URLs still need MEDIA_ORIGIN rewriting.
+     * Present only when `includeContent: true` was requested — list hits
+     * default to summary + media only.
+     */
+    content?: string;
     /** JSON-encoded MediaItem[] or null — route parses + resolves r2Url. */
     media: string | null;
     source: {
@@ -312,7 +316,8 @@ interface RawReleaseRow {
   url: string | null;
   publishedAt: string | null;
   summary: string;
-  content: string;
+  /** Full body; only selected when `includeContent` is true. */
+  content?: string | null;
   media: string | null;
   sourceId: string;
   sourceSlug: string;
@@ -339,10 +344,13 @@ interface RawReleaseRow {
 async function hydrateReleases(
   db: WorkerD1Db,
   ids: string[],
-  opts: { includeCoverage?: boolean } = {},
+  opts: { includeCoverage?: boolean; includeContent?: boolean } = {},
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
   const releasesTable = opts.includeCoverage ? sql`releases` : sql`releases_visible`;
+  // Full body is heavy (multi-KB markdown per hit); only SELECT when the
+  // caller opted in. Summary already COALESCE-falls back to a content prefix.
+  const contentSelect = opts.includeContent ? sql`r.content as content,` : sql``;
   // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
   const results = await Promise.all(
     chunkInto(ids, D1_IN_CHUNK).map((batch) =>
@@ -355,7 +363,7 @@ async function hydrateReleases(
                COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
                r.title_generated as titleGenerated,
                r.title_short as titleShort,
-               r.content as content,
+               ${contentSelect}
                r.media as media,
                r.type as type,
                s.id as sourceId,
@@ -499,6 +507,12 @@ export interface RunHybridSearchParams {
   orgSourceIds?: string[];
   type?: "feature" | "rollup";
   includeCoverage?: boolean;
+  /**
+   * When true, hydrate full markdown `content` onto each release hit.
+   * Default false — list surfaces use `summary` + `media`; full body is
+   * `GET /v1/releases/:id` (or `?include_content=true` on `/v1/search`).
+   */
+  includeContent?: boolean;
   /**
    * Filter by resolved entity kind: COALESCE(source.kind, product.kind).
    * Release hits where neither the source nor the parent product match are
@@ -746,7 +760,7 @@ async function buildReleaseHits(
   const map = await hydrateReleases(
     db,
     entries.map((e) => e.id),
-    { includeCoverage: params.includeCoverage },
+    { includeCoverage: params.includeCoverage, includeContent: params.includeContent },
   );
   const out: HybridReleaseHit[] = [];
   for (const entry of entries) {
@@ -775,7 +789,7 @@ async function buildReleaseHits(
         summary: row.summary,
         titleGenerated: row.titleGenerated,
         titleShort: row.titleShort,
-        content: row.content,
+        ...(row.content != null && row.content !== "" ? { content: row.content } : {}),
         media: row.media,
         source: {
           id: row.sourceId,

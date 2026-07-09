@@ -22,9 +22,9 @@ import type {
 } from "@buildinternet/releases-api-types";
 
 /**
- * Raw release row returned by the search queries. `content` and `media`
- * still need media-URL hydration + JSON parsing — the route does that so
- * SQL helpers stay thin.
+ * Raw release row returned by the search queries. `content` (when requested)
+ * and `media` still need media-URL hydration + JSON parsing — the route does
+ * that so SQL helpers stay thin.
  */
 export interface RawSearchReleaseRow {
   id: string;
@@ -40,8 +40,12 @@ export interface RawSearchReleaseRow {
   version: string | null;
   title: string;
   summary: string;
-  /** Raw markdown with media URLs not yet rewritten through MEDIA_ORIGIN. */
-  content: string;
+  /**
+   * Raw markdown with media URLs not yet rewritten through MEDIA_ORIGIN.
+   * Absent unless the caller passed `includeContent: true` — list hits ship
+   * summary + media by default to keep the payload small.
+   */
+  content?: string | null;
   /** JSON-encoded MediaItem[] or null. */
   media: string | null;
   publishedAt: string | null;
@@ -77,6 +81,10 @@ export interface RawSearchReleaseRow {
  * any relative shorthand by the route). They apply only to the release
  * helpers; the org/product/source helpers ignore them. Both bounds drop rows
  * with a NULL `published_at`.
+ *
+ * `includeContent` opts into selecting `r.content` on release hits. Default
+ * off — list surfaces only need summary + media; full body is
+ * `GET /v1/releases/:id` (or `?include_content=true` on search).
  */
 type ScopeOpts = {
   orgId?: string;
@@ -95,6 +103,8 @@ type ScopeOpts = {
    * release hits — mirrors the "no matching org sources" behaviour.
    */
   sourceIds?: string[];
+  /** When true, SELECT full `r.content`; default omits it from the row. */
+  includeContent?: boolean;
 };
 
 /**
@@ -285,6 +295,7 @@ export async function searchReleasesFts(
       ? sql`AND r.source_id IN ${sourceIdInList(opts.sourceIds)}`
       : sql``;
   const ftsQuery = toFtsMatchQuery(query);
+  const contentSelect = opts.includeContent ? sql`r.content as content,` : sql``;
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
            s.metadata as sourceMetadata,
@@ -294,7 +305,7 @@ export async function searchReleasesFts(
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.breaking as breaking,
-           r.content as content,
+           ${contentSelect}
            r.media as media,
            r.published_at as publishedAt,
            r.type as type,
@@ -348,6 +359,7 @@ export async function searchReleasesFromMatchedEntities(
     );
   if (conditions.length === 0) return [];
 
+  const contentSelect = opts.includeContent ? sql`r.content as content,` : sql``;
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
            s.metadata as sourceMetadata,
@@ -357,7 +369,7 @@ export async function searchReleasesFromMatchedEntities(
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.breaking as breaking,
-           r.content as content,
+           ${contentSelect}
            r.media as media,
            r.published_at as publishedAt,
            r.type as type,
