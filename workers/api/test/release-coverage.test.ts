@@ -47,6 +47,9 @@ async function seed(db: ReturnType<typeof mkDb>) {
       version: null,
       url: "https://acme.example/blog/acme-2",
       publishedAt: "2026-05-10T12:00:00.000Z",
+      media: JSON.stringify([
+        { type: "image", url: "https://cdn.example.com/launch.png", alt: "Launch hero" },
+      ]),
     },
     {
       id: "rel_cov_changelog",
@@ -139,6 +142,24 @@ describe("GET /v1/releases/:id/coverage — sibling enrichment", () => {
       title: "Acme 2.0 launch post",
       sourceName: "Acme Blog",
       org: { slug: "acme", name: "Acme" },
+    });
+  });
+
+  it("surfaces the canonical sibling thumbnail from its first image media", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await get(fetch, "rel_cov_changelog");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      role: string;
+      canonical: { sibling: { thumbnail: { url: string; alt?: string } | null } | null };
+    };
+    expect(body.role).toBe("coverage");
+    expect(body.canonical.sibling?.thumbnail).toEqual({
+      url: "https://cdn.example.com/launch.png",
+      alt: "Launch hero",
     });
   });
 

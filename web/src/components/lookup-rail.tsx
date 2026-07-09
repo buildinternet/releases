@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/formatters";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { RepoStars } from "@/components/repo-stars";
+import { ReleaseThumb } from "./release-thumb";
 
 /**
  * Renders the on-demand lookup rail attached to coordinate-shaped search
@@ -165,9 +166,12 @@ function ReleasesPreview({
           <li key={rel.id}>
             <Link
               href={`/release/${rel.id}`}
-              className="flex items-baseline justify-between gap-3 py-1.5 hover:bg-white/60 dark:hover:bg-stone-900/60 -mx-2 px-2 rounded"
+              className="flex items-center justify-between gap-3 py-1.5 hover:bg-white/60 dark:hover:bg-stone-900/60 -mx-2 px-2 rounded"
             >
-              <div className="min-w-0 flex items-baseline gap-2">
+              {rel.thumbnail && (
+                <ReleaseThumb src={rel.thumbnail.url} alt={rel.thumbnail.alt ?? ""} size="md" />
+              )}
+              <div className="min-w-0 flex-1 flex items-baseline gap-2">
                 <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate">
                   {rel.version ?? rel.title}
                 </span>

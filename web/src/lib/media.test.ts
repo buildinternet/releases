@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { thumbUrl, isGifSrc, shouldRenderAsVideo } from "./media";
+import { thumbUrl, isGifSrc, shouldRenderAsVideo, pickReleaseThumb } from "./media";
 
 const origin = "https://media.releases.sh";
 

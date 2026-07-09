@@ -4,6 +4,7 @@ import {
   AppStoreSourceInfoSchema,
   MediaItemSchema,
   OrgStatusSchema,
+  ReleaseThumbnailSchema,
   ReleaseTypeSchema,
   VideoSourceInfoSchema,
 } from "./shared.js";
@@ -204,6 +205,8 @@ export const LookupResultPayloadSchema = z.object({
         version: z.string().nullable(),
         title: z.string(),
         publishedAt: z.string().nullable(),
+        /** First image/gif thumbnail; null when the release has none. */
+        thumbnail: ReleaseThumbnailSchema.nullable().optional(),
       }),
     )
     .optional(),

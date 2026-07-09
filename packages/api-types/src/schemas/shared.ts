@@ -225,6 +225,15 @@ export const NoticeSchema = z
     message: "notice.coordinate must be 'org' or 'org/slug'",
   });
 
+/**
+ * Display thumbnail derived server-side from a release's first image/gif media
+ * entry. Shared by the coverage, lookup, and related-release payloads.
+ */
+export const ReleaseThumbnailSchema = z.object({
+  url: z.string(),
+  alt: z.string().optional(),
+});
+
 export const OverviewPageItemSchema = z.object({
   scope: z.enum(["org", "product"]),
   orgSlug: z.string().nullable().optional(),

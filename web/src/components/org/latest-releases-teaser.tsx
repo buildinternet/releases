@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { OrgReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
+import { pickReleaseThumb } from "@/lib/media";
 import { orgEyebrowClass } from "@releases/design-system";
+import { ReleaseThumb } from "../release-thumb";
 import { ArrowRightIcon, ChevronRightIcon } from "./icons";
 
 /**
@@ -38,12 +40,14 @@ export function LatestReleasesTeaser({
         {items.map((r, i) => {
           const label = r.titleShort || r.title;
           const meta = [r.product?.name, r.version].filter(Boolean).join(" · ");
+          const thumb = pickReleaseThumb(r.media);
           return (
             <Link
               key={r.id ?? `${label}-${i}`}
               href={releasesHref}
               className="flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3.5 transition-colors first:border-t-0 hover:bg-[var(--surface-2)]"
             >
+              {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] font-semibold text-[var(--fg)]">{label}</div>
                 {meta && (

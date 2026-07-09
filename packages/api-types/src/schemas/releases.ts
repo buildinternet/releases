@@ -6,6 +6,7 @@ import {
   AppStoreSourceInfoSchema,
   MediaItemSchema,
   ReleaseCompositionSchema,
+  ReleaseThumbnailSchema,
   ReleaseTypeSchema,
   VideoSourceInfoSchema,
 } from "./shared.js";
@@ -125,6 +126,9 @@ export const ReleaseCoverageSiblingSchema = z.object({
   sourceName: z.string(),
   publishedAt: z.string().nullable(),
   org: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  /** First image/gif thumbnail for the counterpart release; null when it has
+   * none. Optional so an older server that omits it still validates. */
+  thumbnail: ReleaseThumbnailSchema.nullable().optional(),
 });
 
 /**

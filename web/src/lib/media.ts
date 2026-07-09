@@ -130,3 +130,24 @@ export function shouldRenderAsVideo(opts: {
 export function releaseVideoUrl(src: string): string {
   return cfMediaUrl(src, { origin: MEDIA_ORIGIN });
 }
+
+/**
+ * Reduce a release's `media[]` to a single display thumbnail: the first
+ * image/gif entry (`r2Url ?? url`), routed through {@link releaseThumbUrl} at a
+ * compact width. Returns null when there is no usable image — compact card
+ * consumers then render exactly as they do today (no placeholder). Mirrors the
+ * server's `firstImageThumbnail` so every surface derives thumbnails the same
+ * way.
+ */
+export function pickReleaseThumb(
+  media:
+    | Array<{ type: string; url: string; alt?: string | null; r2Url?: string | null }>
+    | null
+    | undefined,
+): { url: string; alt: string } | null {
+  const first = media?.find((m) => m.type === "image" || m.type === "gif");
+  if (!first) return null;
+  const src = first.r2Url ?? first.url;
+  if (!src) return null;
+  return { url: releaseThumbUrl(src, 96), alt: first.alt ?? "" };
+}

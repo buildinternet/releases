@@ -23,7 +23,7 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
-import { sourceMatchByIdOrSlug, parseReleaseMedia } from "../utils.js";
+import { sourceMatchByIdOrSlug, firstImageThumbnail } from "../utils.js";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
 import {
@@ -359,23 +359,6 @@ async function hydrateReleaseNeighbors(
     .toSorted((a, b) => b.rank - a.rank)
     .slice(0, limit)
     .map((r) => r.item);
-}
-
-/**
- * Pick the first image-like media entry from a parsed media array. Returns
- * null when the row has no usable image — rail consumers then fall back to
- * a text-only card.
- */
-function firstImageThumbnail(
-  raw: string | null,
-  mediaOrigin: string,
-): { url: string; alt?: string } | null {
-  const media = parseReleaseMedia(raw, mediaOrigin);
-  const first = media.find((m) => m.type === "image" || m.type === "gif");
-  if (!first) return null;
-  const url = first.r2Url ?? first.url;
-  if (!url) return null;
-  return first.alt ? { url, alt: first.alt } : { url };
 }
 
 // ── /v1/related/sources ──────────────────────────────────────────────────

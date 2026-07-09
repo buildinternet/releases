@@ -42,6 +42,7 @@ import {
   parseBoolParam,
   parseLimitParam,
   parseTimeWindow,
+  firstImageThumbnail,
 } from "../utils.js";
 import {
   organizationsActive,
@@ -142,8 +143,9 @@ export function hydrateReleaseHit(
  * Project the internal LookupResponse (full Drizzle row shape) down to the
  * slim wire type so `UnifiedSearchResponse` type-checks cleanly.
  */
-function toLookupPayload(
+export function toLookupPayload(
   lookup: Awaited<ReturnType<typeof runLookup>> | null,
+  mediaOrigin: string,
 ): LookupResultPayload | null {
   if (!lookup) return null;
   return {
@@ -166,6 +168,7 @@ function toLookupPayload(
       version: r.version ?? null,
       title: r.title,
       publishedAt: r.publishedAt ?? null,
+      thumbnail: firstImageThumbnail(r.media, mediaOrigin),
     })),
     relatedOrg: lookup.relatedOrg,
   };
@@ -723,7 +726,7 @@ searchRoutes.get(
         sources: [],
         releases,
         collections: collectionsHits,
-        lookup: toLookupPayload(lookup),
+        lookup: toLookupPayload(lookup, mediaOrigin),
       };
       c.executionCtx.waitUntil(
         logSearch(c.env, {
@@ -877,7 +880,7 @@ searchRoutes.get(
       mode: hybrid.mode,
       degraded: hybrid.degraded,
       ...(hybrid.degradedReason ? { degradedReason: hybrid.degradedReason } : {}),
-      lookup: toLookupPayload(lookup),
+      lookup: toLookupPayload(lookup, mediaOrigin),
     };
 
     c.executionCtx.waitUntil(
