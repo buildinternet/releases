@@ -21,34 +21,44 @@ jobs:
   # actually moved. Jobs that depend on this and evaluate `if:` to false
   # are reported as "Skipped" — required status checks treat that as
   # passing, so the workflow stays compatible with branch protection.
+  #
+  # Two paths-filter steps: exclusion-based `code` needs
+  # predicate-quantifier: every (with the default `some`, `**` matches
+  # every file and `!**/*.md` never excludes — so CHANGELOG-only PRs
+  # still ran full lint/test). OR-style filters keep the default `some`.
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      code: ${{ steps.filter.outputs.code }}
-      schema_inputs: ${{ steps.filter.outputs.schema_inputs }}
-      codegen_inputs: ${{ steps.filter.outputs.codegen_inputs }}
-      publishable: ${{ steps.filter.outputs.publishable }}
+      code: ${{ steps.code.outputs.code }}
+      schema_inputs: ${{ steps.rest.outputs.schema_inputs }}
+      codegen_inputs: ${{ steps.rest.outputs.codegen_inputs }}
+      publishable: ${{ steps.rest.outputs.publishable }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 2
           persist-credentials: false
+      # Exclusions only work with predicate-quantifier: every (dorny/paths-filter).
+      # Workflow files intentionally stay in scope — changing CI on a
+      # docs-only commit should still run CI.
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
+        id: code
         with:
+          predicate-quantifier: every
           filters: |
-            # Anything that isn't pure docs/text. Negation patterns only fire
-            # when the positive '**' matches first, so this is "every changed
-            # file, minus docs". Workflow files intentionally stay in scope —
-            # changing CI on a docs-only commit should still run CI.
             code:
               - '**'
               - '!**/*.md'
               - '!docs/**'
               - '!.context/**'
               - '!LICENSE'
+      # OR-style filters — default predicate-quantifier: some.
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: rest
+        with:
+          filters: |
             # GraphQL schema snapshot is generated from workers/api source.
             # Skip the verify step when nothing here moved.
             schema_inputs:
