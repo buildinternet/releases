@@ -628,6 +628,21 @@ describe("knowledgeToMarkdown", () => {
     expect(md).toContain("release_count: 42");
     expect(md).toContain("last_release: 2024-06-15");
     expect(md).toContain("generated: 2024-06-16");
+    // updated omitted when it matches generated
+    expect(md).not.toContain("updated:");
+  });
+
+  it("includes updated frontmatter when content was amended after generation", () => {
+    const md = knowledgeToMarkdown(
+      {
+        ...fullKnowledge,
+        generatedAt: "2024-04-01T00:00:00Z",
+        updatedAt: "2024-07-04T00:00:00Z",
+      },
+      { orgSlug: "vercel" },
+    );
+    expect(md).toContain("generated: 2024-04-01");
+    expect(md).toContain("updated: 2024-07-04");
   });
 
   it("includes the content body after frontmatter", () => {

@@ -2,8 +2,10 @@ import type { Kind } from "./kinds.js";
 import type { Release, Source } from "./schema.js";
 
 /**
- * Overview is considered stale beyond this many days. CLI and MCP both warn
- * (but still show) when an overview's `generatedAt` is older than this.
+ * Overview content is considered stale beyond this many days. CLI and MCP both
+ * warn (but still show) when the overview's **content write time** is older
+ * than this — prefer `updatedAt` (last amend/write), not `generatedAt` (first
+ * generation, which never moves on amend). See {@link overviewContentAt}.
  */
 export const OVERVIEW_STALE_DAYS = 30;
 
@@ -214,24 +216,64 @@ function distributeBudget(capacities: number[], limit: number): number[] {
 }
 
 export interface OverviewMeta {
+  /** Original first write. Fixed at create; does not move on amend. */
   generatedAt: string;
+  /** Last content write (initial generate or later amend). Prefer for age. */
   updatedAt?: string | null;
   lastContributingReleaseAt?: string | null;
 }
 
-export function overviewAgeDays(generatedAt: string, now: number = Date.now()): number {
-  const ms = now - new Date(generatedAt).getTime();
+/**
+ * Instant that reflects when the overview *body* was last written.
+ * Prefers `updatedAt` (amend/write); falls back to `generatedAt`.
+ */
+export function overviewContentAt(
+  overview: Pick<OverviewMeta, "generatedAt" | "updatedAt">,
+): string {
+  return overview.updatedAt ?? overview.generatedAt;
+}
+
+/**
+ * Whole-day age of an ISO timestamp. Pure math — pass content write time
+ * ({@link overviewContentAt}), not raw `generatedAt`, for reader staleness.
+ */
+export function overviewAgeDays(contentAt: string, now: number = Date.now()): number {
+  const ms = now - new Date(contentAt).getTime();
   return Math.floor(ms / (24 * 60 * 60 * 1000));
 }
 
-export function isOverviewStale(generatedAt: string, now: number = Date.now()): boolean {
-  return overviewAgeDays(generatedAt, now) > OVERVIEW_STALE_DAYS;
+/**
+ * Whether a single ISO timestamp is past {@link OVERVIEW_STALE_DAYS}.
+ * Pass {@link overviewContentAt}(overview) — not `generatedAt` alone —
+ * when checking reader-facing content age after amends.
+ */
+export function isOverviewStale(contentAt: string, now: number = Date.now()): boolean {
+  return overviewAgeDays(contentAt, now) > OVERVIEW_STALE_DAYS;
+}
+
+/** Age in whole days of the overview content (updatedAt, else generatedAt). */
+export function overviewContentAgeDays(
+  overview: Pick<OverviewMeta, "generatedAt" | "updatedAt">,
+  now: number = Date.now(),
+): number {
+  return overviewAgeDays(overviewContentAt(overview), now);
+}
+
+/**
+ * Whether the overview body is past the 30-day reader stale threshold.
+ * Uses content write time, not original generation.
+ */
+export function isOverviewContentStale(
+  overview: Pick<OverviewMeta, "generatedAt" | "updatedAt">,
+  now: number = Date.now(),
+): boolean {
+  return isOverviewStale(overviewContentAt(overview), now);
 }
 
 /**
  * Classify an overview by its release-gap signal. The freshness gap that
  * matters for regeneration is **releases shipped since the overview was
- * generated**, not pure date diff. A 30-day-old overview with zero new
+ * last written**, not pure date diff. A 30-day-old overview with zero new
  * releases isn't actually stale; a 5-day-old overview that's missed 200
  * releases probably is.
  */

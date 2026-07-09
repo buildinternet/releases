@@ -43,7 +43,8 @@ import {
 } from "@buildinternet/releases-core/changelog-slice";
 import {
   OVERVIEW_STALE_DAYS,
-  isOverviewStale,
+  isOverviewContentStale,
+  overviewContentAt,
   overviewPreview,
 } from "@buildinternet/releases-core/overview";
 import {
@@ -1103,6 +1104,7 @@ export async function getOrganization(
         .select({
           content: knowledgePages.content,
           generatedAt: knowledgePages.generatedAt,
+          updatedAt: knowledgePages.updatedAt,
           releaseCount: knowledgePages.releaseCount,
         })
         .from(knowledgePages)
@@ -1128,10 +1130,17 @@ export async function getOrganization(
 
   const overview = overviewRow[0];
   if (overview?.content) {
-    const stale = isOverviewStale(overview.generatedAt);
-    const ageLabel = timeAgo(overview.generatedAt) ?? "unknown";
+    // Prefer updatedAt for age/stale: generatedAt is fixed at first write and
+    // stays old after amends (e.g. generated 3mo ago, updated 4d ago).
+    const stale = isOverviewContentStale(overview);
+    const contentAge = timeAgo(overviewContentAt(overview)) ?? "unknown";
+    const generatedAge = timeAgo(overview.generatedAt) ?? "unknown";
+    const ageLabel =
+      overview.updatedAt && overview.updatedAt !== overview.generatedAt
+        ? `updated ${contentAge}, generated ${generatedAge}`
+        : `generated ${contentAge}`;
     lines.push("");
-    lines.push(`**Overview** (generated ${ageLabel}, ${overview.releaseCount} releases)`);
+    lines.push(`**Overview** (${ageLabel}, ${overview.releaseCount} releases)`);
     if (stale) {
       lines.push(
         `⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`,

@@ -421,6 +421,54 @@ describe("get_organization (overview consolidation)", () => {
     // When fully inlined, the preview-expansion hint should not appear.
     expect(text).not.toContain("Pass `include_overview`");
   });
+
+  it("ages overview content from updatedAt, not original generatedAt", async () => {
+    const [org] = await fixture.db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, "vercel"))
+      .limit(1);
+    // Anthropic-shaped: first write months ago, content amended days ago.
+    const generatedAt = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
+    const updatedAt = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+    await fixture.db.insert(knowledgePages).values({
+      id: newKnowledgePageId(),
+      scope: "org",
+      orgId: org.id,
+      content: longOverview,
+      releaseCount: 12,
+      generatedAt,
+      updatedAt,
+    });
+
+    const text = resultText(await getOrganization(asD1(fixture.db), { identifier: "vercel" }));
+    expect(text).toContain("**Overview**");
+    expect(text).toContain("updated");
+    expect(text).toContain("generated");
+    expect(text).not.toContain("⚠ Overview is older than");
+  });
+
+  it("warns when content write time (updatedAt) is past the stale threshold", async () => {
+    const [org] = await fixture.db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, "vercel"))
+      .limit(1);
+    const generatedAt = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
+    const updatedAt = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+    await fixture.db.insert(knowledgePages).values({
+      id: newKnowledgePageId(),
+      scope: "org",
+      orgId: org.id,
+      content: longOverview,
+      releaseCount: 12,
+      generatedAt,
+      updatedAt,
+    });
+
+    const text = resultText(await getOrganization(asD1(fixture.db), { identifier: "vercel" }));
+    expect(text).toContain("⚠ Overview is older than");
+  });
 });
 
 describe("search (unified)", () => {

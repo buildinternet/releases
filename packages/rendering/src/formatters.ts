@@ -744,6 +744,10 @@ export function overviewToMarkdown(
     lines.push(yamlLine("last_release", isoDateOnly(overview.lastContributingReleaseAt)));
   }
   lines.push(yamlLine("generated", isoDateOnly(overview.generatedAt)));
+  // Content write time when it differs from first generation (amends).
+  if (overview.updatedAt && overview.updatedAt !== overview.generatedAt) {
+    lines.push(yamlLine("updated", isoDateOnly(overview.updatedAt)));
+  }
   if (opts.baseUrl && opts.orgSlug) {
     lines.push(yamlLine("canonical", `${opts.baseUrl}/${opts.orgSlug}/overview.md`));
   }

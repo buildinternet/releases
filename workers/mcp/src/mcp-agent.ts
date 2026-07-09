@@ -726,7 +726,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     {
       ...titled("Get organization", READ_ONLY_HINTS),
       description:
-        "Get detailed information about a single organization — accounts, tags, sources, products, aliases. When an AI-generated overview exists the response includes a short preview; pass `include_overview: true` to inline the full briefing (with a stale warning if it's older than 30 days).",
+        "Get detailed information about a single organization — accounts, tags, sources, products, aliases. When an AI-generated overview exists the response includes a short preview; pass `include_overview: true` to inline the full briefing (with a stale warning if the content is older than 30 days since last write).",
       inputSchema: {
         identifier: z
           .string()
