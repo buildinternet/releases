@@ -12,6 +12,7 @@
     "./consumption-ref": "./src/consumption-ref.ts",
     "./db": "./src/db.ts",
     "./db-errors": "./src/db-errors.ts",
+    "./do-retry": "./src/do-retry.ts",
     "./entity-match": "./src/entity-match.ts",
     "./errors": "./src/errors.ts",
     "./flags": "./src/flags.ts",

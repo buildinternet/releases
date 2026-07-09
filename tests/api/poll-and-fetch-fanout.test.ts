@@ -84,11 +84,14 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
     const dueAll = await queryDueSources(db as any, new Date(), { changeDetectEnabled: true });
     if (dueAll.length === 0) return;
     if (!actor) return; // binding absent → nothing to drive
+    const { withDoRetry } = await import("@releases/lib/do-retry");
     for (let i = 0; i < dueAll.length; i += ENSURE_CONCURRENCY) {
       const batch = dueAll.slice(i, i + ENSURE_CONCURRENCY);
       actor.maxWave.value = Math.max(actor.maxWave.value, batch.length);
       // oxlint-disable-next-line no-await-in-loop -- mirrors the prod heartbeat's bounded waves
-      await Promise.all(batch.map((s) => actor.binding.getByName(s.id).ensureScheduled(s.id)));
+      await Promise.all(
+        batch.map((s) => withDoRetry(() => actor.binding.getByName(s.id).ensureScheduled(s.id))),
+      );
     }
   }
 

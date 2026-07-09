@@ -7,6 +7,7 @@ import {
   type EventStore,
 } from "./events/buffer.js";
 import { EVENT_BUFFER_SIZE, type ReleaseEvent, type ReleaseEventPayload } from "./events/types.js";
+import { enableWsPingPong } from "./lib/ws-auto-response.js";
 
 /** Adapt DurableObjectStorage to our EventStore interface. */
 function storageAsEventStore(storage: DurableObjectStorage): EventStore {
@@ -53,6 +54,7 @@ export class ReleaseHub extends DurableObject {
       const since = parseSince(url.searchParams.get("since"));
 
       const pair = new WebSocketPair();
+      enableWsPingPong(this.ctx);
       this.ctx.acceptWebSocket(pair[1]);
 
       const store = storageAsEventStore(this.ctx.storage);

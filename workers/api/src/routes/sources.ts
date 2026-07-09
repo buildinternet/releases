@@ -149,6 +149,7 @@ import {
 } from "./workflows.js";
 import { ingestReleaseBatch, runBatchIngestEffects } from "../lib/release-batch-ingest.js";
 import { logEvent } from "@releases/lib/log-event";
+import { withDoRetry } from "@releases/lib/do-retry";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
@@ -2734,17 +2735,14 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   ) {
     const actor = c.env.SOURCE_ACTOR;
     c.executionCtx.waitUntil(
-      actor
-        .getByName(src.id)
-        .onSourceChanged(src.id)
-        .catch((err: unknown) => {
-          logEvent("warn", {
-            component: "source-actor",
-            event: "reparent-notify-failed",
-            sourceId: src.id,
-            err: err instanceof Error ? err.message : String(err),
-          });
-        }),
+      withDoRetry(() => actor.getByName(src.id).onSourceChanged(src.id)).catch((err: unknown) => {
+        logEvent("warn", {
+          component: "source-actor",
+          event: "reparent-notify-failed",
+          sourceId: src.id,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }),
     );
   }
   // Only re-embed if semantically-relevant fields changed. Metadata churn

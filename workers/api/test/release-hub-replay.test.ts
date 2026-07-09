@@ -1,8 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import { ReleaseHub } from "../src/release-hub.js";
 
-// Minimal harness: build a fake DurableObjectState with an in-memory storage map.
-function makeHub() {
+// Minimal harness: fake DurableObjectState with an in-memory storage map.
+function makeHub(opts?: {
+  setWebSocketAutoResponse?: (pair: { request: string; response: string }) => void;
+}) {
   const map = new Map<string, unknown>();
   const storage = {
     get: async (k: string) => map.get(k) ?? null,
@@ -13,11 +15,11 @@ function makeHub() {
       for (const k of keys) map.delete(k);
       return undefined;
     },
-    list: async (opts: { prefix: string; startAfter?: string }) => {
+    list: async (listOpts: { prefix: string; startAfter?: string }) => {
       const out = new Map<string, unknown>();
-      const keys = [...map.keys()].filter((k) => k.startsWith(opts.prefix)).toSorted();
+      const keys = [...map.keys()].filter((k) => k.startsWith(listOpts.prefix)).toSorted();
       for (const k of keys) {
-        if (opts.startAfter && k <= opts.startAfter) continue;
+        if (listOpts.startAfter && k <= listOpts.startAfter) continue;
         out.set(k, map.get(k));
       }
       return out as Map<string, any>;
@@ -27,6 +29,7 @@ function makeHub() {
   const ctx = {
     storage,
     acceptWebSocket: () => {},
+    setWebSocketAutoResponse: opts?.setWebSocketAutoResponse ?? (() => {}),
     getWebSockets: () => [],
   } as unknown as DurableObjectState;
 
@@ -57,6 +60,42 @@ async function publish(hub: any, n: number) {
     }),
   );
 }
+
+// Workers runtime globals; polyfill once for unit tests outside miniflare.
+(
+  globalThis as unknown as { WebSocketRequestResponsePair: unknown }
+).WebSocketRequestResponsePair ??= class {
+  request: string;
+  response: string;
+  constructor(request: string, response: string) {
+    this.request = request;
+    this.response = response;
+  }
+};
+(globalThis as unknown as { WebSocketPair: unknown }).WebSocketPair ??= class {
+  0 = { send: () => {} };
+  1 = { send: () => {} };
+};
+
+describe("ReleaseHub WebSocket auto-response", () => {
+  it("registers platform ping/pong before accepting the socket", async () => {
+    const captured: { request?: string; response?: string } = {};
+    const hub = makeHub({
+      setWebSocketAutoResponse: (pair) => {
+        captured.request = pair.request;
+        captured.response = pair.response;
+      },
+    });
+    const res = await hub.fetch(
+      new Request("https://do/subscribe", {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(res.status).toBe(101);
+    expect(captured.request).toBe("ping");
+    expect(captured.response).toBe("pong");
+  });
+});
 
 describe("ReleaseHub /replay", () => {
   it("returns events with seq > since in JSON", async () => {

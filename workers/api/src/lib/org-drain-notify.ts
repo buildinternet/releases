@@ -16,6 +16,7 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
+import { withDoRetry } from "@releases/lib/do-retry";
 import type { OrgActor } from "../org-actor.js";
 
 export async function notifyOrgDrain(
@@ -25,7 +26,7 @@ export async function notifyOrgDrain(
 ): Promise<void> {
   if (!orgActor) return;
   try {
-    await orgActor.getByName(orgId).ensureDrainScheduled(orgId);
+    await withDoRetry(() => orgActor.getByName(orgId).ensureDrainScheduled(orgId));
   } catch (err) {
     logEvent("warn", {
       component: "org-drain-notify",
