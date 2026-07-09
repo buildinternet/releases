@@ -13,7 +13,13 @@ import {
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { Env } from "../index.js";
-import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseTimeWindow } from "../utils.js";
+import {
+  orgWhere,
+  sourceMatchByIdOrSlug,
+  parseBoolParam,
+  parseTimeWindow,
+  firstImageThumbnail,
+} from "../utils.js";
 import {
   getLatestReleasesAcross,
   mapLatestRowToReleaseItem,
@@ -349,7 +355,11 @@ releaseRoutes.get(
       .where(eq(releaseCoverage.coverageId, id))
       .limit(1);
     if (asCoverage) {
-      const siblings = await fetchCoverageSiblings(db, [asCoverage.canonicalId]);
+      const siblings = await fetchCoverageSiblings(
+        db,
+        [asCoverage.canonicalId],
+        c.env.MEDIA_ORIGIN ?? "",
+      );
       return c.json({
         role: "coverage",
         canonical: { ...asCoverage, sibling: siblings.get(asCoverage.canonicalId) ?? null },
@@ -365,6 +375,7 @@ releaseRoutes.get(
       const siblings = await fetchCoverageSiblings(
         db,
         covers.map((r) => r.coverageId),
+        c.env.MEDIA_ORIGIN ?? "",
       );
       return c.json({
         role: "canonical",
@@ -400,6 +411,7 @@ releaseRoutes.get(
 async function fetchCoverageSiblings(
   db: ReturnType<typeof createDb>,
   ids: string[],
+  mediaOrigin: string,
 ): Promise<Map<string, ReleaseCoverageSibling>> {
   const map = new Map<string, ReleaseCoverageSibling>();
   if (ids.length === 0) return map;
@@ -410,6 +422,7 @@ async function fetchCoverageSiblings(
       version: releases.version,
       title: releases.title,
       publishedAt: releases.publishedAt,
+      media: releases.media,
       sourceName: sourcesVisible.name,
       orgSlug: organizationsActive.slug,
       orgName: organizationsActive.name,
@@ -432,6 +445,7 @@ async function fetchCoverageSiblings(
       sourceName: r.sourceName,
       publishedAt: r.publishedAt,
       org: r.orgSlug && r.orgName ? { slug: r.orgSlug, name: r.orgName } : null,
+      thumbnail: firstImageThumbnail(r.media, mediaOrigin),
     });
   }
   return map;
