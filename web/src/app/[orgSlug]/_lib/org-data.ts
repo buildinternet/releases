@@ -81,7 +81,12 @@ function mapSource(s: GqlOrgSource): SourceListItem {
   };
 }
 
-function mapProduct(p: GqlOrgProduct): OrgPageProduct {
+/**
+ * Shared product projection for GraphQL `Org.products` and REST
+ * `OrgDetail.products` — same wire fields; one mapper so the two paths can't
+ * drift (#2060 review).
+ */
+function mapProduct(p: GqlOrgProduct | OrgDetail["products"][number]): OrgPageProduct {
   return {
     id: p.id,
     slug: p.slug,
@@ -124,17 +129,7 @@ export function mapOrgPageFromRest(detail: OrgDetail): OrgPageData {
     lastPolledAt: detail.lastPolledAt,
     trackingSince: detail.trackingSince,
     accounts: detail.accounts,
-    products: detail.products.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      url: p.url,
-      description: p.description,
-      sourceCount: p.sourceCount,
-      kind: (p.kind as Kind | null) ?? null,
-      createdAt: p.createdAt,
-      releaseCount: p.releaseCount,
-    })),
+    products: detail.products.map(mapProduct),
     sources: detail.sources,
   };
 }

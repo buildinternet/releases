@@ -11,8 +11,8 @@ import { mapOrgReleaseItem } from "@/lib/graphql/map-feed";
  * "load more" stays on `/api/org-releases/[orgSlug]` (REST).
  *
  * Falls back to REST when GraphQL fails — same pattern as ProductPage
- * (#2054 / #2056). Real 404s rethrow; empty feed is acceptable degraded mode
- * only if the REST path itself soft-fails after the GraphQL warn.
+ * (#2054 / #2056). Real 404s rethrow. If REST also fails after the GraphQL
+ * warn, degrade to an empty feed (page chrome still renders).
  */
 export const getOrgReleases = cache(
   async (
@@ -34,7 +34,22 @@ export const getOrgReleases = cache(
           },
         }),
       );
-      return getOrgReleasesRest(orgSlug, limit);
+      try {
+        return await getOrgReleasesRest(orgSlug, limit);
+      } catch (restErr) {
+        console.warn(
+          JSON.stringify({
+            component: "web-ssr",
+            event: "org-releases-rest-fallback-empty",
+            route: `/${orgSlug}/releases`,
+            err: {
+              message: restErr instanceof Error ? restErr.message : String(restErr),
+              name: restErr instanceof Error ? restErr.name : undefined,
+            },
+          }),
+        );
+        return { releases: [], nextCursor: null };
+      }
     }
   },
 );

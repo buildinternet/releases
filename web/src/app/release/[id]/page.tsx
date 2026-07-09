@@ -36,7 +36,13 @@ import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
 
-type Release = NonNullable<ReleaseDetailQuery["release"]>;
+type GqlRelease = NonNullable<ReleaseDetailQuery["release"]>;
+type GqlReleaseSource = GqlRelease["source"];
+/** GraphQL types `source.org` non-null; REST can return independent rows with null org. */
+type ReleaseSource = Omit<GqlReleaseSource, "org"> & {
+  org: GqlReleaseSource["org"] | null;
+};
+type Release = Omit<GqlRelease, "source"> & { source: ReleaseSource };
 
 /**
  * Map REST `ReleaseDetail` onto the nested GraphQL shape the page body was
@@ -74,19 +80,17 @@ function mapReleaseFromRest(r: Awaited<ReturnType<typeof api.release>>): Release
       name: r.sourceName,
       type: r.sourceType as Release["source"]["type"],
       isHidden: r.sourceIsHidden ?? false,
-      // REST allows null org (independent sources); GraphQL types org as
-      // non-null on this op. Cast so independent REST rows still render.
-      org: (r.org
+      org: r.org
         ? {
             slug: r.org.slug,
             name: r.org.name,
             avatarUrl: r.org.avatarUrl ?? null,
             isHidden: r.org.isHidden ?? false,
             discovery: (r.org.discovery ?? "curated") as NonNullable<
-              Release["source"]["org"]
+              ReleaseSource["org"]
             >["discovery"],
           }
-        : null) as Release["source"]["org"],
+        : null,
       product: r.product ?? null,
       appStore: (r.appStore as Release["source"]["appStore"]) ?? null,
       video: (r.video as Release["source"]["video"]) ?? null,
