@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
 import { AUTH_CONFIGURED, displayEmailOf } from "@/lib/auth-ui";
 import { computeIsAdmin } from "@/components/admin-only";
-import { adminDefaultHref } from "@/lib/account-nav";
+import { ACCOUNT_SETTINGS_HOME, adminDefaultHref } from "@/lib/account-nav";
 import { useWorkspaces } from "@/components/account/use-workspaces";
 import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import { UserAvatar } from "@/components/account/user-avatar";
@@ -237,10 +237,10 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
           </div>
         </div>
         <Link
-          href="/account/profile"
+          href={ACCOUNT_SETTINGS_HOME}
           className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
         >
-          Your profile
+          Settings
         </Link>
         <Link
           href="/following"
@@ -316,13 +316,13 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
 
             <div className="p-1.5">
               <Link
-                href="/account/profile"
+                href={ACCOUNT_SETTINGS_HOME}
                 role="menuitem"
                 onClick={() => setOpen(false)}
                 className={menuLinkClass}
               >
                 <ProfileIcon className={menuIconClass} />
-                Your profile
+                Settings
               </Link>
               <Link
                 href="/following"

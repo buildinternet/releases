@@ -26,6 +26,12 @@ import {
 /** Reveal not-yet-wired panels in the sidebar. Flip to true once their backends land. */
 export const SHOW_WIP_PANELS = false;
 
+/**
+ * Default account-settings landing when someone hits `/account` (or a generic
+ * "open settings" link). Notifications is the highest-traffic self-serve panel.
+ */
+export const ACCOUNT_SETTINGS_HOME = "/account/notifications";
+
 /** Sidebar / panel group label for operator tools under `/admin/*`. */
 export const ADMIN_GROUP_LABEL = "Admin";
 
