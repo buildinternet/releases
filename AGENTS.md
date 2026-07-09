@@ -16,7 +16,7 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 - Lint + format + type-check: `bun run check` (oxlint with `typeCheck` via `oxlint-tsgolint`, then `oxfmt --check`)
 - Lint only: `bun run lint` (`bun run typecheck` is an alias)
 - Format: `bun run format:check`
-- Tests: `bun test` (not part of `check`)
+- Tests: `bun test` (not part of `check`). **Pre-push:** husky only lints/formats staged files — when touching search/embed/hybrid, ingest/workflows, or `web/**`, run the relevant `bun test` suites (or full root `bun test`) before push; CI is the backstop, not the first filter.
 - Targeted `tsc`: `workers/mcp` still uses `npx tsc --noEmit` in CI (carved-out workspace; excluded from root oxlint). `web` and `tests/` have their own tsconfigs for local runs.
 - **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live in the OSS CLI repo.
 
