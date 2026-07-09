@@ -163,8 +163,10 @@ describe("searchOrgs word-boundary matching", () => {
 
   it("keeps the wire shape free of ranking helper columns", async () => {
     const [hit] = await searchOrgs(db(), "xai", 20, { includeEmpty: true });
+    // `status` + `aliasDomains` are wire fields (#2034 catalog parity); the
+    // `aliasConcat` / `orgAliasConcat` ranking helpers must not leak.
     expect(Object.keys(hit).toSorted()).toEqual(
-      ["avatarUrl", "category", "domain", "name", "slug"].toSorted(),
+      ["aliasDomains", "avatarUrl", "category", "domain", "name", "slug", "status"].toSorted(),
     );
   });
 

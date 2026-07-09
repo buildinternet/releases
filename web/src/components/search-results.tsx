@@ -6,6 +6,7 @@ import { wordMatch } from "@releases/lib/entity-match";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
+import { StubBadge } from "@/components/stub-badge";
 import type {
   UnifiedSearchResponse,
   SearchOrgHit,
@@ -748,11 +749,31 @@ function SearchSections({
             visual={
               <OrgAvatar avatarUrl={org.avatarUrl} githubHandle={null} name={org.name} size={36} />
             }
+            trailing={<StubBadge status={org.status} />}
             secondary={joinMeta([
               org.category && (
                 <Highlight text={categoryDisplayName(org.category)} tokens={tokens} />
               ),
-              org.domain && <Highlight text={org.domain} tokens={tokens} />,
+              // Origin domain is the trustworthy anchor (the lister proved
+              // control by serving the manifest); the name is self-asserted.
+              // Multi-domain orgs surface a `+N` hover listing all of them —
+              // catalog-row parity (#2031/#2034).
+              org.domain && (
+                <span
+                  title={
+                    org.aliasDomains && org.aliasDomains.length > 0
+                      ? `Domains: ${[org.domain, ...org.aliasDomains].join(", ")}`
+                      : undefined
+                  }
+                >
+                  <Highlight text={org.domain} tokens={tokens} />
+                  {org.aliasDomains && org.aliasDomains.length > 0 && (
+                    <span className="ml-1 text-[10px] font-medium text-stone-400 dark:text-stone-500">
+                      +{org.aliasDomains.length}
+                    </span>
+                  )}
+                </span>
+              ),
             ])}
           />
         ))}
