@@ -11,7 +11,6 @@ import {
 import type { MappedProductDetail } from "@/lib/graphql/map-source";
 import { tryFetch } from "@/lib/ssr-fetch";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
-import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { CliCommand } from "@/components/cli-command";
 import { JsonLd } from "@/components/json-ld";
@@ -156,7 +155,6 @@ export async function ProductView({
   return (
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
-      <Header />
       <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">

@@ -3,7 +3,6 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { api, ApiSetupError, type TagDetail } from "@/lib/api";
-import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { TaxonomyList } from "@/components/taxonomy-list";
 
@@ -38,7 +37,6 @@ export default async function TagPage({ params }: { params: Promise<{ slug: stri
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -48,7 +46,6 @@ export default async function TagPage({ params }: { params: Promise<{ slug: stri
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">

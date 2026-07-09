@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/header";
 import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 import { fetchFollowingFeed } from "@/lib/follows-server";
 import { FollowingClient } from "./following-client";
@@ -21,7 +20,6 @@ export default async function FollowingPage() {
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="mx-auto w-full max-w-5xl px-6">
         <FollowingClient initialFeed={initialFeed} />
       </div>

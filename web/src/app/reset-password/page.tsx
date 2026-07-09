@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/header";
 import { ResetPasswordForm } from "@/components/reset-password-form";
 import { AuthCard, AuthCenter, AuthHeading } from "@/components/auth-flow";
 import { AUTH_CONFIGURED } from "@/lib/auth-ui";
@@ -25,7 +24,6 @@ export default async function ResetPasswordPage({
 
   return (
     <div className="min-h-screen">
-      <Header />
       <AuthCenter>
         {hasError ? (
           <AuthCard>

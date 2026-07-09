@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
-import { Header } from "@/components/header";
 import { MemberFacepile } from "@/components/member-facepile";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
@@ -34,7 +33,6 @@ export default async function CollectionsListPage() {
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -44,7 +42,6 @@ export default async function CollectionsListPage() {
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
         <PageHeader
           breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}

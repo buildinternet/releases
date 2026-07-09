@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/header";
 import { LiveStream } from "./live-stream";
 import { apiBaseUrl } from "@/lib/env";
 
@@ -28,7 +27,6 @@ export default function LivePage() {
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
         <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
           {TITLE}

@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { ApiSetupError } from "@/lib/api";
-import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgAvatar } from "@/components/org-avatar";
 import { OrgTabs } from "@/components/org-tabs";
@@ -42,7 +41,6 @@ export default async function OrgLayout({
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -72,7 +70,6 @@ export default async function OrgLayout({
 
   return (
     <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
-      <Header />
       <div className="mx-auto max-w-[1300px] px-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]">

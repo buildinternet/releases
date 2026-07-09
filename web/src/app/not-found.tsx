@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { Header } from "@/components/header";
 
 export default function NotFound() {
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="max-w-md mx-auto px-6 pt-24 text-center">
         <div className="text-5xl font-bold tracking-tight text-stone-300 dark:text-stone-700 mb-4">
           404

@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { api } from "@/lib/api";
-import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
@@ -79,7 +78,6 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="max-w-3xl mx-auto px-6 py-8">
         <JsonLd data={jsonLd} />
         <Link

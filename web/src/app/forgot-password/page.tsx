@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/header";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 import { AuthCenter } from "@/components/auth-flow";
 import { AUTH_CONFIGURED } from "@/lib/auth-ui";
@@ -17,7 +16,6 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen">
-      <Header />
       <AuthCenter>
         <ForgotPasswordForm />
       </AuthCenter>

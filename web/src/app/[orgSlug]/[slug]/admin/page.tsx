@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
-import { Header } from "@/components/header";
 import { ProductAdminPanel } from "@/components/product-admin-panel";
 import { isAdminViewer } from "@/lib/server-session";
 import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
@@ -57,7 +56,6 @@ export default async function ProductAdminPage({
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="mx-auto max-w-[1000px] px-6 pb-24 pt-5">
         <div className="text-[13px] text-stone-400 dark:text-stone-500">
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
