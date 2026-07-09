@@ -55,7 +55,7 @@ curl "https://api.releases.sh/v1/releases/latest?org=vercel&since=2026-01-01&unt
 
 | Resource     | Notes                                                                                                                                                                                                                       |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Orgs**     | Publish releases. Resolved by typed ID (`org_…`) or slug.                                                                                                                                                                   |
+| **Orgs**     | Publish releases. Resolved by typed ID (`org_…`), slug, or a bare domain (primary or alias).                                                                                                                                |
 | **Products** | Optional grouping layer between orgs and sources.                                                                                                                                                                           |
 | **Sources**  | Changelog endpoints owned by an org. `type` is one of `github`, `scrape`, `feed`, `agent`. Resolved by typed ID (`src_…`) on the bare path, or by slug under the org-scoped path (`/v1/orgs/:orgSlug/sources/:sourceSlug`). |
 | **Releases** | Carry `id`, `orgId`, `sourceId`, `title`, `version`, `publishedAt`, `url`, `description`, `media`, plus optional `summary`, `title_generated`, `title_short`.                                                               |

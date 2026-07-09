@@ -51,7 +51,7 @@ and are refused (401); a presented-but-unresolvable Bearer credential gets a 401
 
 Entity resolution prefers IDs over slugs; IDs are immutable, so prefer them in new clients.
 
-- **Org and release** lookups accept `org_…` / `rel_…` IDs or slugs interchangeably.
+- **Org and release** lookups accept `org_…` / `rel_…` IDs or slugs interchangeably. Org detail (`GET /v1/orgs/:slug`) additionally resolves a bare **domain** — primary (`organizations.domain`) or alias — when the identifier is domain-shaped; an unresolved domain-shaped identifier records a demand signal before returning `404` (see [Domain resolution](#domain-resolution)).
 - **Source and product** lookups accept the typed ID (`src_…` / `prod_…`) on the bare path (`/v1/sources/:slug`, `/v1/products/:slug`), but slug-only callers must use the org-scoped path or a `/v1/lookups/*-by-slug` resolver (#698, below).
 
 ## Friendly release URLs
@@ -124,6 +124,8 @@ None of the lookup routes are `adminRoutes`-protected.
 Domain aliases (`domain_aliases` table) map alternate domains to orgs/products; globally unique; matched in `findOrg()`/`findProduct()` fallback and in search LEFT JOINs.
 
 `GET /v1/lookups/by-domain?domain=…` resolves a normalized domain to its owning org (matched on `organizations.domain` for primary or `domain_aliases.domain` for aliases) and any products whose alias targets the same domain. Pure resolution — unlike the GitHub coordinate path, an unknown domain just returns `404 not_found`; there is no probing. Mirrored on MCP as `lookup_domain` and on the OSS CLI as `releases lookup domain <domain>`. The normalizer `normalizeDomain` (`@buildinternet/releases-core/domain`) is shared with `/v1/search?domain=…` and the MCP `search` tool's `domain` input to scope a query to one org by URL-shaped input.
+
+Org detail (`GET /v1/orgs/:slug`) also accepts a bare domain: after id/slug and alias matching, a domain-shaped identifier is matched against `organizations.domain` with the same primary-or-alias semantics as `by-domain` (both share `normalizeDomain`). On a miss it records a fire-and-forget **domain-demand** signal (`domain_demand` table, #1947) — the same signal `by-domain` emits — so the daily manifest sweep can later probe undeclared domains that people are already asking for. This is a demand _record_, not on-demand probing: the request itself still returns `404` and no source is created in-band (probing a manifest on the miss is the deferred JIT path, #2030).
 
 ### On-demand GitHub source creation (#662)
 
