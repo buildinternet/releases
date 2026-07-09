@@ -1,104 +1,18 @@
 ---
 title: "Listing your product — releases.json"
-description: "One small file that tells the Releases registry — and any agent — where you publish product updates. Point at your changelog, feed, or GitHub releases, and optionally break it down by product."
+description: "One small file that tells the Releases registry — and any agent — where you publish product updates. Point at your changelog, feed, or GitHub releases."
 adminOnly: false
 ---
 
 # Listing your product
 
-Every company posts product updates somewhere — a changelog, an updates page, a blog, GitHub releases, an RSS feed. `releases.json` is one small file on your domain that says where. Publish it once, and any registry or agent that reads the format — starting with this one — learns where your release notes live directly from you, instead of guessing.
+`releases.json` is a small file on your domain that declares **where you publish product updates** — a changelog, feed, GitHub Releases, App Store listing, or hosted CHANGELOG. Authority comes from **where the file lives**: domain file → company; repo-root file → that repo.
 
-There's no account to create and no listing to claim. Authority comes from **where the file lives**: a file on your domain speaks for your company, and a file in a repo speaks for that repo. If you can publish a file at a URL, you can control what it declares.
+When the file is live, [check and activate on the submit page](/submit).
 
-The format is deliberately **not ours**. We aren't aware of an existing standard for declaring where release notes live, so this file states plain facts about your domain — your products and the places you publish updates — in terms any registry, feed reader, or agent can consume. Nothing in it binds you to this registry except the optional `registries` block described below, which is namespaced so other tools can add their own. If a real standard emerges, we'd rather read that; until then, publish once and let anyone benefit.
+## Fast track: let an agent write it
 
-## The simplest useful file
-
-Host this at `https://yourdomain.com/.well-known/releases.json`:
-
-```json
-{
-  "$schema": "https://releases.sh/schemas/releases.json",
-  "version": 2,
-  "releases": [{ "url": "https://updates.acme.com", "feed": "https://updates.acme.com/rss.xml" }]
-}
-```
-
-That's a complete manifest. It says: _here's where we post product updates_ — the page people should read, and the feed machines should follow. If you haven't broken your updates down by product, you don't have to. This is enough.
-
-Each entry in `releases` is one place you publish updates, described with whichever keys fit:
-
-| Key        | Use it for                                                                 |
-| ---------- | -------------------------------------------------------------------------- |
-| `url`      | The page a person would read — your changelog, updates page, or what's-new |
-| `feed`     | The RSS/Atom feed for those updates, if you have one                       |
-| `github`   | A GitHub repo whose Releases are the record — `"acme/cloud-sdk"`           |
-| `appstore` | An App Store listing, for apps whose release notes live there              |
-| `file`     | A raw changelog document at a URL, like a hosted `CHANGELOG.md`            |
-
-Every entry needs at least one of those. You can also add a `title` to name a location, and mark one entry per scope with `"canonical": true` if you list several places and one is the primary.
-
-## Growing into products
-
-When one link isn't enough — you ship several products, each with its own changelog — add a `products` array. Root-level fields describe your company; each product carries its own details and locations:
-
-```json
-{
-  "$schema": "https://releases.sh/schemas/releases.json",
-  "version": 2,
-  "name": "Acme",
-  "description": "CI for teams that ship.",
-  "category": "developer-tools",
-  "avatar": "https://acme.com/logo.png",
-  "social": { "github": "acme", "twitter": "acmehq" },
-  "products": [
-    {
-      "name": "Acme Cloud",
-      "description": "Managed CI runners.",
-      "website": "https://acme.com/cloud",
-      "docs": "https://docs.acme.com/cloud",
-      "releases": [
-        {
-          "url": "https://acme.com/whats-new",
-          "feed": "https://acme.com/whats-new/rss.xml",
-          "canonical": true
-        },
-        { "github": "acme/cloud-sdk" }
-      ]
-    },
-    { "name": "Acme Legacy Agent", "archived": true }
-  ],
-  "releases": [{ "url": "https://updates.acme.com" }]
-}
-```
-
-A few things worth knowing:
-
-- **Top-level `releases` and `products` coexist.** Plenty of companies have a combined firehose _and_ per-product feeds (Cloudflare, for one). Declare both; the registry handles the overlap.
-- **Products take `description`, `website`, `docs`, `support`, `social`, and `tags`** — useful when a product has its own site, social presence, or descriptive labels separate from the company's.
-- **`"archived": true`** marks a discontinued product so it's presented as historical rather than active.
-- **Company fields are optional.** `name`, `description`, `category`, `tags`, `avatar`, and `social` shape how you appear, but the file is useful with none of them — the locations are the point.
-
-## In a repo
-
-A `releases.json` at the root of a repo speaks for that repo. It can say which product the repo belongs to, and where its releases actually end up:
-
-```json
-{
-  "$schema": "https://releases.sh/schemas/releases.json",
-  "version": 2,
-  "product": { "name": "Acme Cloud", "slug": "acme-cloud" },
-  "releases": [{ "url": "https://acme.com/whats-new", "canonical": true }, { "github": "self" }]
-}
-```
-
-Repos that declare the same product are grouped under one product page — that's how several changelogs roll up into a single product. `"github": "self"` means this repo's own GitHub Releases are the source of record; the external `url` says where those releases are announced for humans.
-
-A repo file can't define your company identity, and a domain file can't speak for a repo it doesn't host — each file declares only what its location can legitimately vouch for.
-
-## Let an agent write it
-
-If an agent works in your codebase — or you just have a website URL — hand this off with the `creating-releases-json` skill. Install it, then paste a short prompt:
+Install the skill, paste the prompt (swap in your website), publish the file it produces at `/.well-known/releases.json`, then activate:
 
 ```bash
 npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
@@ -119,43 +33,82 @@ find where we publish release notes.
 Our website is: <your website or domain>
 ```
 
-The skill covers domain vs repo scope, product modeling (when not to over-split), validation, and publishing. You can also copy both the install command and this prompt from the [submit page](/submit).
+Same install + prompt are on the [submit page](/submit) as one-click copy.
 
-## What happens after you publish
+## Write it yourself
 
-Once the file is live at `/.well-known/releases.json`, [check and activate your listing on the submit page](/submit) — enter your domain, review the identity, products, and release locations the registry parsed, and activate if you aren't listed yet.
-
-The registry also re-reads your file on a regular sweep, so later edits show up without you doing anything else. When it finds locations it doesn't already know about:
-
-- **Feeds, GitHub repos, and App Store listings go live automatically** once a quick check confirms they're real (the feed parses, the repo exists).
-- **Plain web pages are reviewed by a person first.** We never start crawling a page just because a file mentioned it.
-
-And the file is safe to publish and leave in place:
-
-- It's **fill-if-empty**: your declarations fill gaps in your listing, but never overwrite something a curator set by hand.
-- Curator and editorial decisions — featuring, collections, which source is primary — are never affected by your file.
-- `category`, `kind`, and `tags` are suggestions. An unrecognized value is ignored, never an error.
-- A missing, invalid, oversized, or unreachable file is a no-op. A broken file never breaks your listing.
-
-If you don't have a manifest yet, you can still [suggest a changelog URL on the submit page](/submit) for a curator to review.
-
-## Pinning your listing
-
-Names change and URLs move, so the registry identifies your org and products by stable IDs. If you want your file bound to your exact registry records — not matched by URL — pin them in a `registries` block:
+Host this at `https://yourdomain.com/.well-known/releases.json`:
 
 ```json
 {
-  "registries": {
-    "releases.sh": { "org": "org_abc123" }
-  }
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "releases": [{ "url": "https://updates.acme.com", "feed": "https://updates.acme.com/rss.xml" }]
 }
 ```
 
-You'll find the IDs on your org and product pages. The block is namespaced by registry, so the same file can carry pins for other registries that adopt the format. A `verification` field is reserved here for linking a domain to an account — that flow is coming.
+Each `releases[]` entry needs **at least one** locator:
+
+| Key        | Use it for                                              |
+| ---------- | ------------------------------------------------------- |
+| `url`      | Page a person reads (changelog / what's-new)            |
+| `feed`     | RSS/Atom feed                                           |
+| `github`   | Repo Releases — `"acme/cloud-sdk"` (or `"self"` in a repo file) |
+| `appstore` | App Store listing                                       |
+| `file`     | Hosted raw changelog (e.g. `CHANGELOG.md` URL)          |
+
+Optional: `title` on a location; `"canonical": true` on the primary one per scope.
+
+### Multiple products
+
+Add `products[]` only when each product has **its own** release location (don't invent one product per marketing page that all share one changelog). Company fields (`name`, `description`, `category`, `avatar`, `social`, `tags`) are optional.
+
+```json
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "name": "Acme",
+  "products": [
+    {
+      "name": "Acme Cloud",
+      "releases": [
+        { "url": "https://acme.com/whats-new", "feed": "https://acme.com/whats-new/rss.xml", "canonical": true },
+        { "github": "acme/cloud-sdk" }
+      ]
+    }
+  ],
+  "releases": [{ "url": "https://updates.acme.com" }]
+}
+```
+
+Top-level `releases` and `products` can coexist (company firehose + per-product streams).
+
+### In a repo
+
+Repo-root `releases.json` binds **that repo** only (`product` + `releases[]`). Use `{ "github": "self" }` when this repo's GitHub Releases are the record.
+
+```json
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "product": { "name": "Acme Cloud", "slug": "acme-cloud" },
+  "releases": [{ "url": "https://acme.com/whats-new", "canonical": true }, { "github": "self" }]
+}
+```
+
+## After you publish
+
+1. [Submit → check your domain](/submit) and activate if you're unlisted.
+2. The registry re-reads the file on a regular sweep; later edits land without re-submission.
+3. **Feeds / GitHub / App Store** go live after a quick automated check. **Plain web pages** are curator-reviewed before crawl.
+4. Fill-if-empty only — never overwrites curator/editorial fields. Invalid or missing file is a no-op.
+
+No manifest yet? [Suggest a changelog URL](/submit) for curator review.
 
 ## Reference
 
-- **`version: 2` is required.** Version-1 files (the old profile-only shape) are no longer read; the fields above are the current format.
-- **Limits:** up to 24 products and 8 locations per product, and at most 32 release locations per file in total (the top-level `releases` array plus every product's locations combined).
-- **`$schema` is optional but recommended** — editors that understand JSON Schema will validate and autocomplete your file against [the published schema](https://releases.sh/schemas/releases.json).
-- **Live example:** this site publishes its own file at [releases.sh/.well-known/releases.json](https://releases.sh/.well-known/releases.json).
+- **`version: 2` required.** v1 is no longer read.
+- **Limits:** ≤24 products, ≤8 locations per product, ≤32 locations total per file.
+- **`$schema`:** optional; [published schema](https://releases.sh/schemas/releases.json) for editors.
+- **Pin to registry IDs** (optional): `"registries": { "releases.sh": { "org": "org_…" } }` — IDs are on org/product pages.
+- **Live example:** [releases.sh/.well-known/releases.json](https://releases.sh/.well-known/releases.json).
