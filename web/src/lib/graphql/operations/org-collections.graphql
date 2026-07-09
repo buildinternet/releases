@@ -1,0 +1,14 @@
+# Separate from OrgPage so the OrgPage hash stays stable across deploy windows
+# (web can ship before the API has new hashes — see homepage tryFetch comment
+# and #2047 Vercel prerender of /updates). Additive: nest only when selected.
+query OrgCollections($idOrSlug: String!) {
+  org(idOrSlug: $idOrSlug) {
+    collections {
+      slug
+      name
+      description
+      memberCount
+      isFeatured
+    }
+  }
+}

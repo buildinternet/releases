@@ -9,7 +9,7 @@ import type { Notice } from "@buildinternet/releases-core/notice";
 import type { Kind } from "@buildinternet/releases-core/kinds";
 import { api, ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
-import { OrgPageDocument } from "@/lib/graphql/__generated__/graphql";
+import { OrgPageDocument, OrgCollectionsDocument } from "@/lib/graphql/__generated__/graphql";
 import type { OrgPageQuery } from "@/lib/graphql/__generated__/graphql";
 import { mapCollectionListItem } from "@/lib/graphql/map-feed";
 
@@ -36,23 +36,16 @@ export type OrgPageProduct = {
 
 /**
  * Org detail used by the org page family. Field set matches `OrgDetail`
- * (`@buildinternet/releases-api-types`) MINUS `overview` and `playbook` —
- * those stay on REST (see `getOrgOverview` below): the overview knowledge-page
- * projection joins `knowledge_pages` + citation rows + a playbook-only auth
- * branch, none of which are ported to GraphQL for this slice (#1978 / #2047).
- *
- * `collections` is nested on the OrgPage GraphQL op (#2047) so the layout no
- * longer needs a second REST hop for the sidebar.
+ * (`@buildinternet/releases-api-types`) MINUS `overview`, `playbook`, and
+ * `collections` — overview stays on the thin REST route (`getOrgOverview`);
+ * collections are a separate persisted op (`getOrgCollections`) so the
+ * OrgPage document hash stays stable across deploy windows (#2047).
  */
-export type OrgPageData = Omit<
-  GqlOrg,
-  "products" | "sources" | "locations" | "notice" | "collections"
-> & {
+export type OrgPageData = Omit<GqlOrg, "products" | "sources" | "locations" | "notice"> & {
   products: OrgPageProduct[];
   sources: SourceListItem[];
   locations?: ReleaseLocationItem[];
   notice?: Notice | null;
-  collections: CollectionListItem[];
 };
 
 function mapSource(s: GqlOrgSource): SourceListItem {
@@ -102,32 +95,34 @@ function mapProduct(p: GqlOrgProduct): OrgPageProduct {
 }
 
 /**
- * Primary org record + products + sources + collections, fetched via one
- * persisted GraphQL query (`Query.org`) instead of REST
- * `GET /v1/orgs/:slug` + `GET /v1/orgs/:slug/collections`. Overview stays on
- * the thin REST overview route — see `getOrgOverview`.
+ * Primary org record + products + sources via the stable `OrgPage` persisted
+ * query. Collections and overview are separate (see `getOrgCollections` /
+ * `getOrgOverview`) so this hash can ship without a coordinated API deploy.
  */
 export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
   const data = await graphqlRequest(OrgPageDocument, { idOrSlug: slug });
   if (!data.org) throw new ApiNotFoundError(`/v1/orgs/${slug}`);
-  const { products, sources, locations, notice, collections, ...rest } = data.org;
+  const { products, sources, locations, notice, ...rest } = data.org;
   return {
     ...rest,
     products: products.map(mapProduct),
     sources: sources.map(mapSource),
     locations: (locations as ReleaseLocationItem[] | null) ?? undefined,
     notice: notice as Notice | null,
-    collections: collections.map(mapCollectionListItem),
   };
 });
 
-/** Collections for the org sidebar — already on the OrgPage GraphQL response. */
+/**
+ * Collections for the org sidebar. Prefers GraphQL `OrgCollections` (additive
+ * #2047 field on Query.org); falls back to REST when the persisted op isn't
+ * on the API yet (PR preview / deploy window).
+ */
 export const getOrgCollections = cache(async (slug: string): Promise<CollectionListItem[]> => {
   try {
-    const org = await getOrg(slug);
-    return org.collections;
+    const data = await graphqlRequest(OrgCollectionsDocument, { idOrSlug: slug });
+    return (data.org?.collections ?? []).map(mapCollectionListItem);
   } catch {
-    return [];
+    return api.orgCollections(slug).catch(() => [] as CollectionListItem[]);
   }
 });
 
