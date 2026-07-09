@@ -196,14 +196,10 @@ export function TerminalSession({
     if (el) el.scrollTop = el.scrollHeight;
   }, [reveal, agentMode]);
 
-  // Fixed height *while animating* avoids layout shift as content fills in; once
-  // the reveal is done we drop back to the `maxHeight` cap so the panel can size
-  // to its content (and the value matches, so it never jumps).
-  const scrollerStyle = maxHeight
-    ? animate && !reveal.done
-      ? { height: maxHeight }
-      : { maxHeight }
-    : undefined;
+  // `maxHeight` is a plain cap: the reveal never changes the panel's height
+  // (unrevealed text stays in the layout as invisible spans, below), so the
+  // box is content-sized from the first frame and never jumps.
+  const scrollerStyle = maxHeight ? { maxHeight } : undefined;
 
   const caretVisible = !agentMode && !reveal.done;
   // With tabs, the Humans/Agents toggle lives in the tab bar; the footer only
@@ -280,20 +276,52 @@ export function TerminalSession({
               );
             }
 
+            // The reveal must never change the panel's geometry: text that
+            // hasn't been "typed" yet still renders, wrapped in an invisible
+            // span, so the transcript occupies its final height (and line
+            // wraps) from the first frame. Revealing swaps visibility only —
+            // no layout shift when the animation ends. The caret rides inline
+            // at the visible/invisible boundary.
             const fullyRevealed = reveal.done || bi < reveal.block;
-            if (!fullyRevealed && bi > reveal.block) return null; // not started yet
 
-            const inOutputPhase = !reveal.done && bi === reveal.block && reveal.phase === "out";
-            const commandText =
-              fullyRevealed || inOutputPhase
-                ? block.command
-                : block.command.slice(0, reveal.cmdChars);
-            const showOutput = fullyRevealed || inOutputPhase;
-            const outputText = !showOutput
-              ? null
-              : fullyRevealed
-                ? block.output
-                : block.output.split("\n").slice(0, reveal.outLines).join("\n");
+            if (fullyRevealed) {
+              return (
+                <Fragment key={bi}>
+                  {bi > 0 && "\n\n"}
+                  {block.command && (
+                    <>
+                      <span className="select-none text-stone-400 dark:text-stone-600">$ </span>
+                      <CommandSyntax command={block.command} />
+                    </>
+                  )}
+                  {block.command ? "\n" : null}
+                  <OutputText text={block.output} />
+                </Fragment>
+              );
+            }
+
+            if (bi > reveal.block) {
+              // Not started: hold the block's full footprint invisibly.
+              return (
+                <Fragment key={bi}>
+                  {bi > 0 && "\n\n"}
+                  <span aria-hidden className="invisible">
+                    {block.command ? `$ ${block.command}\n` : ""}
+                    {block.output}
+                  </span>
+                </Fragment>
+              );
+            }
+
+            // The block mid-reveal: visible slice, caret, invisible remainder.
+            const typing = reveal.phase === "cmd";
+            const typedCmd = typing ? block.command.slice(0, reveal.cmdChars) : block.command;
+            const lines = block.output.split("\n");
+            const visibleOut = typing ? "" : lines.slice(0, reveal.outLines).join("\n");
+            const hiddenOut = typing ? block.output : lines.slice(reveal.outLines).join("\n");
+            const hiddenText = typing
+              ? `${block.command.slice(reveal.cmdChars)}\n${block.output}`
+              : `${visibleOut && hiddenOut ? "\n" : ""}${hiddenOut}`;
 
             return (
               <Fragment key={bi}>
@@ -301,23 +329,22 @@ export function TerminalSession({
                 {block.command && (
                   <>
                     <span className="select-none text-stone-400 dark:text-stone-600">$ </span>
-                    <CommandSyntax command={commandText} />
+                    <CommandSyntax command={typedCmd} />
                   </>
                 )}
-                {outputText !== null && (
-                  <>
-                    {block.command ? "\n" : null}
-                    <OutputText text={outputText} />
-                  </>
+                {!typing && (block.command ? "\n" : null)}
+                {visibleOut !== "" && <OutputText text={visibleOut} />}
+                {caretVisible && (
+                  <span aria-hidden className="terminal-caret text-stone-400 dark:text-stone-500">
+                    ▋
+                  </span>
                 )}
+                <span aria-hidden className="invisible">
+                  {hiddenText}
+                </span>
               </Fragment>
             );
           })}
-          {caretVisible && (
-            <span aria-hidden className="terminal-caret text-stone-400 dark:text-stone-500">
-              ▋
-            </span>
-          )}
         </pre>
       </div>
 
@@ -353,12 +380,20 @@ export function TerminalSession({
           ) : (
             <span />
           )}
-          {showReplay && (
+          {/* Reserved (invisible) rather than unmounted while the reveal
+              runs, so the footer — and with it the whole panel — keeps a
+              constant height when the button appears. */}
+          {animate && (
             <button
               type="button"
               onClick={replay}
               aria-label="Replay animation"
-              className="rounded-md p-1 text-stone-400 transition-colors hover:bg-stone-200 hover:text-stone-700 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+              aria-hidden={!showReplay}
+              disabled={!showReplay}
+              tabIndex={showReplay ? undefined : -1}
+              className={`rounded-md p-1 text-stone-400 transition-colors hover:bg-stone-200 hover:text-stone-700 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-200 ${
+                showReplay ? "" : "invisible"
+              }`}
             >
               <ReplayIcon size={14} />
             </button>

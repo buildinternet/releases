@@ -388,11 +388,16 @@ export default async function HomePage() {
                 status line rather than marketing stats. Sources + releases
                 carry the scale, "updated hourly" the freshness promise; the
                 org count still lives in the "Browse all N orgs" link below.
-                Compact release count (35.6k) — a scale signal, not a ledger. */}
-            <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.12em] uppercase text-stone-400 dark:text-stone-500">
-              <span className="tabular-nums">{stats?.sources ?? 0} sources</span>
-              <span className="tabular-nums">{formatStars(stats?.releases ?? 0)} releases</span>
-              <span>updated hourly</span>
+                Compact release count (35.6k) — a scale signal, not a ledger.
+                The conveyor blocks animate directly behind this strip, so it
+                sits on a translucent page-color scrim (blurred, pill-shaped)
+                that keeps it legible without muting the backdrop itself. */}
+            <div className="flex justify-center">
+              <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 rounded-full bg-stone-50/75 px-5 py-1.5 font-mono text-[11px] tracking-[0.12em] text-stone-500 uppercase backdrop-blur-[2px] dark:bg-stone-950/65 dark:text-stone-400">
+                <span className="tabular-nums">{stats?.sources ?? 0} sources</span>
+                <span className="tabular-nums">{formatStars(stats?.releases ?? 0)} releases</span>
+                <span>updated hourly</span>
+              </div>
             </div>
           </div>
         </div>
