@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type {
   CollectionListItem,
+  OrgDetail,
   OverviewPageItem,
   ReleaseLocationItem,
   SourceListItem,
@@ -94,12 +95,79 @@ function mapProduct(p: GqlOrgProduct): OrgPageProduct {
   };
 }
 
+/** Map REST `OrgDetail` onto the GraphQL-shaped `OrgPageData` used by org SSR. */
+export function mapOrgPageFromRest(detail: OrgDetail): OrgPageData {
+  return {
+    id: detail.id ?? "",
+    slug: detail.slug,
+    name: detail.name,
+    domain: detail.domain,
+    description: detail.description ?? null,
+    category: detail.category ?? null,
+    avatarUrl: detail.avatarUrl,
+    isHidden: detail.isHidden ?? false,
+    autoGenerateContent: detail.autoGenerateContent ?? null,
+    overviewCadenceDays: detail.overviewCadenceDays ?? null,
+    featured: detail.featured ?? null,
+    fetchPaused: detail.fetchPaused ?? null,
+    discovery: (detail.discovery ?? "curated") as OrgPageData["discovery"],
+    status: (detail.status ?? "tracked") as OrgPageData["status"],
+    locations: detail.locations,
+    tags: detail.tags ?? [],
+    aliases: detail.aliases ?? [],
+    notice: (detail.notice as Notice | null | undefined) ?? null,
+    sourceCount: detail.sourceCount,
+    releaseCount: detail.releaseCount,
+    releasesLast30Days: detail.releasesLast30Days,
+    avgReleasesPerWeek: detail.avgReleasesPerWeek,
+    lastFetchedAt: detail.lastFetchedAt,
+    lastPolledAt: detail.lastPolledAt,
+    trackingSince: detail.trackingSince,
+    accounts: detail.accounts,
+    products: detail.products.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      url: p.url,
+      description: p.description,
+      sourceCount: p.sourceCount,
+      kind: (p.kind as Kind | null) ?? null,
+      createdAt: p.createdAt,
+      releaseCount: p.releaseCount,
+    })),
+    sources: detail.sources,
+  };
+}
+
 /**
  * Primary org record + products + sources via the stable `OrgPage` persisted
  * query. Collections and overview are separate (see `getOrgCollections` /
  * `getOrgOverview`) so this hash can ship without a coordinated API deploy.
+ *
+ * Falls back to REST when GraphQL fails (PersistedQueryNotFound deploy window,
+ * resolver error, etc.) — same resilience pattern as ProductPage (#2054 / #2056).
  */
 export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
+  try {
+    return await getOrgGraphql(slug);
+  } catch (err) {
+    if (err instanceof ApiNotFoundError) throw err;
+    console.warn(
+      JSON.stringify({
+        component: "web-ssr",
+        event: "org-page-graphql-fallback",
+        route: `/${slug}`,
+        err: {
+          message: err instanceof Error ? err.message : String(err),
+          name: err instanceof Error ? err.name : undefined,
+        },
+      }),
+    );
+    return getOrgRest(slug);
+  }
+});
+
+async function getOrgGraphql(slug: string): Promise<OrgPageData> {
   const data = await graphqlRequest(OrgPageDocument, { idOrSlug: slug });
   if (!data.org) throw new ApiNotFoundError(`/v1/orgs/${slug}`);
   const { products, sources, locations, notice, ...rest } = data.org;
@@ -110,7 +178,12 @@ export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
     locations: (locations as ReleaseLocationItem[] | null) ?? undefined,
     notice: notice as Notice | null,
   };
-});
+}
+
+async function getOrgRest(slug: string): Promise<OrgPageData> {
+  const detail = await api.orgDetail(slug);
+  return mapOrgPageFromRest(detail);
+}
 
 /**
  * Collections for the org sidebar. Prefers GraphQL `OrgCollections` (additive
