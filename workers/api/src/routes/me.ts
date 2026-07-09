@@ -27,7 +27,11 @@ import {
 import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
 import { parseJsonBody } from "../lib/json-body.js";
-import type { FeedToken } from "@buildinternet/releases-api-types";
+import type {
+  DeveloperSettingsResponse,
+  FeedToken,
+  NotificationSettingsResponse,
+} from "@buildinternet/releases-api-types";
 import {
   buildFeedCacheKey,
   FEED_CACHE_PAGE_SIZE,
@@ -36,10 +40,13 @@ import {
   isCacheableFeedRequest,
 } from "../lib/feed-cache.js";
 import { withLatestCache } from "../lib/latest-cache.js";
+import { listUserWebhookSubscriptionsEnriched } from "../webhooks/user-queries.js";
+import { listUserApiKeys } from "./user-api-keys.js";
 import { meWebhookHandlers } from "./me-webhooks.js";
 import { accountProfileHandlers } from "./account-profile.js";
 import { respondError } from "../lib/error-response.js";
 import { UnauthorizedError, ValidationError, NotFoundError } from "@releases/lib/releases-error";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 function optionalWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
   try {
@@ -184,19 +191,30 @@ function feedUrlFor(c: Context<Env>, token: string): string {
   return feedAtomUrl(new URL(c.req.url).origin, token);
 }
 
+function feedTokenPayload(
+  c: Context<Env>,
+  row: { lookupId: string; secret: string; createdAt: Date; lastUsedAt: Date | null },
+): FeedToken {
+  return {
+    feedUrl: feedUrlFor(c, feedTokenString(row)),
+    lookupId: row.lookupId,
+    createdAt: row.createdAt.toISOString(),
+    lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
+  };
+}
+
+function privateJson(c: Context<Env>, body: unknown) {
+  c.header("Cache-Control", "private, no-store");
+  return c.json(body);
+}
+
 meHandlers.get("/me/feed/token", async (c) => {
   const session = c.get("session");
   if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   const row = await getFeedToken(db, session.user.id);
   if (!row) return c.json({ token: null });
-  const token: FeedToken = {
-    feedUrl: feedUrlFor(c, feedTokenString(row)),
-    lookupId: row.lookupId,
-    createdAt: row.createdAt.toISOString(),
-    lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
-  };
-  return c.json({ token });
+  return c.json({ token: feedTokenPayload(c, row) });
 });
 
 meHandlers.post("/me/feed/token", async (c) => {
@@ -227,6 +245,52 @@ meHandlers.get("/me/digest", async (c) => {
   const db = createDb(c.env.DB);
   const row = await getDigestPrefs(db, session.user.id);
   return c.json({ cadence: row?.cadence ?? "off" });
+});
+
+/**
+ * Settings bootstraps under `/me/settings/*` — read-only composition for
+ * account UI panels. Writes stay on the real resources (`/me/digest`,
+ * `/me/feed/token`, `/me/webhooks`, `/api-keys`).
+ */
+meHandlers.get("/me/settings/notifications", async (c) => {
+  const session = c.get("session");
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+  const db = createDb(c.env.DB);
+  const userId = session.user.id;
+
+  const [digestRow, feedRow, webhooks] = await Promise.all([
+    getDigestPrefs(db, userId),
+    getFeedToken(db, userId),
+    listUserWebhookSubscriptionsEnriched(db, userId),
+  ]);
+
+  const body: NotificationSettingsResponse = {
+    cadence: digestRow?.cadence ?? "off",
+    feedToken: feedRow ? feedTokenPayload(c, feedRow) : null,
+    webhooks,
+  };
+  return privateJson(c, body);
+});
+
+meHandlers.get("/me/settings/developer", async (c) => {
+  const session = c.get("session");
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+  const db = createDb(c.env.DB);
+  const userId = session.user.id;
+
+  const keysEnabled = await flag(
+    c.env.FLAGS,
+    c.env.USER_API_KEYS_ENABLED,
+    FLAGS.userApiKeysEnabled,
+  );
+
+  const [webhooks, apiKeys] = await Promise.all([
+    listUserWebhookSubscriptionsEnriched(db, userId),
+    keysEnabled ? listUserApiKeys(db, userId) : null,
+  ]);
+
+  const body: DeveloperSettingsResponse = { webhooks, apiKeys };
+  return privateJson(c, body);
 });
 
 meHandlers.put("/me/digest", async (c) => {

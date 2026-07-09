@@ -39,12 +39,17 @@ function formatLastUsed(iso: string | null): string {
   return `last used ${formatDate(iso)}`;
 }
 
-export function ApiKeysPanel() {
+export function ApiKeysPanel({
+  initialKeys = null,
+}: {
+  /** Optional bootstrap from GET /v1/me/settings/developer (skips mount fetch). */
+  initialKeys?: UserApiKey[] | null;
+}) {
   const { data: sessionData, isPending } = useSession();
   const user = sessionData?.user;
 
-  const [keys, setKeys] = useState<UserApiKey[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [keys, setKeys] = useState<UserApiKey[]>(initialKeys ?? []);
+  const [loading, setLoading] = useState(initialKeys == null);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
@@ -66,8 +71,9 @@ export function ApiKeysPanel() {
   }, []);
 
   useEffect(() => {
+    if (initialKeys != null) return;
     if (user) void refresh();
-  }, [user, refresh]);
+  }, [user, refresh, initialKeys]);
 
   async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -112,11 +118,12 @@ export function ApiKeysPanel() {
     }
   }
 
-  if (isPending) {
+  // Skip the session spinner when the parent already hydrated keys (RSC / settings bootstrap).
+  if (isPending && initialKeys == null) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
   }
 
-  if (!user) {
+  if (!user && initialKeys == null) {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}

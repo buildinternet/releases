@@ -2,23 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { DigestCadence, FeedToken } from "@buildinternet/releases-api-types";
-import { useSession } from "@/lib/auth-client";
-import {
-  getDigestCadence,
-  setDigestCadence,
-  getFeedToken,
-  mintFeedToken,
-  revokeFeedToken,
-} from "@/lib/follows";
-import {
-  listWebhooks,
-  createWebhook,
-  testWebhook,
-  deleteWebhook,
-  type UserWebhookListItem,
-} from "@/lib/webhooks";
+import type {
+  DigestCadence,
+  FeedToken,
+  NotificationSettingsResponse,
+  UserWebhookListItem,
+} from "@buildinternet/releases-api-types";
+import { getNotificationSettings } from "@/lib/me-settings";
+import { setDigestCadence, mintFeedToken, revokeFeedToken } from "@/lib/follows";
+import { listWebhooks, createWebhook, testWebhook, deleteWebhook } from "@/lib/webhooks";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";
 import {
   PanelGrid,
   Toggle,
@@ -30,18 +24,15 @@ import {
   dangerLinkClass,
 } from "@releases/design-system";
 
-function EmailSection() {
-  const [cadence, setCadence] = useState<DigestCadence>("off");
-  const [loading, setLoading] = useState(true);
+function EmailSection({ cadence: initialCadence }: { cadence: DigestCadence }) {
+  const [cadence, setCadence] = useState<DigestCadence>(initialCadence);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Stay in sync if the parent re-bootstraps (e.g. after a full refresh).
   useEffect(() => {
-    getDigestCadence()
-      .then(setCadence)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load settings."))
-      .finally(() => setLoading(false));
-  }, []);
+    setCadence(initialCadence);
+  }, [initialCadence]);
 
   async function apply(next: DigestCadence) {
     if (next === cadence || busy) return;
@@ -58,8 +49,6 @@ function EmailSection() {
       setBusy(false);
     }
   }
-
-  if (loading) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
   const digestOn = cadence !== "off";
 
@@ -117,21 +106,15 @@ function EmailSection() {
   );
 }
 
-function FeedTokenSection() {
-  const [token, setToken] = useState<FeedToken | null>(null);
-  const [loading, setLoading] = useState(true);
+function FeedTokenSection({ token: initialToken }: { token: FeedToken | null }) {
+  const [token, setToken] = useState<FeedToken | null>(initialToken);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { copied, copy } = useCopyToClipboard();
 
   useEffect(() => {
-    getFeedToken()
-      .then(setToken)
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load your feed URL."),
-      )
-      .finally(() => setLoading(false));
-  }, []);
+    setToken(initialToken);
+  }, [initialToken]);
 
   async function mint() {
     setBusy(true);
@@ -159,8 +142,6 @@ function FeedTokenSection() {
       setBusy(false);
     }
   }
-
-  if (loading) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
   return (
     <section>
@@ -237,26 +218,20 @@ function slackRowLabel(hook: UserWebhookListItem): string {
   return hook.description?.trim() || "Slack channel";
 }
 
-function SlackSection() {
-  const [hooks, setHooks] = useState<UserWebhookListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+function SlackSection({ webhooks: initialWebhooks }: { webhooks: UserWebhookListItem[] }) {
+  const [hooks, setHooks] = useState<UserWebhookListItem[]>(initialWebhooks);
   const [busy, setBusy] = useState(false);
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    setHooks(initialWebhooks);
+  }, [initialWebhooks]);
+
   async function refresh() {
     setHooks(await listWebhooks());
   }
-
-  useEffect(() => {
-    listWebhooks()
-      .then(setHooks)
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load Slack settings."),
-      )
-      .finally(() => setLoading(false));
-  }, []);
 
   const slackHook = hooks.find((h) => h.format === "slack" && h.scope === "follows") ?? null;
   const followsTakenByOther = !slackHook && hooks.some((h) => h.scope === "follows");
@@ -313,8 +288,6 @@ function SlackSection() {
       setBusy(false);
     }
   }
-
-  if (loading) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
   return (
     <section>
@@ -423,13 +396,23 @@ function SlackSection() {
   );
 }
 
-export function NotificationsPanel() {
-  const { data: sessionData, isPending } = useSession();
-  const user = sessionData?.user;
+export function NotificationsPanel({
+  initial = null,
+}: {
+  /** Optional RSC-hydrated bootstrap from GET /v1/me/settings/notifications. */
+  initial?: NotificationSettingsResponse | null;
+}) {
+  const { data, status, error, retry } = useSettingsBootstrap(
+    initial,
+    getNotificationSettings,
+    "Failed to load notification settings.",
+  );
 
-  if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  if (status === "loading") {
+    return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  }
 
-  if (!user) {
+  if (status === "unsigned") {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
@@ -441,12 +424,23 @@ export function NotificationsPanel() {
     );
   }
 
+  if (status === "error" || !data) {
+    return (
+      <div className="space-y-3">
+        <ErrorText>{error ?? "Failed to load notification settings."}</ErrorText>
+        <button type="button" onClick={() => void retry()} className={secondaryButtonClass}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <PanelGrid>
       <div className="flex flex-col gap-9">
-        <EmailSection />
-        <FeedTokenSection />
-        <SlackSection />
+        <EmailSection cadence={data.cadence} />
+        <FeedTokenSection token={data.feedToken} />
+        <SlackSection webhooks={data.webhooks} />
       </div>
     </PanelGrid>
   );

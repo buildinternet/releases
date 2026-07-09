@@ -45,6 +45,8 @@ and are refused (401); a presented-but-unresolvable Bearer credential gets a 401
 - `POST /v1/me/follows { targetType, targetId }` — add a follow (idempotent; `targetType` is `"org"` or `"product"`).
 - `DELETE /v1/me/follows/:targetType/:targetId` — remove a follow (idempotent).
 - `GET /v1/me/feed` — paginated release feed across all followed entities; an org follow implicitly includes all of that org's products (org follow = its products too). Cursor-paginated (`?cursor=&limit=`, `{ items, pagination: { nextCursor, limit } }`), newest-first.
+- `GET /v1/me/settings/notifications` — one-shot bootstrap for `/account/notifications`: `{ cadence, feedToken, webhooks }` (read-only; writes stay on `/me/digest`, `/me/feed/token`, `/me/webhooks`). Same principal gate as follows. Web RSC hydrates via cookie-forward; the panel falls back to a single client fetch when SSR is empty.
+- `GET /v1/me/settings/developer` — one-shot bootstrap for `/account/webhooks` (Webhooks & API): `{ webhooks, apiKeys }` where `apiKeys` is `null` when `user-api-keys-enabled` is off (UI hides the keys section). Writes stay on `/me/webhooks` and `/api-keys`.
 - `/v1/me/webhooks` — self-serve outbound webhook subscriptions (`GET/POST`, per-id `GET/PATCH/DELETE`, `rotate-secret`, `test`, `deliveries`). Default `scope: "org"` (requires `orgId`/`orgSlug`, optional source filter, max 10). `scope: "follows"` delivers releases matching the caller's `user_follows` graph (max 1, separate from the org cap). Same principal gate as follows. Subscriber contract: [docs/webhooks.md](../webhooks.md).
 
 ## Entity resolution: IDs over slugs

@@ -155,6 +155,7 @@ export interface UserWebhookListItem {
   productSlug: string | null;
   productName: string | null;
   releaseType: "feature" | "rollup" | null;
+  format: "json" | "slack";
   lastSuccessAt: string | null;
   lastErrorAt: string | null;
   lastErrorMsg: string | null;
@@ -217,6 +218,7 @@ export async function listUserWebhookSubscriptionsEnriched(
         productSlug: productSlug ?? null,
         productName: productName ?? null,
         releaseType: s.releaseType,
+        format: s.format,
         lastSuccessAt: s.lastSuccessAt,
         lastErrorAt: s.lastErrorAt,
         lastErrorMsg: s.lastErrorMsg,
