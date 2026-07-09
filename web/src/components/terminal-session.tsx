@@ -206,7 +206,10 @@ export function TerminalSession({
     : undefined;
 
   const caretVisible = !agentMode && !reveal.done;
-  const showFooter = hasJson || animate;
+  // With tabs, the Humans/Agents toggle lives in the tab bar; the footer only
+  // exists to host the toggle (tabless) or the replay affordance.
+  const footerToggle = hasJson && !(tabs && tabs.length > 0);
+  const showFooter = footerToggle || animate;
   const showReplay = animate && reveal.done && !agentMode;
 
   return (
@@ -215,7 +218,12 @@ export function TerminalSession({
       className={`group relative overflow-hidden rounded-lg border border-stone-200 bg-stone-100 shadow-sm dark:border-stone-800 dark:bg-[oklch(0.268_0.007_286.3)] ${className ?? ""}`}
     >
       {tabs && tabs.length > 0 ? (
-        <TabBar tabs={tabs} active={activeTab} onSelect={switchTab} />
+        <TabBar
+          tabs={tabs}
+          active={activeTab}
+          onSelect={switchTab}
+          trailing={hasJson ? <ViewToggle view={view} onChange={switchView} /> : undefined}
+        />
       ) : (
         showChrome && (
           <div
@@ -234,7 +242,9 @@ export function TerminalSession({
           type="button"
           onClick={() => copy(fullText)}
           aria-label={copied ? "Copied" : "Copy to clipboard"}
-          className="absolute top-2 right-2 z-10 rounded-md p-1.5 text-stone-400 opacity-0 transition-opacity hover:bg-stone-200 hover:text-stone-700 focus-visible:opacity-100 group-hover:opacity-100 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+          // With tabs the top-right corner belongs to the humans/agents
+          // toggle, so the copy affordance drops just below the tab bar.
+          className={`absolute ${tabs && tabs.length > 0 ? "top-12" : "top-2"} right-2 z-10 rounded-md p-1.5 text-stone-400 opacity-0 transition-opacity hover:bg-stone-200 hover:text-stone-700 focus-visible:opacity-100 group-hover:opacity-100 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-200`}
         >
           <CopyIcon copied={copied} size={14} />
         </button>
@@ -313,7 +323,7 @@ export function TerminalSession({
 
       {showFooter && (
         <div className="flex items-center justify-between border-t border-stone-200/70 px-3 py-2 dark:border-stone-800/60">
-          {hasJson ? (
+          {footerToggle ? (
             <div
               role="group"
               aria-label="Output format"
@@ -368,53 +378,103 @@ function TabBar({
   tabs,
   active,
   onSelect,
+  trailing,
 }: {
   tabs: TerminalTab[];
   active: number;
   onSelect: (i: number) => void;
+  /**
+   * Optional right-aligned control (the humans/agents toggle). Rendered as a
+   * sibling of the tablist — not inside it — so the roving arrow-key handler
+   * never fires while the control has focus. (The copy button vacates this
+   * corner when tabs are present.)
+   */
+  trailing?: ReactNode;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   return (
     <div
-      role="tablist"
-      aria-label="Use cases"
-      className="flex items-center gap-1 overflow-x-auto border-b border-stone-200/70 px-2 py-1.5 dark:border-stone-800/60"
-      onKeyDown={(e) => {
-        const next = nextTabIndex(active, e.key, tabs.length);
-        if (next == null) return;
-        e.preventDefault();
-        onSelect(next);
-        refs.current[next]?.focus();
-      }}
+      className={`flex items-center border-b border-stone-200/70 dark:border-stone-800/60 ${trailing ? "gap-2 pr-3" : ""}`}
     >
-      {tabs.map((tab, i) => {
-        const selected = i === active;
-        return (
-          <button
-            key={tab.id}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            type="button"
-            role="tab"
-            id={`terminal-tab-${tab.id}`}
-            aria-selected={selected}
-            // Only the active panel is rendered, so reference it only from the
-            // selected tab — inactive tabs omit aria-controls rather than point
-            // at an absent element (it's optional in the WAI-ARIA tabs pattern).
-            aria-controls={selected ? `terminal-tabpanel-${tab.id}` : undefined}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onSelect(i)}
-            className={`shrink-0 rounded-md px-2.5 py-1 font-mono text-[12px] whitespace-nowrap transition-colors ${
-              selected
-                ? "bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-stone-100"
-                : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
-            }`}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
+      <div
+        role="tablist"
+        aria-label="Use cases"
+        className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-2 py-1.5"
+        onKeyDown={(e) => {
+          const next = nextTabIndex(active, e.key, tabs.length);
+          if (next == null) return;
+          e.preventDefault();
+          onSelect(next);
+          refs.current[next]?.focus();
+        }}
+      >
+        {tabs.map((tab, i) => {
+          const selected = i === active;
+          return (
+            <button
+              key={tab.id}
+              ref={(el) => {
+                refs.current[i] = el;
+              }}
+              type="button"
+              role="tab"
+              id={`terminal-tab-${tab.id}`}
+              aria-selected={selected}
+              // Only the active panel is rendered, so reference it only from the
+              // selected tab — inactive tabs omit aria-controls rather than point
+              // at an absent element (it's optional in the WAI-ARIA tabs pattern).
+              aria-controls={selected ? `terminal-tabpanel-${tab.id}` : undefined}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onSelect(i)}
+              // Sans (not mono) keeps four question-length labels on one row
+              // at the demo's max-w-3xl width; the row still scrolls on mobile.
+              className={`shrink-0 rounded-md px-1.5 py-1 text-[12px] whitespace-nowrap transition-colors ${
+                selected
+                  ? "bg-white font-medium text-stone-900 shadow-sm dark:bg-stone-700 dark:text-stone-100"
+                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+      {trailing}
+    </div>
+  );
+}
+
+/**
+ * Compact `humans / agents` view toggle that sits at the right edge of the tab
+ * bar (mirroring the CLI's own dual audience). Plain mono words with a slash —
+ * the active side carries the ink.
+ */
+function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const option = (value: View, label: string) => (
+    <button
+      type="button"
+      aria-pressed={view === value}
+      onClick={() => onChange(value)}
+      className={`transition-colors ${
+        view === value
+          ? "text-stone-900 dark:text-stone-100"
+          : "text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div
+      role="group"
+      aria-label="Output format"
+      className="flex shrink-0 items-center gap-1.5 font-mono text-[11px]"
+    >
+      {option("human", "humans")}
+      <span aria-hidden className="select-none text-stone-300 dark:text-stone-600">
+        /
+      </span>
+      {option("agents", "agents")}
     </div>
   );
 }
