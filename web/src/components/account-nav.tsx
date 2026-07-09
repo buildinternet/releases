@@ -9,6 +9,11 @@ import { computeIsAdmin } from "@/components/admin-only";
 import { adminDefaultHref } from "@/lib/account-nav";
 import { useWorkspaces } from "@/components/account/use-workspaces";
 import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
+import { UserAvatar } from "@/components/account/user-avatar";
+import {
+  readUserDisplayCache,
+  writeUserDisplayCache,
+} from "@/components/account/user-display-cache";
 import {
   ProfileIcon,
   HeartIcon,
@@ -50,55 +55,16 @@ export function AccountNav({
   return <AccountNavInner variant={variant} devAdmin={devAdmin} />;
 }
 
-function initialOf(name: string | undefined, email: string): string {
-  const source = (name ?? "").trim() || email;
-  return source.slice(0, 1).toUpperCase();
-}
-
-/**
- * Fills its (circular, sized by the parent) container with the user's avatar
- * `image` — imported from Google/GitHub on sign-in — falling back to the name/email
- * initial when there's no image (email-password users) or it fails to load. Each
- * instance tracks its own load error, so multiple avatars on screen degrade
- * independently. Plain <img> (not next/image) to cover both `lh3.googleusercontent.com`
- * and `*.githubusercontent.com` without an optimizer remote-pattern, and
- * `referrerPolicy="no-referrer"` — the convention for third-party profile photos.
- */
-function UserAvatar({
-  user,
-}: {
-  user: { name?: string | null; email: string; image?: string | null };
-}) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => {
-    setBroken(false);
-  }, [user.image]);
-  if (user.image && !broken) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={user.image}
-        alt=""
-        referrerPolicy="no-referrer"
-        decoding="async"
-        onError={() => setBroken(true)}
-        className="h-full w-full object-cover"
-      />
-    );
-  }
-  return <span aria-hidden="true">{initialOf(user.name ?? undefined, user.email)}</span>;
-}
-
 const menuLinkClass =
   "flex items-center gap-[11px] rounded-lg px-2.5 py-2 text-[13.5px] text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-900 dark:hover:text-stone-100";
 const menuIconClass = "h-4 w-4 shrink-0 text-stone-400 dark:text-stone-500";
 
 /** Inline workspace list + create, shown expanded inside the account dropdown. */
 function MenuWorkspaces({ onDone }: { onDone: () => void }) {
-  const { workspaces, active, busy, error, switchTo, create } = useWorkspaces();
+  const { workspaces, active, isLoading, busy, error, switchTo, create } = useWorkspaces();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const current = active ?? workspaces[0] ?? null;
+  const current = active ?? (!isLoading ? (workspaces[0] ?? null) : null);
 
   // Close the menu only after a successful switch, so a failure stays visible.
   const onSwitch = (id: string, isActive: boolean) => {
@@ -110,6 +76,15 @@ function MenuWorkspaces({ onDone }: { onDone: () => void }) {
       if (ok) onDone();
     });
   };
+
+  if (isLoading && workspaces.length === 0 && !creating) {
+    return (
+      <div className="flex items-center gap-2.5 px-2.5 py-2">
+        <span className="h-6 w-6 shrink-0 animate-pulse rounded-md bg-stone-200 dark:bg-stone-800" />
+        <span className="h-3.5 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
+      </div>
+    );
+  }
 
   if (workspaces.length === 0 && !creating) {
     return (
@@ -192,6 +167,7 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
   const { data, isPending } = useSession();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [cachedUser, setCachedUser] = useState(() => readUserDisplayCache());
 
   useEffect(() => {
     if (!open) return;
@@ -202,11 +178,26 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const liveUser = data?.user;
+  useEffect(() => {
+    if (!liveUser) return;
+    const next = {
+      id: liveUser.id,
+      name: liveUser.name ?? null,
+      email: liveUser.email,
+      image: liveUser.image ?? null,
+    };
+    writeUserDisplayCache(next);
+    setCachedUser(next);
+  }, [liveUser?.id, liveUser?.name, liveUser?.email, liveUser?.image]);
+
   async function handleSignOut() {
     if (signingOut) return;
     setSigningOut(true);
     try {
       await signOut();
+      writeUserDisplayCache(null);
+      setCachedUser(null);
       setOpen(false);
       router.push("/");
       router.refresh();
@@ -215,13 +206,14 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
     }
   }
 
-  // Avoid a flash of "Sign in" before the session resolves.
-  if (isPending) {
+  // Prefer live session; while pending, paint last-known avatar so the header
+  // doesn't go empty → photo on every navigation.
+  const user = liveUser ?? (isPending ? cachedUser : null);
+  if (isPending && !user) {
     return variant === "mobile" ? null : <span className="h-7 w-7 shrink-0" aria-hidden="true" />;
   }
 
-  const user = data?.user;
-  const role = (user as { role?: string } | undefined)?.role ?? null;
+  const role = (liveUser as { role?: string } | undefined)?.role ?? null;
   const showAdmin = computeIsAdmin(role, devAdmin);
   const adminHref = showAdmin ? adminDefaultHref() : null;
 
