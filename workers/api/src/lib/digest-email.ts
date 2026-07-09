@@ -1,4 +1,5 @@
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
+import { resolveSourceKind } from "@buildinternet/releases-core/kinds";
 import { logEvent } from "@releases/lib/log-event";
 import { escapeHtml } from "./html-escape.js";
 import { appendHtmlFooter, appendTextFooter } from "./email-layout.js";
@@ -34,8 +35,46 @@ export type DigestEmailInput = DigestEmailContent & { to: string };
 const DEFAULT_FROM = "digests@releases.sh";
 const FROM_NAME = "Releases.sh";
 
+// Shared inline styles (email-safe: inline only, system font stack).
+const ACCENT = "#1a56db";
+const INK = "#111827";
+const INK_SOFT = "#374151";
+const BODY = "#4b5563";
+const MUTED = "#6b7280";
+const FAINT = "#9ca3af";
+
 function bestTitle(r: ReleaseLatestItem): string {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Update";
+}
+
+/** Lowercased, whitespace-collapsed, trailing-punctuation-stripped — for equality
+ *  checks between a title and its summary and for boilerplate matching. */
+function norm(s: string): string {
+  return s
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!]+$/, "")
+    .toLowerCase();
+}
+
+// Titles that carry no signal on their own — rendered muted rather than as a
+// prominent accent link, so a "bug fixes" note doesn't read as loudly as a real
+// feature post.
+const LOW_SIGNAL_TITLE =
+  /^(bug fixes|minor (bug )?fixes|various (bug )?fixes|bug fixes and (small )?(improvements|performance improvements)|(small|general|stability|performance) improvements)$/;
+
+function isLowSignalPost(r: ReleaseLatestItem): boolean {
+  return LOW_SIGNAL_TITLE.test(norm(bestTitle(r)));
+}
+
+/** A post's summary, or null when it's absent or merely restates the title (e.g.
+ *  a "Bug fixes and small improvements" body under the same headline) — dropping
+ *  the duplicate keeps the post to one line instead of echoing itself. */
+function postSummary(r: ReleaseLatestItem): string | null {
+  const s = (r.summary ?? "").trim();
+  if (!s) return null;
+  if (norm(s) === norm(bestTitle(r))) return null;
+  return s;
 }
 
 // Subject/title dates render in Eastern time to match the project's ET day
@@ -71,40 +110,40 @@ function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {
   return r.webUrl ?? `${baseUrl}/release/${r.id}`;
 }
 
-// GitHub releases are version-tag drops (the "SDK-style" rows). In the web
-// timelines they collapse into a compact per-product commit-log rollup instead
-// of a hero card; the digest mirrors that so a burst of version bumps reads as
-// one tidy line per product rather than N near-identical paragraphs. Kept as a
-// local literal check (not the web `isTag` helper, which lives in a component
-// the worker must not import).
-function isTagRelease(r: ReleaseLatestItem): boolean {
-  return r.source.type === "github";
+// A release folds into a compact per-product rollup — instead of a hero post —
+// when it's a GitHub version-tag drop OR its resolved kind is "sdk". Both are the
+// high-frequency, low-signal rows a reader wants compressed to a line, not the
+// content posts that earn a title + summary. Using the `kind` signal (surfaced on
+// /releases/latest, #2051) means an SDK published via a feed collapses too, not
+// just GitHub tags — the "always prioritize non-SDK over SDK" intent.
+function isRollupItem(r: ReleaseLatestItem): boolean {
+  return r.source.type === "github" || resolveSourceKind(r.source, r.product ?? null) === "sdk";
 }
 
 function partitionOrgItems(items: ReleaseLatestItem[]): {
   posts: ReleaseLatestItem[];
-  tags: ReleaseLatestItem[];
+  rollups: ReleaseLatestItem[];
 } {
   const posts: ReleaseLatestItem[] = [];
-  const tags: ReleaseLatestItem[] = [];
-  for (const r of items) (isTagRelease(r) ? tags : posts).push(r);
-  return { posts, tags };
+  const rollups: ReleaseLatestItem[] = [];
+  for (const r of items) (isRollupItem(r) ? rollups : posts).push(r);
+  return { posts, rollups };
 }
 
 /**
- * Collapse a day's GitHub version tags into per-product buckets (product when
- * bound, else source), preserving input (published-desc) order — the email
- * analogue of `rollupTags` in the web timeline.
+ * Collapse a day's rollup releases into per-product buckets, keyed on the
+ * server-resolved group identity (`groupSlug`/`groupName` = product ?? source,
+ * #1234) so it matches the web timeline. Preserves input (published-desc) order.
  */
-function groupTagsByProduct(
-  tags: ReleaseLatestItem[],
+function groupByProduct(
+  rollups: ReleaseLatestItem[],
 ): Array<{ label: string; items: ReleaseLatestItem[] }> {
   const groups = new Map<string, { label: string; items: ReleaseLatestItem[] }>();
-  for (const r of tags) {
-    const key = r.product?.slug ?? r.source.slug;
+  for (const r of rollups) {
+    const key = r.groupSlug ?? r.product?.slug ?? r.source.slug;
     let g = groups.get(key);
     if (!g) {
-      g = { label: r.product?.name ?? r.source.name, items: [] };
+      g = { label: r.groupName ?? r.product?.name ?? r.source.name, items: [] };
       groups.set(key, g);
     }
     g.items.push(r);
@@ -116,9 +155,6 @@ function versionLabel(r: ReleaseLatestItem): string {
   return r.version || r.title || "—";
 }
 
-/** How many substantive tags a rollup surfaces before collapsing to "+N more". */
-const ROLLUP_VISIBLE = 3;
-
 /** Trim a blurb to a single, length-capped line. */
 function clampLine(s: string): string {
   const one = s.replace(/\s+/g, " ").trim();
@@ -127,7 +163,7 @@ function clampLine(s: string): string {
 }
 
 /**
- * A one-line blurb for a tag release, or null when it carries no real notes.
+ * A one-line blurb for a rollup release, or null when it carries no real notes.
  * The generated `titleShort` is the canonical one-liner and — crucially — is
  * precisely null for the low-information drops (dependency bumps, auto-generated
  * "Full Changelog" releases), so its presence doubles as the substance signal.
@@ -145,39 +181,51 @@ function tagBlurb(r: ReleaseLatestItem): string | null {
 }
 
 /**
- * Pick which tags a per-product rollup renders: the newest few that carry a real
- * blurb, with everything else (overflow + low-information drops) folded into a
- * hidden count. If nothing in the group has a blurb, still surface the newest one
- * (version only) so the rollup is never an empty header.
+ * Compress a per-product rollup to a single representative release: its version is
+ * the only pill shown, its notes become the "Latest —" line, and every other
+ * release folds into "and N more". The representative is the most recent release
+ * that carries real notes (so the pill and the blurb describe the same release),
+ * falling back to the newest when the whole burst is note-less. Enumerating every
+ * version was the noise the redesign set out to kill — five tags on one SDK now
+ * read as one version + "and 4 more", not five near-identical rows.
  */
-function splitRollup(items: ReleaseLatestItem[]): {
-  shown: Array<{ r: ReleaseLatestItem; blurb: string }>;
+function rollupView(items: ReleaseLatestItem[]): {
+  rep: ReleaseLatestItem;
+  blurb: string | null;
   hiddenCount: number;
 } {
-  const withBlurb: Array<{ r: ReleaseLatestItem; blurb: string }> = [];
   for (const r of items) {
     const b = tagBlurb(r);
-    if (b) withBlurb.push({ r, blurb: b });
+    if (b) return { rep: r, blurb: b, hiddenCount: items.length - 1 };
   }
-  const shown = withBlurb.slice(0, ROLLUP_VISIBLE);
-  if (shown.length === 0 && items.length > 0) shown.push({ r: items[0], blurb: "" });
-  return { shown, hiddenCount: items.length - shown.length };
+  return { rep: items[0], blurb: null, hiddenCount: items.length - 1 };
 }
 
-/** The product (or source) page on the web app — where "+N more" sends the reader. */
+/** The product (or source) page on the web app — where "and N more" sends the reader. */
 function productPageUrl(baseUrl: string, r: ReleaseLatestItem): string {
   const org = r.source.orgSlug;
-  const slug = r.product?.slug ?? r.source.slug;
+  const slug = r.groupSlug ?? r.product?.slug ?? r.source.slug;
   return org ? `${baseUrl}/${org}/${slug}` : releaseUrl(baseUrl, r);
 }
 
+/** The org avatar to render beside its heading: the explicit stored avatar, else
+ *  the GitHub handle's `.png`, else none (heading renders text-only). */
+function orgAvatarSrc(source: ReleaseLatestItem["source"]): string | null {
+  if (source.orgAvatarUrl) return source.orgAvatarUrl;
+  if (source.orgGithubHandle) return `https://github.com/${source.orgGithubHandle}.png?size=48`;
+  return null;
+}
+
 /** Group releases by owning org slug, preserving input (published-desc) order. */
-function groupByOrg(
-  releases: ReleaseLatestItem[],
-): Array<{ orgSlug: string | null; orgName: string; items: ReleaseLatestItem[] }> {
+function groupByOrg(releases: ReleaseLatestItem[]): Array<{
+  orgSlug: string | null;
+  orgName: string;
+  avatar: string | null;
+  items: ReleaseLatestItem[];
+}> {
   const groups = new Map<
     string,
-    { orgSlug: string | null; orgName: string; items: ReleaseLatestItem[] }
+    { orgSlug: string | null; orgName: string; avatar: string | null; items: ReleaseLatestItem[] }
   >();
   for (const r of releases) {
     const key = r.source.orgSlug ?? r.source.name;
@@ -186,7 +234,12 @@ function groupByOrg(
       // Heading is the org's display name ("Cloudflare"), not a source name
       // ("Cloudflare workerd"). Fall back to the source name only when the
       // source has no owning org (orgName/orgSlug null).
-      g = { orgSlug: r.source.orgSlug, orgName: r.source.orgName ?? r.source.name, items: [] };
+      g = {
+        orgSlug: r.source.orgSlug,
+        orgName: r.source.orgName ?? r.source.name,
+        avatar: orgAvatarSrc(r.source),
+        items: [],
+      };
       groups.set(key, g);
     }
     g.items.push(r);
@@ -202,34 +255,35 @@ export function buildDigestEmail(content: DigestEmailContent): {
   const { releases, baseUrl, manageUrl, unsubscribeUrl, cadence, referenceDate } = content;
   const n = releases.length;
   const updates = `${n} update${n === 1 ? "" : "s"}`;
-  const dated = referenceDate ? `${digestDateLabel(cadence, referenceDate)} · ` : "";
-  const subject = `Your ${cadence} Releases digest — ${dated}${updates}`;
+  const dateLabel = referenceDate ? digestDateLabel(cadence, referenceDate) : "";
+  const subject = `Your ${cadence} Releases digest — ${dateLabel ? `${dateLabel} · ` : ""}${updates}`;
   const groups = groupByOrg(releases);
+  const orgSpan = groups.length > 1 ? ` across ${groups.length} orgs` : "";
 
+  // ---- plain text ----
   const textLines: string[] = [subject, ""];
   for (const g of groups) {
     textLines.push(g.orgName.toUpperCase());
-    const { posts, tags } = partitionOrgItems(g.items);
+    const { posts, rollups } = partitionOrgItems(g.items);
     for (const r of posts) {
       const prod = r.product ? ` (${r.product.name})` : "";
       textLines.push(`  • ${bestTitle(r)}${prod}`);
-      if (r.summary) textLines.push(`    ${r.summary}`);
+      const summary = postSummary(r);
+      if (summary) textLines.push(`    ${summary}`);
       textLines.push(`    ${releaseUrl(baseUrl, r)}`);
     }
-    // Version-tag rollup: one product header, then the newest few substantive
-    // updates with their one-line notes, the rest folded into "+N more". Surfaces
-    // real content instead of a wall of information-less version pills.
-    for (const tg of groupTagsByProduct(tags)) {
-      const { shown, hiddenCount } = splitRollup(tg.items);
+    // Per-product rollup: one line — product, newest version, "and N more", plus a
+    // single representative note. Deliberately not an enumerated version list.
+    for (const tg of groupByProduct(rollups)) {
+      const { rep, blurb, hiddenCount } = rollupView(tg.items);
       const count = tg.items.length;
-      textLines.push(`  ${tg.label}${count > 1 ? ` · ${count} updates` : ""}`);
-      for (const { r, blurb } of shown) {
-        textLines.push(blurb ? `    ${versionLabel(r)} — ${blurb}` : `    ${versionLabel(r)}`);
-        textLines.push(`      ${releaseUrl(baseUrl, r)}`);
-      }
-      if (hiddenCount > 0) {
-        textLines.push(`    + ${hiddenCount} more: ${productPageUrl(baseUrl, tg.items[0])}`);
-      }
+      textLines.push(`  ${tg.label}${count > 1 ? ` · ${count} releases` : ""}`);
+      const more = hiddenCount > 0 ? ` (and ${hiddenCount} more)` : "";
+      textLines.push(`    ${versionLabel(rep)}${more}`);
+      if (blurb) textLines.push(`    Latest — ${blurb}`);
+      textLines.push(
+        `    ${hiddenCount > 0 ? productPageUrl(baseUrl, rep) : releaseUrl(baseUrl, rep)}`,
+      );
     }
     textLines.push("");
   }
@@ -242,53 +296,63 @@ export function buildDigestEmail(content: DigestEmailContent): {
   };
   const text = appendTextFooter(textLines.join("\n"), digestFooter);
 
+  // ---- HTML ----
+  // Masthead replaces the old H1-that-just-repeated-the-subject: a compact wordmark
+  // + a one-line count. The inbox already shows the subject sentence.
   const htmlParts: string[] = [
-    `<h1 style="font:600 18px system-ui,sans-serif">${escapeHtml(subject)}</h1>`,
+    `<div style="border-bottom:2px solid ${INK};padding-bottom:9px;margin:0 0 4px">` +
+      `<span style="font:700 12px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:${INK}">Releases</span>` +
+      `<span style="font:13px system-ui,sans-serif;color:${MUTED}">&nbsp;&nbsp;${escapeHtml(dateLabel ? `${dateLabel} · ` : "")}${updates}${orgSpan}</span>` +
+      `</div>`,
   ];
   for (const g of groups) {
-    const orgHeading = g.orgSlug
-      ? `<a href="${escapeHtml(`${baseUrl}/${g.orgSlug}`)}" style="color:#111;text-decoration:none">${escapeHtml(g.orgName)}</a>`
+    const avatar = g.avatar
+      ? `<img src="${escapeHtml(g.avatar)}" width="20" height="20" alt="" style="border-radius:5px;vertical-align:middle;margin-right:8px">`
+      : "";
+    const nameHtml = g.orgSlug
+      ? `<a href="${escapeHtml(`${baseUrl}/${g.orgSlug}`)}" style="color:${INK};text-decoration:none">${escapeHtml(g.orgName)}</a>`
       : escapeHtml(g.orgName);
     htmlParts.push(
-      `<h2 style="font:600 14px system-ui,sans-serif;margin-top:20px">${orgHeading}</h2>`,
+      `<h2 style="font:600 15px system-ui,sans-serif;margin:20px 0 8px">${avatar}${nameHtml}</h2>`,
     );
-    const { posts, tags } = partitionOrgItems(g.items);
+    const { posts, rollups } = partitionOrgItems(g.items);
     for (const r of posts) {
       const prod = r.product
-        ? ` <span style="color:#888">(${escapeHtml(r.product.name)})</span>`
+        ? ` <span style="color:${FAINT}">${escapeHtml(r.product.name)}</span>`
         : "";
+      const summary = postSummary(r);
+      const low = isLowSignalPost(r);
+      const titleStyle = low
+        ? `font-weight:500;color:${MUTED};text-decoration:none`
+        : `font-weight:600;color:${ACCENT};text-decoration:none`;
       htmlParts.push(
         `<p style="margin:8px 0;font:14px system-ui,sans-serif">` +
-          `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="font-weight:600;color:#1a56db;text-decoration:none">${escapeHtml(bestTitle(r))}</a>${prod}` +
-          (r.summary ? `<br><span style="color:#444">${escapeHtml(r.summary)}</span>` : "") +
+          `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="${titleStyle}">${escapeHtml(bestTitle(r))}</a>${prod}` +
+          (summary ? `<br><span style="color:${BODY}">${escapeHtml(summary)}</span>` : "") +
           `</p>`,
       );
     }
-    // Version-tag rollup: a product header, then the newest few substantive
-    // updates (version pill + one-line note), the rest folded into a "+N more"
-    // link to the product page — the email analogue of the timeline's commit-log
-    // rollup, but carrying the notes email readers can't click to expand.
-    for (const tg of groupTagsByProduct(tags)) {
-      const { shown, hiddenCount } = splitRollup(tg.items);
+    // Per-product rollup: product + newest version pill + "and N more" on one line,
+    // a single "Latest —" note below. Compresses a version burst to two lines.
+    for (const tg of groupByProduct(rollups)) {
+      const { rep, blurb, hiddenCount } = rollupView(tg.items);
       const count = tg.items.length;
-      const rows = shown
-        .map(({ r, blurb }) => {
-          const pill = `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="display:inline-block;font:12px ui-monospace,monospace;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;text-decoration:none">${escapeHtml(versionLabel(r))}</a>`;
-          const note = blurb ? ` <span style="color:#444">${escapeHtml(blurb)}</span>` : "";
-          return `<div style="margin:4px 0;font:14px system-ui,sans-serif">${pill}${note}</div>`;
-        })
-        .join("");
+      const pill = `<a href="${escapeHtml(releaseUrl(baseUrl, rep))}" style="display:inline-block;font:12px ui-monospace,monospace;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;text-decoration:none">${escapeHtml(versionLabel(rep))}</a>`;
       const more =
         hiddenCount > 0
-          ? `<div style="margin:4px 0"><a href="${escapeHtml(productPageUrl(baseUrl, tg.items[0]))}" style="font:13px system-ui,sans-serif;color:#1a56db;text-decoration:none">+ ${hiddenCount} more →</a></div>`
+          ? ` <a href="${escapeHtml(productPageUrl(baseUrl, rep))}" style="font:13px system-ui,sans-serif;color:${ACCENT};text-decoration:none">and ${hiddenCount} more →</a>`
           : "";
       const countLabel =
-        count > 1 ? ` <span style="color:#888;font-weight:400">· ${count} updates</span>` : "";
+        count > 1 ? ` <span style="color:${FAINT};font-weight:400">· ${count} releases</span>` : "";
+      const blurbHtml = blurb
+        ? `<div style="font:13px system-ui,sans-serif;color:${MUTED};margin-top:2px">Latest — ${escapeHtml(blurb)}</div>`
+        : "";
       htmlParts.push(
         `<div style="margin:10px 0">` +
-          `<div style="font-weight:600;color:#444;font:14px system-ui,sans-serif;margin-bottom:2px">${escapeHtml(tg.label)}${countLabel}</div>` +
-          rows +
-          more +
+          `<div style="font:14px system-ui,sans-serif;margin-bottom:1px">` +
+          `<span style="font-weight:600;color:${INK_SOFT}">${escapeHtml(tg.label)}</span>${countLabel}&nbsp;&nbsp;${pill}${more}` +
+          `</div>` +
+          blurbHtml +
           `</div>`,
       );
     }
