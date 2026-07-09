@@ -38,14 +38,12 @@ import {
   isValidKind,
 } from "@buildinternet/releases-core/kinds";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
-import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
 import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
 import { resolveSummarizeModel } from "./text-model.js";
 import { IN_ARRAY_CHUNK_SIZE } from "./d1-limits.js";
 import { logUsage } from "./usage-log.js";
-import { mirrorReleaseOgImages } from "./og-mirror.js";
 // Type-only — erased at compile, so no runtime import cycle with the workflow
 // module that imports the values below from here.
 import type { PollAndFetchWorkflowEnv } from "../workflows/poll-and-fetch.js";
@@ -79,14 +77,6 @@ export const RETRY_EMBED = {
 export const RETRY_GENERATE = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
   timeout: "10 minutes",
-} satisfies WorkflowStepConfig;
-
-// Per-release failures are caught + logged inside mirrorReleaseOgImages, and
-// the hash check on `metadata.ogImage` makes a step-level retry a no-op for
-// rows already mirrored — same idempotency shape as RETRY_GENERATE.
-export const RETRY_OG_MIRROR = {
-  retries: { limit: 1, delay: "15 seconds", backoff: "exponential" },
-  timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
 /**
@@ -403,17 +393,13 @@ export interface PostInsertStepCtx {
 }
 
 /**
- * `generate-content` → `mirror-og-images` → `embed-releases`, in that order.
+ * `generate-content` → `embed-releases`, in that order.
  *
  * Order is load-bearing: generate runs BEFORE embed so (a) the AI-generated
  * headline isn't embedded as a separate signal, and (b) the new `content_*`
- * fields land before the row reaches release-event observers. `mirror-og-images`
- * runs after generate (so it mirrors the AI-generated `title_short` when one
- * lands) but does not depend on it — it also mirrors releases whose org opted
- * out of `auto_generate_content` (unconditional on `insertedIds`, unlike
- * `generate-content`'s per-org gate). Steps are gated on `insertedIds.length >
- * 0`; embed additionally requires the `RELEASES_INDEX` binding, and
- * `mirror-og-images` requires the `MEDIA` bucket binding (#2066).
+ * fields land before the row reaches release-event observers. Both steps are
+ * gated on `insertedIds.length > 0`; embed additionally requires the
+ * `RELEASES_INDEX` binding.
  *
  * `onStep`, when provided, is invoked with each step name immediately before it
  * runs — the poll workflow uses it to keep its `currentStep` failure-context
@@ -431,16 +417,6 @@ export async function runContentAndEmbedSteps(
   await step.do("generate-content", RETRY_GENERATE, async () => {
     await generateContentForReleases(db, env, source, insertedIds);
   });
-
-  if (env.MEDIA) {
-    onStep?.("mirror-og-images");
-    await step.do("mirror-og-images", RETRY_OG_MIRROR, async () => {
-      await mirrorReleaseOgImages(
-        { db, bucket: env.MEDIA as R2Bucket, webBase: releaseWebBase(env) },
-        insertedIds,
-      );
-    });
-  }
 
   if (env.RELEASES_INDEX) {
     onStep?.("embed-releases");

@@ -111,12 +111,6 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
     /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
-    /**
-     * Absolute web origin (#2066), used to fetch the just-deployed
-     * `opengraph-image` route once per release for R2 mirroring. Falls back
-     * to the prod origin via `releaseWebBase()` when absent.
-     */
-    WEB_BASE_URL?: string;
     /** Staleness horizon for the poll-path self-flag producer (default 72h). */
     FORCE_DRAIN_STALE_HOURS?: string;
     /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */

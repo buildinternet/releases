@@ -12,7 +12,6 @@ query ReleaseDetail($idOrUrl: String!) {
     titleShort
     content
     migrationNotes
-    ogImageUrl
     composition {
       bugs
       features

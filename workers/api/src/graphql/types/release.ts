@@ -1,6 +1,5 @@
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
-import { parseReleaseMedia, resolveR2Url } from "../../utils.js";
-import { parseOgImageFromMetadata } from "../../lib/og-mirror.js";
+import { parseReleaseMedia } from "../../utils.js";
 import { builder } from "../builder.js";
 import { ReleaseTypeEnum } from "./enums.js";
 
@@ -62,16 +61,6 @@ export const ReleaseType = builder.objectType("Release", {
       type: ["Media"],
       description: "Images / videos / GIFs attached to the release. Empty list if none.",
       resolve: (release, _args, ctx) => parseReleaseMedia(release.media, ctx.mediaOrigin),
-    }),
-
-    ogImageUrl: t.field({
-      type: "String",
-      nullable: true,
-      description:
-        "Absolute media.releases.sh URL for the release's mirrored OpenGraph image (#2066), when one has been generated. Null when no mirrored image exists yet — the on-demand opengraph-image route stays the fallback.",
-      resolve: (release, _args, ctx) =>
-        resolveR2Url(parseOgImageFromMetadata(release.metadata ?? null)?.key, ctx.mediaOrigin) ??
-        null,
     }),
 
     source: t.field({

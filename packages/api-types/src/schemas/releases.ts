@@ -273,13 +273,6 @@ export const ReleaseDetailResponseSchema = z.object({
    * Additive — older servers omit it.
    */
   webUrl: z.string().optional(),
-  /**
-   * Absolute `media.releases.sh` URL for the release's mirrored OpenGraph
-   * image (#2066), when one has been generated. `null`/absent means no
-   * mirrored image exists yet — callers fall back to the on-demand
-   * `opengraph-image` route. Additive — older servers omit it.
-   */
-  ogImageUrl: z.string().nullable().optional(),
   contentHash: z.string().nullable(),
   media: z.array(MediaItemSchema),
   publishedAt: z.string().nullable(),
