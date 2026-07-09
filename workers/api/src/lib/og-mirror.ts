@@ -119,17 +119,23 @@ function computeOgHash(input: {
   return sha256Hex(JSON.stringify(input)).slice(0, 20);
 }
 
-async function fetchWithTimeout(
+/**
+ * Fetch that surfaces the failure (network error / timeout / abort) instead of
+ * collapsing it to `null` — the mirror step is now the coupling between the API
+ * worker and the web deployment being reachable at ingest, so a fetch failure
+ * must be distinguishable in the logs from an HTTP-status failure.
+ */
+async function fetchOnce(
   url: string,
   timeoutMs: number,
   fetchImpl: typeof fetch,
-): Promise<Response | null> {
+): Promise<{ res: Response } | { err: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { signal: controller.signal });
-  } catch {
-    return null;
+    return { res: await fetchImpl(url, { signal: controller.signal }) };
+  } catch (err) {
+    return { err };
   } finally {
     clearTimeout(timer);
   }
@@ -150,6 +156,7 @@ export async function mirrorReleaseOgImages(
 
   const fetchImpl = opts.fetchImpl ?? fetch;
   const timeoutMs = opts.perItemTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const startedAt = Date.now();
 
   const rows = await opts.db
     .select({
@@ -166,6 +173,22 @@ export async function mirrorReleaseOgImages(
     .innerJoin(sources, eq(sources.id, releases.sourceId))
     .leftJoin(organizations, eq(organizations.id, sources.orgId))
     .where(inArray(releases.id, releaseIds));
+
+  // Every failure branch logs a distinct `reason` so a broken mirror is never a
+  // silent no-op: fetch-error (web deploy unreachable / timeout) vs fetch-status
+  // vs bad-content-type vs bad-size vs r2-put-failed vs metadata-update-failed
+  // are all separable in the logs. The unchanged-hash skip is the normal steady
+  // state and is NOT logged per-row (only rolled into the info summary).
+  const fail = (releaseId: string, reason: string, extra?: Record<string, unknown>) => {
+    report.failed++;
+    logEvent("warn", {
+      component: "og-mirror",
+      event: "mirror-failed",
+      releaseId,
+      reason,
+      ...extra,
+    });
+  };
 
   for (const row of rows) {
     report.attempted++;
@@ -187,9 +210,14 @@ export async function mirrorReleaseOgImages(
 
       const renderUrl = `${opts.webBase}/release/${row.id}/opengraph-image`;
       // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps this a bounded, easy-to-reason ingest step
-      const res = await fetchWithTimeout(renderUrl, timeoutMs, fetchImpl);
-      if (!res || !res.ok) {
-        report.failed++;
+      const fetched = await fetchOnce(renderUrl, timeoutMs, fetchImpl);
+      if ("err" in fetched) {
+        fail(row.id, "fetch-error", { renderUrl, err: fetched.err });
+        continue;
+      }
+      const res = fetched.res;
+      if (!res.ok) {
+        fail(row.id, "fetch-status", { renderUrl, status: res.status });
         continue;
       }
       const contentType = (res.headers.get("content-type") ?? "")
@@ -197,40 +225,58 @@ export async function mirrorReleaseOgImages(
         .trim()
         .toLowerCase();
       if (contentType !== OG_CONTENT_TYPE) {
-        report.failed++;
+        fail(row.id, "bad-content-type", { renderUrl, contentType });
         continue;
       }
       // eslint-disable-next-line no-await-in-loop -- see above
       const buf = await res.arrayBuffer();
       if (buf.byteLength === 0 || buf.byteLength > OG_MAX_BYTES) {
-        report.failed++;
+        fail(row.id, "bad-size", { bytes: buf.byteLength });
         continue;
       }
 
       const key = `og/release/${row.id}-${hash}.png`;
-      // eslint-disable-next-line no-await-in-loop -- see above
-      await opts.bucket.put(key, buf, { httpMetadata: { contentType } });
+      try {
+        // eslint-disable-next-line no-await-in-loop -- see above
+        await opts.bucket.put(key, buf, { httpMetadata: { contentType } });
+      } catch (err) {
+        fail(row.id, "r2-put-failed", { key, err });
+        continue;
+      }
 
-      // eslint-disable-next-line no-await-in-loop -- see above
-      await opts.db
-        .update(releases)
-        .set({
-          metadata: sql`json_set(coalesce(${releases.metadata}, '{}'), '$.ogImage', json(${JSON.stringify(
-            { key, hash },
-          )}))`,
-        })
-        .where(eq(releases.id, row.id));
+      try {
+        // eslint-disable-next-line no-await-in-loop -- see above
+        await opts.db
+          .update(releases)
+          .set({
+            metadata: sql`json_set(coalesce(${releases.metadata}, '{}'), '$.ogImage', json(${JSON.stringify(
+              { key, hash },
+            )}))`,
+          })
+          .where(eq(releases.id, row.id));
+      } catch (err) {
+        // The R2 object is already written; only the pointer failed to land, so
+        // the next run re-mirrors and re-stamps idempotently (same key/hash).
+        fail(row.id, "metadata-update-failed", { key, err });
+        continue;
+      }
 
       report.mirrored++;
     } catch (err) {
-      report.failed++;
-      logEvent("warn", {
-        component: "og-mirror",
-        event: "mirror-failed",
-        releaseId: row.id,
-        err,
-      });
+      fail(row.id, "unexpected", { err });
     }
+  }
+
+  if (report.attempted > 0) {
+    logEvent("info", {
+      component: "og-mirror",
+      event: "batch-summary",
+      attempted: report.attempted,
+      mirrored: report.mirrored,
+      skippedUnchanged: report.skippedUnchanged,
+      failed: report.failed,
+      durationMs: Date.now() - startedAt,
+    });
   }
 
   return report;

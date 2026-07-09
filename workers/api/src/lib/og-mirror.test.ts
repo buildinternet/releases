@@ -156,6 +156,47 @@ describe("mirrorReleaseOgImages", () => {
     expect(puts[1]!.key).not.toBe(firstKey);
   });
 
+  test("fail-open: a network/timeout error is caught (not thrown) and skipped", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const id = seedRelease(db, { sourceId: "src_a" });
+    const { bucket, puts } = makeBucket();
+    const fetchImpl = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch;
+
+    const report = await mirrorReleaseOgImages(
+      { db: db as any, bucket, webBase: "https://releases.sh", fetchImpl },
+      [id],
+    );
+
+    expect(report).toEqual({ attempted: 1, mirrored: 0, skippedUnchanged: 0, failed: 1 });
+    expect(puts).toHaveLength(0);
+    expect(parseOgImageFromMetadata(metadataOf(db, id))).toBeNull();
+  });
+
+  test("fail-open: an R2 put error leaves metadata untouched (no dangling pointer)", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const id = seedRelease(db, { sourceId: "src_a" });
+    const bucket = {
+      put: async () => {
+        throw new Error("R2 unavailable");
+      },
+    } as unknown as R2Bucket;
+    const { fetchImpl } = pngFetch();
+
+    const report = await mirrorReleaseOgImages(
+      { db: db as any, bucket, webBase: "https://releases.sh", fetchImpl },
+      [id],
+    );
+
+    expect(report.failed).toBe(1);
+    // Pointer is only written after a successful PUT — a PUT failure must not
+    // stamp metadata.ogImage (that would point og:image at a missing object).
+    expect(parseOgImageFromMetadata(metadataOf(db, id))).toBeNull();
+  });
+
   test("fail-open: a non-ok render response leaves metadata untouched", async () => {
     const db = mkDb();
     seedSource(db, "src_a");
