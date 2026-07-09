@@ -78,6 +78,9 @@ import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
+import { normalizeDomain } from "@buildinternet/releases-core/domain";
+import { recordDomainDemand } from "../lib/listing/domain-demand.js";
+import { findOrgByDomain } from "../queries/search.js";
 import {
   isConflictError,
   computeAvgPerWeek,
@@ -360,7 +363,7 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "Get organization detail",
     description:
-      "Resolves by slug, `org_…` ID, or domain alias. Authenticated callers also receive the org playbook (private; CDN cache opt-out).",
+      "Resolves by slug, `org_…` ID, primary domain, or domain alias. Authenticated callers also receive the org playbook (private; CDN cache opt-out).",
     responses: {
       200: {
         description: "Organization detail",
@@ -388,7 +391,43 @@ orgRoutes.get(
         .where(eq(domainAliases.domain, slug));
       if (alias) org = alias.org;
     }
-    if (!org) return respondError(c, new NotFoundError("Organization not found"));
+    // Only treat the identifier as a candidate domain when it looks
+    // domain-shaped (contains a dot) — otherwise a plain slug could
+    // collide with `organizations.domain` in surprising ways. Matches
+    // `findOrgByDomain`'s primary-domain matching (queries/search.ts).
+    const candidateDomain = slug.includes(".") ? normalizeDomain(slug) : null;
+    if (!org && candidateDomain) {
+      const byDomain = await findOrgByDomain(db, candidateDomain);
+      if (byDomain) {
+        [org] = await db
+          .select()
+          .from(organizations)
+          .where(and(eq(organizations.id, byDomain.id), isNull(organizations.deletedAt)));
+      }
+    }
+    if (!org) {
+      if (candidateDomain) {
+        // Fire-and-forget demand signal (#1947), same pattern as
+        // GET /v1/lookups/by-domain — record the unresolved domain so the
+        // manifest sweep can later probe it. Fail-open — never affect the
+        // response, and c.executionCtx throws when absent (some test paths).
+        try {
+          c.executionCtx.waitUntil(
+            recordDomainDemand(db, candidateDomain).catch((err: unknown) => {
+              logEvent("warn", {
+                component: "listing",
+                event: "domain-demand-capture-failed",
+                domain: candidateDomain,
+                err: err instanceof Error ? err : String(err),
+              });
+            }),
+          );
+        } catch {
+          // No execution context (e.g. some test paths) — skip capture silently.
+        }
+      }
+      return respondError(c, new NotFoundError("Organization not found"));
+    }
 
     const cutoff = daysAgoIso(30);
     const cutoff90d = daysAgoIso(90);
