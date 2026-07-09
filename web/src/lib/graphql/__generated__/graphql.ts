@@ -188,6 +188,7 @@ export type HomepageTickerQuery = {
       publishedAt: string | null;
       titleGenerated: string | null;
       titleShort: string | null;
+      media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: {
         org: { slug: string; name: string; avatarUrl: string | null };
         product: { slug: string; name: string } | null;
@@ -964,7 +965,7 @@ export const HomepageOrgsStatsDocument = {
   ],
 } as unknown as DocumentNode<HomepageOrgsStatsQuery, HomepageOrgsStatsQueryVariables>;
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:eb15101c1fc45e4d3bc46bceb18b929e840f636c694ac36b498e32280e9873cc" },
+  __meta__: { hash: "sha256:e8b5f160ba9f17858d2da995ab6c3032dae4c2628100e0c8783b8565d40bf556" },
   kind: "Document",
   definitions: [
     {
@@ -1028,6 +1029,19 @@ export const HomepageTickerDocument = {
                       { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
                       { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
                       { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "media" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            { kind: "Field", name: { kind: "Name", value: "url" } },
+                            { kind: "Field", name: { kind: "Name", value: "alt" } },
+                            { kind: "Field", name: { kind: "Name", value: "r2Url" } },
+                          ],
+                        },
+                      },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "source" },

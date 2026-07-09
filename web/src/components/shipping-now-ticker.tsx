@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 import { videoRowInfoFromWire } from "@/lib/video-source";
+import { pickReleaseThumb } from "@/lib/media";
 import { OrgAvatar } from "./org-avatar";
 import { AppStoreIcon } from "./app-store-icon";
+import { ReleaseThumb } from "./release-thumb";
 
 export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
 type Slide = { release: TickerRelease; relative: string | null; extraCount: number };
@@ -100,6 +102,7 @@ function PlayGlyph() {
 function Card({ slide }: { slide: Slide }) {
   const { release, relative, extraCount } = slide;
   const video = videoRowInfoFromWire(release.source.video);
+  const thumb = pickReleaseThumb(release.media);
   // A slot is keyed per (org, product), so a release on a specific product
   // (Google → Chrome) reads as just the org name without disambiguation. Lead
   // the header with the product name when present, dimming the org after a
@@ -150,6 +153,7 @@ function Card({ slide }: { slide: Slide }) {
             {relative}
           </span>
         )}
+        {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="sm" />}
       </div>
       <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-3 leading-5 min-h-[2.5rem]">
         {pickLabel(release)}

@@ -7,6 +7,12 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
       publishedAt
       titleGenerated
       titleShort
+      media {
+        type
+        url
+        alt
+        r2Url
+      }
       source {
         org {
           slug
