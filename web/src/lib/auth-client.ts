@@ -55,6 +55,48 @@ const GOOGLE_ONE_TAP_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const SENTINEL_IDENTIFY_URL = process.env.NEXT_PUBLIC_BETTER_AUTH_IDENTIFY_URL;
 
 /**
+ * Name of the non-httpOnly session-presence hint cookie the API worker sets in
+ * lockstep with the session-token cookie (see `LOGGED_IN_HINT_COOKIE` in
+ * workers/api/src/auth/index.ts). Present iff this browser currently holds a session.
+ */
+const LOGGED_IN_HINT_COOKIE = "releases.logged_in";
+
+/** True when the session-presence hint cookie is set on this document. */
+function hasSessionHint(): boolean {
+  // SSR / non-browser: never short-circuit — let the request proceed normally.
+  if (typeof document === "undefined") return true;
+  return document.cookie
+    .split("; ")
+    .some(
+      (c) =>
+        c.startsWith(`${LOGGED_IN_HINT_COOKIE}=`) && !c.startsWith(`${LOGGED_IN_HINT_COOKIE}=;`),
+    );
+}
+
+/**
+ * Fetch impl that short-circuits the `get-session` probe when this browser has
+ * never authenticated (no session hint cookie), returning a synthetic null-session
+ * response with NO network call — which also avoids the cross-origin CORS preflight.
+ *
+ * Every page mounts `useSession()` (global header + follows provider), so without
+ * this gate each pageview — including every JS-rendering crawler hit — fires a
+ * cross-origin `get-session`, making it the most-requested API path. Signed-in
+ * users still probe as normal (the hint is present); the worker sets/clears the
+ * hint alongside the real session cookie, so this can't strand a live session.
+ * Only `get-session` is gated — sign-in/up/out and every other call pass through,
+ * so the very first sign-in still reaches the server and sets the hint.
+ */
+const sessionGatedFetch: typeof fetch = (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.includes("/get-session") && !hasSessionHint()) {
+    return Promise.resolve(
+      new Response("null", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  }
+  return fetch(input, init);
+};
+
+/**
  * Better Auth browser client. Points at the API worker (where the auth instance
  * lives), NOT the web origin — `NEXT_PUBLIC_BETTER_AUTH_URL` must be the worker
  * base URL (prod: https://api.releases.sh, local: https://api.releases.localhost).
@@ -70,7 +112,7 @@ const SENTINEL_IDENTIFY_URL = process.env.NEXT_PUBLIC_BETTER_AUTH_IDENTIFY_URL;
  */
 export const authClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
-  fetchOptions: { credentials: "include" },
+  fetchOptions: { credentials: "include", customFetchImpl: sessionGatedFetch },
   plugins: [
     // Client half of Better Auth Infrastructure ("dash"). Pairs with the server-side
     // dash() plugin (workers/api/src/auth/index.ts) so the hosted dashboard's

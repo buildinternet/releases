@@ -26,6 +26,7 @@ import {
   deriveCookieDomain,
   derivePasskeyRp,
   createAuth,
+  LOGGED_IN_HINT_COOKIE,
   type BetterAuthInstance,
 } from "../src/auth/index.js";
 import { readFileSync } from "node:fs";
@@ -789,6 +790,80 @@ describe("change email", () => {
     await expect(
       auth.api.changeEmail({ body: { newEmail: "x@example.com" }, headers: {} }),
     ).rejects.toThrow();
+  });
+});
+
+// ── Integration: session-presence hint cookie (loggedInHintPlugin) ──
+// The web client gates its `get-session` probe on the non-httpOnly
+// `releases.logged_in` cookie, which the worker must set in lockstep with the real
+// session-token cookie: present with a positive Max-Age while a session exists,
+// cleared on sign-out. These run the real createAuth() over the migrated test DB.
+
+describe("session-presence hint cookie", () => {
+  const env = {
+    BETTER_AUTH_URL: "https://api.releases.localhost",
+    BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  } as never;
+
+  /** The full Set-Cookie string for `name`, or undefined if none was emitted. */
+  function setCookie(headers: Headers, name: string): string | undefined {
+    return headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
+  }
+
+  async function verifiedSession(auth: BetterAuthInstance, captured: AuthEmailMessage[]) {
+    await auth.api.signUpEmail({
+      body: { email: "hint@example.com", password: "correct-horse-battery", name: "Hint" },
+    });
+    const token = new URL(
+      captured[0]!.text.match(/https?:\/\/\S*verify-email\S*/)![0],
+    ).searchParams.get("token")!;
+    return auth.api.verifyEmail({ query: { token }, returnHeaders: true });
+  }
+
+  it("is set non-httpOnly alongside the session cookie on sign-in", async () => {
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db: createTestDb(),
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+
+    const { headers } = await verifiedSession(auth, captured);
+    // The session-token cookie was set (name may carry a `__Secure-` prefix), so the
+    // hint must ride alongside it.
+    expect(headers.getSetCookie().some((c) => c.includes("session_token="))).toBe(true);
+    const hint = setCookie(headers, LOGGED_IN_HINT_COOKIE);
+    expect(hint).toBeTruthy();
+    expect(hint).toMatch(new RegExp(`^${LOGGED_IN_HINT_COOKIE}=1(;|$)`));
+    // Readable by client JS (not httpOnly) and scoped to the cross-subdomain domain.
+    expect(hint!.toLowerCase()).not.toContain("httponly");
+    expect(hint!.toLowerCase()).toContain("domain=.releases.localhost");
+    // A positive Max-Age (mirrors the session cookie) — not an immediate expiry.
+    const maxAge = Number(/max-age=(-?\d+)/i.exec(hint!)?.[1]);
+    expect(maxAge).toBeGreaterThan(0);
+  });
+
+  it("is cleared on sign-out", async () => {
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db: createTestDb(),
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+    const { headers: signInHeaders } = await verifiedSession(auth, captured);
+    const cookie = signInHeaders
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+
+    const { headers } = await auth.api.signOut({ headers: { cookie }, returnHeaders: true });
+    const hint = setCookie(headers, LOGGED_IN_HINT_COOKIE);
+    expect(hint).toBeTruthy();
+    // Empty value with a non-positive Max-Age → the browser drops it.
+    expect(hint).toMatch(new RegExp(`^${LOGGED_IN_HINT_COOKIE}=;`));
+    expect(Number(/max-age=(-?\d+)/i.exec(hint!)?.[1])).toBeLessThanOrEqual(0);
   });
 });
 

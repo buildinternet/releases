@@ -776,8 +776,8 @@ type ApiKeyHookCtx = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
  * always takes precedence. Session resolution failures degrade to body.userId.
  */
 async function resolveApiKeyHookOwner(ctx: ApiKeyHookCtx): Promise<string | undefined> {
-  const session = await getSessionFromCtx(ctx).catch(() => null);
-  if (session?.user?.id) return session.user.id;
+  const authed = await getSessionFromCtx(ctx).catch(() => null);
+  if (authed?.user?.id) return authed.user.id;
   const body = ctx.body as { userId?: unknown } | undefined;
   return typeof body?.userId === "string" ? body.userId : undefined;
 }
@@ -933,6 +933,71 @@ export function resetAuthCacheForTests(): void {
 
 function hasCustomAuthDeps(deps: CreateAuthDeps): boolean {
   return deps.db != null || deps.sendEmail != null || deps.audit != null;
+}
+
+/**
+ * Name of the non-httpOnly "is there a session" hint cookie. The web client gates
+ * its `getSession` probe on this cookie's presence (see web/src/lib/auth-client.ts):
+ * absent → skip the network call entirely and treat the visitor as anonymous.
+ */
+export const LOGGED_IN_HINT_COOKIE = "releases.logged_in";
+
+/**
+ * Mirror the httpOnly session-token cookie into a readable `releases.logged_in`
+ * hint cookie so the browser can cheaply tell "signed in at least once" from
+ * "definitely anonymous" WITHOUT calling `/api/auth/get-session`.
+ *
+ * Why this exists: every web page runs `useSession()` (global header + follows
+ * provider), which fires a cross-origin `get-session` on mount — unconditionally,
+ * even for signed-out visitors and JS-executing crawlers (Applebot/Googlebot).
+ * That made `get-session` the single most-requested API path. Gating the client
+ * probe on this hint eliminates the call for anyone who has never authenticated.
+ *
+ * The hint is set/cleared in lockstep with the ACTUAL session-token cookie (its
+ * own Max-Age is copied), so it can never diverge from the real session lifetime —
+ * the trap with reusing `better-auth.last_used_login_method` (fixed 30-day maxAge,
+ * only refreshed on an explicit sign-in, so it can outlive or under-live a sliding
+ * session). It inherits the session cookie's domain/path/secure/sameSite (including
+ * the cross-subdomain `.releases.sh` domain) and differs only in `httpOnly: false`
+ * and its value. It carries NO identity — just presence — so it's safe to expose.
+ */
+function loggedInHintPlugin(): BetterAuthPlugin {
+  return {
+    id: "logged-in-hint",
+    hooks: {
+      after: [
+        {
+          matcher: () => true,
+          handler: createAuthMiddleware(async (ctx) => {
+            const setCookies = ctx.context.responseHeaders?.getSetCookie?.() ?? [];
+            const sessionName = ctx.context.authCookies.sessionToken.name;
+            const sessionCookie = setCookies.find((c) => c.startsWith(`${sessionName}=`));
+            // Only act when THIS response touches the session-token cookie (sign-in,
+            // sign-out, or a sliding refresh). Other responses leave the hint as-is.
+            if (!sessionCookie) return;
+
+            const attributes = {
+              ...ctx.context.authCookies.sessionToken.attributes,
+              httpOnly: false,
+            };
+            const value = sessionCookie.slice(sessionName.length + 1).split(";")[0];
+            const maxAgeMatch = /max-age=(-?\d+)/i.exec(sessionCookie);
+            const maxAge = maxAgeMatch ? Number(maxAgeMatch[1]) : undefined;
+            // Cleared session cookie (sign-out) → empty value or a non-positive Max-Age.
+            const cleared = value === "" || (maxAge != null && maxAge <= 0);
+            if (cleared) {
+              ctx.setCookie(LOGGED_IN_HINT_COOKIE, "", { ...attributes, maxAge: 0 });
+            } else {
+              ctx.setCookie(LOGGED_IN_HINT_COOKIE, "1", {
+                ...attributes,
+                ...(maxAge != null ? { maxAge } : {}),
+              });
+            }
+          }),
+        },
+      ],
+    },
+  };
 }
 
 /**
@@ -1141,7 +1206,8 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
         // (the admin plugin adds it at runtime) — cast at the call, mirroring the
         // customAccessTokenClaims pattern below. Do NOT annotate the destructured
         // param, or it can diverge from the plugin's expected callback type.
-        definePayload: ({ user }) => jwtSessionPayload(user as { role?: string | null }),
+        definePayload: ({ user: jwtUser }) =>
+          jwtSessionPayload(jwtUser as { role?: string | null }),
       },
     }),
     oauthProvider({
@@ -1309,6 +1375,10 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     lastLoginMethod({
       customResolveMethod: (ctx) => resolveLastLoginMethodOverride(ctx.path),
     }),
+    // Non-httpOnly session-presence hint cookie (`releases.logged_in`) that lets the
+    // web client skip its `get-session` probe for never-authenticated visitors and
+    // crawlers. Kept in lockstep with the session-token cookie. See the plugin doc.
+    loggedInHintPlugin(),
     // Stripe customer registration — mounts only when both Stripe secrets resolve
     // (see `buildStripePlugin`). Adds the `stripeCustomerId` user field + the
     // sign-up customer-creation hook and serves the webhook at
@@ -1497,8 +1567,8 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== "/oauth2/consent") return;
-        const session = await getSessionFromCtx(ctx);
-        const role = (session?.user as { role?: string } | undefined)?.role;
+        const authed = await getSessionFromCtx(ctx);
+        const role = (authed?.user as { role?: string } | undefined)?.role;
         if (consentScopeViolation(role, ctx.body as { accept?: unknown; scope?: unknown })) {
           throw new APIError("BAD_REQUEST", {
             error: "invalid_scope",
