@@ -29,3 +29,10 @@ export async function errorMessage(res: Response, fallback: string): Promise<str
     return fallback;
   }
 }
+
+/** Credentialed GET against the API worker; throws with a human message on non-OK. */
+export async function meGet<T>(path: string, fallback: string): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(await errorMessage(res, fallback));
+  return (await res.json()) as T;
+}

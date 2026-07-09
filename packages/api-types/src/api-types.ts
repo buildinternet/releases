@@ -1146,6 +1146,27 @@ export interface DigestPrefsRequest {
   cadence: DigestCadence;
 }
 
+/**
+ * GET /v1/me/settings/notifications — one-shot bootstrap for `/account/notifications`.
+ * Composes digest cadence + feed token + webhook list so the settings page can
+ * render with a single round-trip instead of three independent mounts.
+ */
+export interface NotificationSettingsResponse {
+  cadence: DigestCadence;
+  feedToken: FeedToken | null;
+  webhooks: UserWebhookListItem[];
+}
+
+/**
+ * GET /v1/me/settings/developer — one-shot bootstrap for `/account/webhooks`
+ * (Webhooks & API). `apiKeys` is `null` when the user-api-keys feature is off
+ * so the UI can hide the keys section without a separate probe.
+ */
+export interface DeveloperSettingsResponse {
+  webhooks: UserWebhookListItem[];
+  apiKeys: UserApiKey[] | null;
+}
+
 // ── Search ──
 
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;

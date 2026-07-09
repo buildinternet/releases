@@ -18,6 +18,7 @@ import {
 } from "../auth/api-key-limit.js";
 import { makeAuthAudit } from "../auth/audit.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
+import type { UserApiKey } from "@buildinternet/releases-api-types";
 import { requireSession } from "../middleware/auth.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -178,24 +179,30 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   );
 });
 
+/** List the caller's self-serve API keys (shared by GET /api-keys and settings bootstrap). */
+export async function listUserApiKeys(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+): Promise<UserApiKey[]> {
+  const rows = await db.select().from(apikey).where(eq(apikey.referenceId, userId)).all();
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    start: r.start,
+    scope: scopeLabel(parsePermissions(r.permissions)),
+    enabled: r.enabled,
+    remaining: r.remaining,
+    lastRequest: r.lastRequest ? r.lastRequest.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+    expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
+  }));
+}
+
 userApiKeyHandlers.get("/api-keys", async (c) => {
   const session = c.get("session");
   if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
-  const rows = await db.select().from(apikey).where(eq(apikey.referenceId, session.user.id)).all();
-  return c.json({
-    apiKeys: rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      start: r.start,
-      scope: scopeLabel(parsePermissions(r.permissions)),
-      enabled: r.enabled,
-      remaining: r.remaining,
-      lastRequest: r.lastRequest ? r.lastRequest.toISOString() : null,
-      createdAt: r.createdAt.toISOString(),
-      expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-    })),
-  });
+  return c.json({ apiKeys: await listUserApiKeys(db, session.user.id) });
 });
 
 userApiKeyHandlers.delete("/api-keys/:id", async (c) => {

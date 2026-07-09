@@ -155,9 +155,14 @@ function healthTone(health: UserWebhookListItem["deliveryHealth"]): string {
   }
 }
 
-export function WebhooksPanel() {
-  const [subs, setSubs] = useState<UserWebhookListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+export function WebhooksPanel({
+  initialWebhooks = null,
+}: {
+  /** Optional bootstrap from GET /v1/me/settings/developer (skips mount fetch). */
+  initialWebhooks?: UserWebhookListItem[] | null;
+}) {
+  const [subs, setSubs] = useState<UserWebhookListItem[]>(initialWebhooks ?? []);
+  const [loading, setLoading] = useState(initialWebhooks == null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -194,8 +199,9 @@ export function WebhooksPanel() {
   }, []);
 
   useEffect(() => {
+    if (initialWebhooks != null) return;
     void refresh();
-  }, [refresh]);
+  }, [initialWebhooks, refresh]);
 
   async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

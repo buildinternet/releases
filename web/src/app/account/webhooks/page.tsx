@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SettingsSection } from "@releases/design-system";
 import { WebhooksApiPanel } from "@/components/webhooks-api-panel";
 import { navItem } from "@/lib/account-nav";
+import { fetchDeveloperSettingsServer } from "@/lib/me-settings-server";
 
 const item = navItem("webhooks");
 
@@ -12,10 +13,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AccountWebhooksPage() {
+export default async function AccountWebhooksPage() {
+  const initial = await fetchDeveloperSettingsServer();
+
   return (
     <SettingsSection group={item.group} title={item.label} description={item.description}>
-      <WebhooksApiPanel />
+      <WebhooksApiPanel initial={initial} />
     </SettingsSection>
   );
 }

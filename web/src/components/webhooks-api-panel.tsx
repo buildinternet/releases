@@ -1,26 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "@/lib/auth-client";
-import { USER_API_KEYS_ENABLED } from "@/lib/auth-ui";
+import type { DeveloperSettingsResponse } from "@buildinternet/releases-api-types";
+import { getDeveloperSettings } from "@/lib/follows";
+import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";
 import { ApiKeysPanel } from "@/components/api-keys-panel";
 import { WebhooksPanel } from "@/components/webhooks-panel";
-import { PanelGrid } from "@releases/design-system";
+import { PanelGrid, ErrorText, secondaryButtonClass } from "@releases/design-system";
 import { PromoRail } from "@/components/account/promo-rail";
 
 /**
- * Workspace "Webhooks & API" panel — composes the existing (fully-wired) API
- * keys and webhook-endpoint surfaces into the redesigned two-column layout with
- * the MCP/CLI promo rail. API keys stay gated on {@link USER_API_KEYS_ENABLED},
- * matching the standalone route's gate.
+ * Webhooks & API — one-shot bootstrap from GET /v1/me/settings/developer.
+ * API keys render only when the bootstrap includes them (feature on).
  */
-export function WebhooksApiPanel() {
-  const { data, isPending } = useSession();
-  const user = data?.user;
+export function WebhooksApiPanel({
+  initial = null,
+}: {
+  initial?: DeveloperSettingsResponse | null;
+}) {
+  const { data, status, error, retry } = useSettingsBootstrap(
+    initial,
+    getDeveloperSettings,
+    "Failed to load developer settings.",
+  );
 
-  if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  if (status === "loading") {
+    return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  }
 
-  if (!user) {
+  if (status === "unsigned") {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
@@ -32,19 +40,30 @@ export function WebhooksApiPanel() {
     );
   }
 
+  if (status === "error" || !data) {
+    return (
+      <div className="space-y-3">
+        <ErrorText>{error ?? "Failed to load developer settings."}</ErrorText>
+        <button type="button" onClick={() => void retry()} className={secondaryButtonClass}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <PanelGrid aside={<PromoRail />}>
       <div className="flex flex-col gap-9">
-        {USER_API_KEYS_ENABLED && (
+        {data.apiKeys != null && (
           <section>
             <div className="mb-3.5 text-sm font-semibold text-stone-900 dark:text-stone-100">
               API keys
             </div>
-            <ApiKeysPanel />
+            <ApiKeysPanel initialKeys={data.apiKeys} />
           </section>
         )}
         <section>
-          <WebhooksPanel />
+          <WebhooksPanel initialWebhooks={data.webhooks} />
         </section>
       </div>
     </PanelGrid>

@@ -5,6 +5,7 @@
  */
 
 import type {
+  DeveloperSettingsResponse,
   DigestCadence,
   DigestPrefsResponse,
   FeedToken,
@@ -12,9 +13,12 @@ import type {
   Follow,
   FollowTarget,
   FollowsListResponse,
+  NotificationSettingsResponse,
   PersonalizedFeedResponse,
 } from "@buildinternet/releases-api-types";
-import { apiBase, errorMessage } from "./user-api";
+import { apiBase, errorMessage, meGet } from "./user-api";
+
+export type { NotificationSettingsResponse, DeveloperSettingsResponse };
 
 /** Must match GET /v1/me/feed default page size (workers/api feed-cache). */
 export const FEED_PAGE_SIZE = 30;
@@ -84,6 +88,18 @@ export async function revokeFeedToken(): Promise<void> {
   });
   if (!res.ok)
     throw new Error(await errorMessage(res, `Failed to revoke feed URL (${res.status})`));
+}
+
+// ── Settings bootstraps (/v1/me/settings/*) ─────────────────────────────────
+
+/** One-shot load for `/account/notifications`. */
+export function getNotificationSettings(): Promise<NotificationSettingsResponse> {
+  return meGet("/v1/me/settings/notifications", "Failed to load notification settings");
+}
+
+/** One-shot load for `/account/webhooks` (Webhooks & API). */
+export function getDeveloperSettings(): Promise<DeveloperSettingsResponse> {
+  return meGet("/v1/me/settings/developer", "Failed to load developer settings");
 }
 
 // ── Digest preferences (/v1/me/digest) ──────────────────────────────────────
