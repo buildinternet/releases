@@ -518,6 +518,13 @@ export const api = {
   },
   productOverview: (identifier: string) =>
     fetchApi<OverviewPageItem | null>(`/v1/products/${identifier}/overview`),
+  /**
+   * Thin org overview knowledge page (`GET /v1/orgs/:slug/overview`). Prefer
+   * this over `orgDetail` when only the overview is needed — avoids re-fetching
+   * the full org shell (#2047).
+   */
+  orgOverview: (slug: string) =>
+    fetchApi<OverviewPageItem | null>(`/v1/orgs/${encodeURIComponent(slug)}/overview`),
   productActivity: (ref: { orgSlug: string; productSlug: string }, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);

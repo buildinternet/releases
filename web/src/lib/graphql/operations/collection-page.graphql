@@ -1,0 +1,84 @@
+# Collection detail critical path (#2047): identity + full members + first feed
+# page + daily summaries. Client load-more stays on REST.
+query CollectionPage($slug: String!, $releaseLimit: Int!) {
+  collection(slug: $slug) {
+    slug
+    name
+    description
+    isFeatured
+    dailySummaryEnabled
+    members {
+      __typename
+      ... on CollectionMemberOrg {
+        slug
+        name
+        domain
+        avatarUrl
+        githubHandle
+        description
+      }
+      ... on CollectionMemberProduct {
+        slug
+        name
+        description
+        org {
+          slug
+          name
+          domain
+          avatarUrl
+          githubHandle
+        }
+      }
+    }
+    releases(limit: $releaseLimit) {
+      nextCursor
+      items {
+        id
+        title
+        version
+        type
+        url
+        publishedAt
+        summary
+        content
+        titleGenerated
+        titleShort
+        prerelease
+        media {
+          type
+          url
+          alt
+          r2Url
+        }
+        source {
+          slug
+          name
+          type
+        }
+        org {
+          slug
+          name
+        }
+        product {
+          slug
+          name
+        }
+        groupSlug
+        groupName
+        coverageCount
+        composition {
+          bugs
+          features
+          enhancements
+        }
+      }
+    }
+    dailySummaries {
+      date
+      title
+      summary
+      takeaways
+      releaseCount
+    }
+  }
+}

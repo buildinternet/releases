@@ -27,6 +27,76 @@ export type SourceType = "agent" | "appstore" | "feed" | "github" | "scrape" | "
 /** Provider for a video source. */
 export type VideoProvider = "vimeo" | "wistia" | "youtube";
 
+export type CollectionPageQueryVariables = Exact<{
+  slug: string;
+  releaseLimit: number;
+}>;
+
+export type CollectionPageQuery = {
+  collection: {
+    slug: string;
+    name: string;
+    description: string | null;
+    isFeatured: boolean;
+    dailySummaryEnabled: boolean;
+    members: Array<
+      | {
+          __typename: "CollectionMemberOrg";
+          slug: string;
+          name: string;
+          domain: string | null;
+          avatarUrl: string | null;
+          githubHandle: string | null;
+          description: string | null;
+        }
+      | {
+          __typename: "CollectionMemberProduct";
+          slug: string;
+          name: string;
+          description: string | null;
+          org: {
+            slug: string;
+            name: string;
+            domain: string | null;
+            avatarUrl: string | null;
+            githubHandle: string | null;
+          };
+        }
+    >;
+    releases: {
+      nextCursor: string | null;
+      items: Array<{
+        id: string;
+        title: string;
+        version: string | null;
+        type: string;
+        url: string | null;
+        publishedAt: string | null;
+        summary: string;
+        content: string;
+        titleGenerated: string | null;
+        titleShort: string | null;
+        prerelease: boolean;
+        groupSlug: string;
+        groupName: string;
+        coverageCount: number;
+        media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
+        source: { slug: string; name: string; type: string };
+        org: { slug: string; name: string };
+        product: { slug: string; name: string } | null;
+        composition: { bugs: number; features: number; enhancements: number } | null;
+      }>;
+    };
+    dailySummaries: Array<{
+      date: string;
+      title: string;
+      summary: string;
+      takeaways: Array<string>;
+      releaseCount: number;
+    }>;
+  } | null;
+};
+
 export type HomepageAllOrgsQueryVariables = Exact<{
   limit: number;
 }>;
@@ -126,6 +196,22 @@ export type HomepageTickerQuery = {
       };
     }>;
   };
+};
+
+export type OrgCollectionsQueryVariables = Exact<{
+  idOrSlug: string;
+}>;
+
+export type OrgCollectionsQuery = {
+  org: {
+    collections: Array<{
+      slug: string;
+      name: string;
+      description: string | null;
+      memberCount: number;
+      isFeatured: boolean;
+    }>;
+  } | null;
 };
 
 export type OrgPageQueryVariables = Exact<{
@@ -240,11 +326,12 @@ export type OrgReleasesQuery = {
   };
 };
 
-export type ProductDetailQueryVariables = Exact<{
+export type ProductPageQueryVariables = Exact<{
   id: string;
+  releaseLimit: number;
 }>;
 
-export type ProductDetailQuery = {
+export type ProductPageQuery = {
   product: {
     id: string;
     slug: string;
@@ -268,7 +355,41 @@ export type ProductDetailQuery = {
       metadata: string;
       isHidden: boolean | null;
     }>;
+    collections: Array<{
+      slug: string;
+      name: string;
+      description: string | null;
+      memberCount: number;
+      isFeatured: boolean;
+    }>;
   } | null;
+  latestReleases: {
+    nextCursor: string | null;
+    items: Array<{
+      id: string;
+      title: string;
+      version: string | null;
+      type: ReleaseType;
+      url: string | null;
+      publishedAt: string | null;
+      fetchedAt: string;
+      summary: string | null;
+      titleGenerated: string | null;
+      titleShort: string | null;
+      content: string;
+      prerelease: boolean | null;
+      breaking: string | null;
+      media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
+      source: {
+        slug: string;
+        name: string;
+        type: SourceType;
+        appStore: { platform: AppStorePlatform; iconUrl: string | null } | null;
+        video: { provider: VideoProvider } | null;
+        product: { slug: string; name: string } | null;
+      };
+    }>;
+  };
 };
 
 export type ReleaseDetailQueryVariables = Exact<{
@@ -375,6 +496,231 @@ export type SourceDetailQuery = {
   } | null;
 };
 
+export const CollectionPageDocument = {
+  __meta__: { hash: "sha256:a3acd59c42280cd431d118861711c775337bc4727f0965614f34d7ab141a0a85" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CollectionPage" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "collection" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "slug" },
+                value: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
+                { kind: "Field", name: { kind: "Name", value: "dailySummaryEnabled" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "members" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "__typename" } },
+                      {
+                        kind: "InlineFragment",
+                        typeCondition: {
+                          kind: "NamedType",
+                          name: { kind: "Name", value: "CollectionMemberOrg" },
+                        },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "slug" } },
+                            { kind: "Field", name: { kind: "Name", value: "name" } },
+                            { kind: "Field", name: { kind: "Name", value: "domain" } },
+                            { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                            { kind: "Field", name: { kind: "Name", value: "githubHandle" } },
+                            { kind: "Field", name: { kind: "Name", value: "description" } },
+                          ],
+                        },
+                      },
+                      {
+                        kind: "InlineFragment",
+                        typeCondition: {
+                          kind: "NamedType",
+                          name: { kind: "Name", value: "CollectionMemberProduct" },
+                        },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "slug" } },
+                            { kind: "Field", name: { kind: "Name", value: "name" } },
+                            { kind: "Field", name: { kind: "Name", value: "description" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "org" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                  { kind: "Field", name: { kind: "Name", value: "domain" } },
+                                  { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                                  { kind: "Field", name: { kind: "Name", value: "githubHandle" } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releases" },
+                  arguments: [
+                    {
+                      kind: "Argument",
+                      name: { kind: "Name", value: "limit" },
+                      value: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "nextCursor" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "title" } },
+                            { kind: "Field", name: { kind: "Name", value: "version" } },
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            { kind: "Field", name: { kind: "Name", value: "url" } },
+                            { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
+                            { kind: "Field", name: { kind: "Name", value: "summary" } },
+                            { kind: "Field", name: { kind: "Name", value: "content" } },
+                            { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
+                            { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                            { kind: "Field", name: { kind: "Name", value: "prerelease" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "media" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "type" } },
+                                  { kind: "Field", name: { kind: "Name", value: "url" } },
+                                  { kind: "Field", name: { kind: "Name", value: "alt" } },
+                                  { kind: "Field", name: { kind: "Name", value: "r2Url" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "source" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                  { kind: "Field", name: { kind: "Name", value: "type" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "org" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "product" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                ],
+                              },
+                            },
+                            { kind: "Field", name: { kind: "Name", value: "groupSlug" } },
+                            { kind: "Field", name: { kind: "Name", value: "groupName" } },
+                            { kind: "Field", name: { kind: "Name", value: "coverageCount" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "composition" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "bugs" } },
+                                  { kind: "Field", name: { kind: "Name", value: "features" } },
+                                  { kind: "Field", name: { kind: "Name", value: "enhancements" } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "dailySummaries" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "date" } },
+                      { kind: "Field", name: { kind: "Name", value: "title" } },
+                      { kind: "Field", name: { kind: "Name", value: "summary" } },
+                      { kind: "Field", name: { kind: "Name", value: "takeaways" } },
+                      { kind: "Field", name: { kind: "Name", value: "releaseCount" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<CollectionPageQuery, CollectionPageQueryVariables>;
 export const HomepageAllOrgsDocument = {
   __meta__: { hash: "sha256:b5f9fa07fd60f90839b1f976d116320290ce322946963b2d376139a8c7371b7e" },
   kind: "Document",
@@ -746,6 +1092,62 @@ export const HomepageTickerDocument = {
     },
   ],
 } as unknown as DocumentNode<HomepageTickerQuery, HomepageTickerQueryVariables>;
+export const OrgCollectionsDocument = {
+  __meta__: { hash: "sha256:2f85eba030a7a519bf72cab12801afad38797aa9e9d772d1976f6fd348cae432" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "OrgCollections" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "idOrSlug" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "org" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "idOrSlug" },
+                value: { kind: "Variable", name: { kind: "Name", value: "idOrSlug" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "collections" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "description" } },
+                      { kind: "Field", name: { kind: "Name", value: "memberCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<OrgCollectionsQuery, OrgCollectionsQueryVariables>;
 export const OrgPageDocument = {
   __meta__: { hash: "sha256:0a7f1743532d73eb26d165eeac9401c8e606798955c58d2a5ab60066977f8f9a" },
   kind: "Document",
@@ -1044,14 +1446,14 @@ export const OrgReleasesDocument = {
     },
   ],
 } as unknown as DocumentNode<OrgReleasesQuery, OrgReleasesQueryVariables>;
-export const ProductDetailDocument = {
-  __meta__: { hash: "sha256:6791f51cdafe4def724d68b5a61f881624ca607ffab50baf2bf7fac5427929b5" },
+export const ProductPageDocument = {
+  __meta__: { hash: "sha256:8bbe4adb3c5316c7a9bf8b4daf1d8635993d0d1bab26d3fdfaa334d5107b2f82" },
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "query",
-      name: { kind: "Name", value: "ProductDetail" },
+      name: { kind: "Name", value: "ProductPage" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -1059,6 +1461,14 @@ export const ProductDetailDocument = {
           type: {
             kind: "NonNullType",
             type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
           },
         },
       ],
@@ -1114,6 +1524,121 @@ export const ProductDetailDocument = {
                     ],
                   },
                 },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "collections" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "description" } },
+                      { kind: "Field", name: { kind: "Name", value: "memberCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "latestReleases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "productId" },
+                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "nextCursor" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "title" } },
+                      { kind: "Field", name: { kind: "Name", value: "version" } },
+                      { kind: "Field", name: { kind: "Name", value: "type" } },
+                      { kind: "Field", name: { kind: "Name", value: "url" } },
+                      { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
+                      { kind: "Field", name: { kind: "Name", value: "fetchedAt" } },
+                      { kind: "Field", name: { kind: "Name", value: "summary" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                      { kind: "Field", name: { kind: "Name", value: "content" } },
+                      { kind: "Field", name: { kind: "Name", value: "prerelease" } },
+                      { kind: "Field", name: { kind: "Name", value: "breaking" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "media" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            { kind: "Field", name: { kind: "Name", value: "url" } },
+                            { kind: "Field", name: { kind: "Name", value: "alt" } },
+                            { kind: "Field", name: { kind: "Name", value: "r2Url" } },
+                          ],
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "source" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "slug" } },
+                            { kind: "Field", name: { kind: "Name", value: "name" } },
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "appStore" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "platform" } },
+                                  { kind: "Field", name: { kind: "Name", value: "iconUrl" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "video" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "provider" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "product" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -1121,7 +1646,7 @@ export const ProductDetailDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<ProductDetailQuery, ProductDetailQueryVariables>;
+} as unknown as DocumentNode<ProductPageQuery, ProductPageQueryVariables>;
 export const ReleaseDetailDocument = {
   __meta__: { hash: "sha256:1c550e19778eebf6f75b60652d1d327543320dc870cc5766c47a4189b7dfb7ac" },
   kind: "Document",

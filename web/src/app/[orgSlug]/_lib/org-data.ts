@@ -9,8 +9,9 @@ import type { Notice } from "@buildinternet/releases-core/notice";
 import type { Kind } from "@buildinternet/releases-core/kinds";
 import { api, ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
-import { OrgPageDocument } from "@/lib/graphql/__generated__/graphql";
+import { OrgPageDocument, OrgCollectionsDocument } from "@/lib/graphql/__generated__/graphql";
 import type { OrgPageQuery } from "@/lib/graphql/__generated__/graphql";
+import { mapCollectionListItem } from "@/lib/graphql/map-feed";
 
 type GqlOrg = NonNullable<OrgPageQuery["org"]>;
 type GqlOrgSource = GqlOrg["sources"][number];
@@ -35,10 +36,10 @@ export type OrgPageProduct = {
 
 /**
  * Org detail used by the org page family. Field set matches `OrgDetail`
- * (`@buildinternet/releases-api-types`) MINUS `overview` and `playbook` —
- * those stay on REST (see `getOrgOverview` below): the overview knowledge-page
- * projection joins `knowledge_pages` + citation rows + a playbook-only auth
- * branch, none of which are ported to GraphQL for this slice (#1978).
+ * (`@buildinternet/releases-api-types`) MINUS `overview`, `playbook`, and
+ * `collections` — overview stays on the thin REST route (`getOrgOverview`);
+ * collections are a separate persisted op (`getOrgCollections`) so the
+ * OrgPage document hash stays stable across deploy windows (#2047).
  */
 export type OrgPageData = Omit<GqlOrg, "products" | "sources" | "locations" | "notice"> & {
   products: OrgPageProduct[];
@@ -94,11 +95,9 @@ function mapProduct(p: GqlOrgProduct): OrgPageProduct {
 }
 
 /**
- * Primary org record + products + sources, fetched via one persisted GraphQL
- * query (`Query.org`) instead of the REST `GET /v1/orgs/:slug` round trip.
- * `overview` and stats-heavy REST-only aggregates the GraphQL schema doesn't
- * cover (org overview knowledge-page content, its citations, the playbook
- * scope) stay off this object — see `getOrgOverview`.
+ * Primary org record + products + sources via the stable `OrgPage` persisted
+ * query. Collections and overview are separate (see `getOrgCollections` /
+ * `getOrgOverview`) so this hash can ship without a coordinated API deploy.
  */
 export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
   const data = await graphqlRequest(OrgPageDocument, { idOrSlug: slug });
@@ -113,21 +112,25 @@ export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
   };
 });
 
+/**
+ * Collections for the org sidebar. Prefers GraphQL `OrgCollections` (additive
+ * #2047 field on Query.org); falls back to REST when the persisted op isn't
+ * on the API yet (PR preview / deploy window).
+ */
 export const getOrgCollections = cache(async (slug: string): Promise<CollectionListItem[]> => {
-  return api.orgCollections(slug).catch(() => [] as CollectionListItem[]);
+  try {
+    const data = await graphqlRequest(OrgCollectionsDocument, { idOrSlug: slug });
+    return (data.org?.collections ?? []).map(mapCollectionListItem);
+  } catch {
+    return api.orgCollections(slug).catch(() => [] as CollectionListItem[]);
+  }
 });
 
 /**
  * Org overview knowledge-page content (AI-generated summary + citations).
- * Deliberately left on REST (#1978 slice 2) — the REST projection joins
- * `knowledge_pages` with per-citation release rows and builds canonical
- * `releaseWebUrl`s server-side; porting that to a GraphQL resolver is a
- * separate, disproportionate lift for this pass. Only used by the org
- * overview page (`(org)/page.tsx`), not layout/releases/sources.
+ * Uses the thin REST `GET /v1/orgs/:slug/overview` — not the full orgDetail
+ * shell (#2047). Only used by the org overview page and `/updates`.
  */
 export const getOrgOverview = cache(async (slug: string): Promise<OverviewPageItem | null> => {
-  return api
-    .orgDetail(slug)
-    .then((o) => o.overview ?? null)
-    .catch(() => null);
+  return api.orgOverview(slug).catch(() => null);
 });

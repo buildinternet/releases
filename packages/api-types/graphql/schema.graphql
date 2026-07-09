@@ -19,14 +19,42 @@ enum AppStorePlatform {
 A curated, named group of orgs/products (independent of the `category` taxonomy).
 """
 type Collection {
+  """
+  AI daily summaries for the last 30 ET days (newest first). Fail-soft empty when none exist — same default window as REST `GET /v1/collections/:slug/daily-summaries`.
+  """
+  dailySummaries: [CollectionDailySummary!]!
+
+  """
+  Whether the nightly collection-summaries cron is enabled. Defaults false when the parent was loaded as a list preview without the column.
+  """
+  dailySummaryEnabled: Boolean!
   description: String
   isFeatured: Boolean!
   memberCount: Int!
+
+  """
+  Full ordered membership for the collection detail page. Mirrors REST `GET /v1/collections/:slug` members.
+  """
+  members: [CollectionMember!]!
   name: String!
 
   """Up to 3 interleaved org/product members, for inline avatar chips."""
   previewMembers: [CollectionMember!]!
+
+  """
+  Interleaved cross-member release feed (newest first). SSR first page only — client load-more stays on REST. Cursor shape matches REST `publishedAt|fetchedAt|id`.
+  """
+  releases(limit: Int = 20): CollectionReleaseFeed!
   slug: String!
+}
+
+"""AI-generated daily rollup for one ET calendar day in a collection."""
+type CollectionDailySummary {
+  date: String!
+  releaseCount: Int!
+  summary: String!
+  takeaways: [String!]!
+  title: String!
 }
 
 """
@@ -53,7 +81,7 @@ type CollectionMemberProduct {
 }
 
 """
-Parent-org context on a product member, so the chip can render the org's avatar. Subset of CollectionMemberOrg — no `description`, matching REST's ProductParentOrg.
+Parent-org context on a product member (avatar chip). Subset of CollectionMemberOrg — no `description`, matching REST ProductParentOrg.
 """
 type CollectionMemberProductOrg {
   avatarUrl: String
@@ -61,6 +89,58 @@ type CollectionMemberProductOrg {
   githubHandle: String
   name: String!
   slug: String!
+}
+
+"""
+A release row in a collection's cross-member feed (REST CollectionReleaseItem shape).
+"""
+type CollectionRelease {
+  composition: ReleaseComposition
+  content: String!
+  coverageCount: Int!
+  groupName: String!
+  groupSlug: String!
+  id: ID!
+  media: [Media!]!
+  org: CollectionReleaseOrg!
+  prerelease: Boolean!
+  product: CollectionReleaseProduct
+  publishedAt: DateTime
+  source: CollectionReleaseSource!
+  summary: String!
+  title: String!
+  titleGenerated: String
+  titleShort: String
+  type: String!
+  url: String
+  version: String
+}
+
+"""
+Cursor-paginated collection release feed (SSR first page + load-more cursor).
+"""
+type CollectionReleaseFeed {
+  items: [CollectionRelease!]!
+  nextCursor: String
+}
+
+"""Parent org on a cross-member collection release row."""
+type CollectionReleaseOrg {
+  name: String!
+  slug: String!
+}
+
+"""Product on a collection-feed release when the source is product-bound."""
+type CollectionReleaseProduct {
+  name: String!
+  slug: String!
+}
+
+"""Source on a cross-member collection release row."""
+type CollectionReleaseSource {
+  name: String!
+  slug: String!
+  type: String!
 }
 
 scalar DateTime
@@ -105,6 +185,11 @@ type Org {
   avatarUrl: String
   avgReleasesPerWeek: Float!
   category: String
+
+  """
+  Curated collections that pin this org or any of its products, ordered by name. Mirrors REST `GET /v1/orgs/:slug/collections` for the org-page 'Featured in' sidebar. Preview members omitted (empty) — sidebar needs identity only.
+  """
+  collections: [Collection!]!
   createdAt: DateTime!
   description: String
   discovery: OrgDiscovery!
@@ -193,6 +278,11 @@ type Pagination {
 """Optional grouping layer between an Org and its Sources."""
 type Product {
   category: String
+
+  """
+  Curated collections that pin this product, ordered by name. Mirrors REST `GET /v1/orgs/:slug/products/:productSlug/collections` for the product-page 'Featured in' sidebar. Preview members omitted (empty) — sidebar needs identity only.
+  """
+  collections: [Collection!]!
   createdAt: DateTime!
   description: String
   id: ID!
@@ -212,6 +302,11 @@ type Product {
 
 type Query {
   """
+  Look up a collection by slug for the collection detail page (members + feed + daily summaries via nested fields). #2047
+  """
+  collection(slug: String!): Collection
+
+  """
   Curated collections with a member count and up to 3 preview members, ordered by name.
   """
   collections(
@@ -220,7 +315,7 @@ type Query {
   ): [Collection!]!
 
   """
-  Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice.
+  Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice. Optional `orgIdOrSlug` and/or `productId` narrow the feed (product page SSR uses productId).
   """
   latestReleases(
     cursor: String
@@ -229,6 +324,11 @@ type Query {
     excludeSourceTypes: [SourceType!]
     limit: Int = 20
     orgIdOrSlug: String
+
+    """
+    Restrict to sources under this product (prod_…). Same semantics as REST `GET /v1/orgs/:slug/releases?product=` for the product-page critical path.
+    """
+    productId: String
   ): ReleaseFeed!
 
   """Look up an organization by id (org_…) or slug."""

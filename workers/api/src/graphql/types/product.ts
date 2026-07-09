@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
 import { builder } from "../builder.js";
 import { parseNotice } from "@buildinternet/releases-core/notice";
+import { listCollectionsWhere } from "../../queries/collections.js";
+import { collectionFromListItem } from "../collection-parent.js";
 
 export const ProductType = builder.objectType("Product", {
   description: "Optional grouping layer between an Org and its Sources.",
@@ -49,6 +52,21 @@ export const ProductType = builder.objectType("Product", {
     sources: t.field({
       type: ["Source"],
       resolve: (product, _args, ctx) => ctx.loaders.sourcesByProductId.load(product.id),
+    }),
+
+    collections: t.field({
+      type: ["Collection"],
+      description:
+        "Curated collections that pin this product, ordered by name. Mirrors REST " +
+        "`GET /v1/orgs/:slug/products/:productSlug/collections` for the product-page " +
+        "'Featured in' sidebar. Preview members omitted (empty) — sidebar needs identity only.",
+      resolve: async (product, _args, ctx) => {
+        const rows = await listCollectionsWhere(
+          ctx.db,
+          sql`c.id IN (SELECT cm.collection_id FROM collection_members cm WHERE cm.product_id = ${product.id})`,
+        );
+        return rows.map(collectionFromListItem);
+      },
     }),
   }),
 });

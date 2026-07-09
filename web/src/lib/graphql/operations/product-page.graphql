@@ -1,0 +1,76 @@
+# Product page critical path (#2047): identity + sources + collections + first
+# product-scoped feed page in one persisted document. Activity / heatmap /
+# overview stay on fail-open REST (independent SLAs / cost profiles).
+query ProductPage($id: String!, $releaseLimit: Int!) {
+  product(id: $id) {
+    id
+    slug
+    name
+    url
+    description
+    category
+    tags
+    notice {
+      message
+      linkText
+      coordinate
+      href
+    }
+    sources {
+      id
+      slug
+      name
+      type
+      url
+      metadata
+      isHidden
+    }
+    collections {
+      slug
+      name
+      description
+      memberCount
+      isFeatured
+    }
+  }
+  latestReleases(productId: $id, limit: $releaseLimit) {
+    nextCursor
+    items {
+      id
+      title
+      version
+      type
+      url
+      publishedAt
+      fetchedAt
+      summary
+      titleGenerated
+      titleShort
+      content
+      prerelease
+      breaking
+      media {
+        type
+        url
+        alt
+        r2Url
+      }
+      source {
+        slug
+        name
+        type
+        appStore {
+          platform
+          iconUrl
+        }
+        video {
+          provider
+        }
+        product {
+          slug
+          name
+        }
+      }
+    }
+  }
+}

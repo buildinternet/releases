@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import {
-  api,
-  ApiSetupError,
-  type CollectionDetail,
-  type CollectionReleasesResponse,
-  type CollectionDailySummary,
-} from "@/lib/api";
+import { ApiSetupError, type CollectionDailySummary } from "@/lib/api";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
@@ -18,10 +11,7 @@ import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
 import { withCollectionReleaseView } from "@/lib/render-release-body";
-
-const getCollection = cache((slug: string) => api.collectionDetail(slug));
-const getCollectionReleases = cache((slug: string) => api.collectionReleases(slug, { limit: 20 }));
-const getCollectionDailySummaries = cache((slug: string) => api.collectionDailySummaries(slug));
+import { getCollectionPage } from "./_lib/collection-data";
 
 export async function generateMetadata({
   params,
@@ -30,7 +20,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   try {
-    const detail = await getCollection(slug);
+    const { detail } = await getCollectionPage(slug);
     return {
       // Tab/SEO title reads "What's new with <Collection> — releases.sh" (the
       // "— releases.sh" suffix comes from the root layout title template).
@@ -55,10 +45,9 @@ export async function generateMetadata({
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  let detail: CollectionDetail;
-  let releases: CollectionReleasesResponse;
+  let page;
   try {
-    [detail, releases] = await Promise.all([getCollection(slug), getCollectionReleases(slug)]);
+    page = await getCollectionPage(slug);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -71,11 +60,9 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     notFound();
   }
 
-  const summariesRes = await getCollectionDailySummaries(slug).catch((err) => {
-    console.error("daily-summaries fetch failed:", err);
-    return { summaries: [] as CollectionDailySummary[] };
-  });
-  const summaryByDate = new Map(summariesRes.summaries.map((s) => [s.date, s]));
+  const { detail, releases, summaries } = page;
+  // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
+  const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
 
   const collectionUrl = `https://releases.sh/collections/${slug}`;
   const jsonLd = buildFeedPageJsonLd(releases.releases, {

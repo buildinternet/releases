@@ -6,7 +6,8 @@ import type { ReleaseType } from "@buildinternet/releases-core/schema";
 import { ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { SourceDetailDocument } from "./__generated__/graphql";
-import type { SourceDetailQuery, ProductDetailQuery } from "./__generated__/graphql";
+import type { SourceDetailQuery, ProductPageQuery } from "./__generated__/graphql";
+import { buildRestFeedCursor, mapMediaItems } from "./map-feed";
 
 const DEFAULT_RELEASE_LIMIT = 20;
 
@@ -136,25 +137,8 @@ function mapRelease(
     // nullable (most rows are unpopulated). Fall back to an empty string —
     // consumers already treat empty summary as "render from content".
     summary: r.summary ?? "",
-    media: r.media.map((m) => ({
-      type: m.type,
-      url: m.url,
-      alt: m.alt ?? undefined,
-      r2Url: m.r2Url ?? undefined,
-    })),
+    media: mapMediaItems(r.media),
   };
-}
-
-/**
- * Builds the plain-text `publishedAt|fetchedAt|id` feed cursor consumed by
- * `/api/source-releases/[orgSlug]/[sourceSlug]` (the client-side "load more"
- * route, which stays on REST — see PR description). Mirrors
- * `buildFeedCursor` in packages/core-internal/src/feed-cursor.ts; duplicated
- * here (rather than imported) because that package is worker-only and not
- * safe to pull into the Next.js server bundle.
- */
-function buildCursor(last: { publishedAt: string | null; fetchedAt: string; id: string }): string {
-  return `${last.publishedAt ?? ""}|${last.fetchedAt}|${last.id}`;
 }
 
 /**
@@ -174,7 +158,7 @@ export function mapSourceDetail(
   const hasMore = source.releases.length > requestedLimit;
   const pageRows = hasMore ? source.releases.slice(0, requestedLimit) : source.releases;
   const last = pageRows[pageRows.length - 1];
-  const nextCursor = hasMore && last ? buildCursor(last) : null;
+  const nextCursor = hasMore && last ? buildRestFeedCursor(last) : null;
 
   return {
     id: source.id,
@@ -229,7 +213,7 @@ export async function fetchSourceDetail(
 }
 
 export function mapProductDetail(
-  product: NonNullable<ProductDetailQuery["product"]>,
+  product: NonNullable<ProductPageQuery["product"]>,
 ): MappedProductDetail {
   return {
     id: product.id,

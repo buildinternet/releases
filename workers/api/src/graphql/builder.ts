@@ -37,12 +37,56 @@ export type CollectionMemberOrg = CollectionMemberOrgWire & { kind: "org" };
 export type CollectionMemberProduct = CollectionMemberProductWire & { kind: "product" };
 export type CollectionMember = CollectionMemberOrg | CollectionMemberProduct;
 export type Collection = {
+  /** Present on Query.collection / detail path; list previews may omit and resolvers fall back to slug lookup. */
+  id?: string;
   slug: string;
   name: string;
   description: string | null;
   memberCount: number;
   isFeatured: boolean;
+  /** Present on detail path; list previews may omit (resolver loads the column). */
+  dailySummaryEnabled?: boolean;
   previewMembers: CollectionMember[];
+};
+export type CollectionReleaseOrg = { slug: string; name: string };
+export type CollectionReleaseSource = { slug: string; name: string; type: string };
+export type CollectionReleaseProduct = { slug: string; name: string };
+/**
+ * GraphQL parent for a collection-feed release. Narrower / stricter than the
+ * wire `CollectionReleaseItem` (which has many optional fields for mid-deploy
+ * tolerance) — `formatAggregateReleaseRow` always populates these.
+ */
+export type CollectionRelease = {
+  id: string;
+  title: string;
+  version: string | null;
+  type: string;
+  url: string | null;
+  publishedAt: string | null;
+  summary: string;
+  content: string;
+  titleGenerated: string | null;
+  titleShort: string | null;
+  prerelease: boolean;
+  media: MediaItem[];
+  source: CollectionReleaseSource;
+  org: CollectionReleaseOrg;
+  product: CollectionReleaseProduct | null;
+  groupSlug: string;
+  groupName: string;
+  coverageCount: number;
+  composition: ReleaseComposition | null;
+};
+export type CollectionReleaseFeed = {
+  items: CollectionRelease[];
+  nextCursor: string | null;
+};
+export type CollectionDailySummary = {
+  date: string;
+  title: string;
+  summary: string;
+  takeaways: string[];
+  releaseCount: number;
 };
 /** A rolling or monthly AI-generated summary row. Mirrors `ReleaseSummaryItemSchema`. */
 export type ReleaseSummaryItem = {
@@ -80,6 +124,12 @@ export const builder = new SchemaBuilder<{
     CollectionMemberOrg: CollectionMemberOrg;
     CollectionMemberProduct: CollectionMemberProduct;
     CollectionMemberProductOrg: ProductParentOrg;
+    CollectionRelease: CollectionRelease;
+    CollectionReleaseOrg: CollectionReleaseOrg;
+    CollectionReleaseSource: CollectionReleaseSource;
+    CollectionReleaseProduct: CollectionReleaseProduct;
+    CollectionReleaseFeed: CollectionReleaseFeed;
+    CollectionDailySummary: CollectionDailySummary;
     EntityNotice: Notice;
     ReleaseSummaryItem: ReleaseSummaryItem;
     SourceSummaries: SourceSummaries;

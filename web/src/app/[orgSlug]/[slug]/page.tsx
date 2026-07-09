@@ -5,7 +5,7 @@ import { currentPeriod } from "@/lib/schema-org";
 import { getOrg } from "../_lib/org-data";
 import { getResolved } from "./_lib/resolve";
 import { getSource } from "./_lib/source-data";
-import { getProductById } from "./_lib/product-data";
+import { getProductPage } from "./_lib/product-data";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
@@ -102,11 +102,20 @@ export default async function OrgSlugPage({
     if (org.products.length <= 1) {
       permanentRedirect(`/${orgSlug}`);
     }
-    // Product identity/description fetched via GraphQL (Query.product); the
-    // release feed + overview + activity + heatmap + collections stay REST
-    // inside ProductView — see `_lib/product-data.ts`.
-    const product = await getProductById(resolved.product.id);
-    return <ProductView orgSlug={orgSlug} orgName={org.name} orgId={org.id} product={product} />;
+    // Critical path via ProductPage GraphQL: identity + sources + collections
+    // + first product-scoped feed page. Overview / activity / heatmap stay on
+    // fail-open REST inside ProductView (#2047).
+    const { product, collections, releases } = await getProductPage(resolved.product.id);
+    return (
+      <ProductView
+        orgSlug={orgSlug}
+        orgName={org.name}
+        orgId={org.id}
+        product={product}
+        collections={collections}
+        initialReleases={releases}
+      />
+    );
   }
 
   // Source branch. Legacy `?tab=highlights|changelog` deep-links are redirected
