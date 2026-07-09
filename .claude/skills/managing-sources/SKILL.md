@@ -51,7 +51,7 @@ Use `--json` (CLI) for structured output. Typed tools always return JSON.
 
 Required: **name** and **url**. Optional: **type** (github, scrape, feed, agent — auto-detected from URL if omitted), **organization** (org ID or slug to associate with), **feed_url** (direct feed URL if known). App Store apps (`appstore` type) are **not** created this way — use `create-appstore` (below); `source create` rejects `--type appstore` and pasted `apps.apple.com` URLs with a pointer to it.
 
-On slug collision the API auto-suffixes (`changelog` → `changelog-2`, `-3`, …) and the created row in the response tells you the resolved slug — no rename-and-retry needed.
+On slug collision the API auto-suffixes (`blog` → `blog-2`, `-3`, …) and the created row in the response tells you the resolved slug — no rename-and-retry needed. **Reserved words never auto-suffix:** slugs like `changelog`, `releases`, `sources`, `api`, `admin`, `new`, `list` (`RESERVED_NESTED_SLUGS` in `packages/core/src/reserved-slugs.ts`) return `409 slug_reserved` — pass an explicit non-reserved `--slug` / `slug` instead.
 
 ### App Store sources
 
@@ -71,6 +71,19 @@ releases admin source create-appstore <url-or-id> [--platform ios|macos] [--org 
 
 - **Keep writes serial.** The endpoint resolves the listing on the fly; concurrent creates for a brand-new org/product race on the org/product slug uniqueness constraint. Add one app at a time.
 - The command is idempotent on the app's track ID — re-running reports the existing source instead of creating a duplicate.
+
+### Video sources
+
+YouTube channels and playlists need a dedicated command because the create flow resolves the channel/playlist to its Atom feed, mints a `video` source, and backfills current videos as releases (description-only, summarizer-cleaned, marketing-filtered):
+
+```
+releases admin source create-video <channel-or-playlist-url> --org <slug> [--product <slug>]
+```
+
+- `<channel-or-playlist-url>` is a YouTube channel (`youtube.com/@handle`, `/channel/<id>`) or playlist (`/playlist?list=<id>`) URL.
+- **`--org` is required and must already exist** — unlike `create-appstore`, no org is derived from the channel. Pass a slug or a typed `org_…` id. `--product <slug>` optionally attaches the source to an existing product.
+- The command is idempotent on the resolved feed URL — re-running reports the existing source.
+- **Never use generic `source create` for a YouTube URL.** It builds a `feed` source whose parser drops `media:group/media:description`, leaving a source with titles and dates but **empty release bodies** — a silent failure that needs deleting and re-creating to fix. `create` rejects YouTube URLs with a pointer to `create-video`.
 
 ### Naming sources and products
 
@@ -224,7 +237,7 @@ Only include traps that pass the keep test. Good traps name a property of the **
 - **Per-package release tags:** the GitHub Releases API returns thousands of stale per-package pre-releases. Use the root CHANGELOG.md as the primary artifact instead of tags.
 - **Provider IP block:** the SSR page is parseable in a browser but our fetcher's egress IPs are blocked. Leave at normal priority — the underlying URL is still correct.
 - **Deprecated mirror repo:** `org/foo-deprecated` is archived; the canonical repo lives at `org/foo`. Don't re-add the mirror.
-- **Doubled paths on Platform:** relative doc links get prefixed with the source URL, producing doubled paths. Strip the prefix before recording.
+- **Challenge-blocked render:** the changelog sits behind a Cloudflare Managed Challenge our Browser Rendering can't clear — retrying render returns the challenge shell, never content. Route the source through Firecrawl monitoring (`metadata.firecrawl`) or pause it with the blocker recorded.
 - **Don't re-discover:** include disabled sources with this label so future runs don't re-evaluate them.
 
 Do not include adapter or harness bugs ("feed returns 'Missing feedType in metadata'") — route to `releases-tool-notes`. Do not include onboarding-time errors not tied to a target property. Do not include future engineering work the agent thinks should happen.

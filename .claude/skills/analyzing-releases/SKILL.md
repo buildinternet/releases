@@ -21,8 +21,8 @@ Turn changelog data into competitive intelligence by analyzing release patterns 
 | Fetch releases         | `releases admin source fetch <slug> --max 50` | `manage_source` action "fetch" with identifier (ID or slug)           |
 | Get latest releases    | `releases tail <slug> --json`                 | `get_latest_releases` with source/org and limit                       |
 | Search releases        | `releases search <query> --json`              | `search` with `type: ["releases"]`                                    |
-| Summarize              | `releases summary <slug> --json`              | (not available as typed tool)                                         |
-| Compare                | `releases compare <slugA> <slugB> --json`     | (not available as typed tool)                                         |
+
+There is no built-in summarize or compare — no `releases summary` / `releases compare` command and no typed tool. Fetch the raw release data and synthesize the analysis yourself (Step 6).
 
 ## Workflow
 
@@ -55,7 +55,7 @@ For org/product/source discovery (e.g. "find observability vendors with edge off
 
 ### 6. Synthesize
 
-Combine summaries and comparisons into a structured analysis:
+Combine the raw data into a structured analysis:
 
 - **Release velocity table** — releases per company, cadence pattern
 - **Trends adopted across the board** — features 3+ companies shipped in the same window
@@ -72,4 +72,4 @@ Ask the user where to save the analysis, or use your best judgment based on the 
 - Focus on what companies shipped. If a source has noisy data (blog posts mixed in, missing dates), work around it silently. Don't include source quality commentary in the report unless a company had to be substantially excluded.
 - Fill data gaps with web fetches. List sources to get release URLs, then WebFetch to spot-check pages for missing dates, versions, or feature details.
 - For velocity counting, get the latest releases with dates — CLI: `releases tail <slug> --json`, typed tool: `get_latest_releases`.
-- AI-powered summarize and compare are only available via CLI (`releases summary`, `releases compare`). When using typed tools, synthesize manually from raw release data.
+- Comparison and summarization are yours to synthesize from raw release data — there is no built-in tool or command that does it for you.

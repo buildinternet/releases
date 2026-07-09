@@ -1,11 +1,11 @@
 ---
 name: local-ingest
-description: Onboard or backfill a company's changelog locally in Claude Code by fetching pages and extracting releases with the agent itself (and parallel sub-agents), then writing through the batch-upsert endpoint — no remote managed-agent session, no extraction inference billing. Use when you want to onboard a source without dispatching the MA, avoid the coordinator-Sonnet + worker-Haiku extraction loop, or recover from a remote fetch that burned tokens and wrote zero releases. Includes a mandatory robots.txt / Content-Signal opt-out gate.
+description: Onboard or backfill a company's changelog locally in Claude Code by fetching pages and extracting releases with the agent itself (and parallel sub-agents), then writing through the batch-upsert endpoint — no remote fetch dispatch, no server-side extraction inference billing. Use when you want to onboard a source without triggering the remote update workflow's billed extraction, or recover from a remote fetch that burned tokens and wrote zero releases. Includes a mandatory robots.txt / Content-Signal opt-out gate.
 ---
 
 # Local Ingest
 
-Onboard a changelog **without dispatching the remote managed agent (MA).** The MA path (`releases admin source fetch` → `POST /v1/workflows/update` → discovery worker) spins up a coordinator (Sonnet 4.6) plus a worker (Haiku 4.5) and bills inference for the body→records extraction — even when it writes zero releases. A local Claude Code agent is already a capable model with web-fetch + file tools, so it can do the per-page extraction inline (folded into the session you're already in) and only needs a deterministic write path.
+Onboard a changelog **without dispatching the remote fetch path.** The remote path (`releases admin source fetch` → `POST /v1/workflows/update` → the API worker's `DeterministicUpdateWorkflow`, #1946) runs the body→records extraction server-side (incremental Haiku or the tool-loop) and bills that inference — even when it writes zero releases. A local Claude Code agent is already a capable model with web-fetch + file tools, so it can do the per-page extraction inline (folded into the session you're already in) and only needs a deterministic write path.
 
 **Core principle: the agent is the extractor.** You fetch, you parse, you structure the records, and you POST them to the batch endpoint, which does a plain idempotent upsert with **no AI on insert**. The remote extraction loop never runs.
 
@@ -16,14 +16,14 @@ Onboard a changelog **without dispatching the remote managed agent (MA).** The M
 State this explicitly to the operator before a large run, and honor it:
 
 - **Spends:** your agent's own tokens for fetch + extract, plus any sub-agents you fan out (your choice of model — `sonnet` for quality, `haiku` for bulk).
-- **Does NOT spend:** no MA coordinator-Sonnet, no Haiku worker loop, no remote `web_fetch` extraction. `POST /v1/workflows/update` is **never called**.
+- **Does NOT spend:** no server-side extraction (the update workflow's incremental-Haiku / tool-loop passes), no remote `web_fetch` extraction. `POST /v1/workflows/update` is **never called**.
 - **The batch endpoint runs no AI on insert** — no summarization, no marketing classifier, no feed enrichment. It does an `insert` plus a fire-and-forget vector embed (`waitUntil`). The AI fields (`title_generated` / `title_short` / `summary`) are intentionally left empty; see _Manual enrichment_ below for the deliberate follow-up paths.
 
-The negative signal that confirms no MA ran: in Axiom `releases-cloudflare-logs` there is **no** `POST .../fetch?sessionId=ma-…` and **no** `extract-deps-worker` event for the source.
+The negative signal that confirms no remote run happened: in Axiom `releases-cloudflare-logs` there is **no** `POST .../fetch?sessionId=det-…` and **no** `extract-deps-worker` event for the source.
 
 ## When to use
 
-- Onboarding a new source (or backfilling an existing one) interactively in Claude Code and you want to skip the remote MA cost.
+- Onboarding a new source (or backfilling an existing one) interactively in Claude Code and you want to skip the remote extraction cost.
 - A remote fetch burned a full extraction loop and wrote **0 releases** (the Conductor / large-body / `max_tokens` failure mode) — extracting inline sidesteps the loop entirely.
 - The page is fetchable by your own web tools (the refusal below is a policy gate, not a fetch limit).
 
@@ -48,10 +48,12 @@ It fetches `robots.txt` (following apex→www redirects), parses the Cloudflare 
 | Exit | Verdict   | Action                                                                                                         |
 | ---- | --------- | -------------------------------------------------------------------------------------------------------------- |
 | `0`  | `proceed` | Permissive or absent — continue.                                                                               |
-| `1`  | `refuse`  | `ai-input=no` or `ai-train=no` declared. **STOP. Surface to the user.** Do not fetch or write.                 |
+| `1`  | `refuse`  | `ai-input=no` declared. **STOP. Surface to the user.** Do not fetch or write.                                  |
 | `2`  | `unknown` | Couldn't fetch/parse robots.txt. Retry once; if still unknown, **surface to the user** — don't assume proceed. |
 
-**This is the Conductor lesson.** `conductor.build` serves `Content-Signal: ai-train=no, search=yes, ai-input=no` — its org/source already sits paused in the registry for exactly this reason (`releases admin playbook conductor`). A local onboard must not silently spend tokens or ingest content against a publisher opt-out. **`conductor.build` must be refused** — it is the regression target for this gate.
+**The gate is on `ai-input` only.** Local ingest is search/input ingestion — feeding a search index — which is exactly what `ai-input` governs. `ai-train=no` opts out of model *training*, a use this path doesn't perform, so `ai-train=no` alone (e.g. `vercel.com`) correctly **proceeds**.
+
+**This is the Conductor lesson.** `conductor.build` serves `Content-Signal: ai-train=no, search=yes, ai-input=no` — its org/source already sits paused in the registry for exactly this reason (`releases admin playbook conductor`). A local onboard must not silently spend tokens or ingest content against a publisher opt-out. **`conductor.build` must be refused** (via its `ai-input=no`) — it is the regression target for this gate.
 
 The refusal is a **policy** choice, not a technical limitation: `web_fetch` and CF Browser Rendering can still retrieve these pages (only Cloudflare's `/crawl` endpoint hard-enforced the signal for Conductor). Honor the opt-out anyway. Override **only** with explicit publisher permission documented by the operator — there is no silent bypass.
 
@@ -64,7 +66,7 @@ Ensure the org and source exist before writing — releases attach to a `source_
 - Read the org playbook for parse hints: `releases admin playbook <org>` (see `managing-sources` → Playbooks).
 - Capture the **`sourceSlug`** and the **`src_…` id** from the created/resolved row — you need one of them for the batch URL.
 
-If the source is brand-new, create it (e.g. `releases admin source create "<name>" --url <url> --org <org> [--primary]`) but **do not trigger a fetch** — that would dispatch the MA you're trying to avoid.
+If the source is brand-new, create it (e.g. `releases admin source create "<name>" --url <url> --org <org> [--primary]`) but **do not trigger a fetch** — that would dispatch the remote update workflow you're trying to avoid.
 
 ### Step 3 — Map pages
 
@@ -182,7 +184,7 @@ The batch path intentionally omits `title_generated` / `title_short` / `summary`
 - **Skipping the preflight.** It's the first step for a reason — silently ingesting an opt-out source is the exact failure this skill exists to prevent. `conductor.build` must be refused.
 - **Silent truncation.** Capping the window is fine; not telling the user what you skipped is not.
 - **Missing `url`.** Breaks idempotency — re-runs duplicate instead of upserting.
-- **Triggering a fetch on the new source.** `releases admin source fetch` / `manage_source` action `fetch` dispatches the MA — the cost you're avoiding. Create the source, then write via `/batch`.
+- **Triggering a fetch on the new source.** `releases admin source fetch` / `manage_source` action `fetch` starts the remote update workflow (billed server-side extraction) — the cost you're avoiding. Create the source, then write via `/batch`.
 - **Fetching detail pages in the parent agent during fan-out.** Delegate to sub-agents; keep the parent context clean.
 - **Using this for a clean feed source.** Add it and let cron fetch — don't hand-extract what the feed adapter handles for free.
 - **Running it in a managed-agent session.** Local Claude Code only.
