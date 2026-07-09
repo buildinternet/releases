@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/header";
 import {
   WEB_BOT_AUTH_DIRECTORY_URL,
   WEB_BOT_AUTH_SIGNATURE_AGENT,
@@ -17,7 +16,6 @@ const USER_AGENT = WEB_BOT_AUTH_USER_AGENT;
 export default function BotPage() {
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
       <article className="max-w-3xl w-full mx-auto px-6 py-10 flex-1 prose prose-stone dark:prose-invert prose-headings:tracking-tight prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono">
         <h1>The Releases crawler</h1>
         <p>

@@ -10,7 +10,6 @@ import { ReleaseDetailDocument } from "@/lib/graphql/__generated__/graphql";
 import type { ReleaseDetailQuery } from "@/lib/graphql/__generated__/graphql";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
-import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { CliCommand } from "@/components/cli-command";
@@ -115,7 +114,6 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -288,7 +286,6 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: safeStringifyJsonLd(jsonLd) }}
       />
-      <Header />
       <div className="max-w-3xl mx-auto px-6">
         {/* Breadcrumb: [org logo] Org / Product (or Source). The release title
             is not repeated here — it leads the H1 directly below. */}

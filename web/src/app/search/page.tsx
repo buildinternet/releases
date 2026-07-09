@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { api, emptyResults } from "@/lib/api";
-import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SearchProvider } from "@/components/search-provider";
 import { SearchResultsLive } from "@/components/search-results-live";
@@ -44,7 +43,6 @@ export default async function SearchPage({
   return (
     <SearchProvider initialQuery={q ?? ""} initialResults={results} initialRange={range}>
       <div className="min-h-screen">
-        <Header />
         <div className="max-w-2xl mx-auto px-6 pt-12 pb-12">
           <h1 className="text-2xl font-semibold mb-4">Search</h1>
           <SearchBar />

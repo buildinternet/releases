@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { Header } from "@/components/header";
 import { DeviceVerifyForm } from "@/components/device-verify-form";
 import { AuthCenter } from "@/components/auth-flow";
 import { AUTH_CONFIGURED, DEVICE_AUTH_ENABLED } from "@/lib/auth-ui";
@@ -22,7 +21,6 @@ export default function DevicePage() {
 
   return (
     <div className="min-h-screen">
-      <Header />
       <AuthCenter>
         {/* useSearchParams in the form requires a Suspense boundary in the App Router. */}
         <Suspense fallback={<p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>}>

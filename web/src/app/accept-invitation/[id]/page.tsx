@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/header";
 import { AcceptInvitation } from "@/components/accept-invitation";
 
 export const metadata: Metadata = {
@@ -16,7 +15,6 @@ export default async function AcceptInvitationPage({
   const { id } = await params;
   return (
     <div className="min-h-screen">
-      <Header />
       <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-6 py-16">
         <AcceptInvitation invitationId={id} />
       </main>

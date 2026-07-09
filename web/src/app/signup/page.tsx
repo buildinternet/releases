@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/header";
 import { AuthForm } from "@/components/auth-form";
 import { AuthCenter } from "@/components/auth-flow";
 import { safeRedirect } from "@/lib/auth-redirect";
@@ -24,7 +23,6 @@ export default async function SignupPage({
 
   return (
     <div className="min-h-screen">
-      <Header />
       <AuthCenter>
         <AuthForm mode="signup" redirectTo={redirectTo} />
       </AuthCenter>

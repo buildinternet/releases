@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
-import { Header } from "@/components/header";
 import { GhChangelogContent, GhChangelogSkeleton } from "@/components/gh-changelog-view";
 
 /**
@@ -40,7 +39,6 @@ export default async function GhChangelogPage({
 
   return (
     <div className="min-h-screen">
-      <Header />
       <Suspense
         key={`${coordinate}:${path ?? ""}:${source ?? ""}`}
         fallback={<GhChangelogSkeleton coordinate={coordinate} />}

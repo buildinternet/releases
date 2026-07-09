@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { permanentRedirect } from "next/navigation";
 import { api, ApiNotFoundError, ApiSetupError } from "@/lib/api";
-import { Header } from "@/components/header";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
@@ -48,7 +47,6 @@ export default async function CatalogPage({
 
   const setupView = (err: ApiSetupError) => (
     <div className="min-h-screen">
-      <Header />
       <SetupMessage message={err.message} steps={err.setup} />
     </div>
   );
@@ -106,7 +104,6 @@ export default async function CatalogPage({
   return (
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
-      <Header />
       <div className="mx-auto max-w-3xl px-6 pb-12 pt-8">
         <PageHeader
           breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}

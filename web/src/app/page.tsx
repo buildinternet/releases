@@ -16,7 +16,6 @@ import type {
   HomepageCollectionsQuery,
 } from "@/lib/graphql/__generated__/graphql";
 import { ConveyorBackdrop } from "@/components/conveyor-backdrop";
-import { Header } from "@/components/header";
 import { SiteNotice } from "@/components/site-notice";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
@@ -322,7 +321,6 @@ export default async function HomePage() {
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -365,15 +363,13 @@ export default async function HomePage() {
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
       {/* Masthead band: the animated "advancing blocks" backdrop is confined to
-          this top region — `position: absolute` inside a `relative` wrapper, so
-          it fills only the nav + hero rather than the whole viewport. The nav and
-          hero text sit in a `relative z-10` layer above the (transparent) canvas.
-          No `overflow-hidden`: the canvas self-clips to its own box, and clipping
-          here would cut off the header's search / mobile-nav dropdowns. */}
+          this top hero region — `position: absolute` inside a `relative` wrapper.
+          Site Header lives in the root layout (above this page), so the canvas
+          only paints behind the hero text. Hero content sits in a `relative z-10`
+          layer above the transparent canvas. */}
       <div className="relative">
         <ConveyorBackdrop style={{ position: "absolute" }} />
         <div className="relative z-10">
-          <Header />
           <div className="pt-12 pb-8 text-center px-6">
             <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2 text-balance">
               The latest product releases, indexed for agents

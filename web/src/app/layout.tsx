@@ -9,6 +9,7 @@ import { WebMcpProvider } from "@/components/webmcp-provider";
 import { SearchHotkey } from "@/components/search-hotkey";
 import { LightboxProvider } from "@/components/lightbox";
 import { Footer } from "@/components/footer";
+import { Header } from "@/components/header";
 import { SiteNotice } from "@/components/site-notice";
 import "./globals.css";
 import { apiBaseUrl } from "@/lib/env";
@@ -88,6 +89,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SearchHotkey />
             <LightboxProvider>
               <ViewTransition default="auto">
+                {/* Header lives in the root layout (sibling of main, like Footer)
+                    so segment `error.tsx` boundaries keep full site chrome. */}
+                <Header />
                 <main id="main" className="flex-1 flex flex-col">
                   <SiteNotice slot="banner" />
                   {children}

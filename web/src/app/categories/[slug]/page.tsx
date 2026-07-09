@@ -10,7 +10,6 @@ import {
   type CategoryReleasesResponse,
   type CollectionMember,
 } from "@/lib/api";
-import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
 import { TaxonomyList } from "@/components/taxonomy-list";
@@ -74,7 +73,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -122,7 +120,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   return (
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
-      <Header />
       <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">

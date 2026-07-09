@@ -6,7 +6,6 @@ import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { ApiSetupError } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import { ViewTransition } from "react";
-import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
@@ -82,7 +81,6 @@ export default async function SourceByIdLayout({
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -127,7 +125,6 @@ export default async function SourceByIdLayout({
 
   return (
     <div className="min-h-screen">
-      <Header />
       <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           {source.org ? (

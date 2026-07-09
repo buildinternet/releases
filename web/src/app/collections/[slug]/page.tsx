@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ApiSetupError, type CollectionDailySummary } from "@/lib/api";
-import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
@@ -52,7 +51,6 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     if (err instanceof ApiSetupError) {
       return (
         <div className="min-h-screen">
-          <Header />
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
@@ -76,7 +74,6 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   return (
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
-      <Header />
       <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
