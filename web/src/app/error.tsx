@@ -4,10 +4,11 @@ import { useEffect } from "react";
 import { RouteErrorFallback } from "@/components/route-error-fallback";
 
 /**
- * Product / source segment boundary. Keeps site chrome (Header) so a failed
- * product or source data load doesn't white-screen the whole app.
+ * Root segment error boundary. Catches uncaught errors from any route that
+ * doesn't define a closer `error.tsx`, so a single page failure can't replace
+ * the whole document with Next's bare `__next_error__` shell.
  */
-export default function OrgSlugError({
+export default function RootError({
   error,
   reset,
 }: {
@@ -18,7 +19,7 @@ export default function OrgSlugError({
     console.error(
       JSON.stringify({
         component: "web-error-boundary",
-        event: "org-slug-error",
+        event: "route-error",
         message: error.message,
         digest: error.digest,
         name: error.name,
@@ -26,11 +27,5 @@ export default function OrgSlugError({
     );
   }, [error]);
 
-  return (
-    <RouteErrorFallback
-      reset={reset}
-      title="Couldn't load this page"
-      message="This product or source page failed to load. Try again in a moment, or browse from the org page."
-    />
-  );
+  return <RouteErrorFallback reset={reset} />;
 }

@@ -32,6 +32,18 @@ export class GraphQLRequestError extends Error {
   }
 }
 
+/** Yoga / Apollo APQ codes for an unknown persisted-operation hash. */
+function isPersistedQueryNotFound(errors: GraphQLError[]): boolean {
+  return errors.some((e) => {
+    const code = e.extensions?.code;
+    return (
+      e.message === "PersistedQueryNotFound" ||
+      code === "PERSISTED_QUERY_NOT_IN_LIST" ||
+      code === "PERSISTED_QUERY_NOT_FOUND"
+    );
+  });
+}
+
 // Codegen embeds `__meta__.hash` on every TypedDocumentNode when the
 // `persistedDocuments` preset option is on (see web/codegen.ts). The API
 // rejects requests without a known hash from non-admin callers, so we
@@ -58,15 +70,30 @@ function persistedHashOf(document: PersistedDocument): string {
 /**
  * Server-side GraphQL fetch. Reuses `webApiHeaders` + `applyCacheInit` from
  * `lib/api.ts` so a GraphQL call inside a server component behaves the same
- * as REST equivalents — proxy key, web user-agent, 60s ISR default.
+ * as REST equivalents — proxy key, web user-agent, ISR default revalidate.
  *
  * Sends the persisted-query hash, never the document itself, so the API's
  * persisted-operations gate accepts the request.
+ *
+ * On `PersistedQueryNotFound`, retries once with `cache: "no-store"`. Yoga
+ * returns HTTP 200 with that error, so Next's Data Cache can pin a poison
+ * entry for the full revalidate window when web ships a new op before the
+ * API worker — a common monorepo deploy race (#2047). The uncached retry
+ * heals as soon as the API knows the hash, without waiting for ISR expiry.
  */
 export async function graphqlRequest<TData, TVariables>(
   document: TypedDocumentNode<TData, TVariables>,
   variables: TVariables,
   init?: FetchCacheInit,
+): Promise<TData> {
+  return graphqlRequestInner(document, variables, init, false);
+}
+
+async function graphqlRequestInner<TData, TVariables>(
+  document: TypedDocumentNode<TData, TVariables>,
+  variables: TVariables,
+  init: FetchCacheInit | undefined,
+  retriedUncached: boolean,
 ): Promise<TData> {
   const sha256Hash = persistedHashOf(document as PersistedDocument);
   const fetchInit: RequestInit = {
@@ -95,6 +122,9 @@ export async function graphqlRequest<TData, TVariables>(
   // a typed throw so callers can branch on `extensions.code`.
   const body = (await res.json()) as GraphQLResponse<TData>;
   if (body.errors && body.errors.length > 0) {
+    if (!retriedUncached && init?.cache !== "no-store" && isPersistedQueryNotFound(body.errors)) {
+      return graphqlRequestInner(document, variables, { ...init, cache: "no-store" }, true);
+    }
     throw new GraphQLRequestError(body.errors);
   }
   if (!body.data) throw new Error("GraphQL response missing both data and errors");

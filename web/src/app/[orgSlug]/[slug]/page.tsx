@@ -104,8 +104,13 @@ export default async function OrgSlugPage({
     }
     // Critical path via ProductPage GraphQL: identity + sources + collections
     // + first product-scoped feed page. Overview / activity / heatmap stay on
-    // fail-open REST inside ProductView (#2047).
-    const { product, collections, releases } = await getProductPage(resolved.product.id);
+    // fail-open REST inside ProductView (#2047). REST fallback inside
+    // getProductPage covers PersistedQueryNotFound deploy windows.
+    const { product, collections, releases } = await getProductPage({
+      id: resolved.product.id,
+      orgSlug,
+      productSlug: resolved.product.slug,
+    });
     return (
       <ProductView
         orgSlug={orgSlug}

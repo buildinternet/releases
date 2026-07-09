@@ -49,7 +49,11 @@ export default async function ProductAdminPage({
     permanentRedirect(`/${orgSlug}/admin`);
   }
 
-  const product = await getProductById(resolved.product.id);
+  const product = await getProductById({
+    id: resolved.product.id,
+    orgSlug,
+    productSlug: resolved.product.slug,
+  });
 
   return (
     <div className="min-h-screen">
