@@ -52,6 +52,7 @@ export const adminRoutes = [
   "sessions",
   "evaluate",
   "status/fetch-log",
+  "status/fetch-activity",
   "status/usage",
   "status/event",
   "admin/blocklist",

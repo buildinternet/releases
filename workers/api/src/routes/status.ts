@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, isNull, sql, gte, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, notInArray, sql, gte, lte, type SQL } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   FETCH_LOG_STATUSES,
@@ -22,6 +22,18 @@ import { getSourceMeta } from "@releases/adapters/source-meta";
 import { describeWorkflowStages } from "@releases/adapters/workflow-stages";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
+import {
+  ACTIVITY_BUCKETS,
+  ACTIVITY_CACHE_TTL_SECONDS,
+  type ActivityBucket,
+  type ActivityResponse,
+  assembleActivityBuckets,
+  buildActivityCacheKey,
+  parseExcludeStatuses,
+  resolveActivityWindow,
+  sqlBucketExpr,
+} from "./fetch-activity.js";
+import { withLatestCache } from "../lib/latest-cache.js";
 
 export const statusRoutes = new Hono<Env>();
 
@@ -67,6 +79,17 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   if (after) scope.push(gte(fetchLog.createdAt, after));
   if (before) scope.push(lte(fetchLog.createdAt, before));
   if (org) scope.push(eq(organizations.slug, org));
+  // Activity-chart drill-down wants "signal only" (everything except
+  // no_change). Comma-separated list of statuses to drop from both the page
+  // and the statusCounts rollup.
+  const excludeStatuses = parseExcludeStatuses(c.req.query("excludeStatus"));
+  if (excludeStatuses.length > 0) {
+    scope.push(
+      excludeStatuses.length === 1
+        ? ne(fetchLog.status, excludeStatuses[0]!)
+        : notInArray(fetchLog.status, excludeStatuses),
+    );
+  }
 
   // Page predicates add status and cursor.
   const pagePredicates = [...scope];
@@ -140,6 +163,135 @@ statusRoutes.get("/status/fetch-log", async (c) => {
 
   return c.json({ entries, nextCursor, totalCount, statusCounts });
 });
+
+/**
+ * Time-bucketed fetch_log rollup for the admin Status activity chart.
+ * Admin-internal (Bearer via /api/proxy) — not part of the published wire
+ * protocol. Returns continuous buckets (zeros filled) with per-status counts,
+ * releasesInserted, and a small topOrgs facepile (non–no_change only).
+ *
+ * Performance notes:
+ * - Status rollup hits `idx_fetch_log_created` and skips source/org joins when
+ *   not filtering by org (the common path).
+ * - Facepile query is signal-only (`status != no_change`) and avoids a
+ *   correlated `org_accounts` subquery (avatar_url is enough for OrgAvatar).
+ * - Both queries run in parallel; the assembled payload is KV-cached for 60s
+ *   via LATEST_CACHE (`withLatestCache`). Workers Cache can't store Bearer
+ *   responses (cacheControl forces no-store on Authorization), so KV is the
+ *   only shared layer that helps here.
+ *
+ * Query: after?, before?, bucket=hour|day, org?
+ */
+statusRoutes.get("/status/fetch-activity", async (c) => {
+  const org = c.req.query("org") || undefined;
+  const rawBucket = c.req.query("bucket");
+  const requestedBucket = (ACTIVITY_BUCKETS as readonly string[]).includes(rawBucket ?? "")
+    ? (rawBucket as ActivityBucket)
+    : null;
+
+  const window = resolveActivityWindow({
+    after: c.req.query("after"),
+    before: c.req.query("before"),
+    bucket: requestedBucket,
+  });
+
+  const cacheKey = buildActivityCacheKey({
+    bucket: window.bucket,
+    after: window.after,
+    before: window.before,
+    org,
+  });
+
+  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
+  try {
+    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    waitUntil = undefined;
+  }
+
+  const { data, hit } = await withLatestCache<ActivityResponse>(
+    c.env.LATEST_CACHE,
+    cacheKey,
+    waitUntil,
+    () => computeFetchActivity(c.env.DB, window, org),
+    ACTIVITY_CACHE_TTL_SECONDS,
+  );
+
+  c.header("X-Cache", hit ? "HIT" : "MISS");
+  return c.json(data);
+});
+
+async function computeFetchActivity(
+  d1: Parameters<typeof createDb>[0],
+  window: { after: string; before: string; bucket: ActivityBucket },
+  org: string | undefined,
+): Promise<ActivityResponse> {
+  const db = createDb(d1);
+  const bucketSql = sqlBucketExpr(window.bucket);
+  const timeScope: SQL[] = [
+    gte(fetchLog.createdAt, window.after),
+    lte(fetchLog.createdAt, window.before),
+  ];
+
+  // Status counts: no joins unless filtering by org — keeps the hot path on
+  // idx_fetch_log_created alone.
+  const statusQuery = org
+    ? db
+        .select({
+          bucket: sql<string>`${bucketSql}`.mapWith(String),
+          status: fetchLog.status,
+          n: sql<number>`count(*)`.mapWith(Number),
+          inserts: sql<number>`coalesce(sum(${fetchLog.releasesInserted}), 0)`.mapWith(Number),
+        })
+        .from(fetchLog)
+        .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
+        .innerJoin(organizations, eq(sources.orgId, organizations.id))
+        .where(and(...timeScope, eq(organizations.slug, org)))
+        .groupBy(bucketSql, fetchLog.status)
+    : db
+        .select({
+          bucket: sql<string>`${bucketSql}`.mapWith(String),
+          status: fetchLog.status,
+          n: sql<number>`count(*)`.mapWith(Number),
+          inserts: sql<number>`coalesce(sum(${fetchLog.releasesInserted}), 0)`.mapWith(Number),
+        })
+        .from(fetchLog)
+        .where(and(...timeScope))
+        .groupBy(bucketSql, fetchLog.status);
+
+  // Facepile: signal-only. avatar_url only (no org_accounts correlated subq).
+  const orgScope: SQL[] = [...timeScope, ne(fetchLog.status, "no_change")];
+  if (org) orgScope.push(eq(organizations.slug, org));
+
+  const orgQuery = db
+    .select({
+      bucket: sql<string>`${bucketSql}`.mapWith(String),
+      orgSlug: organizations.slug,
+      orgName: organizations.name,
+      avatarUrl: organizations.avatarUrl,
+      n: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(fetchLog)
+    .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
+    .innerJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(and(...orgScope))
+    .groupBy(bucketSql, organizations.id);
+
+  const [statusRows, orgRows] = await Promise.all([statusQuery, orgQuery]);
+
+  return {
+    bucket: window.bucket,
+    after: window.after,
+    before: window.before,
+    buckets: assembleActivityBuckets({
+      after: window.after,
+      before: window.before,
+      bucket: window.bucket,
+      statusRows,
+      orgRows,
+    }),
+  };
+}
 
 // Dev-only operator view: per-source fetch strategy, interval, and live timing
 // state for an org. Reachable only through the flag-gated /api/proxy and the
