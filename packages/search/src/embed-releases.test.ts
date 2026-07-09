@@ -46,8 +46,9 @@ function fakeVectorize() {
 const baseRelease: EmbedReleaseInput = {
   id: "rel_1",
   title: "v1.0",
-  content: "long body content",
-  summary: "short summary",
+  content: "long body content about the feature shipping in this release",
+  // Must clear empty-tier gate (MIN_CONTENT_CHARS = 15) so normal embed path runs.
+  summary: "Shipped interactive webhook create mode and warning prefix fix",
   version: "1.0.0",
   publishedAt: "2026-01-01T00:00:00Z",
   sourceId: "src_1",
@@ -88,7 +89,9 @@ describe("embedAndUpsertReleases", () => {
       },
     });
     expect(calls.length).toBe(1);
-    expect(calls[0].body.input).toEqual(["v1.0\n1.0.0\nshort summary"]);
+    expect(calls[0].body.input).toEqual([
+      "v1.0\n1.0.0\nShipped interactive webhook create mode and warning prefix fix",
+    ]);
     expect(vec.upserted.length).toBe(1);
     expect(vec.upserted[0].id).toBe("rel_1");
     expect(vec.upserted[0].values).toEqual([0, 0, 0]);
@@ -169,5 +172,61 @@ describe("embedAndUpsertReleases", () => {
     expect(vec.upserted[1].values).toEqual([1, 1, 1]);
     expect(vec.upserted[2].values).toEqual([2, 2, 2]);
     expect(persisted).toEqual([["rel_a", "rel_b", "rel_c"]]);
+  });
+
+  test("skips empty-body placeholders: no embed call, deletes vector, still onPersisted", async () => {
+    const { fetchImpl, calls } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    const persisted: string[][] = [];
+    await embedAndUpsertReleases({
+      releases: [
+        {
+          ...baseRelease,
+          id: "rel_junk",
+          title: "test",
+          summary: "test",
+          content: "test",
+          version: null,
+        },
+      ],
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+      onPersisted: async (ids) => {
+        persisted.push(ids);
+      },
+    });
+    expect(calls.length).toBe(0);
+    expect(vec.upserted.length).toBe(0);
+    expect(vec.deleted).toEqual(["rel_junk"]);
+    expect(persisted).toEqual([["rel_junk"]]);
+  });
+
+  test("mixed batch: embeds real rows, skips empty, deletes empty ids", async () => {
+    const { fetchImpl, calls } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    const persisted: string[][] = [];
+    await embedAndUpsertReleases({
+      releases: [
+        { ...baseRelease, id: "rel_good" },
+        {
+          ...baseRelease,
+          id: "rel_empty",
+          title: "test",
+          summary: "test",
+          content: "",
+          version: null,
+        },
+      ],
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+      onPersisted: async (ids) => {
+        persisted.push(ids);
+      },
+    });
+    expect(calls.length).toBe(1);
+    expect(calls[0].body.input).toHaveLength(1);
+    expect(vec.upserted.map((v: any) => v.id)).toEqual(["rel_good"]);
+    expect(vec.deleted).toEqual(["rel_empty"]);
+    expect(persisted).toEqual([["rel_good", "rel_empty"]]);
   });
 });
