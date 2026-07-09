@@ -509,7 +509,7 @@ export const MAX_ROUNDS = 8;
 export const MAX_TOTAL_TOOL_CHARS = 80_000;
 
 export const CRAWL_EXTRACTION_RULES = `Rules:
-- COMPLETENESS: Extract every "# <url>" section (except the index page itself).
+- COMPLETENESS: Extract every "# <url>" section (except the index page itself). EXCEPTION: when source-specific instructions or the organization playbook define which posts to include or skip, those rules govern — a section they say to skip must be omitted entirely, even though it has its own page. Completeness means "never miss an in-scope post", not "extract out-of-scope ones".
 - URL: the URL is in the section heading; use it as the release's canonical URL.
 - CONTENT: preserve the full body markdown under each heading. Do not summarize. Strip site chrome (nav, footer, login/signup CTAs, share widgets, cookie banners).
 - Media: include screenshots, product images, diagrams, and videos that appear in the body as markdown image links. Exclude author avatars, navigation logos, footer icons, social badges, tracking pixels.
