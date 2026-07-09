@@ -242,10 +242,11 @@ export interface HybridSearchResponse {
 
 /**
  * Inline FTS query returning release IDs only. Mirrors the filter shape
- * of `searchReleasesFts` in workers/api/src/queries/search.ts (active
- * sources, unsuppressed, optional `releases_visible` join for the
- * default coverage-aware view) but skips the wider hydration since the
- * hybrid path re-hydrates after RRF.
+ * of `searchReleasesFts` in `./releases-fts.ts` (active sources,
+ * unsuppressed, optional `releases_visible` join for the default
+ * coverage-aware view) but skips the wider hydration since the hybrid
+ * path re-hydrates after RRF. Kept as its own MATCH site (closed set —
+ * see packages/core/src/fts.ts) rather than selecting full rows.
  */
 async function ftsReleaseIds(
   db: WorkerD1Db,

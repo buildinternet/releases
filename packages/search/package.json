@@ -12,10 +12,14 @@
     "./embedding-cache": "./src/embedding-cache.ts",
     "./embeddings": "./src/embeddings.ts",
     "./hybrid-search-worker": "./src/hybrid-search-worker.ts",
+    "./releases-fts": "./src/releases-fts.ts",
     "./vector-search": "./src/vector-search.ts"
   },
   "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
-    "@releases/lib": "workspace:*"
+    "@releases/core-internal": "workspace:*",
+    "@releases/lib": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   }
 }

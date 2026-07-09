@@ -26,9 +26,9 @@ import {
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { nowIso, timeAgo, resolveDateParam } from "@buildinternet/releases-core/dates";
-import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
+import { searchReleasesFts } from "@releases/search/releases-fts.js";
 import type { Kind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
@@ -2288,37 +2288,29 @@ export async function search(
           return { mode: "hybrid", hybrid };
         }
 
-        const rows = await db.all<LexicalReleaseRow>(sql`
-          SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
-                 r.version, r.title, r.type,
-                 COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
-                 r.title_generated as titleGenerated,
-                 r.title_short as titleShort,
-                 r.published_at as publishedAt,
-                 o.slug as orgSlug,
-                 p.slug as productSlug
-          FROM releases_fts
-          JOIN releases r ON r.rowid = releases_fts.rowid
-          JOIN sources s ON s.id = r.source_id
-          LEFT JOIN products p ON p.id = s.product_id
-          LEFT JOIN organizations o ON o.id = s.org_id
-          WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
-            AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-            AND (r.suppressed IS NULL OR r.suppressed = 0)
-            ${includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
-            ${
-              sourceIds
-                ? sql`AND r.source_id IN (${sql.join(
-                    sourceIds.map((id) => sql`${id}`),
-                    sql`, `,
-                  )})`
-                : sql``
-            }
-            ${params.kind ? sql`AND COALESCE(s.kind, p.kind) = ${params.kind}` : sql``}
-            ${since ? sql`AND r.published_at >= ${since}` : sql``}
-            ${until ? sql`AND r.published_at <= ${until}` : sql``}
-          ORDER BY rank LIMIT ${limit}
-        `);
+        // Shared FTS helper with /v1/search (sources_active, coverage, kind,
+        // since/until, product-scope sourceIds). Same closed MATCH ownership.
+        const ftsRows = await searchReleasesFts(db, params.query, limit, 0, {
+          includeCoverage,
+          sourceIds,
+          kind: params.kind,
+          since,
+          until,
+        });
+        const rows: LexicalReleaseRow[] = ftsRows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          summary: r.summary,
+          titleGenerated: r.titleGenerated,
+          titleShort: r.titleShort,
+          version: r.version,
+          type: r.type,
+          publishedAt: r.publishedAt,
+          sourceSlug: r.sourceSlug,
+          sourceName: r.sourceName,
+          orgSlug: r.orgSlug,
+          productSlug: r.productSlug,
+        }));
         return { mode: "lexical", rows };
       })()
     : Promise.resolve(null);
