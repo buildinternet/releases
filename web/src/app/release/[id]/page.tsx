@@ -34,6 +34,7 @@ import { OrgAvatar } from "@/components/org-avatar";
 import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
+import { buildReleaseOpenGraph } from "./release-og";
 
 type GqlRelease = NonNullable<ReleaseDetailQuery["release"]>;
 type GqlReleaseSource = GqlRelease["source"];
@@ -61,7 +62,6 @@ function mapReleaseFromRest(r: Awaited<ReturnType<typeof api.release>>): Release
     titleShort: r.titleShort ?? null,
     content: r.content,
     migrationNotes: r.migrationNotes ?? null,
-    ogImageUrl: r.ogImageUrl ?? null,
     composition: r.composition
       ? {
           bugs: r.composition.bugs,
@@ -161,21 +161,10 @@ export async function generateMetadata({
       title: clampTitle(`${titleHeading} — ${release.source.name}`),
       description: description || `${heading} release notes for ${release.source.name}`,
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
-      openGraph: {
-        type: "article",
-        url: releasePath(release),
-        publishedTime: release.publishedAt ?? undefined,
-        // Explicit `images` (#2066) short-circuits Next's opengraph-image
-        // file-convention merge (`mergeStaticMetadata` in
-        // next/dist/lib/metadata/resolve-metadata.js only applies the
-        // co-located file when `openGraph.images` is NOT already set) —
-        // pointing crawlers at the pre-rendered R2 object instead of the
-        // per-request Satori render. When no mirrored image exists yet
-        // (`ogImageUrl` null — not yet ingested, or a pre-#2066 release),
-        // omitting `images` here lets the file convention take over exactly
-        // as before, so there is no broken/missing og:image in the gap.
-        ...(release.ogImageUrl ? { images: [release.ogImageUrl] } : {}),
-      },
+      openGraph: buildReleaseOpenGraph(releasePath(release), {
+        publishedAt: release.publishedAt,
+        orgSlug: release.source.org?.slug ?? null,
+      }),
       alternates: { canonical: releasePath(release) },
     };
   } catch {

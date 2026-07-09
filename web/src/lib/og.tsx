@@ -7,11 +7,13 @@ export const OG_SIZE = { width: 1200, height: 630 } as const;
 export const OG_CONTENT_TYPE = "image/png" as const;
 
 /**
- * Per-response cache headers for the live `opengraph-image` routes (#2066).
+ * Per-response cache headers for OG routes that need to control their own
+ * `Cache-Control` rather than inherit it from ISR (used by the shared org OG
+ * route, `web/src/app/api/og/org/[slug]/route.tsx`).
  *
- * The release route is now `force-dynamic` (no `export const revalidate`) so
- * the handler runs per request and its own `Cache-Control` ships verbatim —
- * Next only overrides the header when the route is statically generated (ISR),
+ * Such a route must be `force-dynamic` (no `export const revalidate`) so the
+ * handler runs per request and its own `Cache-Control` ships verbatim — Next
+ * only overrides the header when the route is statically generated (ISR),
  * which `revalidate` triggers and `force-dynamic` disables. That lets a
  * *successful* render stay cached at the edge for 24h while a *fallback*
  * render (a transient upstream failure produced the generic card) is never
