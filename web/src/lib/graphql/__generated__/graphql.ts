@@ -411,6 +411,7 @@ export type ReleaseDetailQuery = {
     titleShort: string | null;
     content: string;
     migrationNotes: string | null;
+    ogImageUrl: string | null;
     composition: { bugs: number; features: number; enhancements: number } | null;
     media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
     source: {
@@ -1662,7 +1663,7 @@ export const ProductPageDocument = {
   ],
 } as unknown as DocumentNode<ProductPageQuery, ProductPageQueryVariables>;
 export const ReleaseDetailDocument = {
-  __meta__: { hash: "sha256:1c550e19778eebf6f75b60652d1d327543320dc870cc5766c47a4189b7dfb7ac" },
+  __meta__: { hash: "sha256:dc00d207481809d195bba3bd3a39caa77cf0a3dc065e24fa7c4e9d5cab6bcb8e" },
   kind: "Document",
   definitions: [
     {
@@ -1707,6 +1708,7 @@ export const ReleaseDetailDocument = {
                 { kind: "Field", name: { kind: "Name", value: "titleShort" } },
                 { kind: "Field", name: { kind: "Name", value: "content" } },
                 { kind: "Field", name: { kind: "Name", value: "migrationNotes" } },
+                { kind: "Field", name: { kind: "Name", value: "ogImageUrl" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "composition" },

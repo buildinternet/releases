@@ -92,6 +92,26 @@ describe("runContentAndEmbedSteps", () => {
     expect(names).toEqual(["generate-content", "embed-releases"]);
   });
 
+  it("skips mirror-og-images when MEDIA is absent (no binding, no fetch attempted)", async () => {
+    const db = mkDb();
+    const { names, step } = mkStepSpy();
+    await runContentAndEmbedSteps(step, mkCtx(db, ["rel_1"]));
+
+    expect(names).not.toContain("mirror-og-images");
+  });
+
+  it("emits mirror-og-images between generate-content and embed-releases when MEDIA is bound (#2066)", async () => {
+    const db = mkDb();
+    const { names, step } = mkStepSpy();
+    const ctx = mkCtx(db, ["rel_1"]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-only env augmentation
+    (ctx.env as any).MEDIA = { put: async () => ({}) };
+
+    await runContentAndEmbedSteps(step, ctx);
+
+    expect(names).toEqual(["generate-content", "mirror-og-images", "embed-releases"]);
+  });
+
   it("skips embed-releases when RELEASES_INDEX is absent", async () => {
     const db = mkDb();
     const { names, step } = mkStepSpy();
