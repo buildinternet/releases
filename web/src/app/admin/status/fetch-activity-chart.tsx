@@ -812,8 +812,8 @@ function DrillRow({ entry }: { entry: FetchLogEntry }) {
   return (
     <li className="flex items-center gap-2.5 px-2 py-1.5 text-xs">
       <OrgAvatar
-        avatarUrl={null}
-        githubHandle={null}
+        avatarUrl={entry.orgAvatarUrl ?? null}
+        githubHandle={entry.orgGithubHandle ?? null}
         name={entry.orgName ?? entry.sourceName ?? "?"}
         size={22}
       />
