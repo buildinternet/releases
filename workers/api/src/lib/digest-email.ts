@@ -42,6 +42,7 @@ const INK_SOFT = "#374151";
 const BODY = "#4b5563";
 const MUTED = "#6b7280";
 const FAINT = "#9ca3af";
+const HAIR = "#eceae7";
 
 function bestTitle(r: ReleaseLatestItem): string {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Update";
@@ -300,20 +301,28 @@ export function buildDigestEmail(content: DigestEmailContent): {
   // Masthead replaces the old H1-that-just-repeated-the-subject: a compact wordmark
   // + a one-line count. The inbox already shows the subject sentence.
   const htmlParts: string[] = [
-    `<div style="border-bottom:2px solid ${INK};padding-bottom:9px;margin:0 0 4px">` +
+    `<div style="border-bottom:2px solid ${INK};padding-bottom:8px;margin:0 0 2px">` +
       `<span style="font:700 12px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:${INK}">Releases</span>` +
-      `<span style="font:13px system-ui,sans-serif;color:${MUTED}">&nbsp;&nbsp;${escapeHtml(dateLabel ? `${dateLabel} · ` : "")}${updates}${orgSpan}</span>` +
+      `<span style="font:13px/1.5 system-ui,sans-serif;color:${MUTED}">&nbsp;&nbsp;${escapeHtml(dateLabel ? `${dateLabel} · ` : "")}${updates}${orgSpan}</span>` +
       `</div>`,
   ];
-  for (const g of groups) {
+  groups.forEach((g, i) => {
     const avatar = g.avatar
       ? `<img src="${escapeHtml(g.avatar)}" width="20" height="20" alt="" style="border-radius:5px;vertical-align:middle;margin-right:8px">`
       : "";
     const nameHtml = g.orgSlug
       ? `<a href="${escapeHtml(`${baseUrl}/${g.orgSlug}`)}" style="color:${INK};text-decoration:none">${escapeHtml(g.orgName)}</a>`
       : escapeHtml(g.orgName);
+    // Each org is a section chunked off by a hairline rule (the masthead's heavier
+    // rule stays the single strong anchor). The heading sits close to its own
+    // content; the rule + padding open the gap between orgs.
+    const section =
+      i === 0
+        ? `padding-top:14px`
+        : `border-top:1px solid ${HAIR};margin-top:10px;padding-top:16px`;
+    htmlParts.push(`<div style="${section}">`);
     htmlParts.push(
-      `<h2 style="font:600 15px system-ui,sans-serif;margin:20px 0 8px">${avatar}${nameHtml}</h2>`,
+      `<h2 style="font:650 15px system-ui,sans-serif;letter-spacing:-.01em;margin:0 0 10px">${avatar}${nameHtml}</h2>`,
     );
     const { posts, rollups } = partitionOrgItems(g.items);
     for (const r of posts) {
@@ -326,37 +335,44 @@ export function buildDigestEmail(content: DigestEmailContent): {
         ? `font-weight:500;color:${MUTED};text-decoration:none`
         : `font-weight:600;color:${ACCENT};text-decoration:none`;
       htmlParts.push(
-        `<p style="margin:8px 0;font:14px system-ui,sans-serif">` +
+        `<p style="margin:0 0 12px;font:14px/1.5 system-ui,sans-serif">` +
           `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="${titleStyle}">${escapeHtml(bestTitle(r))}</a>${prod}` +
           (summary ? `<br><span style="color:${BODY}">${escapeHtml(summary)}</span>` : "") +
           `</p>`,
       );
     }
-    // Per-product rollup: product + newest version pill + "and N more" on one line,
-    // a single "Latest —" note below. Compresses a version burst to two lines.
+    // Per-product rollup: product + newest version pill + "and N more" on one line.
+    // A rollup that carries a note gets a "Latest —" second line and roomier spacing;
+    // a bare version bump collapses to a single tight row so a stack of note-less
+    // SDK bumps reads as a compact list, not a set of evenly-weighted blocks.
     for (const tg of groupByProduct(rollups)) {
       const { rep, blurb, hiddenCount } = rollupView(tg.items);
       const count = tg.items.length;
-      const pill = `<a href="${escapeHtml(releaseUrl(baseUrl, rep))}" style="display:inline-block;font:12px ui-monospace,monospace;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;text-decoration:none">${escapeHtml(versionLabel(rep))}</a>`;
+      const pill = `<a href="${escapeHtml(releaseUrl(baseUrl, rep))}" style="display:inline-block;font:12px ui-monospace,monospace;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;text-decoration:none;vertical-align:middle">${escapeHtml(versionLabel(rep))}</a>`;
       const more =
         hiddenCount > 0
           ? ` <a href="${escapeHtml(productPageUrl(baseUrl, rep))}" style="font:13px system-ui,sans-serif;color:${ACCENT};text-decoration:none">and ${hiddenCount} more →</a>`
           : "";
       const countLabel =
         count > 1 ? ` <span style="color:${FAINT};font-weight:400">· ${count} releases</span>` : "";
-      const blurbHtml = blurb
-        ? `<div style="font:13px system-ui,sans-serif;color:${MUTED};margin-top:2px">Latest — ${escapeHtml(blurb)}</div>`
-        : "";
-      htmlParts.push(
-        `<div style="margin:10px 0">` +
-          `<div style="font:14px system-ui,sans-serif;margin-bottom:1px">` +
-          `<span style="font-weight:600;color:${INK_SOFT}">${escapeHtml(tg.label)}</span>${countLabel}&nbsp;&nbsp;${pill}${more}` +
-          `</div>` +
-          blurbHtml +
-          `</div>`,
-      );
+      const line =
+        `<span style="font-weight:600;color:${INK_SOFT}">${escapeHtml(tg.label)}</span>` +
+        `${countLabel}&nbsp;&nbsp;${pill}${more}`;
+      if (blurb) {
+        htmlParts.push(
+          `<div style="margin:0 0 12px">` +
+            `<div style="font:14px/1.45 system-ui,sans-serif;margin:0 0 1px">${line}</div>` +
+            `<div style="font:13px/1.45 system-ui,sans-serif;color:${MUTED};margin:0">Latest — ${escapeHtml(blurb)}</div>` +
+            `</div>`,
+        );
+      } else {
+        htmlParts.push(
+          `<div style="margin:0 0 6px;font:14px/1.45 system-ui,sans-serif">${line}</div>`,
+        );
+      }
     }
-  }
+    htmlParts.push(`</div>`);
+  });
   const html = appendHtmlFooter(htmlParts.join(""), digestFooter);
 
   return { subject, text, html };
