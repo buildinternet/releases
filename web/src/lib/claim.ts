@@ -4,9 +4,8 @@
  * the cross-subdomain (`.releases.sh`) Better Auth session cookie, same as
  * `api-keys.ts`. Unlike `api-keys.ts`, these routes throw `ReleasesError`
  * subclasses via `respondError`, so errors arrive as the nested envelope
- * (`{ error: { message } }`), matching the decoding used by the `/submit`
- * fast lane (`listing-fast-lane.tsx`) rather than `user-api.ts`'s flat
- * `errorMessage()` helper.
+ * (`{ error: { message } }`). `user-api.ts` `errorMessage()` reads that shape
+ * too; this helper also special-cases 429 copy for the claim lane.
  */
 
 import type {

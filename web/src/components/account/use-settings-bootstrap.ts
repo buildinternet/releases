@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 
 type BootstrapStatus = "loading" | "unsigned" | "error" | "ready";
@@ -24,8 +24,12 @@ export function useSettingsBootstrap<T>(
   const [data, setData] = useState<T | null>(initial);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(initial == null);
+  // Ignore concurrent retry()/effect fetches (unstable fetchSettings or rapid retry clicks).
+  const inFlight = useRef(false);
 
   const retry = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -33,12 +37,13 @@ export function useSettingsBootstrap<T>(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : loadErrorFallback);
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   }, [fetchSettings, loadErrorFallback]);
 
   useEffect(() => {
-    if (data != null || error) return;
+    if (data != null || error || inFlight.current) return;
     if (isPending) return;
     if (!user) {
       setLoading(false);

@@ -8,12 +8,8 @@ import type {
   NotificationSettingsResponse,
   UserWebhookListItem,
 } from "@buildinternet/releases-api-types";
-import {
-  getNotificationSettings,
-  setDigestCadence,
-  mintFeedToken,
-  revokeFeedToken,
-} from "@/lib/follows";
+import { getNotificationSettings } from "@/lib/me-settings";
+import { setDigestCadence, mintFeedToken, revokeFeedToken } from "@/lib/follows";
 import { listWebhooks, createWebhook, testWebhook, deleteWebhook } from "@/lib/webhooks";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";

@@ -18,21 +18,39 @@ export function apiBase(): string {
 
 /**
  * Pull a human-readable message off a non-ok JSON response, falling back to the
- * caller's default. `|| fallback` (not `??`) on purpose: an empty-string
- * `message` is useless, so treat it like an absent one and use the fallback.
+ * caller's default. Prefers the standardized `respondError` envelope
+ * (`{ error: { message } }`), then a flat `message` if present. `|| fallback`
+ * (not `??`) on purpose: an empty-string message is useless.
  */
 export async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
-    const body = (await res.json()) as { message?: string };
-    return body.message || fallback;
+    const body = (await res.json()) as {
+      message?: string;
+      error?: { message?: string } | string;
+    };
+    const nested =
+      typeof body.error === "object" && body.error != null ? body.error.message : undefined;
+    const flat = typeof body.message === "string" ? body.message : undefined;
+    return nested || flat || fallback;
   } catch {
     return fallback;
   }
 }
 
+/** Match RSC settings bootstrap (`me-settings-server.ts`) so stalled requests fail closed. */
+const ME_GET_TIMEOUT_MS = 10_000;
+
 /** Credentialed GET against the API worker; throws with a human message on non-OK. */
 export async function meGet<T>(path: string, fallback: string): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, { credentials: "include" });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(ME_GET_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error(fallback);
+  }
   if (!res.ok) throw new Error(await errorMessage(res, fallback));
   return (await res.json()) as T;
 }

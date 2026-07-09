@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { DeveloperSettingsResponse } from "@buildinternet/releases-api-types";
-import { getDeveloperSettings } from "@/lib/follows";
+import { getDeveloperSettings } from "@/lib/me-settings";
 import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";
 import { ApiKeysPanel } from "@/components/api-keys-panel";
 import { WebhooksPanel } from "@/components/webhooks-panel";
