@@ -7,7 +7,9 @@ import sourceOgImage from "../opengraph-image";
 export const alt = "Source on releases.sh";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
-export const revalidate = 86400;
+// Off the ISR path (#2066); the shared source generator this wraps already
+// sets Cache-Control for the Vercel Edge Network.
+export const dynamic = "force-dynamic";
 
 export default function Image(ctx: { params: Promise<{ id: string }> }) {
   return sourceOgImage(ctx);

@@ -7,7 +7,9 @@ import orgOgImage from "../opengraph-image";
 export const alt = "Organization on releases.sh";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
-export const revalidate = 86400;
+// Off the ISR path (#2066); the shared org generator this wraps already sets
+// Cache-Control for the Vercel Edge Network.
+export const dynamic = "force-dynamic";
 
 export default function Image(ctx: { params: Promise<{ orgSlug: string }> }) {
   return orgOgImage(ctx);

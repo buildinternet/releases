@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { parseReleaseParam } from "@buildinternet/releases-core/release-slug";
 import {
+  OG_CDN_CACHE_HEADERS,
   OG_CONTENT_TYPE,
   OG_SIZE,
   formatDate,
@@ -14,7 +15,10 @@ import {
 export const alt = "Release on releases.sh";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
-export const revalidate = 86400;
+// Off the ISR path (#2066): unbounded `[id]` cardinality means every render
+// is a write and almost never a read. Cached by Vercel's Edge Network via
+// OG_CDN_CACHE_HEADERS instead.
+export const dynamic = "force-dynamic";
 
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id: rawParam } = await params;
@@ -37,16 +41,19 @@ export default async function Image({ params }: { params: Promise<{ id: string }
       : stripMarkdown(release.summary ?? release.content) || undefined;
     const published = formatDate(release.publishedAt);
 
-    return renderOgImage({
-      eyebrow: "Release",
-      title: heading,
-      subtitle,
-      description,
-      metrics: published ? [{ label: "Published", value: published }] : [],
-      avatarUrl,
-      heroImage,
-    });
+    return renderOgImage(
+      {
+        eyebrow: "Release",
+        title: heading,
+        subtitle,
+        description,
+        metrics: published ? [{ label: "Published", value: published }] : [],
+        avatarUrl,
+        heroImage,
+      },
+      { headers: OG_CDN_CACHE_HEADERS },
+    );
   } catch {
-    return renderOgFallback();
+    return renderOgFallback({ headers: OG_CDN_CACHE_HEADERS });
   }
 }

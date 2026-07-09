@@ -6,6 +6,28 @@ export { formatCount, formatDate, stripMarkdown } from "./og-helpers";
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 export const OG_CONTENT_TYPE = "image/png" as const;
 
+/**
+ * Cache-Control for `opengraph-image` routes taken off Next's ISR / Full
+ * Route Cache path (#2066 — the unbounded-cardinality routes with a dynamic
+ * segment). An OG image is fetched once by a crawler/unfurler and almost
+ * never read again, so ISR was paying a write per render for a read that
+ * essentially never lands; these routes are `dynamic = "force-dynamic"`
+ * instead and rely on this header to let Vercel's Edge Network cache the
+ * response.
+ *
+ * `s-maxage` matches the former `revalidate = 86400` window so a crawler
+ * hitting a warm PoP sees the same effective freshness as before.
+ * `max-age=0` keeps browsers/clients revalidating on every request (an OG
+ * image is embedded by reference, not re-fetched by end users, so there's no
+ * benefit to a long browser cache and it avoids a stale image surviving a
+ * title/media edit past the edge's own window). `stale-while-revalidate`
+ * lets the edge serve the last-known image while re-rendering in the
+ * background instead of blocking the requester on a cold render.
+ */
+export const OG_CDN_CACHE_HEADERS: Record<string, string> = {
+  "Cache-Control": "public, max-age=0, s-maxage=86400, stale-while-revalidate=86400",
+};
+
 export type OgMetric = { label: string; value: string };
 
 export type OgTemplateProps = {
@@ -16,6 +38,11 @@ export type OgTemplateProps = {
   metrics?: OgMetric[];
   avatarUrl?: string | null;
   heroImage?: string | null;
+};
+
+export type OgRenderOptions = {
+  /** Extra headers merged onto the underlying `ImageResponse`'s Response headers. */
+  headers?: Record<string, string>;
 };
 
 type MediaLike = {
@@ -228,7 +255,7 @@ function Headline({
   );
 }
 
-function renderOgImageText(props: OgTemplateProps): ImageResponse {
+function renderOgImageText(props: OgTemplateProps, options?: OgRenderOptions): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
 
   return new ImageResponse(
@@ -277,11 +304,11 @@ function renderOgImageText(props: OgTemplateProps): ImageResponse {
         </div>
       )}
     </div>,
-    { ...OG_SIZE },
+    { ...OG_SIZE, headers: options?.headers },
   );
 }
 
-function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
+function renderOgImageBleed(props: OgTemplateProps, options?: OgRenderOptions): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
 
   return new ImageResponse(
@@ -354,7 +381,7 @@ function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
         )}
       </div>
     </div>,
-    { ...OG_SIZE },
+    { ...OG_SIZE, headers: options?.headers },
   );
 }
 
@@ -363,7 +390,10 @@ function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
  * kept as a ready-to-use template for future variants (e.g., richer release
  * cards where the hero is self-contained and shouldn't bleed behind text).
  */
-export function renderOgImageSplit(props: OgTemplateProps): ImageResponse {
+export function renderOgImageSplit(
+  props: OgTemplateProps,
+  options?: OgRenderOptions,
+): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
   const hero = props.heroImage;
 
@@ -417,13 +447,13 @@ export function renderOgImageSplit(props: OgTemplateProps): ImageResponse {
         </div>
       ) : null}
     </div>,
-    { ...OG_SIZE },
+    { ...OG_SIZE, headers: options?.headers },
   );
 }
 
-export function renderOgImage(props: OgTemplateProps): ImageResponse {
-  if (props.heroImage) return renderOgImageBleed(props);
-  return renderOgImageText(props);
+export function renderOgImage(props: OgTemplateProps, options?: OgRenderOptions): ImageResponse {
+  if (props.heroImage) return renderOgImageBleed(props, options);
+  return renderOgImageText(props, options);
 }
 
 const HERO_FETCH_TIMEOUT_MS = 4_000;
@@ -505,9 +535,12 @@ export async function resolveAvatarUrl(org: OrgAvatarShape): Promise<string | nu
   return res.url || url;
 }
 
-export function renderOgFallback(): ImageResponse {
-  return renderOgImage({
-    title: "releases.sh",
-    subtitle: "The latest product releases, indexed for agents",
-  });
+export function renderOgFallback(options?: OgRenderOptions): ImageResponse {
+  return renderOgImage(
+    {
+      title: "releases.sh",
+      subtitle: "The latest product releases, indexed for agents",
+    },
+    options,
+  );
 }

@@ -1,6 +1,7 @@
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { api } from "@/lib/api";
 import {
+  OG_CDN_CACHE_HEADERS,
   OG_CONTENT_TYPE,
   OG_SIZE,
   formatCount,
@@ -13,7 +14,12 @@ import {
 export const alt = "Releases on releases.sh";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
-export const revalidate = 86400;
+// Off the ISR path (#2066): unbounded `[orgSlug]/[slug]` cardinality means
+// every render is a write and almost never a read. Cached by Vercel's Edge
+// Network via OG_CDN_CACHE_HEADERS instead. The `/changelog` and
+// `/highlights` sibling views reuse this generator, so their own
+// force-dynamic config rides along with it.
+export const dynamic = "force-dynamic";
 
 export default async function Image({
   params,
@@ -29,19 +35,22 @@ export default async function Image({
       const orgDetail = await api.orgDetail(orgSlug).catch(() => null);
       const avatarUrl = await resolveDisplayAvatarUrl(product.avatarUrl, orgDetail);
 
-      return renderOgImage({
-        eyebrow: "Product",
-        title: product.name,
-        subtitle: orgDetail?.name ?? orgSlug,
-        description: product.description ?? undefined,
-        metrics: [
-          { label: "Sources", value: formatCount(product.sources.length) },
-          ...(product.category
-            ? [{ label: "Category", value: categoryDisplayName(product.category) }]
-            : []),
-        ],
-        avatarUrl,
-      });
+      return renderOgImage(
+        {
+          eyebrow: "Product",
+          title: product.name,
+          subtitle: orgDetail?.name ?? orgSlug,
+          description: product.description ?? undefined,
+          metrics: [
+            { label: "Sources", value: formatCount(product.sources.length) },
+            ...(product.category
+              ? [{ label: "Category", value: categoryDisplayName(product.category) }]
+              : []),
+          ],
+          avatarUrl,
+        },
+        { headers: OG_CDN_CACHE_HEADERS },
+      );
     }
 
     const source = resolved.source;
@@ -57,14 +66,17 @@ export default async function Image({
       metrics.push({ label: "Latest", value: source.latestVersion });
     }
 
-    return renderOgImage({
-      eyebrow: "Source",
-      title: source.name,
-      subtitle: orgName,
-      metrics,
-      avatarUrl,
-    });
+    return renderOgImage(
+      {
+        eyebrow: "Source",
+        title: source.name,
+        subtitle: orgName,
+        metrics,
+        avatarUrl,
+      },
+      { headers: OG_CDN_CACHE_HEADERS },
+    );
   } catch {
-    return renderOgFallback();
+    return renderOgFallback({ headers: OG_CDN_CACHE_HEADERS });
   }
 }
