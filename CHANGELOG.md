@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 8, 2026
+
+**Added**
+- `GET /v1/orgs/:slug/manifest` — export any tracked org as a `releases.json` v2 domain manifest; reconstructs declared products, source locators, and canonical flags from live registry data; intended as an editable baseline to host at `/.well-known/releases.json`.
+- `creating-releases-json` Claude Code skill — an agent-guided flow for writing a `releases.json` v2 manifest from your domain or repo; install via `npx skills add` from the monorepo; the `/submit` page now shows a click-to-copy install command alongside the listing check.
+- "Report an issue" button on org, product, source, and release pages — opens a contextual popover to send a short note to operators without leaving the page.
+
+**Changed**
+- The `/submit` listing check now previews richer details for valid manifests — org identity (name, slug), products with per-product source counts, and a table of detected release locations with kind chips and tier badges.
+
+**Fixed**
+- MCP `get_organization` now measures overview age from the last-edit timestamp instead of the original generation date — recently amended overviews no longer appear falsely stale.
+
 ## July 7, 2026
 
 **Added**
