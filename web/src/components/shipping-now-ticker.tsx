@@ -153,7 +153,7 @@ function Card({ slide }: { slide: Slide }) {
             {relative}
           </span>
         )}
-        {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="sm" />}
+        {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
       </div>
       <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-3 leading-5 min-h-[2.5rem]">
         {pickLabel(release)}

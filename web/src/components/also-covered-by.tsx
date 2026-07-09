@@ -76,7 +76,7 @@ function CoverageItem({ item, asLink }: { item: ReleaseCoverageSibling; asLink: 
   const inner = (
     <>
       {item.thumbnail && (
-        <ReleaseThumb src={item.thumbnail.url} alt={item.thumbnail.alt ?? ""} size="sm" />
+        <ReleaseThumb src={item.thumbnail.url} alt={item.thumbnail.alt ?? ""} size="md" />
       )}
       <div className="min-w-0 flex-1 truncate">
         <span className="text-[14px] text-stone-900 dark:text-stone-100">{heading}</span>
