@@ -25,7 +25,7 @@ type Collection {
   dailySummaries: [CollectionDailySummary!]!
 
   """
-  Whether the nightly collection-summaries cron is enabled for this collection. Defaults false when the parent object was loaded as a list preview without the column.
+  Whether the nightly collection-summaries cron is enabled. Defaults false when the parent was loaded as a list preview without the column.
   """
   dailySummaryEnabled: Boolean!
   description: String
@@ -81,7 +81,7 @@ type CollectionMemberProduct {
 }
 
 """
-Parent-org context on a product member, so the chip can render the org's avatar. Subset of CollectionMemberOrg — no `description`, matching REST's ProductParentOrg.
+Parent-org context on a product member (avatar chip). Subset of CollectionMemberOrg — no `description`, matching REST ProductParentOrg.
 """
 type CollectionMemberProductOrg {
   avatarUrl: String
@@ -130,9 +130,7 @@ type CollectionReleaseOrg {
   slug: String!
 }
 
-"""
-Product on a cross-member collection release row, when the source is product-bound.
-"""
+"""Product on a collection-feed release when the source is product-bound."""
 type CollectionReleaseProduct {
   name: String!
   slug: String!
@@ -189,7 +187,7 @@ type Org {
   category: String
 
   """
-  Curated collections that pin this org or any of its products, ordered by name. Mirrors REST `GET /v1/orgs/:slug/collections` for the org-page 'Featured in' sidebar. Preview members omitted (empty) — sidebar only needs identity fields.
+  Curated collections that pin this org or any of its products, ordered by name. Mirrors REST `GET /v1/orgs/:slug/collections` for the org-page 'Featured in' sidebar. Preview members omitted (empty) — sidebar needs identity only.
   """
   collections: [Collection!]!
   createdAt: DateTime!
@@ -282,7 +280,7 @@ type Product {
   category: String
 
   """
-  Curated collections that pin this product, ordered by name. Mirrors REST `GET /v1/orgs/:slug/products/:productSlug/collections` for the product-page 'Featured in' sidebar. Preview members are omitted (empty) — the sidebar only needs identity fields.
+  Curated collections that pin this product, ordered by name. Mirrors REST `GET /v1/orgs/:slug/products/:productSlug/collections` for the product-page 'Featured in' sidebar. Preview members omitted (empty) — sidebar needs identity only.
   """
   collections: [Collection!]!
   createdAt: DateTime!
