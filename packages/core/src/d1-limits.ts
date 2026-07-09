@@ -1,11 +1,15 @@
 /**
- * D1 (and SQLite-backend) bound-parameter capability constants.
+ * Relational backend bound-parameter capability constants (D1 / SQLite today).
  *
  * D1 rejects prepared statements with more than 100 bound parameters. These
  * two values are the backend capability every single-column `IN (...)` chunk
  * should read — hoisted here so both `workers/api` and `packages/core-internal`
- * share one source of truth. Row-shape-specific INSERT chunk sizes (releases
- * batch, citations, tags, …) stay in `workers/api/src/lib/d1-limits.ts`.
+ * share one source of truth. A higher-limit backend (e.g. Postgres) bumps these
+ * in one place. Row-shape-specific INSERT chunk sizes (releases batch,
+ * citations, tags, …) stay in `workers/api/src/lib/d1-limits.ts`.
+ *
+ * Broader capability matrix (FTS, batch, vectors, IDs):
+ * docs/architecture/storage-portability.md → Backend capability map.
  */
 
 /** Hard ceiling on bound parameters per prepared statement (D1 / SQLite). */

@@ -1,3 +1,14 @@
+/**
+ * Typed entity IDs — one string is both primary key and public handle.
+ *
+ * Registry entities use a prefix + nanoid (`rel_…`, `src_…`, `org_…`, …) as the
+ * sole identity across D1, the REST/MCP/CLI wire, URLs, and webhooks. There is
+ * no separate internal UUID/`public_id` pair; dual-ID is deliberately deferred
+ * (see docs/architecture/storage-portability.md → Entity IDs).
+ *
+ * Generate IDs in application code (these helpers), not with DB-side defaults
+ * that would diverge across SQL dialects.
+ */
 import { nanoid } from "nanoid";
 
 export const newSourceId = () => `src_${nanoid()}`;
