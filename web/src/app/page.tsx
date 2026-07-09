@@ -69,16 +69,16 @@ const DEMO_TABS: TerminalTab[] = [
     label: "What should we build next?",
     blocks: [
       {
-        command: 'releases search "mcp" --since 90d --limit 4',
+        command: 'releases search "mcp" --kind tool --since 90d --limit 4',
         output: `Linear             Enterprise MCP access, shareable filtered views  2d
 Devin / Cognition  MCP read-only mode for compliance-bound teams    2d
 Sentry             MCP server monitoring goes GA                    3w
 Figma              Design context over MCP for coding agents        5w
 
-4 of 23 results — 23 products shipped MCP features in the last 90 days.
-Trend lines from your space, read as roadmap input — not a news digest.`,
+4 of 23 results — 23 tools shipped MCP features in the last 90 days.`,
         json: `{
   "query": "mcp",
+  "kind": "tool",
   "since": "90d",
   "total": 23,
   "releases": [
@@ -124,7 +124,7 @@ Workspace / Google       Full Gemini presentations; Drive AI on mobile          
 Linear                   Initiative properties and enterprise MCP access        2d
 Devin / Cognition        Slack thread sync and PR ratio analytics               2d
 
-Follow the vendors you depend on and \`releases feed\` becomes your stack's changelog.`,
+4 releases across 4 orgs in the last 7 days.`,
         json: `{
   "since": "7d",
   "releases": [
@@ -236,8 +236,7 @@ rel_sWKjqqfAsQYbLkeAKgDno  @vercel/express@0.1.94  2026-05-28`,
 Raycast  Linear extension adds a triage view       4w
 PostHog  Send session replays to Linear issues     2m
 
-3 of 11 results — 11 products shipped Linear integrations in the last 6 months.
-Your integration surface, mapped from vendor changelogs — not your support queue.`,
+3 of 11 results — 11 products shipped Linear integrations in the last 6 months.`,
         json: `{
   "query": "linear integration",
   "since": "6m",
