@@ -5,7 +5,7 @@ The CLI is published from the public OSS repo at [buildinternet/releases-cli](ht
 Shared npm packages are split by where they're published from:
 
 - **`@buildinternet/releases-core`** — published from this monorepo (`packages/core/`). DB schema + pure runtime-neutral helpers. Consumed here via `workspace:*`; the OSS CLI pulls the published version from npm.
-- **`@buildinternet/releases-lib`** and **`@buildinternet/releases-skills`** — published from the OSS CLI repo, consumed here as regular npm deps (pinned versions in `package.json`).
+- **`@buildinternet/releases-lib`** — published from the OSS CLI repo, consumed here as a regular npm dep (pinned version in `package.json`). (`@buildinternet/releases-skills` is retired — skills ship from each repo's tree via `npx skills add`, not npm; ownership split in [agents.md](agents.md).)
 - **`@releases/core-internal`** — private workspace (`packages/core-internal/`) for DB-coupled / worker-only helpers the thin OSS CLI doesn't need: `release-upsert`, `hash`, `webhook-sign`.
 
 **If a schema change needs to ship to the CLI:** edit `packages/core/src/schema.ts` here, publish a new `@buildinternet/releases-core` version, then bump the pin in the OSS CLI repo.

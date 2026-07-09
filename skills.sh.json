@@ -6,6 +6,29 @@
       "title": "Listing",
       "description": "Owner-facing skills for declaring products and release-note locations on releases.sh.",
       "skills": ["creating-releases-json"]
+    },
+    {
+      "title": "Onboarding & parsing (managed agents)",
+      "description": "Deployed to the production discovery/worker managed agents; also used by local operators when onboarding sources.",
+      "skills": [
+        "finding-changelogs",
+        "managing-sources",
+        "parsing-changelogs",
+        "classify-media-relevance"
+      ]
+    },
+    {
+      "title": "Registry maintenance (operator)",
+      "description": "Local Claude Code operator skills for maintaining the registry — ingest, backfills, overviews, content generation, playbooks, coverage curation. Most need an admin API key.",
+      "skills": [
+        "local-ingest",
+        "backfilling-sources",
+        "maintaining-orgs",
+        "regenerating-overviews",
+        "generating-release-content",
+        "seeding-playbooks",
+        "grouping-releases"
+      ]
     }
   ]
 }

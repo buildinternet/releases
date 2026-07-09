@@ -29,23 +29,31 @@ await buildSkillsIndex();
 buildMcpServerCard();
 
 async function buildSkillsIndex() {
-  const REPO = "buildinternet/releases-cli";
+  // One entry per skill, fetched from its canonical repo (#1090): user-facing
+  // skills live in the CLI repo's skills/ tree; operator + owner skills live
+  // in this monorepo (.claude/skills/ and skills/ respectively).
+  const CLI_REPO = "buildinternet/releases-cli";
+  const MONO_REPO = "buildinternet/releases";
   const REF = "main";
-  const SKILLS = [
-    "analyzing-releases",
-    "classify-media-relevance",
-    "finding-changelogs",
-    "managing-sources",
-    "parsing-changelogs",
-    "releases-cli",
-    "releases-mcp",
-    "seeding-playbooks",
+  const SKILLS: { name: string; repo: string; dir: string }[] = [
+    // Reader (CLI repo)
+    { name: "analyzing-releases", repo: CLI_REPO, dir: "skills" },
+    { name: "releases-cli", repo: CLI_REPO, dir: "skills" },
+    { name: "releases-mcp", repo: CLI_REPO, dir: "skills" },
+    // Owner listing (monorepo)
+    { name: "creating-releases-json", repo: MONO_REPO, dir: "skills" },
+    // Operator (monorepo)
+    { name: "classify-media-relevance", repo: MONO_REPO, dir: ".claude/skills" },
+    { name: "finding-changelogs", repo: MONO_REPO, dir: ".claude/skills" },
+    { name: "managing-sources", repo: MONO_REPO, dir: ".claude/skills" },
+    { name: "parsing-changelogs", repo: MONO_REPO, dir: ".claude/skills" },
+    { name: "seeding-playbooks", repo: MONO_REPO, dir: ".claude/skills" },
   ];
 
   try {
     const entries = await Promise.all(
-      SKILLS.map(async (name) => {
-        const url = `https://raw.githubusercontent.com/${REPO}/${REF}/skills/${name}/SKILL.md`;
+      SKILLS.map(async ({ name, repo, dir }) => {
+        const url = `https://raw.githubusercontent.com/${repo}/${REF}/${dir}/${name}/SKILL.md`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
         const body = await res.text();

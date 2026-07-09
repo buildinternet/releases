@@ -386,8 +386,5 @@ skills:
     skill_id: skill_01DRRRcUsqActnc7ZY8u3HhE
     version: latest
   - type: custom
-    skill_id: skill_014ZJKDrrxBrcQvy2J6XbZqW
-    version: latest
-  - type: custom
     skill_id: skill_01HygPTYkj76j7RHibSwvA47
     version: latest

@@ -88,7 +88,6 @@ const SKILL_DIRS = [
   "finding-changelogs",
   "managing-sources",
   "parsing-changelogs",
-  "analyzing-releases",
   "classify-media-relevance",
 ];
 

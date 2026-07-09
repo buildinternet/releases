@@ -11,7 +11,6 @@
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "@buildinternet/releases-lib": "^0.68.0",
-        "@buildinternet/releases-skills": "^0.68.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@openrouter/ai-sdk-provider": "^2.10.0",
         "@releases/adapters": "workspace:*",
@@ -86,7 +85,7 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.41.0",
+      "version": "0.43.0",
       "dependencies": {
         "@buildinternet/releases-core": "^0.25.0",
         "zod": "^4.4.3",
@@ -363,8 +362,6 @@
     "@buildinternet/releases-core": ["@buildinternet/releases-core@workspace:packages/core"],
 
     "@buildinternet/releases-lib": ["@buildinternet/releases-lib@0.68.0", "", {}, "sha512-aD/NL9nU8QHDn8H2q3zPF/F0wM41bB+zugxEd8Ex13Xok27Aca/ezn9rPapvMs21CKPJlZAC3vsuNV+lJcf6Ag=="],
-
-    "@buildinternet/releases-skills": ["@buildinternet/releases-skills@0.68.0", "", {}, "sha512-uz75p0hAQHxKKDqBsy3G/9PGv3sLfaFot6QRtLPSiMbxq+bK6e8ZM+2+bvC8S4mXBPrw0+xuUJes1qx58IRK+A=="],
 
     "@bytecodealliance/preview2-shim": ["@bytecodealliance/preview2-shim@0.17.6", "", {}, "sha512-n3cM88gTen5980UOBAD6xDcNNL3ocTK8keab21bpx1ONdA+ARj7uD1qoFxOWCyKlkpSi195FH+GeAut7Oc6zZw=="],
 

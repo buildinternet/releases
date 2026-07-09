@@ -8,9 +8,9 @@ Coverage is managed through the API worker. Routes in `workers/api/src/routes/re
 
 - `GET /v1/releases/:id/coverage` — fetch the canonical release and all rows that roll up into it.
 - `POST /v1/releases/:id/coverage` — link coverage items to a canonical release (admin-auth).
-- `DELETE /v1/releases/:id/coverage/:coverageId` — unlink (admin-auth).
+- `DELETE /v1/releases/:id/coverage` — unlink `:id` from its cluster (admin-auth; idempotent, returns `{ unlinked: false }` when it wasn't in one).
 
-The `grouping-releases` skill is bundled with the managed discovery/worker agents; operator-driven cluster runs happen by dispatching an agent session, not via a CLI verb. Bulk re-clustering over a historical window is not currently exposed as a first-class admin endpoint — if you need it, spin up a discovery session with an explicit prompt.
+Ingest-time grouping is deterministic code, not an agent: the changesets clusterer (`workers/api/src/lib/cluster-cascades.ts`, writing `decided_by = "system:changesets"`) links version-cascade coverage as releases land, and the retier only ever touches its own `system:changesets` rows — human/agent decisions are never clobbered. The `grouping-releases` skill (`.claude/skills/grouping-releases/`) is a **local Claude Code operator skill**, not part of the managed-agent bundle: it carries the judgment rubric for manual/batch curation (which co-published releases cover one launch, which item leads) and persists decisions through the coverage routes above with a `human:`/`agent:`-prefixed `decidedBy`. Bulk re-clustering over a historical window is not exposed as a first-class admin endpoint — run the skill over an explicit org + date window instead.
 
 ## Read-path behavior
 

@@ -2,9 +2,12 @@
 name: grouping-releases
 description: >
   Group releases that cover the same underlying launch so readers see one
-  story instead of three. Use when parsing a new release (inline) or when
-  reconciling an organization's recent releases (batch). Decide which item
-  is the best entry point for the average reader and mark it canonical.
+  story instead of three. Use when manually curating an org's coverage —
+  reconciling a window of recent releases, fixing a bad automatic grouping,
+  or linking coverage the deterministic clusterer can't see. Decide which
+  item is the best entry point for the average reader and mark it canonical.
+  Local Claude Code operator skill; ingest-time grouping is deterministic
+  code, not this skill.
 ---
 
 # Grouping Releases
@@ -17,10 +20,20 @@ That overlap is signal, not a bug. Readers want the clearest explanation first, 
 
 ## When this skill runs
 
-- **Inline with parsing.** When the parse flow creates a new release, it hands you a short candidate list (similar recent releases from the same org across all its sources) and asks whether the new item covers any of them.
-- **Batch reconciliation.** When an org is being re-checked, you get a window of its recent releases and decide the full grouping.
+**Not at ingest.** Ingest-time grouping is deterministic code — the changesets clusterer (`clusterAndPersistCascades`, `decided_by = "system:changesets"`) links version-cascade coverage automatically as releases land. This skill is the **operator lane** for the judgment calls that code can't make:
 
-Either way, you're given the candidate set. Do not go looking for more.
+- **Batch reconciliation.** Reviewing a window of an org's recent releases (e.g. `releases tail --org <org> --json`) and deciding the full grouping — typically after a big launch scattered coverage across a marketing post, a changelog entry, and an app note.
+- **Fixing a bad grouping.** Unlinking a wrong cluster or re-pointing the canonical.
+
+Scope the candidate set explicitly before judging (an org + a date window). Do not go looking beyond it.
+
+### Persisting decisions
+
+- **Link:** `POST /v1/releases/:canonicalId/coverage` with `{ "coverageIds": ["rel_…"], "reason": "…", "decidedBy": "…" }`. `decidedBy` MUST be prefixed `human:` or `agent:` (e.g. `agent:claude-code`) — the audit trail records who linked the rows. A release cannot be coverage of itself.
+- **Unlink:** `DELETE /v1/releases/:id/coverage` (idempotent — returns `{ unlinked: false }` if the release wasn't in a cluster).
+- **Read a cluster:** `GET /v1/releases/:id/coverage`.
+
+Manual links are durable: the automatic retier only touches `decided_by = "system:changesets"` rows, so it never clobbers a human/agent decision.
 
 ## The rubric
 
@@ -79,7 +92,7 @@ Same product family, a week apart. The later post is a _new_ launch under the La
 
 ## What to output
 
-For each grouping you make, return the canonical release ID and a (possibly empty) list of coverage release IDs. Include a one-line reason per cluster — the reconciliation pass uses that to decide whether to revisit your call. If you aren't sure between two plausible canonicals, pick one and say so; a later pass will confirm.
+For each grouping you make, produce the canonical release ID and a (possibly empty) list of coverage release IDs, with a one-line reason per cluster — the reason lands in the `reason` audit column when you persist via the coverage route. If you aren't sure between two plausible canonicals, pick one and say so in the reason. (When fanning this out to sub-agents, have each return its clusters and let the parent do the POSTs — the parent-saves pattern from `seeding-playbooks`.)
 
 Singletons are fine. It is correct — and common — for a release to be its own cluster of one.
 
