@@ -73,7 +73,7 @@
       "oxfmt --write",
       "oxfmt --check"
     ],
-    "*.{json,jsonc,yml,yaml,css,mdx,html}": [
+    "*.{json,jsonc,yml,yaml,css,md,mdx,html}": [
       "oxfmt --write",
       "oxfmt --check"
     ]
