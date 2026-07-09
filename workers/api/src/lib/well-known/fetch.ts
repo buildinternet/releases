@@ -1,3 +1,4 @@
+import { WEB_BOT_AUTH_USER_AGENT } from "@buildinternet/releases-core/web-bot-auth";
 import { isPrivateOrLocalHost } from "../avatar-ingest.js";
 
 const TIMEOUT_MS = 5_000;
@@ -45,7 +46,10 @@ export async function fetchReleasesJson(
       res = await fetchImpl(parsed.toString(), {
         redirect: "manual",
         signal: ctrl.signal,
-        headers: { accept: "application/json", "user-agent": "releases.sh well-known sync" },
+        // Registered bot identity (Cloudflare Bot Submission Form + /bot docs).
+        // Callers that need Web Bot Auth signatures should pass makeBotFetch(env)
+        // as fetchImpl — signing is layered on top; it does not set User-Agent.
+        headers: { accept: "application/json", "user-agent": WEB_BOT_AUTH_USER_AGENT },
       });
     } catch {
       return { ok: false, reason: "network_error" };

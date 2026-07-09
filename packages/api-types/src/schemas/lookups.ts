@@ -90,10 +90,11 @@ export const LookupProductBySlugResponseSchema = z.object({
 });
 
 /**
- * Response from `GET /v1/lookups/by-domain?domain=…`. Pure resolution: an
- * unknown domain returns 404, never probes. Both an org and product list can
- * be present when a product alias points at the same domain its parent org
- * owns.
+ * Response from `GET /v1/lookups/by-domain?domain=…`. Resolves against the
+ * registry; on a complete miss may just-in-time materialize a stub from
+ * `/.well-known/releases.json` when listing is enabled (#2030). Both an org
+ * and product list can be present when a product alias points at the same
+ * domain its parent org owns.
  */
 export const DomainLookupOrgSchema = z.object({
   id: z.string(),

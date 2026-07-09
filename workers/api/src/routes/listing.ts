@@ -19,6 +19,7 @@ import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { validateListing, normalizeListingDomain } from "../lib/listing/validate.js";
 import { createStubFromManifest, resolveDomainOrg } from "../lib/well-known/stub.js";
+import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 
@@ -77,8 +78,10 @@ listingRoutes.post(
   async (c) => {
     const { domain } = c.req.valid("json");
     const db = createDb(c.env.DB);
+    const botFetch = await makeBotFetch(c.env);
     const result = await validateListing(db, domain, {
       webBaseUrl: c.env.WEB_BASE_URL ?? "https://releases.sh",
+      fetchImpl: botFetch,
     });
     logEvent("info", {
       component: "listing",
@@ -173,7 +176,8 @@ listingRoutes.post(
       );
     }
 
-    const result = await createStubFromManifest(db, domain, {});
+    const botFetch = await makeBotFetch(c.env);
+    const result = await createStubFromManifest(db, domain, { fetchImpl: botFetch });
     if (!result.created) {
       // Every skip here is a manifest/fetch problem (org_exists was handled
       // above; a create race lands org_exists too — treat it as conflict).
