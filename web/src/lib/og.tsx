@@ -6,6 +6,30 @@ export { formatCount, formatDate, stripMarkdown } from "./og-helpers";
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 export const OG_CONTENT_TYPE = "image/png" as const;
 
+/**
+ * Per-response cache headers for the live `opengraph-image` routes (#2066).
+ *
+ * The release route is now `force-dynamic` (no `export const revalidate`) so
+ * the handler runs per request and its own `Cache-Control` ships verbatim —
+ * Next only overrides the header when the route is statically generated (ISR),
+ * which `revalidate` triggers and `force-dynamic` disables. That lets a
+ * *successful* render stay cached at the edge for 24h while a *fallback*
+ * render (a transient upstream failure produced the generic card) is never
+ * cached — so one bad minute can't pin the generic image onto an entity for a
+ * day. `ImageResponse` merges a `headers` option over its own default.
+ */
+export const OG_CACHE_SUCCESS = {
+  "Cache-Control": "public, max-age=0, s-maxage=86400, stale-while-revalidate=86400",
+} as const;
+export const OG_CACHE_FALLBACK = { "Cache-Control": "no-store" } as const;
+
+/** Optional passthrough to the underlying `ImageResponse` (headers only). */
+export type OgResponseInit = { headers?: Record<string, string> };
+
+function imageResponseInit(init?: OgResponseInit): ConstructorParameters<typeof ImageResponse>[1] {
+  return init?.headers ? { ...OG_SIZE, headers: init.headers } : { ...OG_SIZE };
+}
+
 export type OgMetric = { label: string; value: string };
 
 export type OgTemplateProps = {
@@ -228,7 +252,7 @@ function Headline({
   );
 }
 
-function renderOgImageText(props: OgTemplateProps): ImageResponse {
+function renderOgImageText(props: OgTemplateProps, init?: OgResponseInit): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
 
   return new ImageResponse(
@@ -277,11 +301,11 @@ function renderOgImageText(props: OgTemplateProps): ImageResponse {
         </div>
       )}
     </div>,
-    { ...OG_SIZE },
+    imageResponseInit(init),
   );
 }
 
-function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
+function renderOgImageBleed(props: OgTemplateProps, init?: OgResponseInit): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
 
   return new ImageResponse(
@@ -354,7 +378,7 @@ function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
         )}
       </div>
     </div>,
-    { ...OG_SIZE },
+    imageResponseInit(init),
   );
 }
 
@@ -363,7 +387,7 @@ function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
  * kept as a ready-to-use template for future variants (e.g., richer release
  * cards where the hero is self-contained and shouldn't bleed behind text).
  */
-export function renderOgImageSplit(props: OgTemplateProps): ImageResponse {
+export function renderOgImageSplit(props: OgTemplateProps, init?: OgResponseInit): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
   const hero = props.heroImage;
 
@@ -417,13 +441,13 @@ export function renderOgImageSplit(props: OgTemplateProps): ImageResponse {
         </div>
       ) : null}
     </div>,
-    { ...OG_SIZE },
+    imageResponseInit(init),
   );
 }
 
-export function renderOgImage(props: OgTemplateProps): ImageResponse {
-  if (props.heroImage) return renderOgImageBleed(props);
-  return renderOgImageText(props);
+export function renderOgImage(props: OgTemplateProps, init?: OgResponseInit): ImageResponse {
+  if (props.heroImage) return renderOgImageBleed(props, init);
+  return renderOgImageText(props, init);
 }
 
 const HERO_FETCH_TIMEOUT_MS = 4_000;
@@ -505,9 +529,12 @@ export async function resolveAvatarUrl(org: OrgAvatarShape): Promise<string | nu
   return res.url || url;
 }
 
-export function renderOgFallback(): ImageResponse {
-  return renderOgImage({
-    title: "releases.sh",
-    subtitle: "The latest product releases, indexed for agents",
-  });
+export function renderOgFallback(init?: OgResponseInit): ImageResponse {
+  return renderOgImage(
+    {
+      title: "releases.sh",
+      subtitle: "The latest product releases, indexed for agents",
+    },
+    init,
+  );
 }
