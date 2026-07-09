@@ -644,6 +644,11 @@ export const releases = sqliteTable(
     prerelease: integer("prerelease", { mode: "boolean" }).notNull().default(false),
     suppressed: integer("suppressed", { mode: "boolean" }).default(false),
     suppressedReason: text("suppressed_reason"),
+    // Denormalized COALESCE(product.category, org.category) for category-feed
+    // index seeks (#886). Stamped at insert; recomputed when product/org
+    // category or source.product_id changes. Nullable when neither has a
+    // category. DESC composite index is hand-authored in the migration.
+    effectiveCategory: text("effective_category"),
     fetchedAt: text("fetched_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
@@ -665,6 +670,12 @@ export const releases = sqliteTable(
     ),
     index("idx_releases_fetched_at").on(table.fetchedAt),
     index("idx_releases_source_version_sort").on(table.sourceId, table.versionSort),
+    // Category feed seeks (#886). Directional DESC form lives in the migration.
+    index("idx_releases_eff_cat_published").on(
+      table.effectiveCategory,
+      table.publishedAt,
+      table.id,
+    ),
   ],
 );
 

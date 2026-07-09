@@ -75,6 +75,7 @@ import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
+import { fetchEffectiveCategoryBySourceIds } from "@releases/core-internal/effective-category";
 import {
   RELEASES_BATCH_CHUNK_SIZE,
   RELEASES_ID_IN_CHUNK_SIZE,
@@ -1455,6 +1456,10 @@ export async function ingestRawReleases(
     mediaJsonByIndex[index] = JSON.stringify(finalMedia);
   }
 
+  // Denormalized category for category-feed index seeks (#886).
+  const effectiveCategory =
+    (await fetchEffectiveCategoryBySourceIds(db, [source.id])).get(source.id) ?? null;
+
   const rows = rawReleases.map((raw, index) => {
     const enrich = enrichMap.get(index);
     const content = enrich?.content ?? raw.content;
@@ -1477,6 +1482,7 @@ export async function ingestRawReleases(
       publishedAt: raw.publishedAt?.toISOString() ?? null,
       prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
       media: mediaJsonByIndex[index]!,
+      effectiveCategory,
       ...(enrich ? { metadata: JSON.stringify({ enrichment: enrich.marker }) } : {}),
       suppressed: verdict?.isMarketing === true,
       suppressedReason: verdict?.isMarketing ? `marketing_classifier:${verdict.reason}` : null,

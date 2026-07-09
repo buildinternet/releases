@@ -25,6 +25,7 @@ import { releases, organizations, type ReleaseType } from "@buildinternet/releas
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../db.js";
 import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
+import { fetchEffectiveCategoryBySourceIds } from "@releases/core-internal/effective-category";
 import { inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
@@ -171,6 +172,10 @@ export async function ingestReleaseBatch(
   // those omit `content` (the publish payload doesn't need it).
   const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
 
+  // Stamp denormalized category for category-feed seeks (#886).
+  const effectiveCategory =
+    (await fetchEffectiveCategoryBySourceIds(db, [src.id])).get(src.id) ?? null;
+
   // Ingest-time R2 media upload (#1177). When the `MEDIA` bucket is bound,
   // drop junk and mirror surviving images to `released-media` before insert
   // so reads resolve a same-origin `r2Url`. Sequential per release (the
@@ -260,6 +265,7 @@ export async function ingestReleaseBatch(
         publishedAt: r.publishedAt ?? inferredPublishedAt ?? null,
         prerelease: r.prerelease ?? isPrereleaseVersion(version),
         media: mediaJsonByIndex[i + j]!,
+        effectiveCategory,
       };
     });
     // RETURNING is built here — not zipped against `chunk` — because

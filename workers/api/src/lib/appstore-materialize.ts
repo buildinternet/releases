@@ -24,6 +24,7 @@ import { toSlug } from "@buildinternet/releases-core/slug";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
+import { fetchEffectiveCategoryBySourceIds } from "@releases/core-internal/effective-category";
 import type { createDb } from "../db.js";
 
 type Db = ReturnType<typeof drizzle>;
@@ -248,6 +249,8 @@ export async function materializeAppStoreSource(
 
   // First release.
   const raw = mapListingToRawReleases(listing, coord);
+  const effectiveCategory =
+    (await fetchEffectiveCategoryBySourceIds(db as never, [sourceId])).get(sourceId) ?? null;
   const rows = raw.map((r) => {
     const size = computeContentSize(r.content);
     return {
@@ -262,6 +265,7 @@ export async function materializeAppStoreSource(
       contentTokens: size.contentTokens,
       publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
       media: JSON.stringify(r.media ?? []),
+      effectiveCategory,
     };
   });
   await db.insert(releases).values(rows).onConflictDoUpdate(RELEASE_URL_UPSERT);

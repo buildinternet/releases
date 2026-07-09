@@ -74,6 +74,7 @@ import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
+import { recomputeReleaseEffectiveCategoryForOrg } from "@releases/core-internal/effective-category";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
@@ -1232,6 +1233,11 @@ orgRoutes.patch(
       .set(updates)
       .where(eq(organizations.id, org.id))
       .returning();
+
+    // Category denorm (#886): restamp releases for all sources under this org.
+    if (body.category !== undefined) {
+      await recomputeReleaseEffectiveCategoryForOrg(db, org.id);
+    }
 
     // Only purge when visibility actually flips — a no-op toggle shouldn't
     // force a homepage-ticker recompute. Hiding/unhiding changes what the

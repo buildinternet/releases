@@ -11,6 +11,7 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
+import { fetchEffectiveCategoryBySourceIds } from "@releases/core-internal/effective-category";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
@@ -326,6 +327,8 @@ export async function runLookup(
     if (rawReleases.length === 0 && probe.hasChangelog) {
       ingestStatus = "deferred";
     } else if (rawReleases.length > 0) {
+      const effectiveCategory =
+        (await fetchEffectiveCategoryBySourceIds(db, [sourceId])).get(sourceId) ?? null;
       const rows = rawReleases.map((r) => {
         const size = computeContentSize(r.content);
         return {
@@ -341,6 +344,7 @@ export async function runLookup(
           // publishedAt is text (ISO string) in the schema; RawRelease carries Date | undefined
           publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
           prerelease: r.prerelease,
+          effectiveCategory,
         };
       });
       for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
