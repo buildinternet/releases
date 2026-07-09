@@ -162,9 +162,11 @@ export async function getLatestReleasesAcross(
 // it from this module.
 export { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 
-// Normalize a free-text `kind` column to the enum; a stray/unknown value maps to
-// null (absent) rather than shipping a schema-invalid string (#1710 pattern).
-const normKind = (raw: string | null): Kind | null => (raw && isValidKind(raw) ? raw : null);
+// Normalize a free-text `kind` column to the enum. A NULL (unset) or stray/unknown
+// value maps to `undefined` — the field is omitted from the wire rather than shipping
+// a null or a schema-invalid string, mirroring how `breaking` drops absent (#1710).
+const normKind = (raw: string | null): Kind | undefined =>
+  raw && isValidKind(raw) ? raw : undefined;
 
 /**
  * Map a raw `LatestReleaseRow` (from D1 or bun:sqlite) to the wire-protocol
