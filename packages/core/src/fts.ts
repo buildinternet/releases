@@ -1,4 +1,6 @@
 /**
+ * FTS5 query sanitizers (backend-neutral string shaping).
+ *
  * FTS5's query parser treats certain ASCII punctuation as syntax (`:`, `(`,
  * `)`, `*`, `^`, `+`, `-`, `"`) and throws on others — most relevantly `/`,
  * which raises `fts5: syntax error near "/"`. Real-world queries hit those
@@ -8,6 +10,21 @@
  *
  * Empty input collapses to `""`, an FTS5 phrase that matches nothing — safer
  * than passing through, which would bubble a syntax error to the caller.
+ *
+ * ## Ownership (do not grow MATCH call sites)
+ *
+ * These helpers are the only shared lexical-query entry. Production
+ * `releases_fts … MATCH` usage is a closed set — extend an existing site,
+ * don't open a new one:
+ *
+ * - `workers/api/src/queries/search.ts`
+ * - `workers/api/src/queries/orgs.ts`
+ * - `workers/api/src/queries/sources.ts`
+ * - `packages/search/src/hybrid-search-worker.ts`
+ * - `workers/mcp/src/tools.ts` (prefer converging onto queries/search)
+ *
+ * Full seam map + future Postgres/`LexicalSearch` notes:
+ * docs/architecture/storage-portability.md → Lexical search ownership.
  */
 export function toFtsMatchQuery(input: string): string {
   const tokens = input
