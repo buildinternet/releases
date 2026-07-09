@@ -117,13 +117,12 @@ bypass these helpers behind the same call sites.
 
 ### Production `MATCH` call sites (closed set)
 
-| File                                                                                               | Role                                                                |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| [`workers/api/src/queries/search.ts`](../../workers/api/src/queries/search.ts)                     | Primary release FTS for `/v1/search`                                |
-| [`workers/api/src/queries/orgs.ts`](../../workers/api/src/queries/orgs.ts)                         | Org-scoped release filter (`MATCH ?` fragment)                      |
-| [`workers/api/src/queries/sources.ts`](../../workers/api/src/queries/sources.ts)                   | Source-scoped release filter (`MATCH ?` fragment)                   |
-| [`packages/search/src/hybrid-search-worker.ts`](../../packages/search/src/hybrid-search-worker.ts) | Hybrid RRF lexical leg (IDs only, then rehydrate)                   |
-| [`workers/mcp/src/tools.ts`](../../workers/mcp/src/tools.ts)                                       | MCP search path (prefer converging onto `queries/search` over time) |
+| File                                                                                               | Role                                                                                    |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [`packages/search/src/releases-fts.ts`](../../packages/search/src/releases-fts.ts)                 | Primary release FTS (`searchReleasesFts`) — `/v1/search` lexical + MCP `search` lexical |
+| [`workers/api/src/queries/orgs.ts`](../../workers/api/src/queries/orgs.ts)                         | Org-scoped release filter (`MATCH ?` fragment)                                          |
+| [`workers/api/src/queries/sources.ts`](../../workers/api/src/queries/sources.ts)                   | Source-scoped release filter (`MATCH ?` fragment)                                       |
+| [`packages/search/src/hybrid-search-worker.ts`](../../packages/search/src/hybrid-search-worker.ts) | Hybrid RRF lexical leg (IDs only, then rehydrate)                                       |
 
 Schema / sync (not query):
 
@@ -131,7 +130,7 @@ Schema / sync (not query):
   `workers/api/migrations/` (baseline).
 
 **Rule:** new lexical behavior goes through an existing site above (extend the
-helper, do not open a sixth MATCH). When a second SQL backend is real, replace
+helper, do not open a fifth MATCH). When a second SQL backend is real, replace
 these sites with one `LexicalSearch` module (FTS5 vs `tsvector` vs empty degrade) —
 that is phase 3, not a D1 rewrite today.
 
@@ -139,6 +138,10 @@ that is phase 3, not a D1 rewrite today.
 lexical-only when the other leg fails or is unbound. A Postgres self-host without
 FTS can lean on Vectorize (if configured) or LIKE/entity match until lexical is
 ported.
+
+MCP no longer owns a separate `releases_fts MATCH` — it calls `searchReleasesFts`
+from `@releases/search/releases-fts` (same filters as the API: `sources_active`,
+hidden/suppressed gates, coverage visibility, kind/since/until/sourceIds).
 
 ## Current construction seam (done)
 
@@ -288,8 +291,9 @@ The forcing function is concrete: a paying self-hoster, an OSS PR, or a D1 ceili
    [Entity IDs](#entity-ids-invariant), [Lexical search](#lexical-search-ownership),
    [Backend capability map](#backend-capability-map)). Code comments in
    `packages/core/src/{id,fts}.ts` point here.
-4. **Converge MCP lexical search onto `queries/search`** — `workers/mcp/src/tools.ts`
-   still has its own `releases_fts MATCH` path. Prefer shared query helpers so the
-   closed MATCH set shrinks before a second backend lands.
+4. ~~**Converge MCP lexical search onto shared helpers**~~ — **done** (`@releases/search/releases-fts`
+   / `searchReleasesFts`; MCP no longer owns a `MATCH`). Closed set:
+   [Lexical search](#lexical-search-ownership).
 5. **Phase 3 only:** introduce a real `LexicalSearch` interface when implementing a
-   non-FTS5 backend (or when deliberately degrading lexical for self-host). Not before.
+   non-FTS5 backend (or when deliberately degrading lexical for self-host). Remaining
+   consolidation: hybrid ID-only leg + org/source feed `MATCH ?` fragments. Not before.

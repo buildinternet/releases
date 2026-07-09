@@ -3,8 +3,9 @@ import { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE } from "../../workers/api/src/lib/
 
 // The product-scoped search path (`?product=` → `sourceIds`) inlines up to
 // IN_ARRAY_CHUNK_SIZE source ids in an `IN (...)` list (see `sourceIdInList` in
-// workers/api/src/queries/search.ts). The heaviest consumer, `searchReleasesFts`,
-// carries these scalar binds alongside that list in a single prepared statement:
+// packages/search/src/releases-fts.ts and workers/api/src/queries/search.ts).
+// The heaviest consumer, `searchReleasesFts`, carries these scalar binds
+// alongside that list in a single prepared statement:
 //
 //   1  releases_fts MATCH <query>
 //   1  s.org_id = <orgId>

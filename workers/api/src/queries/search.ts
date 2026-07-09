@@ -6,60 +6,26 @@ import {
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
-import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
+// Lexical FTS lives in @releases/search so MCP and API share one MATCH site.
+// Re-export the row type + helper for existing route/test import paths.
+export {
+  searchReleasesFts,
+  type RawSearchReleaseRow,
+  type SearchReleasesFtsOpts,
+} from "@releases/search/releases-fts.js";
+import type { RawSearchReleaseRow } from "@releases/search/releases-fts.js";
 import type { D1Db } from "../db.js";
 import type {
-  ReleaseType,
   SearchOrgHit,
   SearchCatalogHit,
   RawSourceHit,
   SearchCollectionHit,
   CollectionMember,
 } from "@buildinternet/releases-api-types";
-
-/**
- * Raw release row returned by the search queries. `content` (when requested)
- * and `media` still need media-URL hydration + JSON parsing — the route does
- * that so SQL helpers stay thin.
- */
-export interface RawSearchReleaseRow {
-  id: string;
-  sourceSlug: string;
-  sourceName: string;
-  sourceType: string;
-  /** Raw source.metadata JSON — parsed into the App Store icon/platform (#1206). */
-  sourceMetadata?: string | null;
-  orgSlug: string | null;
-  orgName: string | null;
-  /** Owning product's slug (for product-aware byline links); null for orphan sources. */
-  productSlug: string | null;
-  version: string | null;
-  title: string;
-  summary: string;
-  /**
-   * Raw markdown with media URLs not yet rewritten through MEDIA_ORIGIN.
-   * Absent unless the caller passed `includeContent: true` — list hits ship
-   * summary + media by default to keep the payload small.
-   */
-  content?: string | null;
-  /** JSON-encoded MediaItem[] or null. */
-  media: string | null;
-  publishedAt: string | null;
-  /** Release type — "feature" (default) or "rollup". */
-  type: ReleaseType;
-  titleGenerated: string | null;
-  titleShort: string | null;
-  /** Breaking-change level (#1696/#1710). `"unknown"` fail-open default; NULL
-   *  only on rows predating the column. Optional because the hybrid (Vectorize)
-   *  hit-builder path constructs rows without it. */
-  breaking?: string | null;
-  /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
-  coverageCount: number;
-}
 
 /**
  * Optional `orgId` narrows the result set to a single organization. Used
@@ -278,54 +244,6 @@ export async function searchSources(
     slug: c.slug,
     urls: [c.url],
   })).map(({ url: _drop, ...hit }) => hit);
-}
-
-export async function searchReleasesFts(
-  db: D1Db,
-  query: string,
-  limit: number,
-  offset: number,
-  opts: { includeCoverage?: boolean } & ScopeOpts = {},
-): Promise<RawSearchReleaseRow[]> {
-  // When sourceIds is an empty array the caller has a product with no sources;
-  // short-circuit to avoid an invalid `IN ()` clause and return no hits.
-  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
-  const sourceIdClause =
-    opts.sourceIds && opts.sourceIds.length > 0
-      ? sql`AND r.source_id IN ${sourceIdInList(opts.sourceIds)}`
-      : sql``;
-  const ftsQuery = toFtsMatchQuery(query);
-  const contentSelect = opts.includeContent ? sql`r.content as content,` : sql``;
-  return db.all<RawSearchReleaseRow>(sql`
-    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
-           s.metadata as sourceMetadata,
-           o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
-           r.version, r.title,
-           COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
-           r.title_generated as titleGenerated,
-           r.title_short as titleShort,
-           r.breaking as breaking,
-           ${contentSelect}
-           r.media as media,
-           r.published_at as publishedAt,
-           r.type as type,
-           ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
-    FROM releases_fts
-    JOIN releases r ON r.rowid = releases_fts.rowid
-    JOIN sources_active s ON s.id = r.source_id
-    LEFT JOIN organizations_active o ON o.id = s.org_id
-    LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE releases_fts MATCH ${ftsQuery}
-      AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
-      ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
-      ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
-      ${sourceIdClause}
-      ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
-      ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
-      ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}
-    ORDER BY rank LIMIT ${limit} OFFSET ${offset}
-  `);
 }
 
 export async function searchReleasesFromMatchedEntities(

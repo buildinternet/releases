@@ -17,11 +17,10 @@
  * `releases_fts … MATCH` usage is a closed set — extend an existing site,
  * don't open a new one:
  *
- * - `workers/api/src/queries/search.ts`
+ * - `packages/search/src/releases-fts.ts` (`searchReleasesFts` — API + MCP lexical)
  * - `workers/api/src/queries/orgs.ts`
  * - `workers/api/src/queries/sources.ts`
- * - `packages/search/src/hybrid-search-worker.ts`
- * - `workers/mcp/src/tools.ts` (prefer converging onto queries/search)
+ * - `packages/search/src/hybrid-search-worker.ts` (hybrid RRF ID-only leg)
  *
  * Full seam map + future Postgres/`LexicalSearch` notes:
  * docs/architecture/storage-portability.md → Lexical search ownership.
