@@ -32,11 +32,48 @@ describe("mapEntries URL resolution", () => {
     expect(r.url).toBe(`${SRC}#custom-voices`);
   });
 
-  test("root-relative non-anchor link also becomes a source anchor", () => {
+  test("root-relative link OUTSIDE the source path becomes a source anchor", () => {
+    // Single-page doc changelog: entry links point at feature docs elsewhere
+    // on the site, not per-post release pages — keep the stable anchor.
     const [r] = mapEntries([entry({ title: "Cost Tracking", url: "/developers/cost-tracking" })], {
       sourceUrl: SRC,
     });
     expect(r.url).toBe(`${SRC}#cost-tracking`);
+  });
+
+  test("root-relative link UNDER the source path resolves to the per-post permalink", () => {
+    // Index pages (anthropic.com/news) expose per-post links root-relative;
+    // those are the canonical release URLs and must be preserved.
+    const [r] = mapEntries(
+      [entry({ title: "Reflect with Claude", url: "/news/reflect-with-claude" })],
+      { sourceUrl: "https://www.anthropic.com/news" },
+    );
+    expect(r.url).toBe("https://www.anthropic.com/news/reflect-with-claude");
+  });
+
+  test("root-relative link equal to the source path itself becomes a source anchor", () => {
+    // `/news` on the /news index would make every entry share one URL and
+    // collide in the UNIQUE(source_id, url) dedup.
+    const [r] = mapEntries([entry({ title: "Reflect with Claude", url: "/news" })], {
+      sourceUrl: "https://www.anthropic.com/news",
+    });
+    expect(r.url).toBe("https://www.anthropic.com/news#reflect-with-claude");
+  });
+
+  test("root-relative link on a bare-domain source becomes a source anchor", () => {
+    // No path prefix to scope "under the source path" — stay conservative.
+    const [r] = mapEntries([entry({ title: "Big Launch", url: "/blog/big-launch" })], {
+      sourceUrl: "https://example.com",
+    });
+    expect(r.url).toBe("https://example.com#big-launch");
+  });
+
+  test("root-relative link with a trailing-slash source URL still resolves", () => {
+    const [r] = mapEntries(
+      [entry({ title: "Reflect with Claude", url: "/news/reflect-with-claude" })],
+      { sourceUrl: "https://www.anthropic.com/news/" },
+    );
+    expect(r.url).toBe("https://www.anthropic.com/news/reflect-with-claude");
   });
 
   test("absolute URLs are preserved (crawl / multi-page sources)", () => {

@@ -445,22 +445,38 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
       const version = sanitizeVersion(e.version);
 
       // Resolve the entry's permalink. Absolute URLs (crawl / multi-page
-      // sources) and fragment-only anchors resolve directly. A relative,
-      // non-anchor "read more" link — common on single-page doc changelogs —
-      // would resolve against the source's directory and produce doubled,
-      // 404ing paths (…/release-notes/developers/…), so we synthesize a stable
-      // section anchor on the source page instead.
-      let entryUrl: string;
+      // sources) and fragment-only anchors resolve directly. A root-relative
+      // href is kept only when it resolves UNDER the source page's own path
+      // (`/news/<slug>` on the `/news` index) — that shape is a per-post
+      // permalink on an index page. Any other relative link — a
+      // directory-relative "read more" that doubles path segments and 404s
+      // (…/release-notes/developers/…), or a root-relative cross-path doc
+      // link on a single-page changelog (`/developers/cost-tracking`) — gets
+      // a stable synthesized section anchor on the source page instead.
+      let entryUrl: string | undefined;
       const href = e.url?.trim();
       const isAbsolute = !!href && /^(?:https?:)?\/\//i.test(href);
       const isFragment = !!href && href.startsWith("#");
+      const isRootRelative = !!href && href.startsWith("/") && !href.startsWith("//");
       if (href && href !== opts.sourceUrl && (isAbsolute || isFragment)) {
         try {
           entryUrl = new URL(href, opts.sourceUrl).href;
         } catch {
           entryUrl = href;
         }
-      } else {
+      } else if (isRootRelative) {
+        try {
+          const src = new URL(opts.sourceUrl);
+          const basePath = src.pathname.replace(/\/+$/, "");
+          const resolved = new URL(href, opts.sourceUrl);
+          if (basePath && resolved.pathname.startsWith(`${basePath}/`)) {
+            entryUrl = resolved.href;
+          }
+        } catch {
+          // fall through to the synthesized anchor
+        }
+      }
+      if (entryUrl === undefined) {
         const frag = (version ?? e.title ?? "")
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
