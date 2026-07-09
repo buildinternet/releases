@@ -47,7 +47,8 @@ describe("hybrid content projection", () => {
       id: releaseId,
       sourceId,
       title: "Ship it",
-      summary: "Short summary",
+      // ≥ MIN_CONTENT_CHARS so empty-tier hydrate filter keeps the hit.
+      summary: "Shipped interactive create mode for webhooks",
       content: BODY,
       url: "https://acme.test/1",
       publishedAt: "2026-04-20T00:00:00Z",
@@ -63,7 +64,7 @@ describe("hybrid content projection", () => {
     expect(hit?.kind).toBe("release");
     if (hit?.kind === "release") {
       expect(hit.release.content).toBeUndefined();
-      expect(hit.release.summary).toBe("Short summary");
+      expect(hit.release.summary).toBe("Shipped interactive create mode for webhooks");
     }
 
     const on = await runHybridSearch(minimalEnv, db, {
