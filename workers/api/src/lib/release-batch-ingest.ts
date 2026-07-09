@@ -39,12 +39,23 @@ import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { normalizeMediaBind } from "./media-bind.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "./d1-limits.js";
+import { clusterAndPersistCascades } from "./cluster-cascades.js";
+import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
+import { publishReleaseEvents, type PublishEnv } from "../events/publish.js";
+import type { InsertedReleaseRow } from "../events/build-event.js";
+import { notifyIndexNowForSource, type IndexNowEnv } from "./indexnow.js";
+import { resolveOrgSlug, resolveProductSlug } from "./slug-lookups.js";
+import { buildEmbedConfig, type EmbedEnv } from "@releases/search/embed-config.js";
+import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
+import { logEvent } from "@releases/lib/log-event";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import type { MediaTransformBinding } from "./media-ingest.js";
 
 /**
  * Shape-coerce media via {@link normalizeMediaBind}, then rewrite each item's
- * `url` through {@link normalizeMediaUrl} (image-proxy unwrap + #1943
- * float-zero path repair). Always runs on the batch write path so scrape/agent
- * inserts store clean URLs even when R2 mirroring is off.
+ * `url` through {@link normalizeMediaUrl} (image-proxy unwrap). Always runs on
+ * the batch write path so scrape/agent inserts match poll-fetch's write-time
+ * normalize pass — even when R2 mirroring is off.
  */
 function normalizeMediaUrlsInBind(media: unknown): string {
   const bound = normalizeMediaBind(media);
@@ -68,17 +79,6 @@ function normalizeMediaUrlsInBind(media: unknown): string {
   });
   return changed ? JSON.stringify(next) : bound;
 }
-import { clusterAndPersistCascades } from "./cluster-cascades.js";
-import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
-import { publishReleaseEvents, type PublishEnv } from "../events/publish.js";
-import type { InsertedReleaseRow } from "../events/build-event.js";
-import { notifyIndexNowForSource, type IndexNowEnv } from "./indexnow.js";
-import { resolveOrgSlug, resolveProductSlug } from "./slug-lookups.js";
-import { buildEmbedConfig, type EmbedEnv } from "@releases/search/embed-config.js";
-import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
-import { logEvent } from "@releases/lib/log-event";
-import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
-import type { MediaTransformBinding } from "./media-ingest.js";
 
 export interface BatchReleaseInput {
   version?: string | null;
@@ -234,9 +234,8 @@ export async function ingestReleaseBatch(
   // Coerce array/object media to a JSON string so a non-primitive bind can't
   // 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
   // Then run `normalizeMediaUrl` on every item so the scrape/agent batch path
-  // matches poll-fetch: unwrap image-proxy URLs and repair known path
-  // corruptions (#1943 float-zero separators). Without this, bad extract URLs
-  // were stored verbatim, 404'd, and never R2-mirrored.
+  // matches poll-fetch's write-time normalize (image-proxy unwrap, etc.).
+  // Without this, agent media was stored verbatim and bad URLs never mirrored.
   const mediaJsonByIndex = releasesInput.map((r) => normalizeMediaUrlsInBind(r.media));
   if (r2UploadEnabled) {
     // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
