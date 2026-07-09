@@ -36,36 +36,37 @@ export async function ProductView({
   orgName,
   orgId,
   product,
+  /** Pre-fetched product-scoped feed from the ProductPage GraphQL op (#2047). */
+  initialReleases,
+  /** Pre-fetched collection membership from the ProductPage GraphQL op (#2047). */
+  collections: collectionsFromGql,
 }: {
   orgSlug: string;
   orgName: string;
   orgId?: string;
   product: MappedProductDetail;
+  initialReleases: OrgReleasesFeedResponse;
+  collections: CollectionListItem[];
 }) {
   const productSlug = product.slug;
   const devAdmin = isLocalAdminEnabled();
   const productRef = { orgSlug, productSlug };
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
-  // Initial feed rows (product-scoped), overview, activity, heatmap, collections — all best-effort.
-  const [releasesResult, overviewResult, activityResult, heatmapResult, collectionsResult] =
-    await Promise.allSettled([
-      api.orgReleases(orgSlug, { product: productSlug }),
-      api.productOverview(product.id),
-      tryFetch(api.productActivity(productRef, activityFrom), {
-        route: `/${orgSlug}/${productSlug}`,
-        event: "product-activity-fetch-failed",
-      }),
-      tryFetch(api.productHeatmap(productRef), {
-        route: `/${orgSlug}/${productSlug}`,
-        event: "product-heatmap-fetch-failed",
-      }),
-      api.productCollections(productRef),
-    ]);
-  const initialReleases: OrgReleasesFeedResponse =
-    releasesResult.status === "fulfilled"
-      ? releasesResult.value
-      : { releases: [], pagination: { nextCursor: null, limit: 20 } };
+  // Fail-open aggregates only — critical path (identity + feed + collections)
+  // arrives via GraphQL ProductPage. Overview / activity / heatmap have
+  // independent SLAs and stay on REST (#2047).
+  const [overviewResult, activityResult, heatmapResult] = await Promise.allSettled([
+    api.productOverview(product.id),
+    tryFetch(api.productActivity(productRef, activityFrom), {
+      route: `/${orgSlug}/${productSlug}`,
+      event: "product-activity-fetch-failed",
+    }),
+    tryFetch(api.productHeatmap(productRef), {
+      route: `/${orgSlug}/${productSlug}`,
+      event: "product-heatmap-fetch-failed",
+    }),
+  ]);
   const overview: OverviewPageItem | null =
     overviewResult.status === "fulfilled" ? overviewResult.value : null;
 
@@ -107,8 +108,7 @@ export async function ProductView({
 
   // Collections this product is pinned in (e.g. "coding agents" → Claude Code).
   // Also surfaced on the parent org page, which merges org + product membership.
-  const collections: CollectionListItem[] =
-    collectionsResult.status === "fulfilled" ? collectionsResult.value : [];
+  const collections = collectionsFromGql;
 
   const latestPublishedAt = initialReleases.releases[0]?.publishedAt ?? null;
   const primaryItems = [

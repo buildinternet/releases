@@ -18,6 +18,8 @@ import {
   releaseSummaries,
   sourceChangelogFiles,
   sources,
+  collections,
+  collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { graphql } from "graphql";
@@ -332,6 +334,41 @@ describe("GraphQL spike", () => {
     ).latestReleases;
     expect(feed.items).toHaveLength(5);
     expect(feed.items.every((r) => r.id.startsWith("rel_src_b1_1"))).toBe(true);
+    expect(feed.nextCursor).toBeNull();
+  });
+
+  it("latestReleases scopes correctly when filtered by productId (#2047)", async () => {
+    const result = await graphql({
+      schema,
+      source: `query {
+        latestReleases(productId: "prod_a1", limit: 10) {
+          items { id }
+          nextCursor
+        }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const feed = (
+      result.data as { latestReleases: { items: Array<{ id: string }>; nextCursor: string | null } }
+    ).latestReleases;
+    // Seed: only src_a1_1 is under prod_a1 → 5 releases.
+    expect(feed.items).toHaveLength(5);
+    expect(feed.items.every((r) => r.id.startsWith("rel_src_a1_1"))).toBe(true);
+    expect(feed.nextCursor).toBeNull();
+  });
+
+  it("latestReleases returns empty for an unknown productId", async () => {
+    const result = await graphql({
+      schema,
+      source: `query { latestReleases(productId: "prod_missing", limit: 10) { items { id } nextCursor } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const feed = (
+      result.data as { latestReleases: { items: Array<{ id: string }>; nextCursor: string | null } }
+    ).latestReleases;
+    expect(feed.items).toHaveLength(0);
     expect(feed.nextCursor).toBeNull();
   });
 
@@ -794,6 +831,73 @@ describe("GraphQL spike", () => {
       tags: [],
       notice: { message: "Beta" },
       sources: [{ id: "src_a1_1", slug: "a1-1" }],
+    });
+  });
+
+  it("resolves Product.collections for pinned membership (#2047)", async () => {
+    await h.db.insert(collections).values([
+      {
+        id: "col_coding",
+        slug: "coding-agents",
+        name: "Coding Agents",
+        description: "Agent tools",
+        isFeatured: true,
+      },
+      {
+        id: "col_other",
+        slug: "other",
+        name: "Other",
+        description: null,
+        isFeatured: false,
+      },
+    ]);
+    await h.db.insert(collectionMembers).values([
+      { collectionId: "col_coding", productId: "prod_a1", position: 0 },
+      // Different product — must not appear on prod_a1.
+      { collectionId: "col_other", productId: "prod_a2", position: 0 },
+    ]);
+
+    const result = await graphql({
+      schema,
+      source: `query {
+        product(id: "prod_a1") {
+          collections {
+            slug
+            name
+            description
+            memberCount
+            isFeatured
+            previewMembers { __typename }
+          }
+        }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const product = (
+      result.data as {
+        product: {
+          collections: Array<{
+            slug: string;
+            name: string;
+            description: string | null;
+            memberCount: number;
+            isFeatured: boolean;
+            previewMembers: unknown[];
+          }>;
+        };
+      }
+    ).product;
+    expect(product.collections).toHaveLength(1);
+    expect(product.collections[0]).toMatchObject({
+      slug: "coding-agents",
+      name: "Coding Agents",
+      description: "Agent tools",
+      // product members gate on products_active + visible parent org;
+      // seed orgs are visible so memberCount includes prod_a1.
+      memberCount: 1,
+      isFeatured: true,
+      previewMembers: [],
     });
   });
 });

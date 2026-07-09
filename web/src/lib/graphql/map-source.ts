@@ -6,7 +6,7 @@ import type { ReleaseType } from "@buildinternet/releases-core/schema";
 import { ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { SourceDetailDocument } from "./__generated__/graphql";
-import type { SourceDetailQuery, ProductDetailQuery } from "./__generated__/graphql";
+import type { SourceDetailQuery, ProductPageQuery } from "./__generated__/graphql";
 
 const DEFAULT_RELEASE_LIMIT = 20;
 
@@ -229,7 +229,7 @@ export async function fetchSourceDetail(
 }
 
 export function mapProductDetail(
-  product: NonNullable<ProductDetailQuery["product"]>,
+  product: NonNullable<ProductPageQuery["product"]>,
 ): MappedProductDetail {
   return {
     id: product.id,

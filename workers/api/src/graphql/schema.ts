@@ -209,11 +209,18 @@ builder.queryType({
     latestReleases: t.field({
       type: "ReleaseFeed",
       description:
-        "Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice.",
+        "Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice. " +
+        "Optional `orgIdOrSlug` and/or `productId` narrow the feed (product page SSR uses productId).",
       args: {
         limit: t.arg.int({ required: false, defaultValue: DEFAULT_PAGE_SIZE }),
         cursor: t.arg.string({ required: false }),
         orgIdOrSlug: t.arg.string({ required: false }),
+        productId: t.arg.string({
+          required: false,
+          description:
+            "Restrict to sources under this product (prod_…). Same semantics as REST " +
+            "`GET /v1/orgs/:slug/releases?product=` for the product-page critical path.",
+        }),
         excludeSourceTypes: t.arg({
           type: [SourceTypeEnum],
           required: false,
@@ -240,7 +247,14 @@ builder.queryType({
         // own it. `high` is reserved for a future ranking boost and is a no-op
         // here. SQLite `json_extract` returns the JSON string; `IS NOT 'low'`
         // keeps rows where the key is absent (NULL), `normal`, or `high`.
-        const qualityFilter = sql`(json_extract(${sources.metadata}, '$.contentQuality') IS NOT 'low')`;
+        //
+        // Skip when the feed is scoped to a product (or org) — those surfaces
+        // mirror REST org/product release lists, which do not apply the
+        // ticker-only quality filter (#2047 product page).
+        const qualityFilter =
+          args.productId || args.orgIdOrSlug
+            ? undefined
+            : sql`(json_extract(${sources.metadata}, '$.contentQuality') IS NOT 'low')`;
 
         // Drop releases whose upstream-supplied date is in the future. Sources
         // occasionally publish a misdated entry (typo, scheduled-post slip);
@@ -261,6 +275,11 @@ builder.queryType({
           if (!org) return { items: [], nextCursor: null };
           orgFilter = eq(sources.orgId, org.id);
         }
+
+        // Product filter is AND-able with org (a product is always under one
+        // org). Unknown productId → empty feed, not an error — matches the
+        // null-product REST path and keeps SSR fail-soft.
+        const productFilter = args.productId ? eq(sources.productId, args.productId) : undefined;
 
         // Cursor predicate: strict-less-than on (publishedAt, id) so the next
         // page starts after the last row from the previous page. Releases
@@ -311,6 +330,7 @@ builder.queryType({
               // `o.deleted_at IS NULL` clause on the REST path.
               isNull(organizations.deletedAt),
               orgFilter,
+              productFilter,
               excludeFilter,
               qualityFilter,
               futureFilter,

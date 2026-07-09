@@ -240,11 +240,12 @@ export type OrgReleasesQuery = {
   };
 };
 
-export type ProductDetailQueryVariables = Exact<{
+export type ProductPageQueryVariables = Exact<{
   id: string;
+  releaseLimit: number;
 }>;
 
-export type ProductDetailQuery = {
+export type ProductPageQuery = {
   product: {
     id: string;
     slug: string;
@@ -268,7 +269,41 @@ export type ProductDetailQuery = {
       metadata: string;
       isHidden: boolean | null;
     }>;
+    collections: Array<{
+      slug: string;
+      name: string;
+      description: string | null;
+      memberCount: number;
+      isFeatured: boolean;
+    }>;
   } | null;
+  latestReleases: {
+    nextCursor: string | null;
+    items: Array<{
+      id: string;
+      title: string;
+      version: string | null;
+      type: ReleaseType;
+      url: string | null;
+      publishedAt: string | null;
+      fetchedAt: string;
+      summary: string | null;
+      titleGenerated: string | null;
+      titleShort: string | null;
+      content: string;
+      prerelease: boolean | null;
+      breaking: string | null;
+      media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
+      source: {
+        slug: string;
+        name: string;
+        type: SourceType;
+        appStore: { platform: AppStorePlatform; iconUrl: string | null } | null;
+        video: { provider: VideoProvider } | null;
+        product: { slug: string; name: string } | null;
+      };
+    }>;
+  };
 };
 
 export type ReleaseDetailQueryVariables = Exact<{
@@ -1044,14 +1079,14 @@ export const OrgReleasesDocument = {
     },
   ],
 } as unknown as DocumentNode<OrgReleasesQuery, OrgReleasesQueryVariables>;
-export const ProductDetailDocument = {
-  __meta__: { hash: "sha256:6791f51cdafe4def724d68b5a61f881624ca607ffab50baf2bf7fac5427929b5" },
+export const ProductPageDocument = {
+  __meta__: { hash: "sha256:8bbe4adb3c5316c7a9bf8b4daf1d8635993d0d1bab26d3fdfaa334d5107b2f82" },
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "query",
-      name: { kind: "Name", value: "ProductDetail" },
+      name: { kind: "Name", value: "ProductPage" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -1059,6 +1094,14 @@ export const ProductDetailDocument = {
           type: {
             kind: "NonNullType",
             type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
           },
         },
       ],
@@ -1114,6 +1157,121 @@ export const ProductDetailDocument = {
                     ],
                   },
                 },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "collections" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "description" } },
+                      { kind: "Field", name: { kind: "Name", value: "memberCount" } },
+                      { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "latestReleases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "productId" },
+                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: { kind: "Variable", name: { kind: "Name", value: "releaseLimit" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "nextCursor" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "title" } },
+                      { kind: "Field", name: { kind: "Name", value: "version" } },
+                      { kind: "Field", name: { kind: "Name", value: "type" } },
+                      { kind: "Field", name: { kind: "Name", value: "url" } },
+                      { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
+                      { kind: "Field", name: { kind: "Name", value: "fetchedAt" } },
+                      { kind: "Field", name: { kind: "Name", value: "summary" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                      { kind: "Field", name: { kind: "Name", value: "content" } },
+                      { kind: "Field", name: { kind: "Name", value: "prerelease" } },
+                      { kind: "Field", name: { kind: "Name", value: "breaking" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "media" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            { kind: "Field", name: { kind: "Name", value: "url" } },
+                            { kind: "Field", name: { kind: "Name", value: "alt" } },
+                            { kind: "Field", name: { kind: "Name", value: "r2Url" } },
+                          ],
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "source" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "slug" } },
+                            { kind: "Field", name: { kind: "Name", value: "name" } },
+                            { kind: "Field", name: { kind: "Name", value: "type" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "appStore" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "platform" } },
+                                  { kind: "Field", name: { kind: "Name", value: "iconUrl" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "video" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "provider" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "product" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -1121,7 +1279,7 @@ export const ProductDetailDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<ProductDetailQuery, ProductDetailQueryVariables>;
+} as unknown as DocumentNode<ProductPageQuery, ProductPageQueryVariables>;
 export const ReleaseDetailDocument = {
   __meta__: { hash: "sha256:1c550e19778eebf6f75b60652d1d327543320dc870cc5766c47a4189b7dfb7ac" },
   kind: "Document",

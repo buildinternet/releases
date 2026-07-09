@@ -193,6 +193,11 @@ type Pagination {
 """Optional grouping layer between an Org and its Sources."""
 type Product {
   category: String
+
+  """
+  Curated collections that pin this product, ordered by name. Mirrors REST `GET /v1/orgs/:slug/products/:productSlug/collections` for the product-page 'Featured in' sidebar. Preview members are omitted (empty) — the sidebar only needs identity fields.
+  """
+  collections: [Collection!]!
   createdAt: DateTime!
   description: String
   id: ID!
@@ -220,7 +225,7 @@ type Query {
   ): [Collection!]!
 
   """
-  Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice.
+  Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice. Optional `orgIdOrSlug` and/or `productId` narrow the feed (product page SSR uses productId).
   """
   latestReleases(
     cursor: String
@@ -229,6 +234,11 @@ type Query {
     excludeSourceTypes: [SourceType!]
     limit: Int = 20
     orgIdOrSlug: String
+
+    """
+    Restrict to sources under this product (prod_…). Same semantics as REST `GET /v1/orgs/:slug/releases?product=` for the product-page critical path.
+    """
+    productId: String
   ): ReleaseFeed!
 
   """Look up an organization by id (org_…) or slug."""

@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import { builder } from "../builder.js";
 import { parseNotice } from "@buildinternet/releases-core/notice";
+import { listCollectionsWhere } from "../../queries/collections.js";
 
 export const ProductType = builder.objectType("Product", {
   description: "Optional grouping layer between an Org and its Sources.",
@@ -49,6 +51,31 @@ export const ProductType = builder.objectType("Product", {
     sources: t.field({
       type: ["Source"],
       resolve: (product, _args, ctx) => ctx.loaders.sourcesByProductId.load(product.id),
+    }),
+
+    collections: t.field({
+      type: ["Collection"],
+      description:
+        "Curated collections that pin this product, ordered by name. Mirrors REST " +
+        "`GET /v1/orgs/:slug/products/:productSlug/collections` for the product-page " +
+        "'Featured in' sidebar. Preview members are omitted (empty) — the sidebar only " +
+        "needs identity fields.",
+      resolve: async (product, _args, ctx) => {
+        const rows = await listCollectionsWhere(
+          ctx.db,
+          sql`c.id IN (SELECT cm.collection_id FROM collection_members cm WHERE cm.product_id = ${product.id})`,
+        );
+        // GraphQL Collection requires previewMembers; listCollectionsWhere is the
+        // sidebar-shaped list without previews. Empty array is intentional.
+        return rows.map((r) => ({
+          slug: r.slug,
+          name: r.name,
+          description: r.description,
+          memberCount: r.memberCount,
+          isFeatured: r.isFeatured,
+          previewMembers: [],
+        }));
+      },
     }),
   }),
 });
