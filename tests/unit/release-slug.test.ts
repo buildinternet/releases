@@ -93,3 +93,31 @@ describe("parseReleaseParam", () => {
     expect(parseReleaseParam(`${REL}-${slug21}`)).toEqual({ id: REL, slug: slug21 });
   });
 });
+
+describe("bare/stale-slug params resolve to the current canonical (#2072)", () => {
+  // web/src/app/release/[id]/page.tsx no longer 308s a non-canonical segment
+  // to `releasePath(release)` — it renders in place and relies on
+  // `<link rel="canonical">` (set from this same computation) to consolidate.
+  // This proves the piece that makes that safe: no matter which of the three
+  // request shapes below hits the route, parseReleaseParam recovers the same
+  // id, and releasePath — driven only by the release's current title, never
+  // by the request segment — always resolves to the one current canonical
+  // path.
+  const release = { id: REL, titleShort: "Current Title" };
+  const canonical = releasePath(release);
+
+  it.each([
+    ["bare id", REL],
+    ["stale slug", `${REL}-an-old-title-that-no-longer-matches`],
+    ["already-canonical slug", canonical.slice("/release/".length)],
+  ])("%s: id extraction + releasePath agree on the canonical path", (_label, segment) => {
+    const { id } = parseReleaseParam(segment);
+    expect(id).toBe(REL);
+    expect(releasePath({ ...release, id })).toBe(canonical);
+  });
+
+  it("canonical path differs from a bare/stale request segment (the case the redirect used to fire on)", () => {
+    expect(canonical).not.toBe(`/release/${REL}`);
+    expect(canonical).not.toBe(`/release/${REL}-an-old-title-that-no-longer-matches`);
+  });
+});

@@ -183,8 +183,8 @@ function formatDate(iso: string | null) {
 }
 
 export default async function ReleaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: rawParam } = await params;
-  const { id } = parseReleaseParam(rawParam);
+  const { id: routeParam } = await params;
+  const { id } = parseReleaseParam(routeParam);
 
   let raw: Release;
   try {
@@ -216,8 +216,8 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
       const coverage = await api.coverage(id);
       if (coverage.role === "coverage" && coverage.canonical.sibling != null) {
         // The canonical is visible — send the crawler/user there permanently.
-        // Bare-ID target is fine: the canonical's own page 308s to its
-        // slugged form.
+        // Bare-ID target is fine: the canonical's own page renders directly
+        // (no slug redirect, #2072) and carries its own `rel=canonical`.
         coverageRedirect = `/release/${coverage.canonical.canonicalId}`;
       }
     } catch {
@@ -231,12 +231,19 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   }
 
   // Friendly-URL canonicalization: bare-ID, stale-slug, and mangled-slug
-  // segments all 308 to the current canonical `/release/<id>-<slug>` form.
-  // The ID is the routing key; the slug is derived from the current title.
-  const canonicalPath = releasePath(raw);
-  if (canonicalPath !== `/release/${rawParam}`) {
-    permanentRedirect(canonicalPath);
-  }
+  // segments all render at their given URL rather than 308ing to the current
+  // canonical `/release/<id>-<slug>` form (#2072) — a followed redirect cost
+  // a second full render for no benefit, since `<link rel="canonical">` (see
+  // generateMetadata above) and the JSON-LD `url` (below) already point
+  // crawlers at the slugged form. The ID is the routing key; the slug is
+  // derived from the current title and is purely decorative here. The
+  // coverage-side redirect above is unrelated — that one sends a different
+  // release entity to its canonical sibling and stays a 308.
+  //
+  // Reversible in one commit: reinstate `permanentRedirect(releasePath(raw))`
+  // here if `rel=canonical` proves too weak a consolidation signal (watch
+  // Search Console for `Duplicate, Google chose different canonical` on
+  // `/release/*`).
 
   // Flatten the GraphQL `source { org, product, appStore, video }` nesting
   // back onto the release-detail shape the rest of this page (and its shared
