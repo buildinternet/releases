@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { api, type ReleaseCoverageResponse, type ReleaseCoverageSibling } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
+import { ReleaseThumb } from "./release-thumb";
 
 interface AlsoCoveredByProps {
   anchorReleaseId: string;
@@ -74,6 +75,9 @@ function CoverageItem({ item, asLink }: { item: ReleaseCoverageSibling; asLink: 
 
   const inner = (
     <>
+      {item.thumbnail && (
+        <ReleaseThumb src={item.thumbnail.url} alt={item.thumbnail.alt ?? ""} size="sm" />
+      )}
       <div className="min-w-0 flex-1 truncate">
         <span className="text-[14px] text-stone-900 dark:text-stone-100">{heading}</span>
         <span className="ml-2 text-[12px] text-stone-500 dark:text-stone-400">{byline}</span>
@@ -89,15 +93,13 @@ function CoverageItem({ item, asLink }: { item: ReleaseCoverageSibling; asLink: 
   // Coverage-side rows have no reachable detail page (suppressed by
   // `releases_visible`), so they render as a non-interactive row.
   if (!asLink) {
-    return (
-      <div className="flex items-baseline justify-between gap-3 py-1.5 px-2 -mx-2">{inner}</div>
-    );
+    return <div className="flex items-center justify-between gap-3 py-1.5 px-2 -mx-2">{inner}</div>;
   }
 
   return (
     <Link
       href={`/release/${item.id}`}
-      className="flex items-baseline justify-between gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-stone-100 dark:hover:bg-stone-900 transition-colors"
+      className="flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-stone-100 dark:hover:bg-stone-900 transition-colors"
     >
       {inner}
     </Link>
