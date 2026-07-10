@@ -421,7 +421,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </h1>
             </ViewTransition>
             <RollupBadge type={release.type} />
-            <ImportanceMarker importance={release.importance} className="h-2 w-2" />
+            <ImportanceMarker importance={release.importance} />
           </div>
           {showVersionSubtitle && (
             <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{versionLabel}</p>
