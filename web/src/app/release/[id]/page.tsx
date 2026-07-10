@@ -22,7 +22,7 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
-import { ImportanceChip } from "@/components/importance-chip";
+import { ImportanceMarker } from "@/components/importance-marker";
 import { CompositionChip } from "@/components/composition-chip";
 import { ReleaseAdminMenu } from "@/components/release-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
@@ -421,7 +421,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </h1>
             </ViewTransition>
             <RollupBadge type={release.type} />
-            <ImportanceChip importance={release.importance} />
+            <ImportanceMarker importance={release.importance} className="h-2 w-2" />
           </div>
           {showVersionSubtitle && (
             <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{versionLabel}</p>
