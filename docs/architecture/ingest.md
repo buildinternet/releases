@@ -36,6 +36,8 @@ Three Haiku 4.5 passes can run inside `fetchOne` between parse and insert. All a
 
 The `release-content` pass (`@releases/ai-internal/release-content`) generates `title_generated` / `title_short` / `summary`. It is shared by `scripts/generate-release-content.ts` and the ingest-time hook.
 
+The same call also scores `importance` (1–5, `releases.importance`) — no separate model call. The rubric lives in `SYSTEM_PROMPT`'s `<importance_format>` block in `packages/ai/src/release-content.ts`, alongside the `<breaking>` verdict. Fail-open: an absent `<importance>` tag, a non-integer value, or a value outside 1–5 all parse to `null` (`parseImportance`) — never a fabricated score, the same posture as `breaking`'s `"unknown"`. `null` also covers empty-body releases (skipped before any model call) and unscored history predating the feature. Canonical range: `IMPORTANCE_MIN`/`IMPORTANCE_MAX` in `packages/core/src/importance.ts`. Read/filter behavior: [routing.md → Importance filtering](routing.md); web display: [web.md → Importance marker](web.md).
+
 A manual `POST /v1/sources/:id/fetch` that inserts releases also triggers the `generate-content` fill pass for that source (up to 100 unfilled rows, via `waitUntil` after the response), so onboarding fetches land display-ready instead of waiting for an operator to run `POST /v1/workflows/generate-content` by hand (#1579). Same gates as the cron path — org `auto_generate_content` opt-in, per-source `metadata.summarize` opt-out — and fail-open: a summarize failure never fails the fetch.
 
 ### Marketing classifier
