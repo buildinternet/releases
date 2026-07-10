@@ -12,6 +12,7 @@ code, or any MCP client. Readable by you and your agent.
 
 <p>
   <a href="https://releases.sh"><b>releases.sh</b></a> &nbsp;·&nbsp;
+  <a href="https://releases.sh/docs"><b>Docs</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/buildinternet/releases-cli"><b>CLI repo →</b></a> &nbsp;·&nbsp;
   <a href="#use-it">Use it</a> &nbsp;·&nbsp;
   <a href="#whats-in-this-repo">What's in this repo</a> &nbsp;·&nbsp;
@@ -86,19 +87,48 @@ npx @buildinternet/releases search "MCP"      # search across every vendor
 curl "https://api.releases.sh/v1/releases/latest?limit=5"
 ```
 
-**Agent skills** — install the published skills into any agent (Claude Code /
-Codex / Cursor / OpenCode) without checking out anything:
+**Agent skills** — auto-triggering playbooks, installable into any agent (Claude
+Code / Codex / Cursor / OpenCode) without checking out anything. Start with the
+reader skills — search, MCP lookups, and release analysis — which is what almost
+everyone wants:
 
 ```bash
-npx skills add buildinternet/releases-cli
+npx skills add buildinternet/releases-cli   # reader skills — search, MCP, release analysis
+
+# just the skill that writes a releases.json manifest for your own product
+npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
 ```
 
+On Claude Code, the CLI repo also installs as a plugin — the reader skills plus
+a bundled MCP connection and a `/releases` command:
+
+```
+/plugin marketplace add buildinternet/releases-cli
+/plugin install releases@releases
+```
+
+<sub>Running or maintaining the registry itself? This repo also ships
+**operator skills** (source onboarding, parsing, bulk maintenance) — most need
+an admin key: `npx skills add buildinternet/releases`. See
+[releases.sh/docs/skills](https://releases.sh/docs/skills).</sub>
+
+**Docs** — user-facing documentation is served from the web app at
+[releases.sh/docs](https://releases.sh/docs) (source in
+[`web/src/content/docs/`](web/src/content/docs)):
+[installation](https://releases.sh/docs/installation) ·
+[skills](https://releases.sh/docs/skills) ·
+[REST API](https://releases.sh/docs/api/rest) ·
+[MCP](https://releases.sh/docs/api/mcp) ·
+[webhooks](https://releases.sh/docs/api/webhooks) ·
+[listing your product](https://releases.sh/docs/listing).
+
 Agents consuming the product start from
-[releases.sh/llms.txt](https://releases.sh/llms.txt); the full MCP tool catalog
-and auth model live in [docs/architecture/mcp.md](docs/architecture/mcp.md).
-Creating a [free account](https://releases.sh/signup) unlocks higher rate
-limits (mint an API key at [releases.sh/account](https://releases.sh/account)),
-plus follows, personalized feeds, webhooks, and email digests.
+[releases.sh/llms.txt](https://releases.sh/llms.txt); the MCP tool catalog and
+auth model are also covered in
+[docs/architecture/mcp.md](docs/architecture/mcp.md). Creating a
+[free account](https://releases.sh/signup) unlocks higher rate limits (mint an
+API key at [releases.sh/account](https://releases.sh/account)), plus follows,
+personalized feeds, webhooks, and email digests.
 
 <div align="center">
   <img src="docs/assets/readme-org.png" alt="An organization page: AI-maintained overview of recent releases, source list, and JSON/Markdown/Atom export" width="700">
