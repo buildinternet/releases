@@ -69,7 +69,7 @@ export function Header() {
           <Link
             key={item.href}
             href={item.href}
-            className="hover:text-stone-700 dark:hover:text-stone-300"
+            className={`hover:text-stone-700 dark:hover:text-stone-300 ${item.desktopClassName ?? ""}`}
           >
             {item.label}
           </Link>
