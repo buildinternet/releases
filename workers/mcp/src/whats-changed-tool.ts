@@ -2,7 +2,7 @@ import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { and, eq, inArray } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
-import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+import { chunkArray, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import {
   IMPORTANCE_MIN,
   IMPORTANCE_MAX,
@@ -67,8 +67,7 @@ async function attachImportance(
   const byVersion = new Map<string, number | null>();
   const db = createDb(env.DB);
   // `sourceId` takes one bind, so each chunk stays at IN_ARRAY_CHUNK_SIZE + 1.
-  for (let i = 0; i < versions.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = versions.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+  for (const chunk of chunkArray(versions, IN_ARRAY_CHUNK_SIZE)) {
     const rows = await db
       .select({ version: releases.version, importance: releases.importance })
       .from(releases)
