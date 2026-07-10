@@ -7,6 +7,7 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Search", href: "/search", mobileOnly: true },
   { label: "Catalog", href: "/catalog" },
+  { label: "What's new", href: "/updates" },
   { label: "Collections", href: "/collections" },
   { label: "Submit", href: "/submit" },
   { label: "Docs", href: "/docs" },

@@ -315,6 +315,7 @@ export type OrgReleasesQuery = {
       prerelease: boolean | null;
       breaking: string | null;
       importance: number | null;
+      composition: { bugs: number; features: number; enhancements: number } | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: {
         slug: string;
@@ -1329,7 +1330,7 @@ export const OrgPageDocument = {
   ],
 } as unknown as DocumentNode<OrgPageQuery, OrgPageQueryVariables>;
 export const OrgReleasesDocument = {
-  __meta__: { hash: "sha256:766aa82befc82d7e7f05a77ef1ad25485ca90885b6c1c0d3e5340b397a3edfe9" },
+  __meta__: { hash: "sha256:12d1054933c6449d79bde056c6769544bdb2d382de491183b212bfe7ff340f89" },
   kind: "Document",
   definitions: [
     {
@@ -1396,6 +1397,18 @@ export const OrgReleasesDocument = {
                       { kind: "Field", name: { kind: "Name", value: "prerelease" } },
                       { kind: "Field", name: { kind: "Name", value: "breaking" } },
                       { kind: "Field", name: { kind: "Name", value: "importance" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "composition" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "bugs" } },
+                            { kind: "Field", name: { kind: "Name", value: "features" } },
+                            { kind: "Field", name: { kind: "Name", value: "enhancements" } },
+                          ],
+                        },
+                      },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "media" },

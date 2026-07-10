@@ -3,7 +3,7 @@ import type { OrgReleaseItem } from "@buildinternet/releases-api-types";
 import { api, ApiNotFoundError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { OrgReleasesDocument } from "@/lib/graphql/__generated__/graphql";
-import { mapOrgReleaseItem } from "@/lib/graphql/map-feed";
+import { buildRestFeedCursor, mapOrgReleaseItem } from "@/lib/graphql/map-feed";
 
 /**
  * Org release feed via the persisted `OrgReleases` GraphQL query
@@ -59,9 +59,15 @@ async function getOrgReleasesGraphql(
   limit: number,
 ): Promise<{ releases: OrgReleaseItem[]; nextCursor: string | null }> {
   const data = await graphqlRequest(OrgReleasesDocument, { orgIdOrSlug: orgSlug, limit });
+  const releases = data.latestReleases.items.map(mapOrgReleaseItem);
+  // Client load-more pages via REST, whose cursor is the transparent
+  // `publishedAt|fetchedAt|id` shape — the GraphQL token is opaque and REST's
+  // parser fails open to page 1 on it. Rebuild from the last row, same as
+  // product-data.ts / map-source.ts.
+  const last = data.latestReleases.items.at(-1);
   return {
-    releases: data.latestReleases.items.map(mapOrgReleaseItem),
-    nextCursor: data.latestReleases.nextCursor,
+    releases,
+    nextCursor: data.latestReleases.nextCursor && last ? buildRestFeedCursor(last) : null,
   };
 }
 

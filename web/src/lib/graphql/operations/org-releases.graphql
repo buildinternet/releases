@@ -16,6 +16,11 @@ query OrgReleases($orgIdOrSlug: String!, $limit: Int!) {
       prerelease
       breaking
       importance
+      composition {
+        bugs
+        features
+        enhancements
+      }
       media {
         type
         url
