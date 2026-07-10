@@ -88,11 +88,12 @@ curl "https://api.releases.sh/v1/releases/latest?limit=5"
 ```
 
 **Agent skills** — auto-triggering playbooks, installable into any agent (Claude
-Code / Codex / Cursor / OpenCode) without checking out anything:
+Code / Codex / Cursor / OpenCode) without checking out anything. Start with the
+reader skills — search, MCP lookups, and release analysis — which is what almost
+everyone wants:
 
 ```bash
 npx skills add buildinternet/releases-cli   # reader skills — search, MCP, release analysis
-npx skills add buildinternet/releases       # operator skills from this repo (most need an admin key)
 
 # just the skill that writes a releases.json manifest for your own product
 npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
@@ -105,6 +106,11 @@ a bundled MCP connection and a `/releases` command:
 /plugin marketplace add buildinternet/releases-cli
 /plugin install releases@releases
 ```
+
+<sub>Running or maintaining the registry itself? This repo also ships
+**operator skills** (source onboarding, parsing, bulk maintenance) — most need
+an admin key: `npx skills add buildinternet/releases`. See
+[releases.sh/docs/skills](https://releases.sh/docs/skills).</sub>
 
 **Docs** — user-facing documentation is served from the web app at
 [releases.sh/docs](https://releases.sh/docs) (source in
