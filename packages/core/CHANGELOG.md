@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.26.0
+
+### Minor Changes
+
+- 4b8f335: Add nullable `importance` (1–5) column to releases + parser support in release content generation.
+
 ## 0.25.1
 
 ### Patch Changes
