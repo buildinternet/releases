@@ -1,5 +1,16 @@
 # @buildinternet/releases-api-types
 
+## 0.45.0
+
+### Minor Changes
+
+- 4b8f335: Add optional `importance` (1–5 AI score) to release shapes and `minImportance` filter on the latest feed.
+
+### Patch Changes
+
+- Updated dependencies [4b8f335]
+  - @buildinternet/releases-core@0.26.0
+
 ## 0.44.0
 
 ### Minor Changes
