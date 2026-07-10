@@ -55,7 +55,7 @@ export interface NormalizedLatestParams {
   since: string | undefined;
   until: string | undefined;
   /** Minimum AI-scored `importance` (1–5), when supplied. */
-  minImportance?: number | undefined;
+  minImportance: number | undefined;
 }
 
 /**

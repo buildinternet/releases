@@ -57,7 +57,7 @@ function gradeFixture(
   fields.push({
     field: "no false promotion to >=4",
     passed: !falsePromotion,
-    expected: `<=${Math.min(fixture.expected + 1, 3)} when truth is ${fixture.expected}`,
+    expected: `<=3 when truth is ${fixture.expected}`,
     actual: importance === null ? "null" : String(importance),
   });
 
