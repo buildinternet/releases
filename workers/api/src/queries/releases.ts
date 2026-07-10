@@ -20,6 +20,8 @@ export type LatestReleaseRow = {
    *  NULL only on rows predating the column — mapped to `undefined` (absent) on
    *  the wire, never invented. */
   breaking: string | null;
+  /** AI-scored release importance, 1–5. NULL when unscored. */
+  importance: number | null;
   published_at: string | null;
   /** Selected for feed cursor encoding; not exposed on the wire. */
   fetched_at?: string;
@@ -66,6 +68,8 @@ export interface LatestReleasesFilter {
    */
   since?: string;
   until?: string;
+  /** Only include releases whose `importance` is at least this value (1–5). */
+  minImportance?: number;
   limit: number;
 }
 
@@ -119,6 +123,10 @@ export async function getLatestReleasesAcross(
     wheres.push("r.published_at <= ?");
     bindings.push(f.until);
   }
+  if (f.minImportance !== undefined) {
+    wheres.push("r.importance >= ?");
+    bindings.push(f.minImportance);
+  }
 
   const whereSql = wheres.join(" AND ");
   bindings.push(f.limit);
@@ -126,7 +134,8 @@ export async function getLatestReleasesAcross(
   const stmt = d1
     .prepare(
       `
-    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking, r.type,
+    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking,
+           r.importance, r.type,
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
@@ -192,6 +201,7 @@ export function mapLatestRowToReleaseItem(
     titleShort: r.title_short,
     // NULL (pre-column row) → field absent on the wire; never invent a value (#1710).
     breaking: (r.breaking as BreakingLevel | null) ?? undefined,
+    importance: r.importance,
     publishedAt: r.published_at,
     url: r.url,
     webUrl: webBase
@@ -272,7 +282,8 @@ export async function getFollowedReleases(
   if (!hasFollows) return [];
 
   return db.all<LatestReleaseRow>(sql`
-    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking, r.type,
+    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking,
+           r.importance, r.type,
            r.published_at, r.fetched_at, r.url, r.media,
            NULL AS content_chars, NULL AS content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,

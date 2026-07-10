@@ -190,6 +190,7 @@ async function writeRow(w: WritePayload): Promise<void> {
     `summary = ${lit(w.summary)}`,
     `title_generated = ${lit(w.title)}`,
     `title_short = ${lit(w.titleShort)}`,
+    `importance = ${w.importance == null ? "NULL" : String(w.importance)}`,
   ];
   // Tri-state for composition:
   //   - undefined → no-op (omit metadata from SET). WritePayload doesn't
@@ -292,6 +293,9 @@ async function runBatch(
           titleShort: null,
           summary: null,
           composition: null,
+          breaking: "unknown",
+          migrationNotes: null,
+          importance: null,
           usage: emptyUsage(),
           skipped: true,
         },
@@ -513,6 +517,7 @@ interface WritePayload {
   title: string | null;
   titleShort: string | null;
   composition: { bugs: number; features: number; enhancements: number } | null;
+  importance: number | null;
 }
 const pendingWrites: WritePayload[] = [];
 
@@ -545,6 +550,7 @@ for (const entry of perRow) {
       title: result.title,
       titleShort: result.titleShort,
       composition: result.composition,
+      importance: result.importance,
     });
   }
   samples.push({

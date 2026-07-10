@@ -24,6 +24,11 @@ export const ReleaseType = builder.objectType("Release", {
     fetchedAt: t.expose("fetchedAt", { type: "DateTime" }),
     prerelease: t.exposeBoolean("prerelease", { nullable: true }),
     breaking: t.exposeString("breaking", { nullable: true }),
+    importance: t.exposeInt("importance", {
+      nullable: true,
+      description:
+        "AI-scored release importance, 1 (housekeeping) to 5 (landmark). Null when unscored.",
+    }),
 
     summary: t.exposeString("summary", {
       nullable: true,

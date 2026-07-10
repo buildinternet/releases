@@ -147,6 +147,9 @@ export const ReleaseItemSchema = z.object({
   // classified (the fail-open default). List paths carry `breaking` only —
   // `migrationNotes` stays detail-route-only to keep list payloads slim.
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  // AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
+  // ingest; null when unscored, absent on older servers/pinned workers.
+  importance: z.number().int().min(1).max(5).nullable().optional(),
   // Count of demoted siblings rolling up into this row via `release_coverage`
   // (0 when standalone). Lets list views show a cluster indicator without a
   // detail-page round trip. `.optional()` — older API responses and pinned

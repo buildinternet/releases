@@ -103,6 +103,8 @@ interface FeedItem {
   titleShort?: string | null;
   titleGenerated?: string | null;
   publishedAt?: string | null;
+  /** AI-scored importance 1–5 (5=landmark, 1=housekeeping); absent/null when unscored. */
+  importance?: number | null;
   product?: { name?: string | null } | null;
   source: { name: string };
   /** Slugged canonical web URL (#1906) — the API populates it on feed items. */
@@ -281,8 +283,10 @@ export function registerFollowsTools(
                   const title = it.titleShort ?? it.titleGenerated ?? it.title;
                   const by = it.product?.name ?? it.source.name;
                   const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
+                  const importance =
+                    it.importance != null ? ` · Importance: ${it.importance}/5` : "";
                   const link = it.webUrl ? `\n  Web: ${it.webUrl}` : "";
-                  return `- ${title} — ${by}${when} (${it.id})${link}`;
+                  return `- ${title} — ${by}${when}${importance} (${it.id})${link}`;
                 })
                 .join("\n")}`;
         return {

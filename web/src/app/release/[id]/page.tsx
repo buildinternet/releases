@@ -22,6 +22,7 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
+import { ImportanceChip } from "@/components/importance-chip";
 import { CompositionChip } from "@/components/composition-chip";
 import { ReleaseAdminMenu } from "@/components/release-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
@@ -42,7 +43,16 @@ type GqlReleaseSource = GqlRelease["source"];
 type ReleaseSource = Omit<GqlReleaseSource, "org"> & {
   org: GqlReleaseSource["org"] | null;
 };
-type Release = Omit<GqlRelease, "source"> & { source: ReleaseSource };
+/**
+ * `importance` is intersected in explicitly (rather than relying on
+ * `GqlRelease` alone) so this compiles ahead of the GraphQL schema regen that
+ * adds `Release.importance` server-side — additive, so it's a no-op once the
+ * generated type catches up.
+ */
+type Release = Omit<GqlRelease, "source"> & {
+  source: ReleaseSource;
+  importance?: number | null;
+};
 
 /**
  * Map REST `ReleaseDetail` onto the nested GraphQL shape the page body was
@@ -62,6 +72,7 @@ function mapReleaseFromRest(r: Awaited<ReturnType<typeof api.release>>): Release
     titleShort: r.titleShort ?? null,
     content: r.content,
     migrationNotes: r.migrationNotes ?? null,
+    importance: r.importance ?? null,
     composition: r.composition
       ? {
           bugs: r.composition.bugs,
@@ -410,6 +421,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </h1>
             </ViewTransition>
             <RollupBadge type={release.type} />
+            <ImportanceChip importance={release.importance} />
           </div>
           {showVersionSubtitle && (
             <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{versionLabel}</p>

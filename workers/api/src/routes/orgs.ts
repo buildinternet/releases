@@ -2494,6 +2494,7 @@ orgRoutes.get(
         // List paths carry `breaking` only, never `migrationNotes` (#1710).
         // NULL (pre-column row) → field absent; never invent a value.
         breaking: (r.breaking as BreakingLevel | null) ?? undefined,
+        importance: r.importance,
         content: hydrateMediaUrls(r.content, mediaOrigin),
         publishedAt: r.published_at,
         url: r.url,
@@ -2625,6 +2626,7 @@ orgRoutes.get(
         titleShort: releasesVisible.titleShort,
         // Breaking-change level (#1710) — list paths carry `breaking` only.
         breaking: releasesVisible.breaking,
+        importance: releasesVisible.importance,
         url: releasesVisible.url,
         contentHash: releasesVisible.contentHash,
         metadata: releasesVisible.metadata,

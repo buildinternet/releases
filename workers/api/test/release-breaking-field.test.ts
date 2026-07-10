@@ -110,6 +110,7 @@ describe("latest feed — breaking only, never migrationNotes", () => {
       title_generated: null,
       title_short: null,
       breaking: null,
+      importance: null,
       published_at: null,
       url: null,
       media: null,

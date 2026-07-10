@@ -15,6 +15,7 @@ query OrgReleases($orgIdOrSlug: String!, $limit: Int!) {
       content
       prerelease
       breaking
+      importance
       media {
         type
         url

@@ -239,6 +239,8 @@ export type SourceReleaseRow = {
   /** Breaking-change level (#1696/#1710). `"unknown"` fail-open default; NULL
    *  only on rows predating the column — mapped to absent on the wire. */
   breaking: string | null;
+  /** AI-scored release importance, 1–5. NULL when unscored. */
+  importance: number | null;
   content: string;
   published_at: string | null;
   // Needed so the source-detail SSR cursor can be built in the
@@ -268,7 +270,7 @@ export async function getSourceReleasesPaginated(
     : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
   return db.all<SourceReleaseRow>(sql`
     SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated, r.title_short,
-           r.breaking, r.content, r.published_at, r.fetched_at, r.url, r.media,
+           r.breaking, r.importance, r.content, r.published_at, r.fetched_at, r.url, r.media,
            ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
     FROM ${sql.raw(releasesTable)} r
     WHERE r.source_id = ${sourceId}
@@ -324,7 +326,7 @@ export async function getSourceReleasesFeed(
     .prepare(
       `
     SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated,
-           r.title_short, r.breaking, r.content,
+           r.title_short, r.breaking, r.importance, r.content,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r

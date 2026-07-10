@@ -54,6 +54,8 @@ export interface NormalizedLatestParams {
   /** Canonical ISO `since`/`until` window bounds, when supplied. */
   since: string | undefined;
   until: string | undefined;
+  /** Minimum AI-scored `importance` (1–5), when supplied. */
+  minImportance?: number | undefined;
 }
 
 /**
@@ -97,6 +99,9 @@ function isCacheableDefaultShape(p: NormalizedLatestParams): boolean {
   // it collide with the shared homepage/CLI key. (Matches the `tail -f`
   // rationale: windowed polling would otherwise fork the cache.)
   if (p.since !== undefined || p.until !== undefined) return false;
+  // Same rationale — a minImportance filter is a low-cardinality-unfriendly
+  // shape that must never collide with the shared homepage/CLI cache key.
+  if (p.minImportance !== undefined) return false;
   return CACHEABLE_DEFAULT_SHAPES.some(
     (s) => s.count === p.count && arraysEqual(s.excludeSourceTypes, p.excludeSourceTypes),
   );

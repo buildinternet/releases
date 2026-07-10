@@ -1989,6 +1989,7 @@ export async function buildSourceDetailPayload(
     // List paths carry `breaking` only, never `migrationNotes` (#1710).
     // NULL (pre-column row) → field absent; never invent a value.
     breaking: (r.breaking as BreakingLevel | null) ?? undefined,
+    importance: r.importance,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     fetchedAt: r.fetched_at,
@@ -2178,6 +2179,7 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     // List paths carry `breaking` only, never `migrationNotes` (#1710).
     // NULL (pre-column row) → field absent; never invent a value.
     breaking: (r.breaking as BreakingLevel | null) ?? undefined,
+    importance: r.importance,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     fetchedAt: r.fetched_at,

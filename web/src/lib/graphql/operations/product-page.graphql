@@ -49,6 +49,7 @@ query ProductPage($id: String!, $releaseLimit: Int!) {
       content
       prerelease
       breaking
+      importance
       media {
         type
         url

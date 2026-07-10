@@ -382,6 +382,11 @@ type Release {
   fetchedAt: DateTime!
   id: ID!
 
+  """
+  AI-scored release importance, 1 (housekeeping) to 5 (landmark). Null when unscored.
+  """
+  importance: Int
+
   """Images / videos / GIFs attached to the release. Empty list if none."""
   media: [Media!]!
 

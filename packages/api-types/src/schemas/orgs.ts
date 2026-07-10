@@ -459,6 +459,11 @@ export const OrgRecentReleaseItemSchema = z.object({
    * means not classified. List paths carry `breaking` only.
    */
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  /**
+   * AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
+   * ingest; null when unscored, absent on older servers/pinned workers.
+   */
+  importance: z.number().int().min(1).max(5).nullable().optional(),
   url: z.string().nullable(),
   contentHash: z.string().nullable(),
   metadata: z.string().nullable(),

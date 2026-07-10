@@ -71,6 +71,12 @@ export const ReleaseLatestItemSchema = z.object({
    * `migrationNotes` stays detail-route-only to keep list payloads slim.
    */
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  /**
+   * AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
+   * ingest; `.nullable().optional()` — null when unscored, absent on older
+   * servers/pinned workers.
+   */
+  importance: z.number().int().min(1).max(5).nullable().optional(),
   publishedAt: z.string().nullable(),
   url: z.string().nullable(),
   /**
@@ -260,6 +266,11 @@ export const ReleaseDetailResponseSchema = z.object({
    * `ReleaseDetail.breaking` in api-types.ts.
    */
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  /**
+   * AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
+   * ingest; null when unscored, absent on older servers/pinned workers.
+   */
+  importance: z.number().int().min(1).max(5).nullable().optional(),
   /**
    * Explicit upgrade/migration steps lifted from the body (#1696); omitted
    * when the body gives none. Detail-route-only — list paths never carry it.
