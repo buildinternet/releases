@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import {
   collectionMembers,
   collectionDailySummaries,
@@ -48,6 +48,10 @@ export async function getCollectionMembers(
  * that day. Product membership is resolved through `sourcesActive.productId` —
  * the releases table/view has no direct productId column. Member sets are small
  * (curated), so a single inArray each is within D1's 100-bind limit.
+ *
+ * Rows come back importance-first (`>= 4`), then published-desc, so the caller's
+ * per-day cap and body-excerpt budget favor high-signal releases — see the
+ * `orderBy` note below.
  */
 export async function getCollectionDayReleases(
   db: AnyDb,
@@ -82,7 +86,18 @@ export async function getCollectionDayReleases(
         or(...memberConds),
       ),
     )
-    .orderBy(desc(releasesVisible.publishedAt));
+    // High-signal releases (AI-scored importance >= 4, matching the web flame
+    // threshold) lead, then chronology. The downstream summarizer caps the day at
+    // MAX_RELEASES and allocates a shared body-excerpt budget first-come, so this
+    // ordering is what guarantees a breaking change survives the cap and gets its
+    // body excerpt instead of losing both to churn published later the same day.
+    // NULL importance is `unknown`, not `unimportant`: `importance >= 4` is NULL
+    // for unscored rows, so the CASE folds them into the same bucket as scored-low
+    // releases — deprioritized for promotion, never sorted dead-last or dropped.
+    .orderBy(
+      sql`CASE WHEN ${releasesVisible.importance} >= 4 THEN 0 ELSE 1 END`,
+      desc(releasesVisible.publishedAt),
+    );
 
   return rows.map((r) => ({
     org: r.orgName,

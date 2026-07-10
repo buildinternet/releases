@@ -175,6 +175,52 @@ describe("getCollectionDayReleases", () => {
     expect(rows[0].product).toBe("Product prod_pw");
   });
 
+  test("orders importance >= 4 first, then published-desc; NULL is bulk, not dead-last", async () => {
+    const { db } = createTestDb();
+    await seedOrgSource(db, { orgId: "org_i", sourceId: "src_i" });
+    await db.insert(releases).values([
+      // Published earliest but high-signal — must lead despite its time.
+      {
+        id: "rel_high_early",
+        sourceId: "src_i",
+        title: "High early",
+        content: "body",
+        publishedAt: "2026-06-11T06:00:00.000Z",
+        importance: 5,
+      },
+      // Scored low and published early — sinks below the unscored row.
+      {
+        id: "rel_low_early",
+        sourceId: "src_i",
+        title: "Low early",
+        content: "body",
+        publishedAt: "2026-06-11T09:00:00.000Z",
+        importance: 2,
+      },
+      {
+        id: "rel_high_late",
+        sourceId: "src_i",
+        title: "High late",
+        content: "body",
+        publishedAt: "2026-06-11T16:00:00.000Z",
+        importance: 4,
+      },
+      // Unscored (NULL) but most recent in the non-high bulk — proves NULL is
+      // ordered by recency within the bulk, never forced dead-last.
+      {
+        id: "rel_null_late",
+        sourceId: "src_i",
+        title: "Null late",
+        content: "body",
+        publishedAt: "2026-06-11T20:00:00.000Z",
+        importance: null,
+      },
+    ]);
+
+    const rows = await getCollectionDayReleases(db, { orgIds: ["org_i"], productIds: [] }, window);
+    expect(rows.map((r) => r.title)).toEqual(["High late", "High early", "Null late", "Low early"]);
+  });
+
   test("excludes suppressed releases (matches feed visibility)", async () => {
     const { db } = createTestDb();
     await seedOrgSource(db, { orgId: "org_s", sourceId: "src_s" });
