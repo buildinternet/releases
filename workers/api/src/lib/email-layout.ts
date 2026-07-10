@@ -48,10 +48,14 @@ export function appendHtmlFooter(bodyHtml: string, opts: EmailFooterOpts): strin
   );
 }
 
-/** Minimal HTML document wrapper for single-column transactional mail. */
+/**
+ * Minimal HTML document wrapper for single-column transactional mail. `margin:0 auto`
+ * centers the column in a wide reading pane; the `max-width` keeps the measure
+ * readable rather than letting lines run the full width of the window.
+ */
 export function wrapHtmlEmail(inner: string): string {
   return (
     `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#0f172a;` +
-    `max-width:560px;line-height:1.5;margin:0;padding:16px;">${inner}</body></html>`
+    `max-width:560px;line-height:1.5;margin:0 auto;padding:16px;">${inner}</body></html>`
   );
 }

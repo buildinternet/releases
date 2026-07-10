@@ -29,7 +29,7 @@ A map of every routine or scheduled AI-content job — org overview regeneration
 
 **Collection daily summaries.** One row per (collection, closed ET day) — title, one-line summary, bullet takeaways — generated nightly over the shared summarization lane, distinguished only by `generationName` in usage tracking. See [web.md → Collection daily summaries](web.md).
 
-**Digest emails.** Daily and weekly follows-based digests, both firing at 13:00 UTC (Mondays trigger both). Purely templated — no AI generation involved. See [web.md → Admin hub](web.md) for the preview/test routes.
+**Digest emails.** Daily and weekly follows-based digests, both firing at 13:00 UTC (Mondays trigger both). Purely templated — no AI generation involved. Delivery windows on **`fetched_at`**, not `published_at`: the per-recipient watermark advances to `runStart` on every send, so a publish-time window silently dropped anything ingested after the run that fired for its publish date — which is most editorial feed/scrape posts, and almost no GitHub tags. `releases.fetched_at` is `NOT NULL` and never rewritten by either release upsert, so each row is delivered exactly once, on the first run after ingest; `DIGEST_PUBLISHED_FLOOR_DAYS` (default 30) keeps a history backfill from flooding one email. The subject is dated with the **start** of the covered window (`Jul 9, 2026`, `week of Jul 3, 2026`), not the run instant. See [web.md → Admin hub](web.md) for the preview/test routes.
 
 **Batch org overview (dormant).** `BatchOverviewWorkflow` and its `batch-overview-enabled` flag still exist in code but no cron dispatches them — superseded by the per-org-cadence `OverviewRegenWorkflow`. Retirement tracked in #1897.
 

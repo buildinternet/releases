@@ -77,8 +77,10 @@ beforeEach(async () => {
     title: "Shipped",
     content: "x",
     url: "https://a/1",
+    // Ingested a day ago, not "now": the digest window is on fetched_at, so a
+    // just-fetched row would sit inside even the narrowest `sinceDays` window.
     publishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   });
 });
 afterEach(() => h.cleanup());

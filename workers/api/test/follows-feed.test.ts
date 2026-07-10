@@ -118,7 +118,7 @@ describe("getFollowedReleases", () => {
     expect(ids).toEqual(["rel_between", "rel_org"]);
   });
 
-  it("filters by the published-date watermark window", async () => {
+  it("filters by the ingest-time watermark window", async () => {
     await addFollow(h.db, "u1", "org", "org_a");
     await h.db.insert(releases).values([
       {
@@ -152,10 +152,83 @@ describe("getFollowedReleases", () => {
 
     const rows = await getFollowedReleases(h.db, "u1", {
       limit: 50,
-      publishedAfter: "2026-06-01T00:00:00.000Z",
-      publishedBefore: "2026-06-09T13:00:00.000Z",
+      fetchedAfter: "2026-06-01T00:00:00.000Z",
+      fetchedBefore: "2026-06-09T13:00:00.000Z",
     });
 
     expect(rows.map((r) => r.id)).toEqual(["rel_in"]);
+  });
+
+  // The window is on ingest, not publish: a post that went live before the previous
+  // run but that we only fetched afterwards still belongs to exactly one digest —
+  // the run after we saw it. Windowing on published_at dropped it from both.
+  it("delivers a release published before the window but ingested inside it", async () => {
+    await addFollow(h.db, "u1", "org", "org_a");
+    await h.db.insert(releases).values([
+      {
+        id: "rel_late",
+        sourceId: "src_org",
+        title: "Published pre-window, fetched in-window",
+        content: "x",
+        url: "https://a/1",
+        publishedAt: "2026-06-08T10:00:00.000Z",
+        fetchedAt: "2026-06-08T15:00:00.000Z",
+      },
+      {
+        // Published at the exact instant the previous run fired — the boundary case
+        // a `published_at >` window excluded from every digest, forever.
+        id: "rel_boundary",
+        sourceId: "src_org",
+        title: "Published on the watermark",
+        content: "x",
+        url: "https://a/2",
+        publishedAt: "2026-06-08T13:00:00.000Z",
+        fetchedAt: "2026-06-08T16:00:00.000Z",
+      },
+    ]);
+
+    const rows = await getFollowedReleases(h.db, "u1", {
+      limit: 50,
+      fetchedAfter: "2026-06-08T13:00:00.000Z",
+      fetchedBefore: "2026-06-09T13:00:00.000Z",
+      publishedFloor: "2026-05-09T13:00:00.000Z",
+    });
+
+    expect(rows.map((r) => r.id).sort()).toEqual(["rel_boundary", "rel_late"]);
+  });
+
+  it("floors a backfill's old posts but keeps undated rows", async () => {
+    await addFollow(h.db, "u1", "org", "org_a");
+    await h.db.insert(releases).values([
+      {
+        // Ancient post, freshly re-ingested by a history backfill.
+        id: "rel_backfilled",
+        sourceId: "src_org",
+        title: "Ancient",
+        content: "x",
+        url: "https://a/1",
+        publishedAt: "2024-01-01T00:00:00.000Z",
+        fetchedAt: "2026-06-08T15:00:00.000Z",
+      },
+      {
+        // No publish date is not evidence of age — keep it.
+        id: "rel_undated",
+        sourceId: "src_org",
+        title: "Undated",
+        content: "x",
+        url: "https://a/2",
+        publishedAt: null,
+        fetchedAt: "2026-06-08T15:00:00.000Z",
+      },
+    ]);
+
+    const rows = await getFollowedReleases(h.db, "u1", {
+      limit: 50,
+      fetchedAfter: "2026-06-08T13:00:00.000Z",
+      fetchedBefore: "2026-06-09T13:00:00.000Z",
+      publishedFloor: "2026-05-09T13:00:00.000Z",
+    });
+
+    expect(rows.map((r) => r.id)).toEqual(["rel_undated"]);
   });
 });

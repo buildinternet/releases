@@ -2,7 +2,7 @@ import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { resolveSourceKind } from "@buildinternet/releases-core/kinds";
 import { logEvent } from "@releases/lib/log-event";
 import { escapeHtml } from "./html-escape.js";
-import { appendHtmlFooter, appendTextFooter } from "./email-layout.js";
+import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "./email-layout.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 
 export interface DigestEmailEnv {
@@ -88,13 +88,16 @@ const DIGEST_DATE_FMT = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
 
 /**
- * The dated qualifier for the subject/title: the run date for a daily digest
- * (`Jun 24, 2026`), or "week of" the start of the covered 7-day window for a
- * weekly one (`week of Jun 17, 2026`). The weekly window is anchored to the run
- * date minus 7 days so the label tracks the cadence regardless of the recipient's
+ * The dated qualifier for the subject/title: the START of the covered window, for
+ * both cadences — `Jun 23, 2026` for a daily digest that ran on the 24th, and
+ * `week of Jun 17, 2026` for a weekly one. Labelling the run instant instead dated
+ * a digest with a day it barely covers: the cron fires at 09:00 ET, so a "Jun 24"
+ * daily was overwhelmingly Jun 23's news. The window is anchored to the run date
+ * minus one cadence, so the label tracks the cadence regardless of the recipient's
  * last-digest watermark.
  */
 function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): string {
@@ -102,7 +105,7 @@ function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): st
   if (cadence === "weekly") {
     return `week of ${DIGEST_DATE_FMT.format(new Date(end.getTime() - WEEK_MS))}`;
   }
-  return DIGEST_DATE_FMT.format(end);
+  return DIGEST_DATE_FMT.format(new Date(end.getTime() - DAY_MS));
 }
 
 function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {
@@ -257,7 +260,9 @@ export function buildDigestEmail(content: DigestEmailContent): {
   const n = releases.length;
   const updates = `${n} update${n === 1 ? "" : "s"}`;
   const dateLabel = referenceDate ? digestDateLabel(cadence, referenceDate) : "";
-  const subject = `Your ${cadence} Releases digest — ${dateLabel ? `${dateLabel} · ` : ""}${updates}`;
+  // The cadence is a preference the reader set, not news — the date and the count
+  // are what distinguish one digest from the next in a crowded inbox.
+  const subject = `Releases digest — ${dateLabel ? `${dateLabel} · ` : ""}${updates}`;
   const groups = groupByOrg(releases);
   const orgSpan = groups.length > 1 ? ` across ${groups.length} orgs` : "";
 
@@ -373,7 +378,7 @@ export function buildDigestEmail(content: DigestEmailContent): {
     }
     htmlParts.push(`</div>`);
   });
-  const html = appendHtmlFooter(htmlParts.join(""), digestFooter);
+  const html = wrapHtmlEmail(appendHtmlFooter(htmlParts.join(""), digestFooter));
 
   return { subject, text, html };
 }

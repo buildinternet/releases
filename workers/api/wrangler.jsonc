@@ -64,9 +64,12 @@
     // Digest email sender (AUTH_EMAIL binding). Must be in allowed_sender_addresses.
     "DIGEST_EMAIL_FROM": "digests@releases.sh",
     // Digest cron tunables. Max recipients processed per cron fire; max releases
-    // shown per email. Safe defaults are baked into send-digests.ts when absent.
+    // shown per email; how far back a post may have been published and still be
+    // mailed (bounds a backfill's blast radius — the delivery window itself is on
+    // fetched_at). Safe defaults are baked into send-digests.ts when absent.
     "DIGEST_MAX_PER_RUN": "500",
     "DIGEST_MAX_RELEASES": "50",
+    "DIGEST_PUBLISHED_FLOOR_DAYS": "30",
     // API worker public origin — used to build unsubscribe URLs in digest emails.
     "API_BASE_URL": "https://api.releases.sh",
     // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
@@ -726,6 +729,7 @@
         "DIGEST_EMAIL_FROM": "digests@releases.sh",
         "DIGEST_MAX_PER_RUN": "500",
         "DIGEST_MAX_RELEASES": "50",
+        "DIGEST_PUBLISHED_FLOOR_DAYS": "30",
         "API_BASE_URL": "https://api-staging.releases.sh",
         "FEEDBACK_DISABLED": "false",
         // Staging has no FEEDBACK_RATE_LIMITER binding (no `unsafe` block); the
