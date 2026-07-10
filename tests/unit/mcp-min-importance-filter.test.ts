@@ -12,6 +12,10 @@
  * rendering. See `workers/mcp/src/whats-changed-tool.ts` for the rationale.
  */
 import { describe, it, expect } from "bun:test";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { and, eq, inArray } from "drizzle-orm";
+import { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
@@ -394,5 +398,111 @@ describe("whats_changed — minImportance", () => {
     } finally {
       testDb.cleanup();
     }
+  });
+});
+
+// ── attachImportance bind budget ─────────────────────────────────────
+//
+// `whats_changed` merges `importance` in from D1 by `(source_id, version)`.
+// The API budgets a range at up to MAX_ENTRIES (floor(20_000 / 64) = 312)
+// entries, but D1 rejects any prepared statement binding more than
+// D1_MAX_BINDINGS (100) parameters — so the IN-list must be chunked. An
+// unchunked lookup throws "too many SQL variables" on every wide range, for
+// filtered and unfiltered callers alike.
+//
+// Counts the placeholders Drizzle actually emits (via .toSQL()) rather than
+// asserting "doesn't throw": the in-memory bun:sqlite used by the other tests
+// here enforces no such cap, so a behavioral test would pass while production
+// 500s.
+describe("attachImportance — D1 bind budget", () => {
+  const memDb = drizzle(new Database(":memory:"));
+
+  const lookupBinds = (versionCount: number) =>
+    memDb
+      .select({ version: releases.version, importance: releases.importance })
+      .from(releases)
+      .where(
+        and(
+          eq(releases.sourceId, "src_x"),
+          inArray(
+            releases.version,
+            Array.from({ length: versionCount }, (_, i) => `v${i}`),
+          ),
+        ),
+      )
+      .toSQL().params.length;
+
+  it("a full chunk stays within D1's bind cap", () => {
+    // IN_ARRAY_CHUNK_SIZE version binds + 1 for source_id.
+    expect(lookupBinds(IN_ARRAY_CHUNK_SIZE)).toBe(IN_ARRAY_CHUNK_SIZE + 1);
+    expect(lookupBinds(IN_ARRAY_CHUNK_SIZE)).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+
+  it("an unchunked worst-case range would exceed the cap", () => {
+    // Guards the constant itself: if MAX_ENTRIES ever drops below the cap this
+    // test fails and the chunking (and this comment) can be reconsidered.
+    const MAX_ENTRIES = Math.floor(20_000 / 64);
+    expect(lookupBinds(MAX_ENTRIES)).toBeGreaterThan(D1_MAX_BINDINGS);
+  });
+
+  it("splits a wide range across statements instead of one oversized IN", async () => {
+    // The real guard: `attachImportance` must issue one SELECT per
+    // IN_ARRAY_CHUNK_SIZE versions. Dropping the chunking loop makes the count
+    // flat regardless of range width — which is the shape D1 rejects with
+    // "too many SQL variables". The in-memory sqlite here enforces no bind
+    // cap, so only the statement count separates a correct implementation
+    // from a production 500.
+    //
+    // Asserts the DELTA between a narrow and a wide range rather than an
+    // absolute count, so unrelated SELECTs on the tool's path (and `createDb`'s
+    // `.select` capability probe) can't make this brittle.
+    const selectsForRange = async (versionCount: number): Promise<number> => {
+      const testDb = createTestDb();
+      try {
+        const { srcId } = await seedReleases(testDb.db);
+        let selects = 0;
+        const counting = new Proxy(testDb.db, {
+          get(target, prop, receiver) {
+            if (prop === "select") {
+              selects++;
+              return (target as TestDatabase["db"]).select.bind(target);
+            }
+            return Reflect.get(target, prop, receiver);
+          },
+        }) as TestDatabase["db"];
+
+        const entries: WhatsChangedEntryStub[] = Array.from({ length: versionCount }, (_, i) => ({
+          version: `9.${i}.0`,
+          publishedAt: null,
+          title: `r${i}`,
+          summary: null,
+          breaking: "unknown" as const,
+          migrationNotes: null,
+          url: null,
+          webUrl: null,
+        }));
+        const env = stubEnv({
+          DB: asD1(counting) as unknown as Env["DB"],
+          API: stubWhatsChangedApi(srcId, entries),
+        });
+        const { client, close } = await withClient(env);
+        try {
+          const res = await client.callTool({
+            name: "whats_changed",
+            arguments: { package: "acme-releases", from: "0.9.0", to: "3.0.0" },
+          });
+          expect(firstText(res)).not.toContain("validation error");
+          return selects;
+        } finally {
+          await close();
+        }
+      } finally {
+        testDb.cleanup();
+      }
+    };
+
+    const narrow = await selectsForRange(3); // one chunk
+    const wide = await selectsForRange(IN_ARRAY_CHUNK_SIZE + 12); // two chunks
+    expect(wide - narrow).toBe(1);
   });
 });

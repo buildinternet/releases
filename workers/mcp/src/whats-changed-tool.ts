@@ -2,6 +2,7 @@ import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { and, eq, inArray } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
+import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import {
   IMPORTANCE_MIN,
   IMPORTANCE_MAX,
@@ -47,6 +48,11 @@ type EntryWithImportance = WhatsChangedResponse["entries"][number] & { importanc
  * `version` (shouldn't normally happen for a resolved range) or no matching
  * row gets `importance: null` — the same "unscored" value a NULL column read
  * would produce.
+ *
+ * The IN-list is chunked: the API budgets a range at up to `MAX_ENTRIES` (312)
+ * entries, while D1 caps a prepared statement at `D1_MAX_BINDINGS` (100) bound
+ * parameters. A wide range (`from` an old tag, `to` latest) would otherwise
+ * throw "too many SQL variables" for every caller, filtered or not.
  */
 async function attachImportance(
   env: Env,
@@ -60,12 +66,16 @@ async function attachImportance(
 
   const byVersion = new Map<string, number | null>();
   const db = createDb(env.DB);
-  const rows = await db
-    .select({ version: releases.version, importance: releases.importance })
-    .from(releases)
-    .where(and(eq(releases.sourceId, sourceId), inArray(releases.version, versions)));
-  for (const row of rows) {
-    if (row.version != null) byVersion.set(row.version, row.importance);
+  // `sourceId` takes one bind, so each chunk stays at IN_ARRAY_CHUNK_SIZE + 1.
+  for (let i = 0; i < versions.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = versions.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+    const rows = await db
+      .select({ version: releases.version, importance: releases.importance })
+      .from(releases)
+      .where(and(eq(releases.sourceId, sourceId), inArray(releases.version, chunk)));
+    for (const row of rows) {
+      if (row.version != null) byVersion.set(row.version, row.importance);
+    }
   }
   return entries.map((e) => ({
     ...e,
