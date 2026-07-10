@@ -3,6 +3,25 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 9, 2026
+
+**Added**
+- Homepage features an interactive CLI preview — job-led tabs demo live commands and responses, with a live vitals strip showing indexed source and release counts.
+- Compact release cards now show a media thumbnail when the release has associated imagery.
+- Org rows in the catalog and search results now display provenance — origin domain, alias badge, and a stub icon for listings awaiting verification.
+- Digest emails redesigned for scannability — releases grouped by org with compact multi-release blocks and clearer visual hierarchy.
+- In-place release re-fetch: `POST /v1/workflows/refetch-release` re-fetches a single release's live page and updates its title, content, and date in place without changing its ID.
+- `GET /v1/lookups/by-domain` now auto-materializes a listing stub on miss when the domain has a valid `releases.json` manifest, returning a 200 instead of 404.
+
+**Changed**
+- Release pages now use a shared org-level OG card across all releases from that org, instead of rendering a per-release image.
+- `/v1/search` release hits no longer include full markdown content by default; pass `?include_content=true` to opt in.
+
+**Fixed**
+- Org and product catalog pages now fall back to REST when GraphQL is unavailable during deploy windows, rather than showing an error state.
+- Root-relative per-post permalinks (e.g. `/blog/post`) now resolve correctly during extraction.
+- `GET /v1/orgs/:slug` now resolves by the org's primary domain, fixing lookups that previously returned 404.
+
 ## July 8, 2026
 
 **Added**
