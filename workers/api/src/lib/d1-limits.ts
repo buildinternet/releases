@@ -5,14 +5,19 @@
 // tests in tests/api/releases-batch-binds.test.ts fail loudly when a bump
 // would push a statement past the cap.
 //
-// Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) live
-// in `@buildinternet/releases-core/d1-limits` so packages below the worker
-// (core-internal eligibility / overview-upsert) share one source of truth.
-// Re-exported here so existing worker import paths keep working.
+// Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) and
+// the shared `chunkArray` helper live in `@buildinternet/releases-core/d1-limits`
+// so packages below the worker (core-internal eligibility / overview-upsert)
+// share one source of truth. Re-exported here so existing worker import
+// paths keep working.
 
-import { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+import {
+  D1_MAX_BINDINGS,
+  IN_ARRAY_CHUNK_SIZE,
+  chunkArray,
+} from "@buildinternet/releases-core/d1-limits";
 
-export { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE };
+export { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE, chunkArray };
 
 // `releases` INSERT binds up to 17 placeholders per row when the caller
 // provides the full sources-batch payload. Drizzle binds everything that has

@@ -1,19 +1,11 @@
 import { sql } from "drizzle-orm";
+import { chunkArray } from "@buildinternet/releases-core/d1-limits";
 import { feedCursorSql, type AggregateReleaseRow, type FeedQueryRunner } from "./feed-cursor.js";
 import { COVERAGE_COUNT_EXPR } from "./release-coverage-sql.js";
 
 export { buildFeedCursor } from "./feed-cursor.js";
 
 export type CollectionReleaseRow = AggregateReleaseRow;
-
-/** Split an array into chunks of at most `size` elements. */
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
-}
 
 /**
  * D1 ceiling: 100 bound parameters per prepared statement. The collection

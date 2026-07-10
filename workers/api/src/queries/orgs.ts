@@ -3,7 +3,7 @@ import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { nowIso } from "@buildinternet/releases-core/dates";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
-import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "../lib/d1-limits.js";
 import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
 
@@ -227,11 +227,10 @@ export async function getOrgSparklines(
     return getOrgSparklinesChunk(db, cutoff30d, orgIds);
   }
 
-  const chunks: string[][] = [];
-  for (let i = 0; i < orgIds.length; i += IN_ARRAY_CHUNK_SIZE)
-    chunks.push(orgIds.slice(i, i + IN_ARRAY_CHUNK_SIZE));
   const rows = await Promise.all(
-    chunks.map((chunk) => getOrgSparklinesChunk(db, cutoff30d, chunk)),
+    chunkArray(orgIds, IN_ARRAY_CHUNK_SIZE).map((chunk) =>
+      getOrgSparklinesChunk(db, cutoff30d, chunk),
+    ),
   );
   return rows.flat();
 }

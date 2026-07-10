@@ -29,6 +29,7 @@ import {
 import * as schema from "@buildinternet/releases-core/schema";
 import { getEntityType } from "@buildinternet/releases-core/id";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
+import { chunkArray } from "@buildinternet/releases-core/d1-limits";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import { logEvent } from "@releases/lib/log-event";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
@@ -46,12 +47,6 @@ import { isEmptyReleaseContent } from "./content-quality.js";
 // statement (per `AGENTS.md`); 90 leaves headroom for any other binds the
 // statement carries today and any added later.
 const D1_IN_CHUNK = 90;
-
-function chunkInto<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
 
 // Local D1 db type — same shape as workers/api and workers/mcp's `D1Db`
 // (both compute `ReturnType<typeof drizzle<typeof schema>>`). Re-deriving
@@ -355,7 +350,7 @@ async function hydrateReleases(
   const contentSelect = opts.includeContent ? sql`r.content as content,` : sql``;
   // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
   const results = await Promise.all(
-    chunkInto(ids, D1_IN_CHUNK).map((batch) =>
+    chunkArray(ids, D1_IN_CHUNK).map((batch) =>
       db.all<RawReleaseRow>(sql`
         SELECT r.id as id,
                r.title as title,
@@ -428,7 +423,7 @@ async function hydrateChunks(
 
   // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
   const chunkRowResults = await Promise.all(
-    chunkInto(vectorIds, D1_IN_CHUNK).map((batch) =>
+    chunkArray(vectorIds, D1_IN_CHUNK).map((batch) =>
       db.all<RawChunkRow>(sql`
         SELECT scc.id as id,
                scc.vector_id as vectorId,
@@ -463,7 +458,7 @@ async function hydrateChunks(
   // 100-bind cap here too.
   const uniqueFileIds = [...new Set(chunkRows.map((r) => r.fileId))];
   const fileRowsResults = await Promise.all(
-    chunkInto(uniqueFileIds, D1_IN_CHUNK).map((batch) =>
+    chunkArray(uniqueFileIds, D1_IN_CHUNK).map((batch) =>
       db
         .select({ id: sourceChangelogFiles.id, content: sourceChangelogFiles.content })
         .from(sourceChangelogFiles)
@@ -627,8 +622,7 @@ async function runHybridSearchInternal(
     const map = new Map<string, number>();
     const releaseIds = ids.filter((id) => getEntityType(id) === "release");
     if (releaseIds.length === 0) return map;
-    const chunks: string[][] = [];
-    for (let i = 0; i < releaseIds.length; i += 90) chunks.push(releaseIds.slice(i, i + 90));
+    const chunks = chunkArray(releaseIds, D1_IN_CHUNK);
     const results = await Promise.all(
       chunks.map((chunk) =>
         db.all<{ id: string; rankAt: string | null }>(sql`
@@ -932,7 +926,7 @@ async function runCollectionsSemanticInternal(
     memberCount: number;
   };
   const rowResults = await Promise.all(
-    chunkInto(collectionIds, D1_IN_CHUNK).map((batch) =>
+    chunkArray(collectionIds, D1_IN_CHUNK).map((batch) =>
       db.all<CollectionHydrateRow>(sql`
         SELECT ${collections.id} as id,
                ${collections.slug} as slug,
@@ -1052,7 +1046,7 @@ async function runRegistrySearchInternal(
     query: (batch: string[]) => Promise<T[]>,
   ): Promise<T[]> {
     if (!should) return [];
-    const results = await Promise.all(chunkInto(ids, D1_IN_CHUNK).map(query));
+    const results = await Promise.all(chunkArray(ids, D1_IN_CHUNK).map(query));
     return results.flat();
   }
 
