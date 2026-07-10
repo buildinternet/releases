@@ -12,14 +12,24 @@ export function clamp(text: string, max: number): string {
 
 export function stripMarkdown(text: string | null | undefined): string {
   if (!text) return "";
-  return text
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`[^`]*`/g, " ")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[#*_~>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    text
+      .replace(/```[\s\S]*?```/g, " ")
+      // Unwrap inline code to its contents rather than deleting the span:
+      // dropping it wholesale turned "(`none`/`minor`/`major`)" into "( / / )"
+      // and "the `search` tool" into "the tool".
+      .replace(/`([^`]*)`/g, "$1")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Heading/blockquote markers are only markers at the start of a line.
+      .replace(/^[ \t]*[#>]+[ \t]*/gm, "")
+      // `_` is deliberately not stripped: in changelog prose it is far more
+      // often an identifier character (`whats_changed`) than an emphasis
+      // marker, and unwrapped code spans now expose those identifiers here.
+      .replace(/[*~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 export function formatCount(n: number | null | undefined): string {

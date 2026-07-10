@@ -124,17 +124,23 @@ function isAllowedProtocol(url: string): boolean {
 
 /** Collapse markdown to a single line of plain text for the compact list row. */
 function stripMarkdown(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, " ") // fenced code
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links → text
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "") // headings
-    .replace(/^\s{0,3}>\s?/gm, "") // blockquotes
-    .replace(/^\s{0,3}[-*+]\s+/gm, "") // bullet markers
-    .replace(/^\s{0,3}\d+\.\s+/gm, "") // ordered markers
-    .replace(/[*_`~]/g, "") // emphasis / code ticks
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    md
+      .replace(/```[\s\S]*?```/g, " ") // fenced code
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links → text
+      .replace(/^\s{0,3}#{1,6}\s+/gm, "") // headings
+      .replace(/^\s{0,3}>\s?/gm, "") // blockquotes
+      .replace(/^\s{0,3}[-*+]\s+/gm, "") // bullet markers
+      .replace(/^\s{0,3}\d+\.\s+/gm, "") // ordered markers
+      .replace(/`([^`]*)`/g, "$1") // inline code → its contents
+      // `_` is not an emphasis marker here: in changelog prose it is far more
+      // often an identifier character (`whats_changed`), and unwrapping code
+      // spans above exposes those identifiers to this pass.
+      .replace(/[*~]/g, "") // emphasis
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /**

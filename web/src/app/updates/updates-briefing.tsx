@@ -1,9 +1,9 @@
-"use client";
-
-import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import type { OverviewPageItem } from "@/lib/api";
+import { remarkPlugins } from "@/lib/markdown-plugins";
+import { markdownComponents } from "@/components/markdown-components";
 import { stripLeadingHeading } from "@/lib/overview-citations";
-import { stripMarkdown } from "@/lib/og-helpers";
+import { BriefingClamp } from "./briefing-clamp";
 
 /**
  * Compact "Recently shipped" briefing card for `/updates` (design option 8a).
@@ -11,16 +11,15 @@ import { stripMarkdown } from "@/lib/og-helpers";
  * data fetching — but presents it compressed to a few lines instead of the
  * full clamp-at-1800px prose card, matching the mockup's dense header card.
  *
- * `OverviewView`'s existing `OverviewClamp` is effectively a no-op at this
- * scale (its clamp height is tuned to catch only runaway AI output, not to
- * produce a 2-3 line teaser), so this is a small page-specific presentation
- * rather than a new `OverviewView` variant — the brief's fallback option.
- * Deliberately plain-text (via the shared `stripMarkdown` OG helper) rather
- * than a full markdown render, so this client island stays light.
+ * The markdown renders on the server through the same `react-markdown` stack
+ * `OverviewView` uses, so inline code, links, and paragraph breaks survive; only
+ * the collapse toggle is a client island. An earlier version ran the overview
+ * through the OG `stripMarkdown` helper, which deletes the *contents* of inline
+ * code spans — turning "(`none`/`minor`/`major`)" into "( / / )" — and collapses
+ * every paragraph break into a single run of text.
  */
 export function UpdatesBriefing({ page }: { page: OverviewPageItem }) {
-  const [expanded, setExpanded] = useState(false);
-  const text = stripMarkdown(stripLeadingHeading(page.content));
+  const content = stripLeadingHeading(page.content);
   const updatedDate = new Date(page.updatedAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -42,8 +41,8 @@ export function UpdatesBriefing({ page }: { page: OverviewPageItem }) {
         <path d="M12 3.5l1.5 4.2L18 9l-4.5 1.3L12 14.5l-1.5-4.2L6 9l4.5-1.3z" />
         <path d="M18.6 14.2l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6z" />
       </svg>
-      <div className="min-w-0">
-        <div className="mb-1 flex items-baseline gap-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="mb-1.5 flex items-baseline gap-2.5">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-stone-500 dark:text-stone-400">
             Recently shipped
           </h2>
@@ -51,24 +50,11 @@ export function UpdatesBriefing({ page }: { page: OverviewPageItem }) {
             {page.releaseCount} releases · updated {updatedDate}
           </span>
         </div>
-        <p
-          className={
-            "text-[13.5px] leading-relaxed text-stone-600 dark:text-stone-300 " +
-            (expanded ? "" : "line-clamp-3")
-          }
-        >
-          {text}
-        </p>
-        {!expanded && text.length > 220 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            aria-expanded={false}
-            className="mt-1.5 text-[12px] font-medium text-stone-500 transition-colors hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
-          >
-            Show more
-          </button>
-        )}
+        <BriefingClamp contentId="updates-briefing">
+          <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+            {content}
+          </ReactMarkdown>
+        </BriefingClamp>
       </div>
     </div>
   );
