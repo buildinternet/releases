@@ -1,5 +1,11 @@
 # @buildinternet/releases-api-types
 
+## 0.44.0
+
+### Minor Changes
+
+- 71f132a: Add optional `ogImageUrl` to `ReleaseDetailResponseSchema` / `ReleaseDetail` (#2066): the absolute `media.releases.sh` URL for a release's mirrored OpenGraph image, when one has been generated at ingest time. `null`/absent means no mirrored image exists yet — callers fall back to the on-demand `opengraph-image` route. Additive and optional; older servers omit it.
+
 ## 0.43.0
 
 ### Minor Changes
