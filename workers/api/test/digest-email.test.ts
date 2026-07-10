@@ -229,6 +229,114 @@ describe("buildDigestEmail", () => {
     });
     expect(text).toContain("INDIE FEED");
   });
+
+  // Common render config for the importance-ordering cases.
+  const base = {
+    recipientName: null,
+    cadence: "daily" as const,
+    baseUrl: "https://releases.sh",
+    manageUrl: "https://releases.sh/following",
+    unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+  };
+  const acme = {
+    slug: "blog",
+    name: "Acme Blog",
+    type: "feed" as const,
+    orgSlug: "acme",
+    orgName: "Acme",
+  };
+
+  it("leads an org's posts with the high-signal one, even when published earlier", () => {
+    const { text } = buildDigestEmail({
+      ...base,
+      // Arrives published-desc from the query: the newer, unremarkable post first.
+      releases: [
+        rel({
+          id: "r_norm",
+          title: "Routine update",
+          titleShort: "Routine update",
+          importance: null,
+          publishedAt: "2026-06-09T00:00:00.000Z",
+          source: acme,
+        }),
+        rel({
+          id: "r_hot",
+          title: "Notable launch",
+          titleShort: "Notable launch",
+          importance: 5,
+          publishedAt: "2026-06-08T00:00:00.000Z",
+          source: acme,
+        }),
+      ],
+    });
+    expect(text.indexOf("Notable launch")).toBeLessThan(text.indexOf("Routine update"));
+  });
+
+  it("floats an org carrying a high-signal release above a more-recent but unremarkable org", () => {
+    const alpha = {
+      slug: "a",
+      name: "Alpha",
+      type: "feed" as const,
+      orgSlug: "alpha",
+      orgName: "Alpha",
+    };
+    const beta = {
+      slug: "b",
+      name: "Beta",
+      type: "feed" as const,
+      orgSlug: "beta",
+      orgName: "Beta",
+    };
+    const { text } = buildDigestEmail({
+      ...base,
+      releases: [
+        rel({
+          id: "r_a",
+          title: "Alpha routine",
+          titleShort: "Alpha routine",
+          importance: null,
+          publishedAt: "2026-06-10T00:00:00.000Z",
+          source: alpha,
+        }),
+        rel({
+          id: "r_b",
+          title: "Beta breaking change",
+          titleShort: "Beta breaking change",
+          importance: 5,
+          publishedAt: "2026-06-08T00:00:00.000Z",
+          source: beta,
+        }),
+      ],
+    });
+    expect(text.indexOf("BETA")).toBeLessThan(text.indexOf("ALPHA"));
+  });
+
+  it("keeps NULL-importance posts in chronological order, never below a scored-low post", () => {
+    const { text } = buildDigestEmail({
+      ...base,
+      releases: [
+        rel({
+          id: "r_null",
+          title: "Unscored recent",
+          titleShort: "Unscored recent",
+          importance: null,
+          publishedAt: "2026-06-09T00:00:00.000Z",
+          source: acme,
+        }),
+        rel({
+          id: "r_low",
+          title: "Low scored older",
+          titleShort: "Low scored older",
+          importance: 2,
+          publishedAt: "2026-06-08T00:00:00.000Z",
+          source: acme,
+        }),
+      ],
+    });
+    // Neither is high-signal, so published-desc is preserved and the NULL row (more
+    // recent) stays ahead of the scored-low one — unknown is not treated as unimportant.
+    expect(text.indexOf("Unscored recent")).toBeLessThan(text.indexOf("Low scored older"));
+  });
 });
 
 describe("sendDigestEmail", () => {

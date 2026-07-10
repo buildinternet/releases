@@ -124,6 +124,20 @@ function isRollupItem(r: ReleaseLatestItem): boolean {
   return r.source.type === "github" || resolveSourceKind(r.source, r.product ?? null) === "sdk";
 }
 
+/**
+ * A release the AI scored high-signal (importance >= 4, the same threshold the web
+ * surfaces as a flame). A within-structure ordering nudge keys off this: high-signal
+ * posts lead their org section and orgs carrying one float up. NULL/undefined
+ * importance is `unknown`, never `unimportant` — it stays in the chronological bulk,
+ * never promoted, but also never demoted below a scored-low post. Deliberately a
+ * binary lead (not a full importance sort): a digest is a time window, so we only
+ * lift the genuinely notable and leave the rest in published order.
+ */
+const HIGH_SIGNAL_IMPORTANCE = 4;
+function isHighSignal(r: ReleaseLatestItem): boolean {
+  return (r.importance ?? 0) >= HIGH_SIGNAL_IMPORTANCE;
+}
+
 function partitionOrgItems(items: ReleaseLatestItem[]): {
   posts: ReleaseLatestItem[];
   rollups: ReleaseLatestItem[];
@@ -131,6 +145,10 @@ function partitionOrgItems(items: ReleaseLatestItem[]): {
   const posts: ReleaseLatestItem[] = [];
   const rollups: ReleaseLatestItem[] = [];
   for (const r of items) (isRollupItem(r) ? rollups : posts).push(r);
+  // Lead an org's posts with its high-signal ones, preserving published-desc order
+  // within each tier (Array#sort is stable). Rollups (GitHub tags / SDK churn) are
+  // importance-agnostic by design and keep their per-product grouping untouched.
+  posts.sort((a, b) => Number(isHighSignal(b)) - Number(isHighSignal(a)));
   return { posts, rollups };
 }
 
@@ -248,7 +266,12 @@ function groupByOrg(releases: ReleaseLatestItem[]): Array<{
     }
     g.items.push(r);
   }
-  return [...groups.values()];
+  // Float orgs that carry a high-signal release above the rest, preserving the
+  // published-desc order among orgs within each tier (stable sort). Chronology is
+  // still the default spine — only a genuinely notable release reorders the sections.
+  const ordered = [...groups.values()];
+  ordered.sort((a, b) => Number(b.items.some(isHighSignal)) - Number(a.items.some(isHighSignal)));
+  return ordered;
 }
 
 export function buildDigestEmail(content: DigestEmailContent): {
