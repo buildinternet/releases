@@ -35,6 +35,7 @@ export type GqlOrgFeedRelease = {
   titleGenerated: string | null;
   titleShort: string | null;
   breaking?: string | null;
+  importance?: number | null;
   composition?: { bugs: number; features: number; enhancements: number } | null;
   source: {
     slug: string;
@@ -63,6 +64,7 @@ export function mapOrgReleaseItem(r: GqlOrgFeedRelease): OrgReleaseItem {
     titleGenerated: r.titleGenerated,
     titleShort: r.titleShort,
     breaking: (r.breaking as OrgReleaseItem["breaking"]) ?? undefined,
+    importance: r.importance ?? undefined,
     composition: r.composition ?? undefined,
     source: {
       slug: r.source.slug,

@@ -12,6 +12,7 @@ query ReleaseDetail($idOrUrl: String!) {
     titleShort
     content
     migrationNotes
+    importance
     composition {
       bugs
       features

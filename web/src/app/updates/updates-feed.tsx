@@ -7,6 +7,7 @@ import { buildFeedEntries, type FeedEntry } from "@/components/org-release-entri
 import { deriveFeedTitle } from "@/lib/release-title";
 import { formatDate } from "@/lib/formatters";
 import { FallbackImage } from "@/components/fallback-image";
+import { ImportanceMarker } from "@/components/importance-marker";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 import { GlyphCounts, CompositionLegend } from "./composition-glyphs";
 import {
@@ -413,6 +414,7 @@ function FullEntry({
     <article className="border-b border-stone-200 py-5 last:border-b-0 dark:border-stone-800">
       <MetaLine publishedAt={publishedAt} area={area} version={version} composition={composition} />
       <h3 className="m-0 text-[18px] font-semibold leading-tight tracking-tight text-stone-900 dark:text-stone-100">
+        <ImportanceMarker importance={release.importance} className="mr-1.5 align-baseline" />
         {release.id ? (
           <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
             {heading}

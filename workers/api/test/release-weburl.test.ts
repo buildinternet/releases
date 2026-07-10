@@ -116,6 +116,7 @@ describe("mapLatestRowToReleaseItem webUrl", () => {
     title_generated: null,
     title_short: "Acme improves widgets",
     breaking: null,
+    importance: null,
     published_at: "2026-06-01T00:00:00Z",
     url: "https://acme.test/2-0",
     media: null,

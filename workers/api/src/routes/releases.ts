@@ -11,6 +11,11 @@ import {
   sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
+import {
+  IMPORTANCE_MAX,
+  IMPORTANCE_MIN,
+  isImportanceScore,
+} from "@buildinternet/releases-core/importance";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { Env } from "../index.js";
 import {
@@ -185,6 +190,14 @@ releaseRoutes.get(
         description:
           "Keep only releases published at or before this bound. Same input formats as `since`.",
       },
+      {
+        name: "minImportance",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 5 },
+        description:
+          "Only include releases with AI-scored `importance` >= this value (1–5). Releases with no score (`null`) are excluded when set. Filtered requests bypass the KV cache (`X-Cache: BYPASS`).",
+      },
     ],
     responses: {
       200: {
@@ -193,7 +206,7 @@ releaseRoutes.get(
       },
       400: {
         description:
-          "Invalid `exclude` value, unparseable `since`/`until`, or `source` and `org` both supplied",
+          "Invalid `exclude` value, unparseable `since`/`until`, invalid `minImportance`, or `source` and `org` both supplied",
         content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
@@ -230,6 +243,25 @@ releaseRoutes.get(
       return respondError(c, new ValidationError(window.message, { code: "bad_request" }));
     }
     const { since, until } = window;
+
+    // Reject typos/garbage with a 400 — same rationale as `exclude`: silent
+    // fallthrough would return an unfiltered feed and cache-collide with the
+    // default homepage shape.
+    const minImportanceParam = c.req.query("minImportance");
+    let minImportance: number | undefined;
+    if (minImportanceParam !== undefined) {
+      const parsed = Number(minImportanceParam);
+      if (!isImportanceScore(parsed)) {
+        return respondError(
+          c,
+          new ValidationError(
+            `\`minImportance\` must be an integer between ${IMPORTANCE_MIN} and ${IMPORTANCE_MAX}`,
+            { code: "bad_request" },
+          ),
+        );
+      }
+      minImportance = parsed;
+    }
 
     if (sourceParam && orgParam) {
       return respondError(
@@ -274,6 +306,7 @@ releaseRoutes.get(
       // keying on the resolved bounds keeps any future allowlisting safe.
       since,
       until,
+      minImportance: minImportance !== undefined ? String(minImportance) : undefined,
     });
 
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -288,6 +321,7 @@ releaseRoutes.get(
         excludeSourceTypes,
         since,
         until,
+        minImportance,
         limit: count,
       });
       return rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)));
@@ -304,6 +338,7 @@ releaseRoutes.get(
       excludeSourceTypes,
       since,
       until,
+      minImportance,
     });
 
     if (!cacheable) {

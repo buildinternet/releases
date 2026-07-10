@@ -4,6 +4,7 @@ import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import {
   AppStoreSourceInfoSchema,
   CategorySchema,
+  ImportanceScoreSchema,
   ListResponseSchema,
   NoticeSchema,
   OrgStatusSchema,
@@ -459,6 +460,7 @@ export const OrgRecentReleaseItemSchema = z.object({
    * means not classified. List paths carry `breaking` only.
    */
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  importance: ImportanceScoreSchema,
   url: z.string().nullable(),
   contentHash: z.string().nullable(),
   metadata: z.string().nullable(),

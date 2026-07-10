@@ -314,6 +314,7 @@ export type OrgReleasesQuery = {
       content: string;
       prerelease: boolean | null;
       breaking: string | null;
+      importance: number | null;
       composition: { bugs: number; features: number; enhancements: number } | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: {
@@ -381,6 +382,7 @@ export type ProductPageQuery = {
       content: string;
       prerelease: boolean | null;
       breaking: string | null;
+      importance: number | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: {
         slug: string;
@@ -412,6 +414,7 @@ export type ReleaseDetailQuery = {
     titleShort: string | null;
     content: string;
     migrationNotes: string | null;
+    importance: number | null;
     composition: { bugs: number; features: number; enhancements: number } | null;
     media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
     source: {
@@ -1327,7 +1330,7 @@ export const OrgPageDocument = {
   ],
 } as unknown as DocumentNode<OrgPageQuery, OrgPageQueryVariables>;
 export const OrgReleasesDocument = {
-  __meta__: { hash: "sha256:b417aa886d03499aaf60ee878bfc0530c88e3cdfc1b4bb5af3ea25e38d7e6940" },
+  __meta__: { hash: "sha256:12d1054933c6449d79bde056c6769544bdb2d382de491183b212bfe7ff340f89" },
   kind: "Document",
   definitions: [
     {
@@ -1393,6 +1396,7 @@ export const OrgReleasesDocument = {
                       { kind: "Field", name: { kind: "Name", value: "content" } },
                       { kind: "Field", name: { kind: "Name", value: "prerelease" } },
                       { kind: "Field", name: { kind: "Name", value: "breaking" } },
+                      { kind: "Field", name: { kind: "Name", value: "importance" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "composition" },
@@ -1474,7 +1478,7 @@ export const OrgReleasesDocument = {
   ],
 } as unknown as DocumentNode<OrgReleasesQuery, OrgReleasesQueryVariables>;
 export const ProductPageDocument = {
-  __meta__: { hash: "sha256:8bbe4adb3c5316c7a9bf8b4daf1d8635993d0d1bab26d3fdfaa334d5107b2f82" },
+  __meta__: { hash: "sha256:f6b8bcc5a1c6f3bff075f00f7f35f0032b2648e3197393b6410bec34ed6bdc17" },
   kind: "Document",
   definitions: [
     {
@@ -1606,6 +1610,7 @@ export const ProductPageDocument = {
                       { kind: "Field", name: { kind: "Name", value: "content" } },
                       { kind: "Field", name: { kind: "Name", value: "prerelease" } },
                       { kind: "Field", name: { kind: "Name", value: "breaking" } },
+                      { kind: "Field", name: { kind: "Name", value: "importance" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "media" },
@@ -1675,7 +1680,7 @@ export const ProductPageDocument = {
   ],
 } as unknown as DocumentNode<ProductPageQuery, ProductPageQueryVariables>;
 export const ReleaseDetailDocument = {
-  __meta__: { hash: "sha256:1c550e19778eebf6f75b60652d1d327543320dc870cc5766c47a4189b7dfb7ac" },
+  __meta__: { hash: "sha256:425e8a63e8513a9a744f98fc5f7596f23a4b8031d683148e1bbeefac22ab3539" },
   kind: "Document",
   definitions: [
     {
@@ -1720,6 +1725,7 @@ export const ReleaseDetailDocument = {
                 { kind: "Field", name: { kind: "Name", value: "titleShort" } },
                 { kind: "Field", name: { kind: "Name", value: "content" } },
                 { kind: "Field", name: { kind: "Name", value: "migrationNotes" } },
+                { kind: "Field", name: { kind: "Name", value: "importance" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "composition" },

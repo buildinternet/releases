@@ -230,6 +230,7 @@ export async function generateContentForReleases(
     composition: ReleaseComposition | null;
     breaking: BreakingLevel;
     migrationNotes: string | null;
+    importance: number | null;
   }[] = [];
 
   for (const row of rows) {
@@ -310,6 +311,7 @@ export async function generateContentForReleases(
         composition: result.composition,
         breaking,
         migrationNotes,
+        importance: result.importance,
       });
     } catch (err) {
       failed++;
@@ -325,10 +327,11 @@ export async function generateContentForReleases(
 
   let generated = 0;
   // Worst-case binds per UPDATE: titleGenerated, titleShort, summary, metadata,
-  // breaking, migration_notes, id = 7 → chunk at floor(100 / 7) = 14 to stay
-  // under D1's 100-bind per-statement cap. breaking/migration_notes are only SET
-  // for classified rows; non-classified rows keep their "unknown" default.
-  const UPDATE_CHUNK_SIZE = 14;
+  // breaking, migration_notes, importance, id = 8 → chunk at floor(100 / 8) = 12
+  // to stay under D1's 100-bind per-statement cap. breaking/migration_notes are
+  // only SET for classified rows; non-classified rows keep their "unknown"
+  // default. importance is always SET (including null, when unclassified).
+  const UPDATE_CHUNK_SIZE = 12;
   for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
     const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
     const statements = chunk.map((u) => {
@@ -339,6 +342,7 @@ export async function generateContentForReleases(
           titleGenerated: u.titleGenerated,
           titleShort: u.titleShort,
           summary: u.summary,
+          importance: u.importance,
           ...(metadataSet ? { metadata: metadataSet } : {}),
           ...(u.breaking !== "unknown"
             ? { breaking: u.breaking, migrationNotes: u.migrationNotes }

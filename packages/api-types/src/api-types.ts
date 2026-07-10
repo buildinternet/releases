@@ -888,6 +888,12 @@ export interface ReleaseDetail {
   breaking?: BreakingLevel;
   /** Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none. */
   migrationNotes?: string | null;
+  /**
+   * AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
+   * ingest by the release-content pass; fail-open — null/absent means not
+   * scored. Additive — older servers omit it.
+   */
+  importance?: number | null;
   url: string | null;
   /**
    * Canonical releases.sh detail-page URL (friendly form: ID + current
@@ -1537,6 +1543,8 @@ export interface ReleaseWithSource {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). */
   titleShort?: string | null;
+  /** AI-scored importance 1–5. See {@link ReleaseDetail.importance}. */
+  importance?: number | null;
   url: string | null;
   contentHash: string | null;
   metadata: string | null;
@@ -1580,6 +1588,8 @@ export interface LatestRelease {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). */
   titleShort?: string | null;
+  /** AI-scored importance 1–5. See {@link ReleaseDetail.importance}. */
+  importance?: number | null;
   media: MediaItem[];
   /**
    * Cached release-body size — `LENGTH(content)` and `countTokensSafe(content)`

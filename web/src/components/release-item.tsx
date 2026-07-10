@@ -22,6 +22,7 @@ import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
 import { BreakingChip } from "./breaking-chip";
+import { ImportanceMarker } from "./importance-marker";
 import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
 import { PlayBadge } from "./play-badge";
@@ -448,6 +449,7 @@ export function ReleaseListItem({
         {!appStore && !video && (
           <>
             <div className="flex items-baseline gap-1.5 mb-1">
+              <ImportanceMarker importance={release.importance} />
               <h2 id={titleId} className={headingClasses}>
                 {release.id ? (
                   <ViewTransition name={`rel-${release.id}`} default="none">

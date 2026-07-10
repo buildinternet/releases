@@ -4,6 +4,7 @@ import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
   AppStoreSourceInfoSchema,
+  ImportanceScoreSchema,
   MediaItemSchema,
   ReleaseCompositionSchema,
   ReleaseThumbnailSchema,
@@ -71,6 +72,7 @@ export const ReleaseLatestItemSchema = z.object({
    * `migrationNotes` stays detail-route-only to keep list payloads slim.
    */
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  importance: ImportanceScoreSchema,
   publishedAt: z.string().nullable(),
   url: z.string().nullable(),
   /**
@@ -260,6 +262,7 @@ export const ReleaseDetailResponseSchema = z.object({
    * `ReleaseDetail.breaking` in api-types.ts.
    */
   breaking: z.enum(BREAKING_LEVELS).optional(),
+  importance: ImportanceScoreSchema,
   /**
    * Explicit upgrade/migration steps lifted from the body (#1696); omitted
    * when the body gives none. Detail-route-only — list paths never carry it.

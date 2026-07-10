@@ -14,6 +14,7 @@
 
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { isBreakingLevel, type BreakingLevel } from "@buildinternet/releases-core/breaking";
+import { isImportanceScore } from "@buildinternet/releases-core/importance";
 import type { TextModel } from "./text-model";
 
 export type { ReleaseComposition };
@@ -28,8 +29,9 @@ export const MAX_BODY_CHARS = 8000;
 /** Cap on the model's response. Sized for ~80-char title + ~70-char short + 1-2 sentence summary
  *  in tagged XML, with headroom for the trailing <composition> count tag (~25-30 tokens for
  *  two-digit counts), plus the <breaking> verdict word + a ≤3-sentence <migration> note (#1696,
- *  ~120 tokens). 420 = 280 (pre-breaking cap) + ~140 buffer. */
-export const MAX_OUTPUT_TOKENS = 420;
+ *  ~120 tokens), plus a single-digit <importance> tag (~5 tokens). 440 = 420 (pre-importance
+ *  cap) + ~20 buffer. */
+export const MAX_OUTPUT_TOKENS = 440;
 
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
@@ -86,11 +88,13 @@ export function isEmptyContent(raw: string): boolean {
 export const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
 
 <output_structure>
-Output exactly one <empty>...</empty> tag, then one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, then one <breaking>...</breaking> tag, then one <migration>...</migration> tag, in that order. Output nothing before, between, or after these tags.
+Output exactly one <empty>...</empty> tag, then one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, then one <breaking>...</breaking> tag, then one <migration>...</migration> tag, then one <importance>...</importance> tag, in that order. Output nothing before, between, or after these tags.
 
 The <empty> tag is a boolean — exactly the literal string \`true\` or \`false\`, with no other text inside the tag. It is true when the body has no real release-note content (see <fallback> below) and false otherwise. When empty is true, downstream discards the summary and short title entirely — still produce a formulaic title from the product and version (e.g. "Next.js v15.4.2 dependency update"), but the summary and title_short content is ignored.
 
 The <breaking> and <migration> tags classify upgrade risk — see <breaking_change> below. You are already scanning the body for breaking changes to write the title and summary (priority #1); the <breaking> tag just records that verdict.
+
+The <importance> tag scores newsworthiness — see <importance_format> below.
 </output_structure>
 
 <title_format>
@@ -220,6 +224,22 @@ Use the SemVer signal — for GitHub/npm packages it is often the clearest indic
 Examples: a release removing \`completions.create\` and dropping Node 18 → \`<breaking>major</breaking>\` with migration steps; a package landing on \`3.0.0\` with only terse notes → \`<breaking>major</breaking>\` (the major-version bump is the maintainer's signal); a \`1.4.2\` patch with only bug fixes → \`<breaking>none</breaking><migration>none</migration>\`; a release deprecating a prop that still works → \`<breaking>minor</breaking><migration>none</migration>\`; a release of only feature additions + bug fixes → \`<breaking>none</breaking><migration>none</migration>\`; a marketing-only "we shipped improvements" body with no version → \`<breaking>unknown</breaking><migration>none</migration>\`.
 </breaking_change>
 
+<importance_format>
+After the migration note, output a single digit 1-5 scoring how newsworthy this release is — how much attention it deserves relative to everything else in a changelog feed, not how well-written the notes are.
+
+- **5 — landmark:** significant beyond this company's own users — a major model or product launch, GA of a flagship, industry-notable news.
+- **4 — major for this company:** a flagship feature, a significant pricing change, or a breaking change most of this product's users will care about.
+- **3 — notable:** a real feature or a meaningful improvement worth a user's attention.
+- **2 — routine:** minor enhancements, small fix rollups, incremental updates.
+- **1 — housekeeping:** patch releases, dependency bumps, docs/typo fixes, internal chores.
+
+Judge from the content itself, not the title's framing or the version number's SemVer position alone. When torn between two adjacent levels, pick the lower one — precision over recall applies here the same way it does to <breaking>. Boilerplate or empty releases (empty is true) always get 1.
+
+Security fixes: rate 4 only for critical vulnerabilities (remote code execution, auth bypass, actively exploited, urgent upgrade required for everyone). A moderate- or low-severity security patch is 3 — important to affected operators, but not company-defining news. Standard advisory language ("all deployments should upgrade") does not raise the level by itself; go by the stated severity and blast radius.
+
+Output format: \`<importance>N</importance>\` with N a single digit 1-5. No other text inside the tag.
+</importance_format>
+
 <fallback>
 Set <empty>true</empty> only when the body is empty, a single dependency-bump line, or pure pipeline boilerplate with no other content. When empty is true, write the fallback summary "${EMPTY_BODY_FALLBACK}" and use "Dependency update" or "Internal release" for title_short — downstream will discard both fields, so their exact text only matters as a sanity signal. The title field is kept regardless, so always produce a formulaic title from product + version (e.g. "Next.js v15.4.2 dependency update").
 
@@ -246,6 +266,7 @@ Body:
 <composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>3</importance>
 </good_output>
 <bad_output reason="title_short used 'Adds X and Y' instead of leading with the noun and outcome">
 <empty>false</empty>
@@ -255,6 +276,7 @@ Body:
 <composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>3</importance>
 </bad_output>
 </example>
 
@@ -271,6 +293,7 @@ Body: 35 bullets where #1-#3 are cosmetic ("/color picks random colors", model p
 <composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>2</importance>
 </good_output>
 <bad_output reason="title_short led with 'Fixes' verb and described mechanism instead of outcome">
 <empty>false</empty>
@@ -280,6 +303,7 @@ Body: 35 bullets where #1-#3 are cosmetic ("/color picks random colors", model p
 <composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>2</importance>
 </bad_output>
 </example>
 
@@ -296,6 +320,7 @@ Body: 25 bullets. The first 4 are feature additions: "Added --plugin-url flag to
 <composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
 <breaking>major</breaking>
 <migration>Set CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 to restore the automatic gateway /v1/models discovery this release made opt-in.</migration>
+<importance>4</importance>
 </good_output>
 <bad_output reason="led with #4 correctness fixes and missed the #1 default-behavior reversal buried at bullet #5; the gateway discovery change breaks users on 2.1.126-128">
 <empty>false</empty>
@@ -305,6 +330,7 @@ Body: 25 bullets. The first 4 are feature additions: "Added --plugin-url flag to
 <composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
 <breaking>major</breaking>
 <migration>Set CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 to restore the automatic gateway /v1/models discovery this release made opt-in.</migration>
+<importance>4</importance>
 </bad_output>
 </example>
 
@@ -321,6 +347,7 @@ Body: Updated dependencies.</input>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>1</importance>
 </good_output>
 </example>
 
@@ -336,6 +363,7 @@ Body: Shows how to build live speech translation with the Realtime API.</input>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>2</importance>
 </good_output>
 <bad_output reason="title_short forced smart-brevity transformation onto guide content; smart brevity does not apply to documentation/announcement releases">
 <empty>false</empty>
@@ -345,6 +373,7 @@ Body: Shows how to build live speech translation with the Realtime API.</input>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>2</importance>
 </bad_output>
 </example>
 
@@ -368,6 +397,7 @@ This week's release brings exciting quality-of-life improvements across the app:
 <composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>3</importance>
 </good_output>
 <bad_output reason="title and title_short kept marketing language and missed the real fixes buried below">
 <empty>false</empty>
@@ -377,6 +407,7 @@ This week's release brings exciting quality-of-life improvements across the app:
 <composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>3</importance>
 </bad_output>
 </example>
 
@@ -394,6 +425,7 @@ Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak 
 <composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>3</importance>
 </good_output>
 <bad_output reason="title_short led with the mechanism (chunked cross-entropy loss is the *how*) framed as an added option; for capacity/performance releases, the user-facing outcome (longer sequences now fit) is the headline">
 <empty>false</empty>
@@ -403,6 +435,7 @@ Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak 
 <composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
 <breaking>none</breaking>
 <migration>none</migration>
+<importance>3</importance>
 </bad_output>
 </example>
 </examples>`;
@@ -442,6 +475,13 @@ export interface SummarizeReleaseResult {
   breaking: BreakingLevel;
   /** Explicit upgrade/migration steps lifted from the body (#1696); null when none. */
   migrationNotes: string | null;
+  /**
+   * AI-scored newsworthiness, 1 (housekeeping) to 5 (landmark). Fail-open:
+   * null when the tag is absent, non-integer, or out of range (parse miss,
+   * older cached prompt, truncated output) — never a fabricated score. Also
+   * null on a skipped (empty-body) call, since no model call was made.
+   */
+  importance: number | null;
   usage: ReleaseContentUsage;
   /** True when isEmptyContent short-circuited and no model call was made. */
   skipped: boolean;
@@ -575,7 +615,21 @@ export function parseReleaseContent(
     composition: parseComposition(raw),
     breaking,
     migrationNotes,
+    importance: parseImportance(raw),
   };
+}
+
+/**
+ * Pull the `<importance>` score out of a model response. Fail-open: an
+ * absent tag, a non-integer value, or a value outside 1-5 all map to `null`
+ * (never a fabricated score, and never throws) — the same posture as
+ * `parseBreaking`'s "unknown". Exported so the batch path parses identically.
+ */
+export function parseImportance(raw: string): number | null {
+  const tag = extractTagged(raw, "importance").trim();
+  if (!tag) return null;
+  const n = Number(tag);
+  return isImportanceScore(n) ? n : null;
 }
 
 function readEmptyTag(raw: string): "true" | "false" | null {
@@ -635,6 +689,8 @@ export async function summarizeRelease(
       // No model call → no breaking verdict. Stays "unknown" (fail-open).
       breaking: "unknown",
       migrationNotes: null,
+      // No model call → no importance score.
+      importance: null,
       usage: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 },
       skipped: true,
     };

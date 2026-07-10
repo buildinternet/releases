@@ -119,6 +119,8 @@ export interface ReleaseFeedRow {
   version: string | null;
   type: "feature" | "rollup";
   summary: string | null;
+  /** AI-scored importance 1–5 (5=landmark, 1=housekeeping); null when unscored. */
+  importance: number | null;
   /** First ~500 chars of the release body, ready to display under the title. */
   contentPreview: string;
   publishedAt: string | null;
@@ -191,6 +193,7 @@ function toReleaseFeedRow(
     version: string | null;
     type: string;
     summary: string | null;
+    importance?: number | null;
     content: string | null;
     publishedAt: string | null;
     url: string | null;
@@ -216,6 +219,7 @@ function toReleaseFeedRow(
     version: r.version,
     type: r.type as "feature" | "rollup",
     summary: r.summary,
+    importance: r.importance ?? null,
     contentPreview: (r.summary || r.content || "").slice(0, 500),
     publishedAt: r.publishedAt,
     url: r.url,
@@ -376,6 +380,7 @@ interface FeedReleaseTextRow {
   version: string | null;
   publishedAt: string | null;
   summary: string | null;
+  importance?: number | null;
   content: string | null;
   sourceName: string;
   coordinate: string;
@@ -402,6 +407,7 @@ function renderFeedReleaseText(r: FeedReleaseTextRow): string {
   metaParts.push(`Source: ${r.sourceName} (${r.coordinate})`);
   metaParts.push(`Version: ${r.version ?? "N/A"}`);
   metaParts.push(`Date: ${r.publishedAt ?? "N/A"}`);
+  if (r.importance != null) metaParts.push(`Importance: ${r.importance}/5`);
   const sizeLabel = formatSizeLabel(r.contentChars, r.contentTokens);
   if (sizeLabel) metaParts.push(sizeLabel);
 
@@ -797,6 +803,7 @@ export async function getLatestReleases(
       type: releasesTable.type,
       content: releasesTable.content,
       summary: releasesTable.summary,
+      importance: releasesTable.importance,
       titleGenerated: releasesTable.titleGenerated,
       titleShort: releasesTable.titleShort,
       publishedAt: releasesTable.publishedAt,
@@ -872,6 +879,7 @@ export async function getLatestReleases(
         version: r.version,
         publishedAt: r.publishedAt,
         summary: r.summary,
+        importance: r.importance,
         content: r.content,
         sourceName: r.sourceName,
         coordinate,
@@ -1333,6 +1341,8 @@ export interface ReleaseDetailStructured {
   type: "feature" | "rollup";
   content: string;
   summary: string | null;
+  /** AI-scored importance 1–5 (5=landmark, 1=housekeeping); null when unscored. */
+  importance: number | null;
   publishedAt: string | null;
   url: string | null;
   /** Absolute slugged canonical web URL (#1906); distinct from upstream `url`. */
@@ -1357,6 +1367,7 @@ export async function getRelease(
       type: releases.type,
       content: releases.content,
       summary: releases.summary,
+      importance: releases.importance,
       titleGenerated: releases.titleGenerated,
       titleShort: releases.titleShort,
       publishedAt: releases.publishedAt,
@@ -1400,6 +1411,7 @@ export async function getRelease(
   lines.push(`ID: ${r.id}`);
   if (r.version) lines.push(`Version: ${r.version}`);
   if (r.publishedAt) lines.push(`Published: ${r.publishedAt}`);
+  if (r.importance != null) lines.push(`Importance: ${r.importance}/5`);
   lines.push(`Source: ${r.sourceName ?? "Unknown"}${r.sourceSlug ? ` (${r.sourceSlug})` : ""}`);
   if (r.orgName) {
     lines.push(`Organization: ${r.orgName}${r.orgSlug ? ` (${r.orgSlug})` : ""}`);
@@ -1420,6 +1432,7 @@ export async function getRelease(
     type: r.type as "feature" | "rollup",
     content: body,
     summary: r.summary,
+    importance: r.importance ?? null,
     publishedAt: r.publishedAt,
     url: r.url,
     webUrl,
