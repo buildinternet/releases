@@ -1,5 +1,12 @@
 # @buildinternet/releases-api-types
 
+## 0.45.1
+
+### Patch Changes
+
+- Updated dependencies [b94d5c0]
+  - @buildinternet/releases-core@0.27.0
+
 ## 0.45.0
 
 ### Minor Changes
