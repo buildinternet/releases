@@ -69,9 +69,34 @@ type ScopeOpts = {
    * release hits — mirrors the "no matching org sources" behaviour.
    */
   sourceIds?: string[];
+  /**
+   * Scope to an org set without materializing a source-id list. `orgCategory`
+   * matches `organizations.category`; `collectionId` matches membership via a
+   * `collection_members` EXISTS. Used by the `?category=` / `?collection=`
+   * filters on `/v1/search`. Unlike `sourceIds`, these are uncapped org-set
+   * predicates — a category or collection spanning many sources still filters
+   * correctly. Applied by the org/product/source and release helpers alike.
+   */
+  orgCategory?: string;
+  collectionId?: string;
   /** When true, SELECT full `r.content`; default omits it from the row. */
   includeContent?: boolean;
 };
+
+/**
+ * Shared `?category=` / `?collection=` predicates. `orgCategory` matches the
+ * `o.category` column; `collectionId` matches membership via an EXISTS against
+ * `collection_members`. `orgIdExpr` is the column holding the row's org id in
+ * the caller's query (`o.id` for the entity helpers, `s.org_id` for the
+ * source-rooted release helper). Returns empty SQL when neither is set.
+ */
+function categoryCollectionClauses(opts: ScopeOpts, orgIdExpr = sql`o.id`) {
+  return sql`${opts.orgCategory ? sql`AND o.category = ${opts.orgCategory}` : sql``}${
+    opts.collectionId
+      ? sql`AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = ${opts.collectionId} AND cm.org_id = ${orgIdExpr})`
+      : sql``
+  }`;
+}
 
 /**
  * Build an `IN (...)` value list from a `sourceIds` scope. Callers guard the
@@ -145,6 +170,7 @@ export async function searchOrgs(
       OR ${likeContains(sql`o.domain`, query)} OR ${likeContains(sql`da.domain`, query)}
       OR ${likeContains(sql`o.category`, query)})
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
+      ${categoryCollectionClauses(opts)}
       ${nonEmptyClause}
     GROUP BY o.id
     ORDER BY o.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
@@ -195,6 +221,7 @@ export async function searchProducts(
       OR ${likeContains(sql`da.domain`, query)})
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND p.kind = ${opts.kind}` : sql``}
+      ${categoryCollectionClauses(opts)}
       ${sourceIdExistsClause}
       AND EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = p.id)
     GROUP BY p.id
@@ -236,6 +263,7 @@ export async function searchSources(
         OR ${likeContains(sql`s.url`, query)})
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND s.kind = ${opts.kind}` : sql``}
+      ${categoryCollectionClauses(opts, sql`s.org_id`)}
       ${sourceIdClause}
     ORDER BY s.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
@@ -300,6 +328,7 @@ export async function searchReleasesFromMatchedEntities(
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (${sql.join(conditions, sql` OR `)})
       ${sourceIdClause}
+      ${categoryCollectionClauses(opts, sql`s.org_id`)}
       ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
       ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
       ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}

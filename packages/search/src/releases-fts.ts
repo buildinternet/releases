@@ -62,6 +62,12 @@ export interface RawSearchReleaseRow {
  * `IN_ARRAY_CHUNK_SIZE`, not chunk-unioned (a product owning more than that
  * many sources is not a served shape).
  * `includeContent` opts into selecting `r.content` (default off).
+ *
+ * `orgCategory` / `collectionId` scope hits to an org set without materializing
+ * a source-id list: `orgCategory` matches `organizations.category` directly,
+ * `collectionId` matches membership via a `collection_members` EXISTS. Both are
+ * uncapped org-set predicates (unlike `sourceIds`), so a category or collection
+ * spanning more than `IN_ARRAY_CHUNK_SIZE` sources still filters correctly.
  */
 export type SearchReleasesFtsOpts = {
   orgId?: string;
@@ -70,6 +76,8 @@ export type SearchReleasesFtsOpts = {
   since?: string;
   until?: string;
   sourceIds?: string[];
+  orgCategory?: string;
+  collectionId?: string;
   includeCoverage?: boolean;
   includeContent?: boolean;
 };
@@ -136,6 +144,12 @@ export async function searchReleasesFts(
       ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
       ${sourceIdClause}
+      ${opts.orgCategory ? sql`AND o.category = ${opts.orgCategory}` : sql``}
+      ${
+        opts.collectionId
+          ? sql`AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = ${opts.collectionId} AND cm.org_id = s.org_id)`
+          : sql``
+      }
       ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
       ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
       ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}
