@@ -26,6 +26,11 @@ import {
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { nowIso, timeAgo, resolveDateParam } from "@buildinternet/releases-core/dates";
+import {
+  IMPORTANCE_MIN,
+  IMPORTANCE_MAX,
+  isImportanceScore,
+} from "@buildinternet/releases-core/importance";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
 import { searchReleasesFts } from "@releases/search/releases-fts.js";
@@ -681,6 +686,28 @@ function resolveToolWindow(params: {
   return { ok: true, since, until };
 }
 
+/**
+ * Validate an optional `minImportance` tool input against the shared
+ * {@link isImportanceScore} range check — mirrors the REST `?minImportance=`
+ * validation in `workers/api/src/routes/releases.ts` exactly (integer,
+ * `IMPORTANCE_MIN`–`IMPORTANCE_MAX`). Zod already enforces this bound at the
+ * MCP-server input-schema layer for real callers (see `mcp-agent.ts`); this
+ * is the same check applied defensively for callers of the exported function
+ * directly (tests, and any future non-server caller).
+ */
+function validateMinImportance(
+  value: number | undefined,
+): { ok: true; value?: number } | { ok: false; message: string } {
+  if (value === undefined) return { ok: true };
+  if (!isImportanceScore(value)) {
+    return {
+      ok: false,
+      message: `\`minImportance\` must be an integer between ${IMPORTANCE_MIN} and ${IMPORTANCE_MAX}.`,
+    };
+  }
+  return { ok: true, value };
+}
+
 // ── get_latest_releases ──────────────────────────────────────────────
 
 export async function getLatestReleases(
@@ -696,12 +723,15 @@ export async function getLatestReleases(
     include_prereleases?: boolean;
     since?: string;
     until?: string;
+    minImportance?: number;
   },
   webBase: string,
 ): Promise<ToolResult> {
   const limit = parseFeedLimit(params.limit ?? 10);
   const window = resolveToolWindow(params);
   if (!window.ok) return text(window.message);
+  const minImportance = validateMinImportance(params.minImportance);
+  if (!minImportance.ok) return text(minImportance.message);
   const includeCoverage = params.include_coverage === true;
 
   // `product` resolves a product (or source) identifier to one or more source
@@ -760,6 +790,12 @@ export async function getLatestReleases(
   // NULL-dated rows — an undated release can't be placed in a window.
   if (window.since) conditions.push(gte(releasesTable.publishedAt, window.since));
   if (window.until) conditions.push(lte(releasesTable.publishedAt, window.until));
+  // Importance floor — mirrors the REST `?minImportance=` predicate
+  // (`r.importance >= ?`) exactly: `gte` against a nullable column drops
+  // unscored (NULL) rows rather than treating them as passing.
+  if (minImportance.value !== undefined) {
+    conditions.push(gte(releasesTable.importance, minImportance.value));
+  }
   // Content surface → resolve kind through source→product inheritance
   // (`COALESCE(source.kind, product.kind)`), the same asymmetry the unified
   // `search` tool and the `/v1/orgs/:slug/releases` feed apply. See AGENTS.md.

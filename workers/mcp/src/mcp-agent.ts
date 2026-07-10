@@ -29,6 +29,7 @@ import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { IMPORTANCE_MIN, IMPORTANCE_MAX } from "@buildinternet/releases-core/importance";
 import { scopeSatisfies } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
@@ -606,6 +607,15 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .optional()
           .describe(
             "Keep only releases published at or before this bound. Same input formats as `since`.",
+          ),
+        minImportance: z
+          .number()
+          .int()
+          .min(IMPORTANCE_MIN)
+          .max(IMPORTANCE_MAX)
+          .optional()
+          .describe(
+            `Only include releases with an AI-scored \`importance\` >= this value (${IMPORTANCE_MIN}-${IMPORTANCE_MAX}; 5=landmark, 1=housekeeping). Releases with no score (unscored) are excluded when this is set. Mirrors the REST \`?minImportance=\` filter.`,
           ),
       },
     },
