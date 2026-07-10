@@ -1,97 +1,106 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
-import type { LanguageModel } from "ai";
+import { describe, expect, it } from "bun:test";
+import { MockLanguageModelV3 } from "ai/test";
+import { aisdkTextModel } from "./aisdk-text-model";
 
-const fakeModel = {} as LanguageModel;
+// Deliberately no `mock.module("ai", …)` here: bun's module mocks are process-global
+// and cannot be undone (see AGENTS.md), so stubbing `ai` from this file leaks into
+// sibling suites that use the real `generateText` / `Output` (overview-content.test.ts).
+// Instead we drive the real `generateText` with a fake `LanguageModelV3`.
 
-type GenerateTextResult = {
-  text: string;
-  usage: Record<string, unknown>;
-  finalStep?: { providerMetadata?: Record<string, unknown> };
-};
+type DoGenerateResult = Awaited<ReturnType<MockLanguageModelV3["doGenerate"]>>;
 
-async function withMockedGenerateText(
-  impl: (opts: Record<string, unknown>) => Promise<GenerateTextResult>,
-  run: (
-    aisdkTextModel: typeof import("./aisdk-text-model").aisdkTextModel,
-    getOpts: () => Record<string, unknown> | undefined,
-  ) => Promise<void>,
-) {
-  let captured: Record<string, unknown> | undefined;
-  mock.module("ai", () => ({
-    generateText: async (opts: Record<string, unknown>) => {
-      captured = opts;
-      return impl(opts);
+function textModel(
+  result: Partial<DoGenerateResult> = {},
+  onCall?: () => void,
+): MockLanguageModelV3 {
+  return new MockLanguageModelV3({
+    doGenerate: async () => {
+      onCall?.();
+      return {
+        content: [{ type: "text", text: "x" }],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+        ...result,
+      } as DoGenerateResult;
     },
-  }));
-  const { aisdkTextModel } = await import("./aisdk-text-model");
-  await run(aisdkTextModel, () => captured);
+  });
+}
+
+/** The system message the SDK forwarded to the provider, if any. */
+function systemMessage(model: MockLanguageModelV3) {
+  const prompt = model.doGenerateCalls[0]?.prompt ?? [];
+  return prompt.find((m) => m.role === "system");
 }
 
 describe("aisdkTextModel", () => {
-  afterEach(() => {
-    mock.restore();
-  });
-
   it("maps AI SDK usage fields and OpenRouter cost metadata", async () => {
-    await withMockedGenerateText(
-      async () => ({
-        text: "HELLO",
-        usage: {
-          inputTokens: 100,
-          outputTokens: 2,
-          inputTokenDetails: { noCacheTokens: 10, cacheWriteTokens: 7, cacheReadTokens: 3 },
-        },
-        finalStep: { providerMetadata: { openrouter: { usage: { cost: 0.0002 } } } },
-      }),
-      async (aisdkTextModel) => {
-        const model = aisdkTextModel(fakeModel, "openrouter:google/gemini-2.5-flash");
-        const res = await model.complete({ system: "SYS", user: "U", maxTokens: 40 });
-        expect(model.id).toBe("openrouter:google/gemini-2.5-flash");
-        expect(res).toEqual({
-          text: "HELLO",
-          usage: { input: 10, output: 2, cacheCreate: 7, cacheRead: 3, costUsd: 0.0002 },
-        });
+    const mock = textModel({
+      content: [{ type: "text", text: "HELLO" }],
+      usage: {
+        inputTokens: { total: 20, noCache: 10, cacheRead: 3, cacheWrite: 7 },
+        outputTokens: { total: 2, text: 2, reasoning: 0 },
       },
-    );
+      providerMetadata: { openrouter: { usage: { cost: 0.0002 } } },
+    });
+
+    const model = aisdkTextModel(mock, "openrouter:google/gemini-2.5-flash");
+    const res = await model.complete({ system: "SYS", user: "U", maxTokens: 40 });
+
+    expect(model.id).toBe("openrouter:google/gemini-2.5-flash");
+    expect(res).toEqual({
+      text: "HELLO",
+      usage: { input: 10, output: 2, cacheCreate: 7, cacheRead: 3, costUsd: 0.0002 },
+    });
   });
 
   it("passes ephemeral cache control when cacheSystem is true", async () => {
-    await withMockedGenerateText(
-      async () => ({ text: "x", usage: { inputTokens: 1, outputTokens: 1 } }),
-      async (aisdkTextModel, getOpts) => {
-        const model = aisdkTextModel(fakeModel, "anthropic:claude-haiku-4-5");
-        await model.complete({ system: "SYS", user: "U", maxTokens: 40, cacheSystem: true });
-        expect(getOpts()?.instructions).toEqual([
-          {
-            role: "system",
-            content: "SYS",
-            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-          },
-        ]);
-        expect(getOpts()?.maxRetries).toBe(0);
-      },
-    );
+    const mock = textModel();
+    const model = aisdkTextModel(mock, "anthropic:claude-haiku-4-5");
+
+    await model.complete({ system: "SYS", user: "U", maxTokens: 40, cacheSystem: true });
+
+    expect(systemMessage(mock)).toEqual({
+      role: "system",
+      content: "SYS",
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    });
   });
 
-  it("uses a plain string system prompt when cacheSystem is falsy", async () => {
-    await withMockedGenerateText(
-      async () => ({ text: "x", usage: { inputTokens: 1, outputTokens: 1 } }),
-      async (aisdkTextModel, getOpts) => {
-        const model = aisdkTextModel(fakeModel, "anthropic:m");
-        await model.complete({ system: "SYS", user: "U", maxTokens: 5 });
-        expect(getOpts()?.instructions).toBe("SYS");
-      },
-    );
+  it("uses a plain system prompt with no provider options when cacheSystem is falsy", async () => {
+    const mock = textModel();
+    const model = aisdkTextModel(mock, "anthropic:m");
+
+    await model.complete({ system: "SYS", user: "U", maxTokens: 5 });
+
+    expect(systemMessage(mock)).toEqual({ role: "system", content: "SYS" });
   });
 
   it("forwards timeoutMs as an abort signal", async () => {
-    await withMockedGenerateText(
-      async () => ({ text: "x", usage: { inputTokens: 1, outputTokens: 1 } }),
-      async (aisdkTextModel, getOpts) => {
-        const model = aisdkTextModel(fakeModel, "anthropic:m", { timeoutMs: 12_000 });
-        await model.complete({ system: "s", user: "u", maxTokens: 1 });
-        expect(getOpts()?.abortSignal).toBeInstanceOf(AbortSignal);
+    const mock = textModel();
+    const model = aisdkTextModel(mock, "anthropic:m", { timeoutMs: 12_000 });
+
+    await model.complete({ system: "s", user: "u", maxTokens: 1 });
+
+    expect(mock.doGenerateCalls[0]?.abortSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("does not retry internally (maxRetries: 0) — callers own retry/fail-open", async () => {
+    let calls = 0;
+    const mock = new MockLanguageModelV3({
+      doGenerate: async () => {
+        calls++;
+        throw new Error("provider down");
       },
+    });
+    const model = aisdkTextModel(mock, "anthropic:m");
+
+    await expect(model.complete({ system: "s", user: "u", maxTokens: 1 })).rejects.toThrow(
+      "provider down",
     );
+    expect(calls).toBe(1);
   });
 });
