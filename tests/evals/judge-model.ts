@@ -35,6 +35,13 @@ export interface EvalLaneOptions {
   generationName: string;
   /** Env var naming the OpenRouter candidate model — `EVAL_MODEL` or `EVAL_OPENROUTER_MODEL`. */
   orModelEnvVar: string;
+  /**
+   * OpenRouter `reasoning` control for the candidate lane. Evals of the
+   * summarize lanes MUST pass `{ enabled: false }` to mirror production
+   * (`resolveSummarizeModel`) — a reasoning model like DeepSeek otherwise burns
+   * the small output cap on chain-of-thought and returns empty text (#1633).
+   */
+  reasoning?: { enabled?: boolean; effort?: "low" | "medium" | "high"; max_tokens?: number };
 }
 
 /** @deprecated Alias for {@link EvalLaneOptions}. */
@@ -44,7 +51,11 @@ function evalLabel(provider: "openrouter" | "anthropic", model: string): string 
   return `${provider}:${model}`;
 }
 
-function openRouterEvalLane(model: string, generationName: string): LanguageModel | null {
+function openRouterEvalLane(
+  model: string,
+  generationName: string,
+  reasoning?: EvalLaneOptions["reasoning"],
+): LanguageModel | null {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) return null;
   const baseURL = process.env.OPENROUTER_BASE_URL?.trim();
@@ -52,6 +63,7 @@ function openRouterEvalLane(model: string, generationName: string): LanguageMode
     apiKey,
     model,
     ...(baseURL ? { baseURL } : {}),
+    ...(reasoning ? { reasoning } : {}),
     sessionId: generationName,
     referer: EVAL_REFERER,
     title: EVAL_TITLE,
@@ -98,7 +110,7 @@ export function resolveEvalModel(
 ): { model: TextModel; label: string } | null {
   const orModel = process.env[opts.orModelEnvVar]?.trim();
   if (orModel) {
-    const lane = openRouterEvalLane(orModel, opts.generationName);
+    const lane = openRouterEvalLane(orModel, opts.generationName, opts.reasoning);
     if (lane) {
       const label = evalLabel("openrouter", orModel);
       return { model: asEvalTextModel(lane, label), label };
@@ -125,7 +137,7 @@ export function resolveOverviewEvalModel(
 ): { model: LanguageModel; label: string } | null {
   const orModel = process.env[opts.orModelEnvVar]?.trim();
   if (orModel) {
-    const lane = openRouterEvalLane(orModel, opts.generationName);
+    const lane = openRouterEvalLane(orModel, opts.generationName, opts.reasoning);
     if (lane) return { model: lane, label: evalLabel("openrouter", orModel) };
   }
   const lane = anthropicEvalLane(opts.anthropicModel);

@@ -235,6 +235,8 @@ After the migration note, output a single digit 1-5 scoring how newsworthy this 
 
 Judge from the content itself, not the title's framing or the version number's SemVer position alone. When torn between two adjacent levels, pick the lower one — precision over recall applies here the same way it does to <breaking>. Boilerplate or empty releases (empty is true) always get 1.
 
+Security fixes: rate 4 only for critical vulnerabilities (remote code execution, auth bypass, actively exploited, urgent upgrade required for everyone). A moderate- or low-severity security patch is 3 — important to affected operators, but not company-defining news. Standard advisory language ("all deployments should upgrade") does not raise the level by itself; go by the stated severity and blast radius.
+
 Output format: \`<importance>N</importance>\` with N a single digit 1-5. No other text inside the tag.
 </importance_format>
 
