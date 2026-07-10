@@ -25,7 +25,7 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { newKnowledgePageId, newKnowledgePageCitationId } from "@buildinternet/releases-core/id";
-import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "@buildinternet/releases-core/d1-limits";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle generic
 type AnyDb = DrizzleD1Database<any>;
@@ -111,9 +111,7 @@ export async function upsertOrgOverview(
     createdAt: now,
   }));
 
-  for (let i = 0; i < rows.length; i += CITATIONS_CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + CITATIONS_CHUNK_SIZE);
-    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert
+  for (const chunk of chunkArray(rows, CITATIONS_CHUNK_SIZE)) {
     await db.insert(knowledgePageCitations).values(chunk);
   }
 
@@ -152,9 +150,7 @@ export async function resolveReleaseIdsByUrl(
   const lowered = Array.from(new Set(urls.map((u) => u.toLowerCase())));
 
   // Pass 1: exact match.
-  for (let i = 0; i < lowered.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = lowered.slice(i, i + IN_ARRAY_CHUNK_SIZE);
-    // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked SELECT
+  for (const chunk of chunkArray(lowered, IN_ARRAY_CHUNK_SIZE)) {
     const rows: Array<{ id: string; urlLower: string }> = await db
       .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
       .from(releases)
@@ -178,9 +174,7 @@ export async function resolveReleaseIdsByUrl(
 
   const bases = Array.from(new Set(stripped.map((s) => s.base)));
   const baseToReleaseId = new Map<string, string>();
-  for (let i = 0; i < bases.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = bases.slice(i, i + IN_ARRAY_CHUNK_SIZE);
-    // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked SELECT
+  for (const chunk of chunkArray(bases, IN_ARRAY_CHUNK_SIZE)) {
     const rows: Array<{ id: string; urlLower: string }> = await db
       .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
       .from(releases)

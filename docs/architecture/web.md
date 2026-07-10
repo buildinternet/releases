@@ -189,6 +189,12 @@ registry path (`org` / `org/slug`) and `href` is an external URL — at most one
 - **No cascade:** a notice shows only on the entity it is set on. The
   "formerly X" case is two independent notices pointing at each other.
 
+## Importance marker
+
+`ImportanceMarker` (`web/src/components/importance-marker.tsx`) is a small flame-glyph cue for a release's AI-scored `importance` (1–5, scored at ingest — see [ingest.md → Content summarization](ingest.md)), deliberately not another chip in the already-dense badge row (rollup, breaking, cluster, pre). It renders nothing below 4 — most releases score 1–3 (housekeeping/routine/notable) and a marker on every row would be noise. Score 5 ("landmark") renders a solid orange flame; score 4 ("major for this company") renders an outline amber flame — the level is encoded in stroke/fill on one glyph slot rather than a second flame, so it doesn't read like a rating widget. The accessible label (`aria-label`/`title`) carries the actual meaning; the pure `importanceMarkerLabel(importance)` helper is unit-testable without a DOM harness.
+
+Three surfaces render it: feed cards (`web/src/components/release-item.tsx`), the release detail header (`web/src/app/release/[id]/page.tsx`), and the `/updates` feed (`web/src/app/updates/updates-feed.tsx`).
+
 ## Fetch Log workflow drawer (dev-only)
 
 On the dev-gated Fetch Log tab, clicking a Fetch Plan row opens a per-source ingestion-pipeline drawer: an adaptive vertical stage list (topology from `describeWorkflowStages` in `@releases/adapters/workflow-stages`) annotated with current state and last-run outcome derived from `fetch_log` + `usage_log` + `sources` via `GET /v1/status/source-workflow`. Phase 1 is derived-data only; per-stage timing instrumentation is a documented Phase 2. Spec: `docs/superpowers/specs/2026-05-31-per-source-workflow-viz-design.md`.

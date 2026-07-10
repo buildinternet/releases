@@ -42,7 +42,7 @@ import { embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js"
 import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
 import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
 import { resolveSummarizeModel } from "./text-model.js";
-import { IN_ARRAY_CHUNK_SIZE } from "./d1-limits.js";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "./d1-limits.js";
 import { logUsage } from "./usage-log.js";
 // Type-only — erased at compile, so no runtime import cycle with the workflow
 // module that imports the values below from here.
@@ -152,13 +152,11 @@ export async function generateContentForReleases(
     productKind: string | null;
   };
   const rows: ContentRow[] = [];
-  for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = insertedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+  for (const chunk of chunkArray(insertedIds, IN_ARRAY_CHUNK_SIZE)) {
     // Skip coverage-side rows: they're hidden from read paths by default, so
     // summarizing them is a pure waste. The LEFT JOIN keeps canonical and
     // unlinked rows; the IS NULL filter drops anything that's already linked
     // as coverage to another release.
-    // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
     const chunkRows: ContentRow[] = await db
       .select({
         id: releases.id,

@@ -17,7 +17,7 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
-import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "@buildinternet/releases-core/d1-limits";
 import { releaseCoverage } from "./schema-coverage.js";
 
 export interface EligibilityOptions {
@@ -154,10 +154,9 @@ export async function fetchEligibleReleases(
   type ChunkRow = EligibleRow & { publishedAt: string | null };
   const seen = new Set<string>();
   const all: ChunkRow[] = [];
+  const loweredOrgSlugs = orgSlugs.map((s) => s.toLowerCase());
 
-  for (let i = 0; i < orgSlugs.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = orgSlugs.slice(i, i + IN_ARRAY_CHUNK_SIZE).map((s) => s.toLowerCase());
-    // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
+  for (const chunk of chunkArray(loweredOrgSlugs, IN_ARRAY_CHUNK_SIZE)) {
     const chunkRows: ChunkRow[] = await db
       .select({
         id: releases.id,

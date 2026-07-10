@@ -8,7 +8,7 @@
  * through to the org. Null when neither is set.
  */
 import { sql } from "drizzle-orm";
-import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "@buildinternet/releases-core/d1-limits";
 
 /** Pure COALESCE — product wins, then org, else null. */
 export function resolveEffectiveCategory(
@@ -36,13 +36,11 @@ export async function fetchEffectiveCategoryBySourceIds(
   if (sourceIds.length === 0) return out;
   // Documented contract: every requested id is present; unknown/missing → null.
   for (const id of sourceIds) out.set(id, null);
-  for (let i = 0; i < sourceIds.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = sourceIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+  for (const chunk of chunkArray(sourceIds, IN_ARRAY_CHUNK_SIZE)) {
     const idList = sql`(${sql.join(
       chunk.map((id) => sql`${id}`),
       sql`, `,
     )})`;
-    // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked IN list
     const rows = await db.all<{ id: string; effective_category: string | null }>(sql`
       SELECT s.id AS id, COALESCE(p.category, o.category) AS effective_category
       FROM sources s

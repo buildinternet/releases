@@ -141,7 +141,7 @@ import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
-import { RELEASES_ID_IN_CHUNK_SIZE, IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { RELEASES_ID_IN_CHUNK_SIZE, IN_ARRAY_CHUNK_SIZE, chunkArray } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import {
   runGenerateContent,
@@ -297,14 +297,12 @@ sourceRoutes.get(
       const urls = c.req.queries("url") ?? [];
       if (urls.length === 0) return c.json([]);
       const rows: (typeof sources.$inferSelect)[] = [];
-      for (let i = 0; i < urls.length; i += IN_ARRAY_CHUNK_SIZE) {
-        const chunk = urls.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+      for (const chunk of chunkArray(urls, IN_ARRAY_CHUNK_SIZE)) {
         // Skip soft-deleted (tombstoned) sources. This is the dedup pre-check
         // the CLI's `source create` / `import` run before inserting; surfacing
         // a deleted row here makes create "revive" the tombstone (returns the
         // mangled `<slug>--<id>` row as `existed: true`) instead of starting
         // fresh, which is the create-revives half of #1184.
-        // oxlint-disable-next-line no-await-in-loop -- sequential chunks under the D1 bind-param cap
         const chunkRows = await db
           .select()
           .from(sources)
@@ -366,10 +364,9 @@ sourceRoutes.get(
           conditions.push(eq(sources.productId, matches[0]!.id));
         } else {
           const ids = matches.map((m) => m.id);
-          const chunks: SQL[] = [];
-          for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
-            chunks.push(inArray(sources.productId, ids.slice(i, i + IN_ARRAY_CHUNK_SIZE)));
-          }
+          const chunks: SQL[] = chunkArray(ids, IN_ARRAY_CHUNK_SIZE).map((idsChunk) =>
+            inArray(sources.productId, idsChunk),
+          );
           // OR the chunks together so the WHERE clause stays under D1's
           // 100-bind cap even if a slug ever fans out to >90 products.
           conditions.push(chunks.length === 1 ? chunks[0]! : or(...chunks)!);
@@ -3043,9 +3040,7 @@ async function sumReleaseIdChunks(
   run: (chunk: string[]) => Promise<number>,
 ): Promise<number> {
   let total = 0;
-  for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
-    const chunk = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
-    // oxlint-disable-next-line no-await-in-loop -- D1 bind-param chunked statement
+  for (const chunk of chunkArray(ids, RELEASES_ID_IN_CHUNK_SIZE)) {
     total += await run(chunk);
   }
   return total;
