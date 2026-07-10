@@ -3,3 +3,9 @@
 -- Additive, fail-open: no default — existing rows and any unclassified
 -- release stay NULL until the model scores it.
 ALTER TABLE releases ADD COLUMN importance INTEGER;
+
+-- Backs `minImportance` feed filtering: without it a filter over mostly-NULL
+-- history degrades to a full published_at scan-and-discard. Partial form keeps
+-- the index small (only scored rows) and `importance >= ?` implies IS NOT NULL,
+-- so SQLite can use it directly.
+CREATE INDEX idx_releases_importance_published ON releases (importance, published_at) WHERE importance IS NOT NULL;

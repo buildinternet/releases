@@ -14,6 +14,7 @@
 
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { isBreakingLevel, type BreakingLevel } from "@buildinternet/releases-core/breaking";
+import { isImportanceScore } from "@buildinternet/releases-core/importance";
 import type { TextModel } from "./text-model";
 
 export type { ReleaseComposition };
@@ -626,9 +627,7 @@ export function parseImportance(raw: string): number | null {
   const tag = extractTagged(raw, "importance").trim();
   if (!tag) return null;
   const n = Number(tag);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
-  if (n < 1 || n > 5) return null;
-  return n;
+  return isImportanceScore(n) ? n : null;
 }
 
 function readEmptyTag(raw: string): "true" | "false" | null {

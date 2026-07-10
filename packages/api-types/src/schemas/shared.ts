@@ -3,8 +3,22 @@ import { RELEASE_TYPES } from "@buildinternet/releases-core/schema";
 import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { isValidNoticeCoordinate } from "@buildinternet/releases-core/notice";
+import { IMPORTANCE_MAX, IMPORTANCE_MIN } from "@buildinternet/releases-core/importance";
 
 export const CategorySchema = z.enum(CATEGORIES);
+
+/**
+ * AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
+ * ingest; `.nullable().optional()` — null when unscored, absent on older
+ * servers/pinned workers.
+ */
+export const ImportanceScoreSchema = z
+  .number()
+  .int()
+  .min(IMPORTANCE_MIN)
+  .max(IMPORTANCE_MAX)
+  .nullable()
+  .optional();
 
 export const MediaItemSchema = z.object({
   type: z.enum(["image", "video", "gif"]),
@@ -147,9 +161,7 @@ export const ReleaseItemSchema = z.object({
   // classified (the fail-open default). List paths carry `breaking` only —
   // `migrationNotes` stays detail-route-only to keep list payloads slim.
   breaking: z.enum(BREAKING_LEVELS).optional(),
-  // AI-scored release importance, 1 (housekeeping) to 5 (landmark). Scored at
-  // ingest; null when unscored, absent on older servers/pinned workers.
-  importance: z.number().int().min(1).max(5).nullable().optional(),
+  importance: ImportanceScoreSchema,
   // Count of demoted siblings rolling up into this row via `release_coverage`
   // (0 when standalone). Lets list views show a cluster indicator without a
   // detail-page round trip. `.optional()` — older API responses and pinned

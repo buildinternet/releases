@@ -682,6 +682,12 @@ export const releases = sqliteTable(
       table.publishedAt,
       table.id,
     ),
+    // Backs `minImportance` feed filtering. Partial: most rows are NULL
+    // (unscored history and low-signal releases never scored), so the index
+    // stays small and a `importance >= ?` seek skips the full published_at scan.
+    index("idx_releases_importance_published")
+      .on(table.importance, table.publishedAt)
+      .where(sql`${table.importance} IS NOT NULL`),
   ],
 );
 

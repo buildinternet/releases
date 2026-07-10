@@ -11,6 +11,11 @@ import {
   sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
+import {
+  IMPORTANCE_MAX,
+  IMPORTANCE_MIN,
+  isImportanceScore,
+} from "@buildinternet/releases-core/importance";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { Env } from "../index.js";
 import {
@@ -246,12 +251,13 @@ releaseRoutes.get(
     let minImportance: number | undefined;
     if (minImportanceParam !== undefined) {
       const parsed = Number(minImportanceParam);
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+      if (!isImportanceScore(parsed)) {
         return respondError(
           c,
-          new ValidationError("`minImportance` must be an integer between 1 and 5", {
-            code: "bad_request",
-          }),
+          new ValidationError(
+            `\`minImportance\` must be an integer between ${IMPORTANCE_MIN} and ${IMPORTANCE_MAX}`,
+            { code: "bad_request" },
+          ),
         );
       }
       minImportance = parsed;
