@@ -57,6 +57,10 @@ describe("buildDigestEmail", () => {
     expect(text).toContain("ACME");
     expect(text).not.toContain("Acme Blog");
     expect(html).toContain(">Acme</a>");
+    // Wrapped in the shared document shell — without it the body has no
+    // max-width and lines run the full width of a wide reading pane.
+    expect(html).toStartWith("<!doctype html>");
+    expect(html).toContain("max-width:560px");
   });
 
   it("compresses a per-product version burst to the newest release + notes", () => {

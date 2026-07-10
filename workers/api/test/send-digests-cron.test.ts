@@ -100,4 +100,63 @@ describe("sendDigests cron", () => {
     await sendDigests(env({ CRON_ENABLED: "false" }), { cadence: "daily", runStart: new Date() });
     expect(sent.length).toBe(0);
   });
+
+  // A post published before run 1 but fetched after it: the watermark has already
+  // advanced past its publish date, so a published_at window dropped it from run 1
+  // (row absent) and from run 2 (behind the watermark) — mailed to nobody, ever.
+  it("delivers a late-ingested release exactly once on the run after it lands", async () => {
+    const sec = (ms: number) => new Date(Math.floor(ms / 1000) * 1000);
+    const base = Date.now();
+    const run1 = sec(base + 60_000);
+    const run2 = sec(base + 120_000);
+    const run3 = sec(base + 180_000);
+
+    // Seed a normal release so run 1 sends and advances the watermark to run1.
+    await h.db.insert(releases).values({
+      id: "rel_seed",
+      sourceId: "src_a",
+      title: "Seed",
+      content: "x",
+      url: "https://a/seed",
+      publishedAt: new Date(base + 1000).toISOString(),
+      fetchedAt: new Date(base + 1000).toISOString(),
+    });
+    await sendDigests(env(), { cadence: "daily", runStart: run1 });
+    expect(sent.length).toBe(1);
+    expect((await getDigestPrefs(h.db, "u1"))!.lastDigestAt!.getTime()).toBe(run1.getTime());
+
+    // Published before run 1 fired; we only fetched it afterwards.
+    await h.db.insert(releases).values({
+      id: "rel_late",
+      sourceId: "src_a",
+      title: "Late",
+      content: "x",
+      url: "https://a/late",
+      publishedAt: new Date(base + 2000).toISOString(),
+      fetchedAt: new Date(base + 70_000).toISOString(),
+    });
+
+    await sendDigests(env(), { cadence: "daily", runStart: run2 });
+    expect(sent.length).toBe(1);
+
+    // ...and not a second time on the next run.
+    await sendDigests(env(), { cadence: "daily", runStart: run3 });
+    expect(sent.length).toBe(0);
+  });
+
+  it("does not mail a backfill's ancient posts", async () => {
+    const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    await h.db.insert(releases).values({
+      id: "rel_ancient",
+      sourceId: "src_a",
+      title: "Ancient",
+      content: "x",
+      url: "https://a/ancient",
+      // Freshly ingested, but published far outside DIGEST_PUBLISHED_FLOOR_DAYS.
+      publishedAt: new Date(Date.now() - 2 * YEAR_MS).toISOString(),
+      fetchedAt: new Date(Date.now() + 1000).toISOString(),
+    });
+    await sendDigests(env(), { cadence: "daily", runStart: new Date(Date.now() + 60_000) });
+    expect(sent.length).toBe(0);
+  });
 });

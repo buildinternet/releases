@@ -242,10 +242,21 @@ export interface FollowedReleasesParams {
   limit: number;
   /** Opaque cursor from a previous page's `pagination.nextCursor`. */
   cursor?: string | null;
-  /** Inclusive-exclusive lower bound: only releases with published_at > this ISO string. */
-  publishedAfter?: string | null;
-  /** Upper bound: only releases with published_at <= this ISO string. */
-  publishedBefore?: string | null;
+  /**
+   * Exclusive lower bound on INGEST time: only releases with fetched_at > this.
+   * Digest delivery windows on ingest, not publish, so a post we saw late is still
+   * delivered once. `fetched_at` is NOT NULL and never rewritten by either release
+   * upsert, so it is a stable first-seen watermark.
+   */
+  fetchedAfter?: string | null;
+  /** Inclusive upper bound on ingest time: only releases with fetched_at <= this ISO string. */
+  fetchedBefore?: string | null;
+  /**
+   * Guard rail, not a window: drop rows published long before the window opened, so
+   * a history backfill (old posts, fresh fetched_at) can't flood one digest. Rows
+   * with no publish date are kept — undated is not evidence of age.
+   */
+  publishedFloor?: string | null;
 }
 
 /**
@@ -257,6 +268,10 @@ export interface FollowedReleasesParams {
  *
  * The SELECT omits feed-unused columns (coverage count, github handle, content
  * metrics) so the following surface avoids per-row correlated subqueries.
+ *
+ * Rows are SELECTED on `fetched_at` (the digest's delivery window) but ORDERED by
+ * `published_at` — a post is delivered exactly once, on the run after we ingested
+ * it, yet still reads newest-first by its own publish date.
  */
 export async function getFollowedReleases(
   db: AnyDb,
@@ -290,8 +305,9 @@ export async function getFollowedReleases(
       AND (o.deleted_at IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (r.prerelease IS NULL OR r.prerelease = 0)
-      ${params.publishedAfter ? sql`AND r.published_at > ${params.publishedAfter}` : sql``}
-      ${params.publishedBefore ? sql`AND r.published_at <= ${params.publishedBefore}` : sql``}
+      ${params.fetchedAfter ? sql`AND r.fetched_at > ${params.fetchedAfter}` : sql``}
+      ${params.fetchedBefore ? sql`AND r.fetched_at <= ${params.fetchedBefore}` : sql``}
+      ${params.publishedFloor ? sql`AND (r.published_at IS NULL OR r.published_at > ${params.publishedFloor})` : sql``}
       AND (
         s.org_id IN (SELECT uf.target_id FROM user_follows uf
                      WHERE uf.user_id = ${userId} AND uf.target_type = 'org')

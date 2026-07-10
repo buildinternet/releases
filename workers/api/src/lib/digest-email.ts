@@ -2,7 +2,7 @@ import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { resolveSourceKind } from "@buildinternet/releases-core/kinds";
 import { logEvent } from "@releases/lib/log-event";
 import { escapeHtml } from "./html-escape.js";
-import { appendHtmlFooter, appendTextFooter } from "./email-layout.js";
+import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "./email-layout.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 
 export interface DigestEmailEnv {
@@ -373,7 +373,7 @@ export function buildDigestEmail(content: DigestEmailContent): {
     }
     htmlParts.push(`</div>`);
   });
-  const html = appendHtmlFooter(htmlParts.join(""), digestFooter);
+  const html = wrapHtmlEmail(appendHtmlFooter(htmlParts.join(""), digestFooter));
 
   return { subject, text, html };
 }

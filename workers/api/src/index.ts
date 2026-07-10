@@ -452,10 +452,13 @@ export type Env = {
     // Digest email sender address. Falls back to AUTH_EMAIL_FROM / noreply@releases.sh.
     DIGEST_EMAIL_FROM?: string;
     // Digest cron tunables. DIGEST_MAX_PER_RUN caps recipients processed per cron
-    // fire; DIGEST_MAX_RELEASES caps releases shown per email. Both default to
-    // safe values in send-digests.ts when absent.
+    // fire; DIGEST_MAX_RELEASES caps releases shown per email;
+    // DIGEST_PUBLISHED_FLOOR_DAYS bounds how old a post may be and still be mailed
+    // when a backfill re-ingests history. All default to safe values in
+    // send-digests.ts when absent.
     DIGEST_MAX_PER_RUN?: string;
     DIGEST_MAX_RELEASES?: string;
+    DIGEST_PUBLISHED_FLOOR_DAYS?: string;
     // Public REST API origin — used to build unsubscribe URLs in digest emails.
     // Falls back to https://api.releases.sh when absent.
     API_BASE_URL?: string;
@@ -1159,6 +1162,7 @@ export default {
               CRON_ENABLED: env.CRON_ENABLED,
               DIGEST_MAX_PER_RUN: env.DIGEST_MAX_PER_RUN,
               DIGEST_MAX_RELEASES: env.DIGEST_MAX_RELEASES,
+              DIGEST_PUBLISHED_FLOOR_DAYS: env.DIGEST_PUBLISHED_FLOOR_DAYS,
               API_BASE_URL: env.API_BASE_URL,
               ENVIRONMENT: env.ENVIRONMENT,
             },
