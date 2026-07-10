@@ -505,4 +505,72 @@ describe("attachImportance — D1 bind budget", () => {
     const wide = await selectsForRange(IN_ARRAY_CHUNK_SIZE + 12); // two chunks
     expect(wide - narrow).toBe(1);
   });
+
+  it("resolves importance across the 90-bind chunk boundary", async () => {
+    // Mirrors `overview-upsert.test.ts`'s boundary test: the statement-count
+    // assertion above proves the loop exists, but an off-by-one in the slice
+    // would still drop entries. Score every version and require each one back,
+    // so a version landing in the second chunk can't silently go unscored.
+    const versionCount = IN_ARRAY_CHUNK_SIZE + 1;
+    const testDb = createTestDb();
+    try {
+      const orgId = newOrgId();
+      await testDb.db.insert(organizations).values({ id: orgId, name: "Acme", slug: "acme" });
+      const srcId = newSourceId();
+      await testDb.db.insert(sources).values({
+        id: srcId,
+        orgId,
+        name: "Acme Releases",
+        slug: "acme-releases",
+        type: "github",
+        url: "https://github.com/acme/releases",
+        discovery: "curated",
+      });
+      await testDb.db.insert(releases).values(
+        Array.from({ length: versionCount }, (_, i) => ({
+          id: newReleaseId(),
+          sourceId: srcId,
+          version: `9.${i}.0`,
+          title: `r${i}`,
+          content: TOKEN,
+          publishedAt: "2026-01-01T00:00:00Z",
+          type: "feature" as const,
+          importance: 5,
+        })),
+      );
+
+      const entries: WhatsChangedEntryStub[] = Array.from({ length: versionCount }, (_, i) => ({
+        version: `9.${i}.0`,
+        publishedAt: null,
+        title: `r${i}`,
+        summary: null,
+        breaking: "unknown" as const,
+        migrationNotes: null,
+        url: null,
+        webUrl: null,
+      }));
+      const env = stubEnv({
+        DB: asD1(testDb.db) as unknown as Env["DB"],
+        API: stubWhatsChangedApi(srcId, entries),
+      });
+      const { client, close } = await withClient(env);
+      try {
+        // minImportance=5 keeps only rows whose score was actually merged in —
+        // an entry dropped by a bad slice reads as unscored and filters out.
+        const res = await client.callTool({
+          name: "whats_changed",
+          arguments: { package: "acme-releases", from: "0.9.0", to: "9.99.0", minImportance: 5 },
+        });
+        const rendered = firstText(res);
+        const scored = (rendered.match(/Importance: 5\/5/g) ?? []).length;
+        expect(scored).toBe(versionCount);
+        // The last version lives in the second chunk.
+        expect(rendered).toContain(`9.${versionCount - 1}.0`);
+      } finally {
+        await close();
+      }
+    } finally {
+      testDb.cleanup();
+    }
+  });
 });
