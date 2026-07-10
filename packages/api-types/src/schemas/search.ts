@@ -228,6 +228,16 @@ export const UnifiedSearchResponseSchema = z.object({
   // domain filter was applied.
   domain: z.string().optional(),
   domainStatus: z.enum(["matched", "not_found"]).optional(),
+  // Normalized `?category=` echo. Present only when a category filter was
+  // applied; the resolved canonical slug (aliases are folded to canonical).
+  // `categoryStatus` is always `matched` because an unknown category is a 400,
+  // not an empty envelope — categories are a fixed enum, unlike collections.
+  category: z.string().optional(),
+  categoryStatus: z.enum(["matched"]).optional(),
+  // Normalized `?collection=` echo + resolution outcome. `not_found` when the
+  // slug matched no collection (empty envelope, mirroring `domainStatus`).
+  collection: z.string().optional(),
+  collectionStatus: z.enum(["matched", "not_found"]).optional(),
   orgs: z.array(SearchOrgHitSchema),
   catalog: z.array(SearchCatalogHitSchema),
   sources: z.array(SearchSourceHitSchema),

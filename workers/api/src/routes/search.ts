@@ -16,6 +16,9 @@ import type {
   LookupResultPayload,
 } from "@buildinternet/releases-api-types";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { CATEGORIES, resolveCategorySlug } from "@buildinternet/releases-core/categories";
+import { loadAliasMap } from "@releases/core-internal/category-alias";
+import { getCollectionBySlug } from "../queries/collections.js";
 import { createDb } from "../db.js";
 import {
   findOrgByDomain,
@@ -287,7 +290,7 @@ searchRoutes.get(
     tags: ["Search"],
     summary: "Unified search across orgs, catalog, collections, releases, and chunks",
     description:
-      'Returns orgs, catalog entries (products + standalone sources folded together), curated collections, release hits, and — on hybrid/semantic modes — CHANGELOG.md chunk hits in a single response.\n\nEntity sections (orgs/catalog) match at word boundaries — including camelCase transitions ("ai" matches OpenAI but not Em·ai·l) — and never via a domain TLD ("ai" does not match coderabbit.ai). Hits order by match quality: exact name/slug, then name prefix, then name word, then slug/domain/URL, then org category.\n\n`mode` selects the release-retrieval strategy: `lexical` (FTS5), `semantic` (vector-only), or `hybrid` (RRF fusion of FTS5 + vector; default). The handler echoes back the mode actually used, including `degraded: true` when a hybrid request fell back to lexical because Vectorize is unavailable.\n\n`?domain=` narrows the entire result set to one org (matched against `organizations.domain` and `domain_aliases.domain`). Invalid hostnames return 400; unknown hostnames return an empty envelope with `domainStatus: "not_found"` (distinct from "matched but no hits").\n\nWhen the query parses as a GitHub coordinate (`org/repo` or `github:org/repo`) and no orgs/catalog matched, the handler runs an on-demand lookup and embeds the result on `lookup`. Coordinate-shaped queries are not suppressed by tangential release/chunk hits.\n\nCollections surface via two paths: a direct match on the collection\'s name/description (lexical in every mode, plus a vector match in hybrid/semantic mode — vector hits below the relevance floor are dropped so off-topic queries return no collections) and a member rollup that includes every collection containing one of the matched orgs. Each row carries a `via` discriminator (`"direct"` vs `"member"`); `matchedOrgSlugs` on member rows names the result-set orgs that triggered the rollup so a UI can render an "includes X" hint.\n\nContent negotiation: `Accept: text/markdown` returns a Markdown-rendered version of the same payload.',
+      'Returns orgs, catalog entries (products + standalone sources folded together), curated collections, release hits, and — on hybrid/semantic modes — CHANGELOG.md chunk hits in a single response.\n\nEntity sections (orgs/catalog) match at word boundaries — including camelCase transitions ("ai" matches OpenAI but not Em·ai·l) — and never via a domain TLD ("ai" does not match coderabbit.ai). Hits order by match quality: exact name/slug, then name prefix, then name word, then slug/domain/URL, then org category.\n\n`mode` selects the release-retrieval strategy: `lexical` (FTS5), `semantic` (vector-only), or `hybrid` (RRF fusion of FTS5 + vector; default). The handler echoes back the mode actually used, including `degraded: true` when a hybrid request fell back to lexical because Vectorize is unavailable.\n\n`?domain=` narrows the entire result set to one org (matched against `organizations.domain` and `domain_aliases.domain`). Invalid hostnames return 400; unknown hostnames return an empty envelope with `domainStatus: "not_found"` (distinct from "matched but no hits").\n\n`?category=` and `?collection=` scope orgs, catalog, and release hits to an org set — a fixed category slug (unknown → 400) or a curated collection\'s members (unknown → empty envelope with `collectionStatus: "not_found"`). Both compose with every other filter.\n\nWhen the query parses as a GitHub coordinate (`org/repo` or `github:org/repo`) and no orgs/catalog matched, the handler runs an on-demand lookup and embeds the result on `lookup`. Coordinate-shaped queries are not suppressed by tangential release/chunk hits.\n\nCollections surface via two paths: a direct match on the collection\'s name/description (lexical in every mode, plus a vector match in hybrid/semantic mode — vector hits below the relevance floor are dropped so off-topic queries return no collections) and a member rollup that includes every collection containing one of the matched orgs. Each row carries a `via` discriminator (`"direct"` vs `"member"`); `matchedOrgSlugs` on member rows names the result-set orgs that triggered the rollup so a UI can render an "includes X" hint.\n\nContent negotiation: `Accept: text/markdown` returns a Markdown-rendered version of the same payload.',
     parameters: [
       {
         name: "q",
@@ -332,6 +335,22 @@ searchRoutes.get(
         schema: { type: "string" },
         description:
           'Narrow release and catalog hits to a specific product\'s sources. Accepts a `prod_…` typed ID or an `orgSlug/productSlug` coordinate (e.g. `vercel/next-js`). Bare slugs (no `/` prefix) are rejected as ambiguous. Unknown products return an empty envelope with `productStatus: "not_found"`. Composes with `domain`, `kind`, `since`, and `until`.',
+      },
+      {
+        name: "category",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: CATEGORIES as unknown as string[] },
+        description:
+          'Narrow orgs, catalog, and release hits to organizations in this category (the slugs `GET /v1/categories` lists; curator aliases resolve to canonical). Unknown values are rejected with 400. The response echoes the resolved slug as `category` with `categoryStatus: "matched"`. Composes with every other filter.',
+      },
+      {
+        name: "collection",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          'Narrow orgs, catalog, and release hits to the member organizations of this curated collection (by slug, e.g. `coding-agents`). Unknown slugs return an empty envelope with `collectionStatus: "not_found"` (mirrors `domain`). Composes with every other filter.',
       },
       {
         name: "include_coverage",
@@ -392,7 +411,7 @@ searchRoutes.get(
       },
       400: {
         description:
-          "Missing `q`, invalid `domain` hostname, unknown `kind` value, or unparseable `since`/`until`",
+          "Missing `q`, invalid `domain` hostname, unknown `kind` or `category` value, or unparseable `since`/`until`",
         content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
@@ -493,6 +512,43 @@ searchRoutes.get(
         ? `${productResolution.orgSlug}/${productResolution.productSlug}`
         : undefined;
 
+    // Optional `?category=` scopes hits to one org category. Categories are a
+    // fixed enum (+ curator aliases), so an unknown value is a 400 — not an
+    // empty envelope like domain/collection. Resolve aliases to canonical.
+    const rawCategory = c.req.query("category")?.trim();
+    let categorySlug: string | undefined;
+    if (rawCategory) {
+      const aliasMap = await loadAliasMap(db);
+      const resolved = resolveCategorySlug(rawCategory, aliasMap);
+      if (!resolved) {
+        return respondError(
+          c,
+          new ValidationError(`Invalid category. Expected one of: ${CATEGORIES.join(", ")}`, {
+            code: "bad_request",
+          }),
+        );
+      }
+      categorySlug = resolved;
+    }
+
+    // Optional `?collection=` scopes hits to a curated collection's member
+    // orgs. Unknown slug → empty envelope with `collectionStatus: "not_found"`
+    // (mirrors domain miss); collections are data, not a fixed enum.
+    const rawCollection = c.req.query("collection")?.trim();
+    const collectionRow = rawCollection ? await getCollectionBySlug(db, rawCollection) : null;
+    const collectionMissed = Boolean(rawCollection) && !collectionRow;
+
+    // Reusable scope options + response echoes for the category/collection
+    // filters — threaded into the lexical query helpers and spread onto every
+    // response envelope below.
+    const catColScope = { orgCategory: categorySlug, collectionId: collectionRow?.id ?? undefined };
+    const categoryEcho = categorySlug
+      ? { category: categorySlug, categoryStatus: "matched" as const }
+      : {};
+    const collectionEcho = collectionRow
+      ? { collection: collectionRow.slug, collectionStatus: "matched" as const }
+      : {};
+
     // Trigger embedding as a side effect when a new source was just indexed.
     // The try/catch guards against test environments that have no ExecutionContext.
     function maybeEmbed(lookup: Awaited<ReturnType<typeof runLookup>> | null): void {
@@ -579,6 +635,42 @@ searchRoutes.get(
       return c.json(result);
     }
 
+    // Collection miss → empty result envelope with collectionStatus:
+    // "not_found". Same shape as domain/product miss; no GitHub lookup.
+    if (collectionMissed) {
+      const result = {
+        query: q,
+        collection: rawCollection!,
+        collectionStatus: "not_found" as const,
+        orgs: [],
+        catalog: [],
+        sources: [],
+        releases: [],
+        collections: [],
+        ...(mode !== "lexical" ? { chunks: [], mode, degraded: false } : {}),
+        lookup: null,
+      };
+      c.executionCtx.waitUntil(
+        logSearch(c.env, {
+          surface,
+          clientKind,
+          authed,
+          query: q,
+          mode: mode === "lexical" ? "lexical" : mode,
+          orgHits: 0,
+          catalogHits: 0,
+          releaseHits: 0,
+          chunkHits: 0,
+          collectionHits: 0,
+          durationMs: Date.now() - startedAt,
+          anonId,
+          userAgent,
+        }),
+      );
+      if (wantsMarkdown(c)) return markdownResponse(c, searchToMarkdown(result));
+      return c.json(result);
+    }
+
     // Entity lookups stay lexical — the /search endpoint keeps its historical
     // shape so orgs/products keep rendering the way the web UI expects.
     //
@@ -618,16 +710,18 @@ searchRoutes.get(
               aliasDomains: scopedOrgRow.aliasConcat ? scopedOrgRow.aliasConcat.split(",") : [],
             },
           ])
-        : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty }),
+        : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty, ...catColScope }),
       searchProducts(db, q, limit, {
         orgId: scopeOrgId,
         kind: kindFilter,
         sourceIds: productSourceIds,
+        ...catColScope,
       }),
       searchSources(db, q, limit, {
         orgId: scopeOrgId,
         kind: kindFilter,
         sourceIds: productSourceIds,
+        ...catColScope,
       }),
       // Direct LIKE match on collection name/slug/description — runs in
       // every mode. Independent of `?domain=`: collections are cross-org
@@ -646,7 +740,9 @@ searchRoutes.get(
 
     // Pre-compute the source-id list when narrowing — needed for the hybrid
     // path's `orgSourceIds` filter. When both domain (org scope) and product
-    // scope are active, the product scope is more specific and wins.
+    // scope are active, the product scope is more specific and wins. The
+    // lexical path scopes via SQL predicates instead (orgId / sourceIds /
+    // orgCategory / collectionId), so this list is hybrid-only.
     let scopeSourceIds: string[] | undefined;
     if (productSourceIds) {
       // Product scope is already a pre-resolved source-ID list.
@@ -658,6 +754,39 @@ searchRoutes.get(
         .where(eq(sources.orgId, scopeOrgId));
       scopeSourceIds = rows.map((r) => r.id);
     }
+    // Category/collection scope: materialize the member orgs' source IDs and
+    // intersect with any existing (product/domain) scope. Unlike the lexical
+    // SQL predicates this is uncapped, so a large category still filters the
+    // hybrid post-filter correctly. `scopeSourceIds` becoming `[]` here means
+    // "scope active, zero sources" — the hybrid guard below passes the empty
+    // list through so no releases leak, rather than falling back to unscoped.
+    if (categorySlug || collectionRow) {
+      const catColRows = await db
+        .select({ id: sources.id })
+        .from(sources)
+        .leftJoin(organizationsActive, eq(organizationsActive.id, sources.orgId))
+        .where(
+          and(
+            categorySlug ? eq(organizationsActive.category, categorySlug) : undefined,
+            collectionRow
+              ? sql`EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = ${collectionRow.id} AND cm.org_id = ${sources.orgId})`
+              : undefined,
+          ),
+        );
+      const catColIds = catColRows.map((r) => r.id);
+      scopeSourceIds = scopeSourceIds
+        ? scopeSourceIds.filter((id) => catColIds.includes(id))
+        : catColIds;
+    }
+    // A source-narrowing filter is active whenever any of product/domain/
+    // category/collection resolved. Distinguishes "no scope" (undefined —
+    // don't pass orgSourceIds) from "scope active but empty" ([] — pass it so
+    // the hybrid post-filter drops every hit).
+    const sourceScopeActive =
+      productSourceIds !== undefined ||
+      scopeOrgId !== undefined ||
+      Boolean(categorySlug) ||
+      Boolean(collectionRow);
 
     // When mode==="lexical" we keep the legacy path bit-for-bit (including
     // the cascading enrichment from matched entities) to preserve the cache
@@ -671,6 +800,7 @@ searchRoutes.get(
         kind: kindFilter,
         since,
         until,
+        ...catColScope,
       }).catch((err) => {
         logEvent("warn", { component: "search", event: "fts-query-failed", error: err });
         return [] as RawSearchReleaseRow[];
@@ -689,6 +819,7 @@ searchRoutes.get(
             kind: kindFilter,
             since,
             until,
+            ...catColScope,
           },
         );
       }
@@ -698,12 +829,15 @@ searchRoutes.get(
       // question about one repo, so only entity matches (org / catalog
       // source) suppress it. Tangential FTS hits on a single segment token
       // (e.g. "shopify" in another org's release body) don't. Skip when
-      // narrowing by domain or product — the caller has already specified an entity.
+      // narrowing by domain, product, category, or collection — the caller has
+      // already scoped to a set of entities.
       let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
       if (
         coordinate &&
         !scopeOrgId &&
         !productSourceIds &&
+        !categorySlug &&
+        !collectionRow &&
         orgs.length === 0 &&
         catalog.length === 0
       ) {
@@ -721,6 +855,8 @@ searchRoutes.get(
           ? { domain: domainResolution.domain, domainStatus: "matched" as const }
           : {}),
         ...(productEcho ? { product: productEcho, productStatus: "matched" as const } : {}),
+        ...categoryEcho,
+        ...collectionEcho,
         orgs,
         catalog,
         sources: [],
@@ -770,9 +906,12 @@ searchRoutes.get(
           mode,
           includeCoverage,
           includeContent,
-          // Domain narrowing reaches into the hybrid layer via the existing
-          // `orgSourceIds` filter so vector + FTS results both stay scoped.
-          ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
+          // Domain / product / category / collection narrowing all reach into
+          // the hybrid layer via the existing `orgSourceIds` post-filter so
+          // vector + FTS results stay scoped. Passed whenever a source scope is
+          // active — including the empty-set case, so an empty scope drops
+          // every hit rather than silently falling back to unscoped.
+          ...(sourceScopeActive ? { orgSourceIds: scopeSourceIds ?? [] } : {}),
           ...(kindFilter ? { kind: kindFilter } : {}),
           ...(since ? { since } : {}),
           ...(until ? { until } : {}),
@@ -833,13 +972,16 @@ searchRoutes.get(
       }));
 
     // On-demand GitHub lookup: same gate as the lexical branch — entity
-    // matches suppress it, release/chunk hits don't. Domain or product
-    // narrowing also suppresses (the caller has already named an entity).
+    // matches suppress it, release/chunk hits don't. Domain / product /
+    // category / collection narrowing also suppresses (the caller has already
+    // scoped to a set of entities).
     let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
     if (
       coordinate &&
       !scopeOrgId &&
       !productSourceIds &&
+      !categorySlug &&
+      !collectionRow &&
       orgs.length === 0 &&
       catalog.length === 0
     ) {
@@ -871,6 +1013,8 @@ searchRoutes.get(
         ? { domain: domainResolution.domain, domainStatus: "matched" as const }
         : {}),
       ...(productEcho ? { product: productEcho, productStatus: "matched" as const } : {}),
+      ...categoryEcho,
+      ...collectionEcho,
       orgs,
       catalog,
       sources: [],
