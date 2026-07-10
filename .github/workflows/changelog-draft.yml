@@ -95,8 +95,33 @@ jobs:
                  updates the published entry in place). If it has no section, treat it like a
                  window day.
 
+            CHANGELOG.md is the ONLY file you may modify. If a pre-commit hook, lint rule, or
+            any other tooling blocks your commit, that is a bug to report in the PR body — do
+            not edit config, workflows, or `package.json` to work around it, and do not bypass
+            the hook. If you cannot commit without touching another file, stop and open no PR.
+
             If you wrote nothing, stop and open no PR.
             If CHANGELOG.md changed, commit it on a new branch named
             `changelog/draft-${{ steps.window.outputs.until }}` and open a PR titled
             `changelog: ${{ steps.window.outputs.since }}..${{ steps.window.outputs.until }}`
             with a one-line body listing the dates you drafted. Do not merge it.
+
+      - name: Guard — the draft may only touch CHANGELOG.md
+        if: steps.existing.outputs.open == '0' && steps.window.outputs.skip == 'false'
+        env:
+          BRANCH: changelog/draft-${{ steps.window.outputs.until }}
+        run: |
+          git fetch --quiet origin main "$BRANCH" || git fetch --quiet origin main
+          if ! git rev-parse --verify --quiet "origin/$BRANCH" >/dev/null; then
+            echo "No draft branch pushed; nothing to guard."
+            exit 0
+          fi
+          changed=$(git diff --name-only "origin/main...origin/$BRANCH")
+          echo "Files changed on $BRANCH:"
+          echo "$changed"
+          unexpected=$(echo "$changed" | grep -v '^CHANGELOG\.md$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::The changelog draft modified files other than CHANGELOG.md:"
+            echo "$unexpected"
+            exit 1
+          fi
