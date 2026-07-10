@@ -7,7 +7,8 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Search", href: "/search", mobileOnly: true },
   { label: "Catalog", href: "/catalog" },
-  { label: "What's new", href: "/updates" },
+  // `/updates` is our own changelog, not a primary destination — it stays
+  // linked from the footer rather than the header nav.
   { label: "Collections", href: "/collections" },
   { label: "Submit", href: "/submit" },
   { label: "Docs", href: "/docs" },

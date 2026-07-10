@@ -9,6 +9,7 @@ import { graphqlRequest } from "@/lib/graphql/client";
 import { ReleaseDetailDocument } from "@/lib/graphql/__generated__/graphql";
 import type { ReleaseDetailQuery } from "@/lib/graphql/__generated__/graphql";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { clamp, stripMarkdown } from "@/lib/og-helpers";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
@@ -154,12 +155,11 @@ export async function generateMetadata({
     // Keep the version discoverable in the title tag for version-specific search
     // even when the descriptive headline leads.
     const titleHeading = descriptive && versionLabel ? `${heading} (${versionLabel})` : heading;
-    const rawDesc = release.summary ?? release.content ?? "";
-    const stripped = rawDesc
-      .replace(/[#*[\]`>_~]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
+    // Shared with the OG card so the meta description and the social image
+    // read identically — and so identifiers survive (the local strip this
+    // replaced deleted `_` and backticks, publishing `whatschanged` to
+    // crawlers and link previews).
+    const description = clamp(stripMarkdown(release.summary ?? release.content ?? ""), 160);
     const shouldNoIndex = shouldNoIndexRelease({
       content: release.content,
       summary: release.summary,

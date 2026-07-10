@@ -40,8 +40,14 @@ describe("stripMarkdown", () => {
     expect(stripMarkdown("hello ```js\nconst x = 1;\n``` world")).toBe("hello world");
   });
 
-  it("removes inline code spans", () => {
-    expect(stripMarkdown("use `npm install` then run")).toBe("use then run");
+  it("unwraps inline code spans to their contents", () => {
+    expect(stripMarkdown("use `npm install` then run")).toBe("use npm install then run");
+  });
+
+  it("keeps identifiers inside code spans intact", () => {
+    expect(stripMarkdown("verdicts (`none`/`minor`/`major`) via `whats_changed`")).toBe(
+      "verdicts (none/minor/major) via whats_changed",
+    );
   });
 
   it("keeps link text but drops the URL", () => {
@@ -54,10 +60,16 @@ describe("stripMarkdown", () => {
     expect(stripMarkdown("before ![alt](img.png) after")).toBe("before after");
   });
 
-  it("strips emphasis, heading, and blockquote markers", () => {
-    expect(stripMarkdown("# Heading\n**bold** _it_ ~strike~ > quoted")).toBe(
-      "Heading bold it strike quoted",
-    );
+  it("strips emphasis markers", () => {
+    expect(stripMarkdown("**bold** ~strike~")).toBe("bold strike");
+  });
+
+  it("strips heading and blockquote markers at the start of a line", () => {
+    expect(stripMarkdown("# Heading\n> quoted")).toBe("Heading quoted");
+  });
+
+  it("leaves mid-line '>' alone so code and arrows survive", () => {
+    expect(stripMarkdown("call `() => x` when a > b")).toBe("call () => x when a > b");
   });
 
   it("collapses whitespace runs", () => {
