@@ -64,12 +64,16 @@ export function Header() {
         <SearchTrigger className="hidden sm:flex lg:hidden w-fit" />
       </div>
       <MobileNav devAdmin={devAdmin} />
-      <nav className="hidden sm:flex shrink-0 items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
+      {/* The full link row + star + toggle + account only fits alongside a
+          search affordance at lg+ (below that the fixed-width pieces overflow
+          or overlap the search trigger), so the desktop nav starts at lg and
+          the hamburger covers everything narrower. */}
+      <nav className="hidden lg:flex shrink-0 items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
         {visibleNavItems().map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className={`hover:text-stone-700 dark:hover:text-stone-300 ${item.desktopClassName ?? ""}`}
+            className="hover:text-stone-700 dark:hover:text-stone-300"
           >
             {item.label}
           </Link>

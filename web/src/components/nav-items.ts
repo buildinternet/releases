@@ -2,17 +2,12 @@ export type NavItem = {
   label: string;
   href: string;
   mobileOnly?: boolean;
-  /** Extra classes for the desktop-nav link (e.g. hide at tight widths). */
-  desktopClassName?: string;
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Search", href: "/search", mobileOnly: true },
   { label: "Catalog", href: "/catalog" },
-  // The 640–1024px desktop nav is already at capacity with the search
-  // trigger + GitHub star; below lg this item lives in the mobile menu,
-  // the footer, and the homepage links instead of overflowing the bar.
-  { label: "What's new", href: "/updates", desktopClassName: "hidden lg:inline-block" },
+  { label: "What's new", href: "/updates" },
   { label: "Collections", href: "/collections" },
   { label: "Submit", href: "/submit" },
   { label: "Docs", href: "/docs" },
