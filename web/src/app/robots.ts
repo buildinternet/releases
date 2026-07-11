@@ -10,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: ["/", "/.well-known/http-message-signatures-directory"],
       disallow: ["/api/", "/.well-known/"],
     },
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: [`${BASE_URL}/sitemap.xml`, `${BASE_URL}/sitemap-releases.xml`],
   };
 }

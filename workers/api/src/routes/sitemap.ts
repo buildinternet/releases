@@ -12,7 +12,11 @@ import {
   sourceChangelogFiles,
   collections,
 } from "@buildinternet/releases-core/schema";
-import { SitemapPayloadSchema } from "@buildinternet/releases-api-types";
+import {
+  SitemapPayloadSchema,
+  SitemapReleasesPayloadSchema,
+} from "@buildinternet/releases-api-types";
+import { getSitemapReleases, RELEASE_SITEMAP_MIN_IMPORTANCE } from "../queries/sitemap-releases.js";
 import type { Env } from "../index.js";
 
 export const sitemapRoutes = new Hono<Env>();
@@ -181,6 +185,38 @@ sitemapRoutes.get(
       sources: sourcesOut,
       products: productsOut,
       collections: collectionRows,
+    });
+  },
+);
+
+sitemapRoutes.get(
+  "/sitemap/releases",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Sitemap"],
+    summary: "Curated, importance-gated release payload for the release sitemap",
+    description: `Editorial subset of releases for a dedicated \`sitemap-releases.xml\` (#1181, scoped down). A release qualifies only when it is visible (not suppressed, not coverage-side, not on a hidden source/org, not under an on-demand-discovery org — mirrors the \`/release/:id\` noindex inputs so nothing sitemapped renders noindexed), has a non-empty summary, and \`importance >= ${RELEASE_SITEMAP_MIN_IMPORTANCE}\` (\`RELEASE_SITEMAP_MIN_IMPORTANCE\`). Ordered \`published_at DESC\`, hard-capped; a trim is logged, not silently dropped.`,
+    responses: {
+      200: {
+        description: "Curated release payload",
+        content: { "application/json": { schema: resolver(SitemapReleasesPayloadSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const { rows } = await getSitemapReleases(db);
+
+    return c.json({
+      releases: rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        titleShort: r.titleShort,
+        titleGenerated: r.titleGenerated,
+        version: r.version,
+        publishedAt: r.publishedAt,
+        fetchedAt: r.fetchedAt,
+      })),
     });
   },
 );
