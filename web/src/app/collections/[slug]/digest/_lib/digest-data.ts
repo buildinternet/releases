@@ -50,7 +50,12 @@ export const getLatestDigest = cache(
       const res = await api.collectionWeeklyDigests(slug, { limit: 1 });
       return res.digests[0] ?? null;
     } catch (err) {
-      if (err instanceof ApiNotFoundError) return null;
+      // Cross-links fail soft, but only a missing collection/digest list is
+      // silently "none" — anything else gets logged so real API failures
+      // don't vanish into a quietly absent link.
+      if (!(err instanceof ApiNotFoundError)) {
+        console.error(`getLatestDigest(${slug}) failed`, err);
+      }
       return null;
     }
   },

@@ -118,6 +118,17 @@ describe("GET /v1/collections/:slug/digests", () => {
     expect(secondBody.pagination.nextCursor).toBeNull();
   });
 
+  it("rejects a cursor whose decoded payload is not a date key", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request(`http://test/v1/collections/wd-test-collection/digests?cursor=${btoa("hello")}`),
+    );
+    expect(res.status).toBe(400);
+  });
+
   it("returns 404 for an unknown collection slug", async () => {
     const db = mkDb();
     await seed(db);

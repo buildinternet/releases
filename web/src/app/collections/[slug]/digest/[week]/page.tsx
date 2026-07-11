@@ -8,7 +8,8 @@ import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
-import { getDigestPage } from "../_lib/digest-data";
+import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
+import { weekOfLabel } from "../_lib/digest-format";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
 // sync with applyCacheInit's default (web/src/lib/api.ts).
@@ -30,11 +31,6 @@ function weekRangeLabel(weekStart: string): string {
     return `${startMonth} ${startDay}–${endDay}, ${year}`;
   }
   return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${year}`;
-}
-
-function weekOfLabel(weekStart: string): string {
-  const start = new Date(`${weekStart}T00:00:00Z`);
-  return `Week of ${start.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
 }
 
 function clampMetaTitle(title: string): string {
@@ -143,9 +139,22 @@ export default async function CollectionDigestPage({
     { pageUrl, collectionName: detail.name, collectionUrl },
   );
 
-  const prevWeek = addDaysToDateKey(weekStart, -7);
-  const nextWeek = addDaysToDateKey(weekStart, 7);
-  const isFutureNext = new Date(`${nextWeek}T00:00:00Z`).getTime() > Date.now();
+  // Prev/next link only to weeks that actually have a digest — weeks below
+  // the quality floor are skipped at generation time, so naive ±7d links
+  // would routinely 404. The index list is newest-first and shares the
+  // request-scoped cache with the digest index page.
+  let prevWeek: string | null = null;
+  let nextWeek: string | null = null;
+  try {
+    const { digests } = await getDigestIndex(slug);
+    const idx = digests.findIndex((d) => d.weekStart === weekStart);
+    if (idx !== -1) {
+      nextWeek = digests[idx - 1]?.weekStart ?? null;
+      prevWeek = digests[idx + 1]?.weekStart ?? null;
+    }
+  } catch {
+    // Nav is decorative — render the page without it rather than failing.
+  }
 
   return (
     <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
@@ -212,22 +221,28 @@ export default async function CollectionDigestPage({
           </section>
         )}
 
-        <nav className="mt-12 flex items-center justify-between border-t border-[var(--line-2)] pt-6 text-[13px]">
-          <Link
-            href={`/collections/${slug}/digest/${prevWeek}`}
-            className="text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
-          >
-            ← Previous week
-          </Link>
-          {!isFutureNext && (
-            <Link
-              href={`/collections/${slug}/digest/${nextWeek}`}
-              className="text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
-            >
-              Next week →
-            </Link>
-          )}
-        </nav>
+        {(prevWeek || nextWeek) && (
+          <nav className="mt-12 flex items-center justify-between border-t border-[var(--line-2)] pt-6 text-[13px]">
+            {prevWeek ? (
+              <Link
+                href={`/collections/${slug}/digest/${prevWeek}`}
+                className="text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
+              >
+                ← Previous week
+              </Link>
+            ) : (
+              <span />
+            )}
+            {nextWeek && (
+              <Link
+                href={`/collections/${slug}/digest/${nextWeek}`}
+                className="text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
+              >
+                Next week →
+              </Link>
+            )}
+          </nav>
+        )}
       </article>
     </div>
   );

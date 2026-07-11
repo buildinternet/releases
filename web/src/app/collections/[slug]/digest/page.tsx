@@ -4,13 +4,9 @@ import { notFound } from "next/navigation";
 import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { SetupMessage } from "@/components/setup-message";
 import { getDigestIndex } from "./_lib/digest-data";
+import { weekOfLabel } from "./_lib/digest-format";
 
 export const revalidate = 900;
-
-function weekOfLabel(weekStart: string): string {
-  const start = new Date(`${weekStart}T00:00:00Z`);
-  return `Week of ${start.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
-}
 
 export async function generateMetadata({
   params,

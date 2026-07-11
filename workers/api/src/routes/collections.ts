@@ -864,6 +864,9 @@ collectionRoutes.get(
       } catch {
         return respondError(c, new ValidationError("Malformed cursor", { code: "bad_request" }));
       }
+      if (!isDateKey(cursorWeekStart)) {
+        return respondError(c, new ValidationError("Malformed cursor", { code: "bad_request" }));
+      }
     }
 
     const { items, hasMore } = await listCollectionWeeklyDigests(db, collection.id, {
