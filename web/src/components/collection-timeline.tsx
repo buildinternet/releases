@@ -14,7 +14,6 @@ import {
 } from "@/lib/api";
 import { type CollectionReleaseItemView } from "@/lib/release-view";
 import { memberKey } from "@/lib/member-key";
-import { tabButtonClass } from "@/lib/styles";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
@@ -32,9 +31,10 @@ interface CollectionTimelineProps {
   fetchEndpoint: string;
   /**
    * Path the format-suffix links append `.json` / `.md` / `.atom` to
-   * (e.g. `/collections/frontier-ai-labs`, `/categories/ai`).
+   * (e.g. `/categories/ai`). Omit when the parent surfaces exports in a
+   * context rail instead (collection pages).
    */
-  formatPath: string;
+  formatPath?: string;
   initialReleases: CollectionReleaseItemView[];
   initialCursor: string | null;
   /**
@@ -119,6 +119,148 @@ function findThumbnail(release: CollectionReleaseItemView) {
 function releaseHeading(release: CollectionReleaseItemView): string {
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   return descriptive ?? versionLabel ?? release.title ?? "Release";
+}
+
+const TYPE_FILTERS: ReadonlyArray<{ id: TypeFilter; label: string }> = [
+  { id: "all", label: "All types" },
+  { id: "tag", label: "Releases" },
+  { id: "post", label: "Posts" },
+];
+
+/**
+ * Compact filters menu matching {@link ReleaseFilterInput}'s dropdown — used
+ * here without a search field because the collection feed has no `q` param.
+ * Source-type scope + prereleases live here so the feed chrome stays one row.
+ */
+function CollectionFiltersMenu({
+  typeFilter,
+  onTypeFilterChange,
+  includePrereleases,
+  onIncludePrereleasesChange,
+}: {
+  typeFilter: TypeFilter;
+  onTypeFilterChange: (value: TypeFilter) => void;
+  includePrereleases: boolean;
+  onIncludePrereleasesChange: (checked: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hasActiveFilter = typeFilter !== "all" || includePrereleases;
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label="Release filters"
+        title="Filters"
+        className="relative inline-flex h-7 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-stone-500 transition-colors hover:text-stone-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:hover:text-stone-200"
+      >
+        <FilterIcon />
+        {hasActiveFilter && (
+          <span
+            aria-hidden="true"
+            className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-stone-300"
+          />
+        )}
+        <Caret open={open} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-md border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-800 dark:bg-stone-950"
+        >
+          <div className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+            Type
+          </div>
+          <div role="group" aria-label="Release type">
+            {TYPE_FILTERS.map((opt) => {
+              const active = typeFilter === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={active}
+                  onClick={() => onTypeFilterChange(opt.id)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-stone-600 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-stone-800"
+                >
+                  <span>{opt.label}</span>
+                  {active && <CheckMark className="ml-auto text-stone-500 dark:text-stone-300" />}
+                </button>
+              );
+            })}
+          </div>
+          <div className="my-1 border-t border-stone-100 dark:border-stone-800" />
+          <label className="flex cursor-pointer select-none items-center gap-2 px-3 py-1.5 text-[12px] text-stone-600 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-stone-800">
+            <input
+              type="checkbox"
+              checked={includePrereleases}
+              onChange={(e) => onIncludePrereleasesChange(e.target.checked)}
+              className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
+            />
+            <span>Show prereleases</span>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CheckMark({ className }: { className?: string }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`flex-none ${className ?? ""}`}
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="flex-none"
+    >
+      <path d="M4 6h16M7 12h10M10 18h4" />
+    </svg>
+  );
 }
 
 // Lazily fetch a release's full-body HTML (server-rendered) the first time a
@@ -332,9 +474,22 @@ export function CollectionTimeline({
     onLoadMore: loadMore,
   });
 
+  const allMembersActive =
+    activeMembers.size === allMemberKeys.length && allMemberKeys.every((k) => activeMembers.has(k));
+
+  const selectAllMembers = () => {
+    setPristine(false);
+    setActiveMembers(new Set(allMemberKeys));
+  };
+
   const toggleMember = (key: string) => {
     setPristine(false);
     setActiveMembers((prev) => {
+      // From the "all selected" state, a chip click solos that member — same
+      // feel as flipping an "All" → single product chip on the org feed.
+      if (prev.size === allMemberKeys.length && allMemberKeys.every((k) => prev.has(k))) {
+        return new Set([key]);
+      }
       const n = new Set(prev);
       if (n.has(key)) n.delete(key);
       else n.add(key);
@@ -347,90 +502,92 @@ export function CollectionTimeline({
 
   const days = useMemo(() => groupByDay(releases), [releases]);
 
+  // Quiet chip chrome — one height, one weight. Active = filled stone (not a
+  // second accent "All" competing with the type menu).
+  const chipBase =
+    "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] transition-colors";
+  const chipActive = "bg-stone-900 font-medium text-white dark:bg-stone-100 dark:text-stone-900";
+  const chipIdle =
+    "bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 dark:bg-stone-800/80 dark:text-stone-300 dark:hover:bg-stone-800 dark:hover:text-stone-100";
+
   return (
     <div>
-      {members.length > 1 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {members.map((m) => {
-            const key = memberKey(m);
-            const active = activeMembers.has(key);
-            const avatar = memberAvatar(m);
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleMember(key)}
-                className={`inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border text-[13px] font-medium transition-colors ${
-                  active
-                    ? "border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100"
-                    : "border-stone-200 dark:border-stone-800 bg-transparent text-stone-400 dark:text-stone-500 opacity-70 hover:opacity-100"
-                }`}
-              >
-                <OrgAvatar
-                  avatarUrl={avatar.avatarUrl}
-                  githubHandle={avatar.githubHandle}
-                  name={avatar.name}
-                  size={20}
-                />
-                <span>{m.name}</span>
-                {m.kind === "product" && (
-                  <span className="text-stone-400 dark:text-stone-500 font-normal">
-                    · {m.org.name}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Filter bar: type tabs + prerelease toggle + format links */}
-      <div className="flex items-end flex-wrap gap-5 border-b border-stone-200 dark:border-stone-800">
-        {(
-          [
-            { id: "all", label: "All" },
-            { id: "tag", label: "Releases" },
-            { id: "post", label: "Posts" },
-          ] as Array<{ id: TypeFilter; label: string }>
-        ).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => {
-              setPristine(false);
-              setTypeFilter(t.id);
-            }}
-            className={tabButtonClass(typeFilter === t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-        <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none pb-2.5">
-          <input
-            type="checkbox"
-            checked={includePrereleases}
-            onChange={(e) => {
-              setPristine(false);
-              setIncludePrereleases(e.target.checked);
-            }}
-            className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
-          />
-          <span>Show prereleases</span>
-        </label>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 pb-2.5">
-          <a href={`${formatPath}.json`} className="hover:text-stone-700 dark:hover:text-stone-200">
-            .json
-          </a>
-          <span className="opacity-50">·</span>
-          <a href={`${formatPath}.md`} className="hover:text-stone-700 dark:hover:text-stone-200">
-            .md
-          </a>
-          <span className="opacity-50">·</span>
-          <a href={`${formatPath}.atom`} className="hover:text-stone-700 dark:hover:text-stone-200">
-            .atom
-          </a>
-        </div>
+      {/* Single filter row: member chips (when multi-member) + type/prerelease
+          menu. Type scope used to be a second pill row and made the chrome
+          read as two competing "All" toolbars. */}
+      <div className="mb-4 mt-1 flex flex-wrap items-center gap-1.5">
+        {members.length > 1 && (
+          <>
+            <button
+              type="button"
+              aria-pressed={allMembersActive}
+              onClick={selectAllMembers}
+              className={`${chipBase} ${allMembersActive ? chipActive : chipIdle}`}
+            >
+              All
+            </button>
+            {members.map((m) => {
+              const key = memberKey(m);
+              // When everything is selected, no individual chip reads as the
+              // active filter — "All" carries that state.
+              const active = !allMembersActive && activeMembers.has(key);
+              const avatar = memberAvatar(m);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleMember(key)}
+                  title={m.kind === "product" ? `${m.name} · ${m.org.name}` : m.name}
+                  className={`${chipBase} ${active ? chipActive : chipIdle}`}
+                >
+                  <OrgAvatar
+                    avatarUrl={avatar.avatarUrl}
+                    githubHandle={avatar.githubHandle}
+                    name={avatar.name}
+                    size={14}
+                  />
+                  <span className="max-w-[9rem] truncate">{m.name}</span>
+                </button>
+              );
+            })}
+            <div className="min-w-2 flex-1" />
+          </>
+        )}
+        {members.length <= 1 && <div className="flex-1" />}
+        <CollectionFiltersMenu
+          typeFilter={typeFilter}
+          onTypeFilterChange={(value) => {
+            setPristine(false);
+            setTypeFilter(value);
+          }}
+          includePrereleases={includePrereleases}
+          onIncludePrereleasesChange={(checked) => {
+            setPristine(false);
+            setIncludePrereleases(checked);
+          }}
+        />
+        {formatPath && (
+          <div className="flex items-center gap-1.5 text-[11.5px] text-stone-400 dark:text-stone-500">
+            <a
+              href={`${formatPath}.json`}
+              className="hover:text-stone-600 dark:hover:text-stone-300"
+            >
+              .json
+            </a>
+            <span className="opacity-40">·</span>
+            <a href={`${formatPath}.md`} className="hover:text-stone-600 dark:hover:text-stone-300">
+              .md
+            </a>
+            <span className="opacity-40">·</span>
+            <a
+              href={`${formatPath}.atom`}
+              className="hover:text-stone-600 dark:hover:text-stone-300"
+            >
+              .atom
+            </a>
+          </div>
+        )}
       </div>
 
       {fetchError && releases.length > 0 && (

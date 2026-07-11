@@ -5,6 +5,7 @@ import { ApiSetupError, type CollectionDailySummary } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
+import { CollectionContextRail } from "@/components/collection-context-rail";
 import { CollectionAdminMenu } from "@/components/collection-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
@@ -71,27 +72,29 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     section: { name: "Collections", url: "https://releases.sh/collections" },
   });
 
+  const formatPath = `/collections/${slug}`;
+
   return (
-    <div className="min-h-screen">
+    <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
       <JsonLd data={jsonLd} />
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
+      <div className="mx-auto max-w-[1300px] px-6">
+        <div className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]">
+          <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
             Home
           </Link>
-          <span className="mx-1.5">/</span>
-          <Link href="/collections" className="hover:text-stone-600 dark:hover:text-stone-300">
+          <span className="text-[var(--line-2)]">/</span>
+          <Link href="/collections" className="transition-colors hover:text-[var(--fg-2)]">
             Collections
           </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{detail.name}</span>
+          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--fg-2)]">{detail.name}</span>
         </div>
 
-        <h1 className="text-[34px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4 text-balance">
+        <h1 className="mt-4 text-balance text-[34px] font-bold tracking-tight text-[var(--fg)]">
           {detail.name}
         </h1>
         {detail.description && (
-          <p className="text-[15px] text-stone-500 dark:text-stone-400 mt-1 text-pretty">
+          <p className="mt-1 max-w-[65ch] text-pretty text-[15px] text-[var(--fg-2)]">
             {detail.description}
           </p>
         )}
@@ -101,15 +104,28 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           </div>
         </AdminOnly>
 
-        <div className="mt-7 pb-10">
-          <CollectionTimeline
-            key={slug}
-            fetchEndpoint={`/api/collection-releases/${slug}`}
-            formatPath={`/collections/${slug}`}
-            initialReleases={withCollectionReleaseView(releases.releases)}
-            initialCursor={releases.pagination.nextCursor}
-            members={detail.members}
-            summaryByDate={summaryByDate}
+        {/* Main feed + sticky context rail — same shell as the org page
+            (`flex-col` → `md:flex-row`) so the rail stacks under the feed on
+            mobile and sits sticky-aside on wide screens. */}
+        <div className="flex flex-col gap-10 pb-24 pt-7 md:flex-row md:items-start">
+          <main className="min-w-0 flex-1">
+            <CollectionTimeline
+              key={slug}
+              fetchEndpoint={`/api/collection-releases/${slug}`}
+              initialReleases={withCollectionReleaseView(releases.releases)}
+              initialCursor={releases.pagination.nextCursor}
+              members={detail.members}
+              summaryByDate={summaryByDate}
+            />
+          </main>
+          <CollectionContextRail
+            formatPath={formatPath}
+            report={{
+              kind: "collection",
+              name: detail.name,
+              slug,
+              path: formatPath,
+            }}
           />
         </div>
       </div>

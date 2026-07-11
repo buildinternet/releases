@@ -42,7 +42,7 @@ export default async function CollectionsListPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
+      <div className="mx-auto max-w-[1240px] px-6 pt-8 pb-12">
         <PageHeader
           breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}
           title={TITLE}
@@ -54,29 +54,21 @@ export default async function CollectionsListPage() {
             No collections published yet.
           </div>
         ) : (
-          <ul className="divide-y divide-stone-200 dark:divide-stone-800">
+          <ul className="grid grid-cols-1 gap-x-10 lg:grid-cols-2">
             {collections.map((c) => (
-              <li key={c.slug} className="py-4">
-                <Link
-                  href={`/collections/${c.slug}`}
-                  className="group flex items-start justify-between gap-4"
-                >
-                  <div className="min-w-0">
-                    <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
-                      {c.name}
+              <li key={c.slug} className="border-b border-stone-200 py-4 dark:border-stone-800">
+                <Link href={`/collections/${c.slug}`} className="group block min-w-0">
+                  <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
+                    {c.name}
+                  </div>
+                  {c.description && (
+                    <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
+                      {c.description}
                     </div>
-                    {c.description && (
-                      <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-                        {c.description}
-                      </div>
-                    )}
-                    {c.previewMembers && c.previewMembers.length > 0 && (
-                      <MemberFacepile members={c.previewMembers} totalCount={c.memberCount} />
-                    )}
-                  </div>
-                  <div className="shrink-0 text-[12px] tabular-nums text-stone-400 dark:text-stone-500">
-                    {c.memberCount} {c.memberCount === 1 ? "member" : "members"}
-                  </div>
+                  )}
+                  {c.previewMembers && c.previewMembers.length > 0 && (
+                    <MemberFacepile members={c.previewMembers} totalCount={c.memberCount} />
+                  )}
                 </Link>
               </li>
             ))}
