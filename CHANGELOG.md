@@ -3,6 +3,21 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 10, 2026
+
+**Added**
+- Release importance scoring (1–5) — all newly ingested releases receive an AI-scored significance rating; a flame glyph marks high-impact (4) and landmark (5) releases on feed cards and detail pages; `GET /v1/releases/latest` gains a `?minImportance=` filter; MCP `get_latest_releases` and `whats_changed` expose a matching parameter.
+- `/updates` redesigned with a timeline rail and composition glyphs — month rows and area chips (CLI / Web) filter the feed client-side; per-release meta lines render composition counts as filled, half, and dash glyphs; Follow, Digest, and Atom links appear in the page header.
+- Category and collection scoping for search — `GET /v1/search` now accepts `?category=<slug>` and `?collection=<slug>` to narrow results to a taxonomy category or a curated collection's member orgs.
+- Wider catalog and collection layouts with an export rail — `/catalog` and `/collections` expand to a wider shell; the collections index uses a two-column grid; collection detail pages gain a sticky rail with Export (`.json` / `.md` / `.atom`) and a Report a problem button.
+
+**Changed**
+- Digest emails and collection daily summaries now bias toward higher-importance releases — within each org section in digests and when selecting releases for collection date tiles, items with a higher importance score surface first.
+
+**Fixed**
+- Digest emails now capture releases ingested after the check window opened — editorial posts published hours before being fetched were previously dropped permanently; the email subject is also now dated for the window it covers rather than the delivery day.
+- Inline code spans no longer stripped in compact org overview cards — tool names and verdict values that rendered as stray punctuation now appear correctly.
+
 ## July 9, 2026
 
 **Added**
