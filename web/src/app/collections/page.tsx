@@ -4,6 +4,7 @@ import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
 import { MemberFacepile } from "@/components/member-facepile";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
+import { getLatestDigest } from "./[slug]/digest/_lib/digest-data";
 
 const TITLE = "Collections";
 const DESCRIPTION =
@@ -40,6 +41,13 @@ export default async function CollectionsListPage() {
     throw err;
   }
 
+  // Small, curated list (~12 collections) — a per-row latest-digest lookup is
+  // cheap and keeps the cross-link subtle (dot + one line, no chip row).
+  const latestDigests = await Promise.all(
+    collections.map((c) => getLatestDigest(c.slug).catch(() => null)),
+  );
+  const latestBySlug = new Map(collections.map((c, i) => [c.slug, latestDigests[i]]));
+
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1240px] px-6 pt-8 pb-12">
@@ -70,6 +78,15 @@ export default async function CollectionsListPage() {
                     <MemberFacepile members={c.previewMembers} totalCount={c.memberCount} />
                   )}
                 </Link>
+                {latestBySlug.get(c.slug) && (
+                  <Link
+                    href={`/collections/${c.slug}/digest/${latestBySlug.get(c.slug)!.weekStart}`}
+                    className="mt-1.5 inline-block text-xs text-stone-500 transition-colors hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
+                    aria-label={`This week's digest for ${c.name}: ${latestBySlug.get(c.slug)!.title}`}
+                  >
+                    This week: {latestBySlug.get(c.slug)!.title} →
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

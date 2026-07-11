@@ -39,6 +39,21 @@ export const SitemapPayloadSchema = z.object({
   sources: z.array(SitemapSourceSchema),
   products: z.array(z.object({ orgSlug: z.string(), slug: z.string() })),
   collections: z.array(z.object({ slug: z.string(), updatedAt: z.string() })),
+  /**
+   * Weekly collection digest permalinks (`/collections/:slug/digest/:week`),
+   * with `generatedAt` driving `<lastmod>`. `.optional()` for backwards
+   * compatibility with older cached responses. Small at 12 collections × 52
+   * weeks/year, so no dedicated `/sitemap/digests` surface (unlike releases).
+   */
+  digests: z
+    .array(
+      z.object({
+        collectionSlug: z.string(),
+        weekStart: z.string(),
+        generatedAt: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 /**
