@@ -16,6 +16,6 @@ See what shipped recently for a source, product, or organization.
 
 ## Find what you need
 
-Search works across organizations, sources, and releases. It matches by meaning as well as by keyword (full-text plus semantic search combined). Each result includes a content preview, so you can find the right release without opening it.
+Search works across organizations, sources, and releases. It's hybrid: full-text search for exact keywords, plus semantic search that matches by meaning. Each result includes a content preview, so you can find the right release without opening it.
 
 <!-- slot:search-compare -->
