@@ -233,8 +233,8 @@ function fakeWeeklyModel(onCall?: () => void): TextModel {
       return {
         text:
           "<title>Week</title><intro>I</intro>" +
-          "<body>[Big release](rel:rel_wk_1) shipped.</body>" +
-          "<releases>rel_wk_1</releases>",
+          "<body>[Big release](rel:rel_wk_1) shipped, plus [two](rel:rel_wk_2) and [three](rel:rel_wk_3).</body>" +
+          "<releases>rel_wk_1, rel_wk_2, rel_wk_3</releases>",
         usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 },
       };
     },

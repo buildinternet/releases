@@ -66,7 +66,10 @@ export interface WeeklyDigestUsage {
 }
 
 export interface WeeklyDigestResult extends WeeklyDigestFields {
+  /** Usage summed across all generation attempts (1 or 2). */
   usage: WeeklyDigestUsage;
+  /** How many model calls this digest took (1 = clean first attempt). */
+  attempts: number;
 }
 
 /** Whether a release has enough substance to count toward the quality floor. */
@@ -221,12 +224,61 @@ export function parseWeeklyDigest(raw: string): {
   return { title, intro, body, citedIds };
 }
 
+/** Model calls allowed per digest: one clean attempt plus one retry. */
+export const MAX_GENERATION_ATTEMPTS = 2;
+
+/** Placeholder ids referenced in a raw (pre-resolution) body. */
+function rawPlaceholderIds(body: string): string[] {
+  const ids: string[] = [];
+  const re = /\[[^\]]*\]\(rel:([A-Za-z0-9_-]+)\)/g;
+  for (let m = re.exec(body); m !== null; m = re.exec(body)) ids.push(m[1]!);
+  return ids;
+}
+
+/**
+ * Validate one generation attempt (eval-derived: fabricated ids and dropped
+ * importance>=4 coverage were the two real failure modes of the chosen lane).
+ *
+ * - `hard` failures make the attempt unusable: too few links surviving
+ *   resolution, or an importance>=4 release left uncited. Never accepted.
+ * - `soft` failures (fabricated ids) trigger a retry, but the attempt is
+ *   still shippable — `resolveReleasePlaceholders` drops unknown ids to
+ *   plain text, so the page degrades to slightly link-poorer, not broken.
+ */
+export function validateWeeklyDigestAttempt(
+  rawBody: string,
+  resolvedIds: string[],
+  selected: WeeklyDigestRelease[],
+  idToPath: Map<string, string>,
+): { hard: string | null; soft: string | null } {
+  const fabricated = [...new Set(rawPlaceholderIds(rawBody))].filter((id) => !idToPath.has(id));
+  const minLinks = Math.min(3, selected.length);
+  const cited = new Set(resolvedIds);
+  const uncited = selected.filter((r) => (r.importance ?? 0) >= 4 && !cited.has(r.id));
+
+  let hard: string | null = null;
+  if (resolvedIds.length < minLinks) {
+    hard = `too few resolvable release links (${resolvedIds.length} < ${minLinks})`;
+  } else if (uncited.length > 0) {
+    hard = `importance>=4 releases uncited: ${uncited.map((r) => r.id).join(", ")}`;
+  }
+  const soft = fabricated.length > 0 ? `fabricated release ids: ${fabricated.join(", ")}` : null;
+  return { hard, soft };
+}
+
 /**
  * Run a collection's week through the supplied TextModel, then resolve link
  * placeholders against `idToPath` (built by the caller from the *provided*
  * release set only). `releaseIds` on the result is derived from the resolved
  * body, not the model's self-reported `<releases>` tag — so a hallucinated id
  * can never end up in the persisted "releases covered" list.
+ *
+ * Validate-and-retry (model-eval outcome on PR #2115): each attempt is
+ * checked with {@link validateWeeklyDigestAttempt}; a parse error or any
+ * failure triggers one retry. A hard-clean attempt with only soft failures
+ * is kept as a fallback and returned if the retry does no better. Two hard
+ * failures throw — the caller treats that week like the quality-floor skip
+ * rather than persisting a digest whose links don't hold up.
  */
 export async function generateCollectionWeeklyDigest(
   model: TextModel,
@@ -234,24 +286,55 @@ export async function generateCollectionWeeklyDigest(
   idToPath: Map<string, string>,
 ): Promise<WeeklyDigestResult> {
   const selection = selectWeeklyDigestReleases(input.releases);
-  const { text, usage } = await model.complete({
-    system: SYSTEM_PROMPT,
-    user: buildCollectionWeekBlock(input, selection),
-    maxTokens: MAX_OUTPUT_TOKENS,
-    cacheSystem: true,
-  });
-  const parsed = parseWeeklyDigest(text);
-  const { body, releaseIds } = resolveReleasePlaceholders(parsed.body, idToPath);
-  return {
-    title: parsed.title,
-    intro: parsed.intro,
-    body,
-    releaseIds,
-    usage: {
-      input: usage.input,
-      output: usage.output,
-      cacheCreate: usage.cacheCreate,
-      cacheRead: usage.cacheRead,
-    },
-  };
+  const user = buildCollectionWeekBlock(input, selection);
+
+  const totalUsage: WeeklyDigestUsage = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 };
+  let fallback: WeeklyDigestResult | null = null;
+  let lastFailure = "no attempts ran";
+
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+    const { text, usage } = await model.complete({
+      system: SYSTEM_PROMPT,
+      user,
+      maxTokens: MAX_OUTPUT_TOKENS,
+      cacheSystem: true,
+    });
+    totalUsage.input += usage.input;
+    totalUsage.output += usage.output;
+    totalUsage.cacheCreate += usage.cacheCreate;
+    totalUsage.cacheRead += usage.cacheRead;
+
+    let parsed: ReturnType<typeof parseWeeklyDigest>;
+    try {
+      parsed = parseWeeklyDigest(text);
+    } catch (err) {
+      lastFailure = err instanceof Error ? err.message : String(err);
+      continue;
+    }
+
+    const { body, releaseIds } = resolveReleasePlaceholders(parsed.body, idToPath);
+    const verdict = validateWeeklyDigestAttempt(
+      parsed.body,
+      releaseIds,
+      selection.selected,
+      idToPath,
+    );
+    const result: WeeklyDigestResult = {
+      title: parsed.title,
+      intro: parsed.intro,
+      body,
+      releaseIds,
+      usage: { ...totalUsage },
+      attempts: attempt,
+    };
+
+    if (!verdict.hard && !verdict.soft) return result;
+    if (!verdict.hard) fallback = result; // shippable — bad links already dropped
+    lastFailure = verdict.hard ?? verdict.soft ?? "unknown validation failure";
+  }
+
+  if (fallback) return { ...fallback, usage: { ...totalUsage } };
+  throw new Error(
+    `weekly digest failed validation after ${MAX_GENERATION_ATTEMPTS} attempts: ${lastFailure}`,
+  );
 }

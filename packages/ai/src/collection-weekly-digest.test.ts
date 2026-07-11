@@ -181,5 +181,116 @@ describe("generateCollectionWeeklyDigest", () => {
     );
     expect(result.releaseIds).toEqual(["rel_1"]);
     expect(result.body).toContain("(/release/rel_1)");
+    expect(result.attempts).toBe(1);
+  });
+
+  /** Fake model that returns each text in sequence and counts calls. */
+  function sequencedModel(texts: string[]): TextModel & { calls: () => number } {
+    let i = 0;
+    return {
+      id: "test:model",
+      calls: () => i,
+      async complete() {
+        const text = texts[Math.min(i, texts.length - 1)]!;
+        i++;
+        return { text, usage: { input: 10, output: 5, cacheCreate: 0, cacheRead: 0 } };
+      },
+    };
+  }
+
+  const goodRaw =
+    "<title>T</title><intro>I</intro>" +
+    "<body>[Claude Code](rel:rel_1) shipped something big.</body>" +
+    "<releases>rel_1</releases>";
+
+  test("retries once on a fabricated id, returns the clean attempt", async () => {
+    const badRaw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[Claude Code](rel:rel_1) and [ghost](rel:rel_ghost).</body>" +
+      "<releases>rel_1, rel_ghost</releases>";
+    const model = sequencedModel([badRaw, goodRaw]);
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+      new Map([["rel_1", "/release/rel_1"]]),
+    );
+    expect(model.calls()).toBe(2);
+    expect(result.attempts).toBe(2);
+    expect(result.body).not.toContain("ghost](");
+    // usage summed across both attempts
+    expect(result.usage.input).toBe(20);
+  });
+
+  test("accepts a soft-only attempt as fallback when the retry is no better", async () => {
+    // Both attempts fabricate one id, but keep enough real links + coverage —
+    // shippable, since resolution drops the bad link to plain text.
+    const softRaw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[Claude Code](rel:rel_1) plus [ghost](rel:rel_ghost).</body>" +
+      "<releases>rel_1</releases>";
+    const model = sequencedModel([softRaw, softRaw]);
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+      new Map([["rel_1", "/release/rel_1"]]),
+    );
+    expect(model.calls()).toBe(2);
+    expect(result.releaseIds).toEqual(["rel_1"]);
+    expect(result.body).toContain("ghost."); // anchor text kept, link dropped
+    expect(result.body).not.toContain("(rel:");
+  });
+
+  test("retries when an importance>=4 release is uncited, throws after two hard failures", async () => {
+    const uncitedRaw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[One](rel:rel_1), [two](rel:rel_2), [three](rel:rel_3); the big one went unmentioned.</body>" +
+      "<releases>rel_1, rel_2, rel_3</releases>";
+    const model = sequencedModel([uncitedRaw, uncitedRaw]);
+    const releases = [
+      release({ id: "rel_1" }),
+      release({ id: "rel_2" }),
+      release({ id: "rel_3" }),
+      release({ id: "rel_big", title: "Major launch", importance: 5 }),
+    ];
+    const idToPath = new Map([
+      ["rel_1", "/release/rel_1"],
+      ["rel_2", "/release/rel_2"],
+      ["rel_3", "/release/rel_3"],
+      ["rel_big", "/release/rel_big"],
+    ]);
+    await expect(
+      generateCollectionWeeklyDigest(
+        model,
+        { collectionName: "C", weekStart: "2026-07-06", releases },
+        idToPath,
+      ),
+    ).rejects.toThrow(/importance>=4 releases uncited: rel_big/);
+    expect(model.calls()).toBe(2);
+  });
+
+  test("retries on a parse failure and succeeds on the second attempt", async () => {
+    const model = sequencedModel(["no tags at all", goodRaw]);
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+      new Map([["rel_1", "/release/rel_1"]]),
+    );
+    expect(result.attempts).toBe(2);
+    expect(result.releaseIds).toEqual(["rel_1"]);
+  });
+
+  test("throws when too few links survive resolution on both attempts", async () => {
+    const linkless =
+      "<title>T</title><intro>I</intro>" +
+      "<body>Plenty happened this week but nothing is linked.</body>" +
+      "<releases></releases>";
+    const model = sequencedModel([linkless, linkless]);
+    await expect(
+      generateCollectionWeeklyDigest(
+        model,
+        { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+        new Map([["rel_1", "/release/rel_1"]]),
+      ),
+    ).rejects.toThrow(/too few resolvable release links/);
   });
 });
