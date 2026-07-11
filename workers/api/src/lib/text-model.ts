@@ -240,6 +240,21 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
   });
 }
 
+// Same SUMMARIZE_MODEL lane as the daily summary above — a weekly digest is a
+// longer-form version of the same "summarize collection activity cheaply"
+// task, not a new task family (no new model env var). Only generationName
+// differs, so weekly-digest spend/latency stays separable from daily-summary
+// spend in usage logs.
+export function resolveCollectionWeeklyDigestModel(env: TextModelEnv): Promise<TextModel | null> {
+  return resolveTextModel(env, {
+    orModel: env.SUMMARIZE_MODEL,
+    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    generationName: "collection-weekly-digest",
+    reasoning: SUMMARIZE_REASONING,
+    provider: SUMMARIZE_PROVIDER,
+  });
+}
+
 /**
  * Org-overview generation lane. UNLIKE the other secondary lanes, this one runs
  * through the AI SDK structured-output path (`generateText` + `Output.object`) so

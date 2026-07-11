@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { etDayKey, etDayBoundsUtc, addDaysToDateKey, isDateKey } from "./dates";
+import {
+  etDayKey,
+  etDayBoundsUtc,
+  addDaysToDateKey,
+  isDateKey,
+  etWeekStart,
+  weekBoundsUtc,
+  weekSlug,
+  parseWeekSlug,
+} from "./dates";
 
 describe("etDayKey", () => {
   test("maps a UTC instant to its Eastern calendar day", () => {
@@ -59,5 +68,46 @@ describe("isDateKey", () => {
     expect(isDateKey("2026-13-01")).toBe(false);
     expect(isDateKey("2026-02-30")).toBe(false);
     expect(isDateKey("2026-06-11T00:00:00Z")).toBe(false);
+  });
+});
+
+describe("etWeekStart", () => {
+  test("resolves any day in the week to the same Monday", () => {
+    expect(etWeekStart("2026-07-06")).toBe("2026-07-06"); // Monday itself
+    expect(etWeekStart("2026-07-11")).toBe("2026-07-06"); // Saturday
+    expect(etWeekStart("2026-07-12")).toBe("2026-07-06"); // Sunday (end of week)
+    expect(etWeekStart("2026-07-13")).toBe("2026-07-13"); // next Monday
+  });
+});
+
+describe("weekBoundsUtc", () => {
+  test("returns a 168h week outside any DST transition", () => {
+    const { startUtc, endUtc } = weekBoundsUtc("2026-06-08"); // Mon, EDT throughout
+    expect(startUtc).toBe("2026-06-08T04:00:00.000Z");
+    expect(endUtc).toBe("2026-06-15T04:00:00.000Z");
+  });
+  test("spring-forward week (2026-03-08) is 167 hours", () => {
+    expect(weekBoundsUtc("2026-03-02")).toEqual({
+      startUtc: "2026-03-02T05:00:00.000Z",
+      endUtc: "2026-03-09T04:00:00.000Z",
+    });
+  });
+  test("fall-back week (2026-11-01) is 169 hours", () => {
+    expect(weekBoundsUtc("2026-10-26")).toEqual({
+      startUtc: "2026-10-26T04:00:00.000Z",
+      endUtc: "2026-11-02T05:00:00.000Z",
+    });
+  });
+});
+
+describe("weekSlug / parseWeekSlug", () => {
+  test("round-trips a Monday date key", () => {
+    expect(weekSlug("2026-07-06")).toBe("2026-07-06");
+    expect(parseWeekSlug("2026-07-06")).toBe("2026-07-06");
+  });
+  test("parseWeekSlug rejects malformed or impossible dates", () => {
+    expect(parseWeekSlug("garbage")).toBeNull();
+    expect(parseWeekSlug("2026-13-01")).toBeNull();
+    expect(parseWeekSlug("")).toBeNull();
   });
 });

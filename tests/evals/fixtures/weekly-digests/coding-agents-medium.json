@@ -1,0 +1,238 @@
+{
+  "input": {
+    "collectionName": "Coding Agents",
+    "weekStart": "2026-06-29",
+    "releases": [
+      {
+        "id": "rel_VjnIQW4dmG6UbKndAWx-s",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.200 changes default permission mode to Manual and fixes background session crashes",
+        "summary": "The default permission mode is now \"Manual\" across CLI, VS Code, and JetBrains (opt-in idle timeout for AskUserQuestion dialogs via /config). Fixed background sessions silently stopping mid-turn after sleep/wake or session reopening, re-running cancelled turns after stalls, and daemon crashes leaving stale locks that prevented restarts. Also fixed subagents cut off by rate limits returning empty results, plugin loading from git worktrees, and terminal control bytes leaking into agent view.",
+        "body": "## What's changed\n\n- Changed `AskUserQuestion` dialogs to no longer auto-continue by default; opt into an idle timeout via `/config`\n- Changed the \"default\" permission mode to \"Manual\" across the CLI, `--help`, VS Code, and JetBrains; `--permission-mode manual` and `\"defaultMode\": \"manual\"` are accepted alongside `default`\n- Fixed a crash at startup when `disabledMcpServers` or `enabledMcpServers` in `.claude.json` is set to a non-array value\n- Fixed background sessions silently stopping mid-turn after sleep/wake or when reopening a stalled session\n- Fixed background sessions re-running a turn cancelled with Esc after a stall respawn\n- Fixed background agents never starting again after a crash left a stale `daemon.lock` whose PID the OS reused\n- Fixed background-agent daemon handover so a reinstalled older build can no longer take over the daemon; build recency is now judged by the version's embedded build timestamp\n- Fixed background-agent roster issues: transient corruption permanently disabling orphan cleanup, older binaries not preserving fields written by newer versions, and socket auth tokens being stripped during daemon restarts\n- Fixed subagents cut off by a rate limit before producing any text output returning an empty result instead of failing cleanly\n- Fixed control bytes from background-agent output reaching the terminal in the agent view\n- Fixed `claude agents --plugin-dir <dir>` not showing the plugin's agents and skills in the agent view when the flag is placed after `agents`\n- Fixed project-scoped plugins not loading correctly from git worktrees of the same repository\n- Fixed `/mcp` server list not tracking focus for screen readers and magnifiers\n- Fixed voice dictation showing a misleading \"Voice connection failed\" message when a recording captures no audio\n- Fixed rendering flicker under tmux 3.4+ by enabling synchronized terminal output\n- Improved screen-reader output: decorative glyphs are now hidden, transcript symbols read as short labels, and nested tables read as `Header: value.` lines\n- Improved the install script to explain when installation is killed by the system running out of memory\n",
+        "publishedAt": "2026-07-03T16:52:33.000Z",
+        "importance": 4
+      },
+      {
+        "id": "rel_f8eXZ92j7EHzLXm1BOvAk",
+        "org": "OpenAI",
+        "product": "Codex",
+        "title": "ChatGPT iOS now manages Codex tasks in conversations with branch filters and SSH support",
+        "summary": "ChatGPT for iOS now supports creating, searching, opening, forking, and managing Codex tasks directly from conversations, with filters for staged, unstaged, and branch changes. Added support for SSH hosts using private keys or no credentials, inline photo and camera pickers, and previews for image and file attachments before sending. Also improved task loading, autocomplete, settings persistence, and fixed thread-list loading and prompt mode deadlocks.",
+        "body": "# ChatGPT for iOS\n\n### New features\n\n- Added support for creating, searching, opening, forking, and managing Codex\n  tasks directly from a conversation.\n- Added filters for staged, unstaged, branch, and last-turn changes, with controls\n  for comparing branches.\n- Added support for adding selected transcript text directly to the composer.\n- Added previews for image and file attachments before sending.\n- Added inline Photos and Camera pickers to the attachment menu.\n- Added a connection shortcut and support for SSH hosts using private keys or no\n  credentials.\n- Added usage limits and credit details to the task menu.\n\n### Improvements and bug fixes\n\n- Improved the task list with consistent task terminology, clearer delegated\n  task titles, and a Needs input status.\n- Improved initial task loading and foreground recovery.\n- Improved autocomplete by selecting the first result automatically and\n  accepting it with Return.\n- Improved model, reasoning, and Fast settings so changes remain scoped to the\n  current task.\n- Improved task-management and dynamic tool activity presentation.\n- Improved side chats to open directly when only one conversation is available.\n- Improved plugin autocomplete with installed plugins and their icons.\n- Improved workspace diff accuracy and expand-and-collapse navigation.\n- Improved recovery by preserving thread state across reconnects and host\n  pairings across sign-out.\n- Fixed stuck thread-list loading, prompt mode deadlocks, stale images, and\n  microphone permission alerts.\n- Fixed shake to undo and keyboard refocusing after sending a prompt.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_c2DNFlr0ssOz80uxqticY",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.88 improves scrolling, session search, and fixes resume on corrupted history",
+        "summary": "Scrolling now feels smoother with better trackpad and wheel handling plus configurable speed and mode. Session search returns tighter multi-word results, handles filenames and plurals better, and the session picker now searches conversation content for queries of two or more characters. Resuming sessions no longer fails permanently when history files contain corrupted lines from interrupted writes.",
+        "body": "- Scrolling feels smoother with better trackpad and wheel handling plus configurable speed and mode\n- Session search now returns tighter multi-word results and handles filenames and plurals better\n- Session picker now always searches conversation content for queries of two or more characters\n- Tool call grouping is now enabled by default, folding consecutive reads and searches into single rows\n- Plugins tab now supports `u` to update the selected plugin and shows non-blocking success feedback\n- Reasoning effort used for a session is now recorded in summary.json and conversation history\n- Session content search now correctly indexes messages containing escape sequences like newlines and quotes\n- Formatted links now keep their link color when wrapped in bold, italic, or strikethrough\n- Resuming sessions no longer fails permanently when history files contain corrupted lines from interrupted writes",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_IQ5w6DsYti5O9iDrGnGDp",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.87 improves subscription detection and adds /docs command",
+        "summary": "Subscription upgrades are now detected automatically without restarting the CLI, and a new /docs slash command opens How-to Guides picker, browses web docs, or jumps directly to a guide by title. Bash permission prompts now offer a \"Never allow\" choice that persists the deny rule, reasoning effort menus are configurable per-model from the server and config.toml, and several UI and interaction bugs are fixed.",
+        "body": "- Subscription upgrades are now detected automatically without restarting the CLI\n- Bash permission prompts now offer a \"Never allow\" choice that persists the deny rule\n- New `/docs` slash command opens How-to Guides picker, browses web docs, or jumps directly to a guide by title\n- Per-model reasoning effort menus are now configurable from the server and config.toml without a client release\n- Finished thinking blocks now fold into grouped tool-call rows when group_tool_verbs is enabled\n- `--minimal` mode now always uses your terminal's own colors so text stays readable on any background\n- Invalid fields in [model.*] config blocks no longer cause the whole model to disappear from the picker\n- File tools no longer target paths with literal trailing newlines or whitespace from model output\n- Fixed interactions in no-freeform question modals so clicks below the last option no longer enter input mode\n- Background tasks now correctly wake the agent after a cancelled blocking wait instead of staying idle\n- Copying quoted text from rendered responses no longer includes the quote bar prefix in pretty mode",
+        "publishedAt": "2026-07-05T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_Uj_nmtVQl9mNV5A7GOUmu",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.86 expands media generation limits and adds voice language picker",
+        "summary": "Media generation no longer hits per-session file limits, and image and video byte budgets have been increased. Voice language setting now lets you pick speech-to-text language in the Editor settings, and tab autocomplete suggests your next prompt as ghost text after each turn.",
+        "body": "- Voice language setting now lets you pick speech-to-text language (including System) in the Editor settings\n- Tab autocomplete now suggests your next prompt as ghost text after each turn\n- `/usage` (and `/cost`) is now hidden for free and X Basic personal accounts\n- Media generation no longer hits per-session file limits; image and video byte budgets increased\n- `--minimal` flag now shows in `grok --help`\n- Claude-style Bash(cmd:*) permission rules are now correctly translated to prefix matches",
+        "publishedAt": "2026-07-04T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_TqlzjZ2abne6mHtCNHnZz",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.201 removes mid-conversation system role from Claude Sonnet 5",
+        "summary": "Claude Sonnet 5 sessions no longer use the mid-conversation system role for harness reminders.",
+        "body": "## What's changed\n\n- Claude Sonnet 5 sessions no longer use the mid-conversation system role for harness reminders\n",
+        "publishedAt": "2026-07-03T23:50:35.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_irgHWfploVKeNXtMGtGXp",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.85 improves tool call grouping and subagent handling",
+        "summary": "Tool call grouping can now be enabled to collapse consecutive read/search/list calls into single rows, and subagents now run in the background by default. Pressing Enter on an empty prompt sends the top queued follow-up immediately, permission prompts now correctly wrap long bash commands, and inline LaTeX math with padding spaces renders correctly.",
+        "body": "- Pressing Enter on an empty prompt now sends the top queued follow-up immediately while a turn is running\n- Tool call grouping can now be enabled via config.toml or settings to collapse consecutive read/search/list calls\n- Consecutive tool calls of the same kind can now be folded into a single row when group_tool_verbs is enabled\n- Subagent conversations now receive the same type-specific instructions in gateway chat as in the CLI\n- Scheduled automation tasks now show their header panel correctly in gateway chat sessions\n- Promotional announcements now appear with clickable CTAs and can be non-dismissible\n- Subagents now run in the background by default unless explicitly set to false\n- Permission prompts now correctly wrap long bash commands while preserving structure and quotes\n- Claude Code settings with permissions.defaultMode are now correctly honored\n- Project skills and commands are now discovered even when their directories are gitignored\n- Inline LaTeX math with padding spaces now renders correctly instead of showing raw dollar signs\n- Manual `/recap` now works on the same turn and long auto recaps are hidden from view while still saved\n- Always allow for common commands like ls and git status now remembers just the command instead of extra arguments",
+        "publishedAt": "2026-07-03T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_aC1Btmd3FOETst61py69O",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.84 improves performance and adds air-gapped deployments support",
+        "summary": "Added remote_fetch option under [features] in config.toml to disable all backend catalog and settings fetches for air-gapped environments. Idle CPU and memory usage after long sessions or resume is now dramatically lower, and grep now stops early on broad searches. Announcements update live during sessions without restart, ask_user_question timeout is now configurable, thinking blocks display by default, and several UI and tool fixes improve usability.",
+        "body": "- Announcements now update live during active sessions without restart or `/new`\n- Hiding an announcement no longer suppresses later criticals; new ones reappear automatically\n- run_terminal_cmd now requires a one-sentence `description` rationale in every invocation\n- ask_user_question timeout policy is now configurable in config.toml and `/settings`\n- Ask-Question timeout can now be toggled from `/settings` (Agent & Approval)\n- Thinking/reasoning blocks are now shown by default while the model is working\n- Critical announcements now show a red title with a clickable [hide] button and aligned message\n- Added remote_fetch option under [features] in config.toml to disable all backend catalog and settings fetches for air-gapped environments\n- Images pasted or read from GIF, BMP or TIFF files are now automatically converted so they work with image generation\n- Queue panel now shows action buttons on hover and the status bar displays a compact done/total task count\n- Hook matchers now correctly see the real MCP tool name instead of the internal dispatcher name\n- Copy now succeeds when running inside containers even when the terminal brand cannot be detected\n- Tool result previews no longer paint opaque panels in `grok --minimal`\n- `grok wrap` now correctly handles quoted strings and shell aliases\n- Text selection settings now correctly honor explicit keep_text_selection values even when legacy keys remain\n- Fixed a freeze that could occur when editing and sending the last message in the queue\n- Fixed a startup crash on minimal Linux systems lacking system CA certificates\n- Grep now stops early on broad searches, returning faster results with far less memory use\n- Idle CPU and memory usage after long sessions or resume is now dramatically lower",
+        "publishedAt": "2026-07-03T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_dkG_D32nY3AzlAMuNT5WJ",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code 2.1.199 fixes background-agent daemon self-kill loop and stacked skill invocations",
+        "summary": "Fixed a background-agent daemon bug on Linux that killed every running agent every ~50 seconds after an unclean shutdown. Stacked slash-skill invocations now load up to 5 leading skills, SSL certificate errors fail immediately with actionable guidance, and mid-stream API errors keep partial output. Plus dozens of smaller fixes across subagents, hooks, and session management.",
+        "body": "## What's changed\n\n- Stacked slash-skill invocations like `/skill-a /skill-b do XYZ` now load all leading skills (up to 5), not just the first\n- Fixed SSL certificate errors (TLS-inspecting proxies, missing `NODE_EXTRA_CA_CERTS`, expired certs) burning retries before showing actionable guidance \u2014 they now fail immediately with the fix hint\n- Fixed streaming responses being discarded when the API emits a mid-stream overloaded/server error after partial output \u2014 the partial is now kept with an incomplete-response notice\n- Fixed subagents cut off by a rate limit or server error silently failing instead of returning their partial work to the parent\n- Fixed subagents reporting API errors (e.g. usage limit reached) as successful results \u2014 the error is now reported to the parent agent\n- Fixed the background-agent daemon on Linux killing itself and every running agent every ~50 seconds after an unclean shutdown left a corrupted worker record\n- Fixed background agents failing to cold-start over SSH on macOS with \"Could not switch to audit session\" (regression in 2.1.196)\n- Fixed `claude stop` being silently undone when it raced a background-agent respawn \u2014 the respawn now honors the stop\n- Fixed background job progress indicators stalling for minutes while the job ran long commands\n- Fixed background sessions on memory-starved machines showing a generic error \u2014 they now indicate low memory and suggest freeing resources\n- Fixed remote sessions briefly flapping between Working and Idle in the agent view when a background agent completes\n- Fixed idle subagents vanishing from the agent panel while other subagents were still working; surplus idle agents now collapse into an expandable summary row\n- Fixed typing `/model` or `/fast` while viewing a subagent silently opening the lead's model picker \u2014 a notice now explains the command applies to the lead\n- Fixed `SessionStart`, `Setup`, and `SubagentStart` hooks silently hiding stderr when exiting with code 2 \u2014 the error is now shown in the transcript\n- Fixed `claude --dangerously-skip-permissions daemon <subcommand>` being treated as a chat prompt instead of running the subcommand\n- Fixed `SendMessage` silently misrouting when a re-spawned agent reuses a previous agent's name \u2014 the tool now detects the mismatch and asks the caller to retarget\n- Fixed opening or resuming a session with no new messages needlessly growing the transcript file\n- Fixed backgrounding a session with `\u2190` or `/background` dropping its `/color` from the agent view row\n- Fixed resetting a corrupted config file from the startup recovery dialog destroying it unrecoverably \u2014 it now backs up the file first\n- Fixed Claude in Chrome repeatedly opening the reconnect page when sessions run from different builds or config directories\n- Fixed plan mode not prompting for state-changing browser tool calls; read-only `browser_batch` calls are now correctly auto-allowed\n- Transient server rate-limit errors (429s unrelated to your usage limit) are now retried automatically with backoff for subscribers instead of failing the turn\n- `CLAUDE_CODE_RETRY_WATCHDOG` now raises the default retry count for non-capacity transient errors to 300 and lifts the cap of 15 on `CLAUDE_CODE_MAX_RETRIES`\n- `claude agents` session rows now show pull-request links as bare `#N` without the redundant \"PR\" label\n",
+        "publishedAt": "2026-07-02T23:35:18.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_b4lnl7RazCmGGO2Y7O5ME",
+        "org": "Cognition",
+        "product": "Devin",
+        "title": "Devin July 1 release adds Slack thread sync, read-only MCP mode, and PR ratio analytics",
+        "summary": "Adds bidirectional Slack thread sync, a read-only MCP toggle, and a weekly PR ratio analytics chart with CSV export. Also includes redesigned environment page, cross-platform repository cloning, mention-to-unarchive, inline mute reminders, and numerous bug fixes across the platform.",
+        "body": "**No-Access Permission Popover**\n\nWhen your connected account lacks write permission on a repository, Devin Review now shows a clear \"no access\" popover explaining what's needed instead of silently failing.\n\n**Auto-Review Scoped to Your PRs**\n\nThe auto-review user preference now applies only to PRs you author, so enabling it won't trigger automatic reviews on other people's pull requests.\n\n**PR-Link Preference**\n\nUsers can now control whether in-session PR links open in the Devin tab, in GitHub, or in Devin Review.\n\n**Persist Model Selection**\n\nYour chosen default model is now remembered when you select it in the agent picker, persisting across page reloads.\n\n**Network Access Requests**\n\nIn network-restricted sessions, Devin can now request access to specific domains. The request surfaces to you for approval, removing the need to preconfigure every domain.\n\n**GitLab Mention-Only Comments**\n\nDevin now respects mention-only PR comment settings for GitLab merge requests, reducing notification noise for teams that prefer targeted mentions.\n\n**Slack Thread Sync**\n\nSessions can now sync messages bidirectionally with Slack threads. A confirmation prompt appears for busy threads, and global sync is enabled by default for new sessions.\n\n**Unarchive on Mention**\n\nMentioning @contributor in a Slack thread for an archived session now automatically unarchives it so you can continue the conversation.\n\n**Slack Commands Anywhere**\n\nSlack bang-command macros (like `!ultra` or `!fast`) are now recognized anywhere in your message, not just at the beginning.\n\n**Inline Mute Reminder**\n\nThe mute/quiet-mode reminder now appears inline in the session footnote instead of as a separate message, reducing clutter.\n\n**MCP Read-Only Mode**\n\nThe secure-mode profile UI now includes a toggle for restricting MCP servers to read-only access.\n\n**Improved Webhook Trigger Setup**\n\nThe automation editor now shows the webhook URL and secret inline before you save, so you can configure the external service first.\n\n**Usage Analytics: PR Ratio Chart**\n\nA new weekly Devin PR ratio chart with repository filtering is available on the Repositories analytics tab, along with CSV export and improved number formatting across all analytics tables.\n\n**Skills Analytics**\n\nA new enterprise-level skills analytics page shows skill usage patterns, adoption rates, and performance across your organization.\n\n**ACU Limit Audit Trail**\n\nOrganization ACU limit changes are now recorded in the customer-facing audit log, giving enterprise admins full visibility into limit adjustments.\n\n**Read-Only Scan Profiles**\n\nEnterprise-managed scan profiles now render as read-only in child organizations, preventing accidental modifications to centrally managed security policies.\n\n**Analytics Page Improvements**\n\nAnalytics time-range and filter selections now persist in the URL for easy sharing, and the organization picker in productivity dashboards supports pagination for enterprises with many organizations.\n\n**Redesigned Environment Page**\n\nThe environment page is redesigned with platform filters, an active snapshot grid layout, and platform-specific icons for better discoverability of your build configurations.\n\n**Cross-Platform Repository Cloning**\n\nOrganizations can now clone configured repositories on every available build platform, not just the default \u2014 enabling consistent environments across Linux, macOS, and other platforms.\n\n**Bug Fixes**\n\nThis release also includes numerous bug fixes across the platform \u2014 including fixes for the Slate editor crash on mobile, voice recording button visibility on narrow screens, Review header alignment, IDE frame layering over dialogs, MCP OAuth redirect handling, mentions preserving spaces correctly, false \"Installation out of date\" banners on fresh MCP installs, blueprint drawer state preservation, unsubscribe link routing for enterprise emails, and various UI polish improvements throughout the app.",
+        "publishedAt": "2026-07-02T08:26:09.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_TadxKm6e4gOtJSRnISMsY",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.83 improves paste handling and adds critical announcement banner",
+        "summary": "Critical announcements now appear in a top banner during active sessions with a hide command. Pasting the same text again next to a paste chip now expands the chip into editable text instead of duplicating it, and paste preview shows a hint explaining how to expand the chip.",
+        "body": "- Critical announcements now appear in a top banner during active sessions with a hide command\n- Pasting the same text again next to a paste chip now expands the chip into editable text instead of duplicating it\n- Paste preview now shows a hint explaining how to expand the chip",
+        "publishedAt": "2026-07-02T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_7hFTDCieV119lAfOs5RO1",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.82 adds /effort command and improves UI rendering",
+        "summary": "New /effort slash command changes reasoning effort on the active model. Managed connector links now include team ID in team sessions, chat titles from the gateway display in the sidebar, and skill descriptions recover correctly even with malformed YAML frontmatter. Plus improvements to text chip editing, terminal rendering, and voice session startup.",
+        "body": "- Managed connectors links now include the team ID when opening from a team session\n- Chat conversation titles from the gateway are now shown in the sidebar\n- New `/effort` slash command changes reasoning effort on the active model\n- Double-click a pasted text chip to expand it into editable text\n- Skill descriptions are now recovered correctly even when frontmatter YAML is malformed\n- [Esc] hint in `/btw` panels now stays visible even on narrow terminals\n- Background monitors now wake the agent on natural exit the same way bash tasks do\n- Long option labels in question prompts are now always visible instead of disappearing when unfocused\n- Pasted text preview now appears immediately after inserting a paste chip\n- Hex color codes now render as colored dots with no extra space\n- Pressing voice on the welcome screen now starts a new session",
+        "publishedAt": "2026-07-02T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_rKbcYMSOkGocNv9G9bXHs",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.198 makes Claude in Chrome GA and fixes network-drop aborts",
+        "summary": "Claude in Chrome is now generally available. Fixed brief network drops mid-response aborting the turn \u2014 transient errors like ECONNRESET now retry with backoff instead of failing. Also added background agent notifications, a /dataviz skill, and dozens of additional fixes across agents, worktrees, and fullscreen mode.",
+        "body": "## What's changed\n\n- Claude in Chrome is now generally available\n- Added background agent notifications in `claude agents` \u2014 sessions that need input or finish now fire the `Notification` hook (`agent_needs_input` / `agent_completed`)\n- Added `/dataviz` skill for chart and dashboard design guidance with a runnable color-palette validator\n- Gateway: added Claude Platform on AWS (anthropicAws) as an upstream provider; model-not-found responses now advance the failover chain\n- Background agents launched from `claude agents` now commit, push, and open a draft PR when they finish code work in a worktree, instead of stopping to ask\n- The built-in Explore agent now inherits the main session's model (capped at opus) instead of running on haiku\n- Subagents and context compaction now inherit the session's extended thinking configuration, improving output quality on delegated tasks\n- Fixed brief network drops mid-response aborting the turn \u2014 transient errors like ECONNRESET now retry with backoff instead of failing\n- Fixed excessive background classifier requests when sandboxed processes repeatedly accessed the same network host\n- Fixed background tasks in web, desktop, and VS Code task panels getting stuck on \"Running\" after they finish or after resuming a session\n- Fixed agent teams: a teammate that dies on an API error now reports \"failed\" to the lead, and messaging a stuck teammate wakes it to retry immediately\n- Fixed the `/diff` panel not refreshing when you switch branches or commit outside the session\n- Fixed markdown tables overflowing and wrapping their right border when rendered in fullscreen mode\n- Fixed Claude Platform on AWS and Mantle sessions dead-ending with \"Please run /login\" when the STS token expires \u2014 `awsAuthRefresh` now runs automatically\n- Fixed \"no route to host\" for local-network hosts in macOS background agent sessions by declaring Local Network entitlements\n- Fixed `/desktop` failing with \"Cannot determine working directory\" after entering and exiting a worktree\n- Fixed background agents repeatedly showing \"Reconnecting\u2026\" every ~52 seconds on macOS while the agents view was open\n- Fixed pressing `\u2190` inside `claude attach <id>` exiting to the shell instead of opening the agent view\n- Fixed `claude --bg` silently creating an unattachable session when combined with `--print`/`-p`; the conflicting flags are now rejected up front\n- Fixed the workflow progress view dropping the earliest agents from the list while the phase counter stayed correct in SDK and desktop-app sessions\n- Fixed `.claude/rules/` conditional rules not loading when the target file is reached via a symlinked path\n- Fixed Cmd+click not opening URLs in fullscreen mode in Warp on macOS\n- Fixed double-click word selection in fullscreen mode to select the entire URL including the scheme\n- Fixed plan mode not auto-allowing read-only tool calls when a session starts in plan mode\n- Fixed `/branch` deriving its default fork name from the compaction summary instead of the first real prompt\n- Improved focus mode: subagents launched in a turn now appear in its activity summary, and completed background notifications fold into a single count\n- Improved syntax highlighting accuracy in code blocks, diffs, and file previews by upgrading to highlight.js 11\n- Keyboard shortcut hints now show opt/cmd instead of alt/super when connected from a Mac over SSH\n- Improved API retry UX: the error reason is now shown after the second attempt, and a status page link replaces the spinner tip when the API is overloaded\n- `/login` now opens the sign-in dialog from the `claude agents` view instead of saying it isn't available\n- Subagents now treat messages from the agent that launched them as normal task direction; an agent's message is still never treated as the user's approval\n- Removed the `/agents` wizard; ask Claude to create or manage subagents, or edit `.claude/agents/` directly\n",
+        "publishedAt": "2026-07-01T20:45:36.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_hcgzDFh7BRX-agiCDN--X",
+        "org": "OpenAI",
+        "product": "Codex",
+        "title": "Codex CLI 0.142.5 prevents WebSocket request payloads from leak into trace logs",
+        "summary": "Prevented full Responses WebSocket request payloads from being written to trace logs, fixing a potential information exposure in logged data.",
+        "body": "## Bug Fixes\n\n- Prevented full Responses WebSocket request payloads from being written to trace logs. ([#30771](https://github.com/openai/codex/pull/30771))\n\n## Changelog\n\nFull Changelog: [rust-v0.142.4...rust-v0.142.5](https://github.com/openai/codex/compare/rust-v0.142.4...rust-v0.142.5)\n\n- [#30771](https://github.com/openai/codex/pull/30771) \\[codex\\] Backport websocket trace fix to release/0.142 [@contributor](https://github.com/dylan-hurd-oai)",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_NQZm3-ku5Rrz9Qkh6SYs1",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.81 adds stream transforms and fixes thinking indicator hang",
+        "summary": "New stream transforms let hosts hide, unwrap, or rewrite tool calls for display without affecting agent transcripts. Fixed sessions that remained stuck on the thinking indicator after the model finished responding, and recap requests no longer trigger context-length 400 errors on long conversations.",
+        "body": "- New stream transforms let hosts hide, unwrap, or rewrite tool calls for display without affecting agent transcripts\n- cancel() now accepts a timeout so a stuck turn cannot hang the session forever\n- Run tool blocks now show the model's description as the main title when provided\n- Hex color codes in prose now render as colored dots on truecolor terminals\n- New setting \"Show thinking blocks\" controls whether agent reasoning is visible in the scrollback\n- Spinners now show the description or short command of the task being waited on when available\n- Fixed sessions that remained stuck on the thinking indicator after the model finished responding\n- Mermaid diagrams now correctly display angle brackets and symbols instead of literal HTML entities in labels\n- Recap requests no longer trigger context-length 400 errors on long conversations\n- Grep searches now time out after 20 seconds by default (60s on WSL) instead of always waiting 60s",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel___gixOB9ApnooiqkymtfQ",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.80 adds voice dictation and improves session persistence",
+        "summary": "Voice dictation STT is now available using Ctrl+Space or F8, with optional hold-to-talk on supported terminals. Background tasks and TODO lists now survive compaction and remain visible to the model. Command timeouts are configurable per-session, contextual hints can be toggled individually, subagent dialogs reliably show full transcripts, and network connections are more resilient to proxy or load-balancer drops.",
+        "body": "- Command timeouts can now be configured per-session with a foreground-only ceiling\n- Background tasks and TODO lists now survive compaction and remain visible to the model\n- Voice dictation STT feature: uses `Ctrl+Space` or `F8`, with optional hold-to-talk on supported terminals\n- Contextual hints can now be toggled individually for undo, plan mode, and image input\n- Subagent dialogs now reliably show full transcripts on open and reopen\n- Recap blocks now copy only the summary body, not the header label\n- Vim navigation keys now type into dashboard prompts; modals properly handle Esc/Left\n- Network connections are now more resilient to proxy/LB drops",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_wynlslnSKzBWRENAILtA4",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.197 defaults to Claude Sonnet 5 with 1M-token context",
+        "summary": "Claude Sonnet 5 replaces the previous default model, with a native 1M-token context window and promotional pricing of $2/$10 per Mtok through August 31.",
+        "body": "## What's changed\n\n- Introducing Claude Sonnet 5: now the default model in Claude Code, with a native 1M-token context window and promotional pricing of $2/$10 per Mtok through August 31. Update to version 2.1.197 for access. https://www.anthropic.com/news/claude-sonnet-5\n",
+        "publishedAt": "2026-06-30T17:56:37.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_7soHeIsJBT_bIQ6Khuj9w",
+        "org": "Cursor",
+        "product": "Cursor Changelog",
+        "title": "Cursor expands team marketplaces to support Team MCPs and organization groups",
+        "summary": "Admins can now configure Team MCP servers once and distribute them across cloud agents, the agents window, IDE, and CLI through team marketplaces. Marketplace access can now also be restricted to organization groups in addition to SCIM directory groups.",
+        "body": "We've expanded [team marketplaces](https://cursor.com/docs/plugins#team-marketplaces) to support Team MCPs and organization groups.\n\n## Team MCPs in team marketplaces\n\nAdmins can now configure Team MCP servers once and distribute them across cloud agents, the agents window, IDE, and CLI.\n\nWhen an admin sets up Team MCP servers for cloud agents, they can make those same servers available in a team marketplace from \\*\\*Dashboard -> Integrations & MCP\\*\\*. This allows members of the team to install approved integrations locally without configuring servers themselves.\n\nLearn more in the docs on [migrating existing Team MCPs](https://cursor.com/docs/plugins#migrate-existing-team-mcps).\n\n![Team MCP servers](https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/changelog/team-mcps.png)\n\nTeam MCP servers\n\n## Marketplace access by organization group\n\nTeam marketplaces now support [organization groups](https://cursor.com/docs/enterprise/organization-groups), in addition to team-level SCIM directory groups.\n\n![Marketplace organization groups](https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/changelog/marketplace-orgs.png)\n\nMarketplace organization groups\n\nUnder \\*\\*Dashboard -> Plugins -> Team Marketplaces\\*\\*, restrict marketplace access to specific organization groups. Marketplaces that already use SCIM directory groups keep that configuration.\n\nGet started in the [Cursor dashboard](https://cursor.com/dashboard/plugins#team-marketplaces).",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_5USMdI-h_3PrELvcdK8hH",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.79 fixes crash during conversation repair and adds 6-minute question timeout",
+        "summary": "Fixed a crash that could occur during conversation integrity repairs while a turn was active, and question prompts now time out after 6 minutes instead of blocking indefinitely. Contextual hints now display relevant shortcuts, graceful shutdowns allow interrupted turns to resume with a configurable pause budget, and Grok.com chat sessions integrate fully with the gateway bridge for model catalog and resume.",
+        "body": "- Contextual hints now show shortcuts like plan mode or clipboard paste when relevant\n- Graceful shutdowns now allow interrupted turns to resume with a configurable pause budget\n- Grok.com chat sessions now integrate fully with the gateway bridge for model catalog and resume\n- Question prompts now time out after 6 minutes instead of blocking forever\n- Fixed a crash that could occur during conversation integrity repairs while a turn was active\n- Compaction can now run part of its work in the background before it blocks the session",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_o8jWFEx8WrGs29m5zIsem",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.78 fixes image pasting and prompt history loss on quit",
+        "summary": "Pasting images into dashboard peek replies now works and survives turn cancellation. Prompt history is now saved even on fast Ctrl+C quit, fixing data loss on quick exits. Plus improvements to LaTeX rendering in tables, link clickability in /btw panels, tab alignment in prompts, and shell command cleanup.",
+        "body": "- Chat sessions show the grok.com model catalog in the picker\n- Tabs pasted into the prompt now align correctly with proper cursor positioning\n- Pasting images into dashboard peek replies now works and survives turn cancellation\n- Links in `/btw` panels are now clickable and highlight on hover\n- Prompt history is now saved even on fast `Ctrl+C` quit\n- Stuck scrollback text selection can now be cleared with `Esc` or any non-drag input\n- LaTeX math now renders inside markdown tables in the TUI\n- Background shell commands started by the agent are now cleaned up when the CLI exits\n- `grok update` downloads have a longer timeout",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_OtN_OVviVwXEPMJqbMFk8",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.77 adds clipboard image support and clearer credit messaging",
+        "summary": "Pasting images from the local clipboard now works when running commands through grok wrap. Credit limit errors now show clearer upgrade or buy-credits messaging based on billing type, and the turn status spinner displays what the agent is waiting on.",
+        "body": "- Pasting images from the local clipboard now works when running commands through `grok wrap`\n- Turn status spinner now shows what the agent is waiting on (response, subagent, task output, etc.)\n- Double-click word selection is now a discoverable option in the Text selection setting and stays in sync with highlight behavior\n- Credit limit errors now show clearer upgrade or buy-credits messaging based on billing type",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_LLPs6xiVTzGfoBr8iB8DK",
+        "org": "xAI",
+        "product": "Grok Build",
+        "title": "Grok Build 0.2.76 adds auto permission mode and reduces idle session overhead",
+        "summary": "Auto permission mode is now added to the top of Shift+Tab cycles and enabled by default in settings. Idle sessions no longer send repeated empty frames to the terminal, reducing CPU usage in the terminal emulator, and grok agent stdio now checks for updates in the background.",
+        "body": "- Auto permission mode is now added to the top of `Shift+Tab` cycles and enabled by default in settings\n- `grok agent stdio` now checks for updates in the background like other modes\n- Idle sessions no longer send repeated empty frames to the terminal, reducing CPU usage in the terminal emulator",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_upxf2JPglzWX0V76oFqQl",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.196 fixes session loss on job wake and stops unchecked MCP server spawning",
+        "summary": "Fixed a critical bug where waking a background job deleted the conversation and reran the original prompt. Security: `claude mcp list`/`get` no longer spawns repo-approved `.mcp.json` servers in untrusted workspaces. Also fixes OAuth scope rejection on enterprise IdPs, rate-limit flickering, and PowerShell exit-code false positives.",
+        "body": "## What's changed\n\n- Added support for organization default models \u2014 admins set it in the org console; it shows as \"Org default\" (or \"Role default\") in `/model` when you haven't picked one yourself\n- Added readable default names for sessions at start, making them easier to identify and message\n- Added clickable file attachments in chat \u2014 Cmd/Ctrl-click reveals the file in Finder/Explorer\n- Security: `claude mcp list`/`get` no longer spawn `.mcp.json` servers that a repo self-approved via a committed `.claude/settings.json`; untrusted workspaces show `\u23f8 Pending approval`\n- Fixed waking a background job permanently deleting its conversation and re-running the original prompt when the transcript probe misread a real transcript; the file is now set aside, never deleted\n- Fixed the rate-limit warning flickering off and rate-limit telemetry being over-counted when multiple parallel requests were in flight at the moment a usage limit was hit\n- Fixed duplicate recap lines after a background session's turn: a schema-rejected StructuredOutput attempt no longer renders alongside its retry\n- Fixed PowerShell `git diff`/`git grep`, `egrep`/`fgrep`, and quoted search patterns containing `|` being reported as failures when they exit 1, matching Bash behavior\n- Fixed multiple `claude agents` side panel issues: keyboard focus getting stuck when opening an agent, background jobs losing their subagent types on every open, and sessions showing incorrect status while actively running\n- Fixed `claude agents --dangerously-skip-permissions` silently falling back to auto mode instead of showing the bypass disclaimer and applying bypass mode to spawned agents\n- Fixed mid-turn crash recovery for Remote sessions \u2014 sessions interrupted by a server restart now auto-resume on the next worker\n- Fixed sessions moved with `/cd` reappearing in the old directory's resume list after a non-graceful exit when the old path contained special characters\n- Fixed `claude plugin validate` skipping local plugins whose source is \".\" and stopping after the first error class\n- Fixed Esc Esc at an idle prompt not opening the rewind menu (regression); use Ctrl+C or Ctrl+X Ctrl+K to stop background agents\n- Fixed MCP OAuth requesting the authorization server's full `scopes_supported` catalog when no scope is specified, causing `invalid_scope` failures on GitLab self-hosted and other enterprise IdPs\n- Fixed `/context` showing 0 tokens for all tool groups on Bedrock\n- Fixed `/deep-research` misreporting verifier failures as \"all claims refuted\" instead of `unverified`\n- Fixed plugin dependency version pins not being honored when the marketplace was added as a local folder path backed by a git repo\n- Fixed `claude agents` session status: completed rows no longer flip between \"Done\" and \"Needs your input\", stalled agents are now labeled \"Needs attention\", and results that mention a PR show a clickable link\n- Fixed voice dictation swallowing spaces and spuriously starting a recording during very fast typing when voice mode is enabled\n- Improved background session reliability: long-running commands and workflows now survive the session's process being stopped, restarted, or updated \u2014 including on Windows, where background shells are handed off instead of being killed\n- Improved background agents: workers killed by a daemon restart are now automatically resumed from where they left off the next time the agents view opens\n- Improved `/code-review` workflow: merged five cleanup finders into one, cutting token usage by roughly 25%\n- Reduced per-frame rendering work in the terminal UI by skipping no-op subtree walks during streaming\n- The streaming idle watchdog is now on by default for all providers \u2014 it aborts and retries when a response stream produces no events for 5 minutes. Set `CLAUDE_ENABLE_STREAM_WATCHDOG=0` to disable.\n- Remote Control is now disabled when `ANTHROPIC_BASE_URL` points at a non-Anthropic host, matching the existing behavior under `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY`\n- Changed opening the agents view from a foreground session to require a single `\u2190` press instead of two, matching the behavior in background sessions\n",
+        "publishedAt": "2026-06-29T23:27:32.000Z",
+        "importance": null
+      }
+    ]
+  }
+}

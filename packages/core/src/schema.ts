@@ -33,6 +33,7 @@ import {
   newWebhookSubscriptionId,
   newCollectionId,
   newCollectionDailySummaryId,
+  newCollectionWeeklyDigestId,
   newBatchRunId,
   newApiTokenId,
   newFeedbackId,
@@ -303,6 +304,13 @@ export const collections = sqliteTable("collections", {
   dailySummaryEnabled: integer("daily_summary_enabled", { mode: "boolean" })
     .notNull()
     .default(true),
+  // Per-collection on/off for the nightly weekly-digest generation. Default
+  // false — collections opt IN (rollout is a manual D1 UPDATE per collection,
+  // see the weekly-digest generation module). Toggle via
+  // PATCH /v1/collections/:slug.
+  weeklyDigestEnabled: integer("weekly_digest_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
 });
 
 // A member is either an org (`org_id` set, `product_id` null) or a single
@@ -375,6 +383,43 @@ export const collectionDailySummaries = sqliteTable(
   },
   (table) => [
     uniqueIndex("idx_collection_daily_summaries_day").on(table.collectionId, table.summaryDate),
+  ],
+);
+
+// One AI-written "mini blog post" per (collection, ET week): a headline,
+// a lede, and a markdown narrative covering that week's releases across the
+// collection's members, with `[text](rel:rel_ID)` placeholders resolved to
+// real release IDs at generation time. Written by the nightly
+// collection-summaries cron on ET Mondays (the just-closed week); read by
+// GET /v1/collections/:slug/digests (PR B, not yet built). Weeks are ET
+// Monday–Sunday; `weekStart` is the Monday as YYYY-MM-DD.
+export const collectionWeeklyDigests = sqliteTable(
+  "collection_weekly_digests",
+  {
+    id: text("id").primaryKey().$defaultFn(newCollectionWeeklyDigestId),
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    // ET Monday starting the covered week, as YYYY-MM-DD. Canonical week key.
+    weekStart: text("week_start").notNull(),
+    title: text("title").notNull(),
+    intro: text("intro").notNull(),
+    // Markdown body; release references use resolved `/release/*` paths.
+    body: text("body").notNull(),
+    // JSON array of `rel_` ids actually cited in the body.
+    releaseIds: text("release_ids").notNull().default("[]"),
+    releaseCount: integer("release_count").notNull().default(0),
+    // `<provider>:<model>` that produced this row.
+    modelId: text("model_id"),
+    generatedAt: text("generated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_collection_weekly_digests_week").on(table.collectionId, table.weekStart),
   ],
 );
 
@@ -792,6 +837,8 @@ export type CollectionMember = typeof collectionMembers.$inferSelect;
 export type NewCollectionMember = typeof collectionMembers.$inferInsert;
 export type CollectionDailySummary = typeof collectionDailySummaries.$inferSelect;
 export type NewCollectionDailySummary = typeof collectionDailySummaries.$inferInsert;
+export type CollectionWeeklyDigest = typeof collectionWeeklyDigests.$inferSelect;
+export type NewCollectionWeeklyDigest = typeof collectionWeeklyDigests.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
 

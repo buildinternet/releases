@@ -34,6 +34,7 @@ export const newTelemetryEventId = () => `tel_${nanoid()}`;
 export const newSearchQueryId = () => `sq_${nanoid()}`;
 export const newCollectionId = () => `col_${nanoid()}`;
 export const newCollectionDailySummaryId = () => `cds_${nanoid()}`;
+export const newCollectionWeeklyDigestId = () => `cwd_${nanoid()}`;
 export const newBatchRunId = () => `bat_${nanoid()}`;
 export function newWebhookSubscriptionId(): string {
   return `whk_${nanoid(16)}`;
@@ -52,6 +53,7 @@ export type EntityType =
   | "org"
   | "product"
   | "collectionDailySummary"
+  | "collectionWeeklyDigest"
   | "unknown";
 
 const ID_PREFIXES: Record<string, EntityType> = {
@@ -60,6 +62,7 @@ const ID_PREFIXES: Record<string, EntityType> = {
   org_: "org",
   prod_: "product",
   cds_: "collectionDailySummary",
+  cwd_: "collectionWeeklyDigest",
 };
 
 // nanoid() default alphabet is A-Za-z0-9_- and length 21
