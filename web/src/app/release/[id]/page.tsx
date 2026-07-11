@@ -418,7 +418,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
         <div className="mt-6 mb-6">
           <div className="flex items-center gap-2 flex-wrap">
             <ViewTransition name={`rel-${id}`} default="none">
-              <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+              <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 text-balance">
                 {heading}
               </h1>
             </ViewTransition>

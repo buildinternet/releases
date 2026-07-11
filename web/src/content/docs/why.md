@@ -6,16 +6,16 @@ adminOnly: false
 
 # Why Releases
 
-Releases is changelog infrastructure built for agents. Drop the MCP server into Claude, ChatGPT, Cursor, or your own agent and "what changed in X since Y" becomes as cheap a tool call as fetching docs — it's the [Context7](https://context7.com)-equivalent for what shipped.
+Releases is a changelog index built for agents. Add the MCP server to Claude, ChatGPT, Cursor, or your own agent, and "what changed in X since Y" becomes one cheap tool call, as easy as fetching docs. Think of it as the [Context7](https://context7.com) of what shipped.
 
-That matters because changelogs have no standard. Teams publish in GitHub releases, CHANGELOG files, marketing blogs, in-app "what's new" panels, vendor newsletters — and the interesting parts rarely live where you'd guess. Releases unifies them behind one registry, so you can easily see the full story.
+This matters because changelogs have no standard. Teams publish in GitHub releases, CHANGELOG files, marketing blogs, in-app "what's new" panels, and vendor newsletters. The interesting parts rarely live where you'd guess. Releases pulls them into one registry so you can see the full story.
 
 ## Motivation
 
-- **One feed across sources.** GitHub releases, GitHub CHANGELOG files, marketing blogs, public-facing release-notes pages, RSS/Atom, and JSON feeds all normalize into the same shape — org, product, title, date, summary, categories, tags. The launch post that never made it into a tag is in there too.
-- **Product-level signal, not commit noise.** Releases are scoped to orgs and products and summarized for humans, so a roadmap review or competitive scan doesn't drown in dependency-bumps and CI tweaks — and picks up the marketing-side announcements that GitHub never sees in the first place.
-- **With AI, products now change daily.** Markets move faster than any human reader can keep up with. Releases gives your agents a live view of what's shipping across the tools you depend on and the competitors you're tracking, so research prompts and weekly reviews stay current without manual hunting.
-- **Signal agents can act on, not just report.** As agents get more autonomous, landscape awareness stops being a digest and becomes an input: trend lines across your industry and adjacent ones are the signal an agent can use to steer its own roadmap — noticing what's emerging and deciding what's worth building next.
+- **One feed across sources.** GitHub releases, CHANGELOG files, marketing blogs, release-notes pages, RSS/Atom, and JSON feeds all come out in the same shape: org, product, title, date, summary, categories, tags. The launch post that never got a version tag is in there too.
+- **Product-level signal, not commit noise.** Releases are grouped by org and product and summarized for humans. A weekly review doesn't drown in dependency bumps and CI tweaks, and it picks up the announcements that GitHub never sees at all.
+- **With AI, products now change daily.** No human can read it all anymore. Releases gives your agents a live view of what's shipping across the tools you depend on, so research prompts and weekly reviews stay current without manual hunting.
+- **Input agents can act on, not just report.** As agents get more autonomous, knowing what the rest of the industry is building becomes real input: an agent can look at what's shipping across its field, spot what's emerging, and use that to decide what's worth building next.
 
 ## Get started
 

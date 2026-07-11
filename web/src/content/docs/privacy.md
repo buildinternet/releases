@@ -31,7 +31,7 @@ Every CLI command and every local MCP tool call records a single event with:
 
 ## Anonymous ID
 
-The first time the CLI runs, a random UUID is written to `~/.releases/telemetry-id` with `0600` permissions. This ID is not tied to a user, account, or machine identifier — it is a randomly generated value that lets us count unique clients across events. Deleting the file on your end resets your identity.
+The first time the CLI runs, a random UUID is written to `~/.releases/telemetry-id` with `0600` permissions. This ID is not tied to a user, account, or machine identifier. It's a random value that lets us count unique clients across events. Deleting the file on your end resets your identity.
 
 ## First-run notice
 
@@ -61,7 +61,7 @@ releases telemetry enable
 
 ## How events are sent
 
-Events are sent best-effort to `POST /v1/telemetry` on the public API with a 1.5-second timeout. If the request fails, times out, or the machine is offline, the event is silently dropped — telemetry never blocks a command and never surfaces errors.
+Events are sent best-effort to `POST /v1/telemetry` on the public API with a 1.5-second timeout. If the request fails, times out, or the machine is offline, the event is silently dropped. Telemetry never blocks a command and never surfaces errors.
 
 ## Retention
 

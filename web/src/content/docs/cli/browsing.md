@@ -67,9 +67,9 @@ releases tail --json --full              # Complete unprojected payload
 releases tail --json --fields id,version,source.slug  # Project to just these fields
 ```
 
-`--since` and `--until` bound results by publish date and compose with the other filters. Each accepts an ISO date (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`). `latest` is an alias for `tail`; an unparseable value exits with code `2`.
+`--since` and `--until` limit results by publish date and combine with the other filters. Each accepts an ISO date (`2026-01-01`) or a relative shorthand (`90d`, `4w`, `6m`, `2y`). A value that can't be parsed exits with code `2`.
 
-The human view is a single aligned row per release — identity (a package-qualified version like `@scope/pkg@1.2.3`, otherwise the source name) · a one-line description · relative age · a dimmed `rel_…` handle. `--json` returns a [slim release shape](#slim-release-json) by default; add `--full` for everything.
+The human view prints one aligned row per release: an identity (a package-qualified version like `@scope/pkg@1.2.3`, or the source name), a one-line description, a relative age, and a dimmed `rel_…` handle. `--json` returns a [slim release shape](#slim-release-json) by default; add `--full` for everything.
 
 ## Search
 
@@ -86,7 +86,7 @@ releases search "slack integration" --since 90d  # Only release hits from the la
 
 ### On-demand GitHub lookup
 
-When the query is a `{org}/{repo}` coordinate (optionally prefixed `github:`) **and** no entity (org or catalog source) matched, the CLI prints a `Lookup` rail above the regular results. The lookup fires even when tangential release hits surfaced — a coordinate is treated as a precise question about one repo. Org and repo segments match case-insensitively, so `shopify/toxiproxy` and `Shopify/Toxiproxy` resolve to the same source row.
+When the query is a `{org}/{repo}` coordinate (optionally prefixed `github:`) **and** no entity (org or catalog source) matched, the CLI prints a `Lookup` rail above the regular results. The lookup fires even when loosely related release hits surfaced, because a coordinate is treated as a precise question about one repo. Org and repo segments match case-insensitively, so `shopify/toxiproxy` and `Shopify/Toxiproxy` resolve to the same source row.
 
 Possible statuses:
 
@@ -203,7 +203,7 @@ releases stats
 
 ## Feedback
 
-Send feedback about the CLI — a bug, an idea, or anything else — straight to the maintainers. No API key or account required.
+Send feedback about the CLI (a bug, an idea, or anything else) straight to the maintainers. No API key or account required.
 
 ```bash
 releases feedback "tail -f reconnects slowly on flaky wifi"   # one-shot message

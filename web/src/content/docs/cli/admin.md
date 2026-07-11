@@ -35,11 +35,11 @@ releases admin source create --input @astro.json
 echo '{"name":"Astro","url":"https://astro.build/blog"}' | releases admin source create --input -
 ```
 
-The body maps to the CLI's input shape, so the usual dedup, metadata-packing, and validation still run — it is **not** forwarded raw to the API. `--input` requires non-empty string `name` and `url` fields, is mutually exclusive with `--batch`, and rejects a JSON array (use `--batch` for many). Execution modifiers stay on the CLI flags: `--strict` and `--dry-run` override anything the body tries to set. The same flag works on `releases admin source update <id> --input '{…}'`, where body fields are merged over the existing source.
+The body maps to the CLI's input shape, so the usual dedup, metadata-packing, and validation still run; it is **not** forwarded raw to the API. `--input` requires non-empty string `name` and `url` fields, is mutually exclusive with `--batch`, and rejects a JSON array (use `--batch` for many). Execution modifiers stay on the CLI flags: `--strict` and `--dry-run` override anything the body tries to set. The same flag works on `releases admin source update <id> --input '{…}'`, where body fields are merged over the existing source.
 
 ## Update sources
 
-The `update` command accepts a source ID (`src_...`) or slug. IDs are preferred — slugs can change, IDs are immutable.
+The `update` command accepts a source ID (`src_...`) or slug. Prefer IDs: slugs can change, but IDs never do.
 
 ```bash
 releases admin source update src_abc123 --name "New Name"    # by ID (preferred)
@@ -60,7 +60,7 @@ releases admin source delete my-blog
 
 ## Preview any mutation with `--dry-run`
 
-Mutating commands accept `--dry-run`: they resolve the target and report what _would_ happen without writing. It's available across the write surface — source `create`/`update`/`delete`, `org`/`product` create/update/delete, `release` update/delete/suppress, `policy ignore`, `follow`/`unfollow`, `keys create`, `webhook` add/edit/remove, `source import`, and `discovery onboard apply`.
+Mutating commands accept `--dry-run`: they resolve the target and report what _would_ happen without writing. It's available across the write surface: source `create`/`update`/`delete`, `org`/`product` create/update/delete, `release` update/delete/suppress, `policy ignore`, `follow`/`unfollow`, `keys create`, `webhook` add/edit/remove, `source import`, and `discovery onboard apply`.
 
 ```bash
 releases admin source create "Astro" --url https://astro.build/blog --dry-run --json
@@ -197,7 +197,7 @@ releases admin release suppress rel_abc123 --reason "promotional content"
 
 ## Playbook
 
-Read or update an organization's playbook — the agent-facing reference for how each source works.
+Read or update an organization's playbook: the agent-facing reference for how each source works.
 
 ```bash
 # Read the assembled playbook (header + agent notes)
@@ -247,4 +247,4 @@ releases admin feedback list --cursor <cursor>     # Next page (from a previous 
 releases admin feedback list --json                # Raw envelope: { items, nextCursor }
 ```
 
-Each entry carries the message, optional contact, type, status, and submission time. Pagination is cursor-based — pass the `nextCursor` from a `--json` response back as `--cursor` to walk older pages.
+Each entry carries the message, optional contact, type, status, and submission time. Pagination is cursor-based: pass the `nextCursor` from a `--json` response back as `--cursor` to walk older pages.

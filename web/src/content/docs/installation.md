@@ -44,7 +44,7 @@ The script detects your platform, downloads the correct binary from npm, and ins
 
 ## GitHub Releases (precompiled binaries)
 
-Each version publishes precompiled binaries for every supported platform on the [`buildinternet/releases-cli` releases page](https://github.com/buildinternet/releases-cli/releases). Useful for air-gapped installs, pinning to a specific version, or platforms where npm and Homebrew aren't an option.
+Every version ships precompiled binaries for each supported platform on the [`buildinternet/releases-cli` releases page](https://github.com/buildinternet/releases-cli/releases). Use these for air-gapped installs, pinning to a specific version, or machines where npm and Homebrew aren't an option.
 
 Available archives per release:
 
@@ -125,7 +125,7 @@ See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specif
 
 ## Environment variables
 
-All variables are optional — nothing is required for read-only use. Admin commands need a token, which you can also store with `releases auth login` (see [Source Management](/docs/cli/admin)).
+All variables are optional. You don't need any of them for read-only use. Admin commands need a token, which you can also store with `releases auth login` (see [Source Management](/docs/cli/admin)).
 
 | Variable                              | Default                   | Description                                                                                                                                           |
 | ------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |

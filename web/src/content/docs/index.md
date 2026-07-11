@@ -8,7 +8,7 @@ adminOnly: false
 
 Changelog index for AI agents and developers.
 
-Releases tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. It provides a CLI, REST API, MCP server, and a set of auto-triggering agent skills for querying structured release data.
+Releases tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. You can query it four ways: a CLI, a REST API, an MCP server, and agent skills that trigger on their own.
 
 For the motivations behind the project, see [Why](/docs/why).
 
@@ -29,7 +29,7 @@ Releases organizes data in a simple hierarchy:
 - **Sources** — individual changelog feeds (e.g., a GitHub repo, an RSS feed, a changelog page)
 - **Releases** — individual entries with a title, version, date, and content
 
-Each source has a `slug` that uniquely identifies it and is used as the primary argument across CLI commands and API endpoints.
+Each source has a `slug`, a short unique name. Most CLI commands and API endpoints take that slug as their main argument.
 
 ## Interfaces
 

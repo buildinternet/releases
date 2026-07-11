@@ -6,7 +6,7 @@ adminOnly: false
 
 # Listing your product
 
-`releases.json` is a small file on your domain that declares **where you publish product updates** — a changelog, feed, GitHub Releases, App Store listing, or hosted CHANGELOG. Authority comes from **where the file lives**: domain file → company; repo-root file → that repo.
+`releases.json` is a small file on your domain that tells the registry **where you publish product updates**: a changelog, feed, GitHub Releases, App Store listing, or hosted CHANGELOG file. Where the file lives decides what it speaks for. A file on your domain speaks for your company; a file at a repo root speaks for that repo only.
 
 When the file is live, [check and activate on the submit page](/submit).
 
@@ -33,7 +33,7 @@ find where we publish release notes.
 Our website is: <your website or domain>
 ```
 
-Same install + prompt are on the [submit page](/submit) as one-click copy.
+The same install command and prompt are on the [submit page](/submit) with one-click copy.
 
 ## Write it yourself
 
@@ -61,7 +61,7 @@ Optional: `title` on a location; `"canonical": true` on the primary one per scop
 
 ### Multiple products
 
-Add `products[]` only when each product has **its own** release location (don't invent one product per marketing page that all share one changelog). Company fields (`name`, `description`, `category`, `avatar`, `social`, `tags`) are optional.
+Add `products[]` only when each product has **its own** release location. If everything shares one changelog, keep it as one entry. Company fields (`name`, `description`, `category`, `avatar`, `social`, `tags`) are optional.
 
 ```json
 {
@@ -105,7 +105,7 @@ Repo-root `releases.json` binds **that repo** only (`product` + `releases[]`). U
 1. [Submit → check your domain](/submit) and activate if you're unlisted.
 2. The registry re-reads the file on a regular sweep; later edits land without re-submission.
 3. **Feeds / GitHub / App Store** go live after a quick automated check. **Plain web pages** are curator-reviewed before crawl.
-4. Fill-if-empty only — never overwrites curator/editorial fields. Invalid or missing file is a no-op.
+4. The registry only fills in blanks. It never overwrites curator or editorial fields, and an invalid or missing file changes nothing.
 
 No manifest yet? [Suggest a changelog URL](/submit) for curator review.
 
