@@ -8,6 +8,7 @@ import {
   productsActive,
   releasesVisible,
   sourcesActive,
+  sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { releasePath } from "@buildinternet/releases-core/release-slug";
@@ -424,12 +425,14 @@ export async function resolveDigestCoveredReleases(
           titleGenerated: releasesVisible.titleGenerated,
           titleShort: releasesVisible.titleShort,
           version: releasesVisible.version,
-          orgSlug: organizationsActive.slug,
-          orgName: organizationsActive.name,
+          orgSlug: organizationsPublic.slug,
+          orgName: organizationsPublic.name,
         })
         .from(releasesVisible)
-        .innerJoin(sourcesActive, eq(sourcesActive.id, releasesVisible.sourceId))
-        .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
+        // Public read path: join through the hidden-filtered source view and
+        // the public org view so hidden/on-demand rows never surface.
+        .innerJoin(sourcesVisible, eq(sourcesVisible.id, releasesVisible.sourceId))
+        .innerJoin(organizationsPublic, eq(organizationsPublic.id, sourcesVisible.orgId))
         .where(inArray(releasesVisible.id, idChunk)),
     ),
   );

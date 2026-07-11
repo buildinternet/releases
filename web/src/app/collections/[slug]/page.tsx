@@ -46,6 +46,8 @@ export async function generateMetadata({
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
+  // Fire alongside the main page load; never rejects (fails soft to null).
+  const latestDigestPromise = getLatestDigest(slug);
   let page;
   try {
     page = await getCollectionPage(slug);
@@ -61,7 +63,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   }
 
   const { detail, releases, summaries } = page;
-  const latestDigest = await getLatestDigest(slug);
+  const latestDigest = await latestDigestPromise;
   // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
 

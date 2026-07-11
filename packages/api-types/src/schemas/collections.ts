@@ -266,10 +266,7 @@ export const CollectionWeeklyDigestListItemSchema = z.object({
 /** Cursor pagination shape matches the other paginated list surfaces. */
 export const CollectionWeeklyDigestsResponseSchema = z.object({
   digests: z.array(CollectionWeeklyDigestListItemSchema),
-  pagination: z.object({
-    nextCursor: z.string().nullable(),
-    limit: z.number().int().min(1),
-  }),
+  pagination: CollectionFeedPaginationSchema,
 });
 
 /** Minimal, server-resolved release info for a digest's "Releases covered" list. */

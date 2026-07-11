@@ -24,13 +24,17 @@ function weekRangeLabel(weekStart: string): string {
   const end = new Date(`${endKey}T00:00:00Z`);
   const startMonth = start.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
   const endMonth = end.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
-  const year = end.toLocaleDateString("en-US", { year: "numeric", timeZone: "UTC" });
+  const startYear = start.getUTCFullYear();
+  const endYear = end.getUTCFullYear();
   const startDay = start.getUTCDate();
   const endDay = end.getUTCDate();
-  if (startMonth === endMonth) {
-    return `${startMonth} ${startDay}–${endDay}, ${year}`;
+  if (startYear !== endYear) {
+    return `${startMonth} ${startDay}, ${startYear} – ${endMonth} ${endDay}, ${endYear}`;
   }
-  return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${year}`;
+  if (startMonth === endMonth) {
+    return `${startMonth} ${startDay}–${endDay}, ${endYear}`;
+  }
+  return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${endYear}`;
 }
 
 function clampMetaTitle(title: string): string {
