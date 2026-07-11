@@ -37,6 +37,7 @@ import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
 import { shouldNoIndexRelease } from "@/lib/release-noindex";
 import { buildReleaseOpenGraph } from "./release-og";
+import { shouldShowSummaryLede } from "./summary-lede";
 
 type GqlRelease = NonNullable<ReleaseDetailQuery["release"]>;
 type GqlReleaseSource = GqlRelease["source"];
@@ -317,6 +318,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const showVersionSubtitle = !!descriptive && !!versionLabel;
   const trimmedSummary = release.summary?.trim();
   const hasBody = release.content?.trim();
+  const showSummaryLede = shouldShowSummaryLede(release.summary, release.content);
   const devAdmin = isLocalAdminEnabled();
 
   // JSON-LD must carry the same slugged canonical as <link rel=canonical>/OG,
@@ -499,24 +501,43 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               />
             </div>
           )}
-          {trimmedSummary && hasBody && (
-            <aside className="bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-5 mb-6">
-              <div className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium mb-3">
-                Summary
-              </div>
-              <div className="prose prose-stone dark:prose-invert max-w-none text-[15px] leading-relaxed text-stone-700 dark:text-stone-200 [&_p]:my-0 [&_code]:text-sm [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400">
-                <ReactMarkdown
-                  remarkPlugins={detailRemarkPlugins}
-                  rehypePlugins={[rehypeShikiPlugin]}
-                  components={detailMarkdownComponents}
+          {showSummaryLede && trimmedSummary && (
+            <>
+              <aside className="border-l-2 border-stone-300 dark:border-stone-700 pl-5 mb-8">
+                <div
+                  className="prose prose-stone dark:prose-invert max-w-none text-lg leading-relaxed text-stone-700 dark:text-stone-200 [&_p]:my-0 [&_code]:text-base [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400"
+                  aria-label="Summary"
                 >
-                  {trimmedSummary}
-                </ReactMarkdown>
-              </div>
-              <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800 text-[11px] text-stone-400 dark:text-stone-500">
-                {AI_SUMMARY_DISCLAIMER}
-              </div>
-            </aside>
+                  <ReactMarkdown
+                    remarkPlugins={detailRemarkPlugins}
+                    rehypePlugins={[rehypeShikiPlugin]}
+                    components={detailMarkdownComponents}
+                  >
+                    {trimmedSummary}
+                  </ReactMarkdown>
+                </div>
+                <div className="mt-3 text-[11px] text-stone-400 dark:text-stone-500">
+                  {AI_SUMMARY_DISCLAIMER}
+                </div>
+              </aside>
+              {hasBody && (
+                <div className="flex items-center gap-3 mb-4 text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
+                  <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+                  <span>From the original release note</span>
+                  <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+                  {release.url && (
+                    <a
+                      href={release.url}
+                      target="_blank"
+                      rel={EXTERNAL_UGC_REL}
+                      className="normal-case tracking-normal font-normal hover:text-stone-600 dark:hover:text-stone-300"
+                    >
+                      View original ↗
+                    </a>
+                  )}
+                </div>
+              )}
+            </>
           )}
           <ReleaseContent
             content={release.content}
