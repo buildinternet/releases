@@ -203,7 +203,12 @@ import type {
   FeedbackUpdateBodySchema,
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
-import type { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
+import type {
+  SitemapSourceSchema,
+  SitemapPayloadSchema,
+  SitemapReleaseSchema,
+  SitemapReleasesPayloadSchema,
+} from "./schemas/sitemap.js";
 import type {
   RelatedScopeSchema,
   RelatedReleaseThumbnailSchema,
@@ -510,7 +515,12 @@ export {
   FeedbackUpdateBodySchema,
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
-export { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
+export {
+  SitemapSourceSchema,
+  SitemapPayloadSchema,
+  SitemapReleaseSchema,
+  SitemapReleasesPayloadSchema,
+} from "./schemas/sitemap.js";
 export { errorEnvelopeSchema, decodeApiError, isApiError } from "./schemas/errors.js";
 export type { ErrorEnvelope, DecodedApiError } from "./schemas/errors.js";
 export {
@@ -623,6 +633,8 @@ export interface CreateUserApiKeyBody {
 
 export type SitemapSource = z.infer<typeof SitemapSourceSchema>;
 export type SitemapPayload = z.infer<typeof SitemapPayloadSchema>;
+export type SitemapRelease = z.infer<typeof SitemapReleaseSchema>;
+export type SitemapReleasesPayload = z.infer<typeof SitemapReleasesPayloadSchema>;
 
 // ── Related (Vectorize neighbors) ──
 

@@ -4,7 +4,7 @@ import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
-import { buildEntitySitemapEntries } from "@/lib/sitemap-entries";
+import { buildEntitySitemapEntries, buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
 
 // Render on-demand (not during `next build`) so a cold worker / slow D1 can't
 // time out the Vercel export. The API response already carries Cache-Control,
@@ -40,15 +40,10 @@ const UPDATES_ORG_SLUG = "releases-sh";
 async function updatesEntries(): Promise<MetadataRoute.Sitemap> {
   try {
     const feed = await api.orgReleases(UPDATES_ORG_SLUG, { limit: 100 });
-    return feed.releases
-      .map((r) => (r.publishedAt ?? "").slice(0, 10))
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-      .map((d) => ({
-        url: `${BASE_URL}/updates/${d}`,
-        lastModified: new Date(`${d}T12:00:00Z`),
-        changeFrequency: "monthly" as const,
-        priority: 0.5,
-      }));
+    return buildUpdatesSitemapEntries(
+      feed.releases.map((r) => r.publishedAt),
+      BASE_URL,
+    );
   } catch {
     return [];
   }
@@ -68,17 +63,18 @@ function docsRoutes(): StaticRoute[] {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-
   const staticRoutes: StaticRoute[] = [
     ...ALWAYS_PUBLIC,
     ...docsRoutes(),
     ...(statusDashboard ? STATUS_ROUTES : []),
   ];
 
+  // No `lastModified` here: these are static/docs routes with no real
+  // updatedAt signal — stamping `now` on every generation just teaches
+  // Google to distrust our lastmod. Omitting the field is valid per the
+  // sitemap spec.
   const staticEntries: MetadataRoute.Sitemap = staticRoutes.map((r) => ({
     url: `${BASE_URL}${r.path}`,
-    lastModified: now,
     changeFrequency: r.changeFrequency,
     priority: r.priority,
   }));
@@ -92,7 +88,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // added in #875. Without these, Google indexes only the lightweight
     // Overview content and misses the releases feed entirely.
     const orgEntries: MetadataRoute.Sitemap = data.orgs.flatMap((org) => {
-      const lastModified = org.lastActivity ? new Date(org.lastActivity) : now;
+      // Only a real lastActivity drives lastmod; no fabricated `now` fallback.
+      const lastModified = org.lastActivity ? new Date(org.lastActivity) : undefined;
       return [
         {
           url: `${BASE_URL}/${org.slug}`,
@@ -125,12 +122,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     }));
 
+    // Category overlays have no real updatedAt — same reasoning as
+    // staticEntries above, omit rather than fake `now`.
     const categoryEntries: MetadataRoute.Sitemap = CATEGORIES.map((slug) => ({
       url: `${BASE_URL}/categories/${slug}`,
-      lastModified: now,
       changeFrequency: "daily" as const,
       priority: 0.5,
     }));
+
+    // /tags/[slug] pages are indexable but deliberately NOT sitemapped here —
+    // considered for this PR and deferred (candidate rule: only tags with
+    // >=5 releases). Revisit as its own decision.
 
     dynamicEntries = [...orgEntries, ...entityEntries, ...collectionEntries, ...categoryEntries];
   } catch (err) {

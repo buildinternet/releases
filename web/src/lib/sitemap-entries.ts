@@ -2,6 +2,32 @@ import type { MetadataRoute } from "next";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
 
 /**
+ * Pure construction of the `/updates/<date>` sitemap entries from a list of
+ * release `publishedAt` values. One entry per DISTINCT date, not per release
+ * — the naive per-release map used to emit one duplicate `/updates/<date>`
+ * URL for every release published that day (~43 duplicates in the live
+ * sitemap for one moderately active day). Dedupe via a `Set` before mapping.
+ * `publishedAtValues` may contain nulls/malformed strings; anything that
+ * doesn't match `YYYY-MM-DD` after slicing is dropped.
+ */
+export function buildUpdatesSitemapEntries(
+  publishedAtValues: (string | null | undefined)[],
+  baseUrl: string,
+): MetadataRoute.Sitemap {
+  const dates = new Set(
+    publishedAtValues
+      .map((v) => (v ?? "").slice(0, 10))
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+  );
+  return [...dates].map((d) => ({
+    url: `${baseUrl}/updates/${d}`,
+    lastModified: new Date(`${d}T12:00:00Z`),
+    changeFrequency: "monthly" as const,
+    priority: 0.5,
+  }));
+}
+
+/**
  * Pure construction of the product + source sitemap entries from a
  * `/v1/sitemap` payload. Lives in its own side-effect-free module (no Next.js
  * app imports, no docs/flags machinery) so the #1190 shadow-routing logic is
@@ -27,8 +53,6 @@ export function buildEntitySitemapEntries(
   data: SitemapPayload,
   baseUrl: string,
 ): MetadataRoute.Sitemap {
-  const now = new Date();
-
   // Set of "orgSlug/slug" that a product owns. These slugs win the bare
   // /[org]/[slug] URL via product-first resolution (#1190), so any source
   // whose slug collides in the same org is "shadowed" and must be listed at
@@ -51,7 +75,7 @@ export function buildEntitySitemapEntries(
     .filter((p) => (productCountByOrg.get(p.orgSlug) ?? 0) > 1)
     .map((p) => ({
       url: `${baseUrl}/${p.orgSlug}/${p.slug}`,
-      lastModified: now,
+      // No stored product updatedAt signal — omit lastmod rather than fake it.
       changeFrequency: "daily",
       priority: 0.7,
     }));
@@ -59,7 +83,8 @@ export function buildEntitySitemapEntries(
   // Sources: shadowed (slug collides with a product in the same org) → /sources/:id
   // with no sub-tabs; non-shadowed/orphan sources keep the bare URL + sub-tabs.
   const sourceEntries: MetadataRoute.Sitemap = data.sources.flatMap((s) => {
-    const lastModified = s.latestDate ? new Date(s.latestDate) : now;
+    // Only a real latestDate drives lastmod; no fabricated `now` fallback.
+    const lastModified = s.latestDate ? new Date(s.latestDate) : undefined;
     const shadowed = productKeys.has(`${s.orgSlug}/${s.slug}`);
     if (shadowed && s.id) {
       return [

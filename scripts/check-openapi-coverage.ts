@@ -34,6 +34,7 @@ const ALLOWLIST = new Set<string>([
   "GET /orgs/:slug/sparklines",
   "GET /orgs/:slug/recent-releases",
   "GET /sitemap",
+  "GET /sitemap/releases",
   "GET /sources/fetchable",
   "GET /sources/feeds",
   "GET /sources/changes",

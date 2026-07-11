@@ -40,3 +40,26 @@ export const SitemapPayloadSchema = z.object({
   products: z.array(z.object({ orgSlug: z.string(), slug: z.string() })),
   collections: z.array(z.object({ slug: z.string(), updatedAt: z.string() })),
 });
+
+/**
+ * Per-release row in `GET /v1/sitemap/releases` (#1181, scoped down). Carries
+ * exactly what the web needs to build the slugged canonical `/release/...`
+ * URL (`releasePath()` inputs) plus `fetchedAt` for `<lastmod>`.
+ */
+export const SitemapReleaseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  titleShort: z.string().nullable(),
+  titleGenerated: z.string().nullable(),
+  version: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  fetchedAt: z.string(),
+});
+
+/**
+ * Payload for the curated release sitemap: visible releases with a summary
+ * and importance at or above the experiment threshold, newest first, capped.
+ */
+export const SitemapReleasesPayloadSchema = z.object({
+  releases: z.array(SitemapReleaseSchema),
+});
