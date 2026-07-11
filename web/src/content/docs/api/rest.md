@@ -6,7 +6,7 @@ adminOnly: false
 
 # REST API
 
-Programmatic access to the Releases index over HTTP. The notes below cover conventions that apply across endpoints; the per-endpoint reference is generated from the OpenAPI spec.
+Query the Releases index over plain HTTP. This page covers the conventions that apply to every endpoint. The per-endpoint reference is generated from the OpenAPI spec.
 
 - **Interactive reference:** [`api.releases.sh/v1/docs`](https://api.releases.sh/v1/docs) — full Scalar reference with request/response shapes, examples, and client snippets.
 - **OpenAPI 3.1 spec:** [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) — source of truth for request and response shapes.
@@ -16,7 +16,7 @@ Programmatic access to the Releases index over HTTP. The notes below cover conve
 
 ## Authentication
 
-Most read endpoints are public — no credentials required.
+Most read endpoints are public. No credentials required.
 
 **Operator and write endpoints** require a Bearer token with sufficient scope:
 
@@ -34,7 +34,7 @@ User credentials authenticate your account, not operator/admin access. Machine a
 
 ## Pagination
 
-Three shapes, picked per surface:
+Different kinds of endpoints paginate differently. There are three shapes:
 
 | Shape            | Surfaces                                                                                                                                                                                                                                 | Input                                                 | Output                                                                                                     |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -44,7 +44,7 @@ Three shapes, picked per surface:
 
 ## Release date filtering
 
-`/v1/search` and `/v1/releases/latest` accept optional `since` and `until` query params that bound results by publish date. Each takes an ISO date/datetime (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`); an unparseable value is a `400`. On `/v1/search` they filter the release hits only — the orgs, catalog, and collections sections are unaffected — and releases with no `published_at` are dropped from the window.
+`/v1/search` and `/v1/releases/latest` accept optional `since` and `until` query params that limit results by publish date. Each takes an ISO date/datetime (`2026-01-01`) or a relative shorthand (`90d`, `4w`, `6m`, `2y`). A value that can't be parsed returns a `400`. On `/v1/search` these params filter the release hits only; the orgs, catalog, and collections sections are unaffected. Releases with no `published_at` are dropped from the window.
 
 ```bash
 curl "https://api.releases.sh/v1/search?q=slack%20integration&since=90d"
@@ -77,7 +77,7 @@ When you only have a coordinate or a domain:
 
 > **Beta — subject to change.** The shape and parameters of this endpoint may evolve.
 
-`GET /v1/whats-changed?package=…&from=…&to=…&ecosystem=npm|pypi|github` returns the changelog entries between two versions of a package — the releases in the range `(from, to]` (`from` exclusive, `to` inclusive), each with its summary, breaking-change verdict (`none` / `minor` / `major` / `unknown`), and any migration notes. One call instead of reading many changelog pages to plan an upgrade.
+`GET /v1/whats-changed?package=…&from=…&to=…&ecosystem=npm|pypi|github` returns the changelog entries between two versions of a package: the releases in the range `(from, to]` (`from` exclusive, `to` inclusive), each with its summary, breaking-change verdict (`none` / `minor` / `major` / `unknown`), and any migration notes. Planning an upgrade becomes one call instead of reading many changelog pages.
 
 - `package` — a tracked source slug or a GitHub `owner/repo` coordinate (pass `ecosystem=github` for a bare coordinate).
 - Reads already-indexed releases only — no live fetch.

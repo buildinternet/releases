@@ -6,7 +6,7 @@ adminOnly: false
 
 # Examples
 
-Every command outputs a human-readable table by default. Add `--json` for structured output that's easy for scripts and agents to parse. The release readers (`search`, `tail`/`latest`, `get`) return a [slim JSON shape](/docs/cli/browsing#slim-release-json) by default to keep token usage low — add `--full` when you need the complete payload.
+Every command prints a readable table by default. Add `--json` for structured output that scripts and agents can parse. The release readers (`search`, `tail`/`latest`, `get`) return a [slim JSON shape](/docs/cli/browsing#slim-release-json) by default to keep token usage low. Add `--full` when you need everything.
 
 ## Stay up to date
 
@@ -16,6 +16,6 @@ See what shipped recently for a source, product, or organization.
 
 ## Find what you need
 
-Hybrid search across organizations, sources, and releases — fuses full-text and semantic (vector) matching, so you can search by meaning as well as keyword. Each result includes a content preview so you can find the right release without opening it.
+Search works across organizations, sources, and releases. It matches by meaning as well as by keyword (full-text plus semantic search combined). Each result includes a content preview, so you can find the right release without opening it.
 
 <!-- slot:search-compare -->

@@ -17,7 +17,7 @@ releases admin source fetch acme/changelog    # org/slug coordinate
 releases admin source fetch --source next-js  # flag form of the same thing
 ```
 
-A bare `releases admin source fetch` with no identifier or filter is blocked to prevent accidental bulk work — pass a source or one of the filters below.
+A bare `releases admin source fetch` with no identifier or filter is blocked to prevent accidental bulk work. Pass a source or one of the filters below.
 
 ## Targeted batch modes
 
@@ -83,7 +83,7 @@ releases admin source fetch my-source --local --force   # override a Content-Sig
 
 ## AI content fill
 
-When a fetch inserts new releases for a source whose org has auto-generated content enabled, the server follows up with a fill pass that populates missing AI titles and summaries for that source (up to 100 releases per fetch). There is no flag — it's gated by the org-level opt-in.
+When a fetch inserts new releases for a source whose org has auto-generated content enabled, the server follows up with a fill pass that adds missing AI titles and summaries for that source (up to 100 releases per fetch). There is no flag; the org-level opt-in controls it.
 
 ## Options reference
 

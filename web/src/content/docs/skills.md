@@ -38,7 +38,7 @@ If you're on Claude Code and also want the bundled MCP connection and `/releases
 
 ### releases-mcp
 
-Triggers when you ask about a library or product release — "what changed in Next.js 15?", "latest Tailwind releases", "compare Bun vs Deno." Your agent answers from current registry data instead of stale training data.
+Triggers when you ask about a library or product release: "what changed in Next.js 15?", "latest Tailwind releases", "compare Bun vs Deno." Your agent answers from current registry data instead of stale training data.
 
 ### releases-cli
 
@@ -46,11 +46,11 @@ Triggers when you mention the `releases` CLI or run a `releases` command. Helps 
 
 ### analyzing-releases
 
-Triggers on competitive-intelligence asks — "what is X shipping lately", "how does X compare to Y", "what's new in observability." Picks a cohort, fetches recent releases, and summarizes themes.
+Triggers on landscape questions: "what is X shipping lately", "how does X compare to Y", "what's new in observability." Picks a set of products, fetches their recent releases, and summarizes the themes.
 
 ### creating-releases-json
 
-Triggers when you want to **list your own product** — "add a releases.json", "get indexed on releases.sh", "make us a manifest for our website." Discovers real publish locations, models products without over-fragmenting, writes a valid v2 manifest, and guides publishing to `/.well-known/releases.json`.
+Triggers when you want to **list your own product**: "add a releases.json", "get indexed on releases.sh", "make us a manifest for our website." It finds where you actually publish release notes, writes a valid v2 manifest, and walks through publishing it at `/.well-known/releases.json`.
 
 Install just this skill (or grab the copy buttons on the [submit page](/submit)):
 
@@ -62,7 +62,7 @@ See [Listing your product](/docs/listing) for the format and the paste-ready age
 
 ## Operator skills
 
-Skills for people running or maintaining the registry itself — onboarding sources (`finding-changelogs`, `managing-sources`), the parse pipeline (`parsing-changelogs`, `classify-media-relevance`), and bulk maintenance (`seeding-playbooks` and friends) — live with the backend in the [releases monorepo](https://github.com/buildinternet/releases) under `.claude/skills/`. They're picked up automatically by Claude Code in a checkout, or installable anywhere:
+These are for people running or maintaining the registry itself: onboarding sources (`finding-changelogs`, `managing-sources`), the parse pipeline (`parsing-changelogs`, `classify-media-relevance`), and bulk maintenance (`seeding-playbooks` and friends). They live with the backend in the [releases monorepo](https://github.com/buildinternet/releases) under `.claude/skills/`. Claude Code picks them up automatically in a checkout, or you can install them anywhere:
 
 ```bash
 npx skills add buildinternet/releases

@@ -14,7 +14,7 @@ Outbound HTTPS notifications when new releases are indexed. Each delivery is a s
 
 ## Self-serve (`/v1/me/webhooks`)
 
-Requires a signed-in account — browser session cookie, user API key (from `releases login` or Account → API Keys), or an OAuth access token from Sign in with Releases. Same authentication as [follows and your personalized feed](/docs/api/rest#authentication).
+Requires a signed-in account: a browser session cookie, a user API key (from `releases login` or Account → API Keys), or an OAuth access token from Sign in with Releases. Same authentication as [follows and your personalized feed](/docs/api/rest#authentication).
 
 ### Org-scoped (default)
 
@@ -27,13 +27,13 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
   -d '{"orgSlug":"vercel","url":"https://hooks.example.com/releases"}'
 ```
 
-The response includes a **signing key once** at creation (and again after `rotate-secret`). Store it — you cannot retrieve it later.
+The response includes a **signing key once** at creation (and again after `rotate-secret`). Store it; you can't retrieve it later.
 
 Up to **10** org-scoped subscriptions per account.
 
 ### Follows-scoped
 
-One webhook URL for everything you follow — same matching rules as `GET /v1/me/feed`:
+One webhook URL for everything you follow, with the same matching rules as `GET /v1/me/feed`:
 
 - Following an **org** → all releases from that org's sources.
 - Following a **product** → releases from sources tied to that product.
@@ -45,7 +45,7 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
   -d '{"scope":"follows","url":"https://hooks.example.com/my-follows"}'
 ```
 
-**One** follows-scoped subscription per account (separate from the 10 org-scoped cap). Optional `releaseType` (`feature` | `rollup`) narrows follows delivery. Follow/unfollow changes take effect on the next event — no manual webhook edits.
+**One** follows-scoped subscription per account (separate from the 10 org-scoped cap). Optional `releaseType` (`feature` | `rollup`) narrows follows delivery. When you follow or unfollow something, the change applies on the next event. No webhook edits needed.
 
 ### Management endpoints
 
