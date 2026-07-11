@@ -118,13 +118,13 @@ One to two sentences: the lede, naming the week's most significant development(s
 <body_format>
 300-600 words of markdown, organized into 2-4 thematic sections with ### headings (not "Overview" / "Releases" — name the actual themes, e.g. "### Faster local development" or "### Security hardening across the SDKs"). Write narrative prose: what shipped, why it matters to a developer using these tools, and connections between releases when there are any — NOT a bullet-per-release dump. Weight by impact: the biggest story of the week gets the most space; routine churn across many small releases gets a compact mention or is folded into a supporting sentence, not enumerated.
 
-Every time you reference a specific release, link it inline using the placeholder form [anchor text](rel:rel_ID), where rel_ID is exactly one of the release IDs given in the input and the anchor text is natural prose (the product name or the change, never "here" or "this release"). Only use IDs from the input — never invent one. Do not use any other markdown link form.
+Inline release links are REQUIRED, not optional: every release you discuss must carry a link at its first mention, and a body with no links is invalid. The link form is [anchor text](rel:<id>) where <id> is the release's id copied VERBATIM from the square brackets in the input — the entire string including its "rel_" prefix, never shortened or re-cased. Example: for the input line "- [rel_abc123XYZexample0000] Acme / CLI: Faster builds", write [Acme's faster builds](rel:rel_abc123XYZexample0000). The anchor text is natural prose (the product name or the change, never "here" or "this release"). Only use ids from the input — never invent one. Do not use any other markdown link form.
 
 Skip pure noise (dependency bumps, internal tooling, checksum-only releases) unless it's part of a broader theme worth naming.
 </body_format>
 
 <releases_format>
-A single comma-separated list of every rel_ID you actually referenced with a (rel:rel_ID) placeholder in the body — no other text, no duplicates.
+A single comma-separated list of every release id you linked in the body — each copied verbatim with its "rel_" prefix, no other text, no duplicates.
 </releases_format>`;
 
 /** Collapse whitespace runs so an excerpt isn't mostly blank lines. */
