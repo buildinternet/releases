@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.28.0
+
+### Minor Changes
+
+- 4900f5c: Add `collection_weekly_digests` schema (weekly AI-written collection digest content) and the `weekly_digest_enabled` column on `collections`.
+
 ## 0.27.0
 
 ### Minor Changes

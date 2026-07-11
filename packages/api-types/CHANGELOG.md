@@ -1,5 +1,17 @@
 # @buildinternet/releases-api-types
 
+## 0.47.0
+
+### Minor Changes
+
+- 5290935: Add wire types for the weekly collection digest read surface: `GET /v1/collections/:slug/digests` (list) and `GET /v1/collections/:slug/digests/:weekStart` (detail, with server-resolved covered-release links). Also add an optional `digests` field to the `GET /v1/sitemap` payload.
+
+### Patch Changes
+
+- 81aa07a: Add `SitemapReleaseSchema` / `SitemapReleasesPayloadSchema` for the new `GET /v1/sitemap/releases` endpoint (curated, importance-gated release sitemap, #1181 scoped down).
+- Updated dependencies [4900f5c]
+  - @buildinternet/releases-core@0.28.0
+
 ## 0.46.0
 
 ### Minor Changes
