@@ -88,7 +88,7 @@ export function PromoRail() {
           <ExternalLinkIcon className="h-3.5 w-3.5" />
         </Link>
       </div>
-      <div className="flex gap-1.5 px-[18px] pb-4">
+      <div className="flex px-[15px] pb-2.5">
         {CARDS.map((c, i) => (
           <button
             key={c.key}
@@ -96,10 +96,16 @@ export function PromoRail() {
             aria-label={`Show ${c.title}`}
             aria-pressed={i === index}
             onClick={() => setIndex(i)}
-            className={`h-1.5 rounded-full transition-all ${
-              i === index ? "w-[18px] bg-[var(--accent)]" : "w-1.5 bg-stone-300 dark:bg-stone-600"
-            }`}
-          />
+            className="group/dot p-[3px] py-1.5"
+          >
+            <span
+              className={`block h-1.5 rounded-full transition-[width,background-color] ${
+                i === index
+                  ? "w-[18px] bg-[var(--accent)]"
+                  : "w-1.5 bg-stone-300 group-hover/dot:bg-stone-400 dark:bg-stone-600 dark:group-hover/dot:bg-stone-500"
+              }`}
+            />
+          </button>
         ))}
       </div>
     </aside>

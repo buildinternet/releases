@@ -21,7 +21,7 @@ export function ReleaseThumb({
     <img
       src={src}
       alt={alt}
-      className={`shrink-0 ${box} rounded-md object-cover bg-stone-100 dark:bg-stone-800`}
+      className={`shrink-0 ${box} rounded-md object-cover bg-stone-100 dark:bg-stone-800 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10`}
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"

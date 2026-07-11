@@ -86,7 +86,7 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
         >
           ← What&apos;s New
         </Link>
-        <h1 className="mt-3 text-[26px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+        <h1 className="mt-3 text-[26px] font-bold tracking-tight text-stone-900 dark:text-stone-100 text-balance">
           {heading}
         </h1>
         {/* First-party self-changelog (org "releases-sh"): this page is the

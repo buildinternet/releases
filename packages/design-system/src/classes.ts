@@ -29,19 +29,19 @@ export const textareaClass =
 
 /** Filled accent action (h-[38px]). */
 export const primaryButtonClass =
-  "inline-flex h-[38px] items-center justify-center rounded-[9px] bg-[var(--accent)] px-[18px] text-[13px] font-semibold text-[var(--on-accent)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-[38px] items-center justify-center rounded-[9px] bg-[var(--accent)] px-[18px] text-[13px] font-semibold text-[var(--on-accent)] transition hover:brightness-110 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-60";
 
 /** Bordered neutral action (h-[38px]). */
 export const secondaryButtonClass =
-  "inline-flex h-[38px] items-center justify-center gap-2 rounded-[9px] border border-stone-200 bg-white px-4 text-[13px] font-medium text-stone-800 transition hover:border-stone-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-600";
+  "inline-flex h-[38px] items-center justify-center gap-2 rounded-[9px] border border-stone-200 bg-white px-4 text-[13px] font-medium text-stone-800 transition hover:border-stone-300 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-600";
 
 /** Compact bordered neutral action (h-9) — table-row + inline controls. */
 export const smallButtonClass =
-  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 text-[12.5px] font-medium text-stone-700 transition hover:border-stone-300 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:text-stone-100";
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 text-[12.5px] font-medium text-stone-700 transition hover:border-stone-300 hover:text-stone-900 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:text-stone-100";
 
 /** Compact filled accent action (h-9) — pairs with {@link smallButtonClass}. */
 export const smallPrimaryButtonClass =
-  "inline-flex h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-[12.5px] font-semibold text-[var(--on-accent)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-9 items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-[12.5px] font-semibold text-[var(--on-accent)] transition hover:brightness-110 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-60";
 
 /** Quiet link-style destructive control (row actions like Remove/Revoke). */
 export const dangerLinkClass =
@@ -49,7 +49,7 @@ export const dangerLinkClass =
 
 /** Bordered red "confirm destructive" button shown after a Remove/Disconnect click. */
 export const confirmRemoveButtonClass =
-  "inline-flex h-8 items-center rounded-lg border border-red-300 bg-white px-3 text-[12.5px] font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30";
+  "inline-flex h-8 items-center rounded-lg border border-red-300 bg-white px-3 text-[12.5px] font-medium text-red-700 transition hover:bg-red-50 active:scale-[0.96] disabled:opacity-60 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30";
 
 /** Rounded list container with internal dividers (paired with {@link listRowClass}). */
 export const listCardClass = `overflow-hidden ${cardClass}`;

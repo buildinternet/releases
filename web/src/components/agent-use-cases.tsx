@@ -16,17 +16,15 @@ const SECTION_ID = "why-agents";
 const USE_CASES: { prompt: string; answer: string }[] = [
   {
     prompt: "What shipped across our stack this week?",
-    answer:
-      "Everything your tools released — including launches that never made it into a version tag.",
+    answer: "Every release from the tools you use, even the ones that never got a version number.",
   },
   {
     prompt: "Who's shipped integrations with us lately?",
-    answer: "Products in your ecosystem plugging into yours, or into the tools your users rely on.",
+    answer: "Products that just added a connection to yours, or to the tools you build on.",
   },
   {
-    prompt: "What's emerging across our industry that we should build next?",
-    answer:
-      "Trend lines from your space and adjacent ones — read as roadmap input, not a news digest.",
+    prompt: "What should go on the roadmap next?",
+    answer: "What the rest of tech is shipping, as input for deciding what to build next.",
   },
 ];
 
@@ -48,8 +46,8 @@ export function AgentUseCases() {
           What agents ask
         </h2>
         <p className="mt-1.5 text-[13px] text-stone-500 dark:text-stone-400">
-          Pulling the latest GitHub release is the easy part. The point is the rest of the landscape
-          — launches, vendor changelogs, and announcements your agent can reason over.
+          Pulling the latest GitHub release is the easy part. This is the rest: launches,
+          changelogs, and announcements from across the web, in a shape your agent can read.
         </p>
       </div>
       <ul className="space-y-5">
