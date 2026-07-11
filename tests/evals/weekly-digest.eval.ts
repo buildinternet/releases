@@ -284,19 +284,15 @@ async function judgeFixture(
   fixture: WeeklyDigestFixture,
   result: DigestRunResult,
 ): Promise<{ ok: boolean; result: string }> {
-  const releasesBlock = fixture.input.releases
-    .map((r) => {
-      const label = r.product && r.product !== r.org ? `${r.org} / ${r.product}` : r.org;
-      const tail = r.summary ? ` — ${r.summary}` : "";
-      const importance = r.importance != null ? ` [importance: ${r.importance}]` : "";
-      return `- [${r.id}] ${label}: ${r.title}${tail}${importance}`;
-    })
-    .join("\n");
+  // Judge against EXACTLY what the model saw: the same selected subset and
+  // the same summary/body-excerpt rendering as the generation prompt —
+  // otherwise the judge can approve claims about releases the model never
+  // received, or miss facts that live in `body` when `summary` is null.
+  const selection = selectWeeklyDigestReleases(fixture.input.releases);
+  const sourceBlock = buildCollectionWeekBlock(fixture.input, selection);
 
   const artifact = [
-    `Collection: ${fixture.input.collectionName}`,
-    `Week starting (ET Monday): ${fixture.input.weekStart}`,
-    `Releases:\n${releasesBlock}`,
+    `Model input (verbatim):\n${sourceBlock}`,
     ``,
     `Generated title: ${result.title}`,
     `Generated intro: ${result.intro}`,
@@ -379,14 +375,34 @@ function selectedFixtures(): WeeklyDigestFixture[] {
   const arg = process.argv.find((a) => a.startsWith("--fixtures="));
   if (!arg) return FIXTURES;
   const names = new Set(arg.slice("--fixtures=".length).split(",").filter(Boolean));
+  const available = new Set(FIXTURES.map((f) => f.name));
+  const unknown = [...names].filter((name) => !available.has(name));
+  if (names.size === 0 || unknown.length > 0) {
+    // A typo'd filter must fail loudly, not save a zero-case "passing" run.
+    throw new Error(
+      `unknown or empty --fixtures selection "${[...names].join(",")}" — available: ${[...available].join(", ")}`,
+    );
+  }
   return FIXTURES.filter((f) => names.has(f.name));
 }
 
+/** Parse `--repeats=N` as a finite integer in [1, 10] — this multiplies paid model calls. */
+function parseRepeats(): number {
+  const arg = process.argv.find((a) => a.startsWith("--repeats="));
+  if (!arg) return 1;
+  const n = Number(arg.slice("--repeats=".length));
+  if (!Number.isInteger(n) || n < 1 || n > 10) {
+    throw new Error(
+      `--repeats must be an integer between 1 and 10, got "${arg.slice("--repeats=".length)}"`,
+    );
+  }
+  return n;
+}
+
 async function main() {
-  const useJudge = process.argv.includes("--judge");
+  const useJudge = process.argv.includes("--judge") && !process.argv.includes("--dry-run");
   const dryRun = process.argv.includes("--dry-run");
-  const repeatsArg = process.argv.find((a) => a.startsWith("--repeats="));
-  const repeats = repeatsArg ? Math.max(1, Number(repeatsArg.slice("--repeats=".length)) || 1) : 1;
+  const repeats = parseRepeats();
   const fixtures = selectedFixtures();
 
   let digestModel: TextModel;

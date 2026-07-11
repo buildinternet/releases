@@ -87,9 +87,16 @@ export function isSubstantiveRelease(r: WeeklyDigestRelease): boolean {
 export function selectWeeklyDigestReleases(releases: WeeklyDigestRelease[]): {
   selected: WeeklyDigestRelease[];
   omittedCount: number;
+  /**
+   * Importance>=4 releases that did not fit under `MAX_RELEASES`. High-importance
+   * releases sort first, so this is non-zero only when a single week has more
+   * than `MAX_RELEASES` of them; the prompt surfaces the count explicitly so an
+   * overflow is characterized in the digest rather than silently dropped.
+   */
+  omittedImportantCount: number;
 } {
   if (releases.length <= MAX_RELEASES) {
-    return { selected: releases, omittedCount: 0 };
+    return { selected: releases, omittedCount: 0, omittedImportantCount: 0 };
   }
   const sorted = releases.toSorted((a, b) => {
     const aHigh = (a.importance ?? 0) >= 4 ? 1 : 0;
@@ -101,7 +108,10 @@ export function selectWeeklyDigestReleases(releases: WeeklyDigestRelease[]): {
     return b.publishedAt.localeCompare(a.publishedAt);
   });
   const selected = sorted.slice(0, MAX_RELEASES);
-  return { selected, omittedCount: releases.length - selected.length };
+  const omittedImportantCount = sorted
+    .slice(MAX_RELEASES)
+    .filter((r) => (r.importance ?? 0) >= 4).length;
+  return { selected, omittedCount: releases.length - selected.length, omittedImportantCount };
 }
 
 export const SYSTEM_PROMPT = `You write a weekly digest — a short editorial roundup, like a mini blog post — for a curated collection of software products, covering everything that shipped that week across the collection's members. This is first-party editorial content published as a standalone page, not a changelog listing: readers come here to understand the week's story, then click through to specific releases for detail.
@@ -141,7 +151,11 @@ function normalizeBody(body: string): string {
 /** Render the user-message block from a week's selected releases. */
 export function buildCollectionWeekBlock(
   input: CollectionWeekInput,
-  selection: { selected: WeeklyDigestRelease[]; omittedCount: number },
+  selection: {
+    selected: WeeklyDigestRelease[];
+    omittedCount: number;
+    omittedImportantCount?: number;
+  },
 ): string {
   const lines = selection.selected.map((r) => {
     const label = r.product && r.product !== r.org ? `${r.org} / ${r.product}` : r.org;
@@ -159,12 +173,17 @@ export function buildCollectionWeekBlock(
       .join("\n");
     return `${head}\n${indented}`;
   });
+  const omittedImportant = selection.omittedImportantCount ?? 0;
   const omittedNote =
     selection.omittedCount > 0
       ? [
           `(${selection.omittedCount} additional lower-priority release${
             selection.omittedCount === 1 ? "" : "s"
-          } shipped this week and are omitted from this list — you may characterize them collectively, but do not cite a rel_ID for them.)`,
+          } shipped this week and are omitted from this list — you may characterize them collectively, but do not cite a rel_ID for them.${
+            omittedImportant > 0
+              ? ` NOTE: ${omittedImportant} of the omitted releases are ALSO high-importance — this was an unusually heavy week; say so explicitly in the body.`
+              : ""
+          })`,
         ]
       : [];
   return [
@@ -186,9 +205,16 @@ export function resolveReleasePlaceholders(
   body: string,
   idToPath: Map<string, string>,
 ): { body: string; releaseIds: string[] } {
+  // The prompt forbids any link form other than (rel:...); enforce it here.
+  // A model-authored URL is never trusted into first-party editorial content —
+  // unlink it and keep the anchor text.
+  const stripped = body.replace(
+    /\[([^\]]*)\]\((?!rel:)[^)]*\)/g,
+    (_full, anchor: string) => anchor,
+  );
   const resolvedIds = new Set<string>();
   const re = /\[([^\]]*)\]\(rel:([A-Za-z0-9_-]+)\)/g;
-  const resolvedBody = body.replace(re, (full, anchor: string, id: string) => {
+  const resolvedBody = stripped.replace(re, (full, anchor: string, id: string) => {
     const path = idToPath.get(id);
     if (!path) return anchor; // unknown id — drop the link, keep the text
     resolvedIds.add(id);
@@ -333,7 +359,10 @@ export async function generateCollectionWeeklyDigest(
     lastFailure = verdict.hard ?? verdict.soft ?? "unknown validation failure";
   }
 
-  if (fallback) return { ...fallback, usage: { ...totalUsage } };
+  if (fallback) {
+    // Report the real number of model calls, not the attempt the fallback came from.
+    return { ...fallback, usage: { ...totalUsage }, attempts: MAX_GENERATION_ATTEMPTS };
+  }
   throw new Error(
     `weekly digest failed validation after ${MAX_GENERATION_ATTEMPTS} attempts: ${lastFailure}`,
   );

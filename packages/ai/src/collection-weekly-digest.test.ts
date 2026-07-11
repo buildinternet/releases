@@ -154,6 +154,16 @@ describe("resolveReleasePlaceholders", () => {
     );
     expect(releaseIds).toEqual(["rel_1"]);
   });
+
+  test("unlinks non-rel markdown links, keeping the anchor text", () => {
+    const idToPath = new Map([["rel_1", "/release/rel_1"]]);
+    const { body, releaseIds } = resolveReleasePlaceholders(
+      "[Good](rel:rel_1), [docs](https://evil.example/x), and [mail](mailto:a@example.com).",
+      idToPath,
+    );
+    expect(body).toBe("[Good](/release/rel_1), docs, and mail.");
+    expect(releaseIds).toEqual(["rel_1"]);
+  });
 });
 
 describe("generateCollectionWeeklyDigest", () => {
