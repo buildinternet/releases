@@ -374,6 +374,9 @@ export type Env = {
     // How many recent ET days to back-fill if a summary row is missing (default 2).
     // Read by runCollectionSummaries.
     COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
+    // How many recent ET weeks to back-fill if a weekly digest row is missing
+    // (default 1). Read by runCollectionSummaries / CollectionSummariesWorkflow.
+    COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS?: string;
     // OpenRouter cheap-call lane config. OPENROUTER_API_KEY is the Secrets Store
     // binding; OPENROUTER_BASE_URL overrides the default endpoint; OPENROUTER_ENABLED
     // is the Flagship/var kill switch. Read by resolveTextModel (TextModelEnv) for
@@ -1090,6 +1093,7 @@ export default {
         DB: env.DB,
         CRON_ENABLED: env.CRON_ENABLED,
         COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
+        COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS: env.COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS,
         SUMMARIZE_MODEL: env.SUMMARIZE_MODEL,
         ENVIRONMENT: env.ENVIRONMENT,
         FLAGS: env.FLAGS,

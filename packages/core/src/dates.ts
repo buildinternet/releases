@@ -215,3 +215,52 @@ export function etDayBoundsUtc(dateKey: string): { startUtc: string; endUtc: str
     endUtc: etMidnightUtc(addDaysToDateKey(dateKey, 1)),
   };
 }
+
+// ── Eastern-Time week helpers ─────────────────────────────────────
+// Weekly collection digests are bucketed by Eastern calendar week,
+// Monday–Sunday — the same ET convention as the daily helpers above, just
+// rolled up to a 7-day bucket. The canonical week key is the Monday's
+// `YYYY-MM-DD`, used both as the DB `week_start` value and the URL segment
+// (`/digest/2026-07-06`, PR B).
+
+/**
+ * The Monday (`YYYY-MM-DD`, ET) starting the Eastern calendar week containing
+ * `dateKey`. `dateKey` need not itself be a Monday — any day in the week
+ * resolves to the same result. Uses `getUTCDay()` on the date-key's UTC
+ * midnight, which is safe here because `dateKey` is a calendar key (not an
+ * instant) and day-of-week arithmetic on it is timezone-independent.
+ */
+export function etWeekStart(dateKey: string): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceMonday = dow === 0 ? 6 : dow - 1;
+  return addDaysToDateKey(dateKey, -daysSinceMonday);
+}
+
+/**
+ * The `[startUtc, endUtc)` instants bounding the Eastern calendar week
+ * starting at `weekStart` (a Monday `YYYY-MM-DD`, ET) — Monday 00:00 ET
+ * through the following Monday 00:00 ET (i.e. Sunday 23:59:59.999 ET
+ * inclusive).
+ */
+export function weekBoundsUtc(weekStart: string): { startUtc: string; endUtc: string } {
+  return {
+    startUtc: etMidnightUtc(weekStart),
+    endUtc: etMidnightUtc(addDaysToDateKey(weekStart, 7)),
+  };
+}
+
+/** URL form of a week key: identical to the Monday date key (`2026-07-06`). */
+export function weekSlug(weekStart: string): string {
+  return weekStart;
+}
+
+/**
+ * Parse a `/digest/<slug>` URL segment back into a week key. Returns `null`
+ * for a malformed or impossible date; returns the segment unchanged
+ * otherwise — callers that need to verify it's actually a Monday should also
+ * check `etWeekStart(parsed) === parsed`.
+ */
+export function parseWeekSlug(slug: string): string | null {
+  return isDateKey(slug) ? slug : null;
+}

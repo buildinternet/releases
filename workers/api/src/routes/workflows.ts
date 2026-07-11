@@ -48,6 +48,7 @@ import {
   etDayKey,
   addDaysToDateKey,
   isDateKey,
+  etWeekStart,
 } from "@buildinternet/releases-core/dates";
 import { sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
@@ -103,8 +104,15 @@ import {
   type SourceBackfillReport,
 } from "../lib/source-backfill.js";
 import { loadRawSnapshot } from "../lib/raw-snapshot.js";
-import { generateCollectionSummariesForDay } from "../cron/collection-summaries.js";
-import { resolveCollectionSummaryModel } from "../lib/text-model.js";
+import {
+  generateCollectionSummariesForDay,
+  generateCollectionWeeklyDigestsForWeek,
+  listCollectionWeeklyDigestTargets,
+} from "../cron/collection-summaries.js";
+import {
+  resolveCollectionSummaryModel,
+  resolveCollectionWeeklyDigestModel,
+} from "../lib/text-model.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { workflowInstanceStatus, workflowInstanceTerminate } from "../lib/workflow-instance.js";
 import { respondError } from "../lib/error-response.js";
@@ -3136,6 +3144,104 @@ workflowsRoutes.post("/workflows/collection-summaries/terminate/:instanceId", as
     "workflows-collection-summaries-terminate",
   ),
 );
+
+// ── POST /workflows/backfill-weekly-digests ───────────────────────────────────
+//
+// On-demand / launch-backfill trigger for weekly collection digests. Runs
+// synchronously in-worker (no durable Workflow — the launch backfill is ~96
+// generations, well within a single request's compute budget); a transient
+// per-(collection, week) failure is contained by
+// `generateCollectionWeeklyDigestsForWeek` and reported in the totals rather
+// than aborting the run. `dryRun` resolves the (collection × week) scope
+// without any model call, so cost can be estimated first.
+
+interface BackfillWeeklyDigestsBody {
+  /** Limit the run to a single collection (typed `col_…` id). */
+  collectionId?: string;
+  /** How many past ET weeks to backfill, counting back from the just-closed week. Default 1. */
+  weeks?: number;
+  /** When true, regenerate even if a digest already exists for that week. */
+  force?: boolean;
+  /** When true, return the resolved (collection, week) scope without calling the model. */
+  dryRun?: boolean;
+}
+
+const BACKFILL_WEEKLY_DIGESTS_MAX_WEEKS = 52;
+
+workflowsRoutes.post("/workflows/backfill-weekly-digests", async (c) => {
+  const body = await parseJsonBody<BackfillWeeklyDigestsBody>(c);
+
+  const collectionId = typeof body.collectionId === "string" ? body.collectionId : undefined;
+  const force = body.force === true;
+  const weeksRaw = typeof body.weeks === "number" ? body.weeks : 1;
+  if (!Number.isInteger(weeksRaw) || weeksRaw < 1 || weeksRaw > BACKFILL_WEEKLY_DIGESTS_MAX_WEEKS) {
+    return respondError(
+      c,
+      new ValidationError(
+        `weeks must be an integer between 1 and ${BACKFILL_WEEKLY_DIGESTS_MAX_WEEKS}`,
+        {
+          code: "bad_request",
+        },
+      ),
+    );
+  }
+
+  const thisWeekStart = etWeekStart(etDayKey(new Date()));
+  const weekStarts: string[] = [];
+  for (let i = 1; i <= weeksRaw; i++) {
+    weekStarts.push(addDaysToDateKey(thisWeekStart, -7 * i));
+  }
+
+  const db = createDb(c.env.DB);
+
+  if (body.dryRun === true) {
+    const targets = await listCollectionWeeklyDigestTargets(db, { collectionId });
+    return c.json({
+      dryRun: true,
+      weeks: weekStarts,
+      collectionId: collectionId ?? null,
+      force,
+      collectionCount: targets.length,
+      wouldGenerateCount: targets.length * weekStarts.length,
+      collections: targets.map((t) => ({ id: t.id, name: t.name })),
+    });
+  }
+
+  const model = await resolveCollectionWeeklyDigestModel(c.env);
+  if (!model) {
+    return respondError(
+      c,
+      new ServiceUnavailableError(
+        "No AI model configured for weekly collection digests (ANTHROPIC_API_KEY or OPENROUTER_API_KEY required)",
+      ),
+    );
+  }
+
+  let totals = { generated: 0, skipped: 0, failed: 0 };
+  for (const weekStart of weekStarts) {
+    // oxlint-disable-next-line no-await-in-loop -- small bounded sweep (<= 52 weeks x collections)
+    const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
+      collectionId,
+      force,
+    });
+    totals = {
+      generated: totals.generated + r.generated,
+      skipped: totals.skipped + r.skipped,
+      failed: totals.failed + r.failed,
+    };
+  }
+
+  logEvent("info", {
+    component: "collection-weekly-digest",
+    event: "backfill-trigger",
+    weeks: weekStarts,
+    collectionId: collectionId ?? null,
+    force,
+    ...totals,
+  });
+
+  return c.json({ weeks: weekStarts, collectionId: collectionId ?? null, force, ...totals });
+});
 
 workflowsRoutes.get("/workflows/media-backfill/status/:instanceId", async (c) =>
   replyWorkflowStatus(
