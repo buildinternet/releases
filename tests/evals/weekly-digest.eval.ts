@@ -109,7 +109,10 @@ function countWords(text: string): number {
 }
 
 function countSentences(text: string): number {
-  const stripped = text.trim().replace(/[.!?]$/, "");
+  // Version-number dots ("Crawlee 3.17", "v2.1.176") are not sentence enders —
+  // drop digit.digit runs before counting.
+  const noVersions = text.trim().replace(/\d+\.\d+(\.\d+)*/g, "0");
+  const stripped = noVersions.replace(/[.!?]$/, "");
   return (stripped.match(/[.!?]/g) ?? []).length + 1;
 }
 
@@ -215,7 +218,13 @@ function gradeWeeklyDigest(
     expected: "0 unknown ids",
     actual: unknownPlaceholderIds.length === 0 ? "clean" : unknownPlaceholderIds.join(","),
   });
-  const unknownCitedIds = citedIds.filter((id) => !fixtureIds.has(id));
+  // Leniency: models sometimes echo the placeholder form ("rel:rel_X") into
+  // the <releases> tag. Production never consumes that tag (releaseIds derive
+  // from the resolved body), so strip an optional leading "rel:" before the
+  // membership check rather than failing a production-harmless quirk.
+  const unknownCitedIds = citedIds
+    .map((id) => id.replace(/^rel:/, ""))
+    .filter((id) => !fixtureIds.has(id));
   fields.push({
     field: "link discipline: <releases> tag ids are all real fixture releases",
     passed: unknownCitedIds.length === 0,
