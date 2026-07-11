@@ -1,6 +1,6 @@
 /** Entity the user is viewing — embedded into the feedback message body. */
 export type ReportContext = {
-  kind: "org" | "product" | "source" | "release";
+  kind: "org" | "product" | "source" | "release" | "collection";
   name: string;
   /** Typed id (`rel_…`, `src_…`, …) when known. */
   id?: string;

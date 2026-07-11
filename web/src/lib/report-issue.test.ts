@@ -38,4 +38,21 @@ describe("buildReportMessage", () => {
       ['About: org "Anthropic" (anthropic)', "Page: /anthropic", "", "stale overview"].join("\n"),
     );
   });
+
+  it("labels collection context with slug when no id is present", () => {
+    const collection: ReportContext = {
+      kind: "collection",
+      name: "Frontier AI Labs",
+      slug: "frontier-ai-labs",
+      path: "/collections/frontier-ai-labs",
+    };
+    expect(buildReportMessage("missing daily summary", collection, null)).toBe(
+      [
+        'About: collection "Frontier AI Labs" (frontier-ai-labs)',
+        "Page: /collections/frontier-ai-labs",
+        "",
+        "missing daily summary",
+      ].join("\n"),
+    );
+  });
 });
