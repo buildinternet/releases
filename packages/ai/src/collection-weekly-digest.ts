@@ -160,7 +160,16 @@ export function buildCollectionWeekBlock(
   const lines = selection.selected.map((r) => {
     const label = r.product && r.product !== r.org ? `${r.org} / ${r.product}` : r.org;
     const tail = r.summary ? ` — ${r.summary}` : "";
-    const head = `- [${r.id}] ${label}: ${r.title}${tail} (${r.publishedAt.slice(0, 10)})`;
+    // Importance must be visible in the input: the generation gate requires
+    // every importance>=4 release to be discussed + linked, which the model
+    // can only honor if the line says so.
+    const importanceTag =
+      (r.importance ?? 0) >= 4
+        ? ` [importance ${r.importance}/5 — MUST be discussed and linked]`
+        : r.importance != null
+          ? ` [importance ${r.importance}/5]`
+          : "";
+    const head = `- [${r.id}] ${label}: ${r.title}${tail} (${r.publishedAt.slice(0, 10)})${importanceTag}`;
     const normalized = r.body ? normalizeBody(r.body) : "";
     if (!normalized) return head;
     const excerpt =
@@ -192,6 +201,11 @@ export function buildCollectionWeekBlock(
     `Releases (${selection.selected.length}):`,
     ...lines,
     ...omittedNote,
+    // Trailing restatement of the two hard requirements: on heavy weeks the
+    // rules at the top of the system prompt are dozens of excerpts away, and
+    // long-context adherence measurably drops (0-link outputs in the launch
+    // backfill happened only on the largest inputs).
+    `REMINDER: link every release you discuss as [anchor text](rel:<id>) using ids copied verbatim from the list above, and make sure every release marked "MUST be discussed and linked" is covered. A body with no (rel:...) links is invalid.`,
   ].join("\n");
 }
 

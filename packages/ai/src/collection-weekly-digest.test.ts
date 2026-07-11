@@ -104,6 +104,28 @@ describe("buildCollectionWeekBlock", () => {
     const block = buildCollectionWeekBlock(input, { selected: input.releases, omittedCount: 12 });
     expect(block).toContain("12 additional lower-priority releases");
   });
+
+  test("tags importance on release lines and marks >=4 as mandatory", () => {
+    const releases = [
+      release({ id: "rel_big", importance: 5 }),
+      release({ id: "rel_mid", importance: 2 }),
+      release({ id: "rel_none", importance: null }),
+    ];
+    const block = buildCollectionWeekBlock(
+      { ...input, releases },
+      selectWeeklyDigestReleases(releases),
+    );
+    expect(block).toContain("[importance 5/5 — MUST be discussed and linked]");
+    expect(block).toContain("[importance 2/5]");
+    const noneLine = block.split("\n").find((l) => l.includes("[rel_none]"));
+    expect(noneLine).toBeDefined();
+    expect(noneLine).not.toContain("[importance");
+  });
+
+  test("ends with the link-requirement reminder", () => {
+    const block = buildCollectionWeekBlock(input, selectWeeklyDigestReleases(input.releases));
+    expect(block.trimEnd().endsWith("A body with no (rel:...) links is invalid.")).toBe(true);
+  });
 });
 
 describe("parseWeeklyDigest", () => {
