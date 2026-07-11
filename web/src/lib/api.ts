@@ -38,6 +38,10 @@ import type {
   CollectionReleasesResponse,
   CollectionDailySummary,
   CollectionDailySummariesResponse,
+  CollectionWeeklyDigestListItem,
+  CollectionWeeklyDigestsResponse,
+  CollectionWeeklyDigestDetail,
+  DigestCoveredRelease,
   OverviewPageItem,
   ResolveResponse,
 } from "@buildinternet/releases-api-types";
@@ -101,6 +105,10 @@ export type {
   CollectionReleasesResponse,
   CollectionDailySummary,
   CollectionDailySummariesResponse,
+  CollectionWeeklyDigestListItem,
+  CollectionWeeklyDigestsResponse,
+  CollectionWeeklyDigestDetail,
+  DigestCoveredRelease,
 };
 
 export const API_URL = apiBaseUrl() ?? "http://localhost:3456";
@@ -587,6 +595,16 @@ export const api = {
       `/v1/collections/${slug}/daily-summaries${suffix}`,
     );
   },
+  collectionWeeklyDigests: (slug: string, opts: { cursor?: string; limit?: number } = {}) => {
+    const { cursor, limit = 20 } = opts;
+    const qs = new URLSearchParams();
+    if (cursor) qs.set("cursor", cursor);
+    if (limit !== 20) qs.set("limit", String(limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return fetchApi<CollectionWeeklyDigestsResponse>(`/v1/collections/${slug}/digests${suffix}`);
+  },
+  collectionWeeklyDigest: (slug: string, weekStart: string) =>
+    fetchApi<CollectionWeeklyDigestDetail>(`/v1/collections/${slug}/digests/${weekStart}`),
   sourceChangelog: (
     ref: { orgSlug: string; sourceSlug: string },
     range?: { path?: string; offset?: number; limit?: number },

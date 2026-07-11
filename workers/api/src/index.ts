@@ -897,6 +897,16 @@ v1.use(
   "/collections/:slug/daily-summaries",
   cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
 );
+// Written once/week by the collection-summaries cron on ET Mondays — static
+// for a full week once generated, same reasoning as daily-summaries above.
+v1.use(
+  "/collections/:slug/digests",
+  cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
+);
+v1.use(
+  "/collections/:slug/digests/:weekStart",
+  cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
+);
 v1.use(
   "/collections/:slug/releases",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),

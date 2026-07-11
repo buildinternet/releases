@@ -55,8 +55,8 @@ beforeEach(() => {
 describe("GET /sitemap", () => {
   test("returns empty payload when DB has no orgs", async () => {
     const result = await callSitemap();
-    // Empty-org responses still include `collections` (this DB also has none).
-    expect(result).toEqual({ orgs: [], sources: [], products: [], collections: [] });
+    // Empty-org responses still include `collections`/`digests` (this DB also has none).
+    expect(result).toEqual({ orgs: [], sources: [], products: [], collections: [], digests: [] });
   });
 
   test("emits collection slugs sorted, with updatedAt for lastmod", async () => {

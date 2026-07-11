@@ -12,6 +12,7 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
 import { withCollectionReleaseView } from "@/lib/render-release-body";
 import { getCollectionPage } from "./_lib/collection-data";
+import { getLatestDigest } from "./digest/_lib/digest-data";
 
 export async function generateMetadata({
   params,
@@ -45,6 +46,8 @@ export async function generateMetadata({
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
+  // Fire alongside the main page load; never rejects (fails soft to null).
+  const latestDigestPromise = getLatestDigest(slug);
   let page;
   try {
     page = await getCollectionPage(slug);
@@ -60,6 +63,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   }
 
   const { detail, releases, summaries } = page;
+  const latestDigest = await latestDigestPromise;
   // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
 
@@ -97,6 +101,15 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           <p className="mt-1 max-w-[65ch] text-pretty text-[15px] text-[var(--fg-2)]">
             {detail.description}
           </p>
+        )}
+        {latestDigest && (
+          <Link
+            href={`/collections/${slug}/digest/${latestDigest.weekStart}`}
+            className="mt-2 inline-block text-[13px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
+            aria-label={`This week's digest: ${latestDigest.title}`}
+          >
+            This week: {latestDigest.title} →
+          </Link>
         )}
         <AdminOnly devAdmin={isLocalAdminEnabled()}>
           <div className="mt-3">

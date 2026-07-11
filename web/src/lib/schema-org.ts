@@ -290,6 +290,72 @@ export function buildOrgCatalogJsonLd(
  * omitted. Returns `null` when nothing resolved to a release page, so callers can
  * skip emitting an empty node.
  */
+/**
+ * schema.org `@graph` for a weekly collection digest page (WS3): an `Article`
+ * node — NOT `TechArticle`-with-`sameAs` like a release page, because a
+ * digest is first-party editorial content, not a mirror of an external
+ * release note — plus a `BreadcrumbList`.
+ *
+ * `mentions` links out to every covered release's canonical `/release/*`
+ * page, reinforcing the internal-link graph (#1601) the same way
+ * `buildOverviewCitationJsonLd` does for org overviews.
+ */
+export function buildDigestJsonLd(
+  digest: {
+    title: string;
+    intro: string;
+    weekEndDate: string;
+    generatedAt: string;
+    releaseUrls: readonly string[];
+  },
+  opts: {
+    pageUrl: string;
+    collectionName: string;
+    collectionUrl: string;
+  },
+): Record<string, unknown> {
+  const pageNodeId = `${opts.pageUrl}#article`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Article",
+        "@id": pageNodeId,
+        headline: digest.title,
+        description: digest.intro,
+        url: opts.pageUrl,
+        datePublished: digest.weekEndDate,
+        dateModified: digest.generatedAt,
+        author: { "@type": "Organization", name: "Releases", url: SITE_URL },
+        publisher: { "@type": "Organization", name: "Releases", url: SITE_URL },
+        about: { "@type": "CollectionPage", name: opts.collectionName, url: opts.collectionUrl },
+        ...(digest.releaseUrls.length > 0
+          ? { mentions: digest.releaseUrls.map((url) => ({ "@type": "TechArticle", url })) }
+          : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Collections",
+            item: `${SITE_URL}/collections`,
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: opts.collectionName,
+            item: opts.collectionUrl,
+          },
+          { "@type": "ListItem", position: 4, name: digest.title, item: opts.pageUrl },
+        ],
+      },
+    ],
+  };
+}
+
 export function buildOverviewCitationJsonLd(
   citations: readonly { releaseWebUrl?: string | null }[] | undefined | null,
   opts: { orgName: string; aboutId: string; dateModified?: string | null },

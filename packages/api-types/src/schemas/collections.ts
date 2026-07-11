@@ -249,3 +249,46 @@ export const CollectionDailySummarySchema = z.object({
 export const CollectionDailySummariesResponseSchema = z.object({
   summaries: z.array(CollectionDailySummarySchema),
 });
+
+// ── Weekly digests ────────────────────────────────────────────────
+
+/** List row on `GET /v1/collections/:slug/digests` — newest-first, no body. */
+export const CollectionWeeklyDigestListItemSchema = z.object({
+  id: z.string(),
+  /** ET Monday starting the covered week, YYYY-MM-DD. */
+  weekStart: z.string(),
+  title: z.string(),
+  intro: z.string(),
+  releaseCount: z.number().int().nonnegative(),
+  generatedAt: z.string(),
+});
+
+/** Cursor pagination shape matches the other paginated list surfaces. */
+export const CollectionWeeklyDigestsResponseSchema = z.object({
+  digests: z.array(CollectionWeeklyDigestListItemSchema),
+  pagination: CollectionFeedPaginationSchema,
+});
+
+/** Minimal, server-resolved release info for a digest's "Releases covered" list. */
+export const DigestCoveredReleaseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  path: z.string(),
+  org: z.object({ slug: z.string(), name: z.string() }),
+});
+
+/** Full row returned by `GET /v1/collections/:slug/digests/:weekStart`. */
+export const CollectionWeeklyDigestDetailSchema = z.object({
+  id: z.string(),
+  weekStart: z.string(),
+  title: z.string(),
+  intro: z.string(),
+  body: z.string(),
+  releaseIds: z.array(z.string()),
+  releaseCount: z.number().int().nonnegative(),
+  generatedAt: z.string(),
+  /** Server-resolved minimal release info for every id in `releaseIds` that
+   *  still resolves — a release deleted/suppressed after generation is
+   *  dropped rather than surfaced as a dead link. */
+  releases: z.array(DigestCoveredReleaseSchema),
+});

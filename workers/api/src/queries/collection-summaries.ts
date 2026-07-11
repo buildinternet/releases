@@ -8,11 +8,17 @@ import {
   productsActive,
   releasesVisible,
   sourcesActive,
+  sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
+import { releasePath } from "@buildinternet/releases-core/release-slug";
 import type { AnyDb } from "../db.js";
 import type { CollectionDayRelease } from "@releases/ai-internal/collection-summary";
 import type { WeeklyDigestRelease } from "@releases/ai-internal/collection-weekly-digest";
+import type {
+  CollectionWeeklyDigestListItem,
+  DigestCoveredRelease,
+} from "@buildinternet/releases-api-types";
 
 /** Visible org + product member ids for a collection (same views as the feed). */
 export async function getCollectionMembers(
@@ -320,4 +326,134 @@ export async function upsertCollectionWeeklyDigest(
         updatedAt: now,
       },
     });
+}
+
+// ── Weekly digest reads (PR B) ──────────────────────────────────────
+
+/** Cursor-paginated, newest-first digest list for a collection. Cursor is the
+ *  last row's `weekStart` from the prior page — weeks sort naturally as
+ *  strings (YYYY-MM-DD), so a plain `<` comparison is enough. */
+export async function listCollectionWeeklyDigests(
+  db: AnyDb,
+  collectionId: string,
+  opts: { limit: number; cursorWeekStart?: string | null },
+): Promise<{ items: CollectionWeeklyDigestListItem[]; hasMore: boolean }> {
+  const conds = [eq(collectionWeeklyDigests.collectionId, collectionId)];
+  if (opts.cursorWeekStart) {
+    conds.push(lt(collectionWeeklyDigests.weekStart, opts.cursorWeekStart));
+  }
+  const rows = await db
+    .select()
+    .from(collectionWeeklyDigests)
+    .where(and(...conds))
+    .orderBy(desc(collectionWeeklyDigests.weekStart))
+    .limit(opts.limit + 1);
+
+  const hasMore = rows.length > opts.limit;
+  const pageRows = hasMore ? rows.slice(0, opts.limit) : rows;
+  return {
+    items: pageRows.map((r) => ({
+      id: r.id,
+      weekStart: r.weekStart,
+      title: r.title,
+      intro: r.intro,
+      releaseCount: r.releaseCount,
+      generatedAt: r.generatedAt,
+    })),
+    hasMore,
+  };
+}
+
+/** Single digest row by (collectionId, weekStart), or null if missing. */
+export async function getCollectionWeeklyDigest(
+  db: AnyDb,
+  collectionId: string,
+  weekStart: string,
+): Promise<
+  | (Omit<typeof collectionWeeklyDigests.$inferSelect, "releaseIds"> & { releaseIds: string[] })
+  | null
+> {
+  const [row] = await db
+    .select()
+    .from(collectionWeeklyDigests)
+    .where(
+      and(
+        eq(collectionWeeklyDigests.collectionId, collectionId),
+        eq(collectionWeeklyDigests.weekStart, weekStart),
+      ),
+    );
+  if (!row) return null;
+  return { ...row, releaseIds: safeParseReleaseIds(row.releaseIds) };
+}
+
+function safeParseReleaseIds(raw: string): string[] {
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+// D1 caps prepared statements at 100 bound params; chunk inArray lookups at 90.
+const IN_LOOKUP_CHUNK = 90;
+
+/**
+ * Resolve a digest's cited `releaseIds` to minimal display info (title, org,
+ * canonical `/release/*` path) for the "Releases covered" section, server-side
+ * so the web page never N+1s. IDs that no longer resolve (deleted/suppressed
+ * since generation) are silently dropped — never surfaced as a dead link.
+ * Preserves the input `releaseIds` order.
+ */
+export async function resolveDigestCoveredReleases(
+  db: AnyDb,
+  releaseIds: string[],
+): Promise<DigestCoveredRelease[]> {
+  if (releaseIds.length === 0) return [];
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < releaseIds.length; i += IN_LOOKUP_CHUNK) {
+    chunks.push(releaseIds.slice(i, i + IN_LOOKUP_CHUNK));
+  }
+
+  const rowsByChunk = await Promise.all(
+    chunks.map((idChunk) =>
+      db
+        .select({
+          id: releasesVisible.id,
+          title: releasesVisible.title,
+          titleGenerated: releasesVisible.titleGenerated,
+          titleShort: releasesVisible.titleShort,
+          version: releasesVisible.version,
+          orgSlug: organizationsPublic.slug,
+          orgName: organizationsPublic.name,
+        })
+        .from(releasesVisible)
+        // Public read path: join through the hidden-filtered source view and
+        // the public org view so hidden/on-demand rows never surface.
+        .innerJoin(sourcesVisible, eq(sourcesVisible.id, releasesVisible.sourceId))
+        .innerJoin(organizationsPublic, eq(organizationsPublic.id, sourcesVisible.orgId))
+        .where(inArray(releasesVisible.id, idChunk)),
+    ),
+  );
+  const byId = new Map(rowsByChunk.flat().map((r) => [r.id, r]));
+
+  return releaseIds.flatMap((id) => {
+    const r = byId.get(id);
+    if (!r) return [];
+    return [
+      {
+        id: r.id,
+        title: r.titleGenerated ?? r.title,
+        path: releasePath({
+          id: r.id,
+          titleShort: r.titleShort,
+          titleGenerated: r.titleGenerated,
+          title: r.title,
+          version: r.version,
+        }),
+        org: { slug: r.orgSlug, name: r.orgName },
+      },
+    ];
+  });
 }

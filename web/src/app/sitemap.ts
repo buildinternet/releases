@@ -122,6 +122,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     }));
 
+    // Weekly digest permalinks — the net-new editorial surface (WS3).
+    // `lastModified` = generation time; digests are immutable-ish once
+    // written, so no fabricated "now" fallback.
+    const digestEntries: MetadataRoute.Sitemap = (data.digests ?? []).map((d) => ({
+      url: `${BASE_URL}/collections/${d.collectionSlug}/digest/${d.weekStart}`,
+      lastModified: new Date(d.generatedAt),
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    }));
+
     // Category overlays have no real updatedAt — same reasoning as
     // staticEntries above, omit rather than fake `now`.
     const categoryEntries: MetadataRoute.Sitemap = CATEGORIES.map((slug) => ({
@@ -134,7 +144,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // considered for this PR and deferred (candidate rule: only tags with
     // >=5 releases). Revisit as its own decision.
 
-    dynamicEntries = [...orgEntries, ...entityEntries, ...collectionEntries, ...categoryEntries];
+    dynamicEntries = [
+      ...orgEntries,
+      ...entityEntries,
+      ...collectionEntries,
+      ...digestEntries,
+      ...categoryEntries,
+    ];
   } catch (err) {
     if (!(err instanceof ApiSetupError)) throw err;
   }

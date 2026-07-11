@@ -31,7 +31,12 @@ import {
 import { etDayKey, addDaysToDateKey, isDateKey } from "@buildinternet/releases-core/dates";
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
 import { getCollectionsList } from "../queries/collections.js";
-import { listCollectionDailySummaries } from "../queries/collection-summaries.js";
+import {
+  listCollectionDailySummaries,
+  listCollectionWeeklyDigests,
+  getCollectionWeeklyDigest,
+  resolveDigestCoveredReleases,
+} from "../queries/collection-summaries.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -41,6 +46,8 @@ import {
   CollectionDetailSchema,
   CollectionReleasesResponseSchema,
   CollectionDailySummariesResponseSchema,
+  CollectionWeeklyDigestsResponseSchema,
+  CollectionWeeklyDigestDetailSchema,
   CollectionRowSchema,
   CreateCollectionRequestSchema,
   UpdateCollectionRequestSchema,
@@ -793,6 +800,159 @@ collectionRoutes.get(
 
     const summaries = await listCollectionDailySummaries(db, collection.id, from, to);
     return c.json({ summaries });
+  },
+);
+
+collectionRoutes.get(
+  "/collections/:slug/digests",
+  describeRoute({
+    tags: ["Collections"],
+    summary: "Weekly AI digests for a collection",
+    description:
+      'Returns AI-generated weekly "mini blog post" digests for the collection, newest-first, cursor-paginated. Rows omit `body`/`releaseIds` — fetch a single week via `GET /v1/collections/:slug/digests/:weekStart` for the full row. Digests are generated on ET Mondays for the just-closed week by the collection-summaries cron and only exist for weeks that cleared the quality floor (>=3 substantive releases).',
+    parameters: [
+      {
+        name: "slug",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+        description: "Collection slug.",
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+        description: "Page size. Clamped to 1–100.",
+      },
+      {
+        name: "cursor",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Opaque pagination cursor returned by a prior call.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Weekly digests for the collection.",
+        content: {
+          "application/json": { schema: resolver(CollectionWeeklyDigestsResponseSchema) },
+        },
+      },
+      404: {
+        description: "No collection with that slug.",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const slug = c.req.param("slug");
+    const db = createDb(c.env.DB);
+
+    const collection = await findCollectionBySlug(db, slug);
+    if (!collection) return respondError(c, new NotFoundError("Collection not found"));
+
+    const limit = parseLimitParam(c.req.query("limit"), 20, 100);
+    // Cursor is the last-page weekStart, base64-encoded to keep the shape
+    // opaque like the other cursor surfaces (though the payload is plain).
+    const cursorParam = c.req.query("cursor");
+    let cursorWeekStart: string | null = null;
+    if (cursorParam) {
+      try {
+        cursorWeekStart = atob(cursorParam);
+      } catch {
+        return respondError(c, new ValidationError("Malformed cursor", { code: "bad_request" }));
+      }
+      if (!isDateKey(cursorWeekStart)) {
+        return respondError(c, new ValidationError("Malformed cursor", { code: "bad_request" }));
+      }
+    }
+
+    const { items, hasMore } = await listCollectionWeeklyDigests(db, collection.id, {
+      limit,
+      cursorWeekStart,
+    });
+    const nextCursor =
+      hasMore && items.length > 0 ? btoa(items[items.length - 1]!.weekStart) : null;
+
+    return c.json({ digests: items, pagination: { nextCursor, limit } });
+  },
+);
+
+collectionRoutes.get(
+  "/collections/:slug/digests/:weekStart",
+  describeRoute({
+    tags: ["Collections"],
+    summary: "One collection's weekly digest, with resolved release links",
+    description:
+      "Full digest row (title, intro, markdown body, cited release ids) for one ET week, plus server-resolved minimal release info (title, org, canonical `/release/*` path) for every cited release — resolved server-side so the web page never N+1s. `:weekStart` must be the Monday (YYYY-MM-DD, ET) starting the week. Release ids that no longer resolve (deleted/suppressed since generation) are silently dropped from `releases`.",
+    parameters: [
+      {
+        name: "slug",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+        description: "Collection slug.",
+      },
+      {
+        name: "weekStart",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+        description: "ET Monday starting the week, YYYY-MM-DD.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Full digest row with resolved release links.",
+        content: { "application/json": { schema: resolver(CollectionWeeklyDigestDetailSchema) } },
+      },
+      400: {
+        description: "Malformed `weekStart` (must be YYYY-MM-DD).",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+      404: {
+        description: "No collection with that slug, or no digest for that week.",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const slug = c.req.param("slug");
+    const weekStartParam = c.req.param("weekStart");
+    const db = createDb(c.env.DB);
+
+    if (!isDateKey(weekStartParam)) {
+      return respondError(
+        c,
+        new ValidationError("weekStart must be a YYYY-MM-DD calendar date", {
+          code: "bad_request",
+        }),
+      );
+    }
+
+    const collection = await findCollectionBySlug(db, slug);
+    if (!collection) return respondError(c, new NotFoundError("Collection not found"));
+
+    const digest = await getCollectionWeeklyDigest(db, collection.id, weekStartParam);
+    if (!digest) {
+      return respondError(c, new NotFoundError(`No digest for week ${weekStartParam}`));
+    }
+
+    const releases = await resolveDigestCoveredReleases(db, digest.releaseIds);
+
+    return c.json({
+      id: digest.id,
+      weekStart: digest.weekStart,
+      title: digest.title,
+      intro: digest.intro,
+      body: digest.body,
+      releaseIds: digest.releaseIds,
+      releaseCount: digest.releaseCount,
+      generatedAt: digest.generatedAt,
+      releases,
+    });
   },
 );
 

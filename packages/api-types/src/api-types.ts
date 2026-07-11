@@ -244,6 +244,10 @@ import type {
   AddCollectionMemberResponseSchema,
   CollectionDailySummarySchema,
   CollectionDailySummariesResponseSchema,
+  CollectionWeeklyDigestListItemSchema,
+  CollectionWeeklyDigestsResponseSchema,
+  DigestCoveredReleaseSchema,
+  CollectionWeeklyDigestDetailSchema,
 } from "./schemas/collections.js";
 import type {
   OrgOverviewResponseSchema,
@@ -558,6 +562,10 @@ export {
   AddCollectionMemberResponseSchema,
   CollectionDailySummarySchema,
   CollectionDailySummariesResponseSchema,
+  CollectionWeeklyDigestListItemSchema,
+  CollectionWeeklyDigestsResponseSchema,
+  DigestCoveredReleaseSchema,
+  CollectionWeeklyDigestDetailSchema,
 } from "./schemas/collections.js";
 export {
   OrgOverviewResponseSchema,
@@ -1539,6 +1547,10 @@ export type CollectionDailySummary = z.infer<typeof CollectionDailySummarySchema
 export type CollectionDailySummariesResponse = z.infer<
   typeof CollectionDailySummariesResponseSchema
 >;
+export type CollectionWeeklyDigestListItem = z.infer<typeof CollectionWeeklyDigestListItemSchema>;
+export type CollectionWeeklyDigestsResponse = z.infer<typeof CollectionWeeklyDigestsResponseSchema>;
+export type DigestCoveredRelease = z.infer<typeof DigestCoveredReleaseSchema>;
+export type CollectionWeeklyDigestDetail = z.infer<typeof CollectionWeeklyDigestDetailSchema>;
 
 // ── Releases (enriched) ──
 

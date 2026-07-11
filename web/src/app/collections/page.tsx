@@ -4,6 +4,7 @@ import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
 import { MemberFacepile } from "@/components/member-facepile";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
+import { getLatestDigest } from "./[slug]/digest/_lib/digest-data";
 
 const TITLE = "Collections";
 const DESCRIPTION =
@@ -40,6 +41,13 @@ export default async function CollectionsListPage() {
     throw err;
   }
 
+  // Small, curated list (~12 collections) — a per-row latest-digest lookup is
+  // cheap and keeps the cross-link subtle (dot + one line, no chip row).
+  const latestDigests = await Promise.all(
+    collections.map((c) => getLatestDigest(c.slug).catch(() => null)),
+  );
+  const latestBySlug = new Map(collections.map((c, i) => [c.slug, latestDigests[i]]));
+
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1240px] px-6 pt-8 pb-12">
@@ -55,23 +63,35 @@ export default async function CollectionsListPage() {
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-x-10 lg:grid-cols-2">
-            {collections.map((c) => (
-              <li key={c.slug} className="border-b border-stone-200 py-4 dark:border-stone-800">
-                <Link href={`/collections/${c.slug}`} className="group block min-w-0">
-                  <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
-                    {c.name}
-                  </div>
-                  {c.description && (
-                    <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-                      {c.description}
+            {collections.map((c) => {
+              const latestDigest = latestBySlug.get(c.slug);
+              return (
+                <li key={c.slug} className="border-b border-stone-200 py-4 dark:border-stone-800">
+                  <Link href={`/collections/${c.slug}`} className="group block min-w-0">
+                    <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
+                      {c.name}
                     </div>
+                    {c.description && (
+                      <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
+                        {c.description}
+                      </div>
+                    )}
+                    {c.previewMembers && c.previewMembers.length > 0 && (
+                      <MemberFacepile members={c.previewMembers} totalCount={c.memberCount} />
+                    )}
+                  </Link>
+                  {latestDigest && (
+                    <Link
+                      href={`/collections/${c.slug}/digest/${latestDigest.weekStart}`}
+                      className="mt-1.5 inline-block text-xs text-stone-500 transition-colors hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
+                      aria-label={`This week's digest for ${c.name}: ${latestDigest.title}`}
+                    >
+                      This week: {latestDigest.title} →
+                    </Link>
                   )}
-                  {c.previewMembers && c.previewMembers.length > 0 && (
-                    <MemberFacepile members={c.previewMembers} totalCount={c.memberCount} />
-                  )}
-                </Link>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

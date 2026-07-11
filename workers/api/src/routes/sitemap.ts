@@ -11,6 +11,7 @@ import {
   releaseSummaries,
   sourceChangelogFiles,
   collections,
+  collectionWeeklyDigests,
 } from "@buildinternet/releases-core/schema";
 import {
   SitemapPayloadSchema,
@@ -61,8 +62,27 @@ sitemapRoutes.get(
       .from(collections)
       .orderBy(collections.slug);
 
+    // Weekly digests are their own permalinked pages (~600/yr at full scale)
+    // — small enough to fold into the main sitemap payload rather than a
+    // dedicated /sitemap/digests surface, mirroring the collections list above.
+    const digestRows = await db
+      .select({
+        collectionSlug: collections.slug,
+        weekStart: collectionWeeklyDigests.weekStart,
+        generatedAt: collectionWeeklyDigests.generatedAt,
+      })
+      .from(collectionWeeklyDigests)
+      .innerJoin(collections, eq(collections.id, collectionWeeklyDigests.collectionId))
+      .orderBy(collections.slug, collectionWeeklyDigests.weekStart);
+
     if (orgRows.length === 0) {
-      return c.json({ orgs: [], sources: [], products: [], collections: collectionRows });
+      return c.json({
+        orgs: [],
+        sources: [],
+        products: [],
+        collections: collectionRows,
+        digests: digestRows,
+      });
     }
 
     const orgIds = orgRows.map((o) => o.id);
@@ -185,6 +205,7 @@ sitemapRoutes.get(
       sources: sourcesOut,
       products: productsOut,
       collections: collectionRows,
+      digests: digestRows,
     });
   },
 );
