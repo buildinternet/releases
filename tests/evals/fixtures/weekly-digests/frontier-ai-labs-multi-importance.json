@@ -1,0 +1,298 @@
+{
+  "input": {
+    "collectionName": "Frontier AI Labs",
+    "weekStart": "2026-06-29",
+    "releases": [
+      {
+        "id": "rel_zdpiX1jpwxCjWk4f6rBbz",
+        "org": "Anthropic",
+        "product": "Anthropic News",
+        "title": "Anthropic announces Claude Code, an agentic coding assistant for autonomous software engineering",
+        "summary": "Claude Code is a new agentic coding assistant that can autonomously handle complex software engineering tasks, including autonomous code execution, deep codebase understanding, multi-file editing, and error recovery. The system uses extended thinking and tool use to reason through problems and interact with filesystems and version control, with safety features including sandboxed execution.",
+        "body": "# The Making of Claude Code\n\nWe're excited to share the story behind Claude Code, our new agentic coding assistant that can autonomously handle complex software engineering tasks.\n\n## What is Claude Code?\n\nClaude Code is an AI assistant designed to help developers write, debug, and deploy software more efficiently. It can understand complex codebases, propose solutions, and execute code changes with minimal human intervention.\n\n## The Vision\n\nOur goal was to create an AI system that could genuinely assist with real-world software engineering challenges. We wanted Claude to move beyond simple code suggestions and actually understand the context of a project, propose meaningful improvements, and help developers ship faster.\n\n## Key Capabilities\n\n- **Autonomous Code Execution**: Claude Code can run code, see the results, and iterate based on feedback\n- **Codebase Understanding**: Deep comprehension of project structure and dependencies\n- **Multi-file Editing**: Ability to make coordinated changes across multiple files\n- **Error Recovery**: Intelligent handling of failures and debugging\n- **Integration Ready**: Works seamlessly with existing development workflows\n\n## Technical Approach\n\nBuilding Claude Code required advances across several areas:\n\n### Extended Thinking\nWe leveraged our extended thinking capabilities to help Claude reason through complex problems step-by-step before proposing solutions.\n\n### Tool Use\nClaude Code uses a sophisticated set of tools to interact with the filesystem, execute code, and manage version control operations.\n\n### Safety and Reliability\nWe implemented multiple safeguards to ensure Claude Code operates safely and reliably, including sandboxed execution environments and careful permission management.\n\n## Real-World Impact\n\nEarly users have reported significant productivity gains:\n- Faster feature development\n- Reduced debugging time\n- Better code quality through AI-assisted review\n- More time for high-level architectural decisions\n\n## Looking Forward\n\nClaude Code represents an important step toward AI systems that can meaningfully contribute to software development. We're committed to continuously improving its capabilities while maintaining strong safety standards.\n\nWe believe the future of software engineering will be collaborative\u2014humans and AI working together to build better software faster.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 5
+      },
+      {
+        "id": "rel_ZPDrqb65s1jCuxkvVlFvo",
+        "org": "Anthropic",
+        "product": "Anthropic News",
+        "title": "Government of Alberta uses Claude Code to scan 466M lines and fix cybersecurity vulnerabilities",
+        "summary": "The Government of Alberta used Claude Code with Opus and Sonnet models to scan 466 million lines of code across 1,280 applications and 3,400 repositories in 20 hours, identifying and fixing security vulnerabilities and infrastructure weaknesses across government infrastructure. The effort, which would have taken an estimated 6.5 years with traditional approaches, also modernized legacy systems and is being documented through white papers and shared across other governments.",
+        "body": "The Government of Alberta has been using Claude Code with Opus and Sonnet models since 2025 to review systems, find vulnerabilities, and fix them across government infrastructure.\n\n**Achievements:**\n- Scanned 466 million lines of code in 20 hours (estimated to take 6.5 years with traditional approaches)\n- Reviewed all 1,280 applications and 3,400 code repositories maintained by the Ministry of Technology and Innovation\n- Identified security vulnerabilities, infrastructure weaknesses, and documentation gaps\n- Fixed vulnerabilities and modernized legacy systems\n- Built specialized Claude review agents for continuous security assessment\n\n**Approach:**\n- Used approximately 50 Claude Code agents working autonomously in parallel\n- Two-stage scanning routine: rules engine to flag known patterns, then review to cite exact file and line numbers\n- Generated fixes, tests, and rebuilt outdated systems in modern languages\n- Some legacy systems rebuilt in 4-5 days (vs. 5 months originally)\n- Created red team and blue team agents for continuous security review\n- Agents check applications against roughly 95 security controls per pass\n\n**Impact:**\n- Protects highly sensitive information including tax records, procurement data, and social services case files\n- Reduces technical debt and maintenance costs\n- Enables faster modernization of legacy applications\n- Plans to consolidate 185 legacy applications into 16 reusable modern applications\n\n**Knowledge Sharing:**\n- Published technical white papers documenting efforts for other governments\n- Hosting industry day in Edmonton in July\n- Launching program to scale approach across provincial government\n- Training government workers and public through Alberta AI Academy (thousands of government employees and 10,000+ public members trained)",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 5
+      },
+      {
+        "id": "rel_VjnIQW4dmG6UbKndAWx-s",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.200 changes default permission mode to Manual and fixes background session crashes",
+        "summary": "The default permission mode is now \"Manual\" across CLI, VS Code, and JetBrains (opt-in idle timeout for AskUserQuestion dialogs via /config). Fixed background sessions silently stopping mid-turn after sleep/wake or session reopening, re-running cancelled turns after stalls, and daemon crashes leaving stale locks that prevented restarts. Also fixed subagents cut off by rate limits returning empty results, plugin loading from git worktrees, and terminal control bytes leaking into agent view.",
+        "body": "## What's changed\n\n- Changed `AskUserQuestion` dialogs to no longer auto-continue by default; opt into an idle timeout via `/config`\n- Changed the \"default\" permission mode to \"Manual\" across the CLI, `--help`, VS Code, and JetBrains; `--permission-mode manual` and `\"defaultMode\": \"manual\"` are accepted alongside `default`\n- Fixed a crash at startup when `disabledMcpServers` or `enabledMcpServers` in `.claude.json` is set to a non-array value\n- Fixed background sessions silently stopping mid-turn after sleep/wake or when reopening a stalled session\n- Fixed background sessions re-running a turn cancelled with Esc after a stall respawn\n- Fixed background agents never starting again after a crash left a stale `daemon.lock` whose PID the OS reused\n- Fixed background-agent daemon handover so a reinstalled older build can no longer take over the daemon; build recency is now judged by the version's embedded build timestamp\n- Fixed background-agent roster issues: transient corruption permanently disabling orphan cleanup, older binaries not preserving fields written by newer versions, and socket auth tokens being stripped during daemon restarts\n- Fixed subagents cut off by a rate limit before producing any text output returning an empty result instead of failing cleanly\n- Fixed control bytes from background-agent output reaching the terminal in the agent view\n- Fixed `claude agents --plugin-dir <dir>` not showing the plugin's agents and skills in the agent view when the flag is placed after `agents`\n- Fixed project-scoped plugins not loading correctly from git worktrees of the same repository\n- Fixed `/mcp` server list not tracking focus for screen readers and magnifiers\n- Fixed voice dictation showing a misleading \"Voice connection failed\" message when a recording captures no audio\n- Fixed rendering flicker under tmux 3.4+ by enabling synchronized terminal output\n- Improved screen-reader output: decorative glyphs are now hidden, transcript symbols read as short labels, and nested tables read as `Header: value.` lines\n- Improved the install script to explain when installation is killed by the system running out of memory\n",
+        "publishedAt": "2026-07-03T16:52:33.000Z",
+        "importance": 4
+      },
+      {
+        "id": "rel_mgyeHzPcxyTpS5w1CEFbU",
+        "org": "Anthropic",
+        "product": "Anthropic News",
+        "title": "Anthropic launches Claude Sonnet 5 with enhanced agentic capabilities",
+        "summary": "Claude Sonnet 5 is now available with enhanced agentic capabilities including planning, tool use, and autonomous operation. Performance is close to Opus 4.8 but at substantially lower pricing: $2 per million input tokens and $10 per million output tokens through August 31, 2026, then $3 and $15 respectively. The model is safer than Sonnet 4.6 in agentic contexts with cyber safeguards enabled by default.",
+        "body": "Claude Sonnet 5 is now available, representing a substantial improvement over Sonnet 4.6 with enhanced agentic capabilities. The model is designed to be the most agentic Sonnet model yet, capable of making plans, using tools like browsers and terminals, and running autonomously.\n\n**Performance:**\n- Sonnet 5 performance is close to Opus 4.8 but at lower prices\n- Substantial improvements over Sonnet 4.6 in reasoning, tool use, coding, and knowledge work\n- Narrower gap between Sonnet and Opus models in agentic capabilities\n\n**Availability:**\n- Available across all plans: default for Free and Pro, available to Max, Team, and Enterprise users\n- Available in Claude Code and on Claude Platform\n- Introductory pricing: $2 per million input tokens and $10 per million output tokens through August 31, 2026\n- Standard pricing after August 31: $3 per million input tokens and $15 per million output tokens\n- API access via `claude-sonnet-5`\n\n**Safety:**\n- Overall lower rate of undesirable behaviors than Sonnet 4.6\n- Generally safer to use in agentic contexts\n- Much lower ability to perform cybersecurity tasks compared to Opus models\n- Launched with cyber safeguards enabled by default (same as Opus 4.7 and 4.8, but less strict than Fable 5)\n- Cannot successfully develop working exploits for software vulnerabilities\n\n**Rate Limits:**\nRate limits have been increased across Chat, Cowork, Claude Code, and Claude Platform to accommodate higher token usage of higher effort levels.",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 5
+      },
+      {
+        "id": "rel_xch_5tiYoUd_Vli1HUo4W",
+        "org": "Anthropic",
+        "product": "Anthropic News",
+        "title": "Anthropic launches Claude Science, an AI workbench for scientific research",
+        "summary": "Claude Science, an AI workbench designed for scientists, is now available in beta for Claude Pro, Max, Team, and Enterprise users. The platform integrates over 60 curated skills for genomics, proteomics, structural biology, and cheminformatics, generates reproducible scientific artifacts including 3D protein structures, and includes a reviewer agent for citation and calculation checking. It runs locally on macOS or Linux, or remotely via SSH and HPC clusters, and integrates with NVIDIA's BioNeMo Agent Toolkit and life sciences models including Evo 2, Boltz-2, and OpenFold3.",
+        "body": "Claude Science is now available in beta, an AI workbench designed specifically for scientists to conduct research more efficiently. The platform integrates tools and packages commonly used by researchers, produces auditable artifacts, and provides flexible access to computing resources.\n\n**Key Features:**\n- Integrates fragmented research tools into a single environment\n- Provides access to over 60 curated skills and connectors pre-configured for genomics, single-cell, proteomics, structural biology, cheminformatics, and more\n- Generates rich scientific artifacts including 3D protein structures, genome browser tracks, and chemical structures\n- All outputs are fully reproducible with complete code and message history\n- Manages compute resources on laptops, HPC clusters, or on-demand GPUs\n- Includes a reviewer agent that checks citations and calculations\n- Supports local deployment on macOS or Linux, or remote access via SSH or HPC login nodes\n\n**Availability:**\n- Available in beta for Claude Pro, Max, Team, and Enterprise users\n- Runs on macOS and Linux\n- Team and Enterprise users need admin enablement\n\n**Support Programs:**\n- Claude Science AI for Science projects offering up to $30,000 in credits\n- Modal providing up to $2,000 in compute for select projects\n- Up to 50 projects supported with focus on biology and biomedical research\n- Applications open through July 15, 2026\n- Projects run from September 1 to December 1, 2026\n\n**Partnerships:**\nClaude Science integrates with NVIDIA's BioNeMo Agent Toolkit and connects to life sciences models including Evo 2, Boltz-2, and OpenFold3.",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 4
+      },
+      {
+        "id": "rel_IfhTAeslO2rV0KcvHwQEA",
+        "org": "OpenAI",
+        "product": "ChatGPT Business",
+        "title": "ChatGPT for PowerPoint now generally available for Business workspaces",
+        "summary": "ChatGPT for PowerPoint is now generally available for Business workspaces, enabling teams to create and revise presentations directly in Microsoft PowerPoint using Skills and enabled apps. Workspace Agents now use token-based pricing as of July 6th, with usage drawn from the workspace credit pool.",
+        "body": "ChatGPT for PowerPoint is now generally available for Business workspaces. Teams can create and revise editable presentations directly in Microsoft PowerPoint, ask questions about deck structure and narrative, and use Skills and enabled apps to build slides from repeatable workflows and connected sources.\n\nWorkspace admins can enable ChatGPT for PowerPoint and control access to supported apps. Business usage remains free through August 6, 2026. After that, usage follows the flexible-pricing model and draws from the workspace credit pool after included usage.\n\nAs of July 6th, Workspace Agent runs now use token-based pricing, with credit use based on input tokens, cached input tokens, and output tokens. Business plans include usage for ChatGPT Workspace Agents, ChatGPT for Excel, and ChatGPT for PowerPoint through the general Codex agentic usage pool.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_Bfsw49g0TQrlRIB_O94BJ",
+        "org": "OpenAI",
+        "product": "ChatGPT Enterprise & Edu",
+        "title": "ChatGPT Enterprise & Edu shifts Excel/Sheets and Workspace Agent to token-based pricing",
+        "summary": "ChatGPT for Excel/Sheets tasks and Workspace Agent runs now use token-based credit pricing for Enterprise and Edu workspaces, with costs based on input tokens, cached input tokens, and output tokens instead of fixed credits. ChatGPT for PowerPoint remains free through August 6, 2026, after which it will transition to the same token-based pricing model.",
+        "body": "ChatGPT for Excel/Sheets tasks now use token-based credit pricing for Enterprise and Edu workspaces. Workspace Agent runs also use token-based credit pricing for Enterprise workspaces. Credit use is based on input tokens, cached input tokens, and output tokens rather than a fixed credit cost.\n\nChatGPT for PowerPoint remains free for Enterprise customers through August 6, 2026. Charging starts after that date under the same token-based pricing model as ChatGPT for Excel/Sheets.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_aHiAI9713W41o3PnlC8xm",
+        "org": "OpenAI",
+        "product": "ChatGPT Enterprise & Edu",
+        "title": "ChatGPT for PowerPoint now generally available for Enterprise and Edu",
+        "summary": "ChatGPT for PowerPoint is now generally available for Enterprise and Edu workspaces, letting users create and revise editable presentations directly in Microsoft PowerPoint, analyze deck structure and narrative, and work from authorized sources. Admins can enable the add-in through workspace settings or Microsoft 365 deployment, with RBAC-based access, workspace policy enforcement, scoped source access, Compliance API coverage, EU Inference Residency, and Enterprise Key Management support.",
+        "body": "ChatGPT for PowerPoint is now generally available for Enterprise and Edu workspaces. Users can create and revise editable presentations directly in Microsoft PowerPoint, analyze a deck's narrative and structure, and use approved Skills and apps to work from authorized sources.\n\nAdmins can enable the add-in through workspace settings or deploy it through Microsoft 365, including RBAC-based access where applicable. For eligible workspaces, ChatGPT for PowerPoint supports workspace policy enforcement, scoped source access, Compliance API coverage for prompts and responses, EU Inference Residency, and Enterprise Key Management.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_yG02YGaOMOUjE2bi2pQiw",
+        "org": "OpenAI",
+        "product": "ChatGPT",
+        "title": "ChatGPT rolls out GPT-5.5 Instant Mini as fallback model",
+        "summary": "GPT-5.5 Instant Mini is now the fallback model for users hitting GPT-5.5 Instant or Auto rate limits, replacing GPT-5.3 Instant Mini. The model does not appear in the model picker and does not affect the API or Codex. Improvements include better tracking of evolving user intent, tone calibration, reduced repetitive or overly structured responses, stronger personalization, and fewer factual issues.",
+        "body": "Rolled out GPT-5.5 Instant Mini in ChatGPT as the fallback model for users hitting GPT-5.5 Instant or Auto rate limits, replacing GPT-5.3 Instant Mini. The model won't appear in the model picker and doesn't affect the API or Codex. Improvements include better tracking of evolving user intent, tone calibration, reduced repetitive or overly structured responses, stronger personalization, and fewer factual issues compared to GPT-5.3 Instant Mini.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_f8eXZ92j7EHzLXm1BOvAk",
+        "org": "OpenAI",
+        "product": "Codex",
+        "title": "ChatGPT iOS now manages Codex tasks in conversations with branch filters and SSH support",
+        "summary": "ChatGPT for iOS now supports creating, searching, opening, forking, and managing Codex tasks directly from conversations, with filters for staged, unstaged, and branch changes. Added support for SSH hosts using private keys or no credentials, inline photo and camera pickers, and previews for image and file attachments before sending. Also improved task loading, autocomplete, settings persistence, and fixed thread-list loading and prompt mode deadlocks.",
+        "body": "# ChatGPT for iOS\n\n### New features\n\n- Added support for creating, searching, opening, forking, and managing Codex\n  tasks directly from a conversation.\n- Added filters for staged, unstaged, branch, and last-turn changes, with controls\n  for comparing branches.\n- Added support for adding selected transcript text directly to the composer.\n- Added previews for image and file attachments before sending.\n- Added inline Photos and Camera pickers to the attachment menu.\n- Added a connection shortcut and support for SSH hosts using private keys or no\n  credentials.\n- Added usage limits and credit details to the task menu.\n\n### Improvements and bug fixes\n\n- Improved the task list with consistent task terminology, clearer delegated\n  task titles, and a Needs input status.\n- Improved initial task loading and foreground recovery.\n- Improved autocomplete by selecting the first result automatically and\n  accepting it with Return.\n- Improved model, reasoning, and Fast settings so changes remain scoped to the\n  current task.\n- Improved task-management and dynamic tool activity presentation.\n- Improved side chats to open directly when only one conversation is available.\n- Improved plugin autocomplete with installed plugins and their icons.\n- Improved workspace diff accuracy and expand-and-collapse navigation.\n- Improved recovery by preserving thread state across reconnects and host\n  pairings across sign-out.\n- Fixed stuck thread-list loading, prompt mode deadlocks, stale images, and\n  microphone permission alerts.\n- Fixed shake to undo and keyboard refocusing after sending a prompt.",
+        "publishedAt": "2026-07-06T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_TqlzjZ2abne6mHtCNHnZz",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.201 removes mid-conversation system role from Claude Sonnet 5",
+        "summary": "Claude Sonnet 5 sessions no longer use the mid-conversation system role for harness reminders.",
+        "body": "## What's changed\n\n- Claude Sonnet 5 sessions no longer use the mid-conversation system role for harness reminders\n",
+        "publishedAt": "2026-07-03T23:50:35.000Z",
+        "importance": 2
+      },
+      {
+        "id": "rel_dkG_D32nY3AzlAMuNT5WJ",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code 2.1.199 fixes background-agent daemon self-kill loop and stacked skill invocations",
+        "summary": "Fixed a background-agent daemon bug on Linux that killed every running agent every ~50 seconds after an unclean shutdown. Stacked slash-skill invocations now load up to 5 leading skills, SSL certificate errors fail immediately with actionable guidance, and mid-stream API errors keep partial output. Plus dozens of smaller fixes across subagents, hooks, and session management.",
+        "body": "## What's changed\n\n- Stacked slash-skill invocations like `/skill-a /skill-b do XYZ` now load all leading skills (up to 5), not just the first\n- Fixed SSL certificate errors (TLS-inspecting proxies, missing `NODE_EXTRA_CA_CERTS`, expired certs) burning retries before showing actionable guidance \u2014 they now fail immediately with the fix hint\n- Fixed streaming responses being discarded when the API emits a mid-stream overloaded/server error after partial output \u2014 the partial is now kept with an incomplete-response notice\n- Fixed subagents cut off by a rate limit or server error silently failing instead of returning their partial work to the parent\n- Fixed subagents reporting API errors (e.g. usage limit reached) as successful results \u2014 the error is now reported to the parent agent\n- Fixed the background-agent daemon on Linux killing itself and every running agent every ~50 seconds after an unclean shutdown left a corrupted worker record\n- Fixed background agents failing to cold-start over SSH on macOS with \"Could not switch to audit session\" (regression in 2.1.196)\n- Fixed `claude stop` being silently undone when it raced a background-agent respawn \u2014 the respawn now honors the stop\n- Fixed background job progress indicators stalling for minutes while the job ran long commands\n- Fixed background sessions on memory-starved machines showing a generic error \u2014 they now indicate low memory and suggest freeing resources\n- Fixed remote sessions briefly flapping between Working and Idle in the agent view when a background agent completes\n- Fixed idle subagents vanishing from the agent panel while other subagents were still working; surplus idle agents now collapse into an expandable summary row\n- Fixed typing `/model` or `/fast` while viewing a subagent silently opening the lead's model picker \u2014 a notice now explains the command applies to the lead\n- Fixed `SessionStart`, `Setup`, and `SubagentStart` hooks silently hiding stderr when exiting with code 2 \u2014 the error is now shown in the transcript\n- Fixed `claude --dangerously-skip-permissions daemon <subcommand>` being treated as a chat prompt instead of running the subcommand\n- Fixed `SendMessage` silently misrouting when a re-spawned agent reuses a previous agent's name \u2014 the tool now detects the mismatch and asks the caller to retarget\n- Fixed opening or resuming a session with no new messages needlessly growing the transcript file\n- Fixed backgrounding a session with `\u2190` or `/background` dropping its `/color` from the agent view row\n- Fixed resetting a corrupted config file from the startup recovery dialog destroying it unrecoverably \u2014 it now backs up the file first\n- Fixed Claude in Chrome repeatedly opening the reconnect page when sessions run from different builds or config directories\n- Fixed plan mode not prompting for state-changing browser tool calls; read-only `browser_batch` calls are now correctly auto-allowed\n- Transient server rate-limit errors (429s unrelated to your usage limit) are now retried automatically with backoff for subscribers instead of failing the turn\n- `CLAUDE_CODE_RETRY_WATCHDOG` now raises the default retry count for non-capacity transient errors to 300 and lifts the cap of 15 on `CLAUDE_CODE_MAX_RETRIES`\n- `claude agents` session rows now show pull-request links as bare `#N` without the redundant \"PR\" label\n",
+        "publishedAt": "2026-07-02T23:35:18.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_4PqZfjVPzW_NtNMkWRfzu",
+        "org": "Anthropic",
+        "product": "Product Launches",
+        "title": "Product Launches covers Claude Tag in conversation with Boris Cherny and Cat Wu",
+        "summary": "Boris Cherny and Cat Wu discuss Claude Tag's development, including long-horizon research, the memory system, and internal adoption at Anthropic. Claude Tag is available now in Slack (beta).",
+        "body": "\"In the past, you had to open Claude and ask. With Claude Tag, Claude jumps in.\" In this conversation, Boris Cherny (Head of Claude Code) and Cat Wu (Head of Product, Claude Code) walk through how they got there: the long-horizon and alignment research that lets Claude stay on track for days at a time, the memory system that finally feels right, and how usage spread inside Anthropic. Today, 65% of the product team's code is created by Claude.\n\nClaude Tag is available now in Slack (beta). Learn more: claude.com/tag",
+        "publishedAt": "2026-07-02T16:59:37.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_znrtsZyk25w1p2MAmXlbi",
+        "org": "Anthropic",
+        "product": "Anthropic News",
+        "title": "Anthropic details Claude Fable 5 cyber safeguards and proposes jailbreak severity framework",
+        "summary": "Anthropic published details on Claude Fable 5's safety classifiers for cybersecurity use, which categorize requests into prohibited use, high-risk dual use, low-risk dual use, and benign use, with classifiers blocking requests that appear ambiguous. The company also proposed a Cyber Jailbreak Severity (CJS) framework that scores jailbreaks on capability gain, breadth, ease of weaponization, and discoverability, and launched a HackerOne program for security researchers to report potential jailbreaks.",
+        "body": "Anthropic is providing detailed information on Claude Fable 5's cybersecurity safeguards and proposing an industry framework for assessing AI jailbreak severity.\n\n**Fable 5 Cyber Safeguards:**\nFable 5's safety classifiers are designed to discern between four categories of cybersecurity use:\n\n1. **Prohibited Use** - Activities with high harm potential and little defensive benefit (ransomware, wipers, defense evasion, malware development, etc.) - Classifiers block all requests\n\n2. **High-Risk Dual Use** - Activities used by both defenders and attackers (penetration testing, exploit development, privilege escalation, etc.) - Classifiers block until better controls exist\n\n3. **Low-Risk Dual Use** - Activities mostly used defensively (open source intelligence, vulnerability identification, cryptographic testing) - Many allowed, but large fraction blocked as safety margin\n\n4. **Benign Use** - Core defensive and IT activities (secure coding, debugging, patch management, incident response, etc.) - Classifiers not intended to block\n\nClassifiers use a \"safety margin\" approach, blocking requests that look ambiguous to ensure harmful requests are caught, resulting in some false positives.\n\n**Proposed Cyber Jailbreak Severity (CJS) Framework:**\nJailbreaks are scored on four axes:\n\n1. **Capability Gain** (0-4): How far beyond existing tools the technique takes an attacker\n2. **Breadth of Capability Gain** (0-2): How many distinct offensive tasks the same technique works on\n3. **Ease of Weaponization** (0-2): How much effort to turn jailbreak into running attack\n4. **Discoverability** (0-2): How easily threat actors can obtain the technique\n\nScores combine into CJS levels:\n- CJS-0 (Informational): Score 0\n- CJS-1 (Low): Score 1-3.5\n- CJS-2 (Medium): Score 4-6.5\n- CJS-3 (High): Score 7-8.5\n- CJS-4 (Critical): Score 9-10\n\nThe framework includes detailed rubrics for each axis and examples of how historical and hypothetical jailbreaks would be scored.\n\n**Additional Resources:**\n- HackerOne program launched for security researchers to submit potential cyber jailbreaks in Fable 5\n- Feedback welcome at cyber-safeguards@anthropic.com",
+        "publishedAt": "2026-07-02T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_AK0l83H-8-RfnzJE2wC-l",
+        "org": "Anthropic",
+        "product": "Claude Platform",
+        "title": "Claude Platform adds agent-memory-2026-07-22 beta header with stricter memory listing behavior",
+        "summary": "Added the `agent-memory-2026-07-22` beta header, which changes listing memories to return results in a stable server-defined order, ignores `order_by` and `order`, restricts `depth` to `0` or `1`, and tightens `path_prefix` matching. Page cursors from the old header are invalid; restart from the first page. This header replaces `managed-agents-2026-04-01` on memory store endpoints, and both headers together return a 400 error.",
+        "body": "Added the `agent-memory-2026-07-22` beta header, which changes how listing memories behaves: results are returned in a stable, server-defined order and the `order_by` and `order` parameters are ignored; `depth` accepts only `0`, `1`, or being omitted (other values return a `400` error); and `path_prefix` must end with `/` and matches whole path segments instead of a substring. Page cursors issued without the header aren't valid with it, so restart from the first page when you adopt it. On memory store endpoints, `agent-memory-2026-07-22` replaces `managed-agents-2026-04-01`; sending both returns a `400` error. On July 22, 2026, the `managed-agents-2026-04-01` header adopts the same list behavior. All SDKs (Python 0.116.0, TypeScript 0.110.0, Go 1.56.0, Java 2.48.0, Ruby 1.55.0, PHP 0.36.0, C# 12.35.0, and CLI 1.16.0) now send this header on all memory store calls.",
+        "publishedAt": "2026-07-02T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_rKbcYMSOkGocNv9G9bXHs",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.198 makes Claude in Chrome GA and fixes network-drop aborts",
+        "summary": "Claude in Chrome is now generally available. Fixed brief network drops mid-response aborting the turn \u2014 transient errors like ECONNRESET now retry with backoff instead of failing. Also added background agent notifications, a /dataviz skill, and dozens of additional fixes across agents, worktrees, and fullscreen mode.",
+        "body": "## What's changed\n\n- Claude in Chrome is now generally available\n- Added background agent notifications in `claude agents` \u2014 sessions that need input or finish now fire the `Notification` hook (`agent_needs_input` / `agent_completed`)\n- Added `/dataviz` skill for chart and dashboard design guidance with a runnable color-palette validator\n- Gateway: added Claude Platform on AWS (anthropicAws) as an upstream provider; model-not-found responses now advance the failover chain\n- Background agents launched from `claude agents` now commit, push, and open a draft PR when they finish code work in a worktree, instead of stopping to ask\n- The built-in Explore agent now inherits the main session's model (capped at opus) instead of running on haiku\n- Subagents and context compaction now inherit the session's extended thinking configuration, improving output quality on delegated tasks\n- Fixed brief network drops mid-response aborting the turn \u2014 transient errors like ECONNRESET now retry with backoff instead of failing\n- Fixed excessive background classifier requests when sandboxed processes repeatedly accessed the same network host\n- Fixed background tasks in web, desktop, and VS Code task panels getting stuck on \"Running\" after they finish or after resuming a session\n- Fixed agent teams: a teammate that dies on an API error now reports \"failed\" to the lead, and messaging a stuck teammate wakes it to retry immediately\n- Fixed the `/diff` panel not refreshing when you switch branches or commit outside the session\n- Fixed markdown tables overflowing and wrapping their right border when rendered in fullscreen mode\n- Fixed Claude Platform on AWS and Mantle sessions dead-ending with \"Please run /login\" when the STS token expires \u2014 `awsAuthRefresh` now runs automatically\n- Fixed \"no route to host\" for local-network hosts in macOS background agent sessions by declaring Local Network entitlements\n- Fixed `/desktop` failing with \"Cannot determine working directory\" after entering and exiting a worktree\n- Fixed background agents repeatedly showing \"Reconnecting\u2026\" every ~52 seconds on macOS while the agents view was open\n- Fixed pressing `\u2190` inside `claude attach <id>` exiting to the shell instead of opening the agent view\n- Fixed `claude --bg` silently creating an unattachable session when combined with `--print`/`-p`; the conflicting flags are now rejected up front\n- Fixed the workflow progress view dropping the earliest agents from the list while the phase counter stayed correct in SDK and desktop-app sessions\n- Fixed `.claude/rules/` conditional rules not loading when the target file is reached via a symlinked path\n- Fixed Cmd+click not opening URLs in fullscreen mode in Warp on macOS\n- Fixed double-click word selection in fullscreen mode to select the entire URL including the scheme\n- Fixed plan mode not auto-allowing read-only tool calls when a session starts in plan mode\n- Fixed `/branch` deriving its default fork name from the compaction summary instead of the first real prompt\n- Improved focus mode: subagents launched in a turn now appear in its activity summary, and completed background notifications fold into a single count\n- Improved syntax highlighting accuracy in code blocks, diffs, and file previews by upgrading to highlight.js 11\n- Keyboard shortcut hints now show opt/cmd instead of alt/super when connected from a Mac over SSH\n- Improved API retry UX: the error reason is now shown after the second attempt, and a status page link replaces the spinner tip when the API is overloaded\n- `/login` now opens the sign-in dialog from the `claude agents` view instead of saying it isn't available\n- Subagents now treat messages from the agent that launched them as normal task direction; an agent's message is still never treated as the user's approval\n- Removed the `/agents` wizard; ask Claude to create or manage subagents, or edit `.claude/agents/` directly\n",
+        "publishedAt": "2026-07-01T20:45:36.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_RdZZf1-viEcx8UrlV7WaZ",
+        "org": "OpenAI",
+        "product": ".NET SDK",
+        "title": "OpenAI .NET SDK 2.12.0: full changelog linked",
+        "summary": "This release links to the complete changelog at the repository's CHANGELOG.md.",
+        "body": "See full changelog: https://github.com/openai/openai-dotnet/blob/OpenAI_2.12.0/CHANGELOG.md",
+        "publishedAt": "2026-07-01T17:35:59.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_xKZDCRNwYA4jzy4f0ZGN8",
+        "org": "Anthropic",
+        "product": "Claude",
+        "title": "Access to Claude Fable 5 and Claude Mythos 5 restored",
+        "summary": null,
+        "body": "We are restoring access to Claude Fable 5 and Claude Mythos 5. See [our statement](https://www.anthropic.com/news/redeploying-fable-5) for more information.",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_ObnYhyMnjfVOfI5fg4xcD",
+        "org": "Anthropic",
+        "product": "Claude",
+        "title": "Model entitlements for Enterprise plans (beta)",
+        "summary": null,
+        "body": "Admins on Enterprise plans can now control what models their users have access to, and what effort level settings they can use. For more information, see [Manage model access for your organization](https://support.claude.com/en/articles/15694740).",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_JKsMqVrLpTe7Bmy-vvVsl",
+        "org": "Anthropic",
+        "product": "Claude Platform",
+        "title": "Claude Fable 5 and Claude Mythos 5 restored",
+        "summary": null,
+        "body": "We've restored access to Claude Fable 5 and Claude Mythos 5. See our statement for more information.",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_hcgzDFh7BRX-agiCDN--X",
+        "org": "OpenAI",
+        "product": "Codex",
+        "title": "Codex CLI 0.142.5 prevents WebSocket request payloads from leak into trace logs",
+        "summary": "Prevented full Responses WebSocket request payloads from being written to trace logs, fixing a potential information exposure in logged data.",
+        "body": "## Bug Fixes\n\n- Prevented full Responses WebSocket request payloads from being written to trace logs. ([#30771](https://github.com/openai/codex/pull/30771))\n\n## Changelog\n\nFull Changelog: [rust-v0.142.4...rust-v0.142.5](https://github.com/openai/codex/compare/rust-v0.142.4...rust-v0.142.5)\n\n- [#30771](https://github.com/openai/codex/pull/30771) \\[codex\\] Backport websocket trace fix to release/0.142 [@dylan-hurd-oai](https://github.com/dylan-hurd-oai)",
+        "publishedAt": "2026-07-01T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_wynlslnSKzBWRENAILtA4",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.197 defaults to Claude Sonnet 5 with 1M-token context",
+        "summary": "Claude Sonnet 5 replaces the previous default model, with a native 1M-token context window and promotional pricing of $2/$10 per Mtok through August 31.",
+        "body": "## What's changed\n\n- Introducing Claude Sonnet 5: now the default model in Claude Code, with a native 1M-token context window and promotional pricing of $2/$10 per Mtok through August 31. Update to version 2.1.197 for access. https://www.anthropic.com/news/claude-sonnet-5\n",
+        "publishedAt": "2026-06-30T17:56:37.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_Td_AlhiTdMItd-xfUM6PX",
+        "org": "Anthropic",
+        "product": "Product Launches",
+        "title": "Anthropic launches Claude Science, a new research app for reproducible analysis",
+        "summary": "Anthropic introduced Claude Science, a research app in public beta that runs analyses, searches databases, and traces steps from data wrangling to validation, with reproducible artifacts that include code, environment, and conversation. Pre-configured for genomics, proteomics, and cheminformatics, with access to 60+ scientific databases.",
+        "body": "Introducing Claude Science, a new research app from Anthropic now in public beta.\n\nIt runs analyses, searches databases, and traces steps from data wrangling to validation. Every artifact ships with the exact code, environment, and conversation that produced it. It\u2019s all reproducible months later, by anyone on your team.\n\nRuns on your laptop, your cluster, or GPUs on demand. Pre-configured for genomics, single-cell, proteomics, structural biology, and cheminformatics, and can be connected to 60+ scientific databases from day one.\n\nAvailable on Pro, Max, Team, and Enterprise plans for macOS and Linux.\n\nLearn more: https://www.anthropic.com/news/claude-science-ai-workbench\nDownload Claude Science: http://claude.com/science",
+        "publishedAt": "2026-06-30T17:05:42.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_jdyiXg4c6QKxLCOmaLvk-",
+        "org": "Anthropic",
+        "product": "Anthropic News",
+        "title": "Anthropic redeploys Claude Fable 5 and Mythos 5 globally after export controls lifted",
+        "summary": "Claude Fable 5 and Mythos 5 have been redeployed globally following the lifting of export controls that temporarily restricted access on June 12. Fable 5 is available starting July 1 across Claude Platform, Claude.ai, Claude Code, and Claude Cowork, with included usage for Pro, Max, Team, and select Enterprise plans through July 7. Anthropic deployed an improved safety classifier targeting a reported bypass technique, blocking it in over 99% of cases and approved by US Department of Commerce researchers. Anthropic is also partnering with Amazon, Microsoft, Google, and Glasswing partners on a consensus framework for assessing AI jailbreak severity.",
+        "body": "Claude Fable 5 and Mythos 5 have been redeployed globally after export controls were lifted. The models were temporarily restricted on June 12 following a government directive, but access has now been restored as of June 30, 2026.\n\n**Availability:**\n- Fable 5 is available starting July 1 to users globally on Claude Platform, Claude.ai, Claude Code, and Claude Cowork\n- For Pro, Max, Team, and select Enterprise plans, Fable 5 is included for up to 50% of weekly usage limits through July 7, then available via usage credits\n- Access on AWS, Google Cloud, and Microsoft Foundry is being re-enabled\n- Mythos 5 access has been restored for a set of US organizations following government approval\n\n**Safeguard Updates:**\nAnthropicworked with the government to train an improved safety classifier targeting the behavior described in a reported bypass. The new classifier blocks the specific technique in over 99% of cases. Researchers from the US Department of Commerce's Center for AI Standards and Innovation (CAISI) have tested both prior and new safeguards and agree they are extraordinarily strong.\n\n**Industry Framework:**\nAnthropicis partnering with Amazon, Microsoft, Google, and other Glasswing partners to develop a consensus framework for assessing the severity of AI jailbreaks. The framework scores jailbreaks on four criteria: capability gain, breadth of capability gain, ease of weaponization, and discoverability.\n\n**Government Collaboration:**\nAnthropicis strengthening collaboration with the US government on:\n1. Pre-release government access and evaluation for models advancing the capability frontier\n2. Rapid information sharing on safeguards and jailbreaks\n3. Dedicated resources for joint research on AI security\n4. Working toward a common industry security and evaluation standard",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": 3
+      },
+      {
+        "id": "rel_akAWYhVgoEDHRhgR1_9su",
+        "org": "Anthropic",
+        "product": "Claude",
+        "title": "Claude Sonnet 5 launch",
+        "summary": null,
+        "body": "We launched Claude Sonnet 5, our most agentic Sonnet model yet, with substantial improvements over Sonnet 4.6 in reasoning, tool use, coding, and knowledge work. For more information, see our blog post: [Introducing Claude Sonnet 5](https://www.anthropic.com/news/claude-sonnet-5).",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_AtJFw9RcQYmkBG7R7B7Dq",
+        "org": "Anthropic",
+        "product": "Claude Platform",
+        "title": "Claude Sonnet 5 launched with 1M token context and adaptive thinking",
+        "summary": null,
+        "body": "We've launched **Claude Sonnet 5** (`claude-sonnet-5`), the next generation of our Sonnet model family, at introductory pricing of $2 / $10 per MTok through August 31, 2026 (standard $3 / $15 thereafter). Claude Sonnet 5 supports a 1M token context window, 128k max output tokens, and the same set of tools and platform features as Claude Sonnet 4.6, except Priority Tier, which is not available. Key behavior changes: adaptive thinking is now on by default; manual extended thinking is removed and returns a 400 error; setting sampling parameters (`temperature`, `top_p`, `top_k`) to non-default values returns a 400 error. Claude Sonnet 5 uses a new tokenizer that produces approximately 30% more tokens for the same text.",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_2uMlu4sRkSbpoycvRkmlB",
+        "org": "Anthropic",
+        "product": "Claude Platform",
+        "title": "Claude Managed Agents: event deltas, backward pagination, session overrides, credential injection location, and expanded webhooks",
+        "summary": null,
+        "body": "Claude Managed Agents session event streams now support event deltas. Opt in with the `event_deltas[]` query parameter on `GET /v1/sessions/{session_id}/events/stream`. Listing sessions now supports backward pagination with `prev_page` cursor. When creating a session, you can now override the agent's configuration for that session by passing `agent` with `type: \"agent_with_overrides\"` to replace the model, system prompt, tools, MCP servers, or skills. Vaults now support an `injection_location` setting on environment variable credentials, controlling whether the credential's value is substituted into request headers, request body, or both. Webhooks now cover agent, deployment, and deployment run lifecycle events.",
+        "publishedAt": "2026-06-30T00:00:00.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_upxf2JPglzWX0V76oFqQl",
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.196 fixes session loss on job wake and stops unchecked MCP server spawning",
+        "summary": "Fixed a critical bug where waking a background job deleted the conversation and reran the original prompt. Security: `claude mcp list`/`get` no longer spawns repo-approved `.mcp.json` servers in untrusted workspaces. Also fixes OAuth scope rejection on enterprise IdPs, rate-limit flickering, and PowerShell exit-code false positives.",
+        "body": "## What's changed\n\n- Added support for organization default models \u2014 admins set it in the org console; it shows as \"Org default\" (or \"Role default\") in `/model` when you haven't picked one yourself\n- Added readable default names for sessions at start, making them easier to identify and message\n- Added clickable file attachments in chat \u2014 Cmd/Ctrl-click reveals the file in Finder/Explorer\n- Security: `claude mcp list`/`get` no longer spawn `.mcp.json` servers that a repo self-approved via a committed `.claude/settings.json`; untrusted workspaces show `\u23f8 Pending approval`\n- Fixed waking a background job permanently deleting its conversation and re-running the original prompt when the transcript probe misread a real transcript; the file is now set aside, never deleted\n- Fixed the rate-limit warning flickering off and rate-limit telemetry being over-counted when multiple parallel requests were in flight at the moment a usage limit was hit\n- Fixed duplicate recap lines after a background session's turn: a schema-rejected StructuredOutput attempt no longer renders alongside its retry\n- Fixed PowerShell `git diff`/`git grep`, `egrep`/`fgrep`, and quoted search patterns containing `|` being reported as failures when they exit 1, matching Bash behavior\n- Fixed multiple `claude agents` side panel issues: keyboard focus getting stuck when opening an agent, background jobs losing their subagent types on every open, and sessions showing incorrect status while actively running\n- Fixed `claude agents --dangerously-skip-permissions` silently falling back to auto mode instead of showing the bypass disclaimer and applying bypass mode to spawned agents\n- Fixed mid-turn crash recovery for Remote sessions \u2014 sessions interrupted by a server restart now auto-resume on the next worker\n- Fixed sessions moved with `/cd` reappearing in the old directory's resume list after a non-graceful exit when the old path contained special characters\n- Fixed `claude plugin validate` skipping local plugins whose source is \".\" and stopping after the first error class\n- Fixed Esc Esc at an idle prompt not opening the rewind menu (regression); use Ctrl+C or Ctrl+X Ctrl+K to stop background agents\n- Fixed MCP OAuth requesting the authorization server's full `scopes_supported` catalog when no scope is specified, causing `invalid_scope` failures on GitLab self-hosted and other enterprise IdPs\n- Fixed `/context` showing 0 tokens for all tool groups on Bedrock\n- Fixed `/deep-research` misreporting verifier failures as \"all claims refuted\" instead of `unverified`\n- Fixed plugin dependency version pins not being honored when the marketplace was added as a local folder path backed by a git repo\n- Fixed `claude agents` session status: completed rows no longer flip between \"Done\" and \"Needs your input\", stalled agents are now labeled \"Needs attention\", and results that mention a PR show a clickable link\n- Fixed voice dictation swallowing spaces and spuriously starting a recording during very fast typing when voice mode is enabled\n- Improved background session reliability: long-running commands and workflows now survive the session's process being stopped, restarted, or updated \u2014 including on Windows, where background shells are handed off instead of being killed\n- Improved background agents: workers killed by a daemon restart are now automatically resumed from where they left off the next time the agents view opens\n- Improved `/code-review` workflow: merged five cleanup finders into one, cutting token usage by roughly 25%\n- Reduced per-frame rendering work in the terminal UI by skipping no-op subtree walks during streaming\n- The streaming idle watchdog is now on by default for all providers \u2014 it aborts and retries when a response stream produces no events for 5 minutes. Set `CLAUDE_ENABLE_STREAM_WATCHDOG=0` to disable.\n- Remote Control is now disabled when `ANTHROPIC_BASE_URL` points at a non-Anthropic host, matching the existing behavior under `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY`\n- Changed opening the agents view from a foreground session to require a single `\u2190` press instead of two, matching the behavior in background sessions\n",
+        "publishedAt": "2026-06-29T23:27:32.000Z",
+        "importance": null
+      },
+      {
+        "id": "rel_7zM_0g8Lz_e-WPQKkEFk4",
+        "org": "Anthropic",
+        "product": "Claude",
+        "title": "Claude by Anthropic 1.260625.0",
+        "summary": null,
+        "body": "Squashed some bugs and improved the overall experience. Yours, Claude",
+        "publishedAt": "2026-06-29T23:03:37.000Z",
+        "importance": null
+      }
+    ]
+  }
+}
