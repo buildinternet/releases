@@ -37,12 +37,12 @@
     "db:generate": "drizzle-kit generate",
     "db:check-filenames": "./scripts/check-migration-filenames.sh",
     "db:migrate": "drizzle-kit migrate",
-    "db:migrate:local": "wrangler d1 migrations apply released-db --local --config workers/api/wrangler.jsonc",
+    "db:migrate:local": "node scripts/run-timed.mjs 60 -- wrangler d1 migrations apply released-db --local --config workers/api/wrangler.jsonc",
     "db:reset:local": "rm -rf workers/api/.wrangler/state/v3/d1 && bun run db:migrate:local",
     "db:migrate:remote": "wrangler d1 migrations apply released-db --remote --config workers/api/wrangler.jsonc",
     "db:studio": "bun drizzle-kit studio",
     "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",
-    "db:query": "wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
+    "db:query": "node scripts/run-timed.mjs 30 -- wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
     "db:pull": "./scripts/db-pull.sh",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -139,7 +139,7 @@
     "oxlint-tsgolint": "^0.24.0",
     "portless": "^0.15.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.108.0",
+    "wrangler": "^4.110.0",
     "yaml": "^2.9.0"
   },
   "engines": {
