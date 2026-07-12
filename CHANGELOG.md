@@ -3,6 +3,16 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 11, 2026
+
+**Added**
+- Weekly collection digests — AI-written weekly summaries for curated collections, published at `/collections/[slug]/digest/[week]`; browse past digests at `/collections/[slug]/digest`; `GET /v1/collections/:slug/digests` and `GET /v1/collections/:slug/digests/:weekStart` expose the list and detail via the REST API; each digest links to the releases it covers, grouped by org.
+- Release sitemap — `GET /v1/sitemap/releases` surfaces importance-gated releases (importance ≥ 3 with an AI summary) for search engine indexing; `sitemap-releases.xml` is now declared in `robots.txt`.
+
+**Changed**
+- Release pages now show a labeled divider between the AI summary and the original release note — a "From the original release note" section header with an inline "View original ↗" link makes the two-source layout explicit; the lede is suppressed when the body isn't meaningfully longer than the summary.
+- Web interface polish — buttons now have press-scale feedback on click; release thumbnails in tickers and org teasers display a consistent image outline; the homepage agent use-cases copy has been rewritten in plainer language.
+
 ## July 10, 2026
 
 **Added**
