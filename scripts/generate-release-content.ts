@@ -126,6 +126,13 @@ function rowToSummarizeInput(row: ReleaseRow): SummarizeReleaseInput {
   };
 }
 
+// Bound wall-clock so a hung remote `wrangler d1 execute` (network stall, CF
+// API wedge) can't block the script forever. These calls are `--remote` — an
+// HTTPS request, not a local miniflare boot — so killing the child suffices;
+// there's no workerd grandchild to orphan (unlike the `--local` one-shots that
+// go through scripts/run-timed.mjs).
+const WRANGLER_TIMEOUT_MS = 120_000;
+
 function runWrangler(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("bunx", ["wrangler", ...args], {
@@ -133,9 +140,31 @@ function runWrangler(args: string[]): Promise<string> {
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 5000).unref();
+      reject(
+        new Error(`wrangler timed out after ${WRANGLER_TIMEOUT_MS / 1000}s: ${args.join(" ")}`),
+      );
+    }, WRANGLER_TIMEOUT_MS);
+    timer.unref();
+    // Without an "error" listener, spawn failures (ENOENT, EACCES, …) emit an
+    // uncaught error event and the promise never settles. Forward to reject.
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
     child.stdout.on("data", (b) => (stdout += b.toString()));
     child.stderr.on("data", (b) => (stderr += b.toString()));
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (code !== 0) reject(new Error(`wrangler exit ${code}: ${stderr}`));
       else resolve(stdout);
     });
