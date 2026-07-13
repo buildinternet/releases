@@ -43,7 +43,7 @@ export function PageHeader({
           })}
         </ol>
       </nav>
-      <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2 text-balance">
+      <h1 className="font-pixel text-xl font-bold text-stone-900 dark:text-stone-100 mb-2 text-balance">
         {title}
       </h1>
       <p className="mb-8 max-w-[65ch] text-pretty text-sm text-stone-600 dark:text-stone-400">
