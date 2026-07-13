@@ -12,7 +12,7 @@
     "./marketing-classifier": "./src/marketing-classifier.ts",
     "./openrouter-client": "./src/openrouter-client.ts",
     "./playbook": "./src/playbook.ts",
-    "./providers": "./src/providers.ts",
+    "./providers": "./src/providers/index.ts",
     "./collection-summary": "./src/collection-summary.ts",
     "./collection-weekly-digest": "./src/collection-weekly-digest.ts",
     "./release-content": "./src/release-content.ts",

@@ -3,9 +3,13 @@
 When a source is onboarded, we try to recognize the **hosting platform** behind
 its changelog (Mintlify, Ghost, Blume, …) so we can skip guesswork and route
 straight to the best ingestion method — a known RSS path, a `.md` suffix, or a
-crawl pattern. Detection is a pure, table-driven lookup: the source of truth is
-the `PROVIDERS` array in [`packages/ai/src/providers.ts`](../../packages/ai/src/providers.ts),
-consumed by `evaluate.ts` during onboarding.
+crawl pattern. Detection is a pure, table-driven lookup, consumed by `evaluate.ts`
+during onboarding. The code lives in [`packages/ai/src/providers/`](../../packages/ai/src/providers/):
+
+- [`definitions.ts`](../../packages/ai/src/providers/definitions.ts) — the `PROVIDERS` table (data; the source of truth for what we recognize).
+- [`detect.ts`](../../packages/ai/src/providers/detect.ts) — the detection pipeline (fixed machinery; doesn't grow per provider).
+- [`types.ts`](../../packages/ai/src/providers/types.ts) — the `ProviderDef` / `ProviderHints` shapes.
+- [`index.ts`](../../packages/ai/src/providers/index.ts) — the public barrel (`@releases/ai-internal/providers`).
 
 This doc is the engineering reference: how detection works, every platform we
 currently recognize, and the recipe for adding a new one. For the operational
@@ -91,7 +95,7 @@ feed we can consume directly; **Scrape** = per-page HTML (crawl or single-page).
 
 The whole change is usually one `PROVIDERS` entry plus a test. **Investigate the
 live site first** — don't guess paths or markers; fetch and confirm every one.
-Blume ([`id: "blume"`](../../packages/ai/src/providers.ts)) is a clean worked
+Blume ([`id: "blume"`](../../packages/ai/src/providers/definitions.ts)) is a clean worked
 example of every step below.
 
 1. **Confirm it's a distinct platform.** Is there a fingerprint you can detect
@@ -130,11 +134,13 @@ example of every step below.
    spinners, no `<div id="root"></div>` shell) — enables the fast no-render
    scrape path.
 
-6. **Place the entry correctly.** Detection is first-match-wins. If your marker
-   could be a substring of another provider's marker (or vice-versa), order
-   matters — put the more specific one first (cf. Document360 before Ghost).
+6. **Place the entry correctly.** The entry goes in
+   [`definitions.ts`](../../packages/ai/src/providers/definitions.ts), and
+   detection is first-match-wins. If your marker could be a substring of another
+   provider's marker (or vice-versa), order matters — put the more specific one
+   first (cf. Document360 before Ghost).
 
-7. **Add a test** in [`packages/ai/src/providers.test.ts`](../../packages/ai/src/providers.test.ts):
+7. **Add a test** in [`packages/ai/src/providers/detect.test.ts`](../../packages/ai/src/providers/detect.test.ts):
    assert `detectProviderFromHtml(headFragment)` returns your id and that
    `getProviderHints(id)` returns the expected feed routing. Keep the head
    fragment realistic (only what actually appears before `</head>`).

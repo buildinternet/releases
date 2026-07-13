@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { detectProviderFromHtml, getProviderHints } from "./providers.js";
+import { detectProviderFromHtml, getProviderHints } from "./index.js";
 
 describe("Blume provider detection", () => {
   // The reliable marker is the inline anti-flash theme script Blume emits in
