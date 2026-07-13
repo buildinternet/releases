@@ -6,6 +6,9 @@ import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import type { DigestCoveredRelease } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
+import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
+import { DigestBetaNote } from "@/components/digest-beta-note";
+import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
@@ -18,6 +21,20 @@ export const revalidate = 900;
 
 const SITE_URL = "https://releases.sh";
 const MAX_TITLE_LEN = 70;
+
+/** Match release detail / overview prose: code chips, heading scale, no fake backticks. */
+const DIGEST_PROSE_CLASS =
+  "prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed " +
+  "prose-headings:tracking-tight " +
+  "[&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-[18px] [&_h2]:font-semibold " +
+  "[&_h3]:mt-7 [&_h3]:mb-2 [&_h3]:text-[16px] [&_h3]:font-semibold " +
+  "[&_h4]:mt-5 [&_h4]:mb-1.5 [&_h4]:text-[15px] [&_h4]:font-semibold " +
+  "[&_p]:my-3 [&_ul]:my-3 [&_ul]:pl-5 [&_li]:my-1 " +
+  "[&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline hover:[&_a]:underline " +
+  "[&_code]:text-[13.5px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 " +
+  "[&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono " +
+  "[&_code::before]:content-none [&_code::after]:content-none " +
+  "[&_pre]:my-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0";
 
 function weekRangeLabel(weekStart: string): string {
   const start = new Date(`${weekStart}T00:00:00Z`);
@@ -110,15 +127,12 @@ export default async function CollectionDigestPage({
 
   const { detail, digest } = page;
 
-  // Markdown body → sanitized HTML via the shared server-side pipeline
-  // (remark-rehype with no `allowDangerousHtml`, so raw HTML in the
-  // model-generated body is dropped rather than rendered; `isSafeHref` /
-  // `isSafeImgSrc` additionally strip unsafe URL schemes on any links/images
-  // that do parse). Same pipeline the release-body renderer uses — see
-  // web/src/lib/render-release-body.ts.
-  const bodyHtml = renderBodyMarkdownToHtml(digest.body, "full");
+  // No heading demotion — digest `###` sections should render as h3 under the
+  // page h1 (card/changelog pipelines demote by 2 for their own outline).
+  const bodyHtml = renderBodyMarkdownToHtml(digest.body, "full", { demoteHeadings: 0 });
 
   const collectionUrl = `${SITE_URL}/collections/${slug}`;
+  const digestsIndexUrl = `${collectionUrl}/digest`;
   const pageUrl = `${collectionUrl}/digest/${weekStart}`;
   const weekEndDate = addDaysToDateKey(weekStart, 6);
 
@@ -132,6 +146,7 @@ export default async function CollectionDigestPage({
     else releasesByOrg.set(r.org.slug, { name: r.org.name, slug: r.org.slug, items: [r] });
   }
   const orgGroups = Array.from(releasesByOrg.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const facepileOrgs = orgsFromCoveredReleases(digest.releases, detail.members);
 
   const jsonLd = buildDigestJsonLd(
     {
@@ -141,21 +156,34 @@ export default async function CollectionDigestPage({
       generatedAt: digest.generatedAt,
       releaseUrls: digest.releases.map((r) => `${SITE_URL}${r.path}`),
     },
-    { pageUrl, collectionName: detail.name, collectionUrl },
+    { pageUrl, collectionName: detail.name, collectionUrl, digestsIndexUrl },
   );
 
-  // Prev/next link only to weeks that actually have a digest — weeks below
-  // the quality floor are skipped at generation time, so naive ±7d links
-  // would routinely 404. The index list is newest-first and shares the
-  // request-scoped cache with the digest index page.
-  let prevWeek: string | null = null;
-  let nextWeek: string | null = null;
+  // Prev/next only for weeks that have a digest — the quality floor skips
+  // empty weeks at generation, so naive ±7d links would 404. Index is
+  // newest-first and shares the request-scoped cache with the digest index.
+  let prev: { href: string; weekLabel: string; title: string } | null = null;
+  let next: { href: string; weekLabel: string; title: string } | null = null;
   try {
     const { digests } = await getDigestIndex(slug);
     const idx = digests.findIndex((d) => d.weekStart === weekStart);
     if (idx !== -1) {
-      nextWeek = digests[idx - 1]?.weekStart ?? null;
-      prevWeek = digests[idx + 1]?.weekStart ?? null;
+      const older = digests[idx + 1];
+      const newer = digests[idx - 1];
+      if (older) {
+        prev = {
+          href: `/collections/${slug}/digest/${older.weekStart}`,
+          weekLabel: weekOfLabel(older.weekStart),
+          title: older.title,
+        };
+      }
+      if (newer) {
+        next = {
+          href: `/collections/${slug}/digest/${newer.weekStart}`,
+          weekLabel: weekOfLabel(newer.weekStart),
+          title: newer.title,
+        };
+      }
     }
   } catch {
     // Nav is decorative — render the page without it rather than failing.
@@ -187,7 +215,18 @@ export default async function CollectionDigestPage({
           >
             {detail.name}
           </Link>
+          <span className="text-[var(--line-2)]" aria-hidden>
+            /
+          </span>
+          <Link
+            href={`/collections/${slug}/digest`}
+            className="transition-colors hover:text-[var(--fg-2)]"
+          >
+            Weekly digests
+          </Link>
         </nav>
+
+        <DigestBetaNote className="mt-4" />
 
         <h1 className="mt-4 text-balance text-[32px] font-bold tracking-tight text-[var(--fg)]">
           {digest.title}
@@ -195,12 +234,13 @@ export default async function CollectionDigestPage({
         <p className="mt-1.5 text-[14px] font-medium text-[var(--fg-3)]">
           {weekRangeLabel(weekStart)}
         </p>
+        <DigestFacepile orgs={facepileOrgs} className="mt-3" />
         <p className="mt-4 max-w-[65ch] text-pretty text-[17px] leading-relaxed text-[var(--fg-2)]">
           {digest.intro}
         </p>
 
         <div
-          className="prose prose-sm mt-8 max-w-none text-[var(--fg-2)] [&_a]:text-[var(--accent)] [&_h3]:mt-8 [&_h3]:text-[18px] [&_h3]:font-semibold [&_h3]:text-[var(--fg)]"
+          className={DIGEST_PROSE_CLASS}
           // Sanitized server-side — see the renderBodyMarkdownToHtml call above.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
@@ -235,28 +275,7 @@ export default async function CollectionDigestPage({
           </section>
         )}
 
-        {(prevWeek || nextWeek) && (
-          <nav className="mt-12 flex items-center justify-between border-t border-[var(--line-2)] pt-6 text-[13px]">
-            {prevWeek ? (
-              <Link
-                href={`/collections/${slug}/digest/${prevWeek}`}
-                className="text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
-              >
-                ← Previous week
-              </Link>
-            ) : (
-              <span />
-            )}
-            {nextWeek && (
-              <Link
-                href={`/collections/${slug}/digest/${nextWeek}`}
-                className="text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
-              >
-                Next week →
-              </Link>
-            )}
-          </nav>
-        )}
+        <DigestAdjacentNav prev={prev} next={next} />
       </article>
     </div>
   );

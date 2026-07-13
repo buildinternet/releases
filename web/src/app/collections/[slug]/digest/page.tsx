@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { SetupMessage } from "@/components/setup-message";
+import { DigestBetaNote } from "@/components/digest-beta-note";
 import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex } from "./_lib/digest-data";
 
@@ -78,6 +79,8 @@ export default async function CollectionDigestIndexPage({
             {detail.name}
           </Link>
         </nav>
+
+        <DigestBetaNote className="mt-4" />
 
         <h1 className="mt-4 text-balance text-[28px] font-bold tracking-tight text-[var(--fg)]">
           {detail.name} weekly digests

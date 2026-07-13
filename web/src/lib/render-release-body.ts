@@ -60,19 +60,32 @@ export type BodyRenderable = {
 const IMG_CLASS =
   "rounded-md outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 max-w-full h-auto my-2 max-h-80 object-contain";
 
+/** Heading demotion levels — same meaning as `markdownComponents.demoteHeadings`. */
+export type DemoteHeadings = 0 | 1 | 2;
+
+type RehypeBodyOpts = {
+  variant: BodyVariant;
+  /** Default `2` (card/changelog pipeline). Digests use `0` so `###` stays h3. */
+  demoteHeadings?: DemoteHeadings;
+};
+
 /**
  * rehype transform reproducing the `markdownComponents` element overrides:
- * demote headings by 2 (release cards own their h2), sanitize/strip images per
- * variant, and unwrap unsafe links while marking safe ones as external UGC.
+ * optional heading demotion (cards own their h2 → demote 2), sanitize/strip
+ * images per variant, and unwrap unsafe links while marking safe ones as
+ * external UGC.
  */
-function rehypeReleaseBody(variant: BodyVariant) {
+function rehypeReleaseBody(opts: RehypeBodyOpts) {
+  const { variant, demoteHeadings = 2 } = opts;
   return (tree: any) => {
     visit(tree, "element", (node: any, index: any, parent: any) => {
       const tag = node.tagName as string;
 
       const heading = /^h([1-6])$/.exec(tag);
       if (heading) {
-        node.tagName = `h${Math.min(Number(heading[1]) + 2, 6)}`;
+        if (demoteHeadings > 0) {
+          node.tagName = `h${Math.min(Number(heading[1]) + demoteHeadings, 6)}`;
+        }
         return;
       }
 
@@ -110,16 +123,23 @@ function rehypeReleaseBody(variant: BodyVariant) {
  * Exported so the changelog viewer's server pipeline
  * ({@link file://./render-changelog-html.ts}) can render full changelog slices
  * through the exact same stack, keeping shiki + react-markdown off those routes'
- * client bundles (#1919). The `"full"` variant reproduces
- * `markdownComponents({ demoteHeadings: 2 })` byte-for-byte — same heading
- * demotion, same image class, same external-link handling.
+ * client bundles (#1919). Default demotion is `2` (card body / changelog); pass
+ * `demoteHeadings: 0` for standalone pages whose h1 is already outside the body
+ * (collection digests).
  */
-export function renderBodyMarkdownToHtml(content: string, variant: BodyVariant): string {
+export function renderBodyMarkdownToHtml(
+  content: string,
+  variant: BodyVariant,
+  opts?: { demoteHeadings?: DemoteHeadings },
+): string {
   return unified()
     .use(remarkParse)
     .use(remarkPlugins)
     .use(remarkRehype)
-    .use(rehypeReleaseBody, variant)
+    .use(rehypeReleaseBody, {
+      variant,
+      demoteHeadings: opts?.demoteHeadings ?? 2,
+    })
     .use([rehypeShikiPlugin])
     .use(rehypeStringify)
     .processSync(content)
