@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { clamp, isHeroImageResponse, isJunkMediaUrl } from "./og-helpers";
+import { OG_BODY_FAMILY, OG_BODY_FONT } from "./og-body-font";
 import { PIXEL_WORDMARK_FAMILY, PIXEL_WORDMARK_FONT, pixelWordmark } from "./og-pixel-font";
 
 export { formatCount, formatDate, stripMarkdown } from "./og-helpers";
@@ -29,10 +30,14 @@ export const OG_CACHE_FALLBACK = { "Cache-Control": "no-store" } as const;
 /** Optional passthrough to the underlying `ImageResponse` (headers only). */
 export type OgResponseInit = { headers?: Record<string, string> };
 
-// The pixel face is registered on every OG response but PUA-encoded, so it only
-// ever renders the wordmark (which shifts its chars into the PUA via
-// `pixelWordmark`); all other text falls through to next/og's default font.
+// Passing any `fonts` array makes Satori drop next/og's built-in default face,
+// so we re-supply it explicitly. Order matters: Satori treats the FIRST font as
+// the global default for unmatched families, so Geist (next/og's own default,
+// what titles/metrics use today) must come first and the pixel face second. The
+// pixel face is PUA-encoded, so it only ever renders the wordmark (which shifts
+// its chars into the PUA via `pixelWordmark`) — every other glyph stays Geist.
 const OG_FONTS = [
+  { name: OG_BODY_FAMILY, data: OG_BODY_FONT, weight: 400 as const, style: "normal" as const },
   {
     name: PIXEL_WORDMARK_FAMILY,
     data: PIXEL_WORDMARK_FONT,
