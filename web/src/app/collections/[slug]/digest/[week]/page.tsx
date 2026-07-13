@@ -6,6 +6,7 @@ import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import type { DigestCoveredRelease } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
+import { BreadcrumbHome } from "@/components/breadcrumb-home";
 import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
@@ -197,9 +198,7 @@ export default async function CollectionDigestPage({
           aria-label="Breadcrumb"
           className="flex flex-wrap items-center gap-1.5 text-[13px] text-[var(--fg-3)]"
         >
-          <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
-            Home
-          </Link>
+          <BreadcrumbHome />
           <span className="text-[var(--line-2)]" aria-hidden>
             /
           </span>
@@ -251,9 +250,32 @@ export default async function CollectionDigestPage({
         </div>
 
         {orgGroups.length > 0 && (
-          <section className="mt-12 border-t border-[var(--line-2)] pt-8">
-            <h2 className="text-[15px] font-semibold text-[var(--fg)]">Releases covered</h2>
-            <div className="mt-4 flex flex-col gap-5">
+          // Native <details>: starts collapsed (less visual clutter) but the
+          // full link list stays in the HTML for crawlers and expand-on-demand.
+          <details className="group mt-12 border-t border-[var(--line-2)] pt-6">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-semibold text-[var(--fg)] transition-colors hover:text-[var(--fg-2)] [&::-webkit-details-marker]:hidden">
+              <svg
+                width="9"
+                height="9"
+                viewBox="0 0 9 9"
+                fill="none"
+                aria-hidden="true"
+                className="shrink-0 text-[var(--fg-3)] transition-transform group-open:rotate-90"
+              >
+                <path
+                  d="M2.5 1.5 L6 4.5 L2.5 7.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>Releases covered</span>
+              <span className="font-mono text-[11px] font-normal tabular-nums text-[var(--fg-3)]">
+                {digest.releases.length}
+              </span>
+            </summary>
+            <div className="mt-4 flex flex-col gap-5 pl-[17px]">
               {orgGroups.map((group) => (
                 <div key={group.slug}>
                   <div className="text-[13px] font-medium text-[var(--fg-3)]">{group.name}</div>
@@ -272,7 +294,7 @@ export default async function CollectionDigestPage({
                 </div>
               ))}
             </div>
-          </section>
+          </details>
         )}
 
         <DigestAdjacentNav prev={prev} next={next} />
