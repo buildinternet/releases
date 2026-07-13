@@ -2,6 +2,7 @@ import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
   AppStoreSourceInfoSchema,
+  ImportanceScoreSchema,
   MediaItemSchema,
   OrgStatusSchema,
   ReleaseThumbnailSchema,
@@ -109,6 +110,11 @@ export const SearchReleaseHitSchema = z.object({
   summary: z.string(),
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
+  /**
+   * AI-scored importance 1–5 (5=landmark, 1=housekeeping). Null when
+   * unscored; optional for older servers / mid-deploy pin tolerance.
+   */
+  importance: ImportanceScoreSchema,
   /**
    * Full markdown body. Omitted on list hits by default (summary + media
    * cover the card/snippet surfaces). Opt in with `?include_content=true`

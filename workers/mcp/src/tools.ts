@@ -2220,6 +2220,8 @@ export async function search(
     version: string | null;
     type: ReleaseType;
     publishedAt: string | null;
+    /** AI-scored importance 1–5; null when unscored. */
+    importance: number | null;
     sourceSlug: string;
     sourceName: string;
     orgSlug: string | null;
@@ -2356,6 +2358,7 @@ export async function search(
           version: r.version,
           type: r.type,
           publishedAt: r.publishedAt,
+          importance: r.importance ?? null,
           sourceSlug: r.sourceSlug,
           sourceName: r.sourceName,
           orgSlug: r.orgSlug,
@@ -2483,6 +2486,9 @@ export async function search(
       if (hit.kind === "release") {
         const r = hit.release;
         const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.source.slug}` : r.source.id;
+        // Importance only when scored — same omit-when-null norm as feeds /
+        // get_release text (raw 1–5, not the ≥4 flame threshold).
+        const importanceLine = r.importance != null ? `  importance: ${r.importance}/5` : null;
         lines.push(
           [
             `- [release] **${r.title}**`,
@@ -2490,6 +2496,7 @@ export async function search(
             `  source: ${r.source.name} (${srcCoord}) | ${r.publishedAt ?? "N/A"}`,
             r.productSlug && r.orgSlug ? `  product: ${r.orgSlug}/${r.productSlug}` : null,
             r.version ? `  version: ${r.version}` : null,
+            importanceLine,
             `  ${r.summary}`,
           ]
             .filter(Boolean)
@@ -2517,8 +2524,9 @@ export async function search(
       const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       const productLine =
         r.productSlug && r.orgSlug ? `\n  product: ${r.orgSlug}/${r.productSlug}` : "";
+      const importanceLine = r.importance != null ? `\n  importance: ${r.importance}/5` : "";
       lines.push(
-        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}${productLine}\n  ${r.summary}`,
+        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}${productLine}${importanceLine}\n  ${r.summary}`,
       );
     }
     sections.push(lines.join("\n"));

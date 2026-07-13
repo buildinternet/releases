@@ -425,6 +425,7 @@ export async function resolveDigestCoveredReleases(
           titleGenerated: releasesVisible.titleGenerated,
           titleShort: releasesVisible.titleShort,
           version: releasesVisible.version,
+          importance: releasesVisible.importance,
           orgSlug: organizationsPublic.slug,
           orgName: organizationsPublic.name,
         })
@@ -453,6 +454,7 @@ export async function resolveDigestCoveredReleases(
           version: r.version,
         }),
         org: { slug: r.orgSlug, name: r.orgName },
+        importance: r.importance ?? null,
       },
     ];
   });

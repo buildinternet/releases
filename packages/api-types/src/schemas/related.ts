@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ImportanceScoreSchema } from "./shared.js";
 
 /**
  * Anchor scope for related-* lookups. `org` filters the Vectorize query by
@@ -38,6 +39,11 @@ export const RelatedReleaseItemSchema = z.object({
   summary: z.string(),
   titleGenerated: z.string().nullable(),
   titleShort: z.string().nullable(),
+  /**
+   * AI-scored importance 1–5 (5=landmark, 1=housekeeping). Null when
+   * unscored; optional for older servers / mid-deploy pin tolerance.
+   */
+  importance: ImportanceScoreSchema,
   thumbnail: RelatedReleaseThumbnailSchema.nullable(),
   score: z.number(),
   source: RelatedReleaseSourceSchema,

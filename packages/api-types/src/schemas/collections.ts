@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ReleaseItemSchema } from "./shared.js";
+import { ImportanceScoreSchema, ReleaseItemSchema } from "./shared.js";
 
 /**
  * One org as it appears inside a collection's preview list or detail page.
@@ -275,6 +275,12 @@ export const DigestCoveredReleaseSchema = z.object({
   title: z.string(),
   path: z.string(),
   org: z.object({ slug: z.string(), name: z.string() }),
+  /**
+   * AI-scored importance 1–5. Null when unscored; optional for older
+   * servers. Cheap to project on the existing hydrate — powers the flame
+   * marker on the collapsed "Releases covered" list.
+   */
+  importance: ImportanceScoreSchema,
 });
 
 /** Full row returned by `GET /v1/collections/:slug/digests/:weekStart`. */

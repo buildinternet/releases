@@ -648,6 +648,8 @@ export interface RelatedReleaseItem {
   summary: string;
   titleGenerated: string | null;
   titleShort: string | null;
+  /** AI-scored importance 1–5; null when unscored. Optional for older servers. */
+  importance?: number | null;
   thumbnail: { url: string; alt?: string } | null;
   score: number;
   source: {

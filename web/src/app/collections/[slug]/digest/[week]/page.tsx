@@ -11,6 +11,7 @@ import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
 import { DigestFormatLinks } from "@/components/digest-format-links";
+import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
@@ -288,7 +289,8 @@ export default async function CollectionDigestPage({
                   <div className="text-[13px] font-medium text-[var(--fg-3)]">{group.name}</div>
                   <ul className="mt-1.5 flex flex-col gap-1">
                     {group.items.map((r) => (
-                      <li key={r.id}>
+                      <li key={r.id} className="flex items-baseline gap-1.5">
+                        <ImportanceMarker importance={r.importance} />
                         <Link
                           href={r.path}
                           className="text-[14px] text-[var(--fg-2)] transition-colors hover:text-[var(--accent)]"

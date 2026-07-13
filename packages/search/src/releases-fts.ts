@@ -50,6 +50,11 @@ export interface RawSearchReleaseRow {
    *  only on rows predating the column. Optional because the hybrid (Vectorize)
    *  hit-builder path constructs rows without it. */
   breaking?: string | null;
+  /**
+   * AI-scored importance 1–5; null when unscored. Optional so hybrid
+   * hit-builders that construct rows without it still type-check mid-deploy.
+   */
+  importance?: number | null;
   /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
   coverageCount: number;
 }
@@ -128,6 +133,7 @@ export async function searchReleasesFts(
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.breaking as breaking,
+           r.importance as importance,
            ${contentSelect}
            r.media as media,
            r.published_at as publishedAt,

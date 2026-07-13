@@ -315,6 +315,7 @@ export async function searchReleasesFromMatchedEntities(
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.breaking as breaking,
+           r.importance as importance,
            ${contentSelect}
            r.media as media,
            r.published_at as publishedAt,

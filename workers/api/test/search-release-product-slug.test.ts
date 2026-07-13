@@ -1,8 +1,7 @@
 /**
- * `productSlug` on release search hits (#product-pages-default-unit Phase 2).
- * The lexical release query selects the owning product's slug, and
- * `hydrateReleaseHit` forwards it to the wire shape so the web search byline
- * can link to the product page instead of the source.
+ * `productSlug` + `importance` on release search hits.
+ * The lexical release query selects the owning product's slug and the AI
+ * importance score; `hydrateReleaseHit` forwards both to the wire shape.
  */
 import { describe, it, expect, beforeEach } from "bun:test";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
@@ -48,6 +47,7 @@ beforeEach(async () => {
       content: "x",
       url: "https://acme.test/x/1",
       publishedAt: "2026-04-20T00:00:00Z",
+      importance: 5,
     },
     {
       id: "rel_orphan",
@@ -56,6 +56,7 @@ beforeEach(async () => {
       content: "b",
       url: "https://acme.test/blog/1",
       publishedAt: "2026-04-21T00:00:00Z",
+      importance: null,
     },
   ]);
 });
@@ -76,5 +77,27 @@ describe("release-hit productSlug", () => {
     const raw = rows.find((r) => r.id === "rel_x")!;
     const hit = hydrateReleaseHit(raw, "https://media.releases.sh");
     expect(hit.productSlug).toBe("x");
+  });
+});
+
+describe("release-hit importance", () => {
+  it("selects importance for scored and unscored rows", async () => {
+    const rows = await searchReleasesFromMatchedEntities(asD1(testDb.db), ["acme"], [], 50);
+    expect(rows.find((r) => r.id === "rel_x")?.importance).toBe(5);
+    expect(rows.find((r) => r.id === "rel_orphan")?.importance ?? null).toBeNull();
+  });
+
+  it("hydrateReleaseHit forwards importance, null when unscored", async () => {
+    const rows = await searchReleasesFromMatchedEntities(asD1(testDb.db), ["acme"], [], 50);
+    const scored = hydrateReleaseHit(
+      rows.find((r) => r.id === "rel_x")!,
+      "https://media.releases.sh",
+    );
+    const unscored = hydrateReleaseHit(
+      rows.find((r) => r.id === "rel_orphan")!,
+      "https://media.releases.sh",
+    );
+    expect(scored.importance).toBe(5);
+    expect(unscored.importance).toBeNull();
   });
 });
