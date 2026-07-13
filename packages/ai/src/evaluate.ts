@@ -1,6 +1,6 @@
 import { logger } from "@buildinternet/releases-lib/logger";
 import type { EvaluationResult } from "@buildinternet/releases-api-types";
-import { detectProvider, type DetectedProvider } from "./providers.js";
+import { detectProvider, type DetectedProvider } from "./providers/index.js";
 import { discoverFeed, probeFeedPath } from "@releases/adapters/feed";
 import type { SourceMetadata } from "@releases/adapters/source-meta";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
