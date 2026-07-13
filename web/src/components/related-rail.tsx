@@ -2,6 +2,7 @@ import Link from "next/link";
 import { api, type RelatedReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { clamp, stripMarkdown } from "@/lib/og-helpers";
+import { ImportanceMarker } from "./importance-marker";
 
 interface RelatedRailProps {
   anchorReleaseId: string | null;
@@ -122,43 +123,50 @@ function ReleaseCard({ item }: ReleaseCardProps) {
   // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
   const trailingName = item.source.productName ?? item.source.name;
   return (
-    <Link href={href} className={CARD_CLASS}>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <span className={HEADLINE_CLASS}>{heading}</span>
-          {item.publishedAt && (
-            <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
-              {formatDate(item.publishedAt)}
-            </span>
-          )}
-        </div>
-        {subtitleText && (
-          <div className="text-[12px] text-stone-600 dark:text-stone-400 line-clamp-1 mt-0.5">
-            {subtitleText}
+    // Marker sits outside the card link so the HoverCard trigger isn't nested
+    // inside an <a> (same rule as feed cards: flame sibling of title link).
+    <div className={`${CARD_CLASS} items-start`}>
+      <ImportanceMarker importance={item.importance} className="mt-0.5" />
+      <Link href={href} className="flex flex-1 gap-3 min-w-0 h-full">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className={HEADLINE_CLASS}>{heading}</span>
+            {item.publishedAt && (
+              <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
+                {formatDate(item.publishedAt)}
+              </span>
+            )}
           </div>
-        )}
-        {preview && (
-          <p className="text-[12px] text-stone-500 dark:text-stone-400 mt-1 line-clamp-2 text-pretty">
-            {preview}
-          </p>
-        )}
-        <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
-          {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
-          <span className="line-clamp-1">{attributionLine(item.source.orgName, trailingName)}</span>
+          {subtitleText && (
+            <div className="text-[12px] text-stone-600 dark:text-stone-400 line-clamp-1 mt-0.5">
+              {subtitleText}
+            </div>
+          )}
+          {preview && (
+            <p className="text-[12px] text-stone-500 dark:text-stone-400 mt-1 line-clamp-2 text-pretty">
+              {preview}
+            </p>
+          )}
+          <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
+            {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
+            <span className="line-clamp-1">
+              {attributionLine(item.source.orgName, trailingName)}
+            </span>
+          </div>
         </div>
-      </div>
-      {item.thumbnail && (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={item.thumbnail.url}
-          alt={item.thumbnail.alt ?? ""}
-          className={CARD_IMAGE_CLASS}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-        />
-      )}
-    </Link>
+        {item.thumbnail && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={item.thumbnail.url}
+            alt={item.thumbnail.alt ?? ""}
+            className={CARD_IMAGE_CLASS}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
+        )}
+      </Link>
+    </div>
   );
 }
 

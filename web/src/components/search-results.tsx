@@ -58,6 +58,7 @@ import { appRowInfoFromWire, type AppRowInfo } from "@/lib/app-source";
 import { videoRowInfoFromWire, type VideoRowInfo } from "@/lib/video-source";
 import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
+import { ImportanceMarker } from "./importance-marker";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
 import { productPath, sourcePath, sourceOrProductPath } from "@/lib/links";
@@ -202,6 +203,7 @@ function ResultCard({
   appStore,
   video,
   version,
+  importance,
 }: {
   kindLabel?: string;
   title: string;
@@ -227,6 +229,8 @@ function ResultCard({
   // for non-video hits. #1206
   video?: VideoRowInfo | null;
   version?: string | null;
+  /** AI-scored importance; flame renders only at 4–5 (same rule as feeds). */
+  importance?: number | null;
 }) {
   return (
     <div className="group/item border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4">
@@ -244,6 +248,8 @@ function ResultCard({
             className="self-center"
           />
         )}
+        {/* Marker sits outside the title link — same pattern as feed cards. */}
+        <ImportanceMarker importance={importance} />
         <Link
           href={titleHref}
           className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
@@ -385,6 +391,7 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
       appStore={appStore}
       video={video}
       version={hit.version}
+      importance={hit.importance}
     >
       {body.trim() ? (
         <div className={resultMarkdownClasses}>

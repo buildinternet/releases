@@ -264,6 +264,7 @@ async function hydrateReleaseNeighbors(
     contentChars: number;
     titleGenerated: string | null;
     titleShort: string | null;
+    importance: number | null;
     media: string | null;
     sourceId: string;
     sourceSlug: string;
@@ -282,6 +283,7 @@ async function hydrateReleaseNeighbors(
            COALESCE(r.content_chars, LENGTH(r.content), LENGTH(r.summary), 0) as contentChars,
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
+           r.importance as importance,
            r.media as media,
            s.id as sourceId,
            s.slug as sourceSlug,
@@ -340,6 +342,7 @@ async function hydrateReleaseNeighbors(
         summary: row.summary,
         titleGenerated: row.titleGenerated,
         titleShort: row.titleShort,
+        importance: row.importance ?? null,
         thumbnail: firstImageThumbnail(row.media, mediaOrigin),
         score: m.score,
         source: {
