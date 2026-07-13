@@ -23,19 +23,9 @@ export const revalidate = 900;
 const SITE_URL = "https://releases.sh";
 const MAX_TITLE_LEN = 70;
 
-/** Match release detail / overview prose: code chips, heading scale, no fake backticks. */
-const DIGEST_PROSE_CLASS =
-  "prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed " +
-  "prose-headings:tracking-tight " +
-  "[&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-[18px] [&_h2]:font-semibold " +
-  "[&_h3]:mt-7 [&_h3]:mb-2 [&_h3]:text-[16px] [&_h3]:font-semibold " +
-  "[&_h4]:mt-5 [&_h4]:mb-1.5 [&_h4]:text-[15px] [&_h4]:font-semibold " +
-  "[&_p]:my-3 [&_ul]:my-3 [&_ul]:pl-5 [&_li]:my-1 " +
-  "[&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline hover:[&_a]:underline " +
-  "[&_code]:text-[13.5px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 " +
-  "[&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono " +
-  "[&_code::before]:content-none [&_code::after]:content-none " +
-  "[&_pre]:my-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0";
+// Same base as docs / markdown pages (`markdown-page.tsx`, docs layout): let
+// `@tailwindcss/typography` own heading scale; only override code chips.
+// (Feed cards use denser `[&_h*]` chains — wrong for a full article body.)
 
 function weekRangeLabel(weekStart: string): string {
   const start = new Date(`${weekStart}T00:00:00Z`);
@@ -239,7 +229,7 @@ export default async function CollectionDigestPage({
         </p>
 
         <div
-          className={DIGEST_PROSE_CLASS}
+          className="prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed prose-headings:tracking-tight prose-a:text-stone-600 dark:prose-a:text-stone-400 prose-a:no-underline hover:prose-a:underline prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono"
           // Sanitized server-side — see the renderBodyMarkdownToHtml call above.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
