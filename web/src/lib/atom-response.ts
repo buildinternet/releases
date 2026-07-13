@@ -7,6 +7,7 @@ import type {
   CollectionDetail,
   CollectionReleasesResponse,
   CategoryReleasesResponse,
+  CollectionWeeklyDigestListItem,
 } from "@/lib/api";
 import {
   sourceToAtom,
@@ -14,6 +15,7 @@ import {
   productReleasesToAtom,
   collectionReleasesToAtom,
   categoryReleasesToAtom,
+  collectionDigestsToAtom,
 } from "@/lib/atom";
 import { atomEtag, formatLastModified, shouldReturn304 } from "@releases/rendering/atom-http";
 import { getBaseUrl } from "@/lib/base-url";
@@ -95,6 +97,27 @@ export function collectionAtomResponse(
     { baseUrl },
   );
   const lastModified = feed.releases[0]?.publishedAt ?? null;
+  return atomResponse(request, body, { lastModified });
+}
+
+/** Atom feed of weekly digests for a collection (`…/digest.atom`). */
+export function collectionDigestsAtomResponse(
+  request: NextRequest,
+  collection: Pick<CollectionDetail, "slug" | "name" | "description">,
+  digests: CollectionWeeklyDigestListItem[],
+): NextResponse {
+  const baseUrl = getBaseUrl(request);
+  const body = collectionDigestsToAtom(
+    {
+      collectionSlug: collection.slug,
+      collectionName: collection.name,
+      description: collection.description,
+      digests,
+    },
+    { baseUrl },
+  );
+  // List is newest-first; first row's generatedAt is the freshest.
+  const lastModified = digests[0]?.generatedAt ?? null;
   return atomResponse(request, body, { lastModified });
 }
 

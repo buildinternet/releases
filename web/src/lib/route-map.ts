@@ -23,6 +23,25 @@ export function routeMap(pathname: string): string | null {
   const release = pathname.match(/^\/release\/([^/]+)$/);
   if (release) return `/api/format/release/${release[1]}`;
 
+  // Collection weekly digests — longer paths must win before the generic
+  // 1–2 segment org/source fallback (and before the collection itself).
+  const digestWeek = pathname.match(/^\/collections\/([^/]+)\/digest\/([^/]+)$/);
+  if (digestWeek) {
+    return `/api/format/collections/${digestWeek[1]}/digest/${digestWeek[2]}`;
+  }
+  const digestIndex = pathname.match(/^\/collections\/([^/]+)\/digest$/);
+  if (digestIndex) {
+    return `/api/format/collections/${digestIndex[1]}/digest`;
+  }
+
+  // Collection + category release feeds (2-segment under reserved prefixes).
+  // These live outside the generic org/source map below because `collections`
+  // / `categories` are reserved top-level segments.
+  const collection = pathname.match(/^\/collections\/([^/]+)$/);
+  if (collection) return `/api/format/collections/${collection[1]}`;
+  const category = pathname.match(/^\/categories\/([^/]+)$/);
+  if (category) return `/api/format/categories/${category[1]}`;
+
   const product = pathname.match(/^\/([^/]+)\/product\/([^/]+)$/);
   if (product) return `/api/format/${product[1]}/product/${product[2]}`;
 

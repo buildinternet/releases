@@ -5,6 +5,7 @@ import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { SetupMessage } from "@/components/setup-message";
 import { BreadcrumbHome } from "@/components/breadcrumb-home";
 import { DigestBetaNote } from "@/components/digest-beta-note";
+import { DigestFormatLinks } from "@/components/digest-format-links";
 import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex } from "./_lib/digest-data";
 
@@ -22,7 +23,13 @@ export async function generateMetadata({
     return {
       title: `${detail.name} weekly digests`,
       description: `Past weekly digests summarizing what shipped across ${detail.name}.`,
-      alternates: { canonical: path },
+      alternates: {
+        canonical: path,
+        // Atom only — same as org/collection pages. md/json are export chips.
+        types: {
+          "application/atom+xml": [{ url: `${path}.atom`, title: `${detail.name} weekly digests` }],
+        },
+      },
       openGraph: { type: "website", url: path },
     };
   } catch {
@@ -84,6 +91,7 @@ export default async function CollectionDigestIndexPage({
         <h1 className="mt-4 text-balance text-[28px] font-bold tracking-tight text-[var(--fg)]">
           {detail.name} weekly digests
         </h1>
+        <DigestFormatLinks path={`/collections/${slug}/digest`} className="mt-3" />
 
         {digests.length === 0 ? (
           <p className="mt-6 text-[14px] text-[var(--fg-3)]">

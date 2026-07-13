@@ -12,6 +12,7 @@ import type {
   OrgReleaseItem,
   CollectionReleaseItem,
   ReleaseLatestItem,
+  CollectionWeeklyDigestListItem,
 } from "@buildinternet/releases-api-types";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 
@@ -403,6 +404,75 @@ export function collectionReleasesToAtom(
     },
     opts,
   );
+}
+
+/**
+ * Atom feed of weekly collection digests (`/collections/:slug/digest.atom`).
+ * Aggregate only — same pattern as org/source/collection release feeds. There
+ * is no per-week Atom document; individual digests are md/json like overviews.
+ */
+export function collectionDigestsToAtom(
+  params: {
+    collectionSlug: string;
+    collectionName: string;
+    description?: string | null;
+    digests: Array<
+      Pick<CollectionWeeklyDigestListItem, "weekStart" | "title" | "intro" | "generatedAt">
+    >;
+  },
+  opts: AtomFeedOptions,
+): string {
+  const indexPath = `${opts.baseUrl}/collections/${params.collectionSlug}/digest`;
+  const digests = params.digests.slice(0, ATOM_DEFAULT_MAX_ENTRIES);
+
+  const entryXml = digests.map((d) => {
+    const pageUrl = `${indexPath}/${d.weekStart}`;
+    const updated = toRfc3339(d.generatedAt) ?? new Date(0).toISOString();
+    // Stable id on the week path (not title) so a re-title doesn't re-notify.
+    const parts: string[] = ["  <entry>"];
+    parts.push(`    <id>${escapeXml(pageUrl)}</id>`);
+    parts.push(`    <title>${escapeXml(d.title)}</title>`);
+    parts.push(`    <link rel="alternate" type="text/html" href="${escapeAttr(pageUrl)}" />`);
+    parts.push(
+      `    <link rel="alternate" type="text/markdown" href="${escapeAttr(`${pageUrl}.md`)}" />`,
+    );
+    parts.push(`    <updated>${updated}</updated>`);
+    parts.push(`    <published>${updated}</published>`);
+    parts.push(`    <author><name>${escapeXml(params.collectionName)}</name></author>`);
+    parts.push(`    <category term="digest" label="Weekly digest" />`);
+    if (d.intro) {
+      parts.push(`    <summary>${escapeXml(d.intro)}</summary>`);
+      parts.push(`    <content type="text">${escapeXml(d.intro)}</content>`);
+    }
+    parts.push("  </entry>");
+    return { xml: parts.join("\n"), updated };
+  });
+
+  const mostRecent = entryXml
+    .map((e) => e.updated)
+    .filter(Boolean)
+    .toSorted()
+    .toReversed()[0];
+  const feedUpdated = mostRecent ?? new Date().toISOString();
+
+  const header = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<feed xmlns="http://www.w3.org/2005/Atom" xmlns:sy="http://purl.org/rss/1.0/modules/syndication/">',
+    `  <id>${escapeXml(feedId("collection-digest", params.collectionSlug, opts.baseUrl))}</id>`,
+    `  <title>${escapeXml(`${params.collectionName} — weekly digests`)}</title>`,
+    `  <subtitle>${escapeXml(
+      params.description ?? `Weekly editorial digests for ${params.collectionName}`,
+    )}</subtitle>`,
+    `  <link rel="self" type="application/atom+xml" href="${escapeAttr(`${indexPath}.atom`)}" />`,
+    `  <link rel="alternate" type="text/html" href="${escapeAttr(indexPath)}" />`,
+    `  <updated>${feedUpdated}</updated>`,
+    `  <author><name>${escapeXml(params.collectionName)}</name></author>`,
+    '  <generator uri="https://releases.sh">releases.sh</generator>',
+    "  <sy:updatePeriod>weekly</sy:updatePeriod>",
+    "  <sy:updateFrequency>1</sy:updateFrequency>",
+  ].join("\n");
+
+  return `${header}\n${entryXml.map((e) => e.xml).join("\n")}\n</feed>\n`;
 }
 
 function buildOverviewEntry(

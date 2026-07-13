@@ -4,6 +4,7 @@ export {
   productReleasesToAtom,
   collectionReleasesToAtom,
   categoryReleasesToAtom,
+  collectionDigestsToAtom,
   ATOM_DEFAULT_MAX_ENTRIES,
 } from "@releases/rendering/atom";
 
