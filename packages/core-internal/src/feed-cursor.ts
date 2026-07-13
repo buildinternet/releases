@@ -32,6 +32,12 @@ export type AggregateReleaseRow = {
   content_tokens?: number | null;
   title_generated: string | null;
   title_short: string | null;
+  /**
+   * AI-scored importance 1–5 (`releases.importance`). Null when unscored.
+   * Selected on every cross-org feed so collection/category UIs can show the
+   * flame marker (4–5) without a detail-page round trip.
+   */
+  importance: number | null;
   published_at: string | null;
   fetched_at: string;
   url: string | null;

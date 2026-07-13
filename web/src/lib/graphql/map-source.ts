@@ -30,6 +30,8 @@ export type MappedRelease = {
   fetchedAt: string;
   titleGenerated: string | null;
   titleShort: string | null;
+  /** AI-scored importance 1–5; null when unscored. */
+  importance?: number | null;
   content: string;
   summary: string;
   media: MediaItem[];
@@ -132,6 +134,7 @@ function mapRelease(
     fetchedAt: r.fetchedAt,
     titleGenerated: r.titleGenerated,
     titleShort: r.titleShort,
+    importance: r.importance ?? null,
     content: r.content,
     // ReleaseItemSchema.summary is required on the wire; GraphQL's is
     // nullable (most rows are unpopulated). Fall back to an empty string —

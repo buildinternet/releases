@@ -13,6 +13,7 @@ import { normalizeVersionLabel } from "@/lib/release-title";
 import { isTag, rollupTags, type TagListItem } from "@/components/collection-timeline-rollup";
 import { DigestCard } from "./digest-card";
 import { FeedTokenCard } from "./feed-token-card";
+import { ImportanceMarker } from "@/components/importance-marker";
 import type {
   Follow,
   PersonalizedFeedResponse,
@@ -476,7 +477,8 @@ function FeedCommitRow({
           {productLabel}
         </span>
       </span>
-      <span className="whitespace-nowrap rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[12px] font-medium text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[12px] font-medium text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100">
+        <ImportanceMarker importance={release.importance} />
         {versionLabel}
       </span>
       <span
@@ -500,12 +502,15 @@ function FeedRow({ item, orgChips }: { item: ReleaseLatestItem; orgChips: Map<st
 
   return (
     <li className="rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
-      <Link
-        href={`/release/${item.id}`}
-        className="text-[15px] font-semibold leading-snug text-stone-900 underline-offset-2 hover:underline dark:text-stone-100"
-      >
-        {displayTitle}
-      </Link>
+      <div className="flex items-baseline gap-1.5">
+        <ImportanceMarker importance={item.importance} />
+        <Link
+          href={`/release/${item.id}`}
+          className="text-[15px] font-semibold leading-snug text-stone-900 underline-offset-2 hover:underline dark:text-stone-100"
+        >
+          {displayTitle}
+        </Link>
+      </div>
 
       {item.summary && (
         <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">

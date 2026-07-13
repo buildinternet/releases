@@ -43,6 +43,7 @@ query CollectionPage($slug: String!, $releaseLimit: Int!) {
         content
         titleGenerated
         titleShort
+        importance
         prerelease
         media {
           type

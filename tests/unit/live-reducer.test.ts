@@ -158,6 +158,7 @@ describe("normalizers", () => {
       summary: null,
       titleGenerated: null,
       titleShort: null,
+      importance: null,
       media: [],
     });
   });
@@ -223,8 +224,35 @@ describe("normalizers", () => {
       summary: "We shipped a big launch.",
       titleGenerated: "ACME ships the big launch",
       titleShort: "Big launch is here",
+      importance: null,
       media: [{ type: "image", url: "https://cdn.example.com/hero.png" }],
       url: "https://example.com/blog/big",
     });
+  });
+
+  test("fromLatestItem carries AI-scored importance when present", () => {
+    const out = fromLatestItem({
+      id: "rel_c",
+      version: "2.0.0",
+      type: "feature",
+      title: "Landmark ship",
+      summary: null,
+      titleGenerated: null,
+      titleShort: null,
+      importance: 5,
+      publishedAt: "2026-04-23T12:00:00Z",
+      url: null,
+      media: [],
+      source: {
+        slug: "acme",
+        name: "ACME",
+        type: "github",
+        orgSlug: "acme",
+        orgName: "ACME",
+        orgAvatarUrl: null,
+        orgGithubHandle: null,
+      },
+    });
+    expect(out.importance).toBe(5);
   });
 });

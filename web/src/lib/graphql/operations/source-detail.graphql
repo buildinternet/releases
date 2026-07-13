@@ -55,6 +55,7 @@ query SourceDetail($id: String!, $releaseLimit: Int!) {
       fetchedAt
       titleGenerated
       titleShort
+      importance
       content
       summary
       media {

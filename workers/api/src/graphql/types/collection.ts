@@ -95,6 +95,11 @@ export const CollectionReleaseType = builder.objectType("CollectionRelease", {
     content: t.exposeString("content"),
     titleGenerated: t.exposeString("titleGenerated", { nullable: true }),
     titleShort: t.exposeString("titleShort", { nullable: true }),
+    importance: t.exposeInt("importance", {
+      nullable: true,
+      description:
+        "AI-scored release importance, 1 (housekeeping) to 5 (landmark). Null when unscored.",
+    }),
     prerelease: t.exposeBoolean("prerelease"),
     media: t.expose("media", { type: ["Media"] }),
     source: t.expose("source", { type: CollectionReleaseSourceType }),
@@ -154,6 +159,7 @@ function toCollectionRelease(row: ReturnType<typeof formatAggregateReleaseRow>):
     content: row.content ?? "",
     titleGenerated: row.titleGenerated ?? null,
     titleShort: row.titleShort ?? null,
+    importance: row.importance ?? null,
     prerelease: row.prerelease ?? false,
     media: row.media ?? [],
     source: row.source,
