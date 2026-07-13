@@ -20,6 +20,7 @@ import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollu
 import { Caret } from "./caret";
 import { pluralReleases } from "@/lib/formatters";
 import { deriveFeedTitle, normalizeVersionLabel } from "@/lib/release-title";
+import { ImportanceMarker } from "./importance-marker";
 
 interface CollectionTimelineProps {
   /**
@@ -907,7 +908,8 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
             {release.product.name}
           </div>
         )}
-        <h3 className="m-0 text-[18px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+        <h3 className="m-0 flex items-baseline gap-1.5 text-[18px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+          <ImportanceMarker importance={release.importance} />
           {release.id ? (
             <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
               {heading}
@@ -1014,6 +1016,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
   return (
     <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
       <div className="flex items-baseline gap-2 flex-wrap">
+        <ImportanceMarker importance={release.importance} />
         <span className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
           {release.id ? (
             <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
@@ -1167,7 +1170,8 @@ function CommitLogRow({ release }: { release: CollectionReleaseItemView }) {
       <span className="text-[12.5px] font-medium text-stone-700 dark:text-stone-200 truncate max-w-[140px]">
         {productLabel}
       </span>
-      <span className="font-mono text-[12px] font-medium text-stone-900 dark:text-stone-100 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded px-1.5 py-0.5 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 font-mono text-[12px] font-medium text-stone-900 dark:text-stone-100 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded px-1.5 py-0.5 whitespace-nowrap">
+        <ImportanceMarker importance={release.importance} />
         {versionLabel}
       </span>
       <button

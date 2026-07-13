@@ -101,6 +101,11 @@ type CollectionRelease {
   groupName: String!
   groupSlug: String!
   id: ID!
+
+  """
+  AI-scored release importance, 1 (housekeeping) to 5 (landmark). Null when unscored.
+  """
+  importance: Int
   media: [Media!]!
   org: CollectionReleaseOrg!
   prerelease: Boolean!

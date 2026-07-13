@@ -11,6 +11,7 @@ import { SourceTypeIcon } from "@/components/source-type-icon";
 import { FallbackImage } from "@/components/fallback-image";
 import { PlayBadge } from "@/components/play-badge";
 import { ExternalLinkIcon } from "@/components/external-link-icon";
+import { ImportanceMarker } from "@/components/importance-marker";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 import { isOptimizableImage } from "@/lib/sanitize";
@@ -173,6 +174,7 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
 
       {/* Headline + version */}
       <div className="mt-2.5 flex items-baseline gap-2 flex-wrap">
+        <ImportanceMarker importance={release.importance} />
         <h3 className="m-0 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
           <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
             {heading}

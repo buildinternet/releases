@@ -64,6 +64,7 @@ describe("release feed composition", () => {
       summary: "Notes.",
       title_generated: null,
       title_short: null,
+      importance: null,
       published_at: "2026-05-14T00:00:00Z",
       fetched_at: "2026-05-14T01:00:00Z",
       url: null,
@@ -111,6 +112,11 @@ describe("release feed composition", () => {
       );
       expect(item.groupSlug).toBe("codex-cli");
       expect(item.groupName).toBe("Codex CLI");
+    });
+
+    it("carries AI-scored importance through to the wire (null when unscored)", () => {
+      expect(formatAggregateReleaseRow(baseRow, "").importance).toBeNull();
+      expect(formatAggregateReleaseRow({ ...baseRow, importance: 5 }, "").importance).toBe(5);
     });
   });
 });

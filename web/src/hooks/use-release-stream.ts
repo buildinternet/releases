@@ -36,6 +36,12 @@ export type LiveRelease = {
   summary: string | null;
   titleGenerated: string | null;
   titleShort: string | null;
+  /**
+   * AI-scored importance 1–5. Usually null on brand-new live events (scored in
+   * the same post-insert summarize pass as the AI headlines); present on
+   * REST-backfilled rows from `/v1/releases/latest`.
+   */
+  importance?: number | null;
   /** Image/gif/inline-video media for the inline preview. */
   media: MediaItem[];
   url?: string;
@@ -139,6 +145,7 @@ export function fromStreamEvent(e: StreamEvent): LiveRelease {
     summary: r.summary ?? null,
     titleGenerated: r.titleGenerated ?? null,
     titleShort: r.titleShort ?? null,
+    importance: r.importance ?? null,
     media: r.media ?? [],
   };
 }
@@ -155,6 +162,7 @@ export function fromLatestItem(item: ReleaseLatestItem): LiveRelease {
     summary: item.summary ?? null,
     titleGenerated: item.titleGenerated ?? null,
     titleShort: item.titleShort ?? null,
+    importance: item.importance ?? null,
     media: item.media ?? [],
     url: item.url ?? undefined,
   };

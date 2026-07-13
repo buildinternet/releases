@@ -39,6 +39,7 @@ export function formatAggregateReleaseRow(
     summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
+    importance: r.importance ?? null,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,

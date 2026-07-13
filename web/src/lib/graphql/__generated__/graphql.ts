@@ -76,6 +76,7 @@ export type CollectionPageQuery = {
         content: string;
         titleGenerated: string | null;
         titleShort: string | null;
+        importance: number | null;
         prerelease: boolean;
         groupSlug: string;
         groupName: string;
@@ -494,6 +495,7 @@ export type SourceDetailQuery = {
       fetchedAt: string;
       titleGenerated: string | null;
       titleShort: string | null;
+      importance: number | null;
       content: string;
       summary: string | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
@@ -502,7 +504,7 @@ export type SourceDetailQuery = {
 };
 
 export const CollectionPageDocument = {
-  __meta__: { hash: "sha256:a3acd59c42280cd431d118861711c775337bc4727f0965614f34d7ab141a0a85" },
+  __meta__: { hash: "sha256:2cdd4a63d4f1cae66c04422da6ce48b4d1b5f3da9863c12715bd814a13d60b41" },
   kind: "Document",
   definitions: [
     {
@@ -635,6 +637,7 @@ export const CollectionPageDocument = {
                             { kind: "Field", name: { kind: "Name", value: "content" } },
                             { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
                             { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                            { kind: "Field", name: { kind: "Name", value: "importance" } },
                             { kind: "Field", name: { kind: "Name", value: "prerelease" } },
                             {
                               kind: "Field",
@@ -1819,7 +1822,7 @@ export const ReleaseDetailDocument = {
   ],
 } as unknown as DocumentNode<ReleaseDetailQuery, ReleaseDetailQueryVariables>;
 export const SourceDetailDocument = {
-  __meta__: { hash: "sha256:a9b727e50ab142ce7aa42763f0faa91f1b26aa4b7a9e974064c19d4f164a4b84" },
+  __meta__: { hash: "sha256:b8074661ec1ed044fa1b4d2c4d0fca0fc00785f8adcaa7eebc9f6bb0777c3513" },
   kind: "Document",
   definitions: [
     {
@@ -1962,6 +1965,7 @@ export const SourceDetailDocument = {
                       { kind: "Field", name: { kind: "Name", value: "fetchedAt" } },
                       { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
                       { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                      { kind: "Field", name: { kind: "Name", value: "importance" } },
                       { kind: "Field", name: { kind: "Name", value: "content" } },
                       { kind: "Field", name: { kind: "Name", value: "summary" } },
                       {

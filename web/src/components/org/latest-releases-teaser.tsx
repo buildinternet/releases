@@ -3,6 +3,7 @@ import type { OrgReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { pickReleaseThumb } from "@/lib/media";
 import { orgEyebrowClass } from "@releases/design-system";
+import { ImportanceMarker } from "../importance-marker";
 import { ReleaseThumb } from "../release-thumb";
 import { ArrowRightIcon, ChevronRightIcon } from "./icons";
 
@@ -49,7 +50,10 @@ export function LatestReleasesTeaser({
             >
               {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-semibold text-[var(--fg)]">{label}</div>
+                <div className="flex items-center gap-1.5 truncate text-[14px] font-semibold text-[var(--fg)]">
+                  <ImportanceMarker importance={r.importance} />
+                  <span className="truncate">{label}</span>
+                </div>
                 {meta && (
                   <div className="mt-0.5 truncate font-mono text-[11.5px] text-[var(--fg-3)]">
                     {meta}

@@ -59,6 +59,7 @@ function mapRelease(r: GqlRelease): CollectionReleaseItem {
     content: r.content,
     titleGenerated: r.titleGenerated,
     titleShort: r.titleShort,
+    importance: r.importance ?? null,
     prerelease: r.prerelease,
     media: mapMediaItems(r.media),
     source: {

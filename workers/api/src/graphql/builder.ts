@@ -67,6 +67,8 @@ export type CollectionRelease = {
   content: string;
   titleGenerated: string | null;
   titleShort: string | null;
+  /** AI-scored importance 1–5; null when unscored. */
+  importance: number | null;
   prerelease: boolean;
   media: MediaItem[];
   source: CollectionReleaseSource;
