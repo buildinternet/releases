@@ -44,7 +44,7 @@ export default async function CategoriesListPage() {
     <div className="min-h-screen">
       <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
         <PageHeader
-          breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}
+          breadcrumb={[{ label: "Home", href: "/" }]}
           title={TITLE}
           description={DESCRIPTION}
         />

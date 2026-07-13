@@ -106,7 +106,7 @@ export default async function CatalogPage({
       <JsonLd data={jsonLd} />
       <div className="mx-auto max-w-[1240px] px-6 pb-12 pt-8">
         <PageHeader
-          breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}
+          breadcrumb={[{ label: "Home", href: "/" }]}
           title={TITLE}
           description={DESCRIPTION}
         />

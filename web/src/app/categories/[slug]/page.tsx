@@ -121,17 +121,20 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
       <div className="max-w-5xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+        <nav
+          aria-label="Breadcrumb"
+          className="pt-5 text-[13px] text-stone-400 dark:text-stone-500"
+        >
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
             Home
           </Link>
-          <span className="mx-1.5">/</span>
+          <span className="mx-1.5" aria-hidden>
+            /
+          </span>
           <Link href="/categories" className="hover:text-stone-600 dark:hover:text-stone-300">
             Categories
           </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{title}</span>
-        </div>
+        </nav>
 
         <h1 className="text-[34px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
           {title}

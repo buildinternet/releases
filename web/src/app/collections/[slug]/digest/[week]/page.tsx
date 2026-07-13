@@ -8,8 +8,9 @@ import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
+import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
+import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
-import { weekOfLabel } from "../_lib/digest-format";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
 // sync with applyCacheInit's default (web/src/lib/api.ts).
@@ -164,24 +165,29 @@ export default async function CollectionDigestPage({
     <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
       <JsonLd data={jsonLd} />
       <article className="mx-auto max-w-[760px] px-6 pb-24 pt-5">
-        <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-[var(--fg-3)]">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex flex-wrap items-center gap-1.5 text-[13px] text-[var(--fg-3)]"
+        >
           <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
             Home
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--line-2)]" aria-hidden>
+            /
+          </span>
           <Link href="/collections" className="transition-colors hover:text-[var(--fg-2)]">
             Collections
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--line-2)]" aria-hidden>
+            /
+          </span>
           <Link
             href={`/collections/${slug}`}
             className="transition-colors hover:text-[var(--fg-2)]"
           >
             {detail.name}
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
-          <span className="text-[var(--fg-2)]">{weekOfLabel(weekStart)}</span>
-        </div>
+        </nav>
 
         <h1 className="mt-4 text-balance text-[32px] font-bold tracking-tight text-[var(--fg)]">
           {digest.title}
@@ -199,6 +205,10 @@ export default async function CollectionDigestPage({
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
         />
+
+        <div className="mt-4 border-t border-[var(--line)] pt-3 text-[11px] text-[var(--fg-3)]">
+          {AI_DIGEST_DISCLAIMER}
+        </div>
 
         {orgGroups.length > 0 && (
           <section className="mt-12 border-t border-[var(--line-2)] pt-8">

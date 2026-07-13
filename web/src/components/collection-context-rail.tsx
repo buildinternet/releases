@@ -1,23 +1,58 @@
+import Link from "next/link";
 import { ReportIssue } from "@/components/report-issue";
 import type { ReportContext } from "@/lib/report-issue";
+import type { CollectionWeeklyDigestListItem } from "@/lib/api";
+import { weekOfLabel } from "@/lib/digest-format";
 
 /**
- * Right-hand context rail for a collection page — mirrors the org feed's Export
- * + Report block. Member filtering lives in the timeline chip row (listing
- * members twice cluttered the header); scoped under `.org-surface` for the
- * same tokens. On narrow viewports the parent `flex-col md:flex-row` stacks
- * this under the feed (same shell as the org page).
+ * Right-hand context rail for a collection page — latest weekly digests,
+ * export formats, and report. Mirrors the org feed shell (`.org-surface`
+ * tokens; parent stacks under the feed on narrow viewports).
  */
 export function CollectionContextRail({
   formatPath,
   report,
+  digests = [],
 }: {
-  /** Path the export links hang off, e.g. `/collections/frontier-ai-labs`. */
+  /** Path export links hang off, e.g. `/collections/frontier-ai-labs`. */
   formatPath: string;
   report: ReportContext;
+  /** Newest-first recent digests (typically 2–3). Empty → section omitted. */
+  digests?: CollectionWeeklyDigestListItem[];
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-5 md:w-[268px] lg:sticky lg:top-20">
+      {digests.length > 0 && (
+        <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-[17px] py-4">
+          <RailEyebrow>Weekly digests</RailEyebrow>
+          <ul className="mt-3 flex flex-col gap-3.5">
+            {digests.map((d) => (
+              <li key={d.id}>
+                <Link href={`${formatPath}/digest/${d.weekStart}`} className="group/digest block">
+                  <div className="text-[11px] font-medium text-[var(--fg-3)]">
+                    {weekOfLabel(d.weekStart)}
+                  </div>
+                  <div className="mt-0.5 text-[13px] font-semibold leading-snug text-[var(--fg)] transition-colors group-hover/digest:text-[var(--accent)]">
+                    {d.title}
+                  </div>
+                  {d.intro && (
+                    <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[var(--fg-3)]">
+                      {d.intro}
+                    </p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href={`${formatPath}/digest`}
+            className="mt-3.5 inline-block text-[12px] text-[var(--fg-2)] underline decoration-[var(--line-2)] underline-offset-2 transition-colors hover:text-[var(--fg)] hover:decoration-[var(--fg-3)]"
+          >
+            Browse all digests →
+          </Link>
+        </div>
+      )}
+
       <div>
         <RailEyebrow className="ml-0.5">Export</RailEyebrow>
         <div className="mt-2.5 flex gap-2">

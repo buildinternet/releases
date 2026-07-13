@@ -176,14 +176,11 @@ export function FollowingClient({
 
   return (
     <div className="pb-16">
-      {/* Header treatment — mirrors the collection page shell. */}
-      <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+      <nav aria-label="Breadcrumb" className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
         <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
           Home
         </Link>
-        <span className="mx-1.5">/</span>
-        <span className="font-medium text-stone-600 dark:text-stone-300">Following</span>
-      </div>
+      </nav>
 
       <h1 className="mt-4 text-[34px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
         Following

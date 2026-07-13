@@ -71,14 +71,14 @@ export default async function OrgLayout({
   return (
     <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
       <div className="mx-auto max-w-[1300px] px-6">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]"
+        >
           <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
             Home
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
-          <span className="text-[var(--fg-2)]">{org.name}</span>
-        </div>
+        </nav>
 
         {/* Org header. Wraps on narrow screens so the Follow action drops
             below the name+meta instead of overlapping a squeezed title. */}

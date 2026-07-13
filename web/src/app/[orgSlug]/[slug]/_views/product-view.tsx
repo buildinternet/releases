@@ -156,17 +156,20 @@ export async function ProductView({
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
       <div className="max-w-5xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+        <nav
+          aria-label="Breadcrumb"
+          className="pt-5 text-[13px] text-stone-400 dark:text-stone-500"
+        >
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
             Home
           </Link>
-          <span className="mx-1.5">/</span>
+          <span className="mx-1.5" aria-hidden>
+            /
+          </span>
           <Link href={`/${orgSlug}`} className="hover:text-stone-600 dark:hover:text-stone-300">
             {orgName}
           </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{product.name}</span>
-        </div>
+        </nav>
 
         <div className="flex flex-col md:flex-row gap-10 mt-4">
           <div className="flex-1 min-w-0">
