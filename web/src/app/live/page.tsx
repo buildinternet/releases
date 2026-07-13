@@ -28,9 +28,7 @@ export default function LivePage() {
   return (
     <div className="min-h-screen">
       <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
-        <h1 className="font-pixel text-xl font-bold text-stone-900 dark:text-stone-100 mb-2">
-          {TITLE}
-        </h1>
+        <h1 className="font-pixel text-xl text-stone-900 dark:text-stone-100 mb-2">{TITLE}</h1>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-6">
           A live feed of product releases as they&rsquo;re fetched and indexed across every tracked
           source.

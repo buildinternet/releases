@@ -44,7 +44,7 @@ export default async function SearchPage({
     <SearchProvider initialQuery={q ?? ""} initialResults={results} initialRange={range}>
       <div className="min-h-screen">
         <div className="max-w-2xl mx-auto px-6 pt-12 pb-12">
-          <h1 className="font-pixel text-2xl font-semibold mb-4">Search</h1>
+          <h1 className="font-pixel text-2xl mb-4">Search</h1>
           <SearchBar />
           <div className="mt-2 flex justify-end">
             <SearchTimeframe />
