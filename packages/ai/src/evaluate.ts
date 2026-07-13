@@ -1,7 +1,7 @@
 import { logger } from "@buildinternet/releases-lib/logger";
 import type { EvaluationResult } from "@buildinternet/releases-api-types";
 import { detectProvider, type DetectedProvider } from "./providers.js";
-import { classifyFeedMime, discoverFeed } from "@releases/adapters/feed";
+import { discoverFeed, probeFeedPath } from "@releases/adapters/feed";
 import type { SourceMetadata } from "@releases/adapters/source-meta";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
@@ -74,28 +74,19 @@ async function tryProviderFeeds(
   const base = new URL(url);
   const changePath = base.pathname.replace(/\/$/, "");
 
-  // Build all candidate URLs (origin-relative + changelog-relative)
-  const candidates: string[] = [];
+  // Build candidate paths (origin-relative + changelog-relative), then probe
+  // each with the shared feed prober — it HEADs to classify by MIME and falls
+  // back to GET-and-sniff for feeds served as generic XML (e.g. Blume's
+  // /changelog/rss.xml). Origin-relative resolves feeds mounted at the site
+  // root; changelog-relative resolves feeds mounted under the changelog page.
+  const paths: string[] = [];
   for (const path of feedPaths) {
-    candidates.push(`${base.origin}${path}`);
-    const relative = `${base.origin}${changePath}${path}`;
-    if (relative !== `${base.origin}${path}`) candidates.push(relative);
+    paths.push(path);
+    const relative = `${changePath}${path}`;
+    if (relative !== path) paths.push(relative);
   }
 
-  // Probe all in parallel
-  const results = await Promise.allSettled(
-    candidates.map(async (feedUrl) => {
-      const res = await fetch(feedUrl, {
-        method: "HEAD",
-        headers: { "User-Agent": RELEASES_BOT_UA },
-        redirect: "follow",
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) return null;
-      const type = classifyFeedMime(res.headers.get("content-type") ?? "");
-      return type ? { url: feedUrl, type } : null;
-    }),
-  );
+  const results = await Promise.allSettled(paths.map((path) => probeFeedPath(base.origin, path)));
 
   for (const r of results) {
     if (r.status === "fulfilled" && r.value) return r.value;
