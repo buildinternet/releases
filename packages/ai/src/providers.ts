@@ -194,6 +194,37 @@ const PROVIDERS: ProviderDef[] = [
     },
   },
   {
+    id: "blume",
+    name: "Blume",
+    // Blume (github.com/haydenbleasel/blume) is a self-hosted Astro changelog/docs
+    // generator, not a hosted SaaS — sites deploy to their own domains (typically
+    // Vercel), so there's no reliable CNAME and no custom HTTP header. Detection
+    // rides on the inline anti-flash theme script Blume emits in <head>, which
+    // references the `blume-theme` localStorage key. Theme switching is a core
+    // (non-optional) Blume feature, so the marker is present on every page.
+    // NOT usable as markers: `data-blume-banner*` (only when the optional
+    // announcement banner is configured), `data-blume-search-*` / `#blume-content`
+    // (body-only — detectFromHttpSignals scans <head> only), and og:site_name
+    // "Blume" (present on the project's own dogfood site; self-hosters override it).
+    htmlPatterns: ["blume-theme", "data-blume-"],
+    hints: {
+      // Blume mounts the changelog at /changelog and serves RSS 2.0 at
+      // {changelogRoot}/rss.xml. Listing the absolute /changelog/rss.xml first
+      // resolves the feed even when onboarding from the site root — the feed
+      // autodiscovery <link> is only present on the /changelog page, not on /.
+      feedPaths: ["/changelog/rss.xml", "/rss.xml"],
+      changelogPaths: ["/changelog"],
+      preferredType: "feed",
+      // Astro serves fully pre-rendered HTML (content present without JS).
+      staticContent: true,
+      // markdownSuffix intentionally omitted: entry pages serve raw markdown at
+      // <entry>.md, but the changelog *index* .md 404s, so tryMarkdownSuffix on
+      // the index URL (the usual onboarding target) is a false negative. RSS
+      // items are body-less (title/link/guid/pubDate only), so the feed enricher
+      // follows each entry link for content — no markdown probe needed.
+    },
+  },
+  {
     id: "notion",
     name: "Notion (Super/Potion)",
     cnames: ["super.so", "potion.so"],

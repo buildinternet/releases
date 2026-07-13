@@ -7,6 +7,7 @@ How a source's published content becomes `releases` rows in the database — the
 Source `type` selects the fetch adapter: `github`, `scrape`, `feed`, `agent`, `appstore`.
 
 - The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare browser rendering + AI. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
+- Onboarding recognizes the hosting **platform** (Mintlify, Ghost, Blume, …) to pick the best route up front — known feed paths, `.md` mirrors, crawl patterns. Supported platforms and how to add a new one: [provider-detection.md](provider-detection.md).
 - `appstore` sources are materialized from an App Store listing via `POST /v1/sources/appstore` (resolves the iTunes listing, mints the first release, backfills the product icon) — see #1160; the CLI surface is `releases admin source create-appstore` (cli#247).
 
 `source.url` is the human-readable URL; machine fetch endpoints live in `source.metadata` (`feedUrl`, `githubUrl`, `crawlEnabled`, `firecrawl`, …) so display and ingest can diverge. See [remote-mode.md → Display URL vs. fetch routing](remote-mode.md).

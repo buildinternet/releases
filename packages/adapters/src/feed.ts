@@ -171,7 +171,13 @@ async function discoverFromHead(
   }
 }
 
-async function probeFeedPath(
+/**
+ * Probe a single candidate feed path: HEAD to classify by MIME, and when that's
+ * inconclusive but the response still looks feed-plausible, GET and sniff the
+ * body. Exported so provider-hint feed probing (`@releases/ai-internal/evaluate`)
+ * reuses the same dance instead of re-implementing it.
+ */
+export async function probeFeedPath(
   origin: string,
   path: string,
   fetchImpl: typeof fetch = fetch,
@@ -188,7 +194,14 @@ async function probeFeedPath(
   const feedType = classifyFeedMime(ct);
   if (feedType) return { url: probeUrl, type: feedType };
 
-  if (path.endsWith(".xml") || path.endsWith(".json") || path === "/feed" || path === "/rss") {
+  // HEAD didn't confirm a feed by MIME. GET-and-sniff when the path looks like a
+  // feed endpoint OR the response is generic XML (`application/xml` / `text/xml`).
+  // Many real feeds are served this way — Blume's `/changelog/rss.xml`, Fern's
+  // `/changelog.rss` — and `classifyFeedMime` can't recognize them from the
+  // header alone.
+  const feedLikePath =
+    /\.(xml|rss|atom|json)$/i.test(path) || /(^|\/)(feed|rss|atom)\/?$/i.test(path);
+  if (feedLikePath || /xml/i.test(ct)) {
     const getRes = await fetchImpl(probeUrl, {
       redirect: "follow",
       headers: {

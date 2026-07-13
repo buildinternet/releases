@@ -22,6 +22,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 | Add or change a REST endpoint                   | [routing.md](architecture/routing.md) for where it goes and how it paginates, [errors.md](architecture/errors.md) for how it fails                                                               |
 | Fork or self-host the workers                   | [deploy-coupling.md](architecture/deploy-coupling.md) — account-scoped IDs, secrets, and what degrades without them                                                                              |
 | Touch fetch/parse/insert behavior               | [ingest.md](architecture/ingest.md), then [remote-mode.md](architecture/remote-mode.md) for the scheduling around it                                                                             |
+| Add support for a new changelog platform        | [provider-detection.md](architecture/provider-detection.md) — supported platforms + the recipe for adding one                                                                                    |
 | Work on auth, tokens, or OAuth                  | [remote-mode.md → Auth model](architecture/remote-mode.md#auth-model)                                                                                                                            |
 | Add or change an MCP tool                       | [mcp.md](architecture/mcp.md) — and keep the WebMCP subset in sync (noted there)                                                                                                                 |
 | Change a D1 table                               | [remote-mode.md → Migrations](architecture/remote-mode.md#migrations), and remember schema ships to the CLI via [cli-distribution.md](architecture/cli-distribution.md)                          |
@@ -40,6 +41,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 
 - **[ingest.md](architecture/ingest.md)** — the per-item fetch → parse → insert path: adapter routing, dedup, backoff, exclusion/suppression, and the three ingest-time AI passes.
 - **[remote-mode.md](architecture/remote-mode.md)** — the API worker itself. The biggest doc, covering auth (all five credential lanes), rate limiting, caching, migrations, cron/Workflow scheduling, and the SourceActor/OrgActor Durable Objects.
+- **[provider-detection.md](architecture/provider-detection.md)** — recognizing the hosting platform behind a changelog (Mintlify, Ghost, Blume, …) to route ingestion: the detection pipeline, every supported platform, and the recipe for adding a new one.
 - **[extract.md](architecture/extract.md)** — how AI turns a fetched body into release records: one-shot for small bodies, a budgeted tool-use loop for large ones.
 - **[coverage.md](architecture/coverage.md)** — grouping several posts about the same launch under one canonical release; also the cron-run observability table and its alert emails.
 - **[events.md](architecture/events.md)** — the real-time side: the `ReleaseHub` Durable Object, the public WebSocket stream, and who consumes publish events (CLI tail, webhooks, cache invalidation).
