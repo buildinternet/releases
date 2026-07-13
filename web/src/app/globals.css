@@ -70,6 +70,20 @@
   background-color: oklch(0.444 0.011 286.3); /* stone-700 */
 }
 
+/* Geist Pixel display accent (geist/font/pixel, Square variant — bound in
+   layout.tsx). Used on the header wordmark and short proper-noun entity titles
+   (org / product names), NOT on running heads or long release titles where the
+   bitmap grid hurts legibility. It's a semi-mono bitmap face, so pin
+   letter-spacing to 0 (overriding any `tracking-*`) and disable subpixel
+   smoothing so the pixels stay crisp; JetBrains Mono is the fallback weight. */
+.font-pixel {
+  font-family:
+    var(--font-geist-pixel-square), var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo,
+    Monaco, "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 0;
+  -webkit-font-smoothing: none;
+}
+
 /* ── Code (inline + blocks) ── */
 .prose code {
   font-family: var(--font-mono);

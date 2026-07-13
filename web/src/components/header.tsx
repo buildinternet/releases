@@ -20,7 +20,7 @@ export function Header() {
     >
       <Link
         href="/"
-        className="font-bold text-base sm:text-lg tracking-tight text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2"
+        className="font-pixel font-bold text-base sm:text-lg text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2"
       >
         <svg viewBox="0 0 64 64" aria-hidden="true" className="h-5 w-5 shrink-0">
           <rect
@@ -50,11 +50,11 @@ export function Header() {
         </svg>
         releases.sh
         {isLocalDev ? (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-stone-950 bg-amber-400 rounded px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-stone-950 bg-amber-400 rounded px-1.5 py-0.5 leading-none">
             dev
           </span>
         ) : (
-          <span className="text-[10px] font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500 border border-stone-300 dark:border-stone-700 rounded px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500 border border-stone-300 dark:border-stone-700 rounded px-1.5 py-0.5 leading-none">
             preview
           </span>
         )}
