@@ -86,7 +86,7 @@ export default async function UpdatesPage() {
         <JsonLd data={jsonLd} />
         <header className="flex flex-col gap-4 border-b border-stone-200 pb-4 pt-8 sm:flex-row sm:items-end sm:justify-between dark:border-stone-800">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+            <h1 className="font-pixel text-[28px] font-bold text-stone-900 dark:text-stone-100">
               {TITLE}
             </h1>
             <p className="mt-1.5 max-w-[60ch] text-sm text-stone-500 dark:text-stone-400">

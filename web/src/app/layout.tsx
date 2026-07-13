@@ -1,6 +1,7 @@
 /// <reference types="react/canary" />
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
+import { GeistPixelSquare } from "geist/font/pixel";
 import Script from "next/script";
 import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -67,7 +68,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // landing partway down the destination instead of at the top. The attribute
   // restores Next's instant scroll-to-top on route changes while keeping smooth
   // scrolling for in-page anchors. See the Next.js 16 upgrade guide.
-  const htmlClassName = ["scroll-smooth", jetbrainsMono.variable].join(" ");
+  // GeistPixelSquare only registers the `--font-geist-pixel-square` CSS variable
+  // here; the `.font-pixel` class in globals.css binds it to the wordmark + short
+  // entity titles. Nothing renders pixel unless an element opts in.
+  const htmlClassName = ["scroll-smooth", jetbrainsMono.variable, GeistPixelSquare.variable].join(
+    " ",
+  );
 
   return (
     <html

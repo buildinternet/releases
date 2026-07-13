@@ -94,7 +94,7 @@ export default async function OrgLayout({
             </span>
           )}
           <div className="min-w-0 grow basis-[180px] pt-px">
-            <h1 className="text-[27px] font-semibold leading-tight tracking-tight text-[var(--fg)]">
+            <h1 className="font-pixel text-[27px] font-semibold leading-tight text-[var(--fg)]">
               {org.name}
             </h1>
             {metaParts.length > 0 && (
