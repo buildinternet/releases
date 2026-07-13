@@ -18,6 +18,8 @@ import type {
   OverviewPageItem,
   CollectionDetail,
   CollectionReleaseItem,
+  CollectionWeeklyDigestListItem,
+  CollectionWeeklyDigestDetail,
 } from "@buildinternet/releases-api-types";
 
 // Re-export under the old names for any callers still using them
@@ -570,6 +572,7 @@ export function collectionToMarkdown(
     lines.push(
       `- Aggregated release feed: \`${opts.baseUrl}/collections/${collection.slug}.atom\``,
     );
+    lines.push(`- Weekly digests: \`${opts.baseUrl}/collections/${collection.slug}/digest.atom\``);
     lines.push("");
   }
 
@@ -761,3 +764,124 @@ export function overviewToMarkdown(
 
 /** @deprecated Use overviewToMarkdown */
 export const knowledgeToMarkdown = overviewToMarkdown;
+
+// ── Collection weekly digests → Markdown ───────────────────────────
+
+/**
+ * Index of past weekly digests for a collection (`/collections/:slug/digest`).
+ * Newest-first list items — no body (same shape as the REST list endpoint).
+ */
+export function collectionDigestIndexToMarkdown(
+  collection: Pick<CollectionDetail, "slug" | "name">,
+  digests: CollectionWeeklyDigestListItem[],
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+  const indexPath = opts.baseUrl
+    ? `${opts.baseUrl}/collections/${collection.slug}/digest`
+    : `/collections/${collection.slug}/digest`;
+
+  lines.push("---");
+  lines.push(yamlLine("collection", collection.slug));
+  lines.push(yamlLine("collection_name", collection.name));
+  lines.push(yamlLine("digest_count", digests.length));
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical", indexPath));
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push(`# ${collection.name} weekly digests`);
+  lines.push("");
+
+  if (digests.length === 0) {
+    lines.push("_No digests yet._");
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  for (const d of digests) {
+    const href = opts.baseUrl
+      ? `${opts.baseUrl}/collections/${collection.slug}/digest/${d.weekStart}`
+      : `/collections/${collection.slug}/digest/${d.weekStart}`;
+    lines.push(`- **[${d.title}](${href})** — week of ${d.weekStart} (${d.releaseCount} releases)`);
+    if (d.intro) {
+      lines.push(`  > ${d.intro}`);
+    }
+  }
+  lines.push("");
+
+  if (opts.baseUrl) {
+    lines.push("## Fetching more");
+    lines.push("");
+    lines.push(
+      "Append `.md` (markdown), `.json` (raw data), or `.atom` (feed) to any URL on this page.",
+    );
+    lines.push("");
+    lines.push(`- Digest Atom feed: \`${indexPath}.atom\``);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Full weekly digest article (`/collections/:slug/digest/:weekStart`).
+ * Body is already markdown from generation — emit it as the page body.
+ */
+export function collectionDigestToMarkdown(
+  collection: Pick<CollectionDetail, "slug" | "name">,
+  digest: CollectionWeeklyDigestDetail,
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+  const pagePath = opts.baseUrl
+    ? `${opts.baseUrl}/collections/${collection.slug}/digest/${digest.weekStart}`
+    : `/collections/${collection.slug}/digest/${digest.weekStart}`;
+
+  lines.push("---");
+  lines.push(yamlLine("collection", collection.slug));
+  lines.push(yamlLine("collection_name", collection.name));
+  lines.push(yamlLine("week_start", digest.weekStart));
+  lines.push(yamlLine("title", digest.title));
+  lines.push(yamlLine("release_count", digest.releaseCount));
+  lines.push(yamlLine("generated", isoDateOnly(digest.generatedAt)));
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical", pagePath));
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push(`# ${digest.title}`);
+  lines.push("");
+  if (digest.intro) {
+    lines.push(digest.intro);
+    lines.push("");
+  }
+  if (digest.body?.trim()) {
+    lines.push(digest.body.trim());
+    lines.push("");
+  }
+
+  if (digest.releases.length > 0) {
+    lines.push("## Releases covered");
+    lines.push("");
+    // Group by org (same presentation as the HTML page).
+    const byOrg = new Map<string, { name: string; items: typeof digest.releases }>();
+    for (const r of digest.releases) {
+      const existing = byOrg.get(r.org.slug);
+      if (existing) existing.items.push(r);
+      else byOrg.set(r.org.slug, { name: r.org.name, items: [r] });
+    }
+    const groups = Array.from(byOrg.values()).toSorted((a, b) => a.name.localeCompare(b.name));
+    for (const group of groups) {
+      lines.push(`### ${group.name}`);
+      lines.push("");
+      for (const r of group.items) {
+        const href = opts.baseUrl ? `${opts.baseUrl}${r.path}` : r.path;
+        lines.push(`- [${r.title}](${href})`);
+      }
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n");
+}

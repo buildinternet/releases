@@ -8,6 +8,8 @@ export {
   collectionToMarkdown,
   collectionReleaseFeedToMarkdown,
   categoryReleaseFeedToMarkdown,
+  collectionDigestIndexToMarkdown,
+  collectionDigestToMarkdown,
 } from "@releases/rendering/formatters";
 
 export type {

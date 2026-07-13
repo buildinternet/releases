@@ -10,6 +10,7 @@ import { BreadcrumbHome } from "@/components/breadcrumb-home";
 import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
+import { DigestFormatLinks } from "@/components/digest-format-links";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
@@ -79,7 +80,18 @@ export async function generateMetadata({
     return {
       title,
       description: digest.intro,
-      alternates: { canonical: path },
+      alternates: {
+        canonical: path,
+        // Point at the aggregate digests feed (no single-item Atom).
+        types: {
+          "application/atom+xml": [
+            {
+              url: `/collections/${slug}/digest.atom`,
+              title: `${detail.name} weekly digests`,
+            },
+          ],
+        },
+      },
       openGraph: { type: "article", url: path, title, description: digest.intro },
     };
   } catch {
@@ -227,6 +239,11 @@ export default async function CollectionDigestPage({
         <p className="mt-4 max-w-[65ch] text-pretty text-[17px] leading-relaxed text-[var(--fg-2)]">
           {digest.intro}
         </p>
+        <DigestFormatLinks
+          path={`/collections/${slug}/digest/${weekStart}`}
+          atomHref={`/collections/${slug}/digest.atom`}
+          className="mt-4"
+        />
 
         <div
           className="prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed prose-headings:tracking-tight prose-a:text-stone-600 dark:prose-a:text-stone-400 prose-a:no-underline hover:prose-a:underline prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono"
