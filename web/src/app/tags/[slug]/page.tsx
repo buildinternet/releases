@@ -47,15 +47,18 @@ export default async function TagPage({ params }: { params: Promise<{ slug: stri
   return (
     <div className="min-h-screen">
       <div className="max-w-5xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+        <nav
+          aria-label="Breadcrumb"
+          className="pt-5 text-[13px] text-stone-400 dark:text-stone-500"
+        >
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
             Home
           </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-400 dark:text-stone-500">Tags</span>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{detail.name}</span>
-        </div>
+          <span className="mx-1.5" aria-hidden>
+            /
+          </span>
+          <span>Tags</span>
+        </nav>
 
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
           {detail.name}

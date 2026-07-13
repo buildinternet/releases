@@ -52,7 +52,7 @@ export default async function CollectionsListPage() {
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1240px] px-6 pt-8 pb-12">
         <PageHeader
-          breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}
+          breadcrumb={[{ label: "Home", href: "/" }]}
           title={TITLE}
           description={DESCRIPTION}
         />

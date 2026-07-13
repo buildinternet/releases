@@ -40,23 +40,34 @@ export const getDigestIndex = cache(async (slug: string): Promise<DigestIndexDat
   return { detail, digests: digestsRes.digests };
 });
 
-/** Latest digest for a collection, or `null` when none exist yet. Used by the
- *  collection page + `/collections` index cross-links — fails soft (empty)
- *  rather than throwing, since a missing digest list is not a 404 condition
- *  for those pages. */
+/** How many recent digests the collection page right-rail surfaces. */
+export const RECENT_DIGESTS_LIMIT = 3;
+
+/**
+ * Recent digests (newest-first). Fails soft to `[]` — a missing list is not
+ * a 404 for the collection rail / cross-links. Non-404 errors are logged.
+ */
+export const getRecentDigests = cache(
+  async (
+    slug: string,
+    limit: number = RECENT_DIGESTS_LIMIT,
+  ): Promise<CollectionWeeklyDigestListItem[]> => {
+    try {
+      const res = await api.collectionWeeklyDigests(slug, { limit });
+      return res.digests;
+    } catch (err) {
+      if (!(err instanceof ApiNotFoundError)) {
+        console.error(`getRecentDigests(${slug}) failed`, err);
+      }
+      return [];
+    }
+  },
+);
+
+/** Latest digest, or `null` when none. Thin wrapper over {@link getRecentDigests}. */
 export const getLatestDigest = cache(
   async (slug: string): Promise<CollectionWeeklyDigestListItem | null> => {
-    try {
-      const res = await api.collectionWeeklyDigests(slug, { limit: 1 });
-      return res.digests[0] ?? null;
-    } catch (err) {
-      // Cross-links fail soft, but only a missing collection/digest list is
-      // silently "none" — anything else gets logged so real API failures
-      // don't vanish into a quietly absent link.
-      if (!(err instanceof ApiNotFoundError)) {
-        console.error(`getLatestDigest(${slug}) failed`, err);
-      }
-      return null;
-    }
+    const digests = await getRecentDigests(slug, 1);
+    return digests[0] ?? null;
   },
 );

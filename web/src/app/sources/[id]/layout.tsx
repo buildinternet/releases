@@ -126,18 +126,27 @@ export default async function SourceByIdLayout({
   return (
     <div className="min-h-screen">
       <div className="max-w-5xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+        <nav
+          aria-label="Breadcrumb"
+          className="pt-5 text-[13px] text-stone-400 dark:text-stone-500"
+        >
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
+            Home
+          </Link>
           {source.org ? (
-            <Link
-              href={`/${source.org.slug}`}
-              className="hover:text-stone-600 dark:hover:text-stone-300"
-            >
-              {source.org.name}
-            </Link>
+            <>
+              <span className="mx-1.5" aria-hidden>
+                /
+              </span>
+              <Link
+                href={`/${source.org.slug}`}
+                className="hover:text-stone-600 dark:hover:text-stone-300"
+              >
+                {source.org.name}
+              </Link>
+            </>
           ) : null}
-          {source.org && <span className="mx-1.5">/</span>}
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
-        </div>
+        </nav>
         <div className="flex items-center gap-2.5 mt-4">
           {appInfo && <AppIcon iconUrl={appInfo.iconUrl} name={source.name} size={32} />}
           <ViewTransition name={`src-${orgSlug}-${sourceSlug}`} default="none">

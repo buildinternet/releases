@@ -12,7 +12,7 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
 import { withCollectionReleaseView } from "@/lib/render-release-body";
 import { getCollectionPage } from "./_lib/collection-data";
-import { getLatestDigest } from "./digest/_lib/digest-data";
+import { getRecentDigests } from "./digest/_lib/digest-data";
 
 export async function generateMetadata({
   params,
@@ -46,8 +46,8 @@ export async function generateMetadata({
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  // Fire alongside the main page load; never rejects (fails soft to null).
-  const latestDigestPromise = getLatestDigest(slug);
+  // One list fetch for header teaser + rail (React `cache`; fails soft to []).
+  const recentDigestsPromise = getRecentDigests(slug);
   let page;
   try {
     page = await getCollectionPage(slug);
@@ -63,7 +63,8 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   }
 
   const { detail, releases, summaries } = page;
-  const latestDigest = await latestDigestPromise;
+  const recentDigests = await recentDigestsPromise;
+  const latestDigest = recentDigests[0] ?? null;
   // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
 
@@ -82,17 +83,20 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
       <JsonLd data={jsonLd} />
       <div className="mx-auto max-w-[1300px] px-6">
-        <div className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]"
+        >
           <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
             Home
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--line-2)]" aria-hidden>
+            /
+          </span>
           <Link href="/collections" className="transition-colors hover:text-[var(--fg-2)]">
             Collections
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
-          <span className="text-[var(--fg-2)]">{detail.name}</span>
-        </div>
+        </nav>
 
         <h1 className="mt-4 text-balance text-[34px] font-bold tracking-tight text-[var(--fg)]">
           {detail.name}
@@ -133,6 +137,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           </main>
           <CollectionContextRail
             formatPath={formatPath}
+            digests={recentDigests}
             report={{
               kind: "collection",
               name: detail.name,

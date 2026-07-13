@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { SetupMessage } from "@/components/setup-message";
+import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex } from "./_lib/digest-data";
-import { weekOfLabel } from "./_lib/digest-format";
 
 export const revalidate = 900;
 
@@ -55,24 +55,29 @@ export default async function CollectionDigestIndexPage({
   return (
     <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
       <div className="mx-auto max-w-[760px] px-6 pb-24 pt-5">
-        <div className="flex items-center gap-1.5 text-[13px] text-[var(--fg-3)]">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1.5 text-[13px] text-[var(--fg-3)]"
+        >
           <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
             Home
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--line-2)]" aria-hidden>
+            /
+          </span>
           <Link href="/collections" className="transition-colors hover:text-[var(--fg-2)]">
             Collections
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--line-2)]" aria-hidden>
+            /
+          </span>
           <Link
             href={`/collections/${slug}`}
             className="transition-colors hover:text-[var(--fg-2)]"
           >
             {detail.name}
           </Link>
-          <span className="text-[var(--line-2)]">/</span>
-          <span className="text-[var(--fg-2)]">Weekly digests</span>
-        </div>
+        </nav>
 
         <h1 className="mt-4 text-balance text-[28px] font-bold tracking-tight text-[var(--fg)]">
           {detail.name} weekly digests
