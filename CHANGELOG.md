@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 12, 2026
+
+**Changed**
+- Site wordmark and entity page titles (org and product names) now render in Geist Pixel; the same branded treatment appears on social-share OG images.
+
 ## July 11, 2026
 
 **Added**
