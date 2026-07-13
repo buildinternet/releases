@@ -70,13 +70,18 @@
   background-color: oklch(0.444 0.011 286.3); /* stone-700 */
 }
 
-/* Geist Pixel display accent (geist/font/pixel, Square variant — bound in
-   layout.tsx). Used on the header wordmark and short, fixed page/entity titles
-   (org + product names, section-index labels, static/legal/docs page titles),
-   NOT on running heads or long release titles where the bitmap grid hurts
-   legibility. It's a semi-mono bitmap face, so pin letter-spacing to 0
-   (overriding any `tracking-*`) and disable subpixel smoothing so the pixels
-   stay crisp; JetBrains Mono is the fallback weight.
+/* Geist Pixel display accent (self-hosted variable font, bound in layout.tsx;
+   `font-variation-settings: "ELSH" 1` pins the Square shape — 0 Regular ·
+   1 Square · 20 Circle · 40 Grid · 60 Triangle · 80 Line). Used on the header
+   wordmark and short, fixed page/entity titles (org + product names,
+   section-index labels, static/legal/docs page titles), NOT on running heads or
+   long release titles where the bitmap grid hurts legibility. It's a
+   single-weight (400) semi-mono face, so pin font-weight to 400 and disable
+   synthesis (a `font-bold` utility would otherwise smear the pixels with faux
+   bold), and pin letter-spacing to 0 (overriding any `tracking-*`). The
+   "pixels" are vector squares, not a bitmap — leave font smoothing alone;
+   `-webkit-font-smoothing: none` renders each square at inconsistent sizes.
+   JetBrains Mono is the fallback weight.
 
    `.font-pixel` is the direct opt-in for JSX headings. `.pixel-doc-title h1`
    is the prose-scoped variant: markdown pages (privacy, terms, security, docs)
@@ -84,14 +89,16 @@
    wrapping <article> and only re-fonts that top-level h1. */
 :root {
   --font-pixel:
-    var(--font-geist-pixel-square), var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo,
+    var(--font-geist-pixel), var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo,
     Monaco, "Liberation Mono", "Courier New", monospace;
 }
 .font-pixel,
 .pixel-doc-title h1 {
   font-family: var(--font-pixel);
+  font-variation-settings: "ELSH" 1;
+  font-weight: 400;
+  font-synthesis: none;
   letter-spacing: 0;
-  -webkit-font-smoothing: none;
 }
 
 /* ── Code (inline + blocks) ── */

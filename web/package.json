@@ -23,7 +23,6 @@
     "@shikijs/themes": "^4.3.1",
     "@tailwindcss/typography": "^0.5.20",
     "better-auth": "^1.6.23",
-    "geist": "1.7.2",
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
     "next": "^16.2.10",

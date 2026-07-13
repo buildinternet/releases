@@ -172,7 +172,7 @@ export async function ProductView({
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
               <div className="min-w-0">
-                <h1 className="font-pixel text-[28px] font-bold text-stone-900 dark:text-stone-100">
+                <h1 className="font-pixel text-[28px] text-stone-900 dark:text-stone-100">
                   {product.name}
                 </h1>
                 {product.description && (
