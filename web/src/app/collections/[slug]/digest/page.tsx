@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { SetupMessage } from "@/components/setup-message";
+import { BreadcrumbHome } from "@/components/breadcrumb-home";
+import { DigestBetaNote } from "@/components/digest-beta-note";
 import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex } from "./_lib/digest-data";
 
@@ -59,9 +61,7 @@ export default async function CollectionDigestIndexPage({
           aria-label="Breadcrumb"
           className="flex items-center gap-1.5 text-[13px] text-[var(--fg-3)]"
         >
-          <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
-            Home
-          </Link>
+          <BreadcrumbHome />
           <span className="text-[var(--line-2)]" aria-hidden>
             /
           </span>
@@ -78,6 +78,8 @@ export default async function CollectionDigestIndexPage({
             {detail.name}
           </Link>
         </nav>
+
+        <DigestBetaNote className="mt-4" />
 
         <h1 className="mt-4 text-balance text-[28px] font-bold tracking-tight text-[var(--fg)]">
           {detail.name} weekly digests

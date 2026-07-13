@@ -312,6 +312,8 @@ export function buildDigestJsonLd(
     pageUrl: string;
     collectionName: string;
     collectionUrl: string;
+    /** Index of past digests for this collection (`/collections/:slug/digest`). */
+    digestsIndexUrl: string;
   },
 ): Record<string, unknown> {
   const pageNodeId = `${opts.pageUrl}#article`;
@@ -335,6 +337,8 @@ export function buildDigestJsonLd(
       },
       {
         "@type": "BreadcrumbList",
+        // Home → Collections → {collection} → Weekly digests → this week.
+        // Visible UI stops at "Weekly digests" (current page is the H1).
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
           {
@@ -349,7 +353,13 @@ export function buildDigestJsonLd(
             name: opts.collectionName,
             item: opts.collectionUrl,
           },
-          { "@type": "ListItem", position: 4, name: digest.title, item: opts.pageUrl },
+          {
+            "@type": "ListItem",
+            position: 4,
+            name: "Weekly digests",
+            item: opts.digestsIndexUrl,
+          },
+          { "@type": "ListItem", position: 5, name: digest.title, item: opts.pageUrl },
         ],
       },
     ],
