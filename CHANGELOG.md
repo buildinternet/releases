@@ -3,6 +3,18 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 13, 2026
+
+**Added**
+- Blume changelogs — sites built on the Blume self-hosted Astro changelog generator are now auto-detected and ingested via their native RSS feed.
+- AI-scored importance now reaches collection and category timelines, the following feed, live stream, search results, related rails, and MCP `search` results; a hover card on the flame glyph explains the 4 vs. 5 score.
+- Collection weekly digests available as Markdown, JSON, and Atom — `.md`, `.json`, and `.atom` format adapters on the digest index; individual week pages support `.md` and `.json`.
+- Recent digests surface in the collection right rail with a browse-all link; digest pages now include an AI-generated content disclaimer.
+
+**Fixed**
+- Collection digest pages polished — headings render at the correct depth, a covered-orgs facepile shows which companies are featured, breadcrumbs link back to the digest archive, and prev/next cards navigate between weeks.
+- Geist Pixel wordmark now uses the variable font at true weight 400 — the faux-bold smear from stacked bold utilities is gone.
+
 ## July 12, 2026
 
 **Changed**
