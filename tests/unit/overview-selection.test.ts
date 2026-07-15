@@ -26,6 +26,12 @@ function mkBatch(prefix: string, n: number, base = "2026-04-01"): Release[] {
   );
 }
 
+/** Overwrite one release's importance in place, returning the same array. */
+function withImportance(releases: Release[], index: number, importance: number | null): Release[] {
+  (releases[index] as { importance: number | null }).importance = importance;
+  return releases;
+}
+
 describe("selectReleasesForOverview", () => {
   it("applies per-source caps before merging", () => {
     const perSource = [
@@ -209,5 +215,85 @@ describe("selectReleasesForOverview", () => {
     expect(releases.length).toBe(50);
     expect(count("p1")).toBe(20);
     expect(count("directA") + count("directB")).toBe(30);
+  });
+
+  describe("importance bias", () => {
+    it("retains a high-signal release past the per-source cap over later churn", () => {
+      // github cap is 10; give a source 30 releases where the OLDEST (index 29)
+      // is the only high-signal one. Pure recency would drop it (kept: newest
+      // 10). The importance lead pulls it into the kept set.
+      const releases = withImportance(mkBatch("gh", 30), 29, 5);
+      const { releases: out } = selectReleasesForOverview(
+        [{ type: "github" as const, releases }],
+        50,
+      );
+      expect(out.length).toBe(PER_SOURCE_CAPS.github);
+      expect(out.some((r) => r.id === "rel_gh_29")).toBe(true);
+    });
+
+    it("retains a high-signal release past the per-kind family cap", () => {
+      // SDK family cap is 10. One source's oldest release is high-signal; the
+      // family is otherwise all newer churn. It must survive the family pool.
+      const sdkA = withImportance(mkBatch("sdkA", 10, "2026-01-01"), 9, 5);
+      const sdkB = mkBatch("sdkB", 10, "2026-05-01");
+      const { releases: out } = selectReleasesForOverview(
+        [
+          { type: "github" as const, kind: "sdk" as const, releases: sdkA },
+          { type: "github" as const, kind: "sdk" as const, releases: sdkB },
+        ],
+        50,
+      );
+      const sdkCount = out.filter((r) => r.id.includes("rel_sdk")).length;
+      expect(sdkCount).toBe(PER_KIND_FAMILY_CAPS.sdk!);
+      expect(out.some((r) => r.id === "rel_sdkA_9")).toBe(true);
+    });
+
+    it("retains a high-signal release past the per-product budget", () => {
+      // Two products, each capped to 20, budgeted to ~25 slots → each keeps its
+      // full 20. Make one product's OLDEST release (index 19) high-signal and
+      // shrink the budget so the bucket must drop some: importance keeps it.
+      const p1 = withImportance(mkBatch("p1", 20, "2026-05-01"), 19, 5);
+      const p2 = mkBatch("p2", 20, "2026-04-01");
+      const { releases: out } = selectReleasesForOverview(
+        [
+          { type: "scrape" as const, productId: "prod_1", releases: p1 },
+          { type: "scrape" as const, productId: "prod_2", releases: p2 },
+        ],
+        20, // 2 buckets → 10 slots each, so each product drops 10 of its 20.
+      );
+      expect(out.some((r) => r.id === "rel_p1_19")).toBe(true);
+    });
+
+    it("leads the final feed with high-signal releases before recency", () => {
+      // A newest churn release and an older high-signal release in one source.
+      const releases = withImportance(
+        mkReleases("s", ["2026-05-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"]),
+        1,
+        5,
+      );
+      const { releases: out } = selectReleasesForOverview([{ type: "feed" as const, releases }]);
+      // High-signal (older) leads despite the newer churn release.
+      expect(out[0].id).toBe("rel_s_1");
+      expect(out[1].id).toBe("rel_s_0");
+    });
+
+    it("treats NULL importance as unknown, not dead-last", () => {
+      // A scored-low release (importance 2) and unscored releases. The unscored
+      // rows fold into the same normal bucket ordered by recency — never sorted
+      // behind the scored-low one for lacking a score.
+      const releases = [
+        { id: "rel_x_0", sourceId: "src_x", publishedAt: "2026-05-01T00:00:00.000Z" },
+        {
+          id: "rel_x_1",
+          sourceId: "src_x",
+          publishedAt: "2026-04-01T00:00:00.000Z",
+          importance: 2,
+        },
+        { id: "rel_x_2", sourceId: "src_x", publishedAt: "2026-03-01T00:00:00.000Z" },
+      ] as unknown as Release[];
+      const { releases: out } = selectReleasesForOverview([{ type: "feed" as const, releases }]);
+      // Neither high-signal → pure recency; the newest unscored row still leads.
+      expect(out.map((r) => r.id)).toEqual(["rel_x_0", "rel_x_1", "rel_x_2"]);
+    });
   });
 });

@@ -64,9 +64,37 @@ export const PER_KIND_FAMILY_CAPS: Partial<Record<Kind, number>> = {
   sdk: 10,
 };
 
+/**
+ * High-signal importance threshold — the AI-scored floor the web flame glyph
+ * uses, and the same cutoff #2108 (collection summaries) and #2109 (digest
+ * emails) bias toward. Releases at or above this survive truncation ahead of
+ * churn.
+ */
+export const OVERVIEW_HIGH_IMPORTANCE = 4;
+
 /** Recency comparator for releases: newest first, null/empty dates sort last. */
 function byRecencyDesc(a: Release, b: Release): number {
   return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
+}
+
+/**
+ * Selection comparator: high-signal releases lead, recency within each tier.
+ *
+ * A binary high/normal lead, not a full importance sort — a mostly-recency
+ * overview isn't reshuffled by score. Applied at every truncation stage so a
+ * breaking change published earlier in the window survives the per-source cap,
+ * the family cap, the per-product budget, and the global limit ahead of churn
+ * published later.
+ *
+ * NULL importance is `unknown`, not `unimportant`: `importance ?? 0` folds
+ * unscored rows into the same normal bucket as scored-low releases, ordered by
+ * recency — never sorted dead-last or dropped for being unscored.
+ */
+function byImportanceThenRecency(a: Release, b: Release): number {
+  const aHigh = (a.importance ?? 0) >= OVERVIEW_HIGH_IMPORTANCE ? 0 : 1;
+  const bHigh = (b.importance ?? 0) >= OVERVIEW_HIGH_IMPORTANCE ? 0 : 1;
+  if (aHigh !== bHigh) return aHigh - bHigh;
+  return byRecencyDesc(a, b);
 }
 
 /** A release tagged with its owning product (null for direct org sources). */
@@ -76,6 +104,14 @@ type TaggedRelease = { release: Release; productId: string | null };
  * Select releases to feed into overview regeneration. Pure: input arrays must
  * each be sorted by `publishedAt` desc; output is the merged, capped, limited,
  * resorted slice plus the pre-cap total for reporting.
+ *
+ * Every truncation stage biases toward high-signal releases
+ * (`importance >= OVERVIEW_HIGH_IMPORTANCE`, the web flame threshold) via
+ * {@link byImportanceThenRecency}: a binary high/normal lead with recency as
+ * the spine within each tier, so a major launch published earlier in the window
+ * survives the caps instead of being truncated out by later churn. Unscored
+ * (NULL importance) rows fold into the normal bucket, never dropped for lacking
+ * a score.
  */
 export function selectReleasesForOverview(
   perSource: Array<{
@@ -88,18 +124,22 @@ export function selectReleasesForOverview(
 ): { releases: Release[]; totalAvailable: number } {
   const totalAvailable = perSource.reduce((n, s) => n + s.releases.length, 0);
 
-  // 1. Per-source cap by adapter type (unchanged): a single noisy repo can't
-  //    contribute more than its type's cap. `productId` rides along so the
+  // 1. Per-source cap by adapter type: a single noisy repo can't contribute
+  //    more than its type's cap. High-signal releases lead the sort before the
+  //    slice, so a breaking change earlier in the window isn't dropped in favor
+  //    of later churn from the same source. `productId` rides along so the
   //    per-product budget (step 3) can group survivors by their owning product.
   const perSourceCapped = perSource.map(({ type, kind, productId, releases }) => ({
     kind: kind ?? null,
     productId: productId ?? null,
-    releases: releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
+    releases: releases.toSorted(byImportanceThenRecency).slice(0, PER_SOURCE_CAPS[type] ?? 20),
   }));
 
   // 2. Per-kind family cap: pool releases of a capped kind across all its
-  //    sources, keep the most-recent N. Other kinds (and untagged sources)
-  //    pass through untouched. Each surviving release keeps its product tag.
+  //    sources, keep the top N by importance-then-recency so a high-signal SDK
+  //    release isn't crowded out of the family's shared budget by churn. Other
+  //    kinds (and untagged sources) pass through untouched. Each surviving
+  //    release keeps its product tag.
   const familyPools = new Map<Kind, TaggedRelease[]>();
   const passthrough: TaggedRelease[] = [];
   for (const { kind, productId, releases } of perSourceCapped) {
@@ -115,8 +155,10 @@ export function selectReleasesForOverview(
   const familyCapped: TaggedRelease[] = [];
   for (const [kind, pool] of familyPools) {
     const cap = PER_KIND_FAMILY_CAPS[kind]!;
-    const mostRecent = pool.toSorted((a, b) => byRecencyDesc(a.release, b.release)).slice(0, cap);
-    familyCapped.push(...mostRecent);
+    const topSignal = pool
+      .toSorted((a, b) => byImportanceThenRecency(a.release, b.release))
+      .slice(0, cap);
+    familyCapped.push(...topSignal);
   }
 
   // 3. Per-product budget: bucket the post-cap releases by `productId` (product-
@@ -128,19 +170,21 @@ export function selectReleasesForOverview(
   //    is allotted min(limit, size), identical to the pre-budget behavior.
   const budgeted = budgetByProduct([...passthrough, ...familyCapped], limit);
 
-  // 4. Global recency sort + global limit (the limit is a safety net; step 3
-  //    already holds the total at or under `limit`).
-  const sorted = budgeted.map((t) => t.release).toSorted(byRecencyDesc);
+  // 4. Global importance-then-recency sort + global limit. High-signal releases
+  //    lead so the safety-net slice (step 3 already holds the total at or under
+  //    `limit`) can only ever trim churn, never a breaking change.
+  const sorted = budgeted.map((t) => t.release).toSorted(byImportanceThenRecency);
   return { releases: sorted.slice(0, limit), totalAvailable };
 }
 
 /**
  * Split `limit` slots across product buckets. Product-less releases (null
  * `productId`) share a single bucket. Each bucket gets a fair share of the
- * limit (see {@link distributeBudget}); within a bucket the most-recent
- * releases are kept. Returns the kept tagged releases; the caller does the
- * final global sort. A no-op short-circuit returns the input untouched when it
- * already fits under the limit.
+ * limit (see {@link distributeBudget}); within a bucket the highest-signal
+ * releases are kept (importance-then-recency), so a product's fair share leads
+ * with its breaking changes rather than its churn. Returns the kept tagged
+ * releases; the caller does the final global sort. A no-op short-circuit
+ * returns the input untouched when it already fits under the limit.
  */
 function budgetByProduct(tagged: TaggedRelease[], limit: number): TaggedRelease[] {
   if (tagged.length <= limit) return tagged;
@@ -156,7 +200,7 @@ function budgetByProduct(tagged: TaggedRelease[], limit: number): TaggedRelease[
   }
 
   const bucketLists = [...buckets.values()].map((list) =>
-    list.toSorted((a, b) => byRecencyDesc(a.release, b.release)),
+    list.toSorted((a, b) => byImportanceThenRecency(a.release, b.release)),
   );
   const allocations = distributeBudget(
     bucketLists.map((b) => b.length),
