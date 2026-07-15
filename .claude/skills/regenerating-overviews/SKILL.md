@@ -48,7 +48,7 @@ Returns:
 
 Default lookback is a 30-day window, widening automatically to 90 days when the org shipped fewer than 5 releases in that window (quiet-org fallback — the response's `windowDays` reflects whichever window was actually used). Pass an explicit `--window` to pin a specific value and bypass the fallback.
 
-Selection is server-side and deterministic (per-source caps: github=10, others=20; merged + sorted desc by `publishedAt`; capped at 50). Don't second-guess the selection — generate from `selected` as-is.
+Selection is server-side and deterministic (per-source caps: github=10, others=20; per-kind family cap + per-product budget; capped at 50). High-signal releases (`importance >= 4`, the flame threshold) lead each truncation stage, then recency within each tier — so a major launch or breaking change earlier in the window survives the caps instead of being crowded out by later churn; `selected` therefore arrives importance-first, then newest-first, not pure recency. Don't second-guess the selection — generate from `selected` as-is, in the order returned.
 
 If `selected` is empty (`totalAvailable: 0`), **stop**. Report "no releases in window — overview not regenerated" and exit. Don't generate from existing-content alone.
 
