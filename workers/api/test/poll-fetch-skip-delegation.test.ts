@@ -35,15 +35,15 @@ const feedFetchCalls: string[] = [];
 // control are overridden below. Without the spread, every newly-imported feed
 // export silently breaks this mock's ESM bindings at module-eval time (#1391).
 //
-// IMPORTANT: do NOT override the github-override-path helpers
-// (`getSourceMeta`, `isGitHubFetched`, `effectiveGitHubUrl`,
-// `synthesizeReleaseUrl`). `mock.module` is process-global and irreversible
-// (AGENTS.md), so any override here leaks into the real-feed override test
-// (poll-fetch-github-override.test.ts) when Bun evaluates this file first.
-// This file's old hand-rolled `synthesizeReleaseUrl` dropped the
-// `releaseUrlTemplate` arg, so the leak made that test synthesize the default
-// `#anchor` URL instead of the templated one — a deterministic CI flake (#1565).
-// `...actualFeed` already supplies the real, template-faithful implementations.
+// IMPORTANT: do NOT override pure helpers that other suites assert against.
+// `mock.module` is process-global and irreversible (AGENTS.md), so any override
+// here leaks into later files when Bun evaluates this one first:
+//   - github-override-path helpers (`getSourceMeta`, `isGitHubFetched`,
+//     `effectiveGitHubUrl`, `synthesizeReleaseUrl`) → poll-fetch-github-override
+//     (#1565 flake: hand-rolled synthesizeReleaseUrl dropped releaseUrlTemplate)
+//   - `extractMediaFromMarkdown` → poll-fetch-github-media (CI flake: stubbing
+//     it to `[]` made every media extraction assertion see length 0)
+// `...actualFeed` already supplies the real implementations.
 const actualFeed = await import("@releases/adapters/feed.js");
 
 mock.module("@releases/adapters/feed.js", () => ({
@@ -67,7 +67,6 @@ mock.module("@releases/adapters/feed.js", () => ({
       contentLength: undefined,
     };
   },
-  extractMediaFromMarkdown: (_body: string) => [],
 }));
 
 // Import fetchOne + shouldDelegateToCrawl after mock.module is set up.
