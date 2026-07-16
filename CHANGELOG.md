@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 15, 2026
+
+**Changed**
+- Org overviews now bias toward high-importance releases — high-signal releases (importance ≥ 4) are prioritized at every selection stage so a landmark update isn't crowded out by later churn; unscored releases are treated as normal priority rather than penalized.
+- Site footer reorganized — a new Collections column links directly to featured collections; Webhooks is now listed under Docs; an uploads.sh cross-link appears in the footer bar.
+
 ## July 13, 2026
 
 **Added**
