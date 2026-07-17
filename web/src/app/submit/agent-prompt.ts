@@ -1,11 +1,11 @@
 /**
  * Install the owner-facing skill that writes a valid releases.json.
- * Full GitHub URL + `--skill` (same shape as other single-skill installs from a
- * multi-skill repo — prior art: `npx skills add buildinternet/skills`).
+ * `owner/repo` shorthand + `--skill` (same shape as other single-skill installs
+ * from a multi-skill repo — prior art: `npx skills add buildinternet/skills`).
  * Source: monorepo `skills/creating-releases-json/`, not the CLI skill pack.
  */
 export const SKILL_INSTALL_CMD =
-  "npx skills add https://github.com/buildinternet/releases --skill creating-releases-json";
+  "npx skills add buildinternet/releases --skill creating-releases-json";
 
 /** Build the paste-into-agent prompt. Optional domain is filled when the user typed one. */
 export function buildAgentPrompt(domain?: string): string {

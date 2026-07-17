@@ -50,6 +50,11 @@ const themeOptions = {
   // gets the dual-theme background/foreground variables.
   defaultLanguage: "plaintext",
   fallbackLanguage: "plaintext",
+  // Stamp a `language-<lang>` class on each `<code>` so CSS can distinguish a
+  // block's kind. We use it to let prose blocks (```text — paste-ready agent
+  // prompts) soft-wrap instead of scrolling, while real code keeps horizontal
+  // scroll. See the `language-text` rule in globals.css.
+  addLanguageClass: true,
 } as const;
 
 /**

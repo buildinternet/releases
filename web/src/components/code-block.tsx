@@ -18,13 +18,13 @@ export function CodeBlock(props: React.ComponentPropsWithoutRef<"pre">) {
   const { copied, copy } = useCopyToClipboard();
 
   return (
-    <div className="group relative">
+    <div className="relative">
       <pre {...props} />
       <button
         type="button"
         onClick={() => copy(extractText(props.children))}
         aria-label={copied ? "Copied" : "Copy to clipboard"}
-        className="absolute top-2 right-2 p-1.5 rounded-md text-stone-400 dark:text-stone-500 opacity-0 group-hover:opacity-100 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-800 transition-opacity"
+        className="absolute top-2 right-2 p-1.5 rounded-md text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors"
       >
         <CopyIcon copied={copied} size={14} />
       </button>

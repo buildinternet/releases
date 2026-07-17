@@ -1,0 +1,56 @@
+{
+  "name": "releases-registry",
+  "owner": {
+    "name": "Build Internet"
+  },
+  "description": "Skills for listing your product on the Releases.sh registry, plus the operator skills for running and maintaining it. Grouping mirrors skills.sh.json so the skills.sh page and the `npx skills add` picker agree.",
+  "plugins": [
+    {
+      "name": "listing",
+      "source": "./",
+      "description": "Owner-facing: discover where you publish release notes and write a valid releases.json manifest to list your product on releases.sh.",
+      "author": {
+        "name": "Build Internet"
+      },
+      "version": "0.1.0",
+      "strict": false,
+      "skills": ["./skills/creating-releases-json"]
+    },
+    {
+      "name": "onboarding-parsing",
+      "source": "./",
+      "description": "Managed-agent skills for onboarding changelog sources and driving the fetch/parse pipeline.",
+      "author": {
+        "name": "Build Internet"
+      },
+      "version": "0.1.0",
+      "strict": false,
+      "skills": [
+        "./.claude/skills/finding-changelogs",
+        "./.claude/skills/managing-sources",
+        "./.claude/skills/parsing-changelogs",
+        "./.claude/skills/classify-media-relevance"
+      ]
+    },
+    {
+      "name": "registry-maintenance",
+      "source": "./",
+      "description": "Operator skills for maintaining the registry — ingest, backfills, overviews, release content, playbooks, coverage. Most need an admin API key.",
+      "author": {
+        "name": "Build Internet"
+      },
+      "version": "0.1.0",
+      "strict": false,
+      "skills": [
+        "./.claude/skills/local-ingest",
+        "./.claude/skills/backfilling-sources",
+        "./.claude/skills/maintaining-orgs",
+        "./.claude/skills/regenerating-overviews",
+        "./.claude/skills/generating-release-content",
+        "./.claude/skills/seeding-playbooks",
+        "./.claude/skills/grouping-releases",
+        "./.claude/skills/firecrawl-monitoring"
+      ]
+    }
+  ]
+}
