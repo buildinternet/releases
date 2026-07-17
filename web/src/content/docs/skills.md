@@ -55,7 +55,7 @@ Triggers when you want to **list your own product**: "add a releases.json", "get
 Install just this skill (or grab the copy buttons on the [submit page](/submit)):
 
 ```bash
-npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
+npx skills add buildinternet/releases --skill creating-releases-json
 ```
 
 See [Listing your product](/docs/listing) for the format and the paste-ready agent prompt.
@@ -74,4 +74,4 @@ Most need an admin API key to do anything.
 
 - **Reader skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `skills/`.
 - **Operator skills**: [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `.claude/skills/`.
-- **Owner manifest skill** (`creating-releases-json`): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `skills/creating-releases-json/`. Repo page grouping lives in root [`skills.sh.json`](https://github.com/buildinternet/releases/blob/main/skills.sh.json) ([skills.sh customize](https://www.skills.sh/docs/customize)).
+- **Owner manifest skill** (`creating-releases-json`): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `skills/creating-releases-json/`. Two files drive skill grouping and must stay in sync: the skills.sh **web** repo page reads root [`skills.sh.json`](https://github.com/buildinternet/releases/blob/main/skills.sh.json) ([skills.sh customize](https://www.skills.sh/docs/customize)), while the `npx skills add` **CLI** picker groups by plugin from [`.claude-plugin/marketplace.json`](https://github.com/buildinternet/releases/blob/main/.claude-plugin/marketplace.json) (each `plugins[].name` becomes a picker group).

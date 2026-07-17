@@ -15,19 +15,15 @@ When the file is live, [check and activate on the submit page](/submit).
 Install the skill, paste the prompt (swap in your website), publish the file it produces at `/.well-known/releases.json`, then activate:
 
 ```bash
-npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
+npx skills add buildinternet/releases --skill creating-releases-json
 ```
 
 ```text
-Create a releases.json manifest for our product so registries and agents can
-find where we publish release notes.
+Create a releases.json manifest for our product so registries and agents can find where we publish release notes.
 
 1. Install the creating-releases-json skill:
-   npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
-2. Follow that skill end-to-end: discover the real places we publish updates
-   (changelog, feed, GitHub Releases, App Store, CHANGELOG file), write a
-   valid v2 manifest, and show me the finished file plus the URL it should be
-   served from (usually https://{domain}/.well-known/releases.json).
+   npx skills add buildinternet/releases --skill creating-releases-json
+2. Follow that skill end-to-end: discover the real places we publish updates (changelog, feed, GitHub Releases, App Store, CHANGELOG file), write a valid v2 manifest, and show me the finished file plus the URL it should be served from (usually https://{domain}/.well-known/releases.json).
 3. Only declare locations that actually exist — never invent URLs.
 
 Our website is: <your website or domain>
@@ -43,7 +39,12 @@ Host this at `https://yourdomain.com/.well-known/releases.json`:
 {
   "$schema": "https://releases.sh/schemas/releases.json",
   "version": 2,
-  "releases": [{ "url": "https://updates.acme.com", "feed": "https://updates.acme.com/rss.xml" }]
+  "releases": [
+    {
+      "url": "https://updates.acme.com",
+      "feed": "https://updates.acme.com/rss.xml"
+    }
+  ]
 }
 ```
 
@@ -95,8 +96,17 @@ Repo-root `releases.json` binds **that repo** only (`product` + `releases[]`). U
 {
   "$schema": "https://releases.sh/schemas/releases.json",
   "version": 2,
-  "product": { "name": "Acme Cloud", "slug": "acme-cloud" },
-  "releases": [{ "url": "https://acme.com/whats-new", "canonical": true }, { "github": "self" }]
+  "product": {
+    "name": "Acme Cloud",
+    "slug": "acme-cloud"
+  },
+  "releases": [
+    {
+      "url": "https://acme.com/whats-new",
+      "canonical": true
+    },
+    { "github": "self" }
+  ]
 }
 ```
 

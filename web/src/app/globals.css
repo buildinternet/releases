@@ -119,6 +119,16 @@
   background-color: oklch(0.268 0.007 286.3); /* stone-850ish */
   border-color: oklch(0.372 0.01 286.3); /* stone-750ish */
 }
+/* Prose-in-a-code-block (```text — e.g. the paste-ready agent prompt) soft-wraps
+   instead of scrolling: natural-language content reads better wrapped, and the
+   copy button still copies the intended line breaks (textContent is unaffected).
+   Scoped to explicit `text`/`txt` fences so real code — and bare blocks that
+   default to `plaintext` — keep horizontal scroll. */
+.prose pre:has(> code.language-text),
+.prose pre:has(> code.language-txt) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .prose pre code {
   background: none !important;
   padding: 0 !important;

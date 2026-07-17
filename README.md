@@ -96,7 +96,7 @@ everyone wants:
 npx skills add buildinternet/releases-cli   # reader skills — search, MCP, release analysis
 
 # just the skill that writes a releases.json manifest for your own product
-npx skills add https://github.com/buildinternet/releases --skill creating-releases-json
+npx skills add buildinternet/releases --skill creating-releases-json
 ```
 
 On Claude Code, the CLI repo also installs as a plugin — the reader skills plus
