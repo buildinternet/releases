@@ -118,8 +118,9 @@ const nextConfig: NextConfig = {
       // (`cloudflare-what-s-new`, the global developers.cloudflare.com feed) was
       // deleted when the org moved to Cloudflare's per-area feeds — its ~439
       // product-less releases duplicated the new area-product feeds. The page
-      // had real content/index value, so forward it to the org overview rather
-      // than 404. One-off until a general source-retirement redirect lands (#1691).
+      // had real content/index value, so forward it to the org page (Releases
+      // feed) rather than 404. One-off until a general source-retirement
+      // redirect lands (#1691).
       {
         source: "/cloudflare/cloudflare-what-s-new",
         destination: "/cloudflare",

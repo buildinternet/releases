@@ -23,7 +23,8 @@ export function LatestReleasesTeaser({
 }) {
   const items = releases.slice(0, count);
   if (items.length === 0) return null;
-  const releasesHref = `/${orgSlug}/releases`;
+  // Releases is the bare org URL (default tab); `/:org/releases` 308s here.
+  const releasesHref = `/${orgSlug}`;
 
   return (
     <section className="mb-6">

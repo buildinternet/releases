@@ -1,25 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { api, ApiSetupError, type OrgHeatmap } from "@/lib/api";
-import { tryFetch } from "@/lib/ssr-fetch";
-import { OverviewView } from "@/components/overview-view";
-import { LatestReleasesTeaser } from "@/components/org/latest-releases-teaser";
-import { OrgActivityPanel } from "@/components/org/org-activity-panel";
+import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
+import { OrgReleaseList } from "@/components/org-release-list";
+import { withReleaseBodyHtml, orgRowVariant } from "@/lib/render-release-body";
+import { OrgReleaseProductLinks } from "@/components/org/org-release-product-links";
 import { StubLocations } from "@/components/org/stub-locations";
 import { ClaimPanel } from "@/components/org/claim-panel";
+import { orgAvatarSrc } from "@/components/org-avatar";
 import { JsonLd } from "@/components/json-ld";
-
-import {
-  buildOverviewCitationJsonLd,
-  buildReleaseItemListJsonLd,
-  currentPeriod,
-  lastModifiedAt,
-} from "@/lib/schema-org";
+import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
-import { enableOnDemandIsr } from "@/lib/static-params";
-import { getOrg, getOrgOverview } from "../_lib/org-data";
+import { getOrg } from "../_lib/org-data";
 import { getOrgReleases } from "../_lib/org-releases-data";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
 // On-demand ISR: render once per org on first request, then serve from cache
 // (revalidated every 15 min). See `enableOnDemandIsr`. (#1607)
@@ -37,14 +30,15 @@ export async function generateMetadata({
   try {
     const org = await getOrg(orgSlug);
     const lastModified = lastModifiedAt(org);
+    const period = currentPeriod();
     // A stub is a thin, near-duplicate page (no releases yet) — noindex AND
     // nofollow it (#1947), stronger than the index:false/follow:true posture
     // used for on_demand / hidden orgs.
     const isStub = org.status === "stub";
     const shouldNoIndex = isStub || org.discovery === "on_demand" || org.isHidden === true;
     return {
-      title: `${org.name} Releases & Latest Updates · ${currentPeriod()}`,
-      description: `Latest releases, product updates, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
+      title: `${org.name} Release Notes & Changelog · ${period}`,
+      description: `Every ${org.name} release note, changelog, and product update across all tracked sources — version history refreshed ${period}.`,
       ...(shouldNoIndex ? { robots: { index: false, follow: !isStub } } : {}),
       openGraph: {
         type: "website",
@@ -63,7 +57,12 @@ export async function generateMetadata({
   }
 }
 
-export default async function OrgOverviewPage({
+/**
+ * Org landing page — the Releases feed is the default tab (homepage links and
+ * bare `/:org` URLs land here). Overview lives at `/:org/overview`; the old
+ * `/:org/releases` path 308s back here for bookmarks and sitemap entries.
+ */
+export default async function OrgReleasesPage({
   params,
 }: {
   params: Promise<{ orgSlug: string }>;
@@ -71,8 +70,6 @@ export default async function OrgOverviewPage({
   const { orgSlug } = await params;
   // Legacy `?tab=` deep-links are redirected to the path-based tab routes in the
   // routing middleware (`src/proxy.ts`) so this page can render statically.
-
-  const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let org;
   try {
@@ -86,8 +83,8 @@ export default async function OrgOverviewPage({
   const orgNodeId = `${orgUrl}#org`;
   const lastModified = lastModifiedAt(org);
 
-  // A stub org has no processed sources — skip the activity/heatmap/releases
-  // fetches entirely (they'd be discarded) and render declared locations.
+  // A stub org has no processed sources — skip the releases feed and render
+  // declared locations + claim CTA instead of an empty list.
   if (org.status === "stub") {
     const jsonLd = {
       "@context": "https://schema.org",
@@ -119,62 +116,35 @@ export default async function OrgOverviewPage({
     );
   }
 
-  let activityResult;
-  let heatmapResult;
-  let releaseItems: Awaited<ReturnType<typeof getOrgReleases>>["releases"];
-  let overview: Awaited<ReturnType<typeof getOrgOverview>>;
+  let initialReleases: Awaited<ReturnType<typeof getOrgReleases>>;
   try {
-    [activityResult, heatmapResult, releaseItems, overview] = await Promise.all([
-      tryFetch(api.orgActivity(orgSlug, activityFrom), {
-        route: `/${orgSlug}`,
-        event: "org-activity-fetch-failed",
-      }),
-      tryFetch(api.orgHeatmap(orgSlug), {
-        route: `/${orgSlug}`,
-        event: "org-heatmap-fetch-failed",
-      }),
-      // Drives the JSON-LD release ItemList only; a failure just drops the list.
-      getOrgReleases(orgSlug, 20)
-        .then((r) => r.releases)
-        .catch(() => []),
-      getOrgOverview(orgSlug),
-    ]);
+    initialReleases = await getOrgReleases(orgSlug);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
-    notFound();
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
   }
 
-  const activity = activityResult.data;
-  const heatmap: OrgHeatmap | null = heatmapResult.data;
-
+  // Resolved org avatar (incl. GitHub fallback) for the image-lightbox byline.
+  const orgGithubHandle = org.accounts?.find((a) => a.platform === "github")?.handle ?? null;
+  const orgAvatarUrl = orgAvatarSrc(org.avatarUrl, orgGithubHandle, 24);
   const releaseListId = `${orgUrl}#releases`;
-  // Declare the overview's provenance as internal release-page citations (#1934).
-  const overviewCitationNode = overview
-    ? buildOverviewCitationJsonLd(overview.citations, {
-        orgName: org.name,
-        aboutId: orgNodeId,
-        dateModified: lastModified,
-      })
-    : null;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "Organization",
-        "@id": orgNodeId,
-        name: org.name,
-        url: orgUrl,
-        ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
-        ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
-        ...(lastModified ? { dateModified: lastModified } : {}),
-      },
-      {
         "@type": "CollectionPage",
-        name: `${org.name} Releases & Latest Updates`,
+        name: `${org.name} Releases`,
         url: orgUrl,
         ...(lastModified ? { dateModified: lastModified } : {}),
-        about: { "@id": orgNodeId },
-        ...(releaseItems.length > 0 ? { mainEntity: { "@id": releaseListId } } : {}),
+        mainEntity: { "@id": releaseListId },
+        about: {
+          "@type": "Organization",
+          "@id": orgNodeId,
+          name: org.name,
+          url: orgUrl,
+          ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
+        },
       },
       {
         "@type": "BreadcrumbList",
@@ -183,43 +153,26 @@ export default async function OrgOverviewPage({
           { "@type": "ListItem", position: 2, name: org.name, item: orgUrl },
         ],
       },
-      ...(overviewCitationNode ? [overviewCitationNode] : []),
-      ...(releaseItems.length > 0
-        ? [
-            buildReleaseItemListJsonLd(releaseItems, {
-              listId: releaseListId,
-              name: `${org.name} Releases`,
-              isPartOfId: orgNodeId,
-            }),
-          ]
-        : []),
+      buildReleaseItemListJsonLd(initialReleases.releases, {
+        listId: releaseListId,
+        name: `${org.name} Releases`,
+        isPartOfId: orgNodeId,
+      }),
     ],
   };
 
   return (
     <>
       <JsonLd data={jsonLd} />
-      {overview && <OverviewView page={overview} variant="org" />}
-      {releaseItems.length > 0 && (
-        <LatestReleasesTeaser orgSlug={orgSlug} releases={releaseItems} />
-      )}
-      {activity && (
-        <OrgActivityPanel
-          orgSlug={orgSlug}
-          activity={activity}
-          heatmap={heatmap}
-          products={org.products}
-          sources={org.sources}
-          totalReleases={org.releaseCount}
-          avgPerWeek={org.avgReleasesPerWeek}
-          trackingSince={org.trackingSince}
-        />
-      )}
-      {!activity && !overview && activityResult.error && (
-        <p className="py-4 text-sm text-[var(--fg-3)]">
-          Couldn&apos;t load release activity. Try refreshing.
-        </p>
-      )}
+      <OrgReleaseList
+        orgSlug={orgSlug}
+        initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
+        initialCursor={initialReleases.nextCursor}
+        multipleSourcesExist={org.sources.length > 1}
+        availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
+        orgAvatarUrl={orgAvatarUrl}
+        productLinks={<OrgReleaseProductLinks orgSlug={orgSlug} products={org.products} />}
+      />
     </>
   );
 }

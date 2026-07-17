@@ -22,17 +22,21 @@ function CodeBrackets() {
   );
 }
 
-type OrgTab = "overview" | "releases" | "sources" | "playbook" | "fetch-log" | "admin";
+type OrgTab = "releases" | "overview" | "sources" | "playbook" | "fetch-log" | "admin";
 
 function resolveActiveTab(pathname: string, orgSlug: string): OrgTab {
   const base = `/${orgSlug}`;
-  if (pathname === base) return "overview";
+  // Bare org URL is the Releases feed (default landing).
+  if (pathname === base) return "releases";
+  if (pathname === `${base}/overview`) return "overview";
+  // `/:org/releases` 308s to bare, but resolve it as releases while the
+  // redirect is in flight so the tab highlight doesn't flicker.
   if (pathname === `${base}/releases`) return "releases";
   if (pathname === `${base}/sources`) return "sources";
   if (pathname === `${base}/playbook`) return "playbook";
   if (pathname === `${base}/fetch-log`) return "fetch-log";
   if (pathname === `${base}/admin`) return "admin";
-  return "overview";
+  return "releases";
 }
 
 function orgTabClass(active: boolean): string {
@@ -110,14 +114,7 @@ export function OrgTabs({
 
   return (
     <div className="flex items-center gap-6 overflow-x-auto border-b border-[var(--line)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <Link href={base} className={orgTabClass(activeTab === "overview")} scroll={false}>
-        Overview
-      </Link>
-      <Link
-        href={`${base}/releases`}
-        className={orgTabClass(activeTab === "releases")}
-        scroll={false}
-      >
+      <Link href={base} className={orgTabClass(activeTab === "releases")} scroll={false}>
         Releases
         {showDot && (
           <span
@@ -125,6 +122,13 @@ export function OrgTabs({
             className="org-status-dot ml-[7px] inline-block h-1.5 w-1.5 translate-y-[1px] rounded-full bg-[var(--accent)] align-middle"
           />
         )}
+      </Link>
+      <Link
+        href={`${base}/overview`}
+        className={orgTabClass(activeTab === "overview")}
+        scroll={false}
+      >
+        Overview
       </Link>
       <Link
         href={`${base}/sources`}
