@@ -27,7 +27,7 @@ export const getOrgReleases = cache(
         JSON.stringify({
           component: "web-ssr",
           event: "org-releases-graphql-fallback",
-          route: `/${orgSlug}/releases`,
+          route: `/${orgSlug}`,
           err: {
             message: err instanceof Error ? err.message : String(err),
             name: err instanceof Error ? err.name : undefined,
@@ -41,7 +41,7 @@ export const getOrgReleases = cache(
           JSON.stringify({
             component: "web-ssr",
             event: "org-releases-rest-fallback-empty",
-            route: `/${orgSlug}/releases`,
+            route: `/${orgSlug}`,
             err: {
               message: restErr instanceof Error ? restErr.message : String(restErr),
               name: restErr instanceof Error ? restErr.name : undefined,

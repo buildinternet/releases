@@ -282,9 +282,11 @@ const NESTED_RESERVED = [
   "sitemap",
   // Org sub-tabs at `/{org}/{slug}` — added in #875 when org tabs moved to
   // path segments. A source/product slug matching these would shadow the
-  // route via Next.js static-over-dynamic precedence.
+  // route via Next.js static-over-dynamic precedence. `overview` joined when
+  // Releases became the bare-org default and Overview moved to `/:org/overview`.
   "releases",
   "sources",
+  "overview",
   // Source sub-tabs at `/{org}/{src}/{slug}` — added in #875.
   "highlights",
   "changelog",

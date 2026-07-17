@@ -9,7 +9,7 @@ describe("isReservedSlug nested scope — product-first additions", () => {
   });
 
   it("still reserves the pre-existing org/source sub-tabs", () => {
-    for (const slug of ["releases", "sources", "highlights", "changelog"]) {
+    for (const slug of ["releases", "sources", "overview", "highlights", "changelog"]) {
       expect(isReservedSlug(slug, "nested")).toBe(true);
     }
   });

@@ -69,9 +69,6 @@ const COLUMNS: FooterColumn[] = [
 const linkClass =
   "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 underline-offset-2 hover:underline transition-colors";
 
-const creditLinkClass =
-  "text-stone-500 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-400 underline-offset-2 hover:underline";
-
 function FooterLinkItem({ link }: { link: FooterLink }) {
   if (link.external) {
     return (
@@ -125,16 +122,17 @@ export function Footer() {
 
       {/* Family bar — maintainer credit + a quiet cross-link to the sibling
           Build Internet tool. rel omits "noreferrer" so uploads.sh sees the
-          referral traffic. */}
+          referral traffic. Same text size as the column links (`text-xs`);
+          earlier 10px / stone-600 dark was hard to read. */}
       <div className="border-t border-stone-200 dark:border-stone-800">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex flex-col gap-2 text-[10px] leading-relaxed text-stone-400 dark:text-stone-600 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-6 py-4 text-xs leading-relaxed text-stone-500 dark:text-stone-400 sm:flex-row sm:items-center sm:justify-between">
           <p>
             Maintained by{" "}
             <a
               href="https://zachdunn.com"
               target="_blank"
               rel="noopener noreferrer"
-              className={creditLinkClass}
+              className={linkClass}
             >
               Zach Dunn
             </a>{" "}
@@ -143,7 +141,7 @@ export function Footer() {
               href="https://buildinternet.com"
               target="_blank"
               rel="noopener noreferrer"
-              className={creditLinkClass}
+              className={linkClass}
             >
               Build Internet
             </a>
@@ -151,7 +149,7 @@ export function Footer() {
           </p>
           <p>
             Screenshots &amp; recordings for agent PRs —{" "}
-            <a href={UPLOADS_URL} target="_blank" rel="noopener" className={creditLinkClass}>
+            <a href={UPLOADS_URL} target="_blank" rel="noopener" className={linkClass}>
               uploads.sh →
             </a>
           </p>

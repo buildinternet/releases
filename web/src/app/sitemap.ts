@@ -84,9 +84,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const data = await api.sitemap();
 
-    // Each org emits the bare URL (Overview) plus the path-based tab routes
-    // added in #875. Without these, Google indexes only the lightweight
-    // Overview content and misses the releases feed entirely.
+    // Each org emits the bare URL (Releases feed — the default landing) plus
+    // Overview and Sources tabs. `/:org/releases` 308s to the bare URL and is
+    // deliberately omitted so the sitemap only lists canonical paths.
     const orgEntries: MetadataRoute.Sitemap = data.orgs.flatMap((org) => {
       // Only a real lastActivity drives lastmod; no fabricated `now` fallback.
       const lastModified = org.lastActivity ? new Date(org.lastActivity) : undefined;
@@ -98,10 +98,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           priority: 0.8,
         },
         {
-          url: `${BASE_URL}/${org.slug}/releases`,
+          url: `${BASE_URL}/${org.slug}/overview`,
           lastModified,
-          changeFrequency: "daily" as const,
-          priority: 0.8,
+          changeFrequency: "weekly" as const,
+          priority: 0.6,
         },
         {
           url: `${BASE_URL}/${org.slug}/sources`,

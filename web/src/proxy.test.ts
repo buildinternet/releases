@@ -41,6 +41,15 @@ describe("proxy legacy ?tab= redirects", () => {
   }
 
   it("308s an org-level legacy tab to its path-based route, dropping the query", () => {
+    // Releases is the bare org URL (default tab) — not /:org/releases.
+    expect(locationOf("/vercel?tab=releases")).toEqual({
+      status: 308,
+      location: "https://releases.sh/vercel",
+    });
+    expect(locationOf("/vercel?tab=overview")).toEqual({
+      status: 308,
+      location: "https://releases.sh/vercel/overview",
+    });
     expect(locationOf("/vercel?tab=sources")).toEqual({
       status: 308,
       location: "https://releases.sh/vercel/sources",

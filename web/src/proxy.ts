@@ -99,7 +99,16 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-const ORG_LEGACY_TABS = new Set(["releases", "sources", "playbook", "fetch-log", "admin"]);
+// `releases` maps to the bare org URL (Releases is the default tab); `overview`
+// is the dedicated overview path. Other tabs keep their path-based routes.
+const ORG_LEGACY_TABS = new Set([
+  "releases",
+  "overview",
+  "sources",
+  "playbook",
+  "fetch-log",
+  "admin",
+]);
 const SOURCE_LEGACY_TABS = new Set(["highlights", "changelog"]);
 
 // First path segments that name a real top-level route, not an org slug. The
@@ -162,9 +171,11 @@ function legacyTabRedirect(request: NextRequest): NextResponse | null {
   // Past this point the first segment must be an org slug, never a top-level route.
   if (RESERVED_FIRST_SEGMENT.has(parts[0])) return null;
 
-  // /:org?tab=releases|sources|playbook|fetch-log|admin → /:org/:tab
+  // /:org?tab=releases|overview|sources|playbook|fetch-log|admin → path-based tab.
+  // Releases is the bare org URL now; other tabs keep `/:org/:tab`.
   if (parts.length === 1 && ORG_LEGACY_TABS.has(tab)) {
-    return redirectToPath(request, `/${parts[0]}/${tab}`);
+    const target = tab === "releases" ? `/${parts[0]}` : `/${parts[0]}/${tab}`;
+    return redirectToPath(request, target);
   }
 
   // /:org/:slug?tab=highlights|changelog → /:org/:slug/:tab

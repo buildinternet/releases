@@ -4,6 +4,10 @@
  * preview so every compact release surface reads as one system — matching the
  * related-rail card thumbnail. Renders nothing when `src` is falsy, so callers
  * pass a possibly-empty url without branching.
+ *
+ * Placement: sit the thumb in the **content** row (left or right of the title),
+ * never in the attribution chrome next to a relative timestamp — that reads as
+ * cramped chrome rather than editorial media.
  */
 export function ReleaseThumb({
   src,

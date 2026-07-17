@@ -2,7 +2,7 @@
 
 import { RouteErrorFallback } from "@/components/route-error-fallback";
 
-export default function OrgReleasesError({
+export default function OrgError({
   error: _error,
   reset,
 }: {

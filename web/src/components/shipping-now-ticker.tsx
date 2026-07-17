@@ -37,11 +37,11 @@ function dedupKey(r: TickerRelease): string {
  * version treatment, a bare-version title ("5.0.0") still reads as a complete,
  * recognizable unit, so the bare-version drop doesn't apply to them. #1206
  *
- * Video releases short-circuit for the same reason: the play chip + provider
- * label ("Watch on YouTube") makes the card a complete unit even when the
- * video title is terse. Gate on the resolved provider (what `Card` actually
- * renders), not the raw facet — a truthy-but-unrecognised provider shows no
- * chip, so it shouldn't bypass the bare-version drop. #1206
+ * Video releases short-circuit for the same reason: the subtle video icon
+ * makes the card a complete unit even when the video title is terse. Gate on
+ * the resolved provider (what `Card` actually renders), not the raw facet —
+ * a truthy-but-unrecognised provider shows no icon, so it shouldn't bypass
+ * the bare-version drop. #1206
  */
 function isMeaningfulRelease(r: TickerRelease): boolean {
   if (r.source.appStore || videoRowInfoFromWire(r.source.video)) return true;
@@ -81,21 +81,32 @@ function ActivityIcon() {
   );
 }
 
-// Small filled play triangle for the inline video chip — same glyph as
-// `PlayBadge`, sized down to ride alongside the version badge. SVG, not an
-// emoji (per the web UI convention).
-function PlayGlyph() {
+// Subtle video mark for the meta row — a quiet clapper/frame glyph instead of
+// a "YouTube"/"Vimeo" text chip. The provider name rides `title` + `aria-label`
+// so sighted UI stays minimal while screen readers still get the platform.
+function VideoIcon({ label }: { label: string }) {
   return (
-    <svg
-      width="9"
-      height="9"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      className="translate-x-[0.5px]"
+    <span
+      className="inline-flex shrink-0 items-center text-stone-400 dark:text-stone-500"
+      title={label}
+      aria-label={`Video · ${label}`}
     >
-      <path d="M8 5v14l11-7z" />
-    </svg>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {/* Rounded screen + play triangle — reads as “video” without a brand. */}
+        <rect x="2.5" y="5.5" width="15" height="13" rx="2.5" />
+        <path d="M17.5 10.5 21.5 8v8l-4-2.5" />
+      </svg>
+    </span>
   );
 }
 
@@ -117,6 +128,8 @@ function Card({ slide }: { slide: Slide }) {
       data-ticker-card
       className="snap-start flex-none basis-[88%] sm:basis-[calc(33.333%-0.5rem)] lg:basis-[calc(25%-0.5625rem)] flex flex-col gap-2 p-4 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700 hover:shadow-sm transition-[border-color,box-shadow] shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
     >
+      {/* Attribution row only — keep the relative timestamp here, never the
+          media thumb (it used to sit next to "5h ago" and felt cramped). */}
       <div className="flex items-center gap-2 min-w-0">
         {/* App Store releases lead with the app icon (more recognizable than
             the org avatar for an app update); everything else uses the org
@@ -153,21 +166,19 @@ function Card({ slide }: { slide: Slide }) {
             {relative}
           </span>
         )}
+      </div>
+      {/* Title + optional media: thumb rides the content row (right, top-
+          aligned), same as related-rail cards — not the header chrome. */}
+      <div className="flex items-start gap-3 min-w-0">
+        <p className="flex-1 min-w-0 text-[13px] text-stone-700 dark:text-stone-300 line-clamp-3 leading-5 min-h-[2.5rem]">
+          {pickLabel(release)}
+        </p>
         {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
       </div>
-      <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-3 leading-5 min-h-[2.5rem]">
-        {pickLabel(release)}
-      </p>
       <div className="flex items-center gap-2 min-w-0">
-        {/* Video releases lead the meta row with a play chip + provider so the
-            card reads as watchable; the version (rare on video sources) still
-            follows when present. #1206 */}
-        {video && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap">
-            <PlayGlyph />
-            {video.label}
-          </span>
-        )}
+        {/* Video releases get a quiet icon (not a "YouTube" text chip); version
+            still follows when present. #1206 */}
+        {video && <VideoIcon label={video.label} />}
         {release.version && (
           <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap max-w-full truncate">
             {release.version}
