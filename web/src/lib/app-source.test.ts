@@ -1,7 +1,30 @@
 import { describe, it, expect } from "bun:test";
-import { getAppInfo, appStoreIconUrl } from "./app-source";
+import { getAppInfo, appStoreIconUrl, appRowInfoFromWire } from "./app-source";
 
 const meta = (o: unknown) => JSON.stringify(o);
+
+// The cross-promo importance gate (`isRoutineAppRelease`) lives in
+// `@buildinternet/releases-core/importance` and is tested there.
+
+describe("appRowInfoFromWire", () => {
+  it("maps ios/macos to the human label + carries icon + app name", () => {
+    expect(appRowInfoFromWire({ platform: "ios", iconUrl: "x" }, "ChatGPT")).toEqual({
+      label: "iOS",
+      iconUrl: "x",
+      appName: "ChatGPT",
+    });
+    expect(appRowInfoFromWire({ platform: "macos", iconUrl: null }, "Things")).toEqual({
+      label: "macOS",
+      iconUrl: null,
+      appName: "Things",
+    });
+  });
+
+  it("returns null when there is no appStore block (non-app source)", () => {
+    expect(appRowInfoFromWire(null, "Acme")).toBeNull();
+    expect(appRowInfoFromWire(undefined, "Acme")).toBeNull();
+  });
+});
 
 describe("getAppInfo", () => {
   it("returns null for non-app sources", () => {

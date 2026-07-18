@@ -2,9 +2,12 @@ import Link from "next/link";
 import type { OrgReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { pickReleaseThumb } from "@/lib/media";
+import { appRowInfoFromWire } from "@/lib/app-source";
 import { orgEyebrowClass } from "@releases/design-system";
 import { ImportanceMarker } from "../importance-marker";
 import { ReleaseThumb } from "../release-thumb";
+import { AppStoreIcon } from "../app-store-icon";
+import { AppPlatformCue } from "../app-platform-cue";
 import { ArrowRightIcon, ChevronRightIcon } from "./icons";
 
 /**
@@ -40,21 +43,35 @@ export function LatestReleasesTeaser({
       </div>
       <div className="overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--surface)]">
         {items.map((r, i) => {
-          const label = r.titleShort || r.title;
-          const meta = [r.product?.name, r.version].filter(Boolean).join(" · ");
-          const thumb = pickReleaseThumb(r.media);
+          // Mobile-app release: lead with the app icon, headline the app name,
+          // and swap the "product · version" meta for a muted "iOS/macOS app"
+          // cue — the version carries no meaning for a routine app update.
+          // `appStore` is set only for `appstore` sources. #mobile-app-release-cards
+          const app = appRowInfoFromWire(r.source.appStore, r.product?.name ?? r.source.name);
+          const label = app ? app.appName : r.titleShort || r.title;
+          const meta = app ? null : [r.product?.name, r.version].filter(Boolean).join(" · ");
+          const thumb = app ? null : pickReleaseThumb(r.media);
           return (
             <Link
               key={r.id ?? `${label}-${i}`}
               href={releasesHref}
               className="flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3.5 transition-colors first:border-t-0 hover:bg-[var(--surface-2)]"
             >
+              {/* Leading media, and the meta line below, are mutually exclusive
+                  by construction: `thumb`/`meta` are null exactly when `app` is
+                  set, so these render as independent siblings, not nested. */}
+              {app && <AppStoreIcon iconUrl={app.iconUrl} appName={app.appName} size={36} />}
               {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 truncate text-[14px] font-semibold text-[var(--fg)]">
                   <ImportanceMarker importance={r.importance} />
                   <span className="truncate">{label}</span>
                 </div>
+                {app && (
+                  <div className="mt-0.5 truncate text-[11.5px]">
+                    <AppPlatformCue label={app.label} />
+                  </div>
+                )}
                 {meta && (
                   <div className="mt-0.5 truncate font-mono text-[11.5px] text-[var(--fg-3)]">
                     {meta}

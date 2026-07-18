@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ImportanceScoreSchema } from "./shared.js";
+import { AppStoreSourceInfoSchema, ImportanceScoreSchema } from "./shared.js";
 
 /**
  * Anchor scope for related-* lookups. `org` filters the Vectorize query by
@@ -24,6 +24,15 @@ export const RelatedReleaseSourceSchema = z.object({
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable(),
   orgAvatarUrl: z.string().nullable(),
+  /**
+   * App Store platform + icon, present only for `appstore` sources (resolved
+   * server-side, same block the org/product/ticker read paths already carry).
+   * Its presence is the signal the related rail uses to render the lean
+   * mobile-app card (app icon + "iOS/macOS" cue) instead of the standard
+   * headline/thumbnail. Additive/optional for mid-deploy pin tolerance.
+   * #mobile-app-release-cards
+   */
+  appStore: AppStoreSourceInfoSchema.optional(),
 });
 
 /**

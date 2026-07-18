@@ -5,13 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 import { videoRowInfoFromWire } from "@/lib/video-source";
+import { appRowInfoFromWire } from "@/lib/app-source";
+import { isRoutineAppRelease } from "@buildinternet/releases-core/importance";
 import { pickReleaseThumb } from "@/lib/media";
 import { OrgAvatar } from "./org-avatar";
 import { AppStoreIcon } from "./app-store-icon";
+import { AppPlatformCue } from "./app-platform-cue";
 import { ReleaseThumb } from "./release-thumb";
 
 export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
-type Slide = { release: TickerRelease; relative: string | null; extraCount: number };
+export type Slide = { release: TickerRelease; relative: string | null; extraCount: number };
 
 const MAX_ITEMS = 20;
 
@@ -110,10 +113,15 @@ function VideoIcon({ label }: { label: string }) {
   );
 }
 
-function Card({ slide }: { slide: Slide }) {
+// Exported for render tests (`shipping-now-ticker.test.tsx`).
+export function Card({ slide }: { slide: Slide }) {
   const { release, relative, extraCount } = slide;
   const video = videoRowInfoFromWire(release.source.video);
-  const thumb = pickReleaseThumb(release.media);
+  // Mobile-app release: render the lean form — the app icon already leads the
+  // header, so the body drops to an "iOS/macOS app" cue and the version chip +
+  // media thumbnail are suppressed. #mobile-app-release-cards
+  const app = appRowInfoFromWire(release.source.appStore, release.source.org.name);
+  const thumb = app ? null : pickReleaseThumb(release.media);
   // A slot is keyed per (org, product), so a release on a specific product
   // (Google → Chrome) reads as just the org name without disambiguation. Lead
   // the header with the product name when present, dimming the org after a
@@ -168,18 +176,21 @@ function Card({ slide }: { slide: Slide }) {
         )}
       </div>
       {/* Title + optional media: thumb rides the content row (right, top-
-          aligned), same as related-rail cards — not the header chrome. */}
+          aligned), same as related-rail cards — not the header chrome. For a
+          mobile-app release the body is the muted platform cue instead of the
+          (usually boilerplate) release title. */}
       <div className="flex items-start gap-3 min-w-0">
         <p className="flex-1 min-w-0 text-[13px] text-stone-700 dark:text-stone-300 line-clamp-3 leading-5 min-h-[2.5rem]">
-          {pickLabel(release)}
+          {app ? <AppPlatformCue label={app.label} /> : pickLabel(release)}
         </p>
         {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
       </div>
       <div className="flex items-center gap-2 min-w-0">
         {/* Video releases get a quiet icon (not a "YouTube" text chip); version
-            still follows when present. #1206 */}
+            still follows when present. #1206. App releases drop the version
+            chip — it carries no meaning for a routine app update. */}
         {video && <VideoIcon label={video.label} />}
-        {release.version && (
+        {!app && release.version && (
           <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap max-w-full truncate">
             {release.version}
           </span>
@@ -220,6 +231,11 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
     const slots = new Map<string, Slide>();
     for (const release of releases) {
       if (!isMeaningfulRelease(release)) continue;
+      // Cross-promo deprioritization: this platform-wide rail drops routine
+      // (low-importance / unscored) mobile-app updates; notable app releases and
+      // all non-app releases stay. Same rule as the server related rail.
+      // #mobile-app-release-cards
+      if (isRoutineAppRelease(!!release.source.appStore, release.importance)) continue;
       const existing = slots.get(dedupKey(release));
       if (existing) {
         existing.extraCount += 1;

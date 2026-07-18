@@ -14,6 +14,34 @@
 export const IMPORTANCE_MIN = 1;
 export const IMPORTANCE_MAX = 5;
 
+/**
+ * High-signal floor — the AI-scored importance at/above which a release is
+ * "notable" (`4` = major, `5` = landmark). This is the same threshold the web
+ * flame glyph renders at (`ImportanceMarker`) and the overview/digest selectors
+ * bias toward (`OVERVIEW_HIGH_IMPORTANCE` re-exports this). Consumers that gate
+ * on "is this important enough to surface" (e.g. deprioritizing routine
+ * mobile-app updates out of cross-promo rails) should compare
+ * `(importance ?? 0) >= IMPORTANCE_HIGH` so an unscored (`null`) release folds
+ * below the floor rather than being treated as important.
+ */
+export const IMPORTANCE_HIGH = 4;
+
+/**
+ * True when a release is a *routine* mobile-app update that a cross-promotional
+ * discovery surface — the global "From other products" related rail and the
+ * homepage "Recent" ticker — should skip: an App Store release the AI didn't
+ * flag notable (`importance < IMPORTANCE_HIGH`, including unscored `null`, which
+ * folds below the floor). Non-`appstore` releases are never routine in this
+ * sense. One definition shared by the server rail filter and the client ticker
+ * filter so the rule can't drift out of sync. #mobile-app-release-cards
+ */
+export function isRoutineAppRelease(
+  isAppStore: boolean,
+  importance: number | null | undefined,
+): boolean {
+  return isAppStore && (importance ?? 0) < IMPORTANCE_HIGH;
+}
+
 /** True when `value` is an integer within the 1–5 importance range. */
 export function isImportanceScore(value: number): boolean {
   return Number.isInteger(value) && value >= IMPORTANCE_MIN && value <= IMPORTANCE_MAX;

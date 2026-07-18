@@ -2,7 +2,10 @@ import Link from "next/link";
 import { api, type RelatedReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { clamp, stripMarkdown } from "@/lib/og-helpers";
+import { appRowInfoFromWire } from "@/lib/app-source";
 import { ImportanceMarker } from "./importance-marker";
+import { AppStoreIcon } from "./app-store-icon";
+import { AppPlatformCue } from "./app-platform-cue";
 
 interface RelatedRailProps {
   anchorReleaseId: string | null;
@@ -108,8 +111,19 @@ interface ReleaseCardProps {
   item: RelatedReleaseItem;
 }
 
-function ReleaseCard({ item }: ReleaseCardProps) {
+// Exported for render tests (`related-rail.test.tsx`); the async `RelatedRail`
+// wrapper is not directly renderable in a unit test.
+export function ReleaseCard({ item }: ReleaseCardProps) {
   const href = `/release/${item.id}`;
+  // Prefer the product name over the bare source/feed name when the release's
+  // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
+  const trailingName = item.source.productName ?? item.source.name;
+  // Mobile-app releases render a lean card: app icon + name + "iOS/macOS app",
+  // no version / body / thumbnail — those carry little meaning for a routine app
+  // update. `appStore` is only set for `appstore` sources. #mobile-app-release-cards
+  const app = appRowInfoFromWire(item.source.appStore, trailingName);
+  if (app) return <AppReleaseCard item={item} href={href} app={app} />;
+
   // Content-first: lead with the release title and demote the version to the
   // subtitle. Fall back to an AI-cleaned short title only when there's no
   // version to surface there.
@@ -119,9 +133,6 @@ function ReleaseCard({ item }: ReleaseCardProps) {
     ? item.version
     : item.titleShort?.trim() || item.titleGenerated?.trim() || null;
   const preview = releasePreview(item, subtitleText);
-  // Prefer the product name over the bare source/feed name when the release's
-  // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
-  const trailingName = item.source.productName ?? item.source.name;
   return (
     // Marker sits outside the card link so the HoverCard trigger isn't nested
     // inside an <a> (same rule as feed cards: flame sibling of title link).
@@ -165,6 +176,51 @@ function ReleaseCard({ item }: ReleaseCardProps) {
             referrerPolicy="no-referrer"
           />
         )}
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * Lean mobile-app variant of {@link ReleaseCard}: the app icon leads, the app
+ * name is the headline, and a muted "iOS/macOS app" cue stands in for the
+ * version/body/thumbnail — the date still supplies recency. Attribution drops
+ * to the org alone (the headline already is the app/product name).
+ * #mobile-app-release-cards
+ */
+function AppReleaseCard({
+  item,
+  href,
+  app,
+}: {
+  item: RelatedReleaseItem;
+  href: string;
+  app: { label: "iOS" | "macOS"; iconUrl: string | null; appName: string };
+}) {
+  return (
+    <div className={`${CARD_CLASS} items-start`}>
+      <ImportanceMarker importance={item.importance} className="mt-0.5" />
+      <Link href={href} className="flex flex-1 gap-3 min-w-0 h-full items-start">
+        <AppStoreIcon iconUrl={app.iconUrl} appName={app.appName} size={40} className="mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className={HEADLINE_CLASS}>{app.appName}</span>
+            {item.publishedAt && (
+              <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
+                {formatDate(item.publishedAt)}
+              </span>
+            )}
+          </div>
+          <div className="text-[12px] mt-0.5">
+            <AppPlatformCue label={app.label} />
+          </div>
+          {item.source.orgName && (
+            <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
+              {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
+              <span className="line-clamp-1">{item.source.orgName}</span>
+            </div>
+          )}
+        </div>
       </Link>
     </div>
   );

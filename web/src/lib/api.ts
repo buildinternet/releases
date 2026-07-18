@@ -660,6 +660,9 @@ export interface RelatedReleaseItem {
     orgSlug: string | null;
     orgName: string | null;
     orgAvatarUrl: string | null;
+    /** App Store platform + icon, present only for `appstore` sources; its
+     * presence drives the rail's lean mobile-app card. */
+    appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
   };
 }
 

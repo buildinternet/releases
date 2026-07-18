@@ -1,5 +1,6 @@
 import type { Kind } from "./kinds.js";
 import type { Release, Source } from "./schema.js";
+import { IMPORTANCE_HIGH } from "./importance.js";
 
 /**
  * Overview content is considered stale beyond this many days. CLI and MCP both
@@ -68,9 +69,10 @@ export const PER_KIND_FAMILY_CAPS: Partial<Record<Kind, number>> = {
  * High-signal importance threshold — the AI-scored floor the web flame glyph
  * uses, and the same cutoff #2108 (collection summaries) and #2109 (digest
  * emails) bias toward. Releases at or above this survive truncation ahead of
- * churn.
+ * churn. Aliases the canonical {@link IMPORTANCE_HIGH} (one threshold, one
+ * value) while keeping the overview-scoped name its callers already import.
  */
-export const OVERVIEW_HIGH_IMPORTANCE = 4;
+export const OVERVIEW_HIGH_IMPORTANCE = IMPORTANCE_HIGH;
 
 /** Recency comparator for releases: newest first, null/empty dates sort last. */
 function byRecencyDesc(a: Release, b: Release): number {
