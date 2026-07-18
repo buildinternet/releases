@@ -14,6 +14,17 @@
 export const IMPORTANCE_MIN = 1;
 export const IMPORTANCE_MAX = 5;
 
+/**
+ * High-signal floor — the AI-scored importance at/above which a release is
+ * "notable" (`4` = major, `5` = landmark). This is the same threshold the web
+ * flame glyph renders at (`ImportanceMarker`) and the overview/digest selectors
+ * bias toward. Consumers that gate on "is this important enough to surface"
+ * (e.g. deprioritizing routine mobile-app updates out of cross-promo rails)
+ * should compare `(importance ?? 0) >= IMPORTANCE_HIGH` so an unscored (`null`)
+ * release folds below the floor rather than being treated as important.
+ */
+export const IMPORTANCE_HIGH = 4;
+
 /** True when `value` is an integer within the 1–5 importance range. */
 export function isImportanceScore(value: number): boolean {
   return Number.isInteger(value) && value >= IMPORTANCE_MIN && value <= IMPORTANCE_MAX;

@@ -1,3 +1,19 @@
+import { IMPORTANCE_HIGH } from "@buildinternet/releases-core/importance";
+
+/**
+ * Cross-promo gate for the client-side discovery surface (the homepage ticker),
+ * mirroring the server's related-rail filter (`isRoutineAppRelease`): a
+ * mobile-app release earns a slot on a cross-promotional surface only when the
+ * AI flagged it notable (`importance >= IMPORTANCE_HIGH`); an unscored (`null`)
+ * app release folds below the floor. Non-app releases always pass. `isApp` is
+ * whether the release's source is an App Store source. Returns true when the
+ * release should be SHOWN. #mobile-app-release-cards
+ */
+export function keepInCrossPromo(isApp: boolean, importance: number | null | undefined): boolean {
+  if (!isApp) return true;
+  return (importance ?? 0) >= IMPORTANCE_HIGH;
+}
+
 /**
  * Display info for a mobile/desktop App Store source. App Store sources
  * (`type === "appstore"`) carry the app icon + platform in

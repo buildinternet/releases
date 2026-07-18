@@ -189,6 +189,7 @@ export type HomepageTickerQuery = {
       publishedAt: string | null;
       titleGenerated: string | null;
       titleShort: string | null;
+      importance: number | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: {
         org: { slug: string; name: string; avatarUrl: string | null };
@@ -972,7 +973,7 @@ export const HomepageOrgsStatsDocument = {
   ],
 } as unknown as DocumentNode<HomepageOrgsStatsQuery, HomepageOrgsStatsQueryVariables>;
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:e8b5f160ba9f17858d2da995ab6c3032dae4c2628100e0c8783b8565d40bf556" },
+  __meta__: { hash: "sha256:59bd9b46b3a5292f64c40d99d3659ceaa8d3352f56966e9987df64d0588192de" },
   kind: "Document",
   definitions: [
     {
@@ -1036,6 +1037,7 @@ export const HomepageTickerDocument = {
                       { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
                       { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
                       { kind: "Field", name: { kind: "Name", value: "titleShort" } },
+                      { kind: "Field", name: { kind: "Name", value: "importance" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "media" },

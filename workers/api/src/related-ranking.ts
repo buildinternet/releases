@@ -18,6 +18,7 @@
  */
 
 import { classifyContentQuality, type ContentTier } from "@releases/search/content-quality";
+import { IMPORTANCE_HIGH } from "@buildinternet/releases-core/importance";
 
 export type { ContentTier, ContentQuality } from "@releases/search/content-quality";
 export {
@@ -44,6 +45,23 @@ export const RELATED_UNDATED_PENALTY = 0.25;
  * where a slow-moving org's older releases are still its best content.
  */
 export const RELATED_GLOBAL_MIN_RANK = 0.2;
+
+/**
+ * Cross-promo gate for the GLOBAL "From other products" rail: a routine
+ * mobile-app update is one whose source is `appstore` and whose AI importance
+ * is below the flame threshold (`< IMPORTANCE_HIGH`), including unscored
+ * (`null` → folds below the floor). Those are dropped from the global rail so
+ * discovery isn't flooded with point-release churn; a landmark/major app
+ * release (`>= IMPORTANCE_HIGH`) and every non-`appstore` release are kept.
+ * NOT applied to the org-scoped rail (the org's own content, like its feed).
+ * Returns true when the candidate should be filtered OUT.
+ */
+export function isRoutineAppRelease(
+  sourceType: string,
+  importance: number | null | undefined,
+): boolean {
+  return sourceType === "appstore" && (importance ?? 0) < IMPORTANCE_HIGH;
+}
 
 const DAY_MS = 86_400_000;
 

@@ -25,11 +25,13 @@ import {
 import { createDb } from "../db.js";
 import { sourceMatchByIdOrSlug, firstImageThumbnail } from "../utils.js";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { logEvent } from "@releases/lib/log-event";
 import {
   scoreRelatedRelease,
   recencyMultiplier,
   RELATED_GLOBAL_MIN_RANK,
+  isRoutineAppRelease,
 } from "../related-ranking.js";
 import {
   RelatedReleasesResponseSchema,
@@ -229,6 +231,12 @@ relatedRoutes.get(
     // (a stale, low-similarity pool means "nothing good out there"). The org
     // rail is inherently scoped, so it shows its best even when modest.
     const minRank = scope === "global" ? RELATED_GLOBAL_MIN_RANK : 0;
+    // Cross-promo deprioritization: on the global "From other products" rail,
+    // drop routine mobile-app updates (an `appstore` release scored below the
+    // flame threshold, or unscored). The org-scoped "More from {org}" rail is
+    // the org's own content — like its own feed teaser — so it keeps every app
+    // release. #mobile-app-release-cards
+    const dropRoutineApps = scope === "global";
     const items = await hydrateReleaseNeighbors(
       db,
       matches,
@@ -237,6 +245,7 @@ relatedRoutes.get(
       mediaOrigin,
       excludeOrg,
       minRank,
+      dropRoutineApps,
     );
     return c.json({ scope, items });
   },
@@ -250,6 +259,7 @@ async function hydrateReleaseNeighbors(
   mediaOrigin: string,
   excludeOrg: string | null,
   minRank: number,
+  dropRoutineApps: boolean,
 ): Promise<RelatedReleaseItem[]> {
   const ids = matches.map((m) => m.id).filter((id) => id !== anchorId);
   if (ids.length === 0) return [];
@@ -269,6 +279,8 @@ async function hydrateReleaseNeighbors(
     sourceId: string;
     sourceSlug: string;
     sourceName: string;
+    sourceType: string;
+    sourceMetadata: string | null;
     productName: string | null;
     orgSlug: string | null;
     orgName: string | null;
@@ -288,6 +300,8 @@ async function hydrateReleaseNeighbors(
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
+           s.type as sourceType,
+           s.metadata as sourceMetadata,
            p.name as productName,
            o.slug as orgSlug,
            o.name as orgName,
@@ -318,6 +332,9 @@ async function hydrateReleaseNeighbors(
     const row = byId.get(m.id);
     if (!row) continue;
     if (excludeOrg && row.orgSlug === excludeOrg) continue;
+    // Cross-promo filter: on the global rail, drop routine (low-importance /
+    // unscored) mobile-app updates. Non-app + high-importance app releases stay.
+    if (dropRoutineApps && isRoutineAppRelease(row.sourceType, row.importance)) continue;
 
     const { tier, rank } = scoreRelatedRelease(
       {
@@ -353,6 +370,11 @@ async function hydrateReleaseNeighbors(
           orgSlug: row.orgSlug,
           orgName: row.orgName,
           orgAvatarUrl: row.orgAvatarUrl,
+          type: row.sourceType,
+          // Resolved only for `appstore` sources (null otherwise); lets the rail
+          // render the lean app card (icon + iOS/macOS cue). `?? undefined` so
+          // the optional wire field is omitted rather than sent as null.
+          appStore: appStoreSourceInfo(row.sourceType, row.sourceMetadata) ?? undefined,
         },
       },
     });
