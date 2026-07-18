@@ -3,6 +3,13 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 17, 2026
+
+**Changed**
+- Org pages now open on the Releases feed — Overview moves to `/:org/overview`; `/:org/releases` redirects to the org root.
+- Copy buttons on `/docs` code blocks are always visible instead of appearing on hover; text blocks soft-wrap rather than scrolling horizontally.
+- `npx skills add buildinternet/releases` now groups all skills into Listing, Onboarding/Parsing, and Registry Maintenance sections in the picker.
+
 ## July 15, 2026
 
 **Changed**
