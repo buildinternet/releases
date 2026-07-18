@@ -24,13 +24,12 @@ const base = {
   },
 };
 
-describe("RelatedReleaseItem source.type + source.appStore", () => {
-  it("accepts an appstore source with type + appStore block", () => {
+describe("RelatedReleaseItem source.appStore", () => {
+  it("accepts an appStore block on the source", () => {
     const r = RelatedReleaseItemSchema.safeParse({
       ...base,
       source: {
         ...base.source,
-        type: "appstore",
         appStore: { platform: "ios", iconUrl: "https://x/1024x1024bb.png" },
       },
     });
@@ -40,16 +39,12 @@ describe("RelatedReleaseItem source.type + source.appStore", () => {
   it("accepts a macOS appStore block with a null iconUrl", () => {
     const r = RelatedReleaseItemSchema.safeParse({
       ...base,
-      source: {
-        ...base.source,
-        type: "appstore",
-        appStore: { platform: "macos", iconUrl: null },
-      },
+      source: { ...base.source, appStore: { platform: "macos", iconUrl: null } },
     });
     expect(r.success).toBe(true);
   });
 
-  it("still parses a source that omits type + appStore (back-compat)", () => {
+  it("still parses a source that omits appStore (non-app / back-compat)", () => {
     const r = RelatedReleaseItemSchema.safeParse(base);
     expect(r.success).toBe(true);
   });
@@ -57,11 +52,7 @@ describe("RelatedReleaseItem source.type + source.appStore", () => {
   it("rejects an invalid appStore platform", () => {
     const r = RelatedReleaseItemSchema.safeParse({
       ...base,
-      source: {
-        ...base.source,
-        type: "appstore",
-        appStore: { platform: "android", iconUrl: null },
-      },
+      source: { ...base.source, appStore: { platform: "android", iconUrl: null } },
     });
     expect(r.success).toBe(false);
   });

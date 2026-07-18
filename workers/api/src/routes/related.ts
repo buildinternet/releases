@@ -31,8 +31,8 @@ import {
   scoreRelatedRelease,
   recencyMultiplier,
   RELATED_GLOBAL_MIN_RANK,
-  isRoutineAppRelease,
 } from "../related-ranking.js";
+import { isRoutineAppRelease } from "@buildinternet/releases-core/importance";
 import {
   RelatedReleasesResponseSchema,
   RelatedSourcesResponseSchema,
@@ -301,7 +301,10 @@ async function hydrateReleaseNeighbors(
            s.slug as sourceSlug,
            s.name as sourceName,
            s.type as sourceType,
-           s.metadata as sourceMetadata,
+           -- metadata is only read for appstore rows (appStoreSourceInfo
+           -- early-returns otherwise), so don't ship the blob for every
+           -- non-app candidate in the pool.
+           CASE WHEN s.type = 'appstore' THEN s.metadata END as sourceMetadata,
            p.name as productName,
            o.slug as orgSlug,
            o.name as orgName,
@@ -334,7 +337,8 @@ async function hydrateReleaseNeighbors(
     if (excludeOrg && row.orgSlug === excludeOrg) continue;
     // Cross-promo filter: on the global rail, drop routine (low-importance /
     // unscored) mobile-app updates. Non-app + high-importance app releases stay.
-    if (dropRoutineApps && isRoutineAppRelease(row.sourceType, row.importance)) continue;
+    if (dropRoutineApps && isRoutineAppRelease(row.sourceType === "appstore", row.importance))
+      continue;
 
     const { tier, rank } = scoreRelatedRelease(
       {
@@ -370,10 +374,9 @@ async function hydrateReleaseNeighbors(
           orgSlug: row.orgSlug,
           orgName: row.orgName,
           orgAvatarUrl: row.orgAvatarUrl,
-          type: row.sourceType,
-          // Resolved only for `appstore` sources (null otherwise); lets the rail
-          // render the lean app card (icon + iOS/macOS cue). `?? undefined` so
-          // the optional wire field is omitted rather than sent as null.
+          // Resolved only for `appstore` sources (null otherwise); its presence
+          // is what tells the rail to render the lean app card (icon + iOS/macOS
+          // cue). `?? undefined` so the optional wire field is omitted, not null.
           appStore: appStoreSourceInfo(row.sourceType, row.sourceMetadata) ?? undefined,
         },
       },

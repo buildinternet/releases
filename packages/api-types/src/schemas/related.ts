@@ -25,18 +25,12 @@ export const RelatedReleaseSourceSchema = z.object({
   orgName: z.string().nullable(),
   orgAvatarUrl: z.string().nullable(),
   /**
-   * Source fetch type (`appstore`, `github`, `feed`, …). Additive — older API
-   * responses omit it; consumers must degrade gracefully (treat `undefined` as
-   * "not a special-cased type"). Loose `z.string()` to match the other related
-   * source rollup (`RelatedSourceItemSchema.type`). Lets the rail render the
-   * lean mobile-app card for `appstore` releases. #mobile-app-release-cards
-   */
-  type: z.string().optional(),
-  /**
-   * App Store platform + icon, present only for `type === "appstore"` sources.
-   * Same block the org/product/ticker read paths already resolve; lets the
-   * related rail show the app icon + "iOS/macOS" cue instead of the standard
+   * App Store platform + icon, present only for `appstore` sources (resolved
+   * server-side, same block the org/product/ticker read paths already carry).
+   * Its presence is the signal the related rail uses to render the lean
+   * mobile-app card (app icon + "iOS/macOS" cue) instead of the standard
    * headline/thumbnail. Additive/optional for mid-deploy pin tolerance.
+   * #mobile-app-release-cards
    */
   appStore: AppStoreSourceInfoSchema.optional(),
 });

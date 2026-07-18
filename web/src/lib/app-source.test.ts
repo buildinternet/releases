@@ -1,30 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { getAppInfo, appStoreIconUrl, appRowInfoFromWire, keepInCrossPromo } from "./app-source";
+import { getAppInfo, appStoreIconUrl, appRowInfoFromWire } from "./app-source";
 
 const meta = (o: unknown) => JSON.stringify(o);
 
-describe("keepInCrossPromo (client-side ticker gate)", () => {
-  it("always shows non-app releases regardless of importance", () => {
-    expect(keepInCrossPromo(false, null)).toBe(true);
-    expect(keepInCrossPromo(false, 1)).toBe(true);
-    expect(keepInCrossPromo(false, undefined)).toBe(true);
-  });
-
-  it("shows a flame-threshold app release (4–5)", () => {
-    expect(keepInCrossPromo(true, 4)).toBe(true);
-    expect(keepInCrossPromo(true, 5)).toBe(true);
-  });
-
-  it("hides a low-importance app release (1–3)", () => {
-    expect(keepInCrossPromo(true, 1)).toBe(false);
-    expect(keepInCrossPromo(true, 3)).toBe(false);
-  });
-
-  it("hides an unscored app release (null/undefined folds below the floor)", () => {
-    expect(keepInCrossPromo(true, null)).toBe(false);
-    expect(keepInCrossPromo(true, undefined)).toBe(false);
-  });
-});
+// The cross-promo importance gate (`isRoutineAppRelease`) lives in
+// `@buildinternet/releases-core/importance` and is tested there.
 
 describe("appRowInfoFromWire", () => {
   it("maps ios/macos to the human label + carries icon + app name", () => {

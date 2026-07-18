@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 import { videoRowInfoFromWire } from "@/lib/video-source";
-import { appRowInfoFromWire, keepInCrossPromo } from "@/lib/app-source";
+import { appRowInfoFromWire } from "@/lib/app-source";
+import { isRoutineAppRelease } from "@buildinternet/releases-core/importance";
 import { pickReleaseThumb } from "@/lib/media";
 import { OrgAvatar } from "./org-avatar";
 import { AppStoreIcon } from "./app-store-icon";
@@ -230,10 +231,11 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
     const slots = new Map<string, Slide>();
     for (const release of releases) {
       if (!isMeaningfulRelease(release)) continue;
-      // Cross-promo deprioritization: this platform-wide rail only carries a
-      // mobile-app release the AI flagged notable (importance >= flame floor);
-      // routine app point-releases are dropped. #mobile-app-release-cards
-      if (!keepInCrossPromo(!!release.source.appStore, release.importance)) continue;
+      // Cross-promo deprioritization: this platform-wide rail drops routine
+      // (low-importance / unscored) mobile-app updates; notable app releases and
+      // all non-app releases stay. Same rule as the server related rail.
+      // #mobile-app-release-cards
+      if (isRoutineAppRelease(!!release.source.appStore, release.importance)) continue;
       const existing = slots.get(dedupKey(release));
       if (existing) {
         existing.extraCount += 1;

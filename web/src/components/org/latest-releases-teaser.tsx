@@ -57,26 +57,25 @@ export function LatestReleasesTeaser({
               href={releasesHref}
               className="flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3.5 transition-colors first:border-t-0 hover:bg-[var(--surface-2)]"
             >
-              {app ? (
-                <AppStoreIcon iconUrl={app.iconUrl} appName={app.appName} size={36} />
-              ) : (
-                thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />
-              )}
+              {/* Leading media, and the meta line below, are mutually exclusive
+                  by construction: `thumb`/`meta` are null exactly when `app` is
+                  set, so these render as independent siblings, not nested. */}
+              {app && <AppStoreIcon iconUrl={app.iconUrl} appName={app.appName} size={36} />}
+              {thumb && <ReleaseThumb src={thumb.url} alt={thumb.alt} size="md" />}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 truncate text-[14px] font-semibold text-[var(--fg)]">
                   <ImportanceMarker importance={r.importance} />
                   <span className="truncate">{label}</span>
                 </div>
-                {app ? (
+                {app && (
                   <div className="mt-0.5 truncate text-[11.5px]">
                     <AppPlatformCue label={app.label} />
                   </div>
-                ) : (
-                  meta && (
-                    <div className="mt-0.5 truncate font-mono text-[11.5px] text-[var(--fg-3)]">
-                      {meta}
-                    </div>
-                  )
+                )}
+                {meta && (
+                  <div className="mt-0.5 truncate font-mono text-[11.5px] text-[var(--fg-3)]">
+                    {meta}
+                  </div>
                 )}
               </div>
               {r.publishedAt && (

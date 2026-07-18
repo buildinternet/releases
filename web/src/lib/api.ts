@@ -660,10 +660,8 @@ export interface RelatedReleaseItem {
     orgSlug: string | null;
     orgName: string | null;
     orgAvatarUrl: string | null;
-    /** Source fetch type (`appstore`/`github`/…). Optional — older responses
-     * omit it. Lets the rail render the lean mobile-app card. */
-    type?: string;
-    /** App Store platform + icon, present only for `type === "appstore"`. */
+    /** App Store platform + icon, present only for `appstore` sources; its
+     * presence drives the rail's lean mobile-app card. */
     appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
   };
 }
