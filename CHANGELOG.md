@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 18, 2026
+
+**Changed**
+- App Store release cards in related rails and the homepage ticker now render as compact entries — app icon, name, iOS/macOS label, and date; version strings, body previews, and thumbnails are removed.
+- Routine App Store updates are filtered from cross-product discovery surfaces (the "From other products" rail and the "Recent" ticker) unless the release carries an AI importance score of 4 or higher.
+
 ## July 17, 2026
 
 **Changed**
