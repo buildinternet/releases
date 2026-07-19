@@ -10,14 +10,14 @@ import { notifyAutoDisabledSubscription } from "./auto-disable-notify.js";
 import { deliver as deliverImpl, type DeliveryResult } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import { slackWebhookAppId } from "./slack-app-id.js";
-import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
-import { sendWebhookAlert, type EmailEnv } from "./email.js";
-import { logEvent } from "@releases/lib/log-event";
-import { getSecret } from "@releases/lib/secrets";
+import type { DeliveryMessage } from "@releases/core-internal/webhook-delivery";
 import {
   autoDisableReason,
   shouldAutoDisableWebhook,
 } from "@releases/core-internal/webhook-resilience";
+import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
+import { sendWebhookAlert, type EmailEnv } from "./email.js";
 
 export const DLQ_QUEUE = "webhook-dlq";
 

@@ -11,6 +11,9 @@
     "./hash": "./src/hash.ts",
     "./webhook-sign": "./src/webhook-sign.ts",
     "./webhook-resilience": "./src/webhook-resilience.ts",
+    "./webhook-url-safety": "./src/webhook-url-safety.ts",
+    "./webhook-delivery": "./src/webhook-delivery.ts",
+    "./release-event": "./src/release-event.ts",
     "./web-bot-auth-sign": "./src/web-bot-auth-sign.ts",
     "./collection-feed": "./src/collection-feed.ts",
     "./category-feed": "./src/category-feed.ts",
@@ -26,6 +29,7 @@
     "./composition-metadata": "./src/composition-metadata.ts"
   },
   "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "drizzle-orm": "^0.45.2"
   }

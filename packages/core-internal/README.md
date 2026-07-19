@@ -14,6 +14,9 @@ Imported as `@releases/core-internal/<subpath>`.
 | `hash`                 | SHA-256 hex digest helper.                                                             |
 | `webhook-sign`         | Web Crypto HMAC signing for outbound webhook deliveries.                               |
 | `webhook-resilience`   | Auto-disable thresholds and delivery-health classification for webhook subscriptions.  |
+| `webhook-url-safety`   | SSRF gates for webhook targets (HTTPS, blocked hosts, private IP / DNS re-check).      |
+| `webhook-delivery`     | `DeliveryMessage` queue wire type shared by API fan-out and the webhooks worker.       |
+| `release-event`        | `ReleaseEvent` / `ReleaseEventPayload` wire shape + `newEventId` / `padSeq` helpers.   |
 | `web-bot-auth-sign`    | RFC 9421 request signing for Web Bot Auth (Cloudflare-compatible component set).       |
 | `collection-feed`      | Aggregated, cursor-paginated release feed for a collection's member orgs/products.     |
 | `category-feed`        | Aggregated, cursor-paginated release feed for all orgs/products in a category.         |
