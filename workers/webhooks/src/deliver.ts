@@ -1,7 +1,7 @@
 import { deriveSigningKey, signPayload } from "@releases/core-internal/webhook-sign";
+import type { DeliveryMessage } from "@releases/core-internal/webhook-delivery";
+import { assertPublicWebhookTarget } from "@releases/core-internal/webhook-url-safety";
 import { formatSlackMessage } from "@releases/rendering/slack-message";
-import { assertPublicWebhookTarget } from "../../api/src/webhooks/url-safety.js";
-import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import type { ErrorCode, Outcome } from "./ae.js";
 
 export interface DeliveryResult {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
+import type { DeliveryMessage } from "@releases/core-internal/webhook-delivery";
 import { deliver } from "./deliver.js";
-import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 
 const PUBLIC_RESOLVE = async () => ["93.184.216.34"];
 

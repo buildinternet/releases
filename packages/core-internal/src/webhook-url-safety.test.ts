@@ -3,8 +3,9 @@ import {
   assertPublicWebhookTarget,
   blockedWebhookHostname,
   isPrivateIpv4,
+  validateSlackWebhookUrl,
   validateWebhookUrl,
-} from "./url-safety.js";
+} from "./webhook-url-safety.js";
 
 const PUBLIC_HOOK = "https://1.1.1.1/hook";
 
@@ -50,8 +51,6 @@ describe("isPrivateIpv4", () => {
     expect(isPrivateIpv4([8, 8, 8, 8])).toBe(false);
   });
 });
-
-import { validateSlackWebhookUrl } from "./url-safety.js";
 
 describe("validateSlackWebhookUrl", () => {
   test("accepts a hooks.slack.com URL", () => {
