@@ -15,7 +15,7 @@ import {
 } from "./shared.js";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
 import { formatRejectionMessage, validateRecords } from "./record-validate.js";
-import type { ExtractDeps, ExtractedEntry } from "./types.js";
+import type { ExtractDeps, ExtractedEntry, ExtractLogger } from "./types.js";
 
 /**
  * Per-run cap on in-band validation retry rounds (#1874). Without a cap, a
@@ -27,6 +27,9 @@ import type { ExtractDeps, ExtractedEntry } from "./types.js";
  */
 const MAX_VALIDATION_RETRIES = 2;
 
+/** Anthropic beta: compare consecutive Messages requests for prompt-cache divergence. */
+const CACHE_DIAGNOSIS_BETA = "cache-diagnosis-2026-04-07" as const;
+
 function stripCacheControlFromPrior(msgs: Anthropic.MessageParam[]): void {
   for (const msg of msgs) {
     if (typeof msg.content === "string") continue;
@@ -36,6 +39,26 @@ function stripCacheControlFromPrior(msgs: Anthropic.MessageParam[]): void {
       }
     }
   }
+}
+
+/**
+ * Warn on actionable cache misses (`*_changed`). Non-actionable reasons
+ * (`previous_message_not_found`, `unavailable`) omit `cache_missed_input_tokens`
+ * and are ignored. Fail-open — never throws.
+ */
+function logCacheMiss(
+  logger: ExtractLogger,
+  diagnostics:
+    | { cache_miss_reason: { type: string; cache_missed_input_tokens?: number } | null }
+    | null
+    | undefined,
+  round: number,
+): void {
+  const reason = diagnostics?.cache_miss_reason;
+  if (!reason || typeof reason.cache_missed_input_tokens !== "number") return;
+  logger.warn(
+    `cache diagnostics: type=${reason.type} missedTokens=${reason.cache_missed_input_tokens} round=${round}`,
+  );
 }
 
 export interface LoopPartialUsage {
@@ -128,6 +151,9 @@ export async function extractWithTools(
   let toolRounds = 0;
   let toolChars = 0;
   let validationRetries = 0;
+  /** Prior response id for cache diagnostics; null on the first stream call. */
+  let previousMessageId: string | null = null;
+  let streamRound = 0;
 
   const makePartial = (): LoopPartialUsage => ({
     totalInput,
@@ -138,8 +164,10 @@ export async function extractWithTools(
     toolChars,
   });
 
-  while (toolRounds < MAX_ROUNDS && toolChars < MAX_TOTAL_TOOL_CHARS) {
-    const stream = deps.anthropicClient.messages.stream({
+  /** One beta Messages round: thread diagnostics id, accumulate usage, log misses. */
+  async function runRound() {
+    streamRound++;
+    const stream = deps.anthropicClient.beta.messages.stream({
       model: deps.agentModel,
       max_tokens: 16_384,
       // Deterministic parse on models that still accept it; omitted on Sonnet 5 /
@@ -152,21 +180,29 @@ export async function extractWithTools(
       system: systemBlocks,
       tools,
       messages,
+      diagnostics: { previous_message_id: previousMessageId },
+      betas: [CACHE_DIAGNOSIS_BETA],
     });
-    // eslint-disable-next-line no-await-in-loop -- each round's response informs the next
     const response = await stream.finalMessage();
-
+    previousMessageId = response.id;
     totalInput += response.usage.input_tokens;
     totalOutput += response.usage.output_tokens;
     cacheReadTokens += response.usage.cache_read_input_tokens ?? 0;
     cacheWriteTokens += response.usage.cache_creation_input_tokens ?? 0;
+    logCacheMiss(deps.logger, response.diagnostics, streamRound);
+    return response;
+  }
+
+  while (toolRounds < MAX_ROUNDS && toolChars < MAX_TOTAL_TOOL_CHARS) {
+    // eslint-disable-next-line no-await-in-loop -- each round's response informs the next
+    const response = await runRound();
 
     if (response.stop_reason === "max_tokens") {
       throw new LoopFallbackError("max_tokens", makePartial());
     }
 
     const toolUses = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+      (b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use",
     );
 
     const terminal = toolUses.find((t) => t.name === "extract_releases");
@@ -214,7 +250,10 @@ export async function extractWithTools(
       // this same turn (there shouldn't normally be any alongside a terminal
       // call, but the API allows multiple blocks) still needs a tool_result.
       validationRetries++;
-      messages.push({ role: "assistant", content: response.content });
+      messages.push({
+        role: "assistant",
+        content: response.content as Anthropic.ContentBlock[],
+      });
 
       const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map((tu) => {
         if (tu.id === terminal.id) {
@@ -253,7 +292,10 @@ export async function extractWithTools(
     }
 
     // Append the assistant turn and the tool_result blocks.
-    messages.push({ role: "assistant", content: response.content });
+    messages.push({
+      role: "assistant",
+      content: response.content as Anthropic.ContentBlock[],
+    });
 
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const tu of toolUses) {
@@ -316,28 +358,11 @@ export async function extractWithTools(
       "Call extract_releases now with all the entries you have found.",
   });
 
-  const forceStream = deps.anthropicClient.messages.stream({
-    model: deps.agentModel,
-    max_tokens: 16_384,
-    // Deterministic parse on models that still accept it; omitted on Sonnet 5 /
-    // Opus 4.7+ / Fable, which 400 on a non-default temperature. See
-    // EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
-    ...(modelAcceptsTemperature(deps.agentModel)
-      ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
-        { temperature: EXTRACTION_TEMPERATURE }
-      : {}),
-    system: systemBlocks,
-    tools,
-    messages,
-  });
-  const forceResp = await forceStream.finalMessage();
-  totalInput += forceResp.usage.input_tokens;
-  totalOutput += forceResp.usage.output_tokens;
-  cacheReadTokens += forceResp.usage.cache_read_input_tokens ?? 0;
-  cacheWriteTokens += forceResp.usage.cache_creation_input_tokens ?? 0;
+  const forceResp = await runRound();
 
   const forceTerminal = forceResp.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "extract_releases",
+    (b): b is Anthropic.Messages.ToolUseBlock =>
+      b.type === "tool_use" && b.name === "extract_releases",
   );
   if (forceTerminal) {
     const input = forceTerminal.input as { releases?: unknown };

@@ -22,6 +22,61 @@ function makeDeps(client: unknown, agentModel = "claude-sonnet-5"): ExtractDeps 
   };
 }
 
+/** Capture each beta.messages.stream params object; replay sequential finalMessages. */
+function capturingBetaClient(
+  captured: Array<Record<string, unknown>>,
+  responses: Array<Record<string, unknown>>,
+) {
+  let i = 0;
+  return {
+    beta: {
+      messages: {
+        stream: ((params: Record<string, unknown>) => {
+          captured.push(params);
+          const response = responses[i++] ?? responses[responses.length - 1]!;
+          return { finalMessage: async () => response } as never;
+        }) as never,
+      },
+    },
+  };
+}
+
+function toolUseResponse(opts: {
+  id: string;
+  name: string;
+  input: unknown;
+  diagnostics?: {
+    cache_miss_reason: { type: string; cache_missed_input_tokens?: number } | null;
+  } | null;
+  cacheRead?: number;
+  cacheCreate?: number;
+}): Record<string, unknown> {
+  return {
+    id: opts.id,
+    type: "message",
+    role: "assistant",
+    model: "x",
+    content: [
+      {
+        type: "tool_use",
+        id: `t_${opts.id}`,
+        name: opts.name,
+        input: opts.input,
+        caller: { type: "direct" as const },
+      },
+    ],
+    stop_reason: "tool_use",
+    stop_sequence: null,
+    usage: {
+      input_tokens: 100,
+      output_tokens: 10,
+      cache_read_input_tokens: opts.cacheRead ?? 0,
+      cache_creation_input_tokens: opts.cacheCreate ?? 0,
+    },
+    diagnostics: opts.diagnostics ?? null,
+  };
+}
+
 describe("extractWithTools — happy path", () => {
   test("returns entries when model emits extract_releases in round 1", async () => {
     const client = mockAnthropicClient([
@@ -81,49 +136,27 @@ describe("extractWithTools — deterministic extraction", () => {
   // 400, so it's omitted there and kept on models that still accept it (Sonnet
   // 4.6 / Haiku). See modelAcceptsTemperature in shared.ts.
   function captureToolLoopParams(agentModel: string) {
-    const captured: Anthropic.MessageCreateParams[] = [];
-    const client: Pick<Anthropic, "messages"> = {
-      messages: {
-        stream: ((params: Anthropic.MessageCreateParams) => {
-          captured.push(params);
-          return {
-            finalMessage: async () =>
-              ({
-                id: "msg_1",
-                type: "message",
-                role: "assistant",
-                model: agentModel,
-                content: [
-                  {
-                    type: "tool_use",
-                    id: "t1",
-                    name: "extract_releases",
-                    input: {
-                      releases: [
-                        {
-                          title: "v1.0",
-                          content: "initial",
-                          isBreaking: false,
-                          publishedAt: "2026-04-01",
-                          url: "https://x.test/r/1",
-                        },
-                      ],
-                    },
-                  },
-                ],
-                stop_reason: "tool_use",
-                stop_sequence: null,
-                usage: {
-                  input_tokens: 100,
-                  output_tokens: 10,
-                  cache_read_input_tokens: 0,
-                  cache_creation_input_tokens: 0,
-                },
-              }) as Anthropic.Message,
-          } as never;
-        }) as never,
-      } as never,
-    };
+    const captured: Array<Record<string, unknown>> = [];
+    const client = capturingBetaClient(captured, [
+      {
+        ...toolUseResponse({
+          id: "msg_1",
+          name: "extract_releases",
+          input: {
+            releases: [
+              {
+                title: "v1.0",
+                content: "initial",
+                isBreaking: false,
+                publishedAt: "2026-04-01",
+                url: "https://x.test/r/1",
+              },
+            ],
+          },
+        }),
+        model: agentModel,
+      },
+    ]);
     return { captured, client };
   }
 
@@ -313,71 +346,26 @@ describe("extractWithTools — budget exhaustion", () => {
 });
 
 describe("extractWithTools — prompt caching", () => {
-  test("marks most-recent tool_result with cache_control on each new round", async () => {
-    const captured: Anthropic.MessageCreateParams[] = [];
-    const client: Pick<Anthropic, "messages"> = {
-      messages: {
-        stream: ((params: Anthropic.MessageCreateParams) => {
-          captured.push(params);
-          const round = captured.length;
-          if (round === 1) {
-            return {
-              finalMessage: async () =>
-                ({
-                  id: "m1",
-                  type: "message",
-                  role: "assistant",
-                  model: "x",
-                  content: [
-                    {
-                      type: "tool_use",
-                      id: "t1",
-                      name: "get_slice",
-                      input: { start: 0, length: 5 },
-                      caller: { type: "direct" as const },
-                    },
-                  ],
-                  stop_reason: "tool_use",
-                  stop_sequence: null,
-                  usage: {
-                    input_tokens: 100,
-                    output_tokens: 10,
-                    cache_read_input_tokens: 0,
-                    cache_creation_input_tokens: 0,
-                  },
-                }) as Anthropic.Message,
-            } as never;
-          }
-          return {
-            finalMessage: async () =>
-              ({
-                id: "m2",
-                type: "message",
-                role: "assistant",
-                model: "x",
-                content: [
-                  {
-                    type: "tool_use",
-                    id: "t2",
-                    name: "extract_releases",
-                    input: { releases: [] },
-                    caller: { type: "direct" as const },
-                  },
-                ],
-                stop_reason: "tool_use",
-                stop_sequence: null,
-                usage: {
-                  input_tokens: 100,
-                  output_tokens: 10,
-                  cache_read_input_tokens: 50,
-                  cache_creation_input_tokens: 0,
-                },
-              }) as Anthropic.Message,
-          } as never;
-        }) as never,
-      } as never,
-    };
+  const twoRoundSliceThenExtract = [
+    toolUseResponse({
+      id: "msg_round1",
+      name: "get_slice",
+      input: { start: 0, length: 5 },
+      cacheCreate: 800,
+    }),
+    toolUseResponse({
+      id: "msg_round2",
+      name: "extract_releases",
+      input: { releases: [] },
+      cacheRead: 50,
+      diagnostics: {
+        cache_miss_reason: { type: "messages_changed", cache_missed_input_tokens: 900 },
+      },
+    }),
+  ];
 
+  test("marks most-recent tool_result with cache_control on each new round", async () => {
+    const captured: Array<Record<string, unknown>> = [];
     await extractWithTools(
       {
         body: "abcdef",
@@ -386,19 +374,41 @@ describe("extractWithTools — prompt caching", () => {
         sourceUrl: "https://x.test",
         fetchUrl: "https://x.test/",
       },
-      makeDeps(client),
+      makeDeps(capturingBetaClient(captured, twoRoundSliceThenExtract)),
     );
 
-    // Second stream() call should include a tool_result block with cache_control set.
     expect(captured.length).toBeGreaterThanOrEqual(2);
-    const round2 = captured[1]!;
-    const msgs = round2.messages;
+    const msgs = (captured[1] as { messages: Anthropic.MessageParam[] }).messages;
     const lastUser = msgs[msgs.length - 1]!;
     expect(lastUser.role).toBe("user");
     const content = lastUser.content as Anthropic.ToolResultBlockParam[];
-    const lastBlock = content[content.length - 1]!;
-    expect(lastBlock.type).toBe("tool_result");
-    expect(lastBlock.cache_control).toEqual({ type: "ephemeral" });
+    expect(content[content.length - 1]!.cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  test("opts into cache diagnostics and threads previous_message_id across rounds", async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    const warns: string[] = [];
+    await extractWithTools(
+      {
+        body: "abcdef",
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/",
+      },
+      {
+        ...makeDeps(capturingBetaClient(captured, twoRoundSliceThenExtract)),
+        logger: { info: () => {}, debug: () => {}, warn: (msg: string) => warns.push(msg) },
+      },
+    );
+
+    expect(captured).toHaveLength(2);
+    expect(captured[0]!.betas).toEqual(["cache-diagnosis-2026-04-07"]);
+    expect(captured[0]!.diagnostics).toEqual({ previous_message_id: null });
+    expect(captured[1]!.diagnostics).toEqual({ previous_message_id: "msg_round1" });
+    expect(
+      warns.some((w) => w.includes("type=messages_changed") && w.includes("missedTokens=900")),
+    ).toBe(true);
   });
 });
 
@@ -682,71 +692,7 @@ describe("extractWithTools — in-band record validation (#1874)", () => {
   });
 
   test("sends an actionable tool_result back to the model on rejection", async () => {
-    const captured: Anthropic.MessageCreateParams[] = [];
-    const client: Pick<Anthropic, "messages"> = {
-      messages: {
-        stream: ((params: Anthropic.MessageCreateParams) => {
-          captured.push(params);
-          const round = captured.length;
-          if (round === 1) {
-            return {
-              finalMessage: async () =>
-                ({
-                  id: "m1",
-                  type: "message",
-                  role: "assistant",
-                  model: "x",
-                  content: [
-                    {
-                      type: "tool_use",
-                      id: "t1",
-                      name: "extract_releases",
-                      input: {
-                        releases: [
-                          { title: "", content: "x", isBreaking: false, url: "https://x.test/1" },
-                        ],
-                      },
-                    },
-                  ],
-                  stop_reason: "tool_use",
-                  stop_sequence: null,
-                  usage: { input_tokens: 100, output_tokens: 10 },
-                }) as Anthropic.Message,
-            } as never;
-          }
-          return {
-            finalMessage: async () =>
-              ({
-                id: "m2",
-                type: "message",
-                role: "assistant",
-                model: "x",
-                content: [
-                  {
-                    type: "tool_use",
-                    id: "t2",
-                    name: "extract_releases",
-                    input: {
-                      releases: [
-                        {
-                          title: "v1",
-                          content: "x",
-                          isBreaking: false,
-                          url: "https://x.test/1",
-                        },
-                      ],
-                    },
-                  },
-                ],
-                stop_reason: "tool_use",
-                stop_sequence: null,
-                usage: { input_tokens: 100, output_tokens: 10 },
-              }) as Anthropic.Message,
-          } as never;
-        }) as never,
-      } as never,
-    };
-
+    const captured: Array<Record<string, unknown>> = [];
     await extractWithTools(
       {
         body: "irrelevant",
@@ -755,14 +701,31 @@ describe("extractWithTools — in-band record validation (#1874)", () => {
         sourceUrl: "https://x.test",
         fetchUrl: "https://x.test/feed.json",
       },
-      makeDeps(client),
+      makeDeps(
+        capturingBetaClient(captured, [
+          toolUseResponse({
+            id: "m1",
+            name: "extract_releases",
+            input: {
+              releases: [{ title: "", content: "x", isBreaking: false, url: "https://x.test/1" }],
+            },
+          }),
+          toolUseResponse({
+            id: "m2",
+            name: "extract_releases",
+            input: {
+              releases: [{ title: "v1", content: "x", isBreaking: false, url: "https://x.test/1" }],
+            },
+          }),
+        ]),
+      ),
     );
 
     expect(captured.length).toBe(2);
-    const round2 = captured[1]!;
-    const lastUser = round2.messages[round2.messages.length - 1]!;
+    const msgs = (captured[1] as { messages: Anthropic.MessageParam[] }).messages;
+    const lastUser = msgs[msgs.length - 1]!;
     const content = lastUser.content as Anthropic.ToolResultBlockParam[];
-    const rejectionResult = content.find((c) => c.tool_use_id === "t1")!;
+    const rejectionResult = content.find((c) => c.tool_use_id === "t_m1")!;
     expect(rejectionResult.content).toContain("rejected and NOT recorded");
     expect(rejectionResult.content).toContain("empty title");
   });
@@ -814,38 +777,12 @@ describe("extractWithTools — in-band record validation (#1874)", () => {
 });
 
 describe("extractWithTools — guidance placement", () => {
-  function capturingClient(captured: Anthropic.MessageCreateParams[]): Pick<Anthropic, "messages"> {
-    return {
-      messages: {
-        stream: ((params: Anthropic.MessageCreateParams) => {
-          captured.push(params);
-          return {
-            finalMessage: async () =>
-              ({
-                id: "m1",
-                type: "message",
-                role: "assistant",
-                model: "x",
-                content: [
-                  { type: "tool_use", id: "t1", name: "extract_releases", input: { releases: [] } },
-                ],
-                stop_reason: "tool_use",
-                stop_sequence: null,
-                usage: {
-                  input_tokens: 100,
-                  output_tokens: 10,
-                  cache_read_input_tokens: 0,
-                  cache_creation_input_tokens: 0,
-                },
-              }) as Anthropic.Message,
-          } as never;
-        }) as never,
-      } as never,
-    };
-  }
+  const terminal = [
+    toolUseResponse({ id: "m1", name: "extract_releases", input: { releases: [] } }),
+  ];
 
   test("emits guidance in a trailing system block after the cached static block", async () => {
-    const captured: Anthropic.MessageCreateParams[] = [];
+    const captured: Array<Record<string, unknown>> = [];
     await extractWithTools(
       {
         body: JSON.stringify({ a: 1 }),
@@ -855,10 +792,10 @@ describe("extractWithTools — guidance placement", () => {
         sourceUrl: "https://x.test",
         fetchUrl: "https://x.test/feed.json",
       },
-      makeDeps(capturingClient(captured)),
+      makeDeps(capturingBetaClient(captured, terminal)),
     );
 
-    const sys = captured[0]!.system as Anthropic.TextBlockParam[];
+    const sys = (captured[0] as { system: Anthropic.TextBlockParam[] }).system;
     expect(sys).toHaveLength(2);
     // Static block carries the breakpoint and is free of volatile guidance —
     // so the prefix stays byte-identical (and cacheable) across sources.
@@ -873,7 +810,7 @@ describe("extractWithTools — guidance placement", () => {
   });
 
   test("omits the trailing block when no guidance is supplied", async () => {
-    const captured: Anthropic.MessageCreateParams[] = [];
+    const captured: Array<Record<string, unknown>> = [];
     await extractWithTools(
       {
         body: JSON.stringify({ a: 1 }),
@@ -882,10 +819,10 @@ describe("extractWithTools — guidance placement", () => {
         sourceUrl: "https://x.test",
         fetchUrl: "https://x.test/feed.json",
       },
-      makeDeps(capturingClient(captured)),
+      makeDeps(capturingBetaClient(captured, terminal)),
     );
 
-    const sys = captured[0]!.system as Anthropic.TextBlockParam[];
+    const sys = (captured[0] as { system: Anthropic.TextBlockParam[] }).system;
     expect(sys).toHaveLength(1);
     expect(sys[0]!.cache_control).toEqual({ type: "ephemeral" });
   });
