@@ -19,35 +19,38 @@ function makeDeps(client: unknown, overrides?: Partial<ExtractDeps>): ExtractDep
 }
 
 /** Capturing client: records each stream() params object and replays a fixed
- *  extract_releases response. Lets tests assert which `model` each call used. */
+ *  extract_releases response. Lets tests assert which `model` each call used.
+ *  Exposes both `messages` (one-shot) and `beta.messages` (tool-loop with
+ *  cache diagnostics) so either tier can capture. */
 function capturingClient(params: Anthropic.MessageCreateParams[]) {
+  const stream = ((p: Anthropic.MessageCreateParams) => {
+    params.push(p);
+    return {
+      finalMessage: async () =>
+        ({
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "x",
+          content: [
+            { type: "tool_use", id: "t1", name: "extract_releases", input: { releases: [] } },
+          ],
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          usage: {
+            input_tokens: 100,
+            output_tokens: 10,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+          diagnostics: null,
+        }) as never,
+    } as never;
+  }) as never;
   return {
-    messages: {
-      stream: ((p: Anthropic.MessageCreateParams) => {
-        params.push(p);
-        return {
-          finalMessage: async () =>
-            ({
-              id: "msg_1",
-              type: "message",
-              role: "assistant",
-              model: "x",
-              content: [
-                { type: "tool_use", id: "t1", name: "extract_releases", input: { releases: [] } },
-              ],
-              stop_reason: "tool_use",
-              stop_sequence: null,
-              usage: {
-                input_tokens: 100,
-                output_tokens: 10,
-                cache_read_input_tokens: 0,
-                cache_creation_input_tokens: 0,
-              },
-            }) as Anthropic.Message,
-        } as never;
-      }) as never,
-    } as never,
-  } as Pick<Anthropic, "messages">;
+    messages: { stream } as never,
+    beta: { messages: { stream } } as never,
+  } as Pick<Anthropic, "messages" | "beta">;
 }
 
 /** A small body well under the 50K-token threshold. */
@@ -255,38 +258,7 @@ describe("extractFromBody — model selection", () => {
 describe("extractFromBody — guidance plumbing", () => {
   test("tool-loop path bakes parseInstructions and playbookContext into the system prompt", async () => {
     const captured: Anthropic.MessageCreateParams[] = [];
-    const client: Pick<Anthropic, "messages"> = {
-      messages: {
-        stream: ((params: Anthropic.MessageCreateParams) => {
-          captured.push(params);
-          return {
-            finalMessage: async () =>
-              ({
-                id: "msg_1",
-                type: "message",
-                role: "assistant",
-                model: "claude-sonnet-5",
-                content: [
-                  {
-                    type: "tool_use",
-                    id: "t1",
-                    name: "extract_releases",
-                    input: { releases: [] },
-                  },
-                ],
-                stop_reason: "tool_use",
-                stop_sequence: null,
-                usage: {
-                  input_tokens: 100,
-                  output_tokens: 10,
-                  cache_read_input_tokens: 0,
-                  cache_creation_input_tokens: 0,
-                },
-              }) as Anthropic.Message,
-          } as never;
-        }) as never,
-      } as never,
-    };
+    const client = capturingClient(captured);
 
     await extractFromBody(
       {
@@ -345,7 +317,7 @@ describe("extractFromBody — deterministic extraction", () => {
                   cache_read_input_tokens: 0,
                   cache_creation_input_tokens: 0,
                 },
-              }) as Anthropic.Message,
+              }) as never,
           } as never;
         }) as never,
       } as never,
@@ -432,15 +404,17 @@ describe("extractFromBody — fallback paths", () => {
   });
 
   test("mode: fallback_to_oneshot + fallbackReason: sdk_error when tool-loop throws a generic Error", async () => {
-    let callIdx = 0;
-    const client: Pick<Anthropic, "messages"> = {
+    // Tool-loop uses beta.messages; one-shot fallback uses messages.
+    const client = {
+      beta: {
+        messages: {
+          stream: () => {
+            throw new Error("boom");
+          },
+        },
+      },
       messages: {
         stream: ((_params: Anthropic.MessageCreateParams) => {
-          callIdx++;
-          if (callIdx === 1) {
-            throw new Error("boom");
-          }
-          // Subsequent call is from runOneShot fallback
           return {
             finalMessage: async () =>
               ({
@@ -475,10 +449,10 @@ describe("extractFromBody — fallback paths", () => {
                   cache_read_input_tokens: 0,
                   cache_creation_input_tokens: 0,
                 },
-              }) as Anthropic.Message,
+              }) as never,
           } as never;
         }) as never,
-      } as never,
+      },
     };
 
     const result = await extractFromBody(
