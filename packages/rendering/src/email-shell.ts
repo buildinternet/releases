@@ -363,22 +363,31 @@ function blockHtml(b: EmailBlock): string {
   }
 }
 
+/**
+ * One bar of the mark: a spacer row, then a colored cell of the given width.
+ * Each bar is its own nested table because a bare `<td>` height is unreliable
+ * in Outlook — the wrapper is what actually holds the 3px.
+ */
+function markBar(width: number, color: string, gapAbove: number): string {
+  return (
+    `<tr><td style="height:${gapAbove}px;font-size:0;line-height:0;">&nbsp;</td></tr>` +
+    `<tr><td style="font-size:0;line-height:0;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
+    `<td width="${width}" height="3" style="width:${width}px;height:3px;background:${color};border-radius:1px;font-size:0;line-height:0;">&nbsp;</td>` +
+    `</tr></table></td></tr>`
+  );
+}
+
 /** The mark: three bars on a dark rounded square, drawn as table cells so it
  *  needs no image and survives image-blocking. */
 function markHtml(): string {
-  const bar = (w: number, color: string, top: number): string =>
-    `<tr><td style="height:${top}px;font-size:0;line-height:0;">&nbsp;</td></tr>` +
-    `<tr><td style="font-size:0;line-height:0;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
-    `<td width="${w}" height="3" style="width:${w}px;height:3px;background:${color};border-radius:1px;font-size:0;line-height:0;">&nbsp;</td>` +
-    `</tr></table></td></tr>`;
   return (
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="22" height="22" ` +
     `style="width:22px;height:22px;background:${C.ink};border-radius:5px;">` +
     `<tr><td style="padding:5px 5px 6px;">` +
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0">` +
-    bar(12, "#f5f5f4", 0) +
-    bar(9, "#c9c5c1", 2) +
-    bar(14, C.accent, 2) +
+    markBar(12, "#f5f5f4", 0) +
+    markBar(9, "#c9c5c1", 2) +
+    markBar(14, C.accent, 2) +
     `</table>` +
     `</td></tr></table>`
   );
