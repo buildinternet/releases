@@ -10,14 +10,17 @@
  * description out of the YAML frontmatter. The MCP server card is derived from
  * workers/mcp/server.json so it stays in sync on version bumps.
  *
- * On fetch failure, the skills index retains the previously-built file rather
- * than aborting the build — a transient GitHub outage shouldn't block deploys.
+ * Each fetch retries (fetchWithRetry) on a thrown network error or a 5xx/429
+ * response — a transient blip on raw.githubusercontent.com shouldn't fail a
+ * production deploy (#2160). A 404 is NOT retried: it means a skill moved, and
+ * that should fail loudly and fast.
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
 import { createHash } from "crypto";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import matter from "gray-matter";
+import { fetchWithRetry } from "./fetch-with-retry";
 
 const WEB_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_ROOT = dirname(WEB_ROOT);
@@ -54,7 +57,7 @@ async function buildSkillsIndex() {
     const entries = await Promise.all(
       SKILLS.map(async ({ name, repo, dir }) => {
         const url = `https://raw.githubusercontent.com/${repo}/${REF}/${dir}/${name}/SKILL.md`;
-        const res = await fetch(url);
+        const res = await fetchWithRetry(url);
         if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
         const body = await res.text();
         const { data } = matter(body);
@@ -76,6 +79,12 @@ async function buildSkillsIndex() {
     });
     console.log(`Agent skills index: ${entries.length} skills → ${SKILLS_INDEX_PATH}`);
   } catch (err) {
+    // Reuse a previously-built index rather than aborting — but note this only
+    // ever fires on a local rebuild. The generated file isn't tracked in git, so
+    // on a fresh CI/Vercel checkout there is nothing to fall back TO and the
+    // build fails. That's the intended outcome: if GitHub is down long enough to
+    // exhaust the retries above, a red build you re-run beats silently shipping
+    // a stale index, and the previous deploy keeps serving in the meantime.
     if (existsSync(SKILLS_INDEX_PATH)) {
       console.warn(`Agent skills fetch failed, keeping previous index: ${err}`);
     } else {
