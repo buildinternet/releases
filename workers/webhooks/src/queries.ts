@@ -15,7 +15,7 @@ import {
   webhookSubscriptions,
   type WebhookSubscription,
 } from "@buildinternet/releases-core/schema";
-import type { SubscriptionLabel } from "./alert-format.js";
+import type { SubscriptionLabel } from "@releases/core-internal/webhook-alert-format";
 import type { D1Db } from "./db.js";
 
 export type SummaryUpdate =

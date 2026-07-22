@@ -5,7 +5,11 @@ import {
   updateWebhookSubscriptionSummary,
   setWebhookSubscriptionEnabled,
 } from "./queries.js";
-import { formatDlqAlert, type DlqEntry, type SubscriptionLabel } from "./alert-format.js";
+import {
+  formatDlqAlert,
+  type DlqEntry,
+  type SubscriptionLabel,
+} from "@releases/core-internal/webhook-alert-format";
 import { notifyAutoDisabledSubscription } from "./auto-disable-notify.js";
 import { deliver as deliverImpl, type DeliveryResult } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";

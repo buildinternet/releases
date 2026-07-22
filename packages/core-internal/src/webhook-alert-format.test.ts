@@ -5,7 +5,7 @@ import {
   subscriptionHeadline,
   orgLabel,
   type SubscriptionLabel,
-} from "./alert-format.js";
+} from "./webhook-alert-format.js";
 
 const acmeLabel: SubscriptionLabel = {
   id: "whk_1",

@@ -7,8 +7,15 @@
  * optional description, and owning org so the email names the endpoint and
  * company; the ids stay as trailing detail for admin lookup.
  *
- * No DB or `cloudflare:*` imports — index.ts does the lookup and passes the
- * resolved shapes in, so this stays unit-testable.
+ * No DB or `cloudflare:*` imports — the webhooks worker does the lookup and
+ * passes the resolved shapes in, so this stays unit-testable.
+ *
+ * Lives in core-internal, not in `workers/webhooks`, because the API worker's
+ * admin email preview (`email-samples.ts`) has to render these two alerts too.
+ * It previously rebuilt them by hand from a "keep this in step" comment, and
+ * they drifted — different lane, different blocks, different footer — so the
+ * preview stopped showing what operators actually receive. One implementation,
+ * imported by both, is the only version of that promise that holds.
  */
 
 import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";

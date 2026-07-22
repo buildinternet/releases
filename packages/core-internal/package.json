@@ -26,11 +26,13 @@
     "./eligibility": "./src/eligibility.ts",
     "./overview-eligibility": "./src/overview-eligibility.ts",
     "./overview-upsert": "./src/overview-upsert.ts",
-    "./composition-metadata": "./src/composition-metadata.ts"
+    "./composition-metadata": "./src/composition-metadata.ts",
+    "./webhook-alert-format": "./src/webhook-alert-format.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "@releases/rendering": "workspace:*"
   }
 }

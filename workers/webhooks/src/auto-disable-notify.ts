@@ -1,6 +1,6 @@
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
-import { formatAutoDisableAlert } from "./alert-format.js";
+import { formatAutoDisableAlert } from "@releases/core-internal/webhook-alert-format";
 import type { EmailEnv } from "./email.js";
 import { sendWebhookAlert, sendWebhookUserNotice } from "./email.js";
 import { getOrgLabelById } from "./queries.js";

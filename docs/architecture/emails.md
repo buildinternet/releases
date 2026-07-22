@@ -104,7 +104,12 @@ markup ships correct and dormant.
 `/admin/emails` renders and test-sends every message from
 `EMAIL_SAMPLE_CATALOG` (`workers/api/src/lib/email-samples.ts`). Adding a
 message means adding a sample there; the catalog is what makes the whole surface
-reviewable in one place. The two webhook alerts are formatted inside
-`workers/webhooks` (a carved-out worker the API worker doesn't import from), so
-their samples rebuild the same shapes locally and must be kept in step with
-`workers/webhooks/src/alert-format.ts`.
+reviewable in one place.
+
+The two webhook alerts are rendered by their real formatters, which live in
+`@releases/core-internal/webhook-alert-format` precisely so both the webhooks
+worker and this preview can import them. They were briefly rebuilt by hand here
+under a "keep this in step" comment and drifted within a single PR — different
+lane, different blocks, different footer — so the preview stopped showing what
+operators receive. A shared implementation is the only version of that promise
+that holds.

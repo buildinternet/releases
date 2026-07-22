@@ -77,10 +77,32 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** `href` values are attribute-escaped but otherwise passed through — a query
- *  string's `&` must stay live or a signed URL corrupts. */
-function href(url: string): string {
+/**
+ * Attribute-escape a URL for an `href`/`src`, or return null if it isn't
+ * http(s).
+ *
+ * The scheme check lives HERE rather than at each call site so there is one
+ * place to be right: block URLs come from stored source URLs, curator-set
+ * avatars, and operator-set base URLs, and "every caller validates first" is a
+ * rule that holds until the next caller. `inlineMarkdownToHtml` already refuses
+ * non-http(s) link targets; this is the same rule for structured blocks.
+ *
+ * Escaping is deliberately narrow — only the characters that would break out of
+ * the attribute. A query string's `&` must stay live or a signed URL corrupts.
+ */
+function href(url: string): string | null {
+  if (!/^https?:\/\//i.test(url.trim())) return null;
   return url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
+}
+
+/**
+ * `inner` wrapped in a link, or left bare when the URL isn't http(s). A refused
+ * URL never silently vanishes — the text it labelled still renders, it just
+ * isn't clickable.
+ */
+function anchor(url: string | null | undefined, inner: string, style: string): string {
+  const safe = url ? href(url) : null;
+  return safe ? `<a href="${safe}" style="${style}">${inner}</a>` : inner;
 }
 
 /* ── Subject helpers ────────────────────────────────────────────────────── */
@@ -238,17 +260,27 @@ function blockHtml(b: EmailBlock): string {
 
     case "button": {
       const u = href(b.url);
+      // A non-http(s) action URL yields no button at all — a dead primary CTA is
+      // worse than the plain link line below it, which still shows the reader
+      // exactly what they were sent.
+      const button = u
+        ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 10px;">` +
+          `<tr><td style="background:${C.accent};border-radius:3px;">` +
+          `<a href="${u}" style="display:inline-block;padding:12px 22px;font-family:${SANS};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">${escapeHtml(b.label)}</a>` +
+          `</td></tr></table>`
+        : "";
       return (
-        `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 10px;">` +
-        `<tr><td style="background:${C.accent};border-radius:3px;">` +
-        `<a href="${u}" style="display:inline-block;padding:12px 22px;font-family:${SANS};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">${escapeHtml(b.label)}</a>` +
-        `</td></tr></table>` +
+        button +
         // The copy-pasteable twin. Not a fallback nicety — for a reader on a
         // client that strips the button, or moving the link to another device,
         // this IS the action.
         `<p style="margin:0 0 16px;font-family:${SANS};font-size:12px;line-height:1.5;color:${C.ink4};">` +
         `Or paste this link into your browser:<br>` +
-        `<a href="${u}" style="font-family:${MONO};font-size:11.5px;color:${C.ink3};word-break:break-all;">${escapeHtml(b.url)}</a>` +
+        anchor(
+          b.url,
+          escapeHtml(b.url),
+          `font-family:${MONO};font-size:11.5px;color:${C.ink3};word-break:break-all;`,
+        ) +
         `</p>`
       );
     }
@@ -275,9 +307,7 @@ function blockHtml(b: EmailBlock): string {
 
     case "entity": {
       const edge = b.sev === "crit" ? C.crit : b.sev === "warn" ? C.warn : C.line2;
-      const coord = b.url
-        ? `<a href="${href(b.url)}" style="color:${C.ink};text-decoration:none;">${escapeHtml(b.coord)}</a>`
-        : escapeHtml(b.coord);
+      const coord = anchor(b.url, escapeHtml(b.coord), `color:${C.ink};text-decoration:none;`);
       return (
         `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 12px;">` +
         `<tr><td width="2" style="width:2px;background:${edge};font-size:0;line-height:0;">&nbsp;</td>` +
@@ -289,11 +319,10 @@ function blockHtml(b: EmailBlock): string {
     }
 
     case "orgGroup": {
-      const name = b.url
-        ? `<a href="${href(b.url)}" style="color:${C.ink};text-decoration:none;">${escapeHtml(b.name)}</a>`
-        : escapeHtml(b.name);
-      const avatar = b.avatarUrl
-        ? `<img src="${href(b.avatarUrl)}" width="20" height="20" alt="" style="width:20px;height:20px;border-radius:5px;vertical-align:middle;margin-right:8px;">`
+      const name = anchor(b.url, escapeHtml(b.name), `color:${C.ink};text-decoration:none;`);
+      const avatarSrc = b.avatarUrl ? href(b.avatarUrl) : null;
+      const avatar = avatarSrc
+        ? `<img src="${avatarSrc}" width="20" height="20" alt="" style="width:20px;height:20px;border-radius:5px;vertical-align:middle;margin-right:8px;">`
         : "";
       const head = `<p style="margin:0 0 10px;font-family:${SANS};font-size:16px;font-weight:600;color:${C.ink};">${avatar}${name}</p>`;
 
@@ -317,7 +346,8 @@ function blockHtml(b: EmailBlock): string {
           return (
             `<div style="margin:0 0 12px;">` +
             `<div style="font-family:${SANS};font-size:15px;font-weight:600;line-height:1.4;">${mark}` +
-            `<a href="${href(p.url)}" style="${titleStyle}">${md(p.title)}</a></div>` +
+            anchor(p.url, md(p.title), titleStyle) +
+            `</div>` +
             summary +
             meta +
             `</div>`
@@ -327,9 +357,11 @@ function blockHtml(b: EmailBlock): string {
 
       const rollups = (b.rollups ?? [])
         .map((r) => {
-          const label = r.url
-            ? `<a href="${href(r.url)}" style="color:${C.ink};text-decoration:none;">${escapeHtml(r.product)}</a>`
-            : escapeHtml(r.product);
+          const label = anchor(
+            r.url,
+            escapeHtml(r.product),
+            `color:${C.ink};text-decoration:none;`,
+          );
           const blurb = r.blurb
             ? `<div style="font-family:${SANS};font-size:12.5px;color:${C.ink3};padding-top:3px;">${md(r.blurb)}</div>`
             : "";
@@ -338,9 +370,11 @@ function blockHtml(b: EmailBlock): string {
             : "";
           // The pill links to the representative release; the product name links
           // to the page holding the rest of the burst.
-          const version = r.versionUrl
-            ? `<a href="${href(r.versionUrl)}" style="color:${C.ink2};text-decoration:none;">${escapeHtml(r.version)}</a>`
-            : escapeHtml(r.version);
+          const version = anchor(
+            r.versionUrl,
+            escapeHtml(r.version),
+            `color:${C.ink2};text-decoration:none;`,
+          );
           const count =
             r.count && r.count > 1
               ? `<span style="font-family:${SANS};font-size:12.5px;color:${C.ink4};margin-left:6px;">&middot; ${r.count} releases</span>`
@@ -423,10 +457,7 @@ function actionMarkup(action: EmailAction, description: string): string {
 
 function footerHtml(footer: EmailFooter): string {
   const links = (footer.links ?? [])
-    .map(
-      (l) =>
-        `<a href="${href(l.href)}" style="color:${C.ink3};text-decoration:underline;">${escapeHtml(l.label)}</a>`,
-    )
+    .map((l) => anchor(l.href, escapeHtml(l.label), `color:${C.ink3};text-decoration:underline;`))
     .join(" &middot; ");
   return (
     `<p style="margin:0 0 6px;font-family:${SANS};font-size:12px;line-height:1.5;color:${C.ink3};">${escapeHtml(footer.reason)}</p>` +

@@ -302,6 +302,17 @@ export function formatCronReport(report: CronReport): FormattedReport {
     }
   }
 
+  // The text body lists the started managed-agent sessions; the html half owes
+  // the reader the same ids — they're what an operator greps for when chasing a
+  // run that produced nothing.
+  if (report.sessionsStarted && report.sessionsStarted.length > 0) {
+    blocks.push({ t: "kicker", text: `Sessions (${report.sessionsStarted.length})` });
+    blocks.push({
+      t: "data",
+      rows: report.sessionsStarted.map((id, i) => ({ label: `#${i + 1}`, value: id })),
+    });
+  }
+
   if (report.notes) {
     blocks.push({ t: "fine", text: report.notes });
   }

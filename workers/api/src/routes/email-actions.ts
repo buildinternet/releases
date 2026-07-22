@@ -52,6 +52,8 @@ async function handleVerifyEmail(c: Context<Env>) {
     }
   }
 
+  // A tokenless request is a malformed call, not a failed verification — the
+  // only case that isn't answered 2xx.
   const token = c.req.query("token");
   if (!token) return respondError(c, new NotFoundError());
 
@@ -60,15 +62,27 @@ async function handleVerifyEmail(c: Context<Env>) {
   target.searchParams.set("token", token);
 
   const res = await auth.handler(new Request(target, { method: "GET" }));
-  // Better Auth answers a good token with a redirect (302) or a 200 JSON body,
-  // and a spent/expired/forged one with a 4xx. Anything short of an error is a
-  // verification that happened.
-  if (res.status >= 400) {
-    logEvent("info", { component: "email-actions", event: "verify-rejected", status: res.status });
-    return respondError(c, new NotFoundError());
-  }
-  logEvent("info", { component: "email-actions", event: "verify-ok" });
-  return c.json({ success: true, verified: true });
+
+  // Every outcome answers 2xx, and the reason why is worth spelling out.
+  //
+  // A verify token is single-use: once spent it's gone, so a Gmail RETRY of an
+  // action that already succeeded is indistinguishable from a forged token —
+  // both reach Better Auth as "unknown". Returning an error would therefore
+  // report failure for a verification that happened, which is exactly the
+  // idempotency Google's one-click contract requires us not to break.
+  //
+  // Answering uniformly also removes the oracle: a caller guessing at tokens
+  // learns nothing from the response, whereas a 404-on-bad / 200-on-good split
+  // would confirm hits. The real outcome goes to the logs, which is where an
+  // operator would look anyway — the reader never sees this response, only
+  // Gmail does.
+  const status = res.status;
+  logEvent("info", {
+    component: "email-actions",
+    event: status < 400 ? "verify-ok" : "verify-noop",
+    status,
+  });
+  return c.json({ success: true });
 }
 
 emailActionRoutes.post("/email-actions/verify-email", handleVerifyEmail);

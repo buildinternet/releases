@@ -19,7 +19,11 @@ import { formatPollFetchAlert } from "./poll-fetch-alert.js";
 import { formatRecommendationAckEmail, formatRecommendationEmail } from "./recommendation-email.js";
 import { buildNoResultsAlert } from "./search-no-results.js";
 import { formatCronCrashAlert } from "./send-alert.js";
-import { renderEmail } from "@releases/rendering/email-shell";
+import {
+  formatAutoDisableAlert,
+  formatDlqAlert,
+  type SubscriptionLabel,
+} from "@releases/core-internal/webhook-alert-format";
 import { buildStalenessDigestEmail } from "./staleness-digest-email.js";
 import { formatCronReport, type CronReport } from "./cron-report.js";
 import { sendEmail, type EmailEnv } from "./email.js";
@@ -223,6 +227,14 @@ const SAMPLE_RECOMMENDATION: Recommendation = {
   userAgent: "Releases admin email test",
 };
 
+const SAMPLE_SUBSCRIPTION: SubscriptionLabel = {
+  id: "whk_sample",
+  url: "https://example.com/webhooks/releases",
+  description: "Sample webhook",
+  orgName: "Example Co",
+  orgSlug: "example",
+};
+
 const SAMPLE_FEEDBACK: Feedback = {
   id: "fb_sample_1",
   createdAt: Date.now(),
@@ -396,74 +408,31 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
         { fire: true, ratio: 0.24 },
         { thresholdPct: 20, minVolume: 50 },
       );
-    // The two webhook alerts are formatted inside `workers/webhooks` — a
-    // carved-out worker this one deliberately doesn't import from — so the
-    // preview rebuilds the same shapes here. Keep them in step with
-    // `workers/webhooks/src/alert-format.ts` when that changes.
+    // Rendered by the REAL formatters (shared via core-internal) rather than
+    // rebuilt here: a hand-copied preview drifts from what operators actually
+    // receive, which defeats the point of having a preview at all.
     case "operator.alert.webhook-dlq": {
-      const { html, text } = renderEmail({
-        lane: "Operator · Alert",
-        tone: "crit",
-        title: "3 webhook deliveries hit the DLQ",
-        subtitle: "One batch · 1 subscription affected",
-        preheader: "Example Co — connection refused.",
-        blocks: [
-          {
-            t: "entity",
-            sev: "crit",
-            coord: "Example Co (example) — Sample webhook",
-            metrics: "3 messages · whk_sample",
-          },
-          {
-            t: "data",
-            rows: [
-              { label: "url", value: "https://example.com/webhooks/releases" },
-              { label: "last error", value: "Connection refused (sample)", kind: "err" },
-            ],
-          },
-        ],
-        footer: {
-          reason:
-            "Internal alert from Releases — webhook deliveries exhausted their retries and landed in the dead-letter queue.",
+      const alert = formatDlqAlert([
+        {
+          subId: "whk_sample",
+          count: 3,
+          lastError: "Connection refused (sample)",
+          label: SAMPLE_SUBSCRIPTION,
         },
-      });
-      return { subject: "[alert] webhook DLQ: 3 messages — Example Co", text, html };
+      ]);
+      return { subject: alert.subject, text: alert.body, html: alert.html };
     }
     case "operator.alert.webhook-auto-disable": {
-      const { html, text } = renderEmail({
-        lane: "Operator · Alert",
-        tone: "crit",
-        title: "A webhook subscription was auto-disabled",
-        preheader: "50 consecutive failures — deliveries have stopped.",
-        blocks: [
-          {
-            t: "p",
-            text: "Deliveries stopped after 50 consecutive failures. The subscription stays off until someone re-enables it.",
-          },
-          {
-            t: "entity",
-            sev: "crit",
-            coord: "Example Co (example) — Sample webhook",
-            metrics: "50 failures · whk_sample",
-          },
-          {
-            t: "data",
-            rows: [
-              { label: "url", value: "https://example.com/webhooks/releases" },
-              { label: "last error", value: "HTTP 500 (sample)", kind: "err" },
-            ],
-          },
-        ],
-        footer: {
-          reason:
-            "Internal alert from Releases — a webhook subscription crossed the consecutive-failure ceiling.",
-        },
+      const alert = formatAutoDisableAlert({
+        subId: SAMPLE_SUBSCRIPTION.id,
+        url: SAMPLE_SUBSCRIPTION.url,
+        description: SAMPLE_SUBSCRIPTION.description,
+        orgName: SAMPLE_SUBSCRIPTION.orgName,
+        orgSlug: SAMPLE_SUBSCRIPTION.orgSlug,
+        consecutiveFailures: 50,
+        lastError: "HTTP 500 (sample)",
       });
-      return {
-        subject: "[alert] webhook subscription auto-disabled: Example Co (example)",
-        text,
-        html,
-      };
+      return { subject: alert.subject, text: alert.body, html: alert.html };
     }
     default: {
       const _exhaustive: never = id;

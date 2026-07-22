@@ -68,6 +68,7 @@ describe("POST /v1/email-actions/verify-email", () => {
   });
 
   it("404s a tokenless request without consulting Better Auth", async () => {
+    // The one non-2xx case: a malformed call, not a failed verification.
     const res = await app({})({}, "/email-actions/verify-email");
     expect(res.status).toBe(404);
   });

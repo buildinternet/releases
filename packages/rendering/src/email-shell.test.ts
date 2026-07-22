@@ -156,3 +156,45 @@ describe("subjectNames", () => {
     expect(subjectNames([null, undefined])).toBe("");
   });
 });
+
+describe("url safety", () => {
+  const nasty = "javascript:alert(1)";
+
+  it("refuses a non-http(s) button url but still shows it as text", () => {
+    const { html } = renderEmail({ ...base, blocks: [{ t: "button", label: "Go", url: nasty }] });
+    expect(html).not.toContain(`href="${nasty}"`);
+    expect(html).toContain("javascript:alert(1)");
+  });
+
+  it("refuses non-http(s) entity, org, post and footer links", () => {
+    const { html } = renderEmail({
+      ...base,
+      blocks: [
+        { t: "entity", coord: "Acme", metrics: "x", url: nasty },
+        {
+          t: "orgGroup",
+          name: "Acme",
+          url: nasty,
+          avatarUrl: nasty,
+          posts: [{ title: "Post", url: nasty }],
+          rollups: [{ product: "sdk", version: "1.0", url: nasty, versionUrl: nasty }],
+        },
+      ],
+      footer: { reason: "r", links: [{ label: "Prefs", href: nasty }] },
+    });
+    expect(html).not.toContain("javascript:");
+    // The labels survive — refusing the scheme must not delete the content.
+    expect(html).toContain("Acme");
+    expect(html).toContain("Post");
+    expect(html).toContain("Prefs");
+  });
+
+  it("still links ordinary http(s) urls", () => {
+    const { html } = renderEmail({
+      ...base,
+      blocks: [{ t: "entity", coord: "Acme", metrics: "x", url: "https://acme.test/a?b=1&c=2" }],
+    });
+    // `&` stays live — escaping it would corrupt a signed url.
+    expect(html).toContain('href="https://acme.test/a?b=1&c=2"');
+  });
+});
