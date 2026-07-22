@@ -21,6 +21,7 @@ import { forwardWellKnown, buildApiProtectedResourceMetadata } from "./oauth-dis
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
 import {
+  publicRateLimit,
   publicRateLimitMiddleware,
   selectAuthEdgeLimiter,
   edgeRateLimitIpKey,
@@ -737,11 +738,14 @@ v1.use("/me/*", publicRateLimitMiddleware);
 // Token-authenticated personalized feed — rate-limited but not under publicReadAuth.
 v1.use("/feed/:token", publicRateLimitMiddleware);
 // Token-authenticated unsubscribe — rate-limited, not under publicReadAuth.
-v1.use("/digest/unsubscribe/:token", publicRateLimitMiddleware);
-// Gmail one-click action handlers. NOTE: this middleware covers safe methods
-// only — it returns early on anything else — so the POST handlers do their own
-// per-IP limiting against AUTH_RATE_LIMITER. See routes/email-actions.ts.
-v1.use("/email-actions/*", publicRateLimitMiddleware);
+// `unsafeMethods` is REQUIRED here: the RFC 8058 One-Click target is the POST,
+// which the default middleware waves through (#2158). Anonymous + emailed token
+// means per-IP is the only handle there is.
+v1.use("/digest/unsubscribe/:token", publicRateLimit({ unsafeMethods: true }));
+// Gmail one-click action handlers. These deliberately DON'T use the tiered
+// public limiter: they consume a real auth credential, so they limit themselves
+// against AUTH_RATE_LIMITER — the tighter per-IP edge limiter that fronts
+// POST /api/auth/*. See routes/email-actions.ts.
 
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));

@@ -83,9 +83,16 @@ Messages with an action carry schema.org JSON-LD
   is the whole credential, exactly as in the link — opaque 404 on anything
   unknown, and idempotent because Google may retry. It rate-limits itself
   **inside the handler** against `AUTH_RATE_LIMITER`, the same per-IP edge
-  limiter that fronts `POST /api/auth/*`: `publicRateLimitMiddleware` returns
-  early on non-safe methods, so mounting it over a POST-only namespace throttles
-  nothing while looking like protection.
+  limiter that fronts `POST /api/auth/*`, because it consumes a real auth
+  credential.
+
+Anonymous write lanes are a standing trap here: `publicRateLimitMiddleware`
+returns early on non-safe methods, so mounting it over a POST route throttles
+nothing while reading as protection. Two shapes are correct — an
+auth-credential endpoint limits in-handler against `AUTH_RATE_LIMITER` (tight,
+brute-force posture), and everything else opts the tiered limiter into unsafe
+methods: `publicRateLimit({ unsafeMethods: true })`, as
+`POST /v1/digest/unsubscribe/:token` now does.
 
 Both annotations stay inert until the sending domain is
 [registered with Google](https://developers.google.com/workspace/gmail/markup/registering-with-google)
