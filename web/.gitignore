@@ -2,9 +2,5 @@
 .vercel
 .env*.local
 public/install
-# index.json is committed as a fallback floor (#2160) — see the comment in
-# scripts/build-well-known.ts. Everything else generated into this dir stays
-# ignored.
-public/.well-known/agent-skills/*
-!public/.well-known/agent-skills/index.json
+public/.well-known/agent-skills/
 public/.well-known/mcp/
