@@ -3,8 +3,7 @@
  */
 import type { FirecrawlStaleEntry } from "../cron/firecrawl-staleness.js";
 import type { StaleSourceEntry } from "../cron/source-staleness.js";
-import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "./email-layout.js";
-import { escapeHtml } from "./html-escape.js";
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type StalenessDigestInput = {
   firstParty: StaleSourceEntry[];
@@ -31,117 +30,69 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
   html: string;
 } {
   const total = input.firstParty.length + input.firecrawl.length;
-  const subject = `[staleness] ${total} source${total === 1 ? "" : "s"} overdue`;
-  const lines: string[] = [
-    `Source staleness digest — ${input.scannedAt}`,
-    "",
-    `${total} source(s) are overdue for new releases or monitor deliveries.`,
-    "",
+  // Name the orgs that went quiet: "4 overdue" alone reads the same every day
+  // and says nothing about whether this run needs attention.
+  const affected = subjectNames([
+    ...input.firstParty.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+    ...input.firecrawl.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+  ]);
+  const subject = `[staleness] ${total} source${total === 1 ? "" : "s"} overdue${affected ? `: ${affected}` : ""}`;
+
+  const blocks: EmailBlock[] = [
+    {
+      t: "p",
+      text: `${total} source(s) are overdue for new releases or monitor deliveries.`,
+    },
   ];
 
   if (input.firstParty.length > 0) {
-    lines.push(`First-party (${input.firstParty.length})`);
-    lines.push(
-      "Established-cadence sources we still poll but that have gone quiet past their overdue window.",
-    );
-    lines.push("");
+    blocks.push({ t: "kicker", text: `First-party (${input.firstParty.length})` });
+    blocks.push({
+      t: "fine",
+      text: "Established-cadence sources we still poll but that have gone quiet past their overdue window.",
+    });
     for (const e of input.firstParty) {
-      lines.push(orgHeadline(e.orgName, e.orgSlug, e.slug));
-      lines.push(`    type:         ${e.sourceType}`);
-      lines.push(`    quiet for:    ${e.daysSinceNewest}d (window ${e.windowDays}d)`);
-      lines.push(`    median gap:   ${e.medianGapDays}d`);
-      lines.push(`    newest:       ${e.newestRelease ?? "(never)"}`);
-      lines.push(`    last seen:    ${e.lastSeenAt}`);
       const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
-      if (adminUrl) lines.push(`    page:         ${adminUrl}`);
-      lines.push(`    source id:    ${e.sourceId}`);
-      lines.push("");
+      blocks.push({
+        t: "entity",
+        coord: orgHeadline(e.orgName, e.orgSlug, e.slug),
+        metrics: `quiet ${e.daysSinceNewest}d · window ${e.windowDays}d · median gap ${e.medianGapDays}d · newest ${e.newestRelease ?? "(never)"} · last seen ${e.lastSeenAt} · ${e.sourceId}`,
+        url: adminUrl ?? undefined,
+        sev: "warn",
+      });
     }
   }
 
   if (input.firecrawl.length > 0) {
-    lines.push(`Firecrawl monitors (${input.firecrawl.length})`);
-    lines.push("Firecrawl-owned sources whose monitor has stopped delivering.");
-    lines.push("");
+    blocks.push({ t: "kicker", text: `Firecrawl monitors (${input.firecrawl.length})` });
+    blocks.push({
+      t: "fine",
+      text: "Firecrawl-owned sources whose monitor has stopped delivering.",
+    });
     for (const e of input.firecrawl) {
-      lines.push(orgHeadline(e.orgName, e.orgSlug, e.slug));
-      lines.push(`    last fetch:   ${e.lastFetchedAt ?? "(never)"}`);
-      lines.push(`    threshold:    ${e.staleHours}h (${e.thresholdBasis})`);
       const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
-      if (adminUrl) lines.push(`    page:         ${adminUrl}`);
-      lines.push(`    source id:    ${e.sourceId}`);
-      lines.push("");
+      blocks.push({
+        t: "entity",
+        coord: orgHeadline(e.orgName, e.orgSlug, e.slug),
+        metrics: `last fetch ${e.lastFetchedAt ?? "(never)"} · threshold ${e.staleHours}h (${e.thresholdBasis}) · ${e.sourceId}`,
+        url: adminUrl ?? undefined,
+        sev: "crit",
+      });
     }
   }
 
-  const footer = {
-    reason:
-      "Internal daily digest from Releases — sources flagged by the staleness scans (first-party poll path and Firecrawl monitors).",
-    links: [{ label: "Admin status", href: `${input.webOrigin}/admin/status` }],
-  };
-  const text = appendTextFooter(lines.join("\n").trimEnd(), footer);
+  const { html, text } = renderEmail({
+    lane: "Admin · Staleness",
+    tone: "warn",
+    title: "Source staleness digest",
+    subtitle: input.scannedAt,
+    blocks,
+    footer: {
+      reason:
+        "Internal daily digest from Releases — sources flagged by the staleness scans (first-party poll path and Firecrawl monitors).",
+      links: [{ label: "Admin status", href: `${input.webOrigin}/admin/status` }],
+    },
+  });
 
-  const htmlBlocks: string[] = [
-    `<h1 style="font:600 18px system-ui,sans-serif;margin:0 0 4px;">Source staleness digest</h1>`,
-    `<p style="color:#64748b;font-size:13px;margin:0 0 16px;">${escapeHtml(input.scannedAt)} · ${total} overdue</p>`,
-  ];
-
-  const renderSection = (title: string, blurb: string, rows: string): void => {
-    htmlBlocks.push(
-      `<h2 style="font:600 14px system-ui,sans-serif;margin:20px 0 6px;">${escapeHtml(title)}</h2>`,
-      `<p style="font:13px system-ui,sans-serif;color:#64748b;margin:0 0 10px;">${escapeHtml(blurb)}</p>`,
-      rows,
-    );
-  };
-
-  if (input.firstParty.length > 0) {
-    const rows = input.firstParty
-      .map((e) => {
-        const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
-        const headline = escapeHtml(orgHeadline(e.orgName, e.orgSlug, e.slug));
-        const link = adminUrl
-          ? `<a href="${escapeHtml(adminUrl)}" style="color:#1a56db;text-decoration:none;">${headline}</a>`
-          : headline;
-        return (
-          `<div style="margin:10px 0;padding-left:12px;border-left:3px solid #f59e0b;">` +
-          `<div style="font-weight:600;">${link}</div>` +
-          `<div style="font:13px ui-monospace,monospace;color:#475569;margin-top:4px;">` +
-          `quiet ${e.daysSinceNewest}d · window ${e.windowDays}d · ${escapeHtml(e.sourceType)}` +
-          `</div></div>`
-        );
-      })
-      .join("");
-    renderSection(
-      `First-party (${input.firstParty.length})`,
-      "Established-cadence sources we still poll but that have gone quiet.",
-      rows,
-    );
-  }
-
-  if (input.firecrawl.length > 0) {
-    const rows = input.firecrawl
-      .map((e) => {
-        const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
-        const headline = escapeHtml(orgHeadline(e.orgName, e.orgSlug, e.slug));
-        const link = adminUrl
-          ? `<a href="${escapeHtml(adminUrl)}" style="color:#1a56db;text-decoration:none;">${headline}</a>`
-          : headline;
-        return (
-          `<div style="margin:10px 0;padding-left:12px;border-left:3px solid #dc2626;">` +
-          `<div style="font-weight:600;">${link}</div>` +
-          `<div style="font:13px ui-monospace,monospace;color:#475569;margin-top:4px;">` +
-          `last fetch ${escapeHtml(e.lastFetchedAt ?? "never")} · threshold ${e.staleHours}h` +
-          `</div></div>`
-        );
-      })
-      .join("");
-    renderSection(
-      `Firecrawl monitors (${input.firecrawl.length})`,
-      "Firecrawl-owned sources whose monitor has stopped delivering.",
-      rows,
-    );
-  }
-
-  const html = wrapHtmlEmail(appendHtmlFooter(htmlBlocks.join(""), footer));
   return { subject, text, html };
 }

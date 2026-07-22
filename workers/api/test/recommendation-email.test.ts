@@ -25,10 +25,11 @@ describe("formatRecommendationEmail", () => {
   it("prefixes the subject and includes the submitted fields", () => {
     const { subject, text } = formatRecommendationEmail(base);
     expect(subject).toBe("[recommendation] source: https://example.com/releases");
-    expect(text).toContain("Type: source");
-    expect(text).toContain("URL: https://example.com/releases");
-    expect(text).toContain("Additional info: Public release notes index");
-    expect(text).toContain("Email to notify: user@example.com");
+    expect(text).toContain("Type:    source");
+    expect(text).toContain("URL:     https://example.com/releases");
+    // The note is the message, so it leads as prose rather than as a labelled field.
+    expect(text).toContain("Public release notes index");
+    expect(text).toContain("Contact: user@example.com");
     expect(text).toContain("rec_123");
   });
 
@@ -38,8 +39,8 @@ describe("formatRecommendationEmail", () => {
       note: null,
       contactEmail: null,
     });
-    expect(text).toContain("Additional info: (none)");
-    expect(text).toContain("Email to notify: (none)");
+    expect(text).toContain("No additional note was left.");
+    expect(text).toContain("Contact: (none)");
   });
 
   it("includes an operator footer explaining the notification", () => {
@@ -51,7 +52,9 @@ describe("formatRecommendationEmail", () => {
 describe("formatRecommendationAckEmail", () => {
   it("thanks the submitter without echoing submitted url or note", () => {
     const { subject, text, html } = formatRecommendationAckEmail(base, "https://releases.sh");
-    expect(subject).toContain("Thanks");
+    // The subject names the submitted domain; the body still doesn't echo the
+    // full url back at the submitter.
+    expect(subject).toContain("We got your Releases submission");
     expect(text).not.toContain(base.url);
     expect(text).not.toContain(base.note!);
     expect(text).toContain(`Reference: ${base.id}`);

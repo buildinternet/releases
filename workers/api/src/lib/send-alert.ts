@@ -9,6 +9,7 @@
 
 import { sendEmail, type EmailEnv } from "./email.js";
 import { logEvent } from "@releases/lib/log-event";
+import { renderEmail } from "@releases/rendering/email-shell";
 
 const DEDUP_TTL_SECONDS = 3600;
 
@@ -75,4 +76,45 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
     logEvent("warn", { component: "send-alert", event: "send-error", err });
     return false;
   }
+}
+
+/**
+ * The Tier-1 "a cron threw" alert. Lives here rather than inline at the throw
+ * site so the crash mail is branded like every other operator message and the
+ * admin preview can render the real thing instead of a fabricated string.
+ *
+ * The stack is deliberately text-only: it is the one payload an operator copies
+ * out wholesale, and monospace HTML wrapping mangles it.
+ */
+export function formatCronCrashAlert(input: {
+  tag: string;
+  message: string;
+  stack?: string;
+  firedAt?: string;
+}): { subject: string; body: string; html: string } {
+  const { html, text } = renderEmail({
+    lane: "Operator · Alert",
+    tone: "crit",
+    title: `${input.tag} crashed`,
+    subtitle: input.firedAt,
+    preheader: `Unhandled error — the run did not complete. ${input.message}`,
+    blocks: [
+      { t: "p", text: "The scheduled run threw before it finished." },
+      {
+        t: "data",
+        rows: [
+          { label: "cron tag", value: input.tag },
+          { label: "error", value: input.message, kind: "err" },
+          ...(input.firedAt ? [{ label: "fired", value: input.firedAt }] : []),
+        ],
+      },
+    ],
+    footer: {
+      reason: "Internal Tier-1 alert from Releases — a scheduled run threw an unhandled error.",
+    },
+  });
+  const body = [text.trimEnd(), input.stack ? `\nStack:\n${input.stack}` : ""]
+    .filter(Boolean)
+    .join("\n");
+  return { subject: `[alert] cron crashed: ${input.tag}`, body, html };
 }

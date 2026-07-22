@@ -60,6 +60,7 @@ import { meRoutes } from "./routes/me.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { feedRoutes } from "./routes/feed.js";
 import { digestRoutes } from "./routes/digest.js";
+import { emailActionRoutes } from "./routes/email-actions.js";
 import { changelogRoutes } from "./routes/changelog.js";
 import { whatsChangedRoutes } from "./routes/whats-changed.js";
 import { firecrawlRoutes } from "./routes/firecrawl.js";
@@ -125,6 +126,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", workspaceRoutes);
   v1.route("/", feedRoutes);
   v1.route("/", digestRoutes);
+  v1.route("/", emailActionRoutes);
   v1.route("/", changelogRoutes);
   v1.route("/", whatsChangedRoutes);
   v1.route("/", firecrawlRoutes);

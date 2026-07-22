@@ -7,9 +7,18 @@
  * optional description, and owning org so the email names the endpoint and
  * company; the ids stay as trailing detail for admin lookup.
  *
- * No DB or `cloudflare:*` imports — index.ts does the lookup and passes the
- * resolved shapes in, so this stays unit-testable.
+ * No DB or `cloudflare:*` imports — the webhooks worker does the lookup and
+ * passes the resolved shapes in, so this stays unit-testable.
+ *
+ * Lives in core-internal, not in `workers/webhooks`, because the API worker's
+ * admin email preview (`email-samples.ts`) has to render these two alerts too.
+ * It previously rebuilt them by hand from a "keep this in step" comment, and
+ * they drifted — different lane, different blocks, different footer — so the
+ * preview stopped showing what operators actually receive. One implementation,
+ * imported by both, is the only version of that promise that holds.
  */
+
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type SubscriptionLabel = {
   id: string;
@@ -54,7 +63,13 @@ export type DlqEntry = {
   label: SubscriptionLabel | null;
 };
 
-export function formatDlqAlert(entries: DlqEntry[]): { subject: string; body: string } {
+export function formatDlqAlert(entries: DlqEntry[]): {
+  subject: string;
+  body: string;
+  html: string;
+} {
+  // Pinned byte-for-byte by alert-format.test.ts — the subject/body here stay
+  // hand-built; only `html` below goes through the shared email shell.
   const totalMsgs = entries.reduce((s, e) => s + e.count, 0);
   const lines = [`${totalMsgs} message(s) reached the DLQ in this batch.`, ""];
   for (const e of entries) {
@@ -65,9 +80,35 @@ export function formatDlqAlert(entries: DlqEntry[]): { subject: string; body: st
     lines.push(field("sub id", e.subId));
     lines.push("");
   }
+  const body = `${lines.join("\n").trimEnd()}\n`;
+
+  const blocks: EmailBlock[] = entries.map((e) => ({
+    t: "entity",
+    coord: subscriptionHeadline(e.label, e.subId),
+    metrics: `${e.count} message${e.count === 1 ? "" : "s"} · ${e.lastError ?? "unknown"} · ${e.subId}`,
+    url: e.label?.url,
+    sev: "crit",
+  }));
+  const { html } = renderEmail({
+    lane: "Alert · Webhook DLQ",
+    tone: "crit",
+    title: `${totalMsgs} message(s) reached the DLQ`,
+    blocks,
+    footer: {
+      reason:
+        "Automated alert from Releases — delivery attempts for these webhook subscriptions exhausted their retries.",
+    },
+  });
+
+  // Name whose endpoint is failing — "3 messages" alone doesn't say whether
+  // this is one broken integration or a platform-wide problem.
+  const affected = subjectNames(
+    entries.map((e) => e.label?.orgName ?? e.label?.description ?? null),
+  );
   return {
-    subject: `[alert] webhook DLQ: ${totalMsgs} messages`,
-    body: `${lines.join("\n").trimEnd()}\n`,
+    subject: `[alert] webhook DLQ: ${totalMsgs} messages${affected ? ` — ${affected}` : ""}`,
+    body,
+    html,
   };
 }
 
@@ -81,7 +122,13 @@ export type AutoDisableInfo = {
   lastError: string | null;
 };
 
-export function formatAutoDisableAlert(info: AutoDisableInfo): { subject: string; body: string } {
+export function formatAutoDisableAlert(info: AutoDisableInfo): {
+  subject: string;
+  body: string;
+  html: string;
+} {
+  // Pinned byte-for-byte by alert-format.test.ts — the subject/body here stay
+  // hand-built; only `html` below goes through the shared email shell.
   const label: SubscriptionLabel = {
     id: info.subId,
     url: info.url,
@@ -100,8 +147,32 @@ export function formatAutoDisableAlert(info: AutoDisableInfo): { subject: string
   lines.push(field("failures", String(info.consecutiveFailures)));
   lines.push(field("last error", info.lastError ?? "unknown"));
   lines.push(field("sub id", info.subId));
+  const body = `${lines.join("\n").trimEnd()}\n`;
+
+  const blocks: EmailBlock[] = [
+    {
+      t: "entity",
+      coord: subscriptionHeadline(label, info.subId),
+      metrics: `${info.consecutiveFailures} consecutive failures · ${info.lastError ?? "unknown"} · ${info.subId}`,
+      url: info.url,
+      sev: "crit",
+    },
+  ];
+  const { html } = renderEmail({
+    lane: "Alert · Webhook auto-disable",
+    tone: "crit",
+    title: "Webhook subscription auto-disabled",
+    subtitle: org || undefined,
+    blocks,
+    footer: {
+      reason:
+        "Automated alert from Releases — this webhook subscription was auto-disabled after repeated delivery failures.",
+    },
+  });
+
   return {
     subject: `[alert] webhook subscription auto-disabled: ${subscriptionShortName(label, info.subId)}`,
-    body: `${lines.join("\n").trimEnd()}\n`,
+    body,
+    html,
   };
 }

@@ -12,7 +12,7 @@
  * Workers runtime.
  */
 
-import { escapeHtml } from "./html-escape.js";
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type PollFetchFailure = {
   sourceId: string;
@@ -94,69 +94,58 @@ export function formatPollFetchAlert(
 ): FormattedAlert {
   const scheduledIso = new Date(scheduledTime).toISOString();
 
-  // Subject names the source when exactly one failed (the common case); a
-  // wider outage stays count-based to keep the line short. The raw epoch
-  // `scheduledTime` is preserved so the per-fire dedup key in sendAlert still
-  // collapses only true retries of the same summary fire.
+  // The subject always names a source. One failure names it and its step; a
+  // wider outage names the first and counts the rest, so the line still answers
+  // "what is down?" without opening the message. The raw epoch `scheduledTime`
+  // is preserved so the per-fire dedup key in sendAlert still collapses only
+  // true retries of the same summary fire.
+  const affected = subjectNames(
+    failures.map((f) => headline(detailsById.get(f.sourceId), f.sourceId)),
+    1,
+  );
   const subject =
     failures.length === 1
-      ? `[alert] poll-and-fetch: ${headline(
-          detailsById.get(failures[0].sourceId),
-          failures[0].sourceId,
-        )} failed at ${failures[0].stepName} (scheduledTime=${scheduledTime})`
-      : `[alert] poll-and-fetch: ${failures.length} source(s) failed (scheduledTime=${scheduledTime})`;
+      ? `[alert] poll-and-fetch: ${affected} failed at ${failures[0].stepName} (scheduledTime=${scheduledTime})`
+      : `[alert] poll-and-fetch: ${affected} failed (${failures.length} sources, scheduledTime=${scheduledTime})`;
 
-  const lines: string[] = [
-    `${failures.length} source(s) failed during the poll-and-fetch fan-out.`,
-    `Scheduled time: ${scheduledIso}`,
-    "",
-  ];
+  const blocks: EmailBlock[] = [];
   for (const f of failures) {
     const detail = detailsById.get(f.sourceId);
-    lines.push(headline(detail, f.sourceId));
-    for (const { label, value } of detailRows(f, detail)) {
-      // Pad "label:" to a fixed column so the values line up vertically.
-      lines.push(`    ${`${label}:`.padEnd(13)}${value}`);
-    }
-    lines.push("");
+    // Only a validated http(s) source URL becomes the entity's link — a
+    // hostile `javascript:` scheme still shows up as plain text in the `data`
+    // rows below, but never as a clickable anchor.
+    const url = detail?.sourceUrl && isHttpUrl(detail.sourceUrl) ? detail.sourceUrl : undefined;
+    blocks.push({
+      t: "entity",
+      coord: headline(detail, f.sourceId),
+      metrics: `step: ${f.stepName}`,
+      url,
+      sev: "crit",
+    });
+    blocks.push({
+      t: "data",
+      rows: detailRows(f, detail).map((r) => ({
+        label: r.label,
+        value: r.value,
+        kind: r.kind === "error" ? "err" : undefined,
+      })),
+    });
   }
-  const text = `${lines.join("\n").trimEnd()}\n`;
 
-  const htmlRow = ({ label, value, kind }: DetailRow): string => {
-    const escaped = escapeHtml(value);
-    let cell: string;
-    switch (kind) {
-      case "url":
-        cell = isHttpUrl(value) ? `<a href="${escaped}">${escaped}</a>` : escaped;
-        break;
-      case "error":
-        cell = `<span style="color:#dc2626;">${escaped}</span>`;
-        break;
-      default:
-        cell = escaped;
-    }
-    return `<tr><td style="padding:2px 12px 2px 0;color:#64748b;white-space:nowrap;vertical-align:top;">${escapeHtml(
-      label,
-    )}</td><td style="padding:2px 0;font-family:ui-monospace,monospace;word-break:break-word;">${cell}</td></tr>`;
-  };
-
-  const blocks = failures
-    .map((f) => {
-      const detail = detailsById.get(f.sourceId);
-      const rows = detailRows(f, detail).map(htmlRow).join("");
-      return `<div style="margin-top:16px;border-left:3px solid #dc2626;padding-left:12px;">
-<h3 style="margin:0 0 6px;font-size:15px;">${escapeHtml(headline(detail, f.sourceId))}</h3>
-<table style="border-collapse:collapse;font-size:13px;">${rows}</table>
-</div>`;
-    })
-    .join("\n");
-
-  const html = `<!doctype html>
-<html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:640px;">
-<h2 style="color:#dc2626;margin-bottom:4px;">poll-and-fetch — ${failures.length} source(s) failed</h2>
-<p style="color:#64748b;font-size:13px;margin-top:0;">Scheduled time: ${escapeHtml(scheduledIso)}</p>
-${blocks}
-</body></html>`;
+  // Both bodies come out of the one render: the shell's plain-text path already
+  // formats `entity` and `data` blocks, and hand-building a second body beside
+  // it is exactly how the two drift apart.
+  const { html, text } = renderEmail({
+    lane: "Alert · Poll fetch",
+    tone: "crit",
+    title: `poll-and-fetch — ${failures.length} source(s) failed`,
+    subtitle: `Scheduled time: ${scheduledIso}`,
+    blocks,
+    footer: {
+      reason:
+        "Automated alert from Releases — one or more sources failed during the scheduled poll-and-fetch run.",
+    },
+  });
 
   return { subject, text, html };
 }

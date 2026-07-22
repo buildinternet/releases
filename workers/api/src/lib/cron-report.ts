@@ -5,7 +5,13 @@
  */
 import type { FinalizeRunParams } from "../db/cron-runs-dao.js";
 import type { TopSearchRow } from "./search-queries-top.js";
-import { escapeHtml } from "./html-escape.js";
+import {
+  renderEmail,
+  subjectNames,
+  type EmailBlock,
+  type EmailDataRow,
+  type EmailTone,
+} from "@releases/rendering/email-shell";
 
 export type CronReportStatus = FinalizeRunParams["status"];
 
@@ -115,7 +121,24 @@ export function formatCronReport(report: CronReport): FormattedReport {
   const resultsSegment = report.results
     ? ` → ${totalReleasesInserted(report.results)} inserted`
     : "";
-  const subject = `${prefix}${report.cronName}: ${report.status} — ${dispatchedSegment}${resultsSegment}`;
+  // When something went wrong, name who it went wrong for. A healthy run stays
+  // clean — there is no entity to name and the counts are the whole story.
+  // Dispatch errors carry only a slug; the per-org results carry the display
+  // name. Prefer the name when the run reported both for the same org.
+  // The subject wants the bare display name, not `orgLabel`'s "Name (slug)" —
+  // it already sits inside parentheses. Dispatch errors carry only a slug, so
+  // the per-org results supply the name when the run reported both.
+  const nameBySlug = new Map(
+    (report.results?.perOrg ?? []).map((o) => [o.orgSlug, o.orgName?.trim() || o.orgSlug] as const),
+  );
+  const failingOrgs = subjectNames([
+    ...(report.dispatchErrorDetail ?? []).map((d) => nameBySlug.get(d.orgSlug) ?? d.orgSlug),
+    ...(report.results?.perOrg ?? [])
+      .filter((o) => o.errors > 0)
+      .map((o) => o.orgName?.trim() || o.orgSlug),
+  ]);
+  const blameSegment = failingOrgs ? ` (${failingOrgs})` : "";
+  const subject = `${prefix}${report.cronName}: ${report.status} — ${dispatchedSegment}${resultsSegment}${blameSegment}`;
 
   const lines: string[] = [];
   lines.push(`Cron: ${report.cronName}`);
@@ -192,92 +215,126 @@ export function formatCronReport(report: CronReport): FormattedReport {
     lines.push(`Detail: ${report.adminBaseUrl}/v1/admin/cron-runs/${report.runId}`);
   }
 
+  // The plain-text body above is pinned byte-for-byte by
+  // tests/unit/cron-report-formatter.test.ts — it stays hand-built. Only the
+  // HTML twin below goes through the shared email shell.
   const text = lines.join("\n");
 
-  const statusColor =
-    report.status === "done" ? "#16a34a" : report.status === "degraded" ? "#d97706" : "#dc2626";
+  // "failed" covers both the immediate dispatch failure and an aborted
+  // preflight — both mean the run didn't complete normally, unlike "degraded"
+  // (it ran, some orgs errored).
+  const tone: EmailTone =
+    report.status === "degraded"
+      ? "warn"
+      : report.status === "dispatch_failed" || report.status === "aborted"
+        ? "crit"
+        : "accent";
 
-  const htmlRows: string[] = [];
-  const row = (label: string, value: string) =>
-    `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">${escapeHtml(label)}</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${escapeHtml(value)}</td></tr>`;
-  htmlRows.push(row("Cron", report.cronName));
-  htmlRows.push(row("Run", report.runId));
-  htmlRows.push(
-    row("Status", report.status + (report.abortReason ? ` (${report.abortReason})` : "")),
-  );
-  htmlRows.push(row("Started", report.startedAt));
-  htmlRows.push(row("Ended", report.endedAt));
-  htmlRows.push(row("Duration", formatDuration(report.durationMs)));
-  htmlRows.push(row("Candidates", String(report.candidates)));
-  htmlRows.push(row("Dispatched", String(report.dispatched)));
-  htmlRows.push(row("Skipped (cap)", String(report.skippedOverCap)));
-  htmlRows.push(row("Dispatch errors", String(report.dispatchErrors)));
+  const blocks: EmailBlock[] = [
+    {
+      t: "data",
+      rows: [
+        { label: "Candidates", value: String(report.candidates) },
+        { label: "Dispatched", value: String(report.dispatched) },
+        { label: "Skipped (cap)", value: String(report.skippedOverCap) },
+        {
+          label: "Dispatch errors",
+          value: String(report.dispatchErrors),
+          kind: report.dispatchErrors > 0 ? "err" : undefined,
+        },
+        { label: "Duration", value: formatDuration(report.durationMs) },
+      ],
+    },
+  ];
 
-  let resultsHtml = "";
   if (report.results) {
     const r = report.results;
-    const stillRunning =
-      r.sessionsWithNoActivity > 0
-        ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">Still running</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${r.sessionsWithNoActivity} session${r.sessionsWithNoActivity === 1 ? "" : "s"}</td></tr>`
-        : "";
-    const orgRows = r.perOrg
-      .map((o) => {
-        const errSeg =
-          o.errors > 0 ? ` <span style="color:#dc2626;">errors=${o.errors}</span>` : "";
-        return `<tr><td style="padding:4px 12px 4px 0;font-family:ui-monospace,monospace;">${escapeHtml(orgLabel(o))}</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.sourcesFetched} fetched</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.releasesFound} found</td><td style="padding:4px 0;"><strong>${o.releasesInserted}</strong> inserted${errSeg}</td></tr>`;
-      })
-      .join("");
-    const orgTable =
-      r.perOrg.length > 0
-        ? `<h3 style="margin-top:24px;">Per org</h3><table style="border-collapse:collapse;font-size:14px;">${orgRows}</table>`
-        : "";
-    resultsHtml = `<h3 style="margin-top:24px;">Results <span style="font-weight:400;color:#64748b;">(after ${r.settleWindowMinutes}min settle)</span></h3><table style="border-collapse:collapse;font-size:14px;"><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Sources fetched</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalSourcesFetched(r)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Releases found</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalReleasesFound(r)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Releases inserted</td><td style="padding:4px 0;font-family:ui-monospace,monospace;"><strong>${totalReleasesInserted(r)}</strong></td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Fetch errors</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalErrors(r)}</td></tr>${stillRunning}</table>${orgTable}`;
-  }
+    blocks.push({ t: "kicker", text: `Results (after ${r.settleWindowMinutes}min settle)` });
+    const resultRows: EmailDataRow[] = [
+      { label: "Sources fetched", value: String(totalSourcesFetched(r)) },
+      { label: "Releases found", value: String(totalReleasesFound(r)) },
+      { label: "Releases inserted", value: String(totalReleasesInserted(r)) },
+      {
+        label: "Fetch errors",
+        value: String(totalErrors(r)),
+        kind: totalErrors(r) > 0 ? "err" : undefined,
+      },
+    ];
+    if (r.sessionsWithNoActivity > 0) {
+      resultRows.push({
+        label: "Still running",
+        value: `${r.sessionsWithNoActivity} session${r.sessionsWithNoActivity === 1 ? "" : "s"}`,
+      });
+    }
+    blocks.push({ t: "data", rows: resultRows });
 
-  let topSearchesHtml = "";
-  if (report.topSearches !== undefined) {
-    if (report.topSearches.length === 0) {
-      topSearchesHtml = `<h3 style="margin-top:24px;">Top searches <span style="font-weight:400;color:#64748b;">(last 24h)</span></h3><p style="color:#64748b;font-size:14px;">No search traffic.</p>`;
-    } else {
-      const searchRows = report.topSearches
-        .map((s) => {
-          const ts = new Date(s.lastSeen).toISOString();
-          return `<tr><td style="padding:4px 12px 4px 0;font-family:ui-monospace,monospace;">${escapeHtml(s.query)}</td><td style="padding:4px 12px 4px 0;color:#64748b;text-align:right;">${s.count}x</td><td style="padding:4px 0;color:#64748b;font-size:12px;">${escapeHtml(ts)}</td></tr>`;
-        })
-        .join("");
-      topSearchesHtml = `<h3 style="margin-top:24px;">Top searches <span style="font-weight:400;color:#64748b;">(last 24h)</span></h3><table style="border-collapse:collapse;font-size:14px;">${searchRows}</table>`;
+    if (r.perOrg.length > 0) {
+      blocks.push({ t: "kicker", text: "Per org" });
+      for (const o of r.perOrg) {
+        const errSeg = o.errors > 0 ? ` errors=${o.errors}` : "";
+        // Markdown `**bold**` (not the `entity` block) so the org label bolds
+        // via the shared `<strong>` — matches what an operator scanning the
+        // list expects to jump out.
+        blocks.push({
+          t: "p",
+          text: `**${orgLabel(o)}**: fetched=${o.sourcesFetched} found=${o.releasesFound} inserted=${o.releasesInserted}${errSeg}`,
+        });
+      }
     }
   }
 
-  let errorsHtml = "";
+  if (report.topSearches !== undefined) {
+    blocks.push({ t: "kicker", text: "Top searches (last 24h)" });
+    if (report.topSearches.length === 0) {
+      blocks.push({ t: "fine", text: "No search traffic." });
+    } else {
+      for (const s of report.topSearches) {
+        const ts = new Date(s.lastSeen).toISOString();
+        blocks.push({ t: "p", text: `${s.query} — ${s.count}x, last seen ${ts}` });
+      }
+    }
+  }
+
   if (report.dispatchErrorDetail && report.dispatchErrorDetail.length > 0) {
-    const items = report.dispatchErrorDetail
-      .map((e) => `<li><strong>${escapeHtml(e.orgSlug)}</strong>: ${escapeHtml(e.error)}</li>`)
-      .join("");
-    errorsHtml = `<h3 style="margin-top:24px;">Errors</h3><ul>${items}</ul>`;
+    blocks.push({ t: "kicker", text: "Dispatch errors" });
+    for (const e of report.dispatchErrorDetail) {
+      blocks.push({ t: "p", text: `**${e.orgSlug}**: ${e.error}` });
+    }
   }
 
-  let notesHtml = "";
+  // The text body lists the started managed-agent sessions; the html half owes
+  // the reader the same ids — they're what an operator greps for when chasing a
+  // run that produced nothing.
+  if (report.sessionsStarted && report.sessionsStarted.length > 0) {
+    blocks.push({ t: "kicker", text: `Sessions (${report.sessionsStarted.length})` });
+    blocks.push({
+      t: "data",
+      rows: report.sessionsStarted.map((id, i) => ({ label: `#${i + 1}`, value: id })),
+    });
+  }
+
   if (report.notes) {
-    notesHtml = `<p style="color:#475569;margin-top:16px;"><em>${escapeHtml(report.notes)}</em></p>`;
+    blocks.push({ t: "fine", text: report.notes });
   }
 
-  let detailLink = "";
   if (report.adminBaseUrl) {
-    const url = `${report.adminBaseUrl}/v1/admin/cron-runs/${report.runId}`;
-    detailLink = `<p style="margin-top:16px;"><a href="${escapeHtml(url)}">View run detail</a></p>`;
+    blocks.push({
+      t: "button",
+      label: "View run detail",
+      url: `${report.adminBaseUrl}/v1/admin/cron-runs/${report.runId}`,
+    });
   }
 
-  const html = `<!doctype html>
-<html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:640px;">
-<h2 style="color:${statusColor};margin-bottom:8px;">${escapeHtml(report.cronName)} — ${escapeHtml(report.status)}</h2>
-<table style="border-collapse:collapse;font-size:14px;">${htmlRows.join("")}</table>
-${resultsHtml}
-${topSearchesHtml}
-${notesHtml}
-${errorsHtml}
-${detailLink}
-</body></html>`;
+  const { html } = renderEmail({
+    lane: "Cron",
+    tone,
+    title: `${report.cronName} — ${report.status}`,
+    subtitle: `${report.runId}${report.abortReason ? ` (${report.abortReason})` : ""}`,
+    blocks,
+    footer: {
+      reason: `Automated report from Releases — the ${report.cronName} cron run.`,
+    },
+  });
 
   return { subject, text, html };
 }

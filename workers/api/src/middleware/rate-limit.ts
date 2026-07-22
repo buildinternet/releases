@@ -144,43 +144,67 @@ async function classifyPrincipal(
   return { tier: "anonymous", bucketKey: ip };
 }
 
+export type PublicRateLimitOptions = {
+  /**
+   * Also limit non-safe methods. OFF by default: nearly every write behind this
+   * middleware is auth-gated and carries its own limiter, and throttling those
+   * per-IP would punish a shared NAT for authenticated traffic.
+   *
+   * Turn it ON for anonymous write lanes, where per-IP is the only handle there
+   * is — an emailed-token endpoint like `POST /digest/unsubscribe/:token`. Note
+   * this middleware silently passes POST through otherwise, so mounting it over
+   * a POST-only route without this flag reads as protection that isn't there
+   * (that was the bug behind #2158).
+   */
+  unsafeMethods?: boolean;
+};
+
 /**
  * Rate limiting for reads. Three rungs on Cloudflare's native limiter: anonymous
  * (per-IP, 120), account (per-userId, 300), machine (per-token, 600). Root + the
  * trusted web proxy are exempt. Each rung is independently gated by its binding +
  * kill switch; with all off this is a no-op.
  */
-export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next) => {
-  if (!SAFE_METHODS.has(c.req.method)) return next();
+export function publicRateLimit(opts: PublicRateLimitOptions = {}): MiddlewareHandler<Env> {
+  return async (c, next) => {
+    if (!opts.unsafeMethods && !SAFE_METHODS.has(c.req.method)) return next();
 
-  const rateLimitEnabled = await flag(
-    c.env.FLAGS,
-    c.env.RATE_LIMIT_ENABLED,
-    FLAGS.rateLimitEnabled,
-  );
-  const limiters = selectTierLimiters(rateLimitEnabled, c.env.TOKEN_RATE_LIMIT_ENABLED === "true", {
-    anonymous: c.env.PUBLIC_RATE_LIMITER,
-    account: c.env.USER_RATE_LIMITER,
-    machine: c.env.TOKEN_RATE_LIMITER,
-  });
-  if (!limiters.anonymous && !limiters.account && !limiters.machine) return next();
+    const rateLimitEnabled = await flag(
+      c.env.FLAGS,
+      c.env.RATE_LIMIT_ENABLED,
+      FLAGS.rateLimitEnabled,
+    );
+    const limiters = selectTierLimiters(
+      rateLimitEnabled,
+      c.env.TOKEN_RATE_LIMIT_ENABLED === "true",
+      {
+        anonymous: c.env.PUBLIC_RATE_LIMITER,
+        account: c.env.USER_RATE_LIMITER,
+        machine: c.env.TOKEN_RATE_LIMITER,
+      },
+    );
+    if (!limiters.anonymous && !limiters.account && !limiters.machine) return next();
 
-  const principal = await classifyPrincipal(c, !!limiters.account);
-  const plan = resolveTierEnforcement(principal, limiters);
-  if (!plan) return next(); // exempt
-  if (!plan.limiter) return next(); // this rung disabled → allow
+    const principal = await classifyPrincipal(c, !!limiters.account);
+    const plan = resolveTierEnforcement(principal, limiters);
+    if (!plan) return next(); // exempt
+    if (!plan.limiter) return next(); // this rung disabled → allow
 
-  const { success } = await plan.limiter.limit({ key: plan.key });
-  c.header("RateLimit-Policy", policyHeader(plan.policyName, plan.quota));
-  const emit = emitDecision(c, plan.tier, plan.key, !success);
-  try {
-    c.executionCtx.waitUntil(emit);
-  } catch {
-    // no executionCtx in tests — await inline to keep assertions deterministic
-    await emit;
-  }
-  if (success) return next();
-  c.header("RateLimit", `"${plan.policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
-  c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-  return c.json(RATE_LIMITED_ERROR, 429);
-};
+    const { success } = await plan.limiter.limit({ key: plan.key });
+    c.header("RateLimit-Policy", policyHeader(plan.policyName, plan.quota));
+    const emit = emitDecision(c, plan.tier, plan.key, !success);
+    try {
+      c.executionCtx.waitUntil(emit);
+    } catch {
+      // no executionCtx in tests — await inline to keep assertions deterministic
+      await emit;
+    }
+    if (success) return next();
+    c.header("RateLimit", `"${plan.policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
+    c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+    return c.json(RATE_LIMITED_ERROR, 429);
+  };
+}
+
+/** The default instance: safe methods only. */
+export const publicRateLimitMiddleware: MiddlewareHandler<Env> = publicRateLimit();

@@ -32,10 +32,10 @@ describe("buildStalenessDigestEmail", () => {
         },
       ],
     });
-    expect(subject).toBe("[staleness] 2 sources overdue");
-    expect(text).toContain("First-party (1)");
+    expect(subject).toBe("[staleness] 2 sources overdue: Vercel, Acme");
+    expect(text).toContain("FIRST-PARTY (1)");
     expect(text).toContain("Vercel (vercel) — next-js");
-    expect(text).toContain("Firecrawl monitors (1)");
+    expect(text).toContain("FIRECRAWL MONITORS (1)");
     expect(text).toContain("https://releases.sh/vercel/next-js");
     expect(text).toContain("Internal daily digest");
     expect(html).toContain("Source staleness digest");

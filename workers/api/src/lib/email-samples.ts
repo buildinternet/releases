@@ -17,7 +17,13 @@ import { buildDigestEmail } from "./digest-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
 import { formatPollFetchAlert } from "./poll-fetch-alert.js";
 import { formatRecommendationAckEmail, formatRecommendationEmail } from "./recommendation-email.js";
-import { formatNoResultsAlertBody } from "./search-no-results.js";
+import { buildNoResultsAlert } from "./search-no-results.js";
+import { formatCronCrashAlert } from "./send-alert.js";
+import {
+  formatAutoDisableAlert,
+  formatDlqAlert,
+  type SubscriptionLabel,
+} from "@releases/core-internal/webhook-alert-format";
 import { buildStalenessDigestEmail } from "./staleness-digest-email.js";
 import { formatCronReport, type CronReport } from "./cron-report.js";
 import { sendEmail, type EmailEnv } from "./email.js";
@@ -221,6 +227,14 @@ const SAMPLE_RECOMMENDATION: Recommendation = {
   userAgent: "Releases admin email test",
 };
 
+const SAMPLE_SUBSCRIPTION: SubscriptionLabel = {
+  id: "whk_sample",
+  url: "https://example.com/webhooks/releases",
+  description: "Sample webhook",
+  orgName: "Example Co",
+  orgSlug: "example",
+};
+
 const SAMPLE_FEEDBACK: Feedback = {
   id: "fb_sample_1",
   createdAt: Date.now(),
@@ -352,16 +366,14 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
           },
         ],
       });
-    case "operator.alert.cron-crash":
-      return {
-        subject: "[alert] cron crashed: sample-cron",
-        text: [
-          "Cron tag: sample-cron",
-          "Error: Sample error for admin email preview",
-          "",
-          "This is a fabricated Tier-1 alert.",
-        ].join("\n"),
-      };
+    case "operator.alert.cron-crash": {
+      const alert = formatCronCrashAlert({
+        tag: "sample-cron",
+        message: "Sample error for admin email preview",
+        firedAt: new Date().toISOString(),
+      });
+      return { subject: alert.subject, text: alert.body, html: alert.html };
+    }
     case "operator.alert.poll-fetch": {
       const alert = formatPollFetchAlert(
         [{ sourceId: "src_sample", stepName: "fetch", error: "Timed out after 5m (sample)" }],
@@ -384,48 +396,44 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
       return alert;
     }
     case "operator.alert.search-no-results":
-      return {
-        subject: "[alert] search no-results rate 24.0%",
-        text: formatNoResultsAlertBody(
-          {
-            total: 120,
-            zeroHits: 29,
-            topQueries: [
-              { query: "sample zero hit", count: 8, lastSeen: Date.now() },
-              { query: "another miss", count: 5, lastSeen: Date.now() },
-            ],
-          },
-          { fire: true, ratio: 0.24 },
-          { thresholdPct: 20, minVolume: 50 },
-        ),
-      };
-    case "operator.alert.webhook-dlq":
-      return {
-        subject: "[alert] webhook DLQ: 3 messages",
-        text: [
-          "3 message(s) reached the DLQ in this batch.",
-          "",
-          "Example Co (example) — Sample webhook",
-          "    url:        https://example.com/webhooks/releases",
-          "    messages:   3",
-          "    last error: Connection refused (sample)",
-          "    sub id:     whk_sample",
-        ].join("\n"),
-      };
-    case "operator.alert.webhook-auto-disable":
-      return {
-        subject: "[alert] webhook subscription auto-disabled: Example Co (example)",
-        text: [
-          "Webhook subscription auto-disabled after 50 consecutive failures.",
-          "",
-          "Example Co (example) — Sample webhook",
-          "    url:        https://example.com/webhooks/releases",
-          "    org:        Example Co (example)",
-          "    failures:   50",
-          "    last error: HTTP 500 (sample)",
-          "    sub id:     whk_sample",
-        ].join("\n"),
-      };
+      return buildNoResultsAlert(
+        {
+          total: 120,
+          zeroHits: 29,
+          topQueries: [
+            { query: "sample zero hit", count: 8, lastSeen: Date.now() },
+            { query: "another miss", count: 5, lastSeen: Date.now() },
+          ],
+        },
+        { fire: true, ratio: 0.24 },
+        { thresholdPct: 20, minVolume: 50 },
+      );
+    // Rendered by the REAL formatters (shared via core-internal) rather than
+    // rebuilt here: a hand-copied preview drifts from what operators actually
+    // receive, which defeats the point of having a preview at all.
+    case "operator.alert.webhook-dlq": {
+      const alert = formatDlqAlert([
+        {
+          subId: "whk_sample",
+          count: 3,
+          lastError: "Connection refused (sample)",
+          label: SAMPLE_SUBSCRIPTION,
+        },
+      ]);
+      return { subject: alert.subject, text: alert.body, html: alert.html };
+    }
+    case "operator.alert.webhook-auto-disable": {
+      const alert = formatAutoDisableAlert({
+        subId: SAMPLE_SUBSCRIPTION.id,
+        url: SAMPLE_SUBSCRIPTION.url,
+        description: SAMPLE_SUBSCRIPTION.description,
+        orgName: SAMPLE_SUBSCRIPTION.orgName,
+        orgSlug: SAMPLE_SUBSCRIPTION.orgSlug,
+        consecutiveFailures: 50,
+        lastError: "HTTP 500 (sample)",
+      });
+      return { subject: alert.subject, text: alert.body, html: alert.html };
+    }
     default: {
       const _exhaustive: never = id;
       throw new Error(`Unhandled sample id: ${_exhaustive}`);

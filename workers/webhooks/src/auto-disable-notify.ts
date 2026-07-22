@@ -1,6 +1,6 @@
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
-import { formatAutoDisableAlert } from "./alert-format.js";
+import { formatAutoDisableAlert } from "@releases/core-internal/webhook-alert-format";
 import type { EmailEnv } from "./email.js";
 import { sendWebhookAlert, sendWebhookUserNotice } from "./email.js";
 import { getOrgLabelById } from "./queries.js";
@@ -38,7 +38,7 @@ export async function notifyAutoDisabledSubscription(
     consecutiveFailures: sub.consecutiveFailures,
     lastError,
   });
-  await sendWebhookAlert(env, alert.subject, alert.body);
+  await sendWebhookAlert(env, alert.subject, alert.body, alert.html);
 
   if (!sub.userId) return;
 
@@ -58,7 +58,7 @@ export async function notifyAutoDisabledSubscription(
       disabledReason: reason,
       accountUrl,
     });
-    await sendWebhookUserNotice(env, contact.email, notice.subject, notice.text);
+    await sendWebhookUserNotice(env, contact.email, notice.subject, notice.text, notice.html);
   } catch (err) {
     logEvent("warn", {
       component: "webhook-auto-disable",

@@ -79,6 +79,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 - **[firecrawl-monitoring.md](architecture/firecrawl-monitoring.md)** — the external fetch backend for challenge-blocked pages, its unusual diff-not-markdown webhook format, and the backfill/re-extract workflows built on it.
 - **[cli-distribution.md](architecture/cli-distribution.md)** — which npm packages publish from which repo, and the schema-change shipping path to the CLI.
 - **[storage-portability.md](architecture/storage-portability.md)** — where SQLite/D1 assumptions live, the entity-ID invariant (single typed nanoid), lexical-search ownership, backend capability map, and what a future optional Postgres backend would cost. Aspirational, not in progress; read before touching the DB construction seam.
+- **[emails.md](architecture/emails.md)** — the shared transactional-email shell: lanes, email-client constraints, Gmail annotations, admin preview.
 - **[logging.md](architecture/logging.md)** — worker `logEvent()` vs the fs-backed CLI logger, and the auth audit-event reference.
 - **[changelog-style.md](changelog-style.md)** — voice and density rules for the project's own daily changelog.
 - **[runbooks/](runbooks/)** — operational procedures: auth-audit monitors, the trusted-proxy WAF rule, Verified Bot registration, the demand dashboard.

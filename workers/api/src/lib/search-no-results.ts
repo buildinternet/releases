@@ -10,6 +10,7 @@
  */
 import { and, desc, gt, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import { searchQueries } from "@buildinternet/releases-core/schema";
+import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
 import { buildBotCondition } from "./search-queries-top.js";
 
 /** SQL: at least one of the four hit columns is non-null (i.e., row was scored). */
@@ -133,7 +134,12 @@ export function evaluateNoResultsAlert(
   return { fire: true, ratio };
 }
 
-/** Plain-text alert body — sendAlert renders text only. */
+/**
+ * Plain-text alert body — kept byte-for-byte as it was before the email-shell
+ * migration (existing callers/tests depend on this exact shape). New callers
+ * should reach for `buildNoResultsAlert` below, which renders the same stats
+ * through the shared shell and gains an HTML twin.
+ */
 export function formatNoResultsAlertBody(
   stats: NoResultsStats,
   decision: { fire: true; ratio: number },
@@ -156,6 +162,64 @@ export function formatNoResultsAlertBody(
     }
   }
   return lines.join("\n");
+}
+
+/** Render the same no-results alert through the shared email shell — subject + both bodies. */
+export function buildNoResultsAlert(
+  stats: NoResultsStats,
+  decision: { fire: true; ratio: number },
+  thresholds: NoResultsThresholds,
+): { subject: string; text: string; html: string } {
+  const pct = (decision.ratio * 100).toFixed(1);
+  // Lead with the query people are actually missing on: the ratio says how bad
+  // it is, the query says what to go fix. The count sits outside the quotes so
+  // the quoted text is exactly what someone typed.
+  const topMiss = stats.topQueries[0]?.query;
+  const otherMisses = Math.max(0, stats.topQueries.length - 1);
+  const missSegment = topMiss
+    ? ` — "${topMiss}"${otherMisses > 0 ? ` +${otherMisses} more` : ""}`
+    : "";
+  const subject = `[alert] search no-results: ${pct}% zero-hit (${stats.zeroHits}/${stats.total})${missSegment}`;
+
+  const blocks: EmailBlock[] = [
+    {
+      t: "data",
+      rows: [
+        { label: "Total", value: String(stats.total) },
+        { label: "Zero-hit", value: `${stats.zeroHits} (${pct}%)`, kind: "err" },
+        {
+          label: "Threshold",
+          value: `${thresholds.thresholdPct}% over ${thresholds.minVolume}+ queries`,
+        },
+      ],
+    },
+  ];
+  blocks.push({ t: "kicker", text: "Top misses" });
+  if (stats.topQueries.length === 0) {
+    blocks.push({ t: "fine", text: "(none)" });
+  } else {
+    for (const row of stats.topQueries) {
+      blocks.push({
+        t: "entity",
+        coord: row.query,
+        metrics: `${row.count}x · last seen ${new Date(row.lastSeen).toISOString()}`,
+      });
+    }
+  }
+
+  const { html, text } = renderEmail({
+    lane: "Alert · Search",
+    tone: "warn",
+    title: "No-results rate exceeded threshold",
+    subtitle: "last 24h",
+    blocks,
+    footer: {
+      reason:
+        "Automated alert from Releases — the search no-results rate crossed its configured threshold over the last 24h.",
+    },
+  });
+
+  return { subject, text, html };
 }
 
 export const DEFAULT_THRESHOLD_PCT = 20;

@@ -21,6 +21,7 @@ import { forwardWellKnown, buildApiProtectedResourceMetadata } from "./oauth-dis
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
 import {
+  publicRateLimit,
   publicRateLimitMiddleware,
   selectAuthEdgeLimiter,
   edgeRateLimitIpKey,
@@ -51,7 +52,7 @@ import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
 import { handleQueueBatch } from "./queues/handler.js";
 import { runCollectionSummaries } from "./cron/collection-summaries.js";
-import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
+import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -737,7 +738,14 @@ v1.use("/me/*", publicRateLimitMiddleware);
 // Token-authenticated personalized feed — rate-limited but not under publicReadAuth.
 v1.use("/feed/:token", publicRateLimitMiddleware);
 // Token-authenticated unsubscribe — rate-limited, not under publicReadAuth.
-v1.use("/digest/unsubscribe/:token", publicRateLimitMiddleware);
+// `unsafeMethods` is REQUIRED here: the RFC 8058 One-Click target is the POST,
+// which the default middleware waves through (#2158). Anonymous + emailed token
+// means per-IP is the only handle there is.
+v1.use("/digest/unsubscribe/:token", publicRateLimit({ unsafeMethods: true }));
+// Gmail one-click action handlers. These deliberately DON'T use the tiered
+// public limiter: they consume a real auth credential, so they limit themselves
+// against AUTH_RATE_LIMITER — the tighter per-IP edge limiter that fronts
+// POST /api/auth/*. See routes/email-actions.ts.
 
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
@@ -1379,14 +1387,14 @@ function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): 
       const stack = err instanceof Error ? err.stack : undefined;
       logEvent("error", { component: tag, event: "dispatch-failed", err });
       if (alertEnv) {
-        const body = [`Cron tag: ${tag}`, `Error: ${message}`, stack ? `\nStack:\n${stack}` : ""]
-          .filter(Boolean)
-          .join("\n");
         // Fire-and-forget — never block or throw in the catch handler.
-        sendAlert(alertEnv, {
-          subject: `[alert] cron crashed: ${tag}`,
-          body,
-        }).catch(() => undefined);
+        const alert = formatCronCrashAlert({
+          tag,
+          message,
+          stack,
+          firedAt: new Date().toISOString(),
+        });
+        sendAlert(alertEnv, alert).catch(() => undefined);
       }
     });
 }

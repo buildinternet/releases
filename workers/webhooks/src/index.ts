@@ -5,7 +5,11 @@ import {
   updateWebhookSubscriptionSummary,
   setWebhookSubscriptionEnabled,
 } from "./queries.js";
-import { formatDlqAlert, type DlqEntry, type SubscriptionLabel } from "./alert-format.js";
+import {
+  formatDlqAlert,
+  type DlqEntry,
+  type SubscriptionLabel,
+} from "@releases/core-internal/webhook-alert-format";
 import { notifyAutoDisabledSubscription } from "./auto-disable-notify.js";
 import { deliver as deliverImpl, type DeliveryResult } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
@@ -165,8 +169,8 @@ export default {
               lastError: info.lastError,
               label: labels.get(subId) ?? null,
             }));
-            const { subject, body } = formatDlqAlert(entries);
-            await sendWebhookAlert(alertEnv, subject, body);
+            const { subject, body, html } = formatDlqAlert(entries);
+            await sendWebhookAlert(alertEnv, subject, body, html);
           })().catch(() => undefined),
         );
       }

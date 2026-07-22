@@ -32,6 +32,8 @@ export type EmailEnv = {
 type SendEmailInput = {
   subject: string;
   text: string;
+  /** Optional HTML alternative part — rendered by the shared email shell upstream. */
+  html?: string;
   to?: string;
   from?: string;
   fromName?: string;
@@ -64,6 +66,9 @@ async function sendEmail(env: EmailEnv, input: SendEmailInput): Promise<SendEmai
   msg.setRecipient(to);
   msg.setSubject(input.subject);
   msg.addMessage({ contentType: "text/plain", data: input.text });
+  if (input.html) {
+    msg.addMessage({ contentType: "text/html", data: input.html });
+  }
 
   const message = new EmailMessage(from, to, msg.asRaw());
   await env.SEND_EMAIL.send(message);
@@ -76,9 +81,10 @@ async function sendTransactional(
   subject: string,
   body: string,
   to?: string,
+  html?: string,
 ): Promise<boolean> {
   try {
-    const result = await sendEmail(env, { to, subject, text: body });
+    const result = await sendEmail(env, { to, subject, text: body, html });
     if (!result.sent) {
       logEvent("info", { component, event: "skipped", reason: result.reason, subject });
       return false;
@@ -97,8 +103,9 @@ export async function sendWebhookUserNotice(
   to: string,
   subject: string,
   body: string,
+  html?: string,
 ): Promise<boolean> {
-  return sendTransactional("webhook-user-notify", env, subject, body, to);
+  return sendTransactional("webhook-user-notify", env, subject, body, to, html);
 }
 
 /** Operator `[alert]` email to EMAIL_NOTIFY_TO. */
@@ -106,7 +113,8 @@ export async function sendWebhookAlert(
   env: EmailEnv,
   subject: string,
   body: string,
+  html?: string,
 ): Promise<boolean> {
   const normalizedSubject = subject.startsWith("[alert]") ? subject : `[alert] ${subject}`;
-  return sendTransactional("webhook-alert", env, normalizedSubject, body);
+  return sendTransactional("webhook-alert", env, normalizedSubject, body, undefined, html);
 }

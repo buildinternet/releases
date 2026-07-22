@@ -5,7 +5,7 @@ import {
   subscriptionHeadline,
   orgLabel,
   type SubscriptionLabel,
-} from "./alert-format.js";
+} from "./webhook-alert-format.js";
 
 const acmeLabel: SubscriptionLabel = {
   id: "whk_1",
@@ -49,10 +49,15 @@ describe("subscriptionHeadline", () => {
 
 describe("formatDlqAlert", () => {
   it("names the subscription and keeps the id as detail", () => {
-    const { subject, body } = formatDlqAlert([
+    const { subject, body, html } = formatDlqAlert([
       { subId: "whk_1", count: 3, lastError: "max retries exceeded", label: acmeLabel },
     ]);
-    expect(subject).toBe("[alert] webhook DLQ: 3 messages");
+    expect(subject).toBe("[alert] webhook DLQ: 3 messages — Acme Inc");
+    // The html half rides the shared shell; assert it carries the same facts so
+    // a block-mapping regression can't leave the two bodies disagreeing.
+    expect(html).toContain("3 message(s) reached the DLQ");
+    expect(html).toContain("https://acme.example/hooks/releases");
+    expect(html).toContain("Acme Inc (acme)");
     expect(body).toContain("Acme Inc (acme) — Release feed → #eng-releases");
     expect(body).toContain("url:        https://acme.example/hooks/releases");
     expect(body).toContain("messages:   3");
