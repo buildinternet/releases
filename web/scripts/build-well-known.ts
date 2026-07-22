@@ -10,14 +10,27 @@
  * description out of the YAML frontmatter. The MCP server card is derived from
  * workers/mcp/server.json so it stays in sync on version bumps.
  *
- * On fetch failure, the skills index retains the previously-built file rather
- * than aborting the build — a transient GitHub outage shouldn't block deploys.
+ * Resilience against a flaky raw.githubusercontent.com (#2160), two layers:
+ *   1. Each fetch retries (fetchWithRetry) on a thrown network error or a
+ *      5xx/429 response — not on a 404, which means a skill moved and should
+ *      fail loudly.
+ *   2. If every retry is exhausted, we fall back to the previously-built
+ *      index.json. That file is COMMITTED to git specifically so this
+ *      fallback has something to fall back to on a fresh CI/Vercel checkout —
+ *      without it in git, `existsSync` is always false on a clean clone and
+ *      the fallback can never engage where it matters. Do not add a
+ *      CI freshness check for it (unlike the GraphQL snapshot / OpenAPI /
+ *      managed-agent YAML gates): its content depends on SKILL.md files in
+ *      OTHER repos, so a gate would turn every upstream description edit into
+ *      an unrelated red CI run here. It's a fallback floor, not a source of
+ *      truth — the live fetch still wins on every successful build.
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
 import { createHash } from "crypto";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import matter from "gray-matter";
+import { fetchWithRetry } from "./fetch-with-retry";
 
 const WEB_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_ROOT = dirname(WEB_ROOT);
@@ -54,7 +67,7 @@ async function buildSkillsIndex() {
     const entries = await Promise.all(
       SKILLS.map(async ({ name, repo, dir }) => {
         const url = `https://raw.githubusercontent.com/${repo}/${REF}/${dir}/${name}/SKILL.md`;
-        const res = await fetch(url);
+        const res = await fetchWithRetry(url);
         if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
         const body = await res.text();
         const { data } = matter(body);
@@ -76,6 +89,8 @@ async function buildSkillsIndex() {
     });
     console.log(`Agent skills index: ${entries.length} skills → ${SKILLS_INDEX_PATH}`);
   } catch (err) {
+    // See the module-level comment (#2160): SKILLS_INDEX_PATH is committed to
+    // git as a fallback floor, so this can actually fire on a fresh checkout.
     if (existsSync(SKILLS_INDEX_PATH)) {
       console.warn(`Agent skills fetch failed, keeping previous index: ${err}`);
     } else {

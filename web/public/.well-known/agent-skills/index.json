@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "analyzing-releases",
+      "type": "skill-md",
+      "description": "Analyze release trends across multiple companies to produce competitive intelligence. Use when asked to compare companies, analyze a market segment, identify industry trends, forecast upcoming releases, or answer questions like \"what is X shipping lately\" or \"how does X compare to Y.\" Also triggers on requests for competitive landscape analysis, feature gap analysis, or release velocity comparisons.",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases-cli/main/skills/analyzing-releases/SKILL.md",
+      "digest": "sha256:eec73687fd7576ef00f2d9fa166716e3782354d5c7a15f18a32b1b130453804b"
+    },
+    {
+      "name": "releases-cli",
+      "type": "skill-md",
+      "description": "Use the `releases` CLI to search, browse, and read the Releases.sh changelog registry from the terminal — the keyless, agent-friendly peer of the Releases MCP. Activate when the user mentions \"releases CLI\", runs a `releases` command, asks how to install it, or wants to look up releases, sources, orgs, collections, or changelogs from a shell.",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases-cli/main/skills/releases-cli/SKILL.md",
+      "digest": "sha256:80676cdbd18b1683c37fa60c1ef2e3833cd9cfc824426ca48a2aa33f2e44aacb"
+    },
+    {
+      "name": "releases-mcp",
+      "type": "skill-md",
+      "description": "Use when the user asks about recent releases, changelogs, what's new in a library, breaking changes, version updates, or wants to compare products. Activates for questions like \"what changed in Next.js 15?\", \"latest Tailwind releases\", \"compare Bun vs Deno releases\".",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases-cli/main/skills/releases-mcp/SKILL.md",
+      "digest": "sha256:7f3b1a42aaa6abfedacefb0d5e7a46759f7012ae7cd8ad031e543288843f49eb"
+    },
+    {
+      "name": "creating-releases-json",
+      "type": "skill-md",
+      "description": "Create or update a releases.json manifest so registries and agents can find where a company or project publishes its release notes. Use this whenever someone wants to \"list our product on Releases\", \"add a releases.json\", \"get indexed on releases.sh\", \"here's our website, make us a manifest\", declare a changelog / updates page / RSS feed / GitHub releases / App Store listing / CHANGELOG for discovery, publish a /.well-known/releases.json, or edit an existing one — even if they don't say \"releases.json\" by name. The usual input is just a company website or domain (no codebase required); the manifest is a small, schema-validated file the owner hosts on their domain or repo. This skill discovers the real publish locations, models products without over-fragmenting, writes the correctly-scoped file, validates it locally, and guides publishing it.",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases/main/skills/creating-releases-json/SKILL.md",
+      "digest": "sha256:a5bffb0dacd9073a80d2867e96fa0e1a500157bc66cd28397ca6f06b561ee3dd"
+    },
+    {
+      "name": "classify-media-relevance",
+      "type": "skill-md",
+      "description": "Decide whether an image or video found on a release page is editorial content (screenshots, demos, diagrams, product shots) or site chrome (avatars, logos, tracking pixels, decorative badges). Used during parsing to populate a release's media array.",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases/main/.claude/skills/classify-media-relevance/SKILL.md",
+      "digest": "sha256:3e432218b34ed352737fa75e63c8894c6b287fc518d9ae1f66e5fb14ddde8c8d"
+    },
+    {
+      "name": "finding-changelogs",
+      "type": "skill-md",
+      "description": "How to find, evaluate, and recommend the best ingestion method for changelog URLs — covers feed discovery, provider detection, GitHub API, markdown sources, and scraping fallback",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases/main/.claude/skills/finding-changelogs/SKILL.md",
+      "digest": "sha256:482701276377d6fedfdd3075892ae6539eded220c9ed45ac112f71b8b9514114"
+    },
+    {
+      "name": "managing-sources",
+      "type": "skill-md",
+      "description": "How to create, delete, list, validate, and manage changelog sources — covers ignored/blocked URLs, duplicate detection, and the validation workflow",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases/main/.claude/skills/managing-sources/SKILL.md",
+      "digest": "sha256:5f6e4085bc8bb6ea7ad178d769f02afa591ec0664e6914f53d47cb4def509451"
+    },
+    {
+      "name": "parsing-changelogs",
+      "type": "skill-md",
+      "description": "How the Releases fetch and parse pipeline works — covers feed vs scrape adapters, incremental vs bulk parsing, dry-run testing, crawl mode, content hashing, and enrichment",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases/main/.claude/skills/parsing-changelogs/SKILL.md",
+      "digest": "sha256:a486a6f9623a20325570cc9bed0b86a51e700f5dc8d15f823edf73a0eca5964c"
+    },
+    {
+      "name": "seeding-playbooks",
+      "type": "skill-md",
+      "description": "Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Currently wired up for Claude Code's Agent tool; the managed-agent fleet supports sub-agents too and the pattern can be adapted, but isn't wired up there yet.",
+      "url": "https://raw.githubusercontent.com/buildinternet/releases/main/.claude/skills/seeding-playbooks/SKILL.md",
+      "digest": "sha256:44f8be930596c948f6386744ab1f5c4b3d5a21b4d54b574b07a6f9435263cebc"
+    }
+  ]
+}
