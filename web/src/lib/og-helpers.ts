@@ -10,27 +10,9 @@ export function clamp(text: string, max: number): string {
   return trimmed.slice(0, max - 1).trimEnd() + "…";
 }
 
-export function stripMarkdown(text: string | null | undefined): string {
-  if (!text) return "";
-  return (
-    text
-      .replace(/```[\s\S]*?```/g, " ")
-      // Unwrap inline code to its contents rather than deleting the span:
-      // dropping it wholesale turned "(`none`/`minor`/`major`)" into "( / / )"
-      // and "the `search` tool" into "the tool".
-      .replace(/`([^`]*)`/g, "$1")
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      // Heading/blockquote markers are only markers at the start of a line.
-      .replace(/^[ \t]*[#>]+[ \t]*/gm, "")
-      // `_` is deliberately not stripped: in changelog prose it is far more
-      // often an identifier character (`whats_changed`) than an emphasis
-      // marker, and unwrapped code spans now expose those identifiers here.
-      .replace(/[*~]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
-}
+// `stripMarkdown` lives in `@releases/rendering/strip-markdown` — the same
+// conversion runs in the email shell, so the two surfaces can't drift.
+export { stripMarkdown } from "@releases/rendering/strip-markdown";
 
 export function formatCount(n: number | null | undefined): string {
   if (n == null) return "0";

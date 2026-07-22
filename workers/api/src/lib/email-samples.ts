@@ -17,7 +17,9 @@ import { buildDigestEmail } from "./digest-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
 import { formatPollFetchAlert } from "./poll-fetch-alert.js";
 import { formatRecommendationAckEmail, formatRecommendationEmail } from "./recommendation-email.js";
-import { formatNoResultsAlertBody } from "./search-no-results.js";
+import { buildNoResultsAlert } from "./search-no-results.js";
+import { formatCronCrashAlert } from "./send-alert.js";
+import { renderEmail } from "@releases/rendering/email-shell";
 import { buildStalenessDigestEmail } from "./staleness-digest-email.js";
 import { formatCronReport, type CronReport } from "./cron-report.js";
 import { sendEmail, type EmailEnv } from "./email.js";
@@ -352,16 +354,14 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
           },
         ],
       });
-    case "operator.alert.cron-crash":
-      return {
-        subject: "[alert] cron crashed: sample-cron",
-        text: [
-          "Cron tag: sample-cron",
-          "Error: Sample error for admin email preview",
-          "",
-          "This is a fabricated Tier-1 alert.",
-        ].join("\n"),
-      };
+    case "operator.alert.cron-crash": {
+      const alert = formatCronCrashAlert({
+        tag: "sample-cron",
+        message: "Sample error for admin email preview",
+        firedAt: new Date().toISOString(),
+      });
+      return { subject: alert.subject, text: alert.body, html: alert.html };
+    }
     case "operator.alert.poll-fetch": {
       const alert = formatPollFetchAlert(
         [{ sourceId: "src_sample", stepName: "fetch", error: "Timed out after 5m (sample)" }],
@@ -384,48 +384,87 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
       return alert;
     }
     case "operator.alert.search-no-results":
-      return {
-        subject: "[alert] search no-results rate 24.0%",
-        text: formatNoResultsAlertBody(
+      return buildNoResultsAlert(
+        {
+          total: 120,
+          zeroHits: 29,
+          topQueries: [
+            { query: "sample zero hit", count: 8, lastSeen: Date.now() },
+            { query: "another miss", count: 5, lastSeen: Date.now() },
+          ],
+        },
+        { fire: true, ratio: 0.24 },
+        { thresholdPct: 20, minVolume: 50 },
+      );
+    // The two webhook alerts are formatted inside `workers/webhooks` — a
+    // carved-out worker this one deliberately doesn't import from — so the
+    // preview rebuilds the same shapes here. Keep them in step with
+    // `workers/webhooks/src/alert-format.ts` when that changes.
+    case "operator.alert.webhook-dlq": {
+      const { html, text } = renderEmail({
+        lane: "Operator · Alert",
+        tone: "crit",
+        title: "3 webhook deliveries hit the DLQ",
+        subtitle: "One batch · 1 subscription affected",
+        preheader: "Example Co — connection refused.",
+        blocks: [
           {
-            total: 120,
-            zeroHits: 29,
-            topQueries: [
-              { query: "sample zero hit", count: 8, lastSeen: Date.now() },
-              { query: "another miss", count: 5, lastSeen: Date.now() },
+            t: "entity",
+            sev: "crit",
+            coord: "Example Co (example) — Sample webhook",
+            metrics: "3 messages · whk_sample",
+          },
+          {
+            t: "data",
+            rows: [
+              { label: "url", value: "https://example.com/webhooks/releases" },
+              { label: "last error", value: "Connection refused (sample)", kind: "err" },
             ],
           },
-          { fire: true, ratio: 0.24 },
-          { thresholdPct: 20, minVolume: 50 },
-        ),
-      };
-    case "operator.alert.webhook-dlq":
-      return {
-        subject: "[alert] webhook DLQ: 3 messages",
-        text: [
-          "3 message(s) reached the DLQ in this batch.",
-          "",
-          "Example Co (example) — Sample webhook",
-          "    url:        https://example.com/webhooks/releases",
-          "    messages:   3",
-          "    last error: Connection refused (sample)",
-          "    sub id:     whk_sample",
-        ].join("\n"),
-      };
-    case "operator.alert.webhook-auto-disable":
+        ],
+        footer: {
+          reason:
+            "Internal alert from Releases — webhook deliveries exhausted their retries and landed in the dead-letter queue.",
+        },
+      });
+      return { subject: "[alert] webhook DLQ: 3 messages", text, html };
+    }
+    case "operator.alert.webhook-auto-disable": {
+      const { html, text } = renderEmail({
+        lane: "Operator · Alert",
+        tone: "crit",
+        title: "A webhook subscription was auto-disabled",
+        preheader: "50 consecutive failures — deliveries have stopped.",
+        blocks: [
+          {
+            t: "p",
+            text: "Deliveries stopped after 50 consecutive failures. The subscription stays off until someone re-enables it.",
+          },
+          {
+            t: "entity",
+            sev: "crit",
+            coord: "Example Co (example) — Sample webhook",
+            metrics: "50 failures · whk_sample",
+          },
+          {
+            t: "data",
+            rows: [
+              { label: "url", value: "https://example.com/webhooks/releases" },
+              { label: "last error", value: "HTTP 500 (sample)", kind: "err" },
+            ],
+          },
+        ],
+        footer: {
+          reason:
+            "Internal alert from Releases — a webhook subscription crossed the consecutive-failure ceiling.",
+        },
+      });
       return {
         subject: "[alert] webhook subscription auto-disabled: Example Co (example)",
-        text: [
-          "Webhook subscription auto-disabled after 50 consecutive failures.",
-          "",
-          "Example Co (example) — Sample webhook",
-          "    url:        https://example.com/webhooks/releases",
-          "    org:        Example Co (example)",
-          "    failures:   50",
-          "    last error: HTTP 500 (sample)",
-          "    sub id:     whk_sample",
-        ].join("\n"),
+        text,
+        html,
       };
+    }
     default: {
       const _exhaustive: never = id;
       throw new Error(`Unhandled sample id: ${_exhaustive}`);

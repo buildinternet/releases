@@ -38,7 +38,7 @@ export async function notifyAutoDisabledSubscription(
     consecutiveFailures: sub.consecutiveFailures,
     lastError,
   });
-  await sendWebhookAlert(env, alert.subject, alert.body);
+  await sendWebhookAlert(env, alert.subject, alert.body, alert.html);
 
   if (!sub.userId) return;
 
@@ -58,7 +58,7 @@ export async function notifyAutoDisabledSubscription(
       disabledReason: reason,
       accountUrl,
     });
-    await sendWebhookUserNotice(env, contact.email, notice.subject, notice.text);
+    await sendWebhookUserNotice(env, contact.email, notice.subject, notice.text, notice.html);
   } catch (err) {
     logEvent("warn", {
       component: "webhook-auto-disable",

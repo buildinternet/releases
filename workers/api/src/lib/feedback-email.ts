@@ -3,7 +3,7 @@
  * `notifyFeedback` is fire-and-forget (never throws) so a mail failure can't
  * fail the submit — callers invoke it via `c.executionCtx.waitUntil(...)`.
  */
-import { appendTextFooter } from "./email-layout.js";
+import { renderEmail } from "@releases/rendering/email-shell";
 import { sendEmail, type EmailEnv } from "./email.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Feedback } from "@buildinternet/releases-core/schema";
@@ -44,26 +44,37 @@ function truncate(s: string, max: number): string {
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }
 
-export function formatFeedbackEmail(row: Feedback): { subject: string; text: string } {
+export function formatFeedbackEmail(row: Feedback): {
+  subject: string;
+  text: string;
+  html: string;
+} {
   const subject = `[feedback] ${row.type}: ${truncate(row.message, 60)}`;
-  const body = [
-    row.message,
-    "",
-    "—",
-    `Contact: ${row.contact ?? "(none)"}`,
-    `Type: ${row.type}`,
-    `Surface: ${row.surface}`,
-    `ID: ${row.id}`,
-    `CLI: ${row.cliVersion ?? "(unknown)"}`,
-    `Client: ${row.clientKind}`,
-    `Env: ${row.os ?? "?"}/${row.arch ?? "?"} ${row.runtime ?? "?"}`,
-    `Anon: ${row.anonId ?? "(omitted)"}`,
-    `Received: ${new Date(row.createdAt).toISOString()}`,
-  ].join("\n");
-  const text = appendTextFooter(body, {
-    reason: `Internal notification from Releases — feedback submitted via ${row.surface}.`,
+  const { html, text } = renderEmail({
+    lane: "Feedback",
+    title: `CLI feedback: ${row.type}`,
+    subtitle: row.id,
+    blocks: [
+      { t: "p", text: row.message },
+      {
+        t: "data",
+        rows: [
+          { label: "Contact", value: row.contact ?? "(none)" },
+          { label: "Surface", value: row.surface },
+          { label: "CLI", value: row.cliVersion ?? "(unknown)" },
+          { label: "Client", value: row.clientKind },
+          { label: "Env", value: `${row.os ?? "?"}/${row.arch ?? "?"} ${row.runtime ?? "?"}` },
+          { label: "Anon", value: row.anonId ?? "(omitted)" },
+          { label: "ID", value: row.id },
+          { label: "When", value: new Date(row.createdAt).toISOString() },
+        ],
+      },
+    ],
+    footer: {
+      reason: `Internal notification from Releases — feedback submitted via ${row.surface}.`,
+    },
   });
-  return { subject, text };
+  return { subject, text, html };
 }
 
 export async function notifyFeedback(env: FeedbackNotifyEnv, row: Feedback): Promise<void> {
@@ -78,8 +89,8 @@ export async function notifyFeedback(env: FeedbackNotifyEnv, row: Feedback): Pro
       });
       return;
     }
-    const { subject, text } = formatFeedbackEmail(row);
-    const result = await sendEmail(env, { subject, text });
+    const { subject, text, html } = formatFeedbackEmail(row);
+    const result = await sendEmail(env, { subject, text, html });
     if (!result.sent) {
       logEvent("info", {
         component: "feedback",

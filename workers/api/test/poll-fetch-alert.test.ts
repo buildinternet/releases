@@ -123,8 +123,10 @@ describe("formatPollFetchAlert", () => {
       new Map([["src_js", hostile]]),
       SCHEDULED,
     );
-    // No anchor for a non-http scheme; the value still appears (as text) for context.
-    expect(html).not.toContain("<a href");
+    // No anchor for a non-http scheme; the value still appears (as text) for
+    // context. (The shell's footer always carries its own links, so the check is
+    // specifically that the hostile url never becomes an href.)
+    expect(html).not.toContain('href="javascript:');
     expect(html).toContain("javascript:alert(1)");
     // The plain-text body never linkifies, so it carries the url verbatim.
     expect(text).toContain("url:         javascript:alert(1)");

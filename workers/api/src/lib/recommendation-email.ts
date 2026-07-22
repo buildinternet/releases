@@ -5,9 +5,8 @@
 import { logEvent } from "@releases/lib/log-event";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
+import { renderEmail } from "@releases/rendering/email-shell";
 import { sendAuthEmail, type AuthEmailEnv } from "../auth/email.js";
-import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "./email-layout.js";
-import { escapeHtml } from "./html-escape.js";
 import { sendEmail, type EmailEnv } from "./email.js";
 
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;
@@ -73,24 +72,30 @@ const OPERATOR_FOOTER_REASON =
 export function formatRecommendationEmail(row: Recommendation): {
   subject: string;
   text: string;
+  html: string;
 } {
   const subject = `[recommendation] ${row.type}: ${truncate(row.url, 72)}`;
-  const body = [
-    "A recommendation was submitted from the web app.",
-    "",
-    `Type: ${row.type}`,
-    `URL: ${row.url}`,
-    `Additional info: ${row.note ?? "(none)"}`,
-    `Email to notify: ${row.contactEmail ?? "(none)"}`,
-    "",
-    "—",
-    `ID: ${row.id}`,
-    `Surface: ${row.surface}`,
-    `User agent: ${row.userAgent ?? "(unknown)"}`,
-    `Received: ${new Date(row.createdAt).toISOString()}`,
-  ].join("\n");
-  const text = appendTextFooter(body, { reason: OPERATOR_FOOTER_REASON });
-  return { subject, text };
+  const { html, text } = renderEmail({
+    lane: "Recommendation",
+    title: "A visitor recommended a changelog source",
+    blocks: [
+      { t: "p", text: row.note ? row.note : "No additional note was left." },
+      {
+        t: "data",
+        rows: [
+          { label: "Type", value: row.type },
+          { label: "URL", value: row.url },
+          { label: "Contact", value: row.contactEmail ?? "(none)" },
+          { label: "Surface", value: row.surface },
+          { label: "Agent", value: row.userAgent ?? "(unknown)" },
+          { label: "ID", value: row.id },
+          { label: "When", value: new Date(row.createdAt).toISOString() },
+        ],
+      },
+    ],
+    footer: { reason: OPERATOR_FOOTER_REASON },
+  });
+  return { subject, text, html };
 }
 
 export type RecommendationAckEnv = AuthEmailEnv & {
@@ -105,29 +110,33 @@ export function formatRecommendationAckEmail(
   webOrigin: string,
 ): { subject: string; text: string; html: string } {
   const submitUrl = `${webOrigin}/submit`;
-  const footer = {
-    reason:
-      "You received this because you submitted a changelog URL at releases.sh/submit and provided this email address.",
-    links: [{ label: "Submit another source", href: submitUrl }],
-  };
-  const subject = "Thanks — we received your Releases submission";
-  const bodyText = [
-    "Thanks for suggesting a changelog source for Releases.",
-    "",
-    "Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.",
-    "",
-    `Reference: ${row.id}`,
-  ].join("\n");
-  const bodyHtml = [
-    "<p>Thanks for suggesting a changelog source for Releases.</p>",
-    "<p>Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.</p>",
-    `<p style="color:#64748b;font-size:13px;">Reference: ${escapeHtml(row.id)}</p>`,
-  ].join("");
-  return {
-    subject,
-    text: appendTextFooter(bodyText, footer),
-    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
-  };
+  // Name what they submitted in the subject: someone who suggested three sources
+  // in a sitting gets three otherwise-identical acknowledgments.
+  let host: string;
+  try {
+    host = new URL(row.url).hostname.replace(/^www\./, "");
+  } catch {
+    host = row.url;
+  }
+  const { html, text } = renderEmail({
+    lane: "Account · Submission",
+    title: "Thanks for the submission",
+    preheader: `We received your suggestion for ${host}.`,
+    blocks: [
+      { t: "p", text: "Thanks for suggesting a changelog source for Releases." },
+      {
+        t: "p",
+        text: "Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.",
+      },
+      { t: "fine", text: `Reference: ${row.id}` },
+    ],
+    footer: {
+      reason:
+        "You received this because you submitted a changelog URL at releases.sh/submit and provided this email address.",
+      links: [{ label: "Submit another source", href: submitUrl }],
+    },
+  });
+  return { subject: `We got your Releases submission — ${host}`, text, html };
 }
 
 function webOrigin(env: RecommendationAckEnv): string {
@@ -196,8 +205,8 @@ export async function notifyRecommendation(
       return;
     }
 
-    const { subject, text } = formatRecommendationEmail(row);
-    const result = await sendEmail(env, { subject, text });
+    const { subject, text, html } = formatRecommendationEmail(row);
+    const result = await sendEmail(env, { subject, text, html });
     if (!result.sent) {
       logEvent("info", {
         component: "recommendations",

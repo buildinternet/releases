@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
 import type { D1Db } from "./db.js";
 
 export interface WebhookUserContact {
@@ -27,28 +28,56 @@ export function formatUserAutoPauseEmail(input: {
   lastError: string | null;
   disabledReason: string;
   accountUrl: string;
-}): { subject: string; text: string } {
+}): { subject: string; text: string; html: string } {
   const label =
     input.description?.trim() ||
     (input.orgName ? `${input.orgName} webhook` : "your follows webhook");
-  const orgLine =
-    input.orgName && input.orgSlug ? `Organization: ${input.orgName} (${input.orgSlug})\n` : "";
-  const greeting = input.recipientName ? `Hi ${input.recipientName},\n\n` : "";
-  const errorLine = input.lastError ? `Recent error: ${input.lastError}\n` : "";
 
-  return {
-    subject: "Your Releases webhook was paused",
-    text:
-      `${greeting}` +
-      `We paused "${label}" because we couldn't deliver events to your endpoint.\n\n` +
-      `Endpoint: ${input.url}\n` +
-      orgLine +
-      `Failures: ${input.consecutiveFailures} consecutive delivery failures\n` +
-      errorLine +
-      `Reason: ${input.disabledReason}\n\n` +
-      `While paused, we won't send new events to this URL. ` +
-      `Fix your endpoint, then re-enable the webhook from your account:\n` +
-      `${input.accountUrl}\n\n` +
-      `You can also use PATCH /v1/me/webhooks/:id with {"enabled": true} once delivery should work again.`,
-  };
+  const blocks: EmailBlock[] = [];
+  if (input.recipientName) blocks.push({ t: "p", text: `Hi ${input.recipientName},` });
+  blocks.push({
+    t: "p",
+    text: `We paused **${label}** because we couldn't deliver events to your endpoint.`,
+  });
+  blocks.push({
+    t: "data",
+    rows: [
+      { label: "Endpoint", value: input.url },
+      ...(input.orgName && input.orgSlug
+        ? [{ label: "Org", value: `${input.orgName} (${input.orgSlug})` }]
+        : []),
+      {
+        label: "Failures",
+        value: `${input.consecutiveFailures} consecutive delivery failures`,
+        kind: "err" as const,
+      },
+      ...(input.lastError
+        ? [{ label: "Last error", value: input.lastError, kind: "err" as const }]
+        : []),
+      { label: "Reason", value: input.disabledReason },
+    ],
+  });
+  blocks.push({
+    t: "p",
+    text: "While paused, we won't send new events to this URL. Fix your endpoint, then re-enable the webhook from your account.",
+  });
+  blocks.push({ t: "button", label: "Manage webhooks", url: input.accountUrl });
+  blocks.push({
+    t: "fine",
+    text: 'You can also use `PATCH /v1/me/webhooks/:id` with `{"enabled": true}` once delivery should work again.',
+  });
+
+  const { html, text } = renderEmail({
+    lane: "Account · Webhooks",
+    title: "Your Releases webhook was paused",
+    preheader: `We paused ${label} after repeated delivery failures.`,
+    blocks,
+    footer: {
+      reason:
+        "You received this because a webhook subscription tied to your Releases account was auto-paused.",
+      links: [{ label: "Manage webhooks", href: input.accountUrl }],
+    },
+  });
+
+  return { subject: "Your Releases webhook was paused", text, html };
 }

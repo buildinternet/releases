@@ -1,0 +1,76 @@
+# Transactional email
+
+Every message the platform sends renders through one shell:
+`renderEmail(doc)` from `@releases/rendering/email-shell`. Callers describe a
+message as blocks and get back a matched pair of bodies — table-based HTML with
+inline styles, and the plain-text alternative saying the same thing in the same
+order. No sender hand-rolls markup.
+
+## Lanes
+
+| Lane     | Messages                                                                                                                                                                 | Tone                                     |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack                                                                                   | accent                                   |
+| Reader   | daily + weekly follow digest                                                                                                                                             | accent                                   |
+| Operator | cron report, staleness digest, recommendation, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
+
+The lane label sits in the masthead; the tone colors the 3px rule at the top of
+the message (azure / amber / red), so severity reads before the subject does.
+
+## Design constraints
+
+The palette mirrors the `.org-surface` tokens in
+`packages/design-system/src/tokens.css`; the accent is the app icon's third bar
+(`oklch(0.60 0.18 252)`), flattened to `#0081e7` because email clients don't
+parse `oklch()`. Beyond that, the shell exists to hold five rules that are easy
+to break one message at a time:
+
+- **Inline styles, `<table>` layout, no web fonts.** There is no cascade to rely
+  on and Outlook's Word renderer has no flex or grid. Font stacks quote with
+  apostrophes — a `"` inside `style="…"` closes the attribute and silently
+  unstyles the rest of the element.
+- **No remote images in the chrome.** The mark is drawn with
+  background-colored cells and the wordmark is monospaced text, so the identity
+  survives image blocking with nothing to load. Org avatars in a digest are the
+  one exception: they are content, and they degrade to the name beside them.
+- **Every button is followed by its URL as selectable text,** in both parts. A
+  blocked button must still be a completable action.
+- **Every footer states why the message arrived,** then links to where that can
+  be changed (preferences, unsubscribe, admin), then the brand line. Digest mail
+  additionally carries RFC 8058 `List-Unsubscribe` + `List-Unsubscribe-Post`
+  headers for inbox-level one-click unsubscribe.
+- **Release content is markdown.** Titles and summaries arrive with `**bold**`,
+  backticks, and links; `inlineMarkdownToHtml` promotes the inline syntax to
+  tags for the HTML part and `stripMarkdown` flattens it for the text part
+  (`@releases/rendering/strip-markdown`). Escaping it verbatim shows readers
+  asterisks.
+
+## Gmail annotations
+
+Messages with an action carry schema.org JSON-LD
+([Gmail markup](https://developers.google.com/workspace/gmail/markup)):
+
+- **Go-To Action** (`ViewAction`) — a button beside the subject in the inbox
+  list. Used by every account email, and by the digest.
+- **One-Click Action** (`ConfirmAction` + `HttpActionHandler`) — Gmail POSTs
+  from the inbox and the reader never opens the message. Used only by email
+  verification, handled by `POST /v1/email-actions/verify-email`, which replays
+  the token through Better Auth's own verify endpoint (one code path owns token
+  consumption and expiry). The route is anonymous by design — the emailed token
+  is the whole credential, exactly as in the link — rate-limited per IP, opaque
+  404 on anything unknown, and idempotent because Google may retry.
+
+Both annotations stay inert until the sending domain is
+[registered with Google](https://developers.google.com/workspace/gmail/markup/registering-with-google)
+and passes DKIM/SPF/DMARC. **That registration is still outstanding** — the
+markup ships correct and dormant.
+
+## Previewing
+
+`/admin/emails` renders and test-sends every message from
+`EMAIL_SAMPLE_CATALOG` (`workers/api/src/lib/email-samples.ts`). Adding a
+message means adding a sample there; the catalog is what makes the whole surface
+reviewable in one place. The two webhook alerts are formatted inside
+`workers/webhooks` (a carved-out worker the API worker doesn't import from), so
+their samples rebuild the same shapes locally and must be kept in step with
+`workers/webhooks/src/alert-format.ts`.

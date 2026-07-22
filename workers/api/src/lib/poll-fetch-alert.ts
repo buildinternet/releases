@@ -12,7 +12,7 @@
  * Workers runtime.
  */
 
-import { escapeHtml } from "./html-escape.js";
+import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type PollFetchFailure = {
   sourceId: string;
@@ -36,6 +36,11 @@ export type FormattedAlert = {
   text: string;
   html: string;
 };
+
+/** Padded `"label:"` at a fixed column so the values line up vertically. */
+function field(label: string, value: string): string {
+  return `    ${`${label}:`.padEnd(13)}${value}`;
+}
 
 /**
  * Only http/https values become clickable anchors. Validates the original
@@ -115,48 +120,47 @@ export function formatPollFetchAlert(
     const detail = detailsById.get(f.sourceId);
     lines.push(headline(detail, f.sourceId));
     for (const { label, value } of detailRows(f, detail)) {
-      // Pad "label:" to a fixed column so the values line up vertically.
-      lines.push(`    ${`${label}:`.padEnd(13)}${value}`);
+      lines.push(field(label, value));
     }
     lines.push("");
   }
   const text = `${lines.join("\n").trimEnd()}\n`;
 
-  const htmlRow = ({ label, value, kind }: DetailRow): string => {
-    const escaped = escapeHtml(value);
-    let cell: string;
-    switch (kind) {
-      case "url":
-        cell = isHttpUrl(value) ? `<a href="${escaped}">${escaped}</a>` : escaped;
-        break;
-      case "error":
-        cell = `<span style="color:#dc2626;">${escaped}</span>`;
-        break;
-      default:
-        cell = escaped;
-    }
-    return `<tr><td style="padding:2px 12px 2px 0;color:#64748b;white-space:nowrap;vertical-align:top;">${escapeHtml(
-      label,
-    )}</td><td style="padding:2px 0;font-family:ui-monospace,monospace;word-break:break-word;">${cell}</td></tr>`;
-  };
+  const blocks: EmailBlock[] = [];
+  for (const f of failures) {
+    const detail = detailsById.get(f.sourceId);
+    // Only a validated http(s) source URL becomes the entity's link — a
+    // hostile `javascript:` scheme still shows up as plain text in the `data`
+    // rows below, but never as a clickable anchor.
+    const url = detail?.sourceUrl && isHttpUrl(detail.sourceUrl) ? detail.sourceUrl : undefined;
+    blocks.push({
+      t: "entity",
+      coord: headline(detail, f.sourceId),
+      metrics: `step: ${f.stepName}`,
+      url,
+      sev: "crit",
+    });
+    blocks.push({
+      t: "data",
+      rows: detailRows(f, detail).map((r) => ({
+        label: r.label,
+        value: r.value,
+        kind: r.kind === "error" ? "err" : undefined,
+      })),
+    });
+  }
 
-  const blocks = failures
-    .map((f) => {
-      const detail = detailsById.get(f.sourceId);
-      const rows = detailRows(f, detail).map(htmlRow).join("");
-      return `<div style="margin-top:16px;border-left:3px solid #dc2626;padding-left:12px;">
-<h3 style="margin:0 0 6px;font-size:15px;">${escapeHtml(headline(detail, f.sourceId))}</h3>
-<table style="border-collapse:collapse;font-size:13px;">${rows}</table>
-</div>`;
-    })
-    .join("\n");
-
-  const html = `<!doctype html>
-<html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:640px;">
-<h2 style="color:#dc2626;margin-bottom:4px;">poll-and-fetch — ${failures.length} source(s) failed</h2>
-<p style="color:#64748b;font-size:13px;margin-top:0;">Scheduled time: ${escapeHtml(scheduledIso)}</p>
-${blocks}
-</body></html>`;
+  const { html } = renderEmail({
+    lane: "Alert · Poll fetch",
+    tone: "crit",
+    title: `poll-and-fetch — ${failures.length} source(s) failed`,
+    subtitle: `Scheduled time: ${scheduledIso}`,
+    blocks,
+    footer: {
+      reason:
+        "Automated alert from Releases — one or more sources failed during the scheduled poll-and-fetch run.",
+    },
+  });
 
   return { subject, text, html };
 }

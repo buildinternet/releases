@@ -30,8 +30,7 @@
  * without the live credential.
  */
 import { logEvent } from "@releases/lib/log-event";
-import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "../lib/email-layout.js";
-import { escapeHtml } from "../lib/html-escape.js";
+import { renderEmail, type EmailDoc } from "@releases/rendering/email-shell";
 
 /** The Cloudflare Email Sending binding (object-form `send`). */
 export interface AuthEmailBinding {
@@ -157,200 +156,204 @@ export async function sendAuthEmail(
   }
 }
 
-/**
- * Escape the attribute-breakout char (`"`) so the URL can sit inside an `href="…"`
- * without breaking out of the attribute. Only that char is touched — `&`/etc. must
- * stay raw or a valid query string would corrupt; the plain-text body keeps the
- * un-escaped URL.
- */
-function escapeHrefUrl(url: string): string {
-  return url.replace(/"/g, "%22");
-}
+/* ────────────────────────────────────────────────────────────────────────────
+   Templates
+   Every account email is the same shape: one sentence of context, one action,
+   one expiry, and a footer that says why it arrived. They differ only in the
+   lane label, the copy, and how long the reader has to act.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 const DEFAULT_WEB_ORIGIN = "https://releases.sh";
 
-function accountFooter(webOrigin: string) {
-  const accountUrl = `${webOrigin}/account`;
-  return {
-    reason:
-      "You received this because someone signed up for a Releases account with this email address.",
-    links: [{ label: "Account settings", href: accountUrl }],
-  };
+export type RenderedAuthEmail = { subject: string; text: string; html: string };
+
+/** Render + stamp the subject in one place so no template forgets a part. */
+function account(subject: string, doc: EmailDoc): RenderedAuthEmail {
+  return { subject, ...renderEmail(doc) };
 }
 
-/** Verification email shown on sign-up / re-sent on an unverified sign-in. */
-export function verifyEmailTemplate(opts: { url: string; webOrigin?: string }): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const safeUrl = escapeHrefUrl(opts.url);
-  const footer = accountFooter(opts.webOrigin ?? DEFAULT_WEB_ORIGIN);
-  const subject = "Verify your email for Releases";
-  const bodyText = [
-    "Welcome to Releases.",
-    "",
-    "Confirm your email address to finish setting up your account:",
-    opts.url,
-    "",
-    "This link expires in 1 hour. If you didn't create an account, you can ignore this email.",
-  ].join("\n");
-  const bodyHtml = [
-    "<p>Welcome to Releases.</p>",
-    "<p>Confirm your email address to finish setting up your account:</p>",
-    `<p><a href="${safeUrl}">Verify email</a></p>`,
-    "<p>This link expires in 1 hour. If you didn't create an account, you can ignore this email.</p>",
-  ].join("");
-  return {
-    subject,
-    text: appendTextFooter(bodyText, footer),
-    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
-  };
+function accountFooter(webOrigin: string, reason: string) {
+  return { reason, links: [{ label: "Account settings", href: `${webOrigin}/account` }] };
+}
+
+/**
+ * The Gmail One-Click endpoint for a verification link, derived from the link
+ * itself: Better Auth hands us `https://api…/api/auth/verify-email?token=…`, and
+ * the one-click twin is that same token POSTed to our own route on the same
+ * origin. Deriving beats threading an extra origin through every caller, and it
+ * can't drift out of sync with the link the button uses. Returns undefined for
+ * anything unparseable or tokenless, in which case the message degrades to an
+ * ordinary Go-To action.
+ */
+function verifyOneClickUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    const token = parsed.searchParams.get("token");
+    if (!token) return undefined;
+    const target = new URL("/v1/email-actions/verify-email", parsed.origin);
+    target.searchParams.set("token", token);
+    return target.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Verification email shown on sign-up / re-sent on an unverified sign-in.
+ *
+ * The only template carrying a Gmail One-Click action: Gmail POSTs the token to
+ * `/v1/email-actions/verify-email` and the reader is verified from the inbox
+ * list without opening the message. Pass `oneClickUrl: null` to force the plain
+ * Go-To action.
+ */
+export function verifyEmailTemplate(opts: {
+  url: string;
+  webOrigin?: string;
+  oneClickUrl?: string | null;
+}): RenderedAuthEmail {
+  const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  const oneClick =
+    opts.oneClickUrl === null ? undefined : (opts.oneClickUrl ?? verifyOneClickUrl(opts.url));
+  return account("Verify your email to finish setting up Releases", {
+    lane: "Account · Verify",
+    title: "Welcome to Releases",
+    preheader: "Confirm your email address to finish setting up your account.",
+    blocks: [
+      { t: "p", text: "Confirm your email address to finish setting up your account." },
+      { t: "button", label: "Verify email", url: opts.url },
+      {
+        t: "fine",
+        text: "This link expires in 1 hour. If you didn't create an account, you can ignore this email.",
+      },
+    ],
+    footer: accountFooter(
+      web,
+      "You received this because someone signed up for a Releases account with this email address.",
+    ),
+    action: oneClick
+      ? { kind: "confirm", name: "Verify email", postUrl: oneClick }
+      : { kind: "view", name: "Verify email", url: opts.url },
+  });
 }
 
 /** Password-reset email triggered by the forgot-password flow. */
-export function resetPasswordTemplate(opts: { url: string; webOrigin?: string }): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const safeUrl = escapeHrefUrl(opts.url);
-  const webOrigin = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
-  const footer = {
-    reason: "You received this because a password reset was requested for your Releases account.",
-    links: [{ label: "Account settings", href: `${webOrigin}/account` }],
-  };
-  const subject = "Reset your Releases password";
-  const bodyText = [
-    "We received a request to reset your Releases password.",
-    "",
-    "Reset it here:",
-    opts.url,
-    "",
-    "This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.",
-  ].join("\n");
-  const bodyHtml = [
-    "<p>We received a request to reset your Releases password.</p>",
-    `<p><a href="${safeUrl}">Reset password</a></p>`,
-    "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.</p>",
-  ].join("");
-  return {
-    subject,
-    text: appendTextFooter(bodyText, footer),
-    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
-  };
+export function resetPasswordTemplate(opts: {
+  url: string;
+  webOrigin?: string;
+}): RenderedAuthEmail {
+  const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  return account("Reset your Releases password — link expires in 1 hour", {
+    lane: "Account · Password",
+    title: "Reset your password",
+    preheader: "Set a new password. The link is good for one hour.",
+    blocks: [
+      { t: "p", text: "We received a request to reset the password on your Releases account." },
+      { t: "button", label: "Reset password", url: opts.url },
+      {
+        t: "fine",
+        text: "This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.",
+      },
+    ],
+    footer: accountFooter(
+      web,
+      "You received this because a password reset was requested for your Releases account.",
+    ),
+    action: { kind: "view", name: "Reset password", url: opts.url },
+  });
 }
 
 /**
  * Email-change confirmation. Sent to the user's CURRENT (old) address when they
  * request a new email from the account page — clicking the link confirms the
  * change and switches the account over. Going to the existing inbox is the
- * security property: an attacker who momentarily holds a session still can't move
- * the account to an address they control without access to the current mailbox.
- * The new address is named in the copy so the recipient can spot an unexpected
- * request and ignore it.
+ * security property: an attacker who momentarily holds a session still can't
+ * move the account to an address they control without access to the current
+ * mailbox. The new address is named in the SUBJECT as well as the body, so an
+ * unexpected request is refutable from the inbox list without opening anything.
  */
-export function changeEmailTemplate(opts: { url: string; newEmail: string; webOrigin?: string }): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const safeUrl = escapeHrefUrl(opts.url);
-  const safeNewEmail = escapeHtml(opts.newEmail);
-  const webOrigin = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
-  const footer = {
-    reason:
+export function changeEmailTemplate(opts: {
+  url: string;
+  newEmail: string;
+  webOrigin?: string;
+}): RenderedAuthEmail {
+  const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  return account(`Confirm your new Releases email: ${opts.newEmail}`, {
+    lane: "Account · Email change",
+    title: "Confirm your new email address",
+    preheader: `Your account is set to move to ${opts.newEmail}.`,
+    blocks: [
+      {
+        t: "p",
+        text: `Your Releases account is set to move to **${opts.newEmail}**. Confirming from this inbox completes the change.`,
+      },
+      { t: "button", label: "Confirm new email", url: opts.url },
+      {
+        t: "fine",
+        text: "This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.",
+      },
+    ],
+    footer: accountFooter(
+      web,
       "You received this because a change to your Releases account email was requested from your signed-in session.",
-    links: [{ label: "Account settings", href: `${webOrigin}/account` }],
-  };
-  const subject = "Confirm your new Releases email address";
-  const bodyText = [
-    `We received a request to change your Releases email address to ${opts.newEmail}.`,
-    "",
-    "Confirm the change here:",
-    opts.url,
-    "",
-    "This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.",
-  ].join("\n");
-  const bodyHtml = [
-    `<p>We received a request to change your Releases email address to ${safeNewEmail}.</p>`,
-    `<p><a href="${safeUrl}">Confirm new email</a></p>`,
-    "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.</p>",
-  ].join("");
-  return {
-    subject,
-    text: appendTextFooter(bodyText, footer),
-    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
-  };
+    ),
+    action: { kind: "view", name: "Confirm email", url: opts.url },
+  });
 }
 
-/**
- * Passwordless magic-link sign-in email. Clicking the link authenticates the user
- * (and auto-creates a verified account for an unknown email — see the magicLink
- * plugin in index.ts). Shorter expiry copy than verify/reset: a login link lives 15
- * minutes (`expiresIn: 60 * 15`).
- */
+/** Workspace invitation. */
 export function invitationEmailTemplate(opts: {
   url: string;
   orgName: string;
   webOrigin?: string;
-}): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const safeUrl = escapeHrefUrl(opts.url);
-  const safeOrg = escapeHtml(opts.orgName);
-  const footer = {
-    reason: "You received this because someone invited you to a workspace on Releases.",
-    links: [{ label: "Releases", href: opts.webOrigin ?? DEFAULT_WEB_ORIGIN }],
-  };
-  const subject = `You're invited to join ${opts.orgName} on Releases`;
-  const bodyText = [
-    `You've been invited to join the ${opts.orgName} workspace on Releases.`,
-    "",
-    "Accept the invitation:",
-    opts.url,
-  ].join("\n");
-  const bodyHtml = [
-    `<p>You've been invited to join the <strong>${safeOrg}</strong> workspace on Releases.</p>`,
-    `<p><a href="${safeUrl}">Accept the invitation</a></p>`,
-  ].join("");
-  return {
-    subject,
-    text: appendTextFooter(bodyText, footer),
-    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
-  };
+}): RenderedAuthEmail {
+  const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  return account(`You're invited to join ${opts.orgName} on Releases`, {
+    lane: "Account · Invitation",
+    title: `Join ${opts.orgName} on Releases`,
+    preheader: `You've been invited to the ${opts.orgName} workspace.`,
+    blocks: [
+      {
+        t: "p",
+        text: `You've been invited to join the **${opts.orgName}** workspace on Releases.`,
+      },
+      { t: "button", label: "Accept the invitation", url: opts.url },
+    ],
+    footer: {
+      reason: "You received this because someone invited you to a workspace on Releases.",
+      links: [{ label: "Releases", href: web }],
+    },
+    action: { kind: "view", name: "Accept invitation", url: opts.url },
+  });
 }
 
-export function magicLinkTemplate(opts: { url: string; webOrigin?: string }): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const safeUrl = escapeHrefUrl(opts.url);
-  const footer = {
-    reason: "You received this because someone requested a passwordless sign-in link for Releases.",
-    links: [{ label: "Sign in", href: opts.webOrigin ?? DEFAULT_WEB_ORIGIN }],
-  };
-  const subject = "Your Releases sign-in link";
-  const bodyText = [
-    "Sign in to Releases.",
-    "",
-    "Click the link below to sign in — no password needed:",
-    opts.url,
-    "",
-    "This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.",
-  ].join("\n");
-  const bodyHtml = [
-    "<p>Sign in to Releases.</p>",
-    "<p>Click the link below to sign in — no password needed:</p>",
-    `<p><a href="${safeUrl}">Sign in to Releases</a></p>`,
-    "<p>This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.</p>",
-  ].join("");
-  return {
-    subject,
-    text: appendTextFooter(bodyText, footer),
-    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
-  };
+/**
+ * Passwordless magic-link sign-in. Clicking the link authenticates the user (and
+ * auto-creates a verified account for an unknown email — see the magicLink
+ * plugin in index.ts). The 15-minute expiry rides in the subject: a sign-in link
+ * is the one account email whose value expires while it sits in the inbox.
+ */
+export function magicLinkTemplate(opts: { url: string; webOrigin?: string }): RenderedAuthEmail {
+  const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  return account("Your Releases sign-in link — expires in 15 minutes", {
+    lane: "Account · Sign in",
+    title: "Sign in to Releases",
+    preheader: "One-time sign-in link. No password needed.",
+    blocks: [
+      { t: "p", text: "Use the link below to sign in. No password needed." },
+      { t: "button", label: "Sign in", url: opts.url },
+      {
+        t: "fine",
+        text: "This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.",
+      },
+    ],
+    footer: {
+      reason:
+        "You received this because someone requested a passwordless sign-in link for Releases.",
+      links: [
+        { label: "Sign in", href: web },
+        { label: "Account settings", href: `${web}/account` },
+      ],
+    },
+    action: { kind: "view", name: "Sign in", url: opts.url },
+  });
 }

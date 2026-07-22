@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     "./atom": "./src/atom.ts",
+    "./email-shell": "./src/email-shell.ts",
+    "./strip-markdown": "./src/strip-markdown.ts",
     "./atom-http": "./src/atom-http.ts",
     "./formatters": "./src/formatters.ts",
     "./markdown-plugins": "./src/markdown-plugins.ts",

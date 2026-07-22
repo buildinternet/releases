@@ -165,8 +165,8 @@ export default {
               lastError: info.lastError,
               label: labels.get(subId) ?? null,
             }));
-            const { subject, body } = formatDlqAlert(entries);
-            await sendWebhookAlert(alertEnv, subject, body);
+            const { subject, body, html } = formatDlqAlert(entries);
+            await sendWebhookAlert(alertEnv, subject, body, html);
           })().catch(() => undefined),
         );
       }
