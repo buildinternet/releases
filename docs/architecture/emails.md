@@ -80,8 +80,12 @@ Messages with an action carry schema.org JSON-LD
   verification, handled by `POST /v1/email-actions/verify-email`, which replays
   the token through Better Auth's own verify endpoint (one code path owns token
   consumption and expiry). The route is anonymous by design — the emailed token
-  is the whole credential, exactly as in the link — rate-limited per IP, opaque
-  404 on anything unknown, and idempotent because Google may retry.
+  is the whole credential, exactly as in the link — opaque 404 on anything
+  unknown, and idempotent because Google may retry. It rate-limits itself
+  **inside the handler** against `AUTH_RATE_LIMITER`, the same per-IP edge
+  limiter that fronts `POST /api/auth/*`: `publicRateLimitMiddleware` returns
+  early on non-safe methods, so mounting it over a POST-only namespace throttles
+  nothing while looking like protection.
 
 Both annotations stay inert until the sending domain is
 [registered with Google](https://developers.google.com/workspace/gmail/markup/registering-with-google)

@@ -738,8 +738,9 @@ v1.use("/me/*", publicRateLimitMiddleware);
 v1.use("/feed/:token", publicRateLimitMiddleware);
 // Token-authenticated unsubscribe — rate-limited, not under publicReadAuth.
 v1.use("/digest/unsubscribe/:token", publicRateLimitMiddleware);
-// Gmail one-click action handlers: same posture as unsubscribe — the emailed
-// token is the whole credential, so the only gate is the per-IP limiter.
+// Gmail one-click action handlers. NOTE: this middleware covers safe methods
+// only — it returns early on anything else — so the POST handlers do their own
+// per-IP limiting against AUTH_RATE_LIMITER. See routes/email-actions.ts.
 v1.use("/email-actions/*", publicRateLimitMiddleware);
 
 // Cache-Control for read-heavy GET endpoints

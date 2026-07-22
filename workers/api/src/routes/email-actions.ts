@@ -11,6 +11,13 @@
  * Handlers must be idempotent (Google may retry) and must not redirect — Gmail
  * wants a 2xx and nothing else.
  *
+ * Rate limiting is done HERE, in the handler, not by route middleware:
+ * `publicRateLimitMiddleware` short-circuits on non-safe methods, so mounting it
+ * over this namespace would throttle nothing and read as protection that isn't
+ * there. These handlers reuse `AUTH_RATE_LIMITER` — the same per-IP edge limiter
+ * that fronts `POST /api/auth/*`, since this is the same threat (guessing at a
+ * single-use auth token) and it's already provisioned.
+ *
  * The annotation only renders for senders Google has registered, so in practice
  * this route is reachable but unexercised until that registration lands. It
  * stays correct either way.
@@ -19,8 +26,9 @@ import { Hono, type Context } from "hono";
 import type { Env } from "../index.js";
 import { createAuth } from "../auth/index.js";
 import { respondError } from "../lib/error-response.js";
-import { NotFoundError } from "@releases/lib/releases-error";
+import { NotFoundError, RateLimitedError } from "@releases/lib/releases-error";
 import { logEvent } from "@releases/lib/log-event";
+import { edgeRateLimitIpKey, selectAuthEdgeLimiter } from "../middleware/rate-limit.js";
 
 export const emailActionRoutes = new Hono<Env>();
 
@@ -30,6 +38,20 @@ export const emailActionRoutes = new Hono<Env>();
  * path owns token consumption, expiry, and the post-verification hooks.
  */
 async function handleVerifyEmail(c: Context<Env>) {
+  const limiter = selectAuthEdgeLimiter(
+    c.req.method,
+    c.env.AUTH_EDGE_RATE_LIMIT_ENABLED,
+    c.env.AUTH_RATE_LIMITER,
+  );
+  if (limiter) {
+    // Key by /64 for IPv6 so one subnet can't rotate addresses past the cap.
+    const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? "unknown";
+    const { success } = await limiter.limit({ key: edgeRateLimitIpKey(ip) });
+    if (!success) {
+      return respondError(c, new RateLimitedError("Too many requests. Please try again later."));
+    }
+  }
+
   const token = c.req.query("token");
   if (!token) return respondError(c, new NotFoundError());
 
