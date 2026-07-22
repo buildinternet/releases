@@ -28,9 +28,10 @@ export async function fetchWithRetry(
     try {
       const res = await fetch(url);
       if (res.ok) return res;
-      if (res.status === 404 || (res.status >= 400 && res.status < 500 && res.status !== 429)) {
-        return res;
-      }
+      // 4xx (except 429) is the caller's problem, not a transient one: a 404
+      // means the skill moved and retrying only delays a failure that should be
+      // loud. Hand the response back and let the caller's `res.ok` check throw.
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) return res;
       lastError = new Error(`Fetch ${url} failed: ${res.status}`);
     } catch (err) {
       lastError = err;
