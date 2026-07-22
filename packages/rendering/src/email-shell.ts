@@ -83,6 +83,26 @@ function href(url: string): string {
   return url.replace(/"/g, "%22").replace(/</g, "%3C").replace(/>/g, "%3E");
 }
 
+/* ── Subject helpers ────────────────────────────────────────────────────── */
+
+/**
+ * "Cloudflare, Anthropic +2 more" — name the affected things in the subject.
+ *
+ * A subject that says "1 source failed" or "3 messages" forces the reader to
+ * open the message to learn what it is about. Naming the first one or two and
+ * counting the rest fits the ~45 characters an inbox list actually shows and
+ * answers "does this concern me?" without a click. Blank names are dropped and
+ * duplicates collapse, so a burst of failures on one org reads as that org
+ * rather than as "Acme, Acme +3 more".
+ */
+export function subjectNames(names: Array<string | null | undefined>, max = 2): string {
+  const unique = [...new Set(names.map((n) => n?.trim()).filter((n): n is string => !!n))];
+  if (unique.length === 0) return "";
+  const shown = unique.slice(0, max).join(", ");
+  const rest = unique.length - Math.min(unique.length, max);
+  return rest > 0 ? `${shown} +${rest} more` : shown;
+}
+
 /* ── Blocks ─────────────────────────────────────────────────────────────── */
 
 export type EmailDataRow = {

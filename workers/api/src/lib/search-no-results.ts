@@ -171,7 +171,15 @@ export function buildNoResultsAlert(
   thresholds: NoResultsThresholds,
 ): { subject: string; text: string; html: string } {
   const pct = (decision.ratio * 100).toFixed(1);
-  const subject = `[alert] search no-results: ${pct}% zero-hit (${stats.zeroHits}/${stats.total})`;
+  // Lead with the query people are actually missing on: the ratio says how bad
+  // it is, the query says what to go fix. The count sits outside the quotes so
+  // the quoted text is exactly what someone typed.
+  const topMiss = stats.topQueries[0]?.query;
+  const otherMisses = Math.max(0, stats.topQueries.length - 1);
+  const missSegment = topMiss
+    ? ` — "${topMiss}"${otherMisses > 0 ? ` +${otherMisses} more` : ""}`
+    : "";
+  const subject = `[alert] search no-results: ${pct}% zero-hit (${stats.zeroHits}/${stats.total})${missSegment}`;
 
   const blocks: EmailBlock[] = [
     {

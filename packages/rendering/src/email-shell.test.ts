@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { renderEmail, type EmailDoc } from "./email-shell.js";
+import { renderEmail, subjectNames, type EmailDoc } from "./email-shell.js";
 
 const base: EmailDoc = {
   lane: "Account · Verify",
@@ -127,5 +127,32 @@ describe("renderEmail", () => {
     });
     expect(text).toContain("  url:        https://x.test");
     expect(text).toContain("  last error: HTTP 500");
+  });
+});
+
+describe("subjectNames", () => {
+  it("names one thing outright", () => {
+    expect(subjectNames(["Cloudflare"])).toBe("Cloudflare");
+  });
+
+  it("names the first two and counts the rest", () => {
+    expect(subjectNames(["Cloudflare", "Anthropic", "Vercel", "Stripe"])).toBe(
+      "Cloudflare, Anthropic +2 more",
+    );
+  });
+
+  it("honours a tighter cap for long entity names", () => {
+    expect(subjectNames(["Vercel — Next.js", "Acme — changelog"], 1)).toBe(
+      "Vercel — Next.js +1 more",
+    );
+  });
+
+  it("collapses duplicates so one org's burst doesn't read as several", () => {
+    expect(subjectNames(["Acme", "Acme", "Acme"])).toBe("Acme");
+  });
+
+  it("drops blank and missing names rather than counting them", () => {
+    expect(subjectNames([null, "  ", "Acme", undefined])).toBe("Acme");
+    expect(subjectNames([null, undefined])).toBe("");
   });
 });

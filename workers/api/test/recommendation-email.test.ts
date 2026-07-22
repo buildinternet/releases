@@ -52,7 +52,9 @@ describe("formatRecommendationEmail", () => {
 describe("formatRecommendationAckEmail", () => {
   it("thanks the submitter without echoing submitted url or note", () => {
     const { subject, text, html } = formatRecommendationAckEmail(base, "https://releases.sh");
-    expect(subject).toContain("Thanks");
+    // The subject names the submitted domain; the body still doesn't echo the
+    // full url back at the submitter.
+    expect(subject).toContain("We got your Releases submission");
     expect(text).not.toContain(base.url);
     expect(text).not.toContain(base.note!);
     expect(text).toContain(`Reference: ${base.id}`);

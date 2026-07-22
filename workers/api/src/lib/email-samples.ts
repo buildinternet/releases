@@ -427,7 +427,7 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
             "Internal alert from Releases — webhook deliveries exhausted their retries and landed in the dead-letter queue.",
         },
       });
-      return { subject: "[alert] webhook DLQ: 3 messages", text, html };
+      return { subject: "[alert] webhook DLQ: 3 messages — Example Co", text, html };
     }
     case "operator.alert.webhook-auto-disable": {
       const { html, text } = renderEmail({

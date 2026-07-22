@@ -75,7 +75,7 @@ describe("formatPollFetchAlert", () => {
     expect(text).not.toContain("url:");
   });
 
-  it("stays count-based in the subject when multiple sources fail", () => {
+  it("names the first source and counts the rest when several fail", () => {
     const failures: PollFetchFailure[] = [
       { sourceId: "src_next", stepName: "fetch", error: "a" },
       { sourceId: "src_ghost", stepName: "embed", error: "b" },
@@ -85,7 +85,10 @@ describe("formatPollFetchAlert", () => {
       new Map([["src_next", vercelDetail]]),
       SCHEDULED,
     );
-    expect(subject).toContain("2 source(s) failed");
+    // The subject names something concrete even in a multi-source outage —
+    // "2 sources failed" alone can't be triaged from the inbox list.
+    expect(subject).toContain("Vercel — Next.js +1 more failed");
+    expect(subject).toContain("2 sources");
     // Both the resolved and the unresolved source appear.
     expect(text).toContain("Vercel — Next.js");
     expect(text).toContain("src_ghost");

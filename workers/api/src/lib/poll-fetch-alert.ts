@@ -12,7 +12,7 @@
  * Workers runtime.
  */
 
-import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type PollFetchFailure = {
   sourceId: string;
@@ -99,17 +99,19 @@ export function formatPollFetchAlert(
 ): FormattedAlert {
   const scheduledIso = new Date(scheduledTime).toISOString();
 
-  // Subject names the source when exactly one failed (the common case); a
-  // wider outage stays count-based to keep the line short. The raw epoch
-  // `scheduledTime` is preserved so the per-fire dedup key in sendAlert still
-  // collapses only true retries of the same summary fire.
+  // The subject always names a source. One failure names it and its step; a
+  // wider outage names the first and counts the rest, so the line still answers
+  // "what is down?" without opening the message. The raw epoch `scheduledTime`
+  // is preserved so the per-fire dedup key in sendAlert still collapses only
+  // true retries of the same summary fire.
+  const affected = subjectNames(
+    failures.map((f) => headline(detailsById.get(f.sourceId), f.sourceId)),
+    1,
+  );
   const subject =
     failures.length === 1
-      ? `[alert] poll-and-fetch: ${headline(
-          detailsById.get(failures[0].sourceId),
-          failures[0].sourceId,
-        )} failed at ${failures[0].stepName} (scheduledTime=${scheduledTime})`
-      : `[alert] poll-and-fetch: ${failures.length} source(s) failed (scheduledTime=${scheduledTime})`;
+      ? `[alert] poll-and-fetch: ${affected} failed at ${failures[0].stepName} (scheduledTime=${scheduledTime})`
+      : `[alert] poll-and-fetch: ${affected} failed (${failures.length} sources, scheduledTime=${scheduledTime})`;
 
   const lines: string[] = [
     `${failures.length} source(s) failed during the poll-and-fetch fan-out.`,

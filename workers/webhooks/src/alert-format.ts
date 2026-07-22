@@ -11,7 +11,7 @@
  * resolved shapes in, so this stays unit-testable.
  */
 
-import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type SubscriptionLabel = {
   id: string;
@@ -93,8 +93,13 @@ export function formatDlqAlert(entries: DlqEntry[]): {
     },
   });
 
+  // Name whose endpoint is failing — "3 messages" alone doesn't say whether
+  // this is one broken integration or a platform-wide problem.
+  const affected = subjectNames(
+    entries.map((e) => e.label?.orgName ?? e.label?.description ?? null),
+  );
   return {
-    subject: `[alert] webhook DLQ: ${totalMsgs} messages`,
+    subject: `[alert] webhook DLQ: ${totalMsgs} messages${affected ? ` — ${affected}` : ""}`,
     body,
     html,
   };

@@ -3,7 +3,7 @@
  */
 import type { FirecrawlStaleEntry } from "../cron/firecrawl-staleness.js";
 import type { StaleSourceEntry } from "../cron/source-staleness.js";
-import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type StalenessDigestInput = {
   firstParty: StaleSourceEntry[];
@@ -30,7 +30,13 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
   html: string;
 } {
   const total = input.firstParty.length + input.firecrawl.length;
-  const subject = `[staleness] ${total} source${total === 1 ? "" : "s"} overdue`;
+  // Name the orgs that went quiet: "4 overdue" alone reads the same every day
+  // and says nothing about whether this run needs attention.
+  const affected = subjectNames([
+    ...input.firstParty.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+    ...input.firecrawl.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+  ]);
+  const subject = `[staleness] ${total} source${total === 1 ? "" : "s"} overdue${affected ? `: ${affected}` : ""}`;
 
   const blocks: EmailBlock[] = [
     {

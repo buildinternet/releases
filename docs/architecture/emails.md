@@ -45,6 +45,29 @@ to break one message at a time:
   (`@releases/rendering/strip-markdown`). Escaping it verbatim shows readers
   asterisks.
 
+## Subject lines
+
+A subject earns its place by naming the thing it concerns. Counts alone ("2
+sources overdue", "3 messages") read identically every day and force a click to
+learn whether the message applies to you, so every subject that has an entity to
+name uses `subjectNames()` — first one or two, then `+N more`, duplicates
+collapsed and blanks dropped:
+
+| Message           | Subject                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| digest            | `Releases digest — Cloudflare, Anthropic +2 more · 7 updates · Jul 21`                 |
+| poll-and-fetch    | `[alert] poll-and-fetch: Vercel — Next.js +1 more failed (2 sources, scheduledTime=…)` |
+| staleness         | `[staleness] 4 sources overdue: Vercel, Acme +2 more`                                  |
+| cron report       | `[degraded] scrape-agent-sweep: degraded — 2/4 dispatched → 1 inserted (Example Co)`   |
+| webhook DLQ       | `[alert] webhook DLQ: 3 messages — Acme Inc`                                           |
+| search no-results | `[alert] search no-results: 24.0% zero-hit (29/120) — "sample zero hit" +1 more`       |
+
+A healthy cron run names nobody — there is no affected entity and the counts are
+the whole story. Operator subjects keep their `[alert]` / `[feedback]` prefixes
+(operators filter on them) and carry no dates; the inbox timestamp already does.
+Account mail carries the fact the reader needs instead: the new address on an
+email change, the expiry when it is short, the domain they submitted.
+
 ## Gmail annotations
 
 Messages with an action carry schema.org JSON-LD

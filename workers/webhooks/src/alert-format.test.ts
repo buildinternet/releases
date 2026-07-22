@@ -52,7 +52,7 @@ describe("formatDlqAlert", () => {
     const { subject, body } = formatDlqAlert([
       { subId: "whk_1", count: 3, lastError: "max retries exceeded", label: acmeLabel },
     ]);
-    expect(subject).toBe("[alert] webhook DLQ: 3 messages");
+    expect(subject).toBe("[alert] webhook DLQ: 3 messages — Acme Inc");
     expect(body).toContain("Acme Inc (acme) — Release feed → #eng-releases");
     expect(body).toContain("url:        https://acme.example/hooks/releases");
     expect(body).toContain("messages:   3");

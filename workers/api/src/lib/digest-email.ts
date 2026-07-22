@@ -1,7 +1,7 @@
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { resolveSourceKind } from "@buildinternet/releases-core/kinds";
 import { logEvent } from "@releases/lib/log-event";
-import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
+import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 import type { AuthEmailBinding } from "../auth/email.js";
 
 export interface DigestEmailEnv {
@@ -279,19 +279,6 @@ function subjectDateLabel(cadence: "daily" | "weekly", referenceDate: string): s
     : DIGEST_SUBJECT_FMT.format(start);
 }
 
-/**
- * "Cloudflare, Anthropic +2" — who shipped, named in the subject.
- *
- * A digest's distinguishing content is WHOSE news it carries; a bare count
- * reads identically week to week. Two names is what survives the ~45 characters
- * an inbox list actually shows before the count and date.
- */
-function orgSubjectList(names: string[], max = 2): string {
-  const shown = names.slice(0, max).join(", ");
-  const rest = names.length - Math.min(names.length, max);
-  return rest > 0 ? `${shown} +${rest}` : shown;
-}
-
 export function buildDigestEmail(content: DigestEmailContent): {
   subject: string;
   text: string;
@@ -306,7 +293,7 @@ export function buildDigestEmail(content: DigestEmailContent): {
   // The cadence is a preference the reader set, not news. What distinguishes one
   // digest from the next is who shipped, how much, and which window it covers —
   // in that order.
-  const who = orgSubjectList(orgNames);
+  const who = subjectNames(orgNames);
   const dateLabel = referenceDate ? digestDateLabel(cadence, referenceDate) : "";
   const shortDate = referenceDate ? subjectDateLabel(cadence, referenceDate) : "";
   const subject = [`Releases digest`, who, updates, shortDate]
@@ -354,7 +341,7 @@ export function buildDigestEmail(content: DigestEmailContent): {
     lane: `Digest · ${cadence === "weekly" ? "Weekly" : "Daily"}`,
     title: `${updates}${orgSpan}`,
     subtitle: [dateLabel, cadence].filter(Boolean).join(" · "),
-    preheader: orgNames.length > 0 ? orgSubjectList(orgNames, 4) : undefined,
+    preheader: orgNames.length > 0 ? subjectNames(orgNames, 4) : undefined,
     blocks,
     footer: {
       reason: `You received this ${cadence} digest because you follow releases on Releases and opted in to email updates.`,

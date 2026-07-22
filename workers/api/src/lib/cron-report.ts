@@ -7,6 +7,7 @@ import type { FinalizeRunParams } from "../db/cron-runs-dao.js";
 import type { TopSearchRow } from "./search-queries-top.js";
 import {
   renderEmail,
+  subjectNames,
   type EmailBlock,
   type EmailDataRow,
   type EmailTone,
@@ -120,7 +121,24 @@ export function formatCronReport(report: CronReport): FormattedReport {
   const resultsSegment = report.results
     ? ` → ${totalReleasesInserted(report.results)} inserted`
     : "";
-  const subject = `${prefix}${report.cronName}: ${report.status} — ${dispatchedSegment}${resultsSegment}`;
+  // When something went wrong, name who it went wrong for. A healthy run stays
+  // clean — there is no entity to name and the counts are the whole story.
+  // Dispatch errors carry only a slug; the per-org results carry the display
+  // name. Prefer the name when the run reported both for the same org.
+  // The subject wants the bare display name, not `orgLabel`'s "Name (slug)" —
+  // it already sits inside parentheses. Dispatch errors carry only a slug, so
+  // the per-org results supply the name when the run reported both.
+  const nameBySlug = new Map(
+    (report.results?.perOrg ?? []).map((o) => [o.orgSlug, o.orgName?.trim() || o.orgSlug] as const),
+  );
+  const failingOrgs = subjectNames([
+    ...(report.dispatchErrorDetail ?? []).map((d) => nameBySlug.get(d.orgSlug) ?? d.orgSlug),
+    ...(report.results?.perOrg ?? [])
+      .filter((o) => o.errors > 0)
+      .map((o) => o.orgName?.trim() || o.orgSlug),
+  ]);
+  const blameSegment = failingOrgs ? ` (${failingOrgs})` : "";
+  const subject = `${prefix}${report.cronName}: ${report.status} — ${dispatchedSegment}${resultsSegment}${blameSegment}`;
 
   const lines: string[] = [];
   lines.push(`Cron: ${report.cronName}`);
