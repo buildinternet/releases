@@ -49,13 +49,13 @@ describe("formatPollFetchAlert", () => {
 
     // Text body carries the human identity + the supporting details.
     expect(text).toContain("Vercel — Next.js");
-    expect(text).toContain("org/source:  vercel/next-js");
-    expect(text).toContain("url:         https://github.com/vercel/next.js/releases");
-    expect(text).toContain("type:        github");
-    expect(text).toContain("step:        fetch");
-    expect(text).toContain("error:       Timed out after 5m");
+    expect(text).toMatch(/org\/source:\s+vercel\/next-js/);
+    expect(text).toMatch(/url:\s+https:\/\/github\.com\/vercel\/next\.js\/releases/);
+    expect(text).toMatch(/type:\s+github/);
+    expect(text).toMatch(/step:\s+fetch/);
+    expect(text).toMatch(/error:\s+Timed out after 5m/);
     // The opaque id stays available for admin lookup, but is no longer alone.
-    expect(text).toContain("source id:   src_next");
+    expect(text).toMatch(/source id:\s+src_next/);
 
     expect(html).toContain("Vercel — Next.js");
     expect(html).toContain("vercel/next-js");
@@ -69,7 +69,7 @@ describe("formatPollFetchAlert", () => {
     const { subject, text } = formatPollFetchAlert(failures, new Map(), SCHEDULED);
     expect(subject).toContain("src_ghost failed at embed");
     expect(text).toContain("src_ghost");
-    expect(text).toContain("error:       boom");
+    expect(text).toMatch(/error:\s+boom/);
     // No org/source/url/type lines when unresolved.
     expect(text).not.toContain("org/source:");
     expect(text).not.toContain("url:");
@@ -132,7 +132,7 @@ describe("formatPollFetchAlert", () => {
     expect(html).not.toContain('href="javascript:');
     expect(html).toContain("javascript:alert(1)");
     // The plain-text body never linkifies, so it carries the url verbatim.
-    expect(text).toContain("url:         javascript:alert(1)");
+    expect(text).toMatch(/url:\s+javascript:alert\(1\)/);
   });
 
   it("uses slug when name is missing and degrades partial identity", () => {
@@ -144,6 +144,6 @@ describe("formatPollFetchAlert", () => {
     });
     const { text } = formatPollFetchAlert(failures, new Map([["src_p", partial]]), SCHEDULED);
     expect(text).toContain("acme — only-slug");
-    expect(text).toContain("org/source:  acme/only-slug");
+    expect(text).toMatch(/org\/source:\s+acme\/only-slug/);
   });
 });

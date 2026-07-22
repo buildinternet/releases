@@ -37,11 +37,6 @@ export type FormattedAlert = {
   html: string;
 };
 
-/** Padded `"label:"` at a fixed column so the values line up vertically. */
-function field(label: string, value: string): string {
-  return `    ${`${label}:`.padEnd(13)}${value}`;
-}
-
 /**
  * Only http/https values become clickable anchors. Validates the original
  * (pre-escape) URL so a malformed or hostile `sources.url` — e.g. a
@@ -113,21 +108,6 @@ export function formatPollFetchAlert(
       ? `[alert] poll-and-fetch: ${affected} failed at ${failures[0].stepName} (scheduledTime=${scheduledTime})`
       : `[alert] poll-and-fetch: ${affected} failed (${failures.length} sources, scheduledTime=${scheduledTime})`;
 
-  const lines: string[] = [
-    `${failures.length} source(s) failed during the poll-and-fetch fan-out.`,
-    `Scheduled time: ${scheduledIso}`,
-    "",
-  ];
-  for (const f of failures) {
-    const detail = detailsById.get(f.sourceId);
-    lines.push(headline(detail, f.sourceId));
-    for (const { label, value } of detailRows(f, detail)) {
-      lines.push(field(label, value));
-    }
-    lines.push("");
-  }
-  const text = `${lines.join("\n").trimEnd()}\n`;
-
   const blocks: EmailBlock[] = [];
   for (const f of failures) {
     const detail = detailsById.get(f.sourceId);
@@ -152,7 +132,10 @@ export function formatPollFetchAlert(
     });
   }
 
-  const { html } = renderEmail({
+  // Both bodies come out of the one render: the shell's plain-text path already
+  // formats `entity` and `data` blocks, and hand-building a second body beside
+  // it is exactly how the two drift apart.
+  const { html, text } = renderEmail({
     lane: "Alert · Poll fetch",
     tone: "crit",
     title: `poll-and-fetch — ${failures.length} source(s) failed`,
