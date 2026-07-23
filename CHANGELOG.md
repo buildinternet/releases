@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 22, 2026
+
+**Changed**
+- Transactional emails now share a unified branded shell — digest, magic link, password reset, verification, and operator alerts all use the same design; release bodies in digest emails now render markdown correctly instead of showing raw asterisks.
+- Email subject lines carry more context — digest subjects name the leading orgs; magic-link and password-reset subjects include expiry times; operator alerts include the name of the affected source or org.
+
 ## July 18, 2026
 
 **Changed**
