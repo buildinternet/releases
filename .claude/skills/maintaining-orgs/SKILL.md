@@ -39,6 +39,8 @@ releases admin overview inputs <slug> --json
 releases admin overview update <slug> --content-file /tmp/<slug>-overview.md
 ```
 
+> **Sandbox without a working CLI?** If the compiled `releases` binary can't reach the API through a TLS-intercepting egress proxy (the weekly SANA sandbox), the overview steps have a curl-to-REST fallback — see `regenerating-overviews` → _Running without the CLI (curl fallback)_, including the plan manifest (`GET /v1/admin/overviews?format=plan`) that drives target selection below. **Step 1 (`admin source fetch`) has no curl fallback yet** — it dispatches a managed update run and polls, not a single REST call. In a broken-CLI sandbox, skip the fetch and regenerate from current indexed data (surface that the fetch was skipped); a proper fetch-trigger fallback is tracked in [#2163](https://github.com/buildinternet/releases/issues/2163).
+
 For orgs with `scrape` or `agent` sources, skim the playbook before fetching — it documents source-specific quirks that may affect `--max` or require crawl flags:
 
 ```bash

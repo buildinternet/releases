@@ -25,6 +25,8 @@ No managed-agent task exists for this today. You — the Claude Code instance re
 
 Three steps. Each step is a single CLI invocation; no other tools needed.
 
+> **Sandbox without a working CLI?** In an environment where the compiled `releases` binary can't reach the API through a TLS-intercepting egress proxy (e.g. the weekly SANA sandbox), skip the CLI and hit the REST routes directly — see [Running without the CLI (curl fallback)](#running-without-the-cli-curl-fallback). Same three steps, same contracts.
+
 ### 1. Fetch inputs
 
 ```bash
@@ -207,6 +209,67 @@ Optional flags:
 - `--citations-file <path>` — JSON array of `{startIndex, endIndex, sourceUrl, title?, citedText}` extracted from the model response per step 2. Omit if the response had no citations (rare); omitting clears any prior citations on the page (replace-all semantics).
 
 The CLI POSTs to `/v1/orgs/:slug/overview` (dumb upsert). Last-write-wins on conflict for both the body and the citations.
+
+## Running without the CLI (curl fallback)
+
+Use this when the compiled `releases` binary can't complete requests — the known case is the weekly SANA sandbox, whose mandatory TLS-intercepting egress proxy the compiled Bun binary can't get through. This was chased to ground in [releases#2163](https://github.com/buildinternet/releases/issues/2163): it is **not** a configuration problem. The failure (`socket connection was closed unexpectedly`) persists across every lever — the correct ambient `HTTPS_PROXY` (the sandbox's proxy port rotates per shell, but Bun reads it correctly each time), all of `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `NODE_USE_SYSTEM_CA=1`, and even bypassing the proxy via `NO_PROXY` (which just hits the sandbox's blocked direct egress). Meanwhile `curl` through the same proxy works cleanly (CONNECT + TLS 1.3, cert verified against `/root/.ccr/ca-bundle.crt`), so the fault is inside the compiled Bun binary's proxy/TLS networking layer, not anything an env var fixes. Every CLI command in this skill is a thin wrapper over a REST route, so call the route directly with `curl` — the contracts are identical.
+
+Use the admin token already in the environment — `$RELEASES_API_KEY`, the same credential the CLI uses. Do **not** read `.env` or fetch secrets of any kind (the [Don't Confabulate](#dont-confabulate-around-tool-failures) rule still holds). A `relu_` user key won't work here: these are admin routes and the write needs `write` scope, which user keys can't hold — you need the root `RELEASES_API_KEY` or a `relk_` admin/write token.
+
+Setup:
+
+```bash
+API="${RELEASES_API_URL:-https://api.releases.sh}"
+AUTH="Authorization: Bearer ${RELEASES_API_KEY}"
+```
+
+### Step 1 — inputs (replaces `releases admin overview inputs`)
+
+`GET /v1/orgs/:slug/overview/inputs?window=30` — admin-only, Bearer auth. The `--max-content-chars` flag is **client-side clipping in the CLI, not a query param**, so the wire payload is never capped. Write the full response to a file (files have no stdout cap), then read a content-clipped view — this preserves the "never generate from a truncated slice" rule:
+
+```bash
+curl -fsS -H "$AUTH" "$API/v1/orgs/$SLUG/overview/inputs?window=30" -o /tmp/$SLUG-inputs.json
+# clip each release body to 1000 chars (what step 2 truncates to anyway) for reading:
+jq '.selected |= map(.content |= .[0:1000])' /tmp/$SLUG-inputs.json > /tmp/$SLUG-inputs-clipped.json
+```
+
+Read `/tmp/$SLUG-inputs-clipped.json`. It carries `org`, `sources`, `existingContent`, `selected`, `totalAvailable`, `windowDays` — same shape as the CLI's `--json`. Same stop rules apply: `selected` empty (`totalAvailable: 0`) → stop, don't generate. Clipping only trims each `content` string, never drops entries, so `selected.length` is unchanged between the raw and clipped files — if the counts differ, something else truncated and you should re-fetch. Lightweight pre-flight (like the CLI's default non-`--json` check): add `&check=true`.
+
+### Step 2 — generate
+
+Unchanged — this is the parent harness's Anthropic call described above. Build the `search_result` blocks from `/tmp/$SLUG-inputs-clipped.json`.
+
+### Step 3 — write (replaces `releases admin overview update`)
+
+`POST /v1/orgs/:slug/overview` — admin-gated. Assemble the JSON body with `jq` (so the markdown body is escaped safely), then POST it:
+
+```bash
+jq -n \
+  --rawfile content /tmp/$SLUG-overview.md \
+  --slurpfile citations /tmp/$SLUG-overview-citations.json \
+  --argjson releaseCount "$TOTAL_AVAILABLE" \
+  --arg lastAt "$LAST_CONTRIBUTING_AT" \
+  '{content:$content, releaseCount:$releaseCount, citations:$citations[0]}
+     + (if $lastAt=="" then {} else {lastContributingReleaseAt:$lastAt} end)' \
+  > /tmp/$SLUG-overview-body.json
+
+curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/json" \
+  --data @/tmp/$SLUG-overview-body.json \
+  "$API/v1/orgs/$SLUG/overview"
+```
+
+- `$TOTAL_AVAILABLE` — `totalAvailable` from step 1 (the CLI defaults `--release-count` to this).
+- `$LAST_CONTRIBUTING_AT` — the first selected release's `publishedAt`; leave the var empty to omit it (the server defaults it).
+- **No citations?** Drop the `--slurpfile`/`citations` key entirely. Omitting `citations` clears any prior citations on the page (replace-all semantics) — matching the CLI.
+- Body field names are exactly `content`, `releaseCount`, `lastContributingReleaseAt`, `citations`; the citations array is `{ startIndex, endIndex, sourceUrl, title?, citedText }` per step 2.
+
+`curl -fsS` exits non-zero on any non-2xx — treat that as a hard stop and surface it, exactly like a CLI error. Never fall back to regenerating from stale inputs.
+
+### Cross-org target selection (plan manifest)
+
+`maintaining-orgs` picks targets from `releases admin overview plan`, which is `GET /v1/admin/overviews?format=plan` — the freshness fields (`overviewUpdatedAt`, `releasesSinceOverview`, `recentReleaseCount`, `needsFetch`) come back directly, no CLI needed.
+
+> The remote MCP server does **not** expose these admin routes as tools (it's a read-only public catalog surface). So in a broken-CLI sandbox, curl-to-REST — not MCP — is the fallback for all three steps. Exposing them as write-scoped MCP tools is a separate, deliberate decision tracked in [#2163](https://github.com/buildinternet/releases/issues/2163).
 
 ## Failure Modes to Watch For
 
