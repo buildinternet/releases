@@ -366,9 +366,11 @@ export const adminApi = {
     ),
 };
 
-// Mirror the worker-side `cacheControl(300)` on /v1/related/* so Next's Data
-// Cache doesn't serve fresh semantic neighbors for longer than the CDN would.
-const RELATED_CACHE_OPTS = { next: { revalidate: 300 } } as const;
+// Per-release / per-source fetch keys must skip Next's Data Cache: every write
+// bills as a Vercel ISR write, and with tens of thousands of release IDs being
+// crawled the entries are written far more often than they're re-read. The API
+// worker's own `cacheControl` + Cloudflare CDN already absorb repeat reads.
+const PER_ENTITY_CACHE_OPTS = { cache: "no-store" } as const;
 
 export interface LatestReleaseItem {
   id: string;
@@ -628,14 +630,17 @@ export const api = {
       `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}${
         excludeOrg ? `&excludeOrg=${encodeURIComponent(excludeOrg)}` : ""
       }`,
-      RELATED_CACHE_OPTS,
+      PER_ENTITY_CACHE_OPTS,
     ),
   coverage: (releaseId: string) =>
-    fetchApi<ReleaseCoverageResponse>(`/v1/releases/${encodeURIComponent(releaseId)}/coverage`),
+    fetchApi<ReleaseCoverageResponse>(
+      `/v1/releases/${encodeURIComponent(releaseId)}/coverage`,
+      PER_ENTITY_CACHE_OPTS,
+    ),
   relatedSources: (sourceIdOrSlug: string, scope: "org" | "global" = "global", limit = 6) =>
     fetchApi<RelatedSourcesResponse>(
       `/v1/related/sources?source=${encodeURIComponent(sourceIdOrSlug)}&scope=${scope}&limit=${limit}`,
-      RELATED_CACHE_OPTS,
+      PER_ENTITY_CACHE_OPTS,
     ),
 };
 
