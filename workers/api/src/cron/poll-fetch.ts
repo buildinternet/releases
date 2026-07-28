@@ -1639,11 +1639,13 @@ export async function fetchOne(
 
     if (isGitHubFetched(source, meta)) {
       const repoUrl = effectiveGitHubUrl(source, meta);
-      const [releases, stars] = await Promise.all([
+      // Named `fetchedReleases`, not `releases` — the latter shadows the drizzle
+      // `releases` table imported at the top of this file, which is in scope here.
+      const [fetchedReleases, stars] = await Promise.all([
         fetchGitHub(source, env.GITHUB_TOKEN, { repoUrl }),
         fetchRepoStars(repoUrl, env.GITHUB_TOKEN),
       ]);
-      rawReleases = releases;
+      rawReleases = fetchedReleases;
       repoStars = stars;
     } else if (isAppStoreFetched(source)) {
       const coord = appStoreCoordFromSource(source);
