@@ -28,9 +28,11 @@ Monitor write goes through the **Axiom management API**, not the repo or the MCP
 - `POST` (create) / `PUT` (update) `https://api.axiom.co/v2/monitors` with a management token —
   `AXIOM_MGMT_TOKEN` in the root `.env` (scoped for monitor + notifier write). This is **distinct
   from `AXIOM_OTEL_TOKEN`**, which is an OTel _ingest_ token and cannot manage monitors.
-- The Axiom MCP server (`mcp__axiom__*`) exposes only **read** monitor tools (`checkMonitors`,
-  `getMonitorHistory`) plus dataset/dashboard tools — it cannot create monitors, so the management
-  API is the automation path. `checkMonitors` is the quickest way to verify state.
+- The Axiom MCP server (`mcp__axiom__*`) **can** create and update monitors
+  (`createMonitor` / `updateMonitor`), alongside `checkMonitors` / `getMonitorHistory` for state —
+  this was not true when this runbook was written, and the management API is no longer the only
+  automation path. On update, omit `notifierIds` to keep existing notifiers (`[]` removes them).
+  `checkMonitors` is still the quickest way to verify state.
 - Threshold monitor body shape: `{ name, description, aplQuery, type:"Threshold",
 operator:"AboveOrEqual", threshold, intervalMinutes, rangeMinutes, triggerFromNRuns:1,
 notifierIds:[…] }`. The query must return a single scalar (`summarize count()` / `sum()`) and
