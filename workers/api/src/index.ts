@@ -37,6 +37,7 @@ import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namesp
 import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
+import { buildFetchOneEnv } from "./workflows/_fetch-env.js";
 import { createDb } from "./db.js";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
 import { retierSources } from "./cron/retier.js";
@@ -57,7 +58,6 @@ import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { withDoRetry } from "@releases/lib/do-retry";
-import { getSecret } from "@releases/lib/secrets";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { NotFoundError } from "@releases/lib/releases-error";
 
@@ -1335,34 +1335,23 @@ export default {
       ctx.waitUntil(loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env), alertEnv));
       return;
     }
-    const githubToken = (await getSecret(env.GITHUB_TOKEN)) ?? undefined;
+    // Same builder the workflow paths use (#2171). This literal used to be
+    // hand-rolled and forwarded zero AI-lane keys, so the inline-cron fallback
+    // never enriched — the local-dev path where you would try to reproduce an
+    // enrichment bug was the one path guaranteed not to show it.
+    const fetchEnv = await buildFetchOneEnv(env);
     ctx.waitUntil(
       loggedDispatch(
         "poll-fetch-cron",
         pollAndFetch({
+          ...fetchEnv,
           DB: env.DB,
-          GITHUB_TOKEN: githubToken,
-          CRON_ENABLED: env.CRON_ENABLED,
-          RELEASES_INDEX: env.RELEASES_INDEX,
-          CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-          EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-          VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-          OPENAI_API_KEY: env.OPENAI_API_KEY,
-          RELEASE_HUB: env.RELEASE_HUB,
-          WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
+          // Re-widened from the raw Env: the builder types LATEST_CACHE as the
+          // read/write spend-cap slice, but pollAndFetch also invalidates through
+          // it, which needs `delete`. Same binding, less-narrowed view.
           LATEST_CACHE: env.LATEST_CACHE,
+          CRON_ENABLED: env.CRON_ENABLED,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
-          DETERMINISTIC_UPDATE_WORKFLOW: env.DETERMINISTIC_UPDATE_WORKFLOW,
-          SOURCE_ACTOR: env.SOURCE_ACTOR,
-          STATUS_HUB: env.STATUS_HUB,
-          MA_SESSIONS_DISABLED: env.MA_SESSIONS_DISABLED,
-          MA_DAILY_SPEND_CAP_ORG_CENTS: env.MA_DAILY_SPEND_CAP_ORG_CENTS,
-          MA_DAILY_SPEND_CAP_GLOBAL_CENTS: env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS,
-          // Without these the inline-cron fallback (no POLL_AND_FETCH_WORKFLOW
-          // binding) would fetch unsigned even when signing is enabled.
-          WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
-          WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
-          FLAGS: env.FLAGS,
         }),
         alertEnv,
       ),
