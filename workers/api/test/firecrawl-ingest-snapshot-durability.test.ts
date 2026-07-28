@@ -169,6 +169,52 @@ describe("FirecrawlIngestWorkflow — pre-extract snapshot durability", () => {
     expect(objects.get(rows[0]!.r2Key as string)).toBe(DELTA);
   });
 
+  // The replay route takes `snapshotId`, so a failure log carrying only the
+  // r2Key is not actionable — an operator cannot invoke reextract-source from it.
+  it("returns the snapshot row id so the failure is replayable", async () => {
+    const db = mkDb();
+    const { bucket } = mkBucket();
+    const { step } = mkStepSpy();
+
+    await runWorkflow(db, bucket, async () => ONE_RELEASE, step);
+
+    const rows = db
+      .select()
+      .from(sourceRawSnapshots)
+      .where(eq(sourceRawSnapshots.sourceId, "src_fc"))
+      .all();
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.id).toBeTruthy();
+  });
+
+  // A spend cap fails identically on every attempt, so burning the retry budget
+  // is pure waste against a provider that has already cut us off. The first
+  // version classified only after RETRY_FETCH had exhausted.
+  it("raises a quota shutoff as non-retryable rather than letting it retry", async () => {
+    const db = mkDb();
+    const { bucket } = mkBucket();
+    const { step } = mkStepSpy();
+
+    let attempts = 0;
+    const capped = async () => {
+      attempts += 1;
+      throw new Error(
+        "You have reached your specified API usage limits. You will regain access on 2026-08-01 at 00:00 UTC.",
+      );
+    };
+
+    let thrown: unknown;
+    try {
+      await runWorkflow(db, bucket, capped, step);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(attempts).toBe(1);
+    // NonRetryableError is what tells the Workflows runtime to stop.
+    expect((thrown as Error)?.name).toMatch(/NonRetryable/);
+  });
+
   it("does not fail the ingest when RAW_SNAPSHOTS is unbound", async () => {
     const db = mkDb();
     const { names, step } = mkStepSpy();

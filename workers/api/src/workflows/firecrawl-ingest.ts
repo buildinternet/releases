@@ -155,7 +155,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
     // health. See resilience option B.
     // Hoisted so the failure handler below can point an operator at the stored
     // body to replay from — that pointer is the whole value of the snapshot.
-    let snapshot: { r2Key: string; contentHash: string } | null = null;
+    let snapshot: { id: string | null; r2Key: string; contentHash: string } | null = null;
 
     try {
       // ── Step 2: resolve body (diff delta, else scrape the full page) ─────────
@@ -217,11 +217,14 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             event: "snapshot-captured",
             sourceId,
             checkId,
+            // `snapshotId` is the handle the replay route takes; `r2Key` alone
+            // is not actionable from a log line.
+            snapshotId: snap.id,
             r2Key: snap.r2Key,
             bytes: snap.bytes,
             created: snap.created,
           });
-          return { r2Key: snap.r2Key, contentHash: snap.contentHash };
+          return { id: snap.id, r2Key: snap.r2Key, contentHash: snap.contentHash };
         } catch (err) {
           logEvent("warn", {
             component: "firecrawl-ingest-workflow",
@@ -236,6 +239,25 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
 
       // ── Step 3: extract ─────────────────────────────────────────────────────
       const rawReleases = await step.do("extract", RETRY_FETCH, async () => {
+        try {
+          return await runExtraction();
+        } catch (err) {
+          // A provider quota shutoff must short-circuit RETRY_FETCH. It is not
+          // transient — it fails identically until a human raises the cap or the
+          // stated reset passes, so every retry is a guaranteed-failing call
+          // against a provider that has already cut us off. Classifying only in
+          // the outer catch (as this first shipped) still burned the full retry
+          // budget first, which is precisely what the quota signal exists to
+          // prevent. The outer handler still logs `provider-quota-exhausted`
+          // for alerting — the message is preserved so it reclassifies there.
+          if (classifyProviderQuota(err)) {
+            throw new NonRetryableError(err instanceof Error ? err.message : String(err));
+          }
+          throw err;
+        }
+      });
+
+      async function runExtraction(): Promise<RawRelease[]> {
         if (env._extractOverride) {
           return env._extractOverride(markdown, source, attributeUrl);
         }
@@ -274,7 +296,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           });
         }
         return result.releases;
-      });
+      }
 
       // ── Step 4: dedup-insert ─────────────────────────────────────────────────
       // resolveFetchEnv is cheap (one getSecret call for GITHUB_TOKEN) and
@@ -388,9 +410,11 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             firecrawlStatus: fcStatus,
             // Replay pointer: when the body was captured, this failure is
             // recoverable via `POST /v1/workflows/reextract-source` instead of
-            // being a permanent hole. Null means the delta really is gone.
+            // being a permanent hole. `snapshotId` is the field that route
+            // takes — the r2Key is for humans. Null means the delta is gone.
+            snapshotId: snapshot?.id ?? null,
             snapshotR2Key: snapshot?.r2Key ?? null,
-            recoverable: snapshot != null,
+            recoverable: snapshot?.id != null,
             err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
           });
           const [row] = await db

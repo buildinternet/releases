@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { sourceRawSnapshots } from "@buildinternet/releases-core/schema";
 import type { createDb } from "../db.js";
@@ -15,7 +16,14 @@ const EXT: Record<RawFormat, string> = { markdown: "md", html: "html" };
 export async function saveRawSnapshot(
   deps: { R2: R2Like; db: ReturnType<typeof createDb> },
   input: { sourceId: string; body: string; format: RawFormat },
-): Promise<{ r2Key: string; contentHash: string; bytes: number; created: boolean }> {
+): Promise<{
+  /** `sourceRawSnapshots.id` — the handle `reextract-source` takes as `snapshotId`. */
+  id: string | null;
+  r2Key: string;
+  contentHash: string;
+  bytes: number;
+  created: boolean;
+}> {
   const hash = sha256Hex(input.body);
   const r2Key = `sources/${input.sourceId}/raw/${hash}.${EXT[input.format]}`;
   const bytes = new TextEncoder().encode(input.body).length;
@@ -44,7 +52,27 @@ export async function saveRawSnapshot(
     .onConflictDoNothing()
     .returning({ id: sourceRawSnapshots.id });
 
-  return { r2Key, contentHash: hash, bytes, created: insertedRows.length > 0 };
+  // `onConflictDoNothing` returns no rows when the body was already stored, but
+  // callers still need the snapshot id — it is what `reextract-source` takes as
+  // `snapshotId`, and a replay is just as valid against a pre-existing snapshot
+  // as a fresh one. Re-read it on the conflict path only, so the happy path
+  // stays a single statement.
+  let id = insertedRows[0]?.id ?? null;
+  if (id === null) {
+    const [existing] = await deps.db
+      .select({ id: sourceRawSnapshots.id })
+      .from(sourceRawSnapshots)
+      .where(
+        and(
+          eq(sourceRawSnapshots.sourceId, input.sourceId),
+          eq(sourceRawSnapshots.contentHash, hash),
+        ),
+      )
+      .limit(1);
+    id = existing?.id ?? null;
+  }
+
+  return { id, r2Key, contentHash: hash, bytes, created: insertedRows.length > 0 };
 }
 
 export async function loadRawSnapshot(deps: { R2: R2Like }, r2Key: string): Promise<string | null> {

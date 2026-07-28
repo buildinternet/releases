@@ -50,10 +50,22 @@ const QUOTA_PATTERNS: readonly RegExp[] = [
   /credit balance is too low/i,
   // OpenRouter: account credits exhausted.
   /insufficient credits/i,
-  // Generic, used by several providers on hard billing stops.
-  /quota exceeded/i,
+  // Generic hard billing stops. Note this is NOT a bare /quota exceeded/i:
+  // several providers use that wording for a retryable per-minute window
+  // ("quota exceeded for this minute; retry after 30s"), which would be
+  // misclassified as a permanent shutoff and — since callers now refuse to
+  // retry quota errors — turn a 30-second blip into a failed ingest.
   /billing hard limit/i,
+  /quota exceeded.*\b(?:billing|plan|account|balance)\b/i,
 ];
+
+/**
+ * Retryable window-limit wording that must never be treated as a hard stop,
+ * checked before {@link QUOTA_PATTERNS}. A provider that says "retry after N"
+ * or scopes the limit to a minute/hour is telling us to wait, not that we are
+ * cut off.
+ */
+const RETRYABLE_WINDOW = /retry[- ]after|per[- ](?:minute|second|hour)|for this (?:minute|hour)/i;
 
 /** "regain access on 2026-08-01 at 00:00 UTC" → Date. */
 const REGAIN_AT = /regain access on (\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{2}:\d{2})\s*UTC)?/i;
@@ -93,13 +105,23 @@ function providerOf(err: unknown, message: string): QuotaProvider {
 export function classifyProviderQuota(err: unknown): ProviderQuotaExhaustion | null {
   const message = messageOf(err).trim();
   if (!message) return null;
+  // Retryable window limits win over the quota patterns: a "retry after 30s"
+  // is a wait, not a shutoff, and callers treat a quota verdict as terminal.
+  if (RETRYABLE_WINDOW.test(message)) return null;
   if (!QUOTA_PATTERNS.some((re) => re.test(message))) return null;
 
   let regainAccessAt: Date | null = null;
   const m = REGAIN_AT.exec(message);
   if (m?.[1]) {
-    const parsed = new Date(`${m[1]}T${m[2] ?? "00:00"}:00Z`);
-    if (!Number.isNaN(parsed.getTime())) regainAccessAt = parsed;
+    const iso = `${m[1]}T${m[2] ?? "00:00"}:00Z`;
+    const parsed = new Date(iso);
+    // `new Date` silently rolls overflowed calendar dates over (2026-02-31
+    // becomes March 3), so a malformed reset date would surface to an operator
+    // as a confident wrong one. Round-trip through toISOString and require the
+    // components to survive unchanged.
+    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(iso.slice(0, 16))) {
+      regainAccessAt = parsed;
+    }
   }
 
   return { provider: providerOf(err, message), regainAccessAt, message };

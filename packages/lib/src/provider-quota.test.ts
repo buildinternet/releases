@@ -48,6 +48,37 @@ describe("classifyProviderQuota", () => {
     expect(classifyProviderQuota("")).toBeNull();
   });
 
+  // A retryable window limit misread as a hard stop is now actively harmful:
+  // callers refuse to retry quota errors, so this would turn a 30-second blip
+  // into a failed ingest.
+  it("does NOT match retryable window limits that mention quota", () => {
+    expect(
+      classifyProviderQuota(new Error("Quota exceeded for this minute; retry after 30 seconds")),
+    ).toBeNull();
+    expect(classifyProviderQuota(new Error("quota exceeded: 10 requests per minute"))).toBeNull();
+    expect(classifyProviderQuota(new Error("Quota exceeded. Retry-After: 60"))).toBeNull();
+  });
+
+  it("still matches quota wording that is scoped to billing or the plan", () => {
+    expect(
+      classifyProviderQuota(new Error("Quota exceeded for your billing period")),
+    ).not.toBeNull();
+    expect(classifyProviderQuota(new Error("Monthly quota exceeded on your plan"))).not.toBeNull();
+  });
+
+  // `new Date("2026-02-31")` silently rolls over to March 3 rather than being
+  // invalid, so an overflowed reset date would reach an operator as a confident
+  // wrong one.
+  it("rejects an overflowed calendar reset date instead of rolling it over", () => {
+    const q = classifyProviderQuota(
+      new Error(
+        "You have reached your specified API usage limits. You will regain access on 2026-02-31.",
+      ),
+    );
+    expect(q).not.toBeNull();
+    expect(q?.regainAccessAt).toBeNull();
+  });
+
   it("accepts a bare string message", () => {
     expect(
       classifyProviderQuota("You have reached your specified API usage limits."),
