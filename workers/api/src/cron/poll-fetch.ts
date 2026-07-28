@@ -91,6 +91,7 @@ import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { logSwallowed } from "../lib/log-swallowed.js";
 import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
+import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import {
@@ -1277,6 +1278,23 @@ async function classifyMarketingForReleases(
         }
       } catch (err) {
         failedCount++;
+        // A provider quota/billing shutoff surfaces here as an ordinary classify
+        // failure — same blind spot #2168 found in the Firecrawl path. Emit the
+        // dedicated event too so it's alertable/groupable across lanes, without
+        // changing the fail-open disposition below (still counts as `failed`,
+        // still lets the loop continue to the next item).
+        const quota = classifyProviderQuota(err);
+        if (quota) {
+          logEvent("error", {
+            component: "cron-poll-fetch",
+            event: "provider-quota-exhausted",
+            lane: "marketing-classifier",
+            provider: quota.provider,
+            regainAccessAt: quota.regainAccessAt?.toISOString() ?? null,
+            providerMessage: quota.message,
+            sourceSlug: source.slug,
+          });
+        }
         logEvent("warn", {
           component: "cron-poll-fetch",
           event: "marketing-filter-classify-failed",

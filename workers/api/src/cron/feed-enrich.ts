@@ -18,6 +18,7 @@ import {
 import { splitModelId } from "@releases/ai-internal/text-model";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
+import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { resolveArticleExtractModel, type TextModelEnv } from "../lib/text-model.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
@@ -74,6 +75,29 @@ export interface EnrichItem {
 /** Local alias for the canonical improvement bar (see `enrichmentFloor`). */
 const bar = enrichmentFloor;
 
+/**
+ * `extractArticleFn` (the AI cleanup step) can throw a provider quota/billing
+ * shutoff, which otherwise reads here as an ordinary cheap-fetch/render
+ * failure and is invisible to an operator — the same blind spot #2168 found
+ * in the Firecrawl path. Emit the dedicated event when the error classifies
+ * as one, alongside (not instead of) the existing failure log, so behavior
+ * is unchanged: the caller still falls through to render escalation / returns
+ * `no_improvement`.
+ */
+function logQuotaIfExhausted(log: typeof logEvent, url: string, err: unknown): void {
+  const quota = classifyProviderQuota(err);
+  if (!quota) return;
+  log("error", {
+    component: "feed-enrich",
+    event: "provider-quota-exhausted",
+    lane: "feed-enrich",
+    provider: quota.provider,
+    regainAccessAt: quota.regainAccessAt?.toISOString() ?? null,
+    providerMessage: quota.message,
+    url,
+  });
+}
+
 export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promise<EnrichResult> {
   // Chokepoint for both the forward path and the backfill route — skip before
   // spending a fetch + extract on URLs that won't yield a single article (see
@@ -107,6 +131,7 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
   } catch (err) {
     // Includes AbortError on timeout — logged like any cheap-path failure, then
     // we fall through to render escalation.
+    logQuotaIfExhausted(deps.logEvent, item.url, err);
     deps.logEvent("warn", {
       component: "feed-enrich",
       event: "cheap-fetch-failed",
@@ -128,6 +153,7 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
         }
       }
     } catch (err) {
+      logQuotaIfExhausted(deps.logEvent, item.url, err);
       deps.logEvent("warn", {
         component: "feed-enrich",
         event: "render-fetch-failed",
