@@ -27,6 +27,8 @@ import {
 } from "./session-error-display";
 import { formatStatusTimestamp } from "./status-shared";
 import { FetchActivityChart, type SelectedWindow } from "./fetch-activity-chart";
+import { useProviderHealth } from "./use-provider-health";
+import { ProviderHealthBanner, ProviderHealthTab } from "./provider-health-tab";
 
 interface SessionState {
   sessionId: string;
@@ -118,7 +120,16 @@ interface FetchTriggerResult {
   type?: string;
 }
 
-type Tab = "sessions" | "fetch-log" | "sources" | "stuck" | "orgs" | "cron" | "searches" | "batch";
+type Tab =
+  | "sessions"
+  | "fetch-log"
+  | "sources"
+  | "stuck"
+  | "health"
+  | "orgs"
+  | "cron"
+  | "searches"
+  | "batch";
 type DateRange = "today" | "week" | "month" | "all";
 
 type SourceSortField =
@@ -136,6 +147,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "fetch-log", label: "Fetch Log" },
   { value: "sources", label: "Sources" },
   { value: "stuck", label: "Stuck" },
+  { value: "health", label: "Health" },
   { value: "orgs", label: "Orgs" },
   { value: "cron", label: "Cron" },
   { value: "searches", label: "Searches" },
@@ -256,6 +268,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     },
     [pathname, router, searchParams],
   );
+  const providerHealth = useProviderHealth();
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
@@ -572,6 +585,11 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
       {/* Force-drain sweep summary (#518) */}
 
+      {/* Provider/ingest health — always visible regardless of tab; see the
+          #2168 postmortem this exists to prevent a repeat of. Renders nothing
+          when there's nothing to say. */}
+      <ProviderHealthBanner state={providerHealth} onOpenHealth={() => setTab("health")} />
+
       {/* Fetch activity chart — shared across tabs; fixed height so selection doesn't reflow */}
       <FetchActivityChart
         after={after}
@@ -597,6 +615,9 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
             >
               {label}
               {value === "sessions" && runningCount > 0 && ` (${runningCount})`}
+              {value === "health" &&
+                (providerHealth.data?.meta.overdueSources ?? 0) > 0 &&
+                ` (${providerHealth.data?.meta.overdueSources})`}
             </button>
           ))}
         </div>
@@ -665,6 +686,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       )}
       {tab === "sources" && <SourcesTable now={now} />}
       {tab === "stuck" && <StuckSourcesTab />}
+      {tab === "health" && <ProviderHealthTab state={providerHealth} />}
       {tab === "orgs" && <OrgsTable />}
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}

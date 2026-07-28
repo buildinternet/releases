@@ -8,10 +8,12 @@ import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type {
   OrgsRollupResponse,
   OrgsRollupRow,
+  ProviderHealthResponse,
   StuckSourcesResponse,
 } from "@buildinternet/releases-api-types";
 import { SOURCE_STALE_DAYS } from "../queries/sources.js";
 import { getStuckSources } from "../queries/stuck-sources.js";
+import { getProviderHealth } from "../queries/provider-health.js";
 import type { Env } from "../index.js";
 
 function parseOptionalInt(v: string | undefined): number | undefined {
@@ -203,6 +205,47 @@ adminSourcesRoutes.get("/admin/sources/stuck", async (c) => {
       window: result.window,
       minAttempts: result.minAttempts,
       includePaused: result.includePaused,
+    },
+  };
+  return c.json(response);
+});
+
+/**
+ * Provider/ingest health lead indicator (#2168 postmortem): sources whose
+ * last *successful check* (`sources.last_fetched_at`, written on every
+ * success including `no_change`) is older than `?overdueDays` (default 3),
+ * separate from `orgs-rollup`'s release-recency signal. See
+ * `queries/provider-health.ts` for why this distinction matters — a source
+ * can look fine by release date while the thing that checks it has stopped.
+ */
+adminSourcesRoutes.get("/admin/sources/health", async (c) => {
+  const db = getDb(c);
+  const url = new URL(c.req.url);
+  const pagination = parseListPagination(url.searchParams, {
+    defaultPageSize: 50,
+    maxPageSize: 500,
+  });
+  const { page, pageSize: limit, offset } = pagination;
+
+  const result = await getProviderHealth(db, {
+    overdueDays: parseOptionalInt(c.req.query("overdueDays")),
+    limit,
+    offset,
+  });
+
+  const envelope = buildListResponse(
+    result.items,
+    { page, pageSize: limit, offset },
+    result.totalItems,
+  );
+  const response: ProviderHealthResponse = {
+    ...envelope,
+    meta: {
+      overdueThresholdDays: result.overdueThresholdDays,
+      totalActiveSources: result.totalActiveSources,
+      overdueSources: result.overdueSources,
+      overdueOrgs: result.overdueOrgs,
+      totalOrgs: result.totalOrgs,
     },
   };
   return c.json(response);
