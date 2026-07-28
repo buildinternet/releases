@@ -1,6 +1,8 @@
 # Large-body extract: tool-use loop
 
-"Extraction" is the AI step that turns a fetched changelog body into structured release records. For most pages that's one model call with the whole body inlined — but a few sources publish megabyte-scale bodies where inlining everything costs $0.50+ per fetch to re-read years of unchanged history. This doc covers the two-tier fix: small bodies keep the one-shot `/v1/messages` call; large ones (>50K tokens) route through a multi-round tool-use loop where the model pulls only the body slices it needs. Any loop failure falls back hard to one-shot, so enabling the flag is strictly a cost optimization — it can never make an extraction fail where the legacy path would have succeeded.
+"Extraction" is the AI step that turns a fetched changelog body into structured release records. For most pages that's one model call with the whole body inlined — but a few sources publish megabyte-scale bodies where inlining everything costs $0.50+ per fetch to re-read years of unchanged history. This doc covers the two-tier fix: small bodies keep the one-shot call; large ones (>50K tokens) route through a multi-round tool-use loop where the model pulls only the body slices it needs. Any loop failure falls back hard to one-shot, so enabling the flag is strictly a cost optimization — it can never make an extraction fail where the legacy path would have succeeded.
+
+Both tiers route through the AI SDK today (issue #2166): OpenRouter (`EXTRACT_MODEL`) when the `openrouter-enabled` flag + model + key resolve, otherwise Anthropic via the AI SDK — never a direct `@anthropic-ai/sdk` call. This matters because the one-shot tier handles the large majority of extractions; before #2166 it was hardwired to call the Anthropic Messages API directly regardless of `EXTRACT_MODEL`, so the (much rarer) tool-loop tier was the only one OpenRouter actually governed.
 
 ## Why
 
@@ -15,18 +17,23 @@ Empirical distribution (90 days of `usage_log.operation="agent-ingest"` and `"in
 ```text
 extractFromBody(body, ...)
   │
-  ├── useToolLoop && approxTokens > 50K ──► extractWithToolsAiSdk(body, ...)  [default]
+  ├── useToolLoop && approxTokens > 50K ──► extractWithToolsAiSdk(body, ...)  [aiSdkModel set]
   │       │                                 extractWithTools(body, ...)       [no aiSdkModel]
   │       │                                 (multi-round tool-use loop)
   │       ├── success  ─► return entries
   │       └── failure  ─► fall back to runOneShot
   │
-  └── else ─► runOneShot(body, ...)    (legacy inline extraction — unchanged)
+  └── else ─► runOneShot(body, ...)
+                │
+                ├── runOneShotAiSdk(body, ...)   [oneShotAiSdkModel set]
+                └── direct @anthropic-ai/sdk call [no oneShotAiSdkModel — rare]
 ```
 
-When `ExtractDeps.aiSdkModel` is set (the normal worker path — OpenRouter when `openrouter-enabled` + `EXTRACT_MODEL` + key are configured, otherwise Anthropic via `buildLaneAnthropicModel`), the tool-loop routes through `extract-with-tools-aisdk.ts`. The hand-rolled Anthropic SDK loop in `extract-with-tools.ts` remains only as a fallback when no AI-SDK model resolves.
+Both tiers resolve their AI-SDK model the SAME way (`resolveToolLoopAiSdkModel`, `packages/adapters/src/extract/resolve-tool-loop-model.ts`): OpenRouter when `openrouter-enabled` + `EXTRACT_MODEL` + key are configured, otherwise Anthropic via `buildLaneAnthropicModel`. They're resolved SEPARATELY (`ExtractDeps.aiSdkModel` for the tool-loop, `ExtractDeps.oneShotAiSdkModel` for one-shot) because each tier falls back to a different Anthropic model when OpenRouter is unusable — Sonnet-class `agentModel` for the tool-loop (a multi-turn agentic loop, where Haiku degrades), Haiku-class `oneShotModel` for one-shot (a single forced-tool-call, where Haiku is reliable at ~⅓ the cost). Both branches share the same `EXTRACT_MODEL` / OpenRouter key when that branch is usable.
 
-The tier gate requires both `useToolLoop === true` (set by the caller from `env.EXTRACT_TOOLLOOP_ENABLED` or the per-source override `source.metadata.extractStrategy === "toolloop"`) AND the approximate token count exceeding `LARGE_BODY_TOKEN_THRESHOLD = 50_000`. Below the threshold, every body keeps taking the legacy path regardless of the flag.
+When `ExtractDeps.aiSdkModel` is set, the tool-loop routes through `extract-with-tools-aisdk.ts`; the hand-rolled Anthropic SDK loop in `extract-with-tools.ts` remains only as a fallback when no AI-SDK model resolves at all (no Anthropic key configured — effectively never in a working deployment). Symmetrically, when `ExtractDeps.oneShotAiSdkModel` is set, one-shot routes through `extract-oneshot-aisdk.ts`; the direct-`@anthropic-ai/sdk` call in `extract-from-body.ts`'s `runOneShot` is the same last-resort fallback.
+
+The tool-loop tier gate requires both `useToolLoop === true` (set by the caller from `env.EXTRACT_TOOLLOOP_ENABLED` or the per-source override `source.metadata.extractStrategy === "toolloop"`) AND the approximate token count exceeding `LARGE_BODY_TOKEN_THRESHOLD = 50_000`. Below the threshold, or when `useToolLoop` is unset, the body takes the one-shot tier — which is now equally AI-SDK-routed, not a separate "legacy" path.
 
 ## Tool-loop mechanics
 
@@ -95,6 +102,8 @@ Rollups come from two places, neither of them new:
 
 Structured stderr logs (`@buildinternet/releases-lib/logger`) emit one `info` line per extraction with mode, rounds, tool chars, cache read/write tokens, and entry count; one `warn` on fallback with the reason.
 
+- **`ai_usage` log event (one-shot tier only, issue #2166)** — the same `{ component: "ai", event: "ai_usage", lane, provider, model, input, output, cacheCreate, cacheRead }` shape the other AI-SDK lanes emit (`workers/api/src/lib/text-model.ts`'s `withLaneUsageLogging`), tagged `lane: "extract-oneshot"`. This is what makes the one-shot tier's real routing (OpenRouter vs. Anthropic fallback) visible in Axiom — the `usage_log` D1 columns above record token counts but not which provider served them.
+
 ## Rollout
 
 `EXTRACT_TOOLLOOP_ENABLED=false` by default, so flipping the branch on main is a no-op until the flag is set in a worker env. Two knobs for progressive rollout:
@@ -106,9 +115,10 @@ The AI Gateway dashboard surfaces cost/token deltas per call; SQL rollups on `us
 
 ## Files
 
-- `packages/adapters/src/extract/extract-from-body.ts` — tier gate + `runOneShot` helper
-- `packages/adapters/src/extract/extract-with-tools-aisdk.ts` — production loop (AI SDK; OpenRouter or Anthropic)
-- `packages/adapters/src/extract/resolve-tool-loop-model.ts` — shared OpenRouter → Anthropic model resolver (`resolveToolLoopAiSdkModel`)
+- `packages/adapters/src/extract/extract-from-body.ts` — tier gate + `runOneShot` helper (branches to the AI-SDK one-shot path or the direct-SDK fallback)
+- `packages/adapters/src/extract/extract-oneshot-aisdk.ts` — one-shot AI-SDK path (issue #2166; OpenRouter or Anthropic, single forced tool call)
+- `packages/adapters/src/extract/extract-with-tools-aisdk.ts` — tool-loop production loop (AI SDK; OpenRouter or Anthropic)
+- `packages/adapters/src/extract/resolve-tool-loop-model.ts` — shared OpenRouter → Anthropic model resolver (`resolveToolLoopAiSdkModel`), used by BOTH tiers with a different Anthropic fallback each
 - `packages/adapters/src/extract/extract-with-tools.ts` — legacy Anthropic SDK loop + `LoopFallbackError`
 - `packages/adapters/src/extract/preview-builder.ts` — JSON schema sketch (strict + partial) and HTML preview
 - `packages/adapters/src/extract/tool-handlers.ts` — `handleGetSlice`, `handleQueryJson`

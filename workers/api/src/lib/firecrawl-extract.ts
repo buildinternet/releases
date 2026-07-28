@@ -33,13 +33,18 @@ export interface FirecrawlExtractDeps {
    */
   logUsageFn?: (entry: FirecrawlExtractUsageEntry) => Promise<void>;
   /**
-   * OpenRouter extraction model (issue #1536), resolved by the caller (which has
-   * `env`) via `resolveExtractAiSdkModel`. Inert on this path today: firecrawl
+   * OpenRouter/Anthropic-AI-SDK extraction model (issue #1536 / #2166), resolved
+   * by the caller (which has `env`) via `resolveExtractAiSdkModel`. Firecrawl
    * extraction never opts into the tool-loop (`useToolLoop` is unset), so it
-   * always takes the one-shot Anthropic tier — threaded for consistency + future.
+   * always takes the one-shot tier — this is what lets `EXTRACT_MODEL` govern
+   * it (threaded into `ExtractDeps.oneShotAiSdkModel`, not `aiSdkModel`, since
+   * that field's Anthropic fallback is scoped to the one-shot Haiku model
+   * (`FIRECRAWL_EXTRACT_MODEL` / `BACKFILL_EXTRACT_MODEL`), not the tool-loop's
+   * Sonnet-class `agentModel`).
    */
-  aiSdkModel?: unknown;
-  aiSdkModelLabel?: string;
+  oneShotAiSdkModel?: unknown;
+  oneShotAiSdkModelLabel?: string;
+  oneShotAiSdkProvider?: "openrouter" | "anthropic";
 }
 
 /** Token-usage subset every extraction result exposes — the bits we log. */
@@ -121,8 +126,12 @@ export async function extractFirecrawlMarkdown(
     logger: deps.logger,
     cloudflare: null,
     extractToolLoopEnabled: false,
-    ...(deps.aiSdkModel
-      ? { aiSdkModel: deps.aiSdkModel, aiSdkModelLabel: deps.aiSdkModelLabel }
+    ...(deps.oneShotAiSdkModel
+      ? {
+          oneShotAiSdkModel: deps.oneShotAiSdkModel,
+          oneShotAiSdkModelLabel: deps.oneShotAiSdkModelLabel,
+          oneShotAiSdkProvider: deps.oneShotAiSdkProvider,
+        }
       : {}),
     repo: {
       peekContentHash: async () => false,
@@ -256,8 +265,12 @@ export async function extractChangelogAllWindows(
     logger: deps.logger,
     cloudflare: null,
     extractToolLoopEnabled: false,
-    ...(deps.aiSdkModel
-      ? { aiSdkModel: deps.aiSdkModel, aiSdkModelLabel: deps.aiSdkModelLabel }
+    ...(deps.oneShotAiSdkModel
+      ? {
+          oneShotAiSdkModel: deps.oneShotAiSdkModel,
+          oneShotAiSdkModelLabel: deps.oneShotAiSdkModelLabel,
+          oneShotAiSdkProvider: deps.oneShotAiSdkProvider,
+        }
       : {}),
     repo: {
       peekContentHash: async () => false,

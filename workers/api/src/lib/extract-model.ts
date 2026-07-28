@@ -4,7 +4,10 @@
  * otherwise Anthropic via `buildLaneAnthropicModel` so `extractFromBody` always
  * routes the tool-loop through `extractWithToolsAiSdk`.
  */
-import { resolveToolLoopAiSdkModel } from "@releases/adapters/extract";
+import {
+  resolveToolLoopAiSdkModel,
+  type ResolvedExtractAiSdkModel,
+} from "@releases/adapters/extract";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
@@ -18,11 +21,16 @@ export interface ExtractModelEnv extends AnthropicEnv {
   EXTRACT_MODEL?: string;
 }
 
-/** @returns `{ model, label }` for the tool-loop, or `undefined` when no key is usable. */
+/**
+ * @returns `{ model, label, provider }`, or `undefined` when no key is usable.
+ * Used for both the tool-loop tier (Sonnet-class `anthropicModel` fallback) and
+ * the one-shot tier (Haiku-class fallback, issue #2166) — callers just pass a
+ * different `anthropicModel`.
+ */
 export async function resolveExtractAiSdkModel(
   env: ExtractModelEnv,
   anthropicModel: string,
-): Promise<{ model: unknown; label: string } | undefined> {
+): Promise<ResolvedExtractAiSdkModel | undefined> {
   let openrouterEnabled = false;
   let openRouterApiKey: string | null = null;
   try {

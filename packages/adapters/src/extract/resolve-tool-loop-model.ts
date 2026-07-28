@@ -1,6 +1,10 @@
 /**
- * Shared OpenRouter → Anthropic AI-SDK resolver for the large-body extraction
- * tool-loop. Callers resolve flags/secrets, then pass plain values here.
+ * Shared OpenRouter → Anthropic AI-SDK resolver for extraction. Originally
+ * built for the large-body tool-loop, it's also the seam the one-shot tier
+ * resolves through (issue #2166) — callers just pass a different
+ * `anthropicModel` fallback (Sonnet-class for the tool-loop, Haiku-class for
+ * one-shot) since both tiers share the same `EXTRACT_MODEL` / OpenRouter key.
+ * Callers resolve flags/secrets, then pass plain values here.
  */
 
 import { buildLaneAnthropicModel } from "../lane-model.js";
@@ -20,10 +24,18 @@ export interface ResolveToolLoopAiSdkModelInput {
   logComponent: string;
 }
 
-/** @returns AI-SDK `{ model, label }` for the tool-loop, or `undefined` when no key is usable. */
+export interface ResolvedExtractAiSdkModel {
+  model: unknown;
+  label: string;
+  /** Which branch resolved — lets callers emit `ai_usage` telemetry without
+   *  re-deriving the provider from the label's shape. */
+  provider: "openrouter" | "anthropic";
+}
+
+/** @returns AI-SDK `{ model, label, provider }`, or `undefined` when no key is usable. */
 export function resolveToolLoopAiSdkModel(
   input: ResolveToolLoopAiSdkModelInput,
-): { model: unknown; label: string } | undefined {
+): ResolvedExtractAiSdkModel | undefined {
   if (input.openrouterEnabled) {
     const model = input.extractModel?.trim();
     if (!model) {
@@ -41,6 +53,7 @@ export function resolveToolLoopAiSdkModel(
           ...(baseURL ? { baseURL } : {}),
         }),
         label: model,
+        provider: "openrouter",
       };
     } else {
       logEvent("warn", {
@@ -61,5 +74,6 @@ export function resolveToolLoopAiSdkModel(
       ...(input.aiGatewayToken ? { gatewayToken: input.aiGatewayToken } : {}),
     }),
     label: input.anthropicModel,
+    provider: "anthropic",
   };
 }

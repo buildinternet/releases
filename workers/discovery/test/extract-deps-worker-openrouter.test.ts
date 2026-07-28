@@ -112,3 +112,81 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     expect(deps.aiSdkModelLabel).toBeUndefined();
   });
 });
+
+/**
+ * The one-shot tier's twin resolution (issue #2166) — same OpenRouter
+ * `extractModel` / key, but falls back to the Haiku-class `oneShotModel`
+ * (not the Sonnet-class `agentModel` the tool-loop resolution above falls
+ * back to). Surfaces on `ExtractDeps.oneShotAiSdkModel` / `oneShotAiSdkModelLabel`
+ * / `oneShotAiSdkProvider`.
+ */
+describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps)", () => {
+  it("routes to OpenRouter when the flag is on, a model is set, and the key resolves", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        openrouterEnabled: true,
+        extractModel: "deepseek/deepseek-v4-pro",
+        openRouterApiKey: resolvingKey,
+      }),
+    );
+
+    expect(deps.oneShotAiSdkModel).toBeDefined();
+    expect(deps.oneShotAiSdkModelLabel).toBe("deepseek/deepseek-v4-pro");
+    expect(deps.oneShotAiSdkProvider).toBe("openrouter");
+  });
+
+  it("falls back to the Haiku-class oneShotModel default when openrouterEnabled is false", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        openrouterEnabled: false,
+        extractModel: "deepseek/deepseek-v4-pro",
+        openRouterApiKey: resolvingKey,
+      }),
+    );
+
+    expect(deps.oneShotAiSdkModel).toBeDefined();
+    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-4-5-20251001");
+    expect(deps.oneShotAiSdkProvider).toBe("anthropic");
+    // And the tool-loop resolution must stay on its OWN (Sonnet) fallback —
+    // the two tiers must never collapse onto the same Anthropic fallback model.
+    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5");
+  });
+
+  it("falls back to the custom oneShotModel when set, not the default", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        openrouterEnabled: false,
+        oneShotModel: "claude-custom-oneshot",
+      }),
+    );
+
+    expect(deps.oneShotAiSdkModel).toBeDefined();
+    expect(deps.oneShotAiSdkModelLabel).toBe("claude-custom-oneshot");
+  });
+
+  it("falls back to Anthropic when the OpenRouter key does not resolve", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        openrouterEnabled: true,
+        extractModel: "deepseek/deepseek-v4-pro",
+        openRouterApiKey: nullKey,
+      }),
+    );
+
+    expect(deps.oneShotAiSdkModel).toBeDefined();
+    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-4-5-20251001");
+    expect(deps.oneShotAiSdkProvider).toBe("anthropic");
+  });
+
+  it("returns no oneShotAiSdkModel when no Anthropic key is configured", async () => {
+    const deps = await buildWorkerExtractDeps(
+      baseEnv({
+        anthropicApiKey: "",
+        openrouterEnabled: false,
+      }),
+    );
+
+    expect(deps.oneShotAiSdkModel).toBeUndefined();
+    expect(deps.oneShotAiSdkModelLabel).toBeUndefined();
+  });
+});

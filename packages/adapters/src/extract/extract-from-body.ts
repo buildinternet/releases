@@ -6,8 +6,10 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
+import type { LanguageModel } from "ai";
 import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 import type { UsageExtractionMode, UsageFallbackReason } from "@buildinternet/releases-core/schema";
+import { logEvent } from "@releases/lib/log-event";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
 import {
   extractReleasesToolFull,
@@ -65,11 +67,7 @@ export interface ExtractFromBodyResult {
 
 const MAX_BODY_CHARS = 400_000;
 
-async function runOneShot(
-  opts: ExtractFromBodyOpts,
-  deps: ExtractDeps,
-  approxTokens: number,
-): Promise<{
+interface OneShotResult {
   entries: ExtractedEntry[];
   totalInput: number;
   totalOutput: number;
@@ -77,11 +75,14 @@ async function runOneShot(
   cacheReadTokens: number;
   cacheWriteTokens: number;
   modelUsed: string;
-}> {
-  const { anthropicClient, agentModel, logger } = deps;
-  // Single forced-tool-call extraction — Haiku-class is reliable and ~⅓ the
-  // cost here. Falls back to agentModel when oneShotModel is unset.
-  const model = deps.oneShotModel ?? agentModel;
+}
+
+async function runOneShot(
+  opts: ExtractFromBodyOpts,
+  deps: ExtractDeps,
+  approxTokens: number,
+): Promise<OneShotResult> {
+  const { agentModel, logger } = deps;
 
   const content =
     opts.body.length > MAX_BODY_CHARS
@@ -95,25 +96,70 @@ async function runOneShot(
       `Body is ~${approxTokens.toLocaleString()} tokens — applying ${isHuge ? "huge" : "large"}-body guardrails`,
     );
   }
+  const maxOutputTokens = isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS;
+  const staticSystem = withGuidance(opts.systemPrompt, opts.guidance);
+  const guardrail = isLarge ? buildBodyGuardrail(approxTokens) : undefined;
+
+  // AI-SDK lane (issue #2166): when the caller resolved an OpenRouter/Anthropic
+  // AI-SDK model for the one-shot tier (`resolveToolLoopAiSdkModel` with the
+  // Haiku-class fallback — see extract-deps-worker.ts), route through it
+  // instead of calling `anthropicClient` directly. This is what lets
+  // `EXTRACT_MODEL` govern the one-shot tier — the tier that handles the large
+  // majority of extractions — not just the large-body tool-loop. Falls open to
+  // the legacy direct-SDK call below when unset, which only happens when NO
+  // Anthropic key resolved at all (resolveToolLoopAiSdkModel itself already
+  // falls open OpenRouter → Anthropic before returning `undefined`).
+  if (deps.oneShotAiSdkModel) {
+    const label = deps.oneShotAiSdkModelLabel ?? deps.oneShotModel ?? agentModel;
+    const provider = deps.oneShotAiSdkProvider ?? "anthropic";
+    const { runOneShotAiSdk } = await import("./extract-oneshot-aisdk.js");
+    const result = await runOneShotAiSdk(
+      {
+        body: content,
+        systemPrompt: staticSystem,
+        guardrail,
+        userMessage: opts.userMessage,
+        maxOutputTokens,
+        preserveBody: opts.preserveBody,
+      },
+      { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
+    );
+    // Mirrors the other lanes' `ai_usage` event (workers/api/src/lib/text-model.ts's
+    // `withLaneUsageLogging`) so Axiom shows the one-shot tier's routing —
+    // previously invisible since extract only logged to the `usage_log` D1 table.
+    logEvent("info", {
+      component: "ai",
+      event: "ai_usage",
+      lane: "extract-oneshot",
+      provider,
+      model: label,
+      input: result.totalInput,
+      output: result.totalOutput,
+      cacheCreate: result.cacheWriteTokens,
+      cacheRead: result.cacheReadTokens,
+    });
+    return { ...result, modelUsed: label };
+  }
+
+  // Legacy path: direct Anthropic SDK call. Single forced-tool-call extraction
+  // — Haiku-class is reliable and ~⅓ the cost here. Falls back to agentModel
+  // when oneShotModel is unset.
+  const model = deps.oneShotModel ?? agentModel;
 
   const systemBlocks: Anthropic.TextBlockParam[] = [
-    {
-      type: "text",
-      text: withGuidance(opts.systemPrompt, opts.guidance),
-      cache_control: { type: "ephemeral" },
-    },
+    { type: "text", text: staticSystem, cache_control: { type: "ephemeral" } },
   ];
-  if (isLarge) {
-    systemBlocks.push({ type: "text", text: buildBodyGuardrail(approxTokens) });
+  if (guardrail) {
+    systemBlocks.push({ type: "text", text: guardrail });
   }
 
   // Both tools are named `extract_releases`, so tool_choice + response parsing
   // are identical; the crawl variant only swaps the `content` field to demand a
   // verbatim body, matching a body-preserving system prompt.
-  const tool = opts.preserveBody ? extractReleasesToolCrawl : extractReleasesToolFull;
-  const stream = anthropicClient.messages.stream({
+  const toolDef = opts.preserveBody ? extractReleasesToolCrawl : extractReleasesToolFull;
+  const stream = deps.anthropicClient.messages.stream({
     model,
-    max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
+    max_tokens: maxOutputTokens,
     // Deterministic parse on models that still accept it (Haiku one-shot,
     // Sonnet 4.6); omitted on Sonnet 5 / Opus 4.7+ / Fable, which 400 on a
     // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
@@ -122,7 +168,7 @@ async function runOneShot(
         { temperature: EXTRACTION_TEMPERATURE }
       : {}),
     system: systemBlocks,
-    tools: [tool],
+    tools: [toolDef],
     tool_choice: { type: "tool", name: "extract_releases" },
     messages: [{ role: "user", content: `${opts.userMessage}\n\n${content}` }],
   });
@@ -143,33 +189,12 @@ async function runOneShot(
   const toolBlock = response.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
   );
-  if (!toolBlock) {
-    return {
-      entries: [],
-      totalInput,
-      totalOutput,
-      hitMaxTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      modelUsed: model,
-    };
-  }
-
-  const input = toolBlock.input as Record<string, unknown>;
-  if (!input || !Array.isArray(input.releases)) {
-    return {
-      entries: [],
-      totalInput,
-      totalOutput,
-      hitMaxTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      modelUsed: model,
-    };
-  }
+  const input = toolBlock?.input as Record<string, unknown> | undefined;
+  const entries =
+    input && Array.isArray(input.releases) ? (input.releases as ExtractedEntry[]) : [];
 
   return {
-    entries: input.releases as ExtractedEntry[],
+    entries,
     totalInput,
     totalOutput,
     hitMaxTokens,

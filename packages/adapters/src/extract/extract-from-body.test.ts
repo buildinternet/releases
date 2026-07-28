@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import { extractFromBody } from "./extract-from-body.js";
+import { anthropicSpikeModel } from "./extract-with-tools-aisdk.js";
 import { mockAnthropicClient } from "./test-helpers/anthropic-mock.js";
 import type { ExtractDeps, ExtractLogger } from "./types.js";
 
@@ -473,5 +474,99 @@ describe("extractFromBody — fallback paths", () => {
     expect(result.toolChars).toBeNull();
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]!.title).toBe("fallback-entry");
+  });
+});
+
+describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
+  test("routes through the AI-SDK seam when oneShotAiSdkModel is set, bypassing anthropicClient", async () => {
+    // A legacy-path client that throws if hit — asserting it's never called is
+    // the proof the AI-SDK branch took over instead of falling through.
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: (() => {
+          throw new Error("legacy Anthropic-direct path should not run");
+        }) as never,
+      } as never,
+    };
+
+    const aiSdkRequests: Array<{ model: string }> = [];
+    const mockFetch = (async (_url: string, init: RequestInit) => {
+      aiSdkRequests.push(JSON.parse(init.body as string) as { model: string });
+      return new Response(
+        JSON.stringify({
+          id: "msg_aisdk",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4-5",
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          content: [
+            {
+              type: "tool_use",
+              id: "tu_1",
+              name: "extract_releases",
+              input: {
+                releases: [{ title: "aisdk-entry", content: "via aisdk", isBreaking: false }],
+              },
+            },
+          ],
+          usage: {
+            input_tokens: 42,
+            output_tokens: 7,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    const model = anthropicSpikeModel({
+      apiKey: "sk-test",
+      model: "claude-haiku-4-5",
+      fetch: mockFetch,
+    });
+
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client, {
+        oneShotAiSdkModel: model,
+        oneShotAiSdkModelLabel: "claude-haiku-4-5",
+        oneShotAiSdkProvider: "anthropic",
+      }),
+    );
+
+    expect(aiSdkRequests.length).toBeGreaterThan(0);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("aisdk-entry");
+    expect(result.modelUsed).toBe("claude-haiku-4-5");
+    expect(result.mode).toBe("oneshot");
+  });
+
+  test("falls back to the legacy Anthropic-direct path when oneShotAiSdkModel is unset", async () => {
+    const params: Anthropic.MessageCreateParams[] = [];
+    const client = capturingClient(params);
+
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client, { oneShotModel: "claude-haiku-4-5-20251001" }),
+    );
+
+    expect(params).toHaveLength(1);
+    expect(result.modelUsed).toBe("claude-haiku-4-5-20251001");
   });
 });
