@@ -113,31 +113,11 @@ export async function runOneShotAiSdk(
   }
 
   const terminal = result.toolCalls.find((c) => c.toolName === "extract_releases");
-  if (!terminal) {
-    return {
-      entries: [],
-      totalInput,
-      totalOutput,
-      hitMaxTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-    };
-  }
-
-  const input = terminal.input as { releases?: unknown };
-  if (!Array.isArray(input?.releases)) {
-    return {
-      entries: [],
-      totalInput,
-      totalOutput,
-      hitMaxTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-    };
-  }
+  const input = terminal?.input as { releases?: unknown } | undefined;
+  const entries = Array.isArray(input?.releases) ? (input.releases as ExtractedEntry[]) : [];
 
   return {
-    entries: input.releases as ExtractedEntry[],
+    entries,
     totalInput,
     totalOutput,
     hitMaxTokens,
