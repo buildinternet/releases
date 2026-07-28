@@ -27,6 +27,14 @@ function buildEnv(): PollAndFetchWorkflowEnv {
     FEED_THIN_CHARS: "600",
     CLOUDFLARE_ACCOUNT_ID: secret("acct"),
     CLOUDFLARE_API_TOKEN: secret("cf-token"),
+    ENVIRONMENT: "production",
+    OPENROUTER_ENABLED: "true",
+    OPENROUTER_API_KEY: secret("sk-or-test"),
+    OPENROUTER_BASE_URL: "https://openrouter.example/api/v1",
+    MARKETING_CLASSIFIER_MODEL: "google/gemini-2.5-flash-lite",
+    FEED_ENRICH_MODEL: "deepseek/deepseek-v4-flash",
+    SUMMARIZE_MODEL: "deepseek/deepseek-v4-flash",
+    EXTRACT_MODEL: "deepseek/deepseek-v4-pro",
   } as unknown as PollAndFetchWorkflowEnv;
 }
 
@@ -51,5 +59,27 @@ describe("resolveFetchEnv (poll-and-fetch workflow)", () => {
     const fetchEnv = await resolveFetchEnv(env);
     expect(fetchEnv.CLOUDFLARE_ACCOUNT_ID).toBe(env.CLOUDFLARE_ACCOUNT_ID);
     expect(fetchEnv.CLOUDFLARE_API_TOKEN).toBe(env.CLOUDFLARE_API_TOKEN);
+  });
+
+  // The 2026-07-23 outage: these were forwarded nowhere, so `resolveTextModel`
+  // read `orModel === undefined` — its "this lane is off" signal — and silently
+  // routed the marketing classifier + feed-enrich extractor to Anthropic Haiku.
+  // The fall-through logs nothing (an empty model var is the intended off
+  // switch), so it stayed invisible until the Anthropic spend cap tripped.
+  it("forwards the OpenRouter lane config so the cheap lanes don't fall back to Anthropic", async () => {
+    const env = buildEnv();
+    const fetchEnv = await resolveFetchEnv(env);
+    expect(fetchEnv.OPENROUTER_API_KEY).toBe(env.OPENROUTER_API_KEY);
+    expect(fetchEnv.OPENROUTER_ENABLED).toBe("true");
+    expect(fetchEnv.OPENROUTER_BASE_URL).toBe("https://openrouter.example/api/v1");
+    expect(fetchEnv.ENVIRONMENT).toBe("production");
+  });
+
+  it("forwards every per-lane OpenRouter model var", async () => {
+    const fetchEnv = await resolveFetchEnv(buildEnv());
+    expect(fetchEnv.MARKETING_CLASSIFIER_MODEL).toBe("google/gemini-2.5-flash-lite");
+    expect(fetchEnv.FEED_ENRICH_MODEL).toBe("deepseek/deepseek-v4-flash");
+    expect(fetchEnv.SUMMARIZE_MODEL).toBe("deepseek/deepseek-v4-flash");
+    expect(fetchEnv.EXTRACT_MODEL).toBe("deepseek/deepseek-v4-pro");
   });
 });

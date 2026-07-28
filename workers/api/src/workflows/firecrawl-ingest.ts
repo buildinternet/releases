@@ -26,6 +26,8 @@ import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
+import { saveRawSnapshot } from "../lib/raw-snapshot.js";
+import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { ingestRawReleases, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
@@ -101,6 +103,9 @@ export interface FirecrawlIngestParams {
 
 export type FirecrawlIngestEnv = PollAndFetchWorkflowEnv & {
   FIRECRAWL_API_KEY?: { get(): Promise<string> };
+  /** Raw-snapshot bucket. Unbound → the pre-extract capture below is skipped
+   *  (logged), and an extraction outage becomes unrecoverable data loss again. */
+  RAW_SNAPSHOTS?: R2Bucket;
   /** TEST-ONLY: inject a pre-built FirecrawlClient instead of constructing one. */
   _firecrawlClientOverride?: FirecrawlClient;
   /** TEST-ONLY: inject an extraction function instead of calling the LLM.
@@ -148,6 +153,10 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
     // failure would only show in the CF Workflows dashboard. Wrap the pipeline
     // so an outage (out-of-credits, auth, 5xx) is recorded in the source's own
     // health. See resilience option B.
+    // Hoisted so the failure handler below can point an operator at the stored
+    // body to replay from — that pointer is the whole value of the snapshot.
+    let snapshot: { r2Key: string; contentHash: string } | null = null;
+
     try {
       // ── Step 2: resolve body (diff delta, else scrape the full page) ─────────
       // Named "resolve-body", not "scrape": on a `changed` event we return the
@@ -170,6 +179,59 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
         const md = await client.scrapeOnce(url, { proxy: sourceMeta.firecrawl?.proxy });
         if (!md) throw new Error(`empty scrape result for ${url}`);
         return md;
+      });
+
+      // ── Step 2b: capture-snapshot ───────────────────────────────────────────
+      // Persist the resolved body BEFORE extraction can fail. A `changed` event
+      // carries a hunkless whole-document diff that exists nowhere else: Firecrawl
+      // monitors diff against THEIR stored page state, not ours, so once this
+      // instance dies the next check diffs against the already-changed page and
+      // the delta is gone for good. That is exactly how the 2026-07-23 Anthropic
+      // spend-cap outage turned 6 days of extraction failures into lost releases.
+      // Snapshotting first downgrades an extraction outage from data loss to a
+      // replay: `POST /v1/workflows/reextract-source { sourceId, snapshotId }`.
+      //
+      // Deliberately NOT gated on `raw-snapshot-capture-enabled` — that flag paces
+      // steady-state scrape-capture volume, whereas this is loss prevention for a
+      // payload with no second copy anywhere. Best-effort by construction: a
+      // snapshot failure must never fail an otherwise-healthy ingest, so the step
+      // swallows its own errors rather than propagating them.
+      snapshot = await step.do("capture-snapshot", NO_RETRY, async () => {
+        if (!env.RAW_SNAPSHOTS) {
+          logEvent("warn", {
+            component: "firecrawl-ingest-workflow",
+            event: "snapshot-skipped",
+            reason: "RAW_SNAPSHOTS unbound",
+            sourceId,
+            checkId,
+          });
+          return null;
+        }
+        try {
+          const snap = await saveRawSnapshot(
+            { R2: env.RAW_SNAPSHOTS, db },
+            { sourceId, body: markdown, format: "markdown" },
+          );
+          logEvent("info", {
+            component: "firecrawl-ingest-workflow",
+            event: "snapshot-captured",
+            sourceId,
+            checkId,
+            r2Key: snap.r2Key,
+            bytes: snap.bytes,
+            created: snap.created,
+          });
+          return { r2Key: snap.r2Key, contentHash: snap.contentHash };
+        } catch (err) {
+          logEvent("warn", {
+            component: "firecrawl-ingest-workflow",
+            event: "snapshot-failed",
+            sourceId,
+            checkId,
+            err,
+          });
+          return null;
+        }
       });
 
       // ── Step 3: extract ─────────────────────────────────────────────────────
@@ -295,6 +357,23 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
       try {
         await step.do("record-failure", NO_RETRY, async () => {
           const fcStatus = err instanceof FirecrawlError ? err.status : null;
+          // An AI-provider quota shutoff is not a transient ingest failure: it
+          // will fail identically for every source until a human raises the cap
+          // or the reset date passes. Give it its own event so it is alertable
+          // and lands in the operator digest, rather than hiding in the general
+          // `ingest-failed` stream the way it did for six days on 2026-07-23.
+          const quota = classifyProviderQuota(err);
+          if (quota) {
+            logEvent("error", {
+              component: "firecrawl-ingest-workflow",
+              event: "provider-quota-exhausted",
+              provider: quota.provider,
+              regainAccessAt: quota.regainAccessAt?.toISOString() ?? null,
+              providerMessage: quota.message,
+              sourceId,
+              checkId,
+            });
+          }
           const eventName =
             fcStatus === 402
               ? "credits-exhausted"
@@ -307,6 +386,11 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             sourceId,
             checkId,
             firecrawlStatus: fcStatus,
+            // Replay pointer: when the body was captured, this failure is
+            // recoverable via `POST /v1/workflows/reextract-source` instead of
+            // being a permanent hole. Null means the delta really is gone.
+            snapshotR2Key: snapshot?.r2Key ?? null,
+            recoverable: snapshot != null,
             err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
           });
           const [row] = await db

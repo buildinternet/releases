@@ -9,11 +9,20 @@
  * enrichment + the marketing classifier in production — every forwarded field is
  * optional on `FetchOneEnv`, so the omission type-checked. Consolidating removes
  * the drift surface: a new forwarded binding is added in one place.
+ *
+ * It happened a second time: the OpenRouter lane vars (#1536, added 2026-07-09)
+ * were forwarded nowhere, so `resolveTextModel` saw `orModel === undefined` and
+ * fell through to Anthropic Haiku on every marketing-classifier / feed-enrich
+ * call for three weeks. That fail-open is deliberately SILENT (an empty model var
+ * is the per-lane off switch), so the only symptom was an Anthropic bill — until
+ * the account hit its spend cap on 2026-07-23 and both lanes started erroring.
+ * The `AiCriticalFetchKeys` guard below now covers the OpenRouter set too.
  */
 import { getSecret } from "@releases/lib/secrets";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
 import type { FetchOneEnv } from "../cron/poll-fetch.js";
 import type { AnthropicEnv } from "../lib/anthropic.js";
+import type { TextModelEnv } from "../lib/text-model.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 
 /**
@@ -22,7 +31,7 @@ import type { InvalidationEnv } from "../lib/latest-cache.js";
  * Every field is optional, so any concrete workflow env (PollAndFetchWorkflowEnv,
  * OnboardSourceWorkflowEnv, …) is structurally assignable.
  */
-export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv {
+export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv, TextModelEnv {
   GITHUB_TOKEN?: { get(): Promise<string> };
   RELEASES_INDEX?: unknown;
   CHANGELOG_CHUNKS_INDEX?: unknown;
@@ -65,6 +74,13 @@ type AiCriticalFetchKeys =
   | "ANTHROPIC_API_KEY"
   | "ANTHROPIC_BASE_URL"
   | "AI_GATEWAY_TOKEN"
+  | "OPENROUTER_ENABLED"
+  | "OPENROUTER_API_KEY"
+  | "OPENROUTER_BASE_URL"
+  | "MARKETING_CLASSIFIER_MODEL"
+  | "FEED_ENRICH_MODEL"
+  | "SUMMARIZE_MODEL"
+  | "EXTRACT_MODEL"
   | "FEED_ENRICH_ENABLED"
   | "FEED_ENRICH_MAX_PER_FIRE"
   | "FEED_THIN_CHARS"
@@ -121,6 +137,17 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
     ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
     AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
+    // OpenRouter lane config. Without these `resolveTextModel` sees an undefined
+    // model var — its "lane is off" signal — and silently routes the marketing
+    // classifier + feed-enrich extractor to Anthropic Haiku instead.
+    ENVIRONMENT: env.ENVIRONMENT,
+    OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
+    OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,
+    MARKETING_CLASSIFIER_MODEL: env.MARKETING_CLASSIFIER_MODEL,
+    FEED_ENRICH_MODEL: env.FEED_ENRICH_MODEL,
+    SUMMARIZE_MODEL: env.SUMMARIZE_MODEL,
+    EXTRACT_MODEL: env.EXTRACT_MODEL,
     FEED_ENRICH_ENABLED: env.FEED_ENRICH_ENABLED,
     FEED_ENRICH_MAX_PER_FIRE: env.FEED_ENRICH_MAX_PER_FIRE,
     FEED_THIN_CHARS: env.FEED_THIN_CHARS,
