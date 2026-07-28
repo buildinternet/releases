@@ -83,6 +83,12 @@ The same page can be split at very different altitudes — per **feature**, per 
 
 The Workflow records the run under `~/.releases/work/` in an **isolated** run dir it mints itself (summary per source, cost line grounded in `budget.spent()`, cross-run sweep report). It deliberately does **not** use `releases admin work start` / the shared `.current-run` pointer — that pointer is global and leaks across concurrent sessions (#1396), so an automated sweep that held it would absorb an unrelated session's mutations. A sweep threads its run dir to each nested source; per-source summaries are namespaced `summary-<slug>.md` to avoid clobbering. Because no pointer is set, these runs don't appear in `releases admin work status`. Review the cross-run report (`reports/<date>-backfill-sweep.md`) for data-quality findings (empty content, thin pages, deferred-for-budget pages). See [maintenance-workspace.md → Concurrency](../../../../docs/architecture/maintenance-workspace.md).
 
+## Before declaring a source "clean" or "recovered" (required)
+
+A dry run's `notStored: 0` — or a top-up's `skippedKnown` matching every extracted URL — is a claim about what extraction found in the window it looked at, not proof the live page has nothing newer. During the 2026-07-23 → 07-28 outage recovery, dry runs across ten sources all reported `new=0` and were read as "no content was lost." A commit run on one of those sources then inserted 5 rows, including a changelog entry dated Jul 22 that was visibly live on the source page the whole time (#2168 item 5b).
+
+**Before reporting any source "recovered," "up to date," or "nothing missing," fetch the live page yourself** — through the same preflight gate above — **and compare its newest 3-5 entries against what's actually stored** (`releases tail <slug> --json` or `admin release get`). This applies whether the conclusion comes from one source or a whole sweep; a clean tool summary is a starting point for the check, not a substitute for it. If the two disagree, the tool number is what's wrong, not the page.
+
 ## Media and content backfills (server-side, no local extraction)
 
 The local Workflows above rebuild release *rows*. Four admin routes heal what's already stored — all idempotent, all `dryRun`-defaulting where noted, none on any cron:

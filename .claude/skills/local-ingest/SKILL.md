@@ -155,6 +155,8 @@ releases tail <slug> --json   # or: get_latest_releases (typed tool)
 
 Confirm releases have non-empty **titles, dates, content, and media**. If a row is _empty_, fix the extraction and **re-run** — the default upsert backfills empty rows safely. If a row already has _thin-but-non-empty_ content (e.g. an index-summary stub you now want to replace with the full body), a plain re-run is a no-op — use the `mode: "upsert-content"` enrichment re-POST from Step 5.
 
+**Recovering a source, not onboarding one?** This step only confirms what got written — it says nothing about what didn't. Before telling anyone a source is "recovered" or "nothing is missing," see `backfilling-sources` → _Before declaring a source "clean" or "recovered"_ for the required live-page spot check.
+
 ### Step 7 — Playbook note
 
 Record how this source was ingested so future agents don't re-derive it. Via `manage_playbook` (action `update_notes`) or `releases admin playbook <org> --notes-file -`. Note that the source was **locally ingested** (not on the cron path yet), its observed cadence, and any extraction quirks. Follow the `managing-sources` playbook-authoring rubric (imperative voice, keep-test, `### Fetch instructions` / `### Traps` / `### Coverage`). Don't restate metadata the header already carries.
