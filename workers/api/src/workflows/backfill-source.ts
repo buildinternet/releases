@@ -114,13 +114,7 @@ interface WindowStepResult {
   deduped: number;
   insertedIds: string[];
   found: number;
-  /**
-   * Rows actually written. `null` on a dry run, where nothing is inserted and the
-   * would-be-new count is not computed — NOT `0`, which is a real commit-path
-   * value meaning "ran and inserted nothing". Conflating the two is what let a
-   * dry-run `new=0` read as "no content is missing" during the 2026-07-23
-   * recovery, when a later commit run on the same source inserted 5 rows (#2168).
-   */
+  /** Rows written; `null` when not computed. See `SourceBackfillReport.inserted`. */
   inserted: number | null;
   entries: Array<{ url: string | undefined; publishedAt: string | undefined }>;
 }
@@ -319,9 +313,8 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               // `found: rawReleases.length`). The dry run already knows it, so
               // reporting it is honest — the old hardcoded `0` was not.
               found: deduped.length,
-              // Not computed on a dry run. Sliver 2 of #2168 will resolve the real
-              // would-be-new count against stored URLs; until then `null` says
-              // "unknown" instead of asserting nothing is new.
+              // Not computed on a dry run — `null`, never `0`. Sliver 2 resolves the
+              // real would-be-new count against stored URLs.
               inserted: null,
               entries: deduped.map((e) => ({
                 url: e.url ?? undefined,
@@ -353,12 +346,9 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
     const report = await step.do("finalize", RETRY_POLL, async () => {
       const allExtracted = windowResults.reduce((n, r) => n + r.extracted, 0);
       const allFound = windowResults.reduce((n, r) => n + r.found, 0);
-      // Stays `null` if ANY window declined to compute it, rather than summing the
-      // known ones — a partial total presented as a whole is the same class of
-      // fabrication this fix removes. In practice dryRun is uniform across windows.
-      const allInserted = windowResults.some((r) => r.inserted === null)
-        ? null
-        : windowResults.reduce((n, r) => n + (r.inserted ?? 0), 0);
+      // `null` on a dry run, matching the per-window results. `dryRun` is read once
+      // from the payload and closed over, so windows can never disagree.
+      const allInserted = dryRun ? null : windowResults.reduce((n, r) => n + (r.inserted ?? 0), 0);
 
       // Aggregate globally-unique across windows: a URL straddling a slice
       // boundary appears in two adjacent windows, so per-window sums/flattens

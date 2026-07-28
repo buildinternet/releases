@@ -171,9 +171,7 @@ describe("POST /v1/workflows/backfill-source", () => {
     expect(body.via).toBe("supplied");
     expect(body.extracted).toBe(3);
     expect(body.deduped).toBe(2);
-    // Dry run reports `null`, not 0 — see #2168 item 5a. A hardcoded 0 here is
-    // indistinguishable from a real commit result of "inserted nothing", which is
-    // how ten dry runs were read as "no content is missing" during recovery.
+    // `null`, not 0 — the route must surface "not computed". See #2168 item 5a.
     expect(body.inserted).toBeNull();
     expect(body.found).toBe(2);
     expect(body.dryRun).toBe(true);

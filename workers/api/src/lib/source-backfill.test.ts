@@ -34,25 +34,6 @@ function baseDeps(over: Partial<SourceBackfillDeps> = {}): SourceBackfillDeps {
 }
 
 describe("runSourceBackfill", () => {
-  // The regression this guards is not "a field changed type" — it is that a dry run
-  // and a real commit that inserted nothing used to be INDISTINGUISHABLE in the
-  // report. Ten dry runs reporting new=0 were read as "no content was lost"; a
-  // commit run on one of those sources then inserted 5 rows (#2168 item 5a).
-  it("distinguishes an uncomputed dry run from a commit that inserted nothing", async () => {
-    const dry = await runSourceBackfill(SOURCE, { dryRun: true }, baseDeps());
-    const committed = await runSourceBackfill(SOURCE, { dryRun: false }, baseDeps());
-
-    // Same source, same extraction, genuinely different meanings.
-    expect(dry.inserted).toBeNull();
-    expect(committed.inserted).toBe(0);
-    expect(dry.inserted).not.toBe(committed.inserted);
-
-    // `found` is knowable without ingesting, so both report it identically rather
-    // than the dry run zeroing it.
-    expect(dry.found).toBe(2);
-    expect(committed.found).toBe(0); // whatever ingest reported
-  });
-
   it("dryRun: reports counts + date range and never ingests", async () => {
     let ingestCalls = 0;
     const deps = baseDeps({
@@ -70,9 +51,7 @@ describe("runSourceBackfill", () => {
     expect(report.deduped).toBe(2); // #a collapsed
     expect(report.dateRange.from).toBe("2024-01-01T00:00:00.000Z");
     expect(report.dateRange.to).toBe("2024-03-01T00:00:00.000Z");
-    // `null`, NOT 0 (#2168 item 5a). Zero is a real commit-path answer — "ran and
-    // inserted nothing" — so reporting it here asserted that nothing was new when
-    // nothing had been checked. That false clean bill is what this pins against.
+    // `null`, NOT 0 — see `SourceBackfillReport.inserted` (#2168 item 5a).
     expect(report.inserted).toBeNull();
     // `found` is what ingest would receive, known without running it.
     expect(report.found).toBe(2);
@@ -114,8 +93,8 @@ describe("runSourceBackfill", () => {
     const report = await runSourceBackfill(SOURCE, { dryRun: false }, deps);
 
     expect(enrichCalls).toBe(0);
-    // Stays a genuine 0 on the commit path: ingest ran and inserted nothing. The
-    // dry-run case above reports `null` instead — the two must not collapse.
+    // A genuine 0: ingest ran and inserted nothing. The dry-run case reports
+    // `null` instead — these two must never collapse into the same value.
     expect(report.inserted).toBe(0);
   });
 });
