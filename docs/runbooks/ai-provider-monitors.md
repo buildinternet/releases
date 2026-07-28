@@ -7,22 +7,34 @@ six days. Nothing surfaced it — it was found only because the Anthropic dashbo
 and someone asked whether that was expected. These monitors exist so that specific silence is
 never again the thing that notices first.
 
-Two failure modes, two monitors, because they need different signals:
+Four failure modes, four monitors, because they need different signals:
 
-| The provider…                              | Signal                         | Monitor |
-| ------------------------------------------ | ------------------------------ | ------- |
-| …rejects calls with a quota/billing error  | the error text / typed event   | 1       |
-| …just stops being used, no matchable error | absence of `ai_usage`          | 2       |
-| …everything stops, all providers at once   | absence of `ai_usage` globally | 3       |
+| Failure                                              | Signal                                    | Monitor |
+| ---------------------------------------------------- | ----------------------------------------- | ------- |
+| A provider rejects calls with a quota/billing error  | the error text / typed event              | 1       |
+| A provider just stops being used, no matchable error | absence of `ai_usage`, vs. its baseline   | 2       |
+| Everything stops, all providers at once              | absence of `ai_usage` globally            | 3       |
+| Releases insert but summarization doesn't run        | `ai_usage` vs. work that demonstrably ran | 4       |
 
-All three are **live**, Threshold type, routed to the shared team notifier `sajiFns75aNFy3xSXH`
+Monitors 1–3 detect silence by comparing against **history**; monitor 4 compares against
+**observed work in the same window**, which is why it detects in ~1h where they need 12h–60h. They
+cover different lanes, though — see the scope note on monitor 4 before treating it as the fast
+path for everything.
+
+All four are **live**, Threshold type, routed to the shared team notifier `sajiFns75aNFy3xSXH`
 (the "Email" notifier, same channel as the auth and managed-agent monitors).
 
-| Monitor                                    | ID                   | Window / every | Alert when   |
-| ------------------------------------------ | -------------------- | -------------- | ------------ |
-| AI provider quota shutoff                  | `1oo9THKJT9xDUu6hnK` | 60m / 15m      | `count_ > 0` |
-| AI provider heartbeat lost                 | `RlEtnGcWm63LuiafWF` | 7d / 60m       | `count_ > 0` |
-| AI inference silent — no `ai_usage` in 12h | `xuxpXTLc8wsDXcQ7mb` | 12h / 60m      | `count_ < 1` |
+| Monitor                                         | ID                   | Window / every | Alert when   |
+| ----------------------------------------------- | -------------------- | -------------- | ------------ |
+| AI provider quota shutoff                       | `1oo9THKJT9xDUu6hnK` | 60m / 15m      | `count_ > 0` |
+| AI provider heartbeat lost                      | `RlEtnGcWm63LuiafWF` | 7d / 60m       | `count_ > 0` |
+| AI inference silent — no `ai_usage` in 12h      | `xuxpXTLc8wsDXcQ7mb` | 12h / 60m      | `count_ < 1` |
+| Ingest inserting releases with no summarization | `R777X1f5nFIPGTRYgY` | 60m / 15m      | `count_ > 0` |
+
+> **The monitor IDs are the source of truth; this table is a snapshot, accurate as of
+> 2026-07-28.** Monitor config lives in Axiom, not in git, so there is no drift detection: a
+> threshold retuned in the dashboard leaves this page quietly wrong. Run `checkMonitors` (MCP) or
+> open the monitor by ID before trusting a number here, and update this table when you change one.
 
 See [logging.md](../architecture/logging.md) for `logEvent` payload conventions and
 [content-pipelines.md](../architecture/content-pipelines.md) for which lanes call which provider.
@@ -139,12 +151,21 @@ for both providers; fires `2026-07-25T11:00Z`, 2.4 days into the outage (vs. the
 actually took to notice), stays hot for 76 consecutive evaluations, and self-clears at
 `2026-07-28T14:00Z` when Anthropic traffic resumed.
 
-**Deliberately no `environment` filter.** The `ai_usage` events from the misrouted `feed-enrich`
-and `marketing-classifier` lanes carry an **empty** `environment` field, because the same
-`buildFetchOneEnv` bug that misrouted them also failed to forward `ENVIRONMENT`. An
-`environment == 'production'` filter would have been blind to exactly the provider that went dark.
-Staging runs no crons, so contamination is negligible. (The auth monitors hit the mirror image of
-this — see the environment note in [auth-audit-monitors.md](./auth-audit-monitors.md).)
+**Deliberately no `environment` filter — and it stays off.** The rule going forward is simply
+that an availability monitor must not filter on a field whose absence is indistinguishable from a
+provider being down: a filter that silently drops events fails _closed_, turning a missing field
+into silence, which is precisely the thing being watched for. Staging runs no crons, so the noise
+this filter would remove is negligible — it buys nothing and can cost everything.
+
+The concrete near-miss that motivated it is now historical, and that's the point: the `ai_usage`
+events from the misrouted `feed-enrich` and `marketing-classifier` lanes carried an **empty**
+`environment`, because the same `buildFetchOneEnv` bug that misrouted them also failed to forward
+`ENVIRONMENT`. #2176 routed every `fetchOne` call site through `buildFetchOneEnv`
+(`_fetch-env.ts:143` forwards `ENVIRONMENT`), so events emitted _after_ that fix do carry the
+field — but the old events can't be retroactively fixed, and a future forwarding gap would look
+identical. **Do not "fix" the filter back in on the grounds that the field is populated now.**
+(The auth monitors hit the mirror image of this — see the environment note in
+[auth-audit-monitors.md](./auth-audit-monitors.md).)
 
 **Known limit — it detects the transition into silence, not indefinite silence.** A provider with
 no events anywhere in the 7d range produces no row and cannot fire. After 7 days dark, Monitor 1
@@ -190,6 +211,65 @@ Range was widened 6h → 12h on 2026-07-28 after measurement: over 428 hourly ev
 window never did. 6h bought one false alarm per ~2.5 weeks and no useful detection speed on a
 signal this coarse.
 
+## Monitor 4 — releases inserting with no summarization
+
+**Alert when:** `count_ > 0`. **Window:** 60m. **Every:** 15m.
+
+```kusto
+['releases-cloudflare-logs']
+| where ['body'] contains '"event":"fetch-done"' or ['body'] contains '"event":"ai_usage"'
+| extend p = parse_json(['body'])
+| extend ev = tostring(p['event']), lane = tostring(p['lane']), ins = toint(p['inserted'])
+| summarize inserts = sumif(ins, ev == 'fetch-done'),
+            summarizeCalls = countif(ev == 'ai_usage' and lane == 'summarize-release')
+| where inserts >= 3 and summarizeCalls == 0
+| summarize count()
+```
+
+The other three monitors infer _expected_ traffic from history, which is what forces their long
+windows: on a bursty cron-driven signal, "silent for 6h" is indistinguishable from "silent because
+nothing was scheduled." This one doesn't need a baseline. Ingest is schedule-anchored and
+`poll-fetch.ts:2012` already emits `fetch-done` carrying how many releases were inserted, so it
+correlates inference against **work that demonstrably happened** in the same window. Releases
+inserting with no summarization at all is anomalous no matter how bursty the provider is — which
+is what buys ~1h detection instead of 12h–60h.
+
+Note the log field is **`inserted`**, not `releasesInserted` (that's the `fetch_log` column and
+the API type; the event key is shorter).
+
+### Why `>= 3`, and what it does not cover
+
+Both numbers below are measured over the same Jul 12–23 healthy window used for Monitor 2:
+
+| Rule                                 | Healthy windows | False fires |
+| ------------------------------------ | --------------- | ----------- |
+| `inserts >= 1` and no `ai_usage`     | 202             | 5 (~2.5%)   |
+| `inserts >= 3` and no summarize lane | 143             | **0**       |
+
+All five `>= 1` false fires were single-insert windows (`shopify-ios`, `turso`, `claude-ios`,
+`livekit-rust-sdks`, `openclaw`) — an insert landing near an hour boundary with its summarize call
+in the next bin, or a source that doesn't summarize at all. Requiring 3 removes them without
+weakening the signal, since a real summarization outage takes out every insert, not one.
+
+**It would NOT have caught the 2026-07-23 outage: 0 fires across 69 outage windows.** Worth being
+precise about why, because the reasoning generalizes. Insertion only anchors lanes that sit
+**downstream of and proportional to** it — that's `summarize-release`, which was on OpenRouter and
+perfectly healthy throughout. The lanes that actually died, `feed-enrich` and
+`marketing-classifier`, sit _beside_ or _before_ insertion: they're gated on per-source metadata
+rather than firing per insert, and they fail open, so inserts continued at a normal rate the whole
+time they were dark. A work-anchored correlate is only as good as the coupling between the work
+and the lane, and for those two lanes there isn't one.
+
+So this is a fast path for **summarization** dying, not a general replacement for Monitor 2. Keep
+both.
+
+**When it fires:** releases are being ingested but nothing is summarizing them — the provider
+carrying `summarize-release` is down, its key is bad, or the lane is switched off.
+
+**Respond:** check `summarize-release` in the lane breakdown below. If the lane is deliberately
+disabled (a flag or a model var), this fires continuously and correctly — confirm intent before
+chasing it as an incident.
+
 ---
 
 ## Triage queries
@@ -211,6 +291,20 @@ Per-provider daily volume — is this a cliff or a slope?
 | where ['body'] contains '"event":"ai_usage"'
 | extend provider = tostring(parse_json(['body'])['provider'])
 | summarize count() by provider, bin(_time, 1d)
+```
+
+Inserts vs. summarization, hour by hour — for Monitor 4. In healthy operation these track 1:1
+(a spot check on 2026-07-28 showed 7 inserts / 7 summarize calls in the same hour):
+
+```kusto
+['releases-cloudflare-logs']
+| where ['body'] contains '"event":"fetch-done"' or ['body'] contains '"event":"ai_usage"'
+| extend p = parse_json(['body'])
+| extend ev = tostring(p['event']), lane = tostring(p['lane']), ins = toint(p['inserted'])
+| summarize inserts = sumif(ins, ev == 'fetch-done'),
+            summarizeCalls = countif(ev == 'ai_usage' and lane == 'summarize-release')
+  by bin(_time, 1h)
+| sort by _time desc
 ```
 
 Quota errors with their context:
