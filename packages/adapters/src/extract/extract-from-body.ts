@@ -125,8 +125,23 @@ async function runOneShot(
       { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
     );
     // Mirrors the other lanes' `ai_usage` event (workers/api/src/lib/text-model.ts's
-    // `withLaneUsageLogging`) so Axiom shows the one-shot tier's routing —
-    // previously invisible since extract only logged to the `usage_log` D1 table.
+    // `withLaneUsageLogging` and `overviewUsageSink`) so Axiom shows the one-shot
+    // tier's routing — previously invisible since extract only logged to the
+    // `usage_log` D1 table.
+    //
+    // `promptTokens` / `cacheHitRate` replicate `cacheMetrics` in
+    // packages/ai/src/text-model.ts rather than importing it: packages/adapters
+    // deliberately does not depend on @releases/ai-internal (see the note in
+    // playbook-block.ts, which mirrors rather than imports for the same reason).
+    // They are NOT decoration — raw `input` is not comparable across providers,
+    // because OpenRouter's prompt count already includes the cached portion while
+    // Anthropic's excludes it. Since the whole point of this lane's telemetry is
+    // to compare Anthropic against OpenRouter routing, logging only raw `input`
+    // would make exactly the comparison it exists for come out wrong.
+    const promptTokens =
+      provider === "openrouter"
+        ? result.totalInput
+        : result.totalInput + result.cacheReadTokens + result.cacheWriteTokens;
     logEvent("info", {
       component: "ai",
       event: "ai_usage",
@@ -137,6 +152,9 @@ async function runOneShot(
       output: result.totalOutput,
       cacheCreate: result.cacheWriteTokens,
       cacheRead: result.cacheReadTokens,
+      promptTokens,
+      cacheHitRate:
+        promptTokens > 0 ? Math.min(1, Math.max(0, result.cacheReadTokens / promptTokens)) : 0,
     });
     return { ...result, modelUsed: label };
   }

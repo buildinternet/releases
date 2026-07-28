@@ -570,3 +570,134 @@ describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
     expect(result.modelUsed).toBe("claude-haiku-4-5-20251001");
   });
 });
+
+describe("extractFromBody — one-shot ai_usage telemetry (issue #2166)", () => {
+  /** Drive the AI-SDK one-shot branch with a fixed usage payload and capture the
+   *  emitted log lines. `logEvent` writes structured JSON to console.log. */
+  async function captureUsageEvent(opts: {
+    provider: "anthropic" | "openrouter";
+    inputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  }): Promise<Record<string, unknown> | undefined> {
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: (() => {
+          throw new Error("legacy Anthropic-direct path should not run");
+        }) as never,
+      } as never,
+    };
+    const mockFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          id: "msg_usage",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4-5",
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          content: [
+            {
+              type: "tool_use",
+              id: "tu_1",
+              name: "extract_releases",
+              input: { releases: [{ title: "t", content: "c", isBreaking: false }] },
+            },
+          ],
+          usage: {
+            input_tokens: opts.inputTokens,
+            output_tokens: 11,
+            cache_creation_input_tokens: opts.cacheWriteTokens,
+            cache_read_input_tokens: opts.cacheReadTokens,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof globalThis.fetch;
+
+    const model = anthropicSpikeModel({
+      apiKey: "sk-test",
+      model: "claude-haiku-4-5",
+      fetch: mockFetch,
+    });
+
+    const lines: string[] = [];
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    };
+    try {
+      await extractFromBody(
+        {
+          body: SMALL_BODY,
+          systemPrompt: "test",
+          userMessage: "Extract from:",
+          sourceUrl: "https://x.test",
+          fetchUrl: "https://x.test/feed.json",
+          useToolLoop: false,
+        },
+        makeDeps(client, {
+          oneShotAiSdkModel: model,
+          oneShotAiSdkModelLabel: "claude-haiku-4-5",
+          oneShotAiSdkProvider: opts.provider,
+        }),
+      );
+    } finally {
+      console.log = origLog;
+    }
+
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        if (parsed.event === "ai_usage") return parsed;
+      } catch {
+        // non-JSON log line — ignore
+      }
+    }
+    return undefined;
+  }
+
+  // The point of this lane's telemetry is comparing Anthropic against OpenRouter.
+  // Anthropic reports the non-cached prompt portion, so the cached tokens have to
+  // be added back to get a total comparable with OpenRouter's.
+  test("adds cached tokens back into promptTokens on Anthropic", async () => {
+    const ev = await captureUsageEvent({
+      provider: "anthropic",
+      inputTokens: 100,
+      cacheReadTokens: 300,
+      cacheWriteTokens: 100,
+    });
+    expect(ev).toBeDefined();
+    expect(ev!.lane).toBe("extract-oneshot");
+    expect(ev!.provider).toBe("anthropic");
+    expect(ev!.input).toBe(100);
+    expect(ev!.promptTokens).toBe(500);
+    expect(ev!.cacheHitRate).toBeCloseTo(0.6, 5);
+  });
+
+  // OpenRouter's prompt count already includes the cached portion, so adding it
+  // again would double-count and understate the cache hit rate.
+  test("does not double-count cached tokens on OpenRouter", async () => {
+    const ev = await captureUsageEvent({
+      provider: "openrouter",
+      inputTokens: 500,
+      cacheReadTokens: 300,
+      cacheWriteTokens: 0,
+    });
+    expect(ev).toBeDefined();
+    expect(ev!.provider).toBe("openrouter");
+    expect(ev!.promptTokens).toBe(500);
+    expect(ev!.cacheHitRate).toBeCloseTo(0.6, 5);
+  });
+
+  test("reports a zero cacheHitRate rather than NaN when there are no prompt tokens", async () => {
+    const ev = await captureUsageEvent({
+      provider: "anthropic",
+      inputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+    expect(ev).toBeDefined();
+    expect(ev!.promptTokens).toBe(0);
+    expect(ev!.cacheHitRate).toBe(0);
+  });
+});

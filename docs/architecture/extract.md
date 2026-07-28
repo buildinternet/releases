@@ -2,7 +2,9 @@
 
 "Extraction" is the AI step that turns a fetched changelog body into structured release records. For most pages that's one model call with the whole body inlined — but a few sources publish megabyte-scale bodies where inlining everything costs $0.50+ per fetch to re-read years of unchanged history. This doc covers the two-tier fix: small bodies keep the one-shot call; large ones (>50K tokens) route through a multi-round tool-use loop where the model pulls only the body slices it needs. Any loop failure falls back hard to one-shot, so enabling the flag is strictly a cost optimization — it can never make an extraction fail where the legacy path would have succeeded.
 
-Both tiers route through the AI SDK today (issue #2166): OpenRouter (`EXTRACT_MODEL`) when the `openrouter-enabled` flag + model + key resolve, otherwise Anthropic via the AI SDK — never a direct `@anthropic-ai/sdk` call. This matters because the one-shot tier handles the large majority of extractions; before #2166 it was hardwired to call the Anthropic Messages API directly regardless of `EXTRACT_MODEL`, so the (much rarer) tool-loop tier was the only one OpenRouter actually governed.
+Both tiers route through the AI SDK today (issue #2166): OpenRouter (`EXTRACT_MODEL`) when the `openrouter-enabled` flag + model + key resolve, otherwise Anthropic via the AI SDK. This matters because the one-shot tier handles the large majority of extractions; before #2166 it was hardwired to call the Anthropic Messages API directly regardless of `EXTRACT_MODEL`, so the (much rarer) tool-loop tier was the only one OpenRouter actually governed.
+
+The direct `@anthropic-ai/sdk` call still exists in `runOneShot` as a last-resort fallback, reached only when no AI-SDK model resolves at all — which in practice means no Anthropic key was available either, since `resolveToolLoopAiSdkModel` already falls open OpenRouter → Anthropic before returning `undefined`. Normal operation never takes it.
 
 ## Why
 
