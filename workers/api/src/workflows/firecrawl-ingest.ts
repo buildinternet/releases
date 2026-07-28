@@ -27,6 +27,7 @@ import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
 import { saveRawSnapshot } from "../lib/raw-snapshot.js";
+import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { ingestRawReleases, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
@@ -356,6 +357,23 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
       try {
         await step.do("record-failure", NO_RETRY, async () => {
           const fcStatus = err instanceof FirecrawlError ? err.status : null;
+          // An AI-provider quota shutoff is not a transient ingest failure: it
+          // will fail identically for every source until a human raises the cap
+          // or the reset date passes. Give it its own event so it is alertable
+          // and lands in the operator digest, rather than hiding in the general
+          // `ingest-failed` stream the way it did for six days on 2026-07-23.
+          const quota = classifyProviderQuota(err);
+          if (quota) {
+            logEvent("error", {
+              component: "firecrawl-ingest-workflow",
+              event: "provider-quota-exhausted",
+              provider: quota.provider,
+              regainAccessAt: quota.regainAccessAt?.toISOString() ?? null,
+              providerMessage: quota.message,
+              sourceId,
+              checkId,
+            });
+          }
           const eventName =
             fcStatus === 402
               ? "credits-exhausted"

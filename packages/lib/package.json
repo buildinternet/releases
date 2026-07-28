@@ -23,6 +23,7 @@
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
     "./oauth-jwt": "./src/oauth-jwt.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
+    "./provider-quota": "./src/provider-quota.ts",
     "./rate-limit-tiers": "./src/rate-limit-tiers.ts",
     "./releases-error": "./src/releases-error.ts",
     "./secrets": "./src/secrets.ts",
