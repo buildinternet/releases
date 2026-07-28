@@ -28,6 +28,7 @@ function baseDeps(over: Partial<SourceBackfillDeps> = {}): SourceBackfillDeps {
       droppedChars: 0,
     }),
     ingest: async () => ({ insertedIds: [], found: 0, inserted: 0, visiblePublishRows: [] }),
+    existingUrls: async () => new Set<string>(),
     embedAndGenerate: async () => {},
     ...over,
   };
@@ -57,6 +58,33 @@ describe("runSourceBackfill", () => {
     expect(report.found).toBe(2);
     expect(report.via).toBe("supplied");
     expect(report.windows).toBe(2);
+  });
+
+  it("dryRun: notStored counts only the urls the source doesn't already have", async () => {
+    const deps = baseDeps({ existingUrls: async () => new Set(["https://x#a"]) });
+
+    const report = await runSourceBackfill(SOURCE, { dryRun: true }, deps);
+
+    // #a is stored, #b is not — the answer the fabricated `new=0` used to hide.
+    expect(report.notStored).toBe(1);
+    expect(report.deduped).toBe(2);
+  });
+
+  it("real run: notStored stays null — `inserted` is the measured answer", async () => {
+    let existingCalls = 0;
+    const deps = baseDeps({
+      existingUrls: async () => {
+        existingCalls++;
+        return new Set<string>();
+      },
+      ingest: async () => ({ insertedIds: ["r1"], found: 2, inserted: 1, visiblePublishRows: [] }),
+    });
+
+    const report = await runSourceBackfill(SOURCE, { dryRun: false }, deps);
+
+    expect(report.notStored).toBeNull();
+    expect(report.inserted).toBe(1);
+    expect(existingCalls).toBe(0); // no wasted query on the commit path
   });
 
   it("real run: ingests deduped rows then enriches inserted ids", async () => {

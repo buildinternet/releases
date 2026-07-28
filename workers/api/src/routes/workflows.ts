@@ -94,6 +94,7 @@ import { extractChangelogAllWindows, extractFirecrawlMarkdown } from "../lib/fir
 import { processMediaForR2 } from "../lib/media-ingest.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { logUsage } from "../lib/usage-log.js";
+import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 import {
   runSourceBackfill,
   effectiveBackfillWindows,
@@ -2707,6 +2708,7 @@ async function executeWindowedBackfill(
     ingest: async () => {
       throw new Error("ingest unavailable on dryRun");
     },
+    existingUrls: async () => (await selectExistingReleaseKeys(db as never, src.id)).urls,
     embedAndGenerate: async () => {},
   };
   if (!dryRun) {
