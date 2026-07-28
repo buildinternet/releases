@@ -169,7 +169,7 @@ When the source has `metadata.firecrawl.enabled`, no `markdown` is supplied, and
 - **Body acquisition ladder (Path A):** supplied `markdown` → plain `fetch` + `htmlToMarkdown`. (Path B uses Firecrawl `scrapeOnce`.)
 - **Extraction:** `extractChangelogAllWindows` / per-step `extractFromBody` — Haiku 4.5, temp 0, one-shot per window.
 - **Dedup contract:** reuses the exact prod `extractFromBody` + `mapEntries` slugs (`${sourceUrl}#${slug(version ?? title)}`). `RELEASE_URL_UPSERT` no-ops already-stored rows; in-memory dedup collapses within-batch duplicates. Re-running is idempotent.
-- **`dryRun` (default true):** returns `windows`, `extracted`, `deduped`, `dateRange` (and `guidance` when capped) without writing.
+- **`dryRun` (default true):** returns `windows`, `extracted`, `deduped`, `found`, `dateRange` (and `guidance` when capped) without writing. `inserted` is `null` — nothing was written and no count computed; `notStored` carries the answer a dry run exists to give: how many extracted URLs the source doesn't already have (an upper bound — ingest additionally drops denied/excluded URLs). Both fields report `null` rather than `0` where unknown; a fabricated `0` is what let ten dry runs read as "nothing is missing" during the 2026-07-23 recovery (#2168).
 - **`guidance`:** set when the Firecrawl ceiling reduced a deeper request and the run stopped with untouched tail — tells the caller to supply `markdown` to go deeper.
 
 Not wired into any cron — runs only when explicitly POSTed. See `docs/superpowers/specs/2026-05-30-backfill-source-durable-workflow-r2-design.md` (durable path) and `docs/superpowers/specs/2026-05-30-backfill-source-primitive-design.md` (original synchronous design).

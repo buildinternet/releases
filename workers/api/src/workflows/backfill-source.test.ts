@@ -193,6 +193,8 @@ describe("BackfillSourceWorkflow", () => {
     expect(report.inserted).toBeNull();
     // `found` is knowable without ingesting, so a dry run reports it for real.
     expect(report.found).toBe(report.deduped);
+    // Nothing stored for this source yet, so every extracted URL is new.
+    expect(report.notStored).toBe(report.deduped);
     // dateRange from the per-window entries
     expect(report.dateRange).toBeDefined();
     const dr = report.dateRange as { from: string | null; to: string | null };
@@ -233,6 +235,30 @@ describe("BackfillSourceWorkflow", () => {
     // Row count unchanged
     const afterSecond = db.select().from(releases).where(eq(releases.sourceId, "src_x")).all();
     expect(afterSecond.length).toBe(afterFirst.length);
+  });
+
+  it("dryRun after a real run: notStored drops to 0 once the URLs are stored", async () => {
+    const db = mkDb();
+    const r2 = fakeR2();
+
+    const first = await runWorkflow(mkEnv(db, r2), {
+      sourceId: "src_x",
+      dryRun: false,
+      maxWindows: 50,
+    });
+    expect((first.result as Record<string, unknown>).inserted as number).toBeGreaterThan(0);
+
+    // Same body, same extract override — every URL now exists. A `notStored` of 0
+    // here is a measured answer; the pre-#2168 `new: 0` said the same thing on a
+    // source that was in fact missing everything.
+    const second = await runWorkflow(mkEnv(db, r2), {
+      sourceId: "src_x",
+      dryRun: true,
+      maxWindows: 50,
+    });
+    const report = second.result as Record<string, unknown>;
+    expect(report.notStored).toBe(0);
+    expect(report.deduped as number).toBeGreaterThan(0);
   });
 
   it("per-window step isolation: each window is a separate step.do with distinct name", async () => {

@@ -36,6 +36,7 @@ import {
   type ExtractDeps,
 } from "@releases/adapters/extract";
 import { saveRawSnapshot, loadRawSnapshot } from "../lib/raw-snapshot.js";
+import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
@@ -313,8 +314,9 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               // `found: rawReleases.length`). The dry run already knows it, so
               // reporting it is honest — the old hardcoded `0` was not.
               found: deduped.length,
-              // Not computed on a dry run — `null`, never `0`. Sliver 2 resolves the
-              // real would-be-new count against stored URLs.
+              // Not computed on a dry run — `null`, never `0`. The would-be-new
+              // count is resolved once in `finalize`, against the cross-window
+              // unique URL set, so a URL straddling two windows isn't counted twice.
               inserted: null,
               entries: deduped.map((e) => ({
                 url: e.url ?? undefined,
@@ -359,6 +361,15 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
         windowResults.flatMap((r) => r.entries.map((e) => e.url ?? "")).filter(Boolean),
       );
 
+      // One query, on the dry-run path only, against the cross-window unique set:
+      // how many of these URLs the source doesn't already have. See
+      // `SourceBackfillReport.notStored`.
+      const notStored = dryRun
+        ? await selectExistingReleaseKeys(db, source.id).then(
+            ({ urls }) => [...allUniqueUrls].filter((u) => !urls.has(u)).length,
+          )
+        : null;
+
       // Compute date range from all per-window entries.
       const dr = dateRange(
         windowResults.flatMap((r) =>
@@ -384,6 +395,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
         dateRange: dr,
         found: allFound,
         inserted: allInserted,
+        notStored,
         dryRun,
         ...(guidance ? { guidance } : {}),
       };

@@ -19,6 +19,9 @@ export interface SourceBackfillDeps {
   extract: (markdown: string) => Promise<SourceBackfillExtractResult>;
   /** Upsert deduped rows via the standard ingest tail. */
   ingest: (rows: RawRelease[]) => Promise<IngestResult>;
+  /** URLs already stored for this source. Called only on the dry-run path, to
+   *  answer "how much of this is content we don't have?" without inserting. */
+  existingUrls: () => Promise<Set<string>>;
   /** Embed + (re)generate summaries/titles for the inserted ids. */
   embedAndGenerate: (insertedIds: string[]) => Promise<void>;
 }
@@ -45,6 +48,17 @@ export interface SourceBackfillReport {
    * commit run on one of those sources then inserted 5 rows (#2168 item 5a).
    */
   inserted: number | null;
+  /**
+   * Dry-run answer to "how much of this don't we have?": extracted rows whose URL
+   * is not already stored for this source, i.e. the rows the `(source_id, url)`
+   * conflict would NOT skip. An **upper bound** — ingest additionally drops denied
+   * and excluded URLs — but never the fabricated `0` that hid the #2168 gap.
+   *
+   * `null` on the commit path, where `inserted` is the measured answer and a
+   * prediction would be noise. Kept separate from `inserted` on purpose:
+   * conflating a forecast with a fact is the bug this pair exists to prevent.
+   */
+  notStored: number | null;
   dryRun: boolean;
   /** Caller hint, set ONLY when the Firecrawl ceiling reduced a deeper request
    *  and the run was capped with untouched tail. Populated by the route handler
@@ -113,10 +127,16 @@ export async function runSourceBackfill(
     // Overwritten with the real count on the commit path below. Stays `null` on a
     // dry run: nothing was inserted and the would-be-new count is not computed.
     inserted: null,
+    // Computed on the dry-run path only; see the field doc.
+    notStored: null,
     dryRun: opts.dryRun,
   };
 
-  if (opts.dryRun) return report;
+  if (opts.dryRun) {
+    const stored = await deps.existingUrls();
+    report.notStored = deduped.filter((r) => !r.url || !stored.has(r.url)).length;
+    return report;
+  }
 
   const result = await deps.ingest(deduped);
   if (result.insertedIds.length > 0) {
