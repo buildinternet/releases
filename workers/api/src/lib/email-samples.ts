@@ -365,6 +365,20 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
             thresholdBasis: "floor",
           },
         ],
+        providerHealth: [
+          {
+            sourceId: "src_sample_quota",
+            slug: "release-notes",
+            orgSlug: "example",
+            orgName: "Example Co",
+            provider: "anthropic",
+            lastFetchedAt: "2026-07-21T00:07:00.000Z",
+            lastAttemptAt: new Date().toISOString(),
+            regainAccessAt: "2026-08-01T00:00:00.000Z",
+            message:
+              "You have reached your specified API usage limits. You will regain access on 2026-08-01 at 00:00 UTC.",
+          },
+        ],
       });
     case "operator.alert.cron-crash": {
       const alert = formatCronCrashAlert({

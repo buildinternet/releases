@@ -3,11 +3,14 @@
  */
 import type { FirecrawlStaleEntry } from "../cron/firecrawl-staleness.js";
 import type { StaleSourceEntry } from "../cron/source-staleness.js";
+import type { ProviderHealthEntry } from "../cron/provider-health.js";
 import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type StalenessDigestInput = {
   firstParty: StaleSourceEntry[];
   firecrawl: FirecrawlStaleEntry[];
+  /** Sources whose most recent ingest attempt failed as a provider quota/billing shutoff. */
+  providerHealth: ProviderHealthEntry[];
   /** Web/admin origin for source links, e.g. https://releases.sh */
   webOrigin: string;
   scannedAt: string;
@@ -29,21 +32,53 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
   text: string;
   html: string;
 } {
-  const total = input.firstParty.length + input.firecrawl.length;
+  const total = input.firstParty.length + input.firecrawl.length + input.providerHealth.length;
+  // A provider quota shutoff is the most urgent signal here — a systemic
+  // outage, not one flaky source — so it drives the subject line whenever
+  // present, ahead of ordinary staleness counts.
+  const hasProviderIssue = input.providerHealth.length > 0;
   // Name the orgs that went quiet: "4 overdue" alone reads the same every day
   // and says nothing about whether this run needs attention.
   const affected = subjectNames([
+    ...input.providerHealth.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
     ...input.firstParty.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
     ...input.firecrawl.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
   ]);
-  const subject = `[staleness] ${total} source${total === 1 ? "" : "s"} overdue${affected ? `: ${affected}` : ""}`;
+  const subject = hasProviderIssue
+    ? `[staleness] provider quota shutoff: ${input.providerHealth.length} source${input.providerHealth.length === 1 ? "" : "s"} unable to ingest${affected ? ` (${affected})` : ""}`
+    : `[staleness] ${total} source${total === 1 ? "" : "s"} overdue${affected ? `: ${affected}` : ""}`;
 
+  // `total` now spans three scans, so the lead has to name the provider-health
+  // entries when there are any — otherwise the first line an operator reads
+  // during a quota shutoff describes those crit rows as merely "overdue", which
+  // is the exact misreading this section was added to prevent.
   const blocks: EmailBlock[] = [
     {
       t: "p",
-      text: `${total} source(s) are overdue for new releases or monitor deliveries.`,
+      text: hasProviderIssue
+        ? `${total} source(s) need attention — including ${input.providerHealth.length} unable to ingest at all because the AI provider is cut off.`
+        : `${total} source(s) are overdue for new releases or monitor deliveries.`,
     },
   ];
+
+  if (input.providerHealth.length > 0) {
+    blocks.push({ t: "kicker", text: `Provider health (${input.providerHealth.length})` });
+    blocks.push({
+      t: "fine",
+      text: "Sources whose most recent ingest attempt failed because the AI provider itself is cut off (spend cap or billing shutoff) — not an ordinary transient error. This needs a human to raise the cap or wait out the stated reset; retrying will not help.",
+    });
+    for (const e of input.providerHealth) {
+      const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
+      const regain = e.regainAccessAt ? `regains ${e.regainAccessAt}` : "no stated reset";
+      blocks.push({
+        t: "entity",
+        coord: orgHeadline(e.orgName, e.orgSlug, e.slug),
+        metrics: `provider ${e.provider} · ${regain} · last evaluated ${e.lastFetchedAt ?? "(never)"} · failing since ${e.lastAttemptAt} · ${e.sourceId}`,
+        url: adminUrl ?? undefined,
+        sev: "crit",
+      });
+    }
+  }
 
   if (input.firstParty.length > 0) {
     blocks.push({ t: "kicker", text: `First-party (${input.firstParty.length})` });
@@ -89,7 +124,7 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
     blocks,
     footer: {
       reason:
-        "Internal daily digest from Releases — sources flagged by the staleness scans (first-party poll path and Firecrawl monitors).",
+        "Internal daily digest from Releases — sources flagged by the staleness scans (first-party poll path, Firecrawl monitors, and provider health).",
       links: [{ label: "Admin status", href: `${input.webOrigin}/admin/status` }],
     },
   });
