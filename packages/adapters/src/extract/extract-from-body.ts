@@ -10,6 +10,7 @@ import type { LanguageModel } from "ai";
 import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 import type { UsageExtractionMode, UsageFallbackReason } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
+import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
 import {
   extractReleasesToolFull,
@@ -312,6 +313,27 @@ export async function extractFromBody(
       const isLoopErr = err instanceof LoopFallbackError;
       const reason: UsageFallbackReason = isLoopErr ? err.reason : "sdk_error";
       const partial = isLoopErr ? err.partial : undefined;
+      // A provider quota/billing shutoff never gets wrapped in LoopFallbackError
+      // — neither tool-loop implementation classifies errors, they just let the
+      // raw SDK error propagate (reason="sdk_error"). Without this it reads as
+      // an ordinary "fell back to one-shot" below and is invisible to an
+      // operator — the same blind spot #2168 found in the Firecrawl path.
+      // Fail-open is unchanged: this only adds a log, the one-shot retry below
+      // still runs exactly as before.
+      if (!isLoopErr) {
+        const quota = classifyProviderQuota(err);
+        if (quota) {
+          logEvent("error", {
+            component: "extract-tool-loop",
+            event: "provider-quota-exhausted",
+            lane: "extract-toolloop",
+            provider: quota.provider,
+            regainAccessAt: quota.regainAccessAt?.toISOString() ?? null,
+            providerMessage: quota.message,
+            sourceUrl: opts.sourceUrl,
+          });
+        }
+      }
       logger.warn(
         `tool-loop extraction fell back to one-shot: reason=${reason} sourceUrl=${opts.sourceUrl}`,
       );

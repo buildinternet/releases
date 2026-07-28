@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, spyOn } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import { extractFromBody } from "./extract-from-body.js";
 import { anthropicSpikeModel } from "./extract-with-tools-aisdk.js";
@@ -762,5 +762,109 @@ describe("extractFromBody — one-shot AI-SDK runtime failure (issue #2166)", ()
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]!.title).toBe("legacy-fallback");
     expect(result.mode).toBe("oneshot");
+  });
+});
+
+describe("extractFromBody — tool-loop provider quota exhaustion (issue #2168 5d)", () => {
+  test("emits provider-quota-exhausted and still falls open to one-shot when the loop hits a quota shutoff", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      // Tool-loop (beta.messages) throws a raw quota-shaped error — mirrors the
+      // AI SDK stamping providerId on a real spend-cap AI_APICallError. Neither
+      // tool-loop implementation classifies this itself; it propagates as a
+      // plain Error and extractFromBody's catch maps it to fallbackReason
+      // "sdk_error" (never wrapped in LoopFallbackError).
+      const client = {
+        beta: {
+          messages: {
+            stream: () => {
+              throw Object.assign(
+                new Error(
+                  "You have reached your specified API usage limits. You will regain access on 2026-08-01 at 00:00 UTC.",
+                ),
+                { providerId: "anthropic.messages" },
+              );
+            },
+          },
+        },
+        messages: {
+          stream: (() => ({
+            finalMessage: async () => extractReleasesResponse,
+          })) as never,
+        },
+      };
+
+      const result = await extractFromBody(
+        {
+          body: LARGE_BODY,
+          systemPrompt: "test",
+          userMessage: "Extract from:",
+          sourceUrl: "https://x.test/changelog",
+          fetchUrl: "https://x.test/",
+          useToolLoop: true,
+        },
+        makeDeps(client),
+      );
+
+      // Fail-open, unchanged: falls all the way through to the one-shot retry
+      // and returns its entries rather than throwing.
+      expect(result.mode).toBe("fallback_to_oneshot");
+      expect(result.fallbackReason).toBe("sdk_error");
+      expect(result.entries).toHaveLength(1);
+
+      const quotaLines = errorSpy.mock.calls
+        .map((call) => call[0] as string)
+        .filter((line) => typeof line === "string" && line.includes("provider-quota-exhausted"))
+        .map((line) => JSON.parse(line));
+      expect(quotaLines).toHaveLength(1);
+      const payload = quotaLines[0];
+      expect(payload.component).toBe("extract-tool-loop");
+      expect(payload.lane).toBe("extract-toolloop");
+      expect(payload.provider).toBe("anthropic");
+      expect(payload.regainAccessAt).toBe("2026-08-01T00:00:00.000Z");
+      expect(payload.sourceUrl).toBe("https://x.test/changelog");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  test("does not emit provider-quota-exhausted for an ordinary tool-loop failure", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const client = {
+        beta: {
+          messages: {
+            stream: () => {
+              throw new Error("boom");
+            },
+          },
+        },
+        messages: {
+          stream: (() => ({
+            finalMessage: async () => extractReleasesResponse,
+          })) as never,
+        },
+      };
+
+      const result = await extractFromBody(
+        {
+          body: LARGE_BODY,
+          systemPrompt: "test",
+          userMessage: "Extract from:",
+          sourceUrl: "https://x.test",
+          fetchUrl: "https://x.test/",
+          useToolLoop: true,
+        },
+        makeDeps(client),
+      );
+
+      expect(result.fallbackReason).toBe("sdk_error");
+      const quotaLines = errorSpy.mock.calls
+        .map((call) => call[0] as string)
+        .filter((line) => typeof line === "string" && line.includes("provider-quota-exhausted"));
+      expect(quotaLines).toHaveLength(0);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

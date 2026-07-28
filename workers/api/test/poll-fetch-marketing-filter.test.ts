@@ -20,7 +20,7 @@
  * array regardless of what `globalThis.fetch` does. The fix is to register our
  * own override at this file's module-load with a per-test state hook.
  */
-import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, mock, beforeEach, afterEach, spyOn } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
@@ -445,5 +445,68 @@ describe("fetchOne — metadata.marketingFilter", () => {
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
     expect(rows.every((r) => r.suppressed === false)).toBe(true);
+  });
+
+  // #2168 item 5d: a provider quota/billing shutoff must not blend into the
+  // ordinary "classifier failed" noise — it needs its own alertable event, the
+  // same way the Firecrawl ingest path already gets one. The lane must stay
+  // fail-open: fetchOne still succeeds and inserts everything visibly.
+  it("emits provider-quota-exhausted and still fails open when the classifier hits a quota shutoff", async () => {
+    let errorSpy: ReturnType<typeof spyOn> | undefined;
+    try {
+      errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
+
+      installFetch((input) => {
+        const url = urlOf(input);
+        if (url.includes("api.anthropic.com")) {
+          return new Response(
+            JSON.stringify({
+              type: "error",
+              error: {
+                type: "rate_limit_error",
+                message:
+                  "You have reached your specified API usage limits. You will regain access on 2026-08-01 at 00:00 UTC.",
+              },
+            }),
+            { status: 429, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      });
+
+      const db = mkDb();
+      await seedFeedSource(db, {
+        feedUrl: "https://clickhouse.com/rss.xml",
+        feedType: "rss",
+        marketingFilter: true,
+      });
+      const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+      // Fail-open: same disposition as an ordinary classifier failure — every
+      // item inserts visibly, ingest itself never breaks.
+      expect(result.status).toBe("success");
+      expect(result.releasesInserted).toBe(2);
+      const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+      expect(rows.every((r) => r.suppressed === false)).toBe(true);
+
+      const quotaLines = errorSpy.mock.calls
+        .map((call: unknown[]) => call[0] as string)
+        .filter(
+          (line: string) => typeof line === "string" && line.includes("provider-quota-exhausted"),
+        )
+        .map((line: string) => JSON.parse(line));
+      expect(quotaLines.length).toBeGreaterThan(0);
+      const payload = quotaLines[0];
+      expect(payload.component).toBe("cron-poll-fetch");
+      expect(payload.lane).toBe("marketing-classifier");
+      expect(payload.sourceSlug).toBe("clickhouse-blog");
+      expect(payload.regainAccessAt).toBe("2026-08-01T00:00:00.000Z");
+      expect(payload.providerMessage).toMatch(/reached your specified API usage limits/);
+    } finally {
+      errorSpy?.mockRestore();
+    }
   });
 });
