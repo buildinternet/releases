@@ -29,8 +29,24 @@
  */
 import { createDb } from "../db.js";
 import { sql } from "drizzle-orm";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyProviderQuota, type QuotaProvider } from "@releases/lib/provider-quota";
+
+/**
+ * How far back the ranked window reaches. Without a lower bound, `ROW_NUMBER()`
+ * partitions EVERY historical `fetch_log` row on every digest run just to keep
+ * `rn = 1` — a scan that grows without limit as sources × polls accumulate, and
+ * one that `idx_fetch_log_source_created` cannot help with.
+ *
+ * Narrowing is behavior-preserving for this signal: a source whose newest
+ * attempt predates the cutoff is by definition not "currently failing to
+ * ingest". 14 days is comfortably wider than the slowest poll cadence (the low
+ * tier is 24h, plus smart-fetch backoff), so a live source always has a recent
+ * row and a source with nothing inside the window has stopped being polled at
+ * all — which the digest's existing staleness sections are what report.
+ */
+const RANKED_WINDOW_DAYS = 14;
 
 export interface ProviderHealthEnv {
   DB: D1Database;
@@ -97,8 +113,15 @@ export async function scanProviderHealth(
       last_fetched_at: string | null;
       last_attempt_at: string;
       last_error: string | null;
+      status: string;
     }
 
+    const rankedSince = daysAgoIso(RANKED_WINDOW_DAYS);
+
+    // The status filter lives in JS rather than SQL so `scanned` below counts
+    // the population actually examined — active sources with a recent attempt —
+    // instead of only the failures. A `scanned` that silently excluded every
+    // healthy source would read during triage as a far smaller fleet than we run.
     const rows: Row[] = await db.all(sql`
       WITH ranked AS (
         SELECT
@@ -111,6 +134,7 @@ export async function scanProviderHealth(
           ) AS rn
         FROM fetch_log fl
         WHERE fl.status != 'dry_run'
+          AND fl.created_at >= ${rankedSince}
       )
       SELECT
         s.id AS source_id,
@@ -119,19 +143,20 @@ export async function scanProviderHealth(
         o.name AS org_name,
         s.last_fetched_at AS last_fetched_at,
         r.created_at AS last_attempt_at,
-        r.error AS last_error
+        r.error AS last_error,
+        r.status AS status
       FROM ranked r
       JOIN sources s ON s.id = r.source_id
       LEFT JOIN organizations_active o ON o.id = s.org_id
       WHERE r.rn = 1
         AND s.deleted_at IS NULL
         AND COALESCE(s.fetch_priority, 'normal') != 'paused'
-        AND r.status = 'error'
     `);
 
     let broken = 0;
     const entries: ProviderHealthEntry[] = [];
     for (const r of rows) {
+      if (r.status !== "error") continue;
       const quota = classifyProviderQuota(r.last_error);
       if (!quota) continue;
 

@@ -70,5 +70,10 @@ describe("buildStalenessDigestEmail", () => {
     expect(text).toContain("provider anthropic");
     expect(text).toContain("2026-08-01T00:00:00.000Z");
     expect(text).toContain("last evaluated 2026-07-21T00:00:00.000Z");
+    // The lead sentence is the first thing an operator reads. Describing a
+    // quota shutoff as merely "overdue for new releases" is the exact
+    // misreading this section exists to prevent, so pin the wording.
+    expect(text).toContain("unable to ingest at all");
+    expect(text).not.toContain("are overdue for new releases or monitor deliveries.");
   });
 });

@@ -196,6 +196,64 @@ describe("scanProviderHealth", () => {
     expect(res).toEqual({ scanned: 0, broken: 0, entries: [] });
   });
 
+  // `scanned` names the population examined, not the failures found. It was
+  // briefly the latter (the status filter lived in SQL), which during triage
+  // reads as a far smaller fleet than we actually run.
+  it("counts healthy sources in `scanned`, not just failing ones", async () => {
+    seedSource({ id: "healthy_1", lastFetchedAt: iso(1 * HOUR) });
+    seedLog({ sourceId: "healthy_1", status: "success", createdAt: iso(1 * HOUR) });
+    seedSource({ id: "healthy_2", lastFetchedAt: iso(1 * HOUR) });
+    seedLog({ sourceId: "healthy_2", status: "no_change", createdAt: iso(1 * HOUR) });
+    seedSource({ id: "capped", lastFetchedAt: iso(2 * DAY) });
+    seedLog({
+      sourceId: "capped",
+      status: "error",
+      createdAt: iso(1 * HOUR),
+      error: QUOTA_MESSAGE,
+    });
+
+    const res = await scanProviderHealth(baseEnv());
+    expect(res.scanned).toBe(3);
+    expect(res.broken).toBe(1);
+    expect(res.entries.map((e) => e.sourceId)).toEqual(["capped"]);
+  });
+
+  // The ranked CTE is bounded so D1 does not window-partition the whole of
+  // `fetch_log` on every digest run. A source whose newest attempt predates the
+  // window has stopped being polled entirely — the staleness sections report
+  // that, and this section must not resurrect a months-old quota error as if it
+  // were current.
+  it("ignores attempts older than the ranked window", async () => {
+    seedSource({ id: "ancient", lastFetchedAt: iso(60 * DAY) });
+    seedLog({
+      sourceId: "ancient",
+      status: "error",
+      createdAt: iso(45 * DAY),
+      error: QUOTA_MESSAGE,
+    });
+
+    const res = await scanProviderHealth(baseEnv());
+    expect(res.scanned).toBe(0);
+    expect(res.broken).toBe(0);
+  });
+
+  // Guard on the boundary itself: a quota failure just inside the window is
+  // still current and must be reported, so the cutoff cannot drift tighter
+  // without this failing.
+  it("still reports a quota failure just inside the ranked window", async () => {
+    seedSource({ id: "recent", lastFetchedAt: iso(14 * DAY) });
+    seedLog({
+      sourceId: "recent",
+      status: "error",
+      createdAt: iso(13 * DAY),
+      error: QUOTA_MESSAGE,
+    });
+
+    const res = await scanProviderHealth(baseEnv());
+    expect(res.scanned).toBe(1);
+    expect(res.broken).toBe(1);
+  });
+
   it("fails open when the DB handle is broken", async () => {
     const brokenDb = {
       all: async () => {

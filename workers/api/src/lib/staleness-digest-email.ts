@@ -48,10 +48,16 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
     ? `[staleness] provider quota shutoff: ${input.providerHealth.length} source${input.providerHealth.length === 1 ? "" : "s"} unable to ingest${affected ? ` (${affected})` : ""}`
     : `[staleness] ${total} source${total === 1 ? "" : "s"} overdue${affected ? `: ${affected}` : ""}`;
 
+  // `total` now spans three scans, so the lead has to name the provider-health
+  // entries when there are any — otherwise the first line an operator reads
+  // during a quota shutoff describes those crit rows as merely "overdue", which
+  // is the exact misreading this section was added to prevent.
   const blocks: EmailBlock[] = [
     {
       t: "p",
-      text: `${total} source(s) are overdue for new releases or monitor deliveries.`,
+      text: hasProviderIssue
+        ? `${total} source(s) need attention — including ${input.providerHealth.length} unable to ingest at all because the AI provider is cut off.`
+        : `${total} source(s) are overdue for new releases or monitor deliveries.`,
     },
   ];
 
@@ -118,7 +124,7 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
     blocks,
     footer: {
       reason:
-        "Internal daily digest from Releases — sources flagged by the staleness scans (first-party poll path and Firecrawl monitors).",
+        "Internal daily digest from Releases — sources flagged by the staleness scans (first-party poll path, Firecrawl monitors, and provider health).",
       links: [{ label: "Admin status", href: `${input.webOrigin}/admin/status` }],
     },
   });
