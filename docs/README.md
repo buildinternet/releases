@@ -82,7 +82,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 - **[emails.md](architecture/emails.md)** — the shared transactional-email shell: lanes, email-client constraints, Gmail annotations, admin preview.
 - **[logging.md](architecture/logging.md)** — worker `logEvent()` vs the fs-backed CLI logger, and the auth audit-event reference.
 - **[changelog-style.md](changelog-style.md)** — voice and density rules for the project's own daily changelog.
-- **[runbooks/](runbooks/)** — operational procedures: auth-audit monitors, the trusted-proxy WAF rule, Verified Bot registration, the demand dashboard.
+- **[runbooks/](runbooks/)** — operational procedures: auth-audit monitors, AI provider-health monitors, the trusted-proxy WAF rule, Verified Bot registration, the demand dashboard.
 - **[superpowers/](superpowers/)** — historical design specs and implementation plans. Architecture docs link into these for rationale; they are point-in-time documents, not maintained references.
 
 ### Design documents (historical)
