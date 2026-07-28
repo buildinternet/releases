@@ -167,14 +167,13 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
   };
 }
 
-async function resolveAiSdkExtractModel(
-  env: WorkerDepsEnv,
-): Promise<{ model: unknown; label: string } | undefined> {
-  const anthropicModel = env.agentModel ?? DEFAULT_AGENT_MODEL;
-  let openRouterApiKey: string | null = null;
+/** Resolve the OpenRouter key once and reuse it for both tiers' resolution —
+ *  they share the same `extractModel` (`EXTRACT_MODEL`) + key, differing only
+ *  in which Anthropic model they fall back to. */
+async function resolveOpenRouterApiKey(env: WorkerDepsEnv): Promise<string | null> {
   try {
     if (env.openrouterEnabled && env.openRouterApiKey) {
-      openRouterApiKey = await getSecret(env.openRouterApiKey).catch(() => null);
+      return await getSecret(env.openRouterApiKey).catch(() => null);
     }
   } catch (err) {
     logEvent("warn", {
@@ -183,7 +182,15 @@ async function resolveAiSdkExtractModel(
       err: err instanceof Error ? err : String(err),
     });
   }
+  return null;
+}
 
+function resolveAiSdkExtractModelFor(
+  env: WorkerDepsEnv,
+  anthropicModel: string,
+  openRouterApiKey: string | null,
+  logComponent: string,
+): ReturnType<typeof resolveToolLoopAiSdkModel> {
   return resolveToolLoopAiSdkModel({
     openrouterEnabled: env.openrouterEnabled ?? false,
     extractModel: env.extractModel,
@@ -193,7 +200,7 @@ async function resolveAiSdkExtractModel(
     anthropicModel,
     anthropicBaseURL: env.anthropicBaseURL,
     aiGatewayToken: env.aiGatewayToken,
-    logComponent: "extract-deps",
+    logComponent,
   });
 }
 
@@ -203,7 +210,24 @@ export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<Extrac
       ? { accountId: env.cloudflareAccountId, apiToken: env.cloudflareApiToken }
       : null;
 
-  const aiSdk = await resolveAiSdkExtractModel(env);
+  const openRouterApiKey = await resolveOpenRouterApiKey(env);
+  // Tool-loop tier: falls back to the agentic (Sonnet-class) model.
+  const aiSdk = resolveAiSdkExtractModelFor(
+    env,
+    env.agentModel ?? DEFAULT_AGENT_MODEL,
+    openRouterApiKey,
+    "extract-deps",
+  );
+  // One-shot tier (issue #2166): falls back to the Haiku-class one-shot model —
+  // resolved SEPARATELY from the tool-loop above because the two tiers have
+  // different Anthropic fallbacks, even though both share the same
+  // `extractModel` (`EXTRACT_MODEL`) / OpenRouter key when that branch is usable.
+  const oneShotAiSdk = resolveAiSdkExtractModelFor(
+    env,
+    env.oneShotModel ?? DEFAULT_ONESHOT_MODEL,
+    openRouterApiKey,
+    "extract-deps:oneshot",
+  );
 
   // The worker ships its own @anthropic-ai/sdk copy (isolated node_modules);
   // the package types resolve via the root workspace copy. Both are the same
@@ -226,5 +250,12 @@ export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<Extrac
     repo: buildWorkerRepo(env),
     extractToolLoopEnabled: env.extractToolLoopEnabled ?? false,
     ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
+    ...(oneShotAiSdk
+      ? {
+          oneShotAiSdkModel: oneShotAiSdk.model,
+          oneShotAiSdkModelLabel: oneShotAiSdk.label,
+          oneShotAiSdkProvider: oneShotAiSdk.provider,
+        }
+      : {}),
   };
 }

@@ -215,10 +215,12 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
       },
     );
 
-    // OpenRouter extraction lane (issue #1536). Resolved ONCE here, not per
-    // window — the flag + secret reads shouldn't repeat each iteration. Inert on
-    // this path today: backfill never sets `useToolLoop`, so extraction always
-    // takes the one-shot Anthropic tier; wired for consistency + future use.
+    // OpenRouter/Anthropic-AI-SDK extraction lane (issue #1536 / #2166). Resolved
+    // ONCE here, not per window — the flag + secret reads shouldn't repeat each
+    // iteration. The Anthropic fallback is BACKFILL_EXTRACT_MODEL (Haiku),
+    // matching this path's one-shot-only extraction (backfill never sets
+    // `useToolLoop`) — threaded into `oneShotAiSdkModel` below so EXTRACT_MODEL
+    // governs backfill extraction too.
     const aiSdk = await resolveExtractAiSdkModel(env, BACKFILL_EXTRACT_MODEL);
 
     // ── Steps 4+: extract-window-N ──────────────────────────────────────────
@@ -255,7 +257,13 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               logger: backfillLogger,
               cloudflare: null,
               extractToolLoopEnabled: false,
-              ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
+              ...(aiSdk
+                ? {
+                    oneShotAiSdkModel: aiSdk.model,
+                    oneShotAiSdkModelLabel: aiSdk.label,
+                    oneShotAiSdkProvider: aiSdk.provider,
+                  }
+                : {}),
               repo: {
                 peekContentHash: async () => false,
                 commitContentHash: async () => {},

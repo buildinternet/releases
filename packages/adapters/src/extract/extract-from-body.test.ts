@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import { extractFromBody } from "./extract-from-body.js";
+import { anthropicSpikeModel } from "./extract-with-tools-aisdk.js";
 import { mockAnthropicClient } from "./test-helpers/anthropic-mock.js";
 import type { ExtractDeps, ExtractLogger } from "./types.js";
 
@@ -473,5 +474,293 @@ describe("extractFromBody — fallback paths", () => {
     expect(result.toolChars).toBeNull();
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]!.title).toBe("fallback-entry");
+  });
+});
+
+describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
+  test("routes through the AI-SDK seam when oneShotAiSdkModel is set, bypassing anthropicClient", async () => {
+    // A legacy-path client that throws if hit — asserting it's never called is
+    // the proof the AI-SDK branch took over instead of falling through.
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: (() => {
+          throw new Error("legacy Anthropic-direct path should not run");
+        }) as never,
+      } as never,
+    };
+
+    const aiSdkRequests: Array<{ model: string }> = [];
+    const mockFetch = (async (_url: string, init: RequestInit) => {
+      aiSdkRequests.push(JSON.parse(init.body as string) as { model: string });
+      return new Response(
+        JSON.stringify({
+          id: "msg_aisdk",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4-5",
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          content: [
+            {
+              type: "tool_use",
+              id: "tu_1",
+              name: "extract_releases",
+              input: {
+                releases: [{ title: "aisdk-entry", content: "via aisdk", isBreaking: false }],
+              },
+            },
+          ],
+          usage: {
+            input_tokens: 42,
+            output_tokens: 7,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    const model = anthropicSpikeModel({
+      apiKey: "sk-test",
+      model: "claude-haiku-4-5",
+      fetch: mockFetch,
+    });
+
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client, {
+        oneShotAiSdkModel: model,
+        oneShotAiSdkModelLabel: "claude-haiku-4-5",
+        oneShotAiSdkProvider: "anthropic",
+      }),
+    );
+
+    expect(aiSdkRequests.length).toBeGreaterThan(0);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("aisdk-entry");
+    expect(result.modelUsed).toBe("claude-haiku-4-5");
+    expect(result.mode).toBe("oneshot");
+  });
+
+  test("falls back to the legacy Anthropic-direct path when oneShotAiSdkModel is unset", async () => {
+    const params: Anthropic.MessageCreateParams[] = [];
+    const client = capturingClient(params);
+
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client, { oneShotModel: "claude-haiku-4-5-20251001" }),
+    );
+
+    expect(params).toHaveLength(1);
+    expect(result.modelUsed).toBe("claude-haiku-4-5-20251001");
+  });
+});
+
+describe("extractFromBody — one-shot ai_usage telemetry (issue #2166)", () => {
+  /** Drive the AI-SDK one-shot branch with a fixed usage payload and capture the
+   *  emitted log lines. `logEvent` writes structured JSON to console.log. */
+  async function captureUsageEvent(opts: {
+    provider: "anthropic" | "openrouter";
+    inputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  }): Promise<Record<string, unknown> | undefined> {
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: (() => {
+          throw new Error("legacy Anthropic-direct path should not run");
+        }) as never,
+      } as never,
+    };
+    const mockFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          id: "msg_usage",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4-5",
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          content: [
+            {
+              type: "tool_use",
+              id: "tu_1",
+              name: "extract_releases",
+              input: { releases: [{ title: "t", content: "c", isBreaking: false }] },
+            },
+          ],
+          usage: {
+            input_tokens: opts.inputTokens,
+            output_tokens: 11,
+            cache_creation_input_tokens: opts.cacheWriteTokens,
+            cache_read_input_tokens: opts.cacheReadTokens,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof globalThis.fetch;
+
+    const model = anthropicSpikeModel({
+      apiKey: "sk-test",
+      model: "claude-haiku-4-5",
+      fetch: mockFetch,
+    });
+
+    const lines: string[] = [];
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    };
+    try {
+      await extractFromBody(
+        {
+          body: SMALL_BODY,
+          systemPrompt: "test",
+          userMessage: "Extract from:",
+          sourceUrl: "https://x.test",
+          fetchUrl: "https://x.test/feed.json",
+          useToolLoop: false,
+        },
+        makeDeps(client, {
+          oneShotAiSdkModel: model,
+          oneShotAiSdkModelLabel: "claude-haiku-4-5",
+          oneShotAiSdkProvider: opts.provider,
+        }),
+      );
+    } finally {
+      console.log = origLog;
+    }
+
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        if (parsed.event === "ai_usage") return parsed;
+      } catch {
+        // non-JSON log line — ignore
+      }
+    }
+    return undefined;
+  }
+
+  // The point of this lane's telemetry is comparing Anthropic against OpenRouter.
+  // Anthropic reports the non-cached prompt portion, so the cached tokens have to
+  // be added back to get a total comparable with OpenRouter's.
+  test("adds cached tokens back into promptTokens on Anthropic", async () => {
+    const ev = await captureUsageEvent({
+      provider: "anthropic",
+      inputTokens: 100,
+      cacheReadTokens: 300,
+      cacheWriteTokens: 100,
+    });
+    expect(ev).toBeDefined();
+    expect(ev!.lane).toBe("extract-oneshot");
+    expect(ev!.provider).toBe("anthropic");
+    expect(ev!.input).toBe(100);
+    expect(ev!.promptTokens).toBe(500);
+    expect(ev!.cacheHitRate).toBeCloseTo(0.6, 5);
+  });
+
+  // OpenRouter's prompt count already includes the cached portion, so adding it
+  // again would double-count and understate the cache hit rate.
+  test("does not double-count cached tokens on OpenRouter", async () => {
+    const ev = await captureUsageEvent({
+      provider: "openrouter",
+      inputTokens: 500,
+      cacheReadTokens: 300,
+      cacheWriteTokens: 0,
+    });
+    expect(ev).toBeDefined();
+    expect(ev!.provider).toBe("openrouter");
+    expect(ev!.promptTokens).toBe(500);
+    expect(ev!.cacheHitRate).toBeCloseTo(0.6, 5);
+  });
+
+  test("reports a zero cacheHitRate rather than NaN when there are no prompt tokens", async () => {
+    const ev = await captureUsageEvent({
+      provider: "anthropic",
+      inputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+    expect(ev).toBeDefined();
+    expect(ev!.promptTokens).toBe(0);
+    expect(ev!.cacheHitRate).toBe(0);
+  });
+});
+
+describe("extractFromBody — one-shot AI-SDK runtime failure (issue #2166)", () => {
+  // Before #2166 this tier always reached Anthropic. Routing it to OpenRouter
+  // without a runtime fallback would swap one single-provider dependency for
+  // another — an OpenRouter outage would break the tier handling the large
+  // majority of extractions. Config-time fail-open cannot cover an in-flight call.
+  test("degrades to the legacy Anthropic-direct path when the AI-SDK call throws", async () => {
+    const client = mockAnthropicClient([
+      {
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "tu_fallback",
+            name: "extract_releases",
+            input: {
+              releases: [
+                {
+                  title: "legacy-fallback",
+                  content: "served by anthropic direct",
+                  isBreaking: false,
+                },
+              ],
+            },
+          } as never,
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ]);
+
+    // A transport-level failure, i.e. what an OpenRouter outage looks like here.
+    const boomFetch = (async () => {
+      throw new Error("openrouter unreachable");
+    }) as unknown as typeof globalThis.fetch;
+
+    const model = anthropicSpikeModel({
+      apiKey: "sk-test",
+      model: "deepseek-v4-flash",
+      fetch: boomFetch,
+    });
+
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client, {
+        oneShotAiSdkModel: model,
+        oneShotAiSdkModelLabel: "deepseek-v4-flash",
+        oneShotAiSdkProvider: "openrouter",
+      }),
+    );
+
+    // Extraction succeeded via the legacy path instead of propagating the error.
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("legacy-fallback");
+    expect(result.mode).toBe("oneshot");
   });
 });

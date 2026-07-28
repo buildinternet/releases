@@ -6,8 +6,10 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
+import type { LanguageModel } from "ai";
 import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 import type { UsageExtractionMode, UsageFallbackReason } from "@buildinternet/releases-core/schema";
+import { logEvent } from "@releases/lib/log-event";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
 import {
   extractReleasesToolFull,
@@ -65,11 +67,7 @@ export interface ExtractFromBodyResult {
 
 const MAX_BODY_CHARS = 400_000;
 
-async function runOneShot(
-  opts: ExtractFromBodyOpts,
-  deps: ExtractDeps,
-  approxTokens: number,
-): Promise<{
+interface OneShotResult {
   entries: ExtractedEntry[];
   totalInput: number;
   totalOutput: number;
@@ -77,11 +75,14 @@ async function runOneShot(
   cacheReadTokens: number;
   cacheWriteTokens: number;
   modelUsed: string;
-}> {
-  const { anthropicClient, agentModel, logger } = deps;
-  // Single forced-tool-call extraction — Haiku-class is reliable and ~⅓ the
-  // cost here. Falls back to agentModel when oneShotModel is unset.
-  const model = deps.oneShotModel ?? agentModel;
+}
+
+async function runOneShot(
+  opts: ExtractFromBodyOpts,
+  deps: ExtractDeps,
+  approxTokens: number,
+): Promise<OneShotResult> {
+  const { agentModel, logger } = deps;
 
   const content =
     opts.body.length > MAX_BODY_CHARS
@@ -95,25 +96,115 @@ async function runOneShot(
       `Body is ~${approxTokens.toLocaleString()} tokens — applying ${isHuge ? "huge" : "large"}-body guardrails`,
     );
   }
+  const maxOutputTokens = isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS;
+  const staticSystem = withGuidance(opts.systemPrompt, opts.guidance);
+  const guardrail = isLarge ? buildBodyGuardrail(approxTokens) : undefined;
+
+  // AI-SDK lane (issue #2166): when the caller resolved an OpenRouter/Anthropic
+  // AI-SDK model for the one-shot tier (`resolveToolLoopAiSdkModel` with the
+  // Haiku-class fallback — see extract-deps-worker.ts), route through it
+  // instead of calling `anthropicClient` directly. This is what lets
+  // `EXTRACT_MODEL` govern the one-shot tier — the tier that handles the large
+  // majority of extractions — not just the large-body tool-loop. Falls open to
+  // the legacy direct-SDK call below when unset, which only happens when NO
+  // Anthropic key resolved at all (resolveToolLoopAiSdkModel itself already
+  // falls open OpenRouter → Anthropic before returning `undefined`).
+  if (deps.oneShotAiSdkModel) {
+    const label = deps.oneShotAiSdkModelLabel ?? deps.oneShotModel ?? agentModel;
+    const provider = deps.oneShotAiSdkProvider ?? "anthropic";
+    try {
+      const { runOneShotAiSdk } = await import("./extract-oneshot-aisdk.js");
+      const result = await runOneShotAiSdk(
+        {
+          body: content,
+          systemPrompt: staticSystem,
+          guardrail,
+          userMessage: opts.userMessage,
+          maxOutputTokens,
+          preserveBody: opts.preserveBody,
+        },
+        { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
+      );
+      // Mirrors the other lanes' `ai_usage` event (workers/api/src/lib/text-model.ts's
+      // `withLaneUsageLogging` and `overviewUsageSink`) so Axiom shows the one-shot
+      // tier's routing — previously invisible since extract only logged to the
+      // `usage_log` D1 table.
+      //
+      // `promptTokens` / `cacheHitRate` replicate `cacheMetrics` in
+      // packages/ai/src/text-model.ts rather than importing it: packages/adapters
+      // deliberately does not depend on @releases/ai-internal (see the note in
+      // playbook-block.ts, which mirrors rather than imports for the same reason).
+      // They are NOT decoration — raw `input` is not comparable across providers,
+      // because OpenRouter's prompt count already includes the cached portion while
+      // Anthropic's excludes it. Since the whole point of this lane's telemetry is
+      // to compare Anthropic against OpenRouter routing, logging only raw `input`
+      // would make exactly the comparison it exists for come out wrong.
+      const promptTokens =
+        provider === "openrouter"
+          ? result.totalInput
+          : result.totalInput + result.cacheReadTokens + result.cacheWriteTokens;
+      logEvent("info", {
+        component: "ai",
+        event: "ai_usage",
+        lane: "extract-oneshot",
+        provider,
+        model: label,
+        input: result.totalInput,
+        output: result.totalOutput,
+        cacheCreate: result.cacheWriteTokens,
+        cacheRead: result.cacheReadTokens,
+        promptTokens,
+        cacheHitRate:
+          promptTokens > 0 ? Math.min(1, Math.max(0, result.cacheReadTokens / promptTokens)) : 0,
+      });
+      return { ...result, modelUsed: label };
+    } catch (err) {
+      // Degrade to the legacy direct-Anthropic call below rather than failing the
+      // extraction. Without this, moving the one-shot tier onto OpenRouter would
+      // TRADE one single-provider dependency for another: before #2166 this tier
+      // always reached Anthropic, so an OpenRouter outage would now break the tier
+      // that handles the large majority of extractions. `resolveToolLoopAiSdkModel`
+      // only fails open at config-resolution time (missing key/model) — it cannot
+      // help once the call itself is in flight.
+      //
+      // This also repairs the tool-loop's fallback: its catch retries via
+      // runOneShot, which now routes to the AI SDK, so an OpenRouter outage would
+      // otherwise have sent the "fallback" straight back to the provider that just
+      // failed. Now that retry reaches Anthropic as intended.
+      //
+      // Loud, not silent: a quietly-degrading lane is precisely what hid the
+      // three weeks of unintended Anthropic spend behind #2171.
+      logEvent("warn", {
+        component: "ai",
+        event: "extract-oneshot-aisdk-failed",
+        lane: "extract-oneshot",
+        provider,
+        model: label,
+        fallback: "anthropic-direct",
+        err: err instanceof Error ? err : String(err),
+      });
+    }
+  }
+
+  // Legacy path: direct Anthropic SDK call. Single forced-tool-call extraction
+  // — Haiku-class is reliable and ~⅓ the cost here. Falls back to agentModel
+  // when oneShotModel is unset.
+  const model = deps.oneShotModel ?? agentModel;
 
   const systemBlocks: Anthropic.TextBlockParam[] = [
-    {
-      type: "text",
-      text: withGuidance(opts.systemPrompt, opts.guidance),
-      cache_control: { type: "ephemeral" },
-    },
+    { type: "text", text: staticSystem, cache_control: { type: "ephemeral" } },
   ];
-  if (isLarge) {
-    systemBlocks.push({ type: "text", text: buildBodyGuardrail(approxTokens) });
+  if (guardrail) {
+    systemBlocks.push({ type: "text", text: guardrail });
   }
 
   // Both tools are named `extract_releases`, so tool_choice + response parsing
   // are identical; the crawl variant only swaps the `content` field to demand a
   // verbatim body, matching a body-preserving system prompt.
-  const tool = opts.preserveBody ? extractReleasesToolCrawl : extractReleasesToolFull;
-  const stream = anthropicClient.messages.stream({
+  const toolDef = opts.preserveBody ? extractReleasesToolCrawl : extractReleasesToolFull;
+  const stream = deps.anthropicClient.messages.stream({
     model,
-    max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
+    max_tokens: maxOutputTokens,
     // Deterministic parse on models that still accept it (Haiku one-shot,
     // Sonnet 4.6); omitted on Sonnet 5 / Opus 4.7+ / Fable, which 400 on a
     // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
@@ -122,7 +213,7 @@ async function runOneShot(
         { temperature: EXTRACTION_TEMPERATURE }
       : {}),
     system: systemBlocks,
-    tools: [tool],
+    tools: [toolDef],
     tool_choice: { type: "tool", name: "extract_releases" },
     messages: [{ role: "user", content: `${opts.userMessage}\n\n${content}` }],
   });
@@ -143,33 +234,12 @@ async function runOneShot(
   const toolBlock = response.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
   );
-  if (!toolBlock) {
-    return {
-      entries: [],
-      totalInput,
-      totalOutput,
-      hitMaxTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      modelUsed: model,
-    };
-  }
-
-  const input = toolBlock.input as Record<string, unknown>;
-  if (!input || !Array.isArray(input.releases)) {
-    return {
-      entries: [],
-      totalInput,
-      totalOutput,
-      hitMaxTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      modelUsed: model,
-    };
-  }
+  const input = toolBlock?.input as Record<string, unknown> | undefined;
+  const entries =
+    input && Array.isArray(input.releases) ? (input.releases as ExtractedEntry[]) : [];
 
   return {
-    entries: input.releases as ExtractedEntry[],
+    entries,
     totalInput,
     totalOutput,
     hitMaxTokens,

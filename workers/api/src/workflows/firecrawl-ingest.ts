@@ -277,9 +277,11 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           apiKey,
           ...(await resolveGatewayOpts(env)),
         });
-        // OpenRouter extraction lane (issue #1536) — undefined unless the flag is
-        // on + EXTRACT_MODEL + key are set. Inert here today (firecrawl extraction
-        // never opts into the tool-loop), threaded for consistency + future use.
+        // OpenRouter/Anthropic-AI-SDK extraction lane (issue #1536 / #2166) — the
+        // Anthropic fallback here is FIRECRAWL_EXTRACT_MODEL (Haiku), matching
+        // this path's one-shot-only extraction (it never opts into the
+        // tool-loop). Threaded into `oneShotAiSdkModel` so EXTRACT_MODEL governs
+        // this ingest path too.
         const aiSdk = await resolveExtractAiSdkModel(env, FIRECRAWL_EXTRACT_MODEL);
         const result = await extractFirecrawlMarkdown(
           markdown,
@@ -289,7 +291,13 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             agentModel: FIRECRAWL_EXTRACT_MODEL,
             logger: workerLogger,
             logUsageFn: (entry) => logUsage(db, { ...entry, sourceId }, "firecrawl-ingest"),
-            ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
+            ...(aiSdk
+              ? {
+                  oneShotAiSdkModel: aiSdk.model,
+                  oneShotAiSdkModelLabel: aiSdk.label,
+                  oneShotAiSdkProvider: aiSdk.provider,
+                }
+              : {}),
           },
           { pageUrl: attributeUrl },
         );

@@ -106,6 +106,24 @@ export interface ExtractDeps {
    * attribution reflects the real model. Ignored when `aiSdkModel` is unset.
    */
   aiSdkModelLabel?: string;
+  /**
+   * The one-shot-tier twin of `aiSdkModel` (issue #2166): when set, `runOneShot`
+   * routes through `extract-oneshot-aisdk.ts` (AI SDK) instead of calling
+   * `anthropicClient` directly, so `EXTRACT_MODEL` governs the one-shot tier
+   * too — the tier that handles the large majority of extractions. Resolved
+   * SEPARATELY from `aiSdkModel` because the two tiers fall back to different
+   * Anthropic models when OpenRouter is unusable (Haiku-class `oneShotModel`
+   * here vs. Sonnet-class `agentModel` for the tool-loop) — both branches share
+   * the same `EXTRACT_MODEL` / OpenRouter key when that branch is usable.
+   */
+  oneShotAiSdkModel?: unknown;
+  /** Label for the model behind `oneShotAiSdkModel`, reported as `modelUsed`
+   *  on the AI-SDK one-shot path. Ignored when `oneShotAiSdkModel` is unset. */
+  oneShotAiSdkModelLabel?: string;
+  /** Which branch resolved `oneShotAiSdkModel` — used to tag the `ai_usage`
+   *  telemetry event with the real provider. Ignored when `oneShotAiSdkModel`
+   *  is unset. */
+  oneShotAiSdkProvider?: "openrouter" | "anthropic";
 }
 
 export interface ExtractRepo {
