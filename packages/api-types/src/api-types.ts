@@ -825,6 +825,49 @@ export interface StuckSourcesResponse extends ListResponse<StuckSource> {
   };
 }
 
+// ── Admin telemetry: provider / ingest health ──
+
+/**
+ * A source flagged as "overdue for evaluation" — `sources.last_fetched_at`
+ * (written on every successful check, including `no_change`) is older than
+ * the health scan's threshold, or null. This is deliberately independent of
+ * release recency: a source can be perfectly healthy (actively checked, just
+ * quiet) while its latest release is months old, and conversely every source
+ * can look quiet-but-fine by release date while the thing that checks them —
+ * ingest, extraction, the AI provider — has silently stopped running. See the
+ * 2026-07-23 spend-cap outage (#2168): `last_fetched_at` froze across every
+ * affected source for six days while nothing else changed.
+ */
+export interface ProviderHealthSource {
+  sourceId: string;
+  sourceSlug: string;
+  name: string;
+  type: SourceType;
+  orgSlug: string | null;
+  orgName: string | null;
+  fetchPriority: SourceFetchPriority;
+  isPrimary: boolean;
+  /** `sources.last_fetched_at` — null when the source has never been fetched successfully. */
+  lastFetchedAt: string | null;
+  /** Days since `lastFetchedAt` (or since the source was created, if never fetched). */
+  daysSinceFetched: number;
+}
+
+export interface ProviderHealthResponse extends ListResponse<ProviderHealthSource> {
+  meta: {
+    /** A source is "overdue" once its last successful check exceeds this many days. */
+    overdueThresholdDays: number;
+    /** Active (non-paused, non-deleted) sources considered by the scan. */
+    totalActiveSources: number;
+    /** Sources whose last successful check is older than the threshold, or never. */
+    overdueSources: number;
+    /** Distinct orgs with at least one overdue source. */
+    overdueOrgs: number;
+    /** Distinct orgs represented among active sources. */
+    totalOrgs: number;
+  };
+}
+
 // ── Releases ──
 
 /**
