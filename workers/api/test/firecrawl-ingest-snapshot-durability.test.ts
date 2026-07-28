@@ -25,6 +25,7 @@ import { organizations, sources, sourceRawSnapshots } from "@buildinternet/relea
 import type { RawRelease } from "@releases/adapters/types";
 import type { WorkflowStep } from "cloudflare:workers";
 import { FirecrawlIngestWorkflow } from "../src/workflows/firecrawl-ingest.js";
+import { classifyProviderQuota } from "@releases/lib/provider-quota";
 
 const DELTA = "## Acme 2.0\n\nBig new release with real body content.";
 
@@ -213,6 +214,30 @@ describe("FirecrawlIngestWorkflow — pre-extract snapshot durability", () => {
     expect(attempts).toBe(1);
     // NonRetryableError is what tells the Workflows runtime to stop.
     expect((thrown as Error)?.name).toMatch(/NonRetryable/);
+  });
+
+  // The rewrap to NonRetryableError keeps only the message, but the AI SDK
+  // stamps provider identity on fields. Without carrying the original as
+  // `cause`, an OpenRouter shutoff would be alerted as provider "unknown".
+  it("preserves provider attribution through the non-retryable rewrap", async () => {
+    const db = mkDb();
+    const { bucket } = mkBucket();
+    const { step } = mkStepSpy();
+
+    const capped = async () => {
+      throw Object.assign(new Error("Insufficient credits"), { providerId: "openrouter.chat" });
+    };
+
+    let thrown: unknown;
+    try {
+      await runWorkflow(db, bucket, capped, step);
+    } catch (err) {
+      thrown = err;
+    }
+
+    // The original survives on `cause`, so the outer handler can still attribute it.
+    const cause = (thrown as { cause?: unknown })?.cause;
+    expect(classifyProviderQuota(cause)?.provider).toBe("openrouter");
   });
 
   it("does not fail the ingest when RAW_SNAPSHOTS is unbound", async () => {

@@ -251,7 +251,17 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           // prevent. The outer handler still logs `provider-quota-exhausted`
           // for alerting — the message is preserved so it reclassifies there.
           if (classifyProviderQuota(err)) {
-            throw new NonRetryableError(err instanceof Error ? err.message : String(err));
+            // Carry the original error as `cause`. `NonRetryableError` only
+            // takes a message, and the AI SDK stamps provider identity on
+            // fields (`providerId`) that a message-only rewrap discards — the
+            // outer handler reclassifies whatever it catches, so without this
+            // an OpenRouter shutoff would be attributed `provider: "unknown"`,
+            // degrading the very alert this path exists to raise.
+            const nonRetryable = new NonRetryableError(
+              err instanceof Error ? err.message : String(err),
+            );
+            (nonRetryable as { cause?: unknown }).cause = err;
+            throw nonRetryable;
           }
           throw err;
         }
@@ -384,7 +394,10 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           // or the reset date passes. Give it its own event so it is alertable
           // and lands in the operator digest, rather than hiding in the general
           // `ingest-failed` stream the way it did for six days on 2026-07-23.
-          const quota = classifyProviderQuota(err);
+          // Classify against the original error when the extract step rewrapped
+          // it as NonRetryableError — the rewrap keeps only the message, and
+          // provider attribution lives on the original's fields.
+          const quota = classifyProviderQuota((err as { cause?: unknown })?.cause ?? err);
           if (quota) {
             logEvent("error", {
               component: "firecrawl-ingest-workflow",

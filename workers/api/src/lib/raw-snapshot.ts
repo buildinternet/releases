@@ -55,12 +55,24 @@ export async function saveRawSnapshot(
   // `onConflictDoNothing` returns no rows when the body was already stored, but
   // callers still need the snapshot id — it is what `reextract-source` takes as
   // `snapshotId`, and a replay is just as valid against a pre-existing snapshot
-  // as a fresh one. Re-read it on the conflict path only, so the happy path
-  // stays a single statement.
-  let id = insertedRows[0]?.id ?? null;
-  if (id === null) {
+  // as a fresh one. Re-read on the conflict path only, so the happy path stays a
+  // single statement.
+  //
+  // Return the EXISTING row's metadata wholesale rather than pairing its id with
+  // our locally-derived `r2Key`: the unique index is (source_id, content_hash)
+  // and excludes `format`, so saving a markdown body that already exists as HTML
+  // conflicts against the HTML row. Mixing that row's id with the `.md` key we
+  // just computed would hand a caller an id and a key describing different
+  // objects, and a replay would silently read the wrong one.
+  const inserted = insertedRows[0];
+  if (!inserted) {
     const [existing] = await deps.db
-      .select({ id: sourceRawSnapshots.id })
+      .select({
+        id: sourceRawSnapshots.id,
+        r2Key: sourceRawSnapshots.r2Key,
+        contentHash: sourceRawSnapshots.contentHash,
+        bytes: sourceRawSnapshots.bytes,
+      })
       .from(sourceRawSnapshots)
       .where(
         and(
@@ -69,10 +81,10 @@ export async function saveRawSnapshot(
         ),
       )
       .limit(1);
-    id = existing?.id ?? null;
+    if (existing) return { ...existing, created: false };
   }
 
-  return { id, r2Key, contentHash: hash, bytes, created: insertedRows.length > 0 };
+  return { id: inserted?.id ?? null, r2Key, contentHash: hash, bytes, created: inserted != null };
 }
 
 export async function loadRawSnapshot(deps: { R2: R2Like }, r2Key: string): Promise<string | null> {
