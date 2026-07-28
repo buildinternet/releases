@@ -2804,15 +2804,35 @@ async function buildEnrichMap(
   rawReleases: readonly RawRelease[],
   env: FetchOneEnv,
 ): Promise<Map<number, EnrichOutcome>> {
-  if (
-    !(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled)) ||
-    meta.feedContentDepth !== "summary-only"
-  ) {
+  // Every branch below is a silent no-op to the caller (an empty map), which is
+  // exactly the failure mode #2171 hid behind: a hand-built FetchOneEnv that
+  // forwarded zero AI-lane keys never enriched, and nothing logged why. Emit a
+  // cheap `feed-enrich-skip` event per reason so an operator can tell "flag is
+  // off" apart from "no usable model" apart from "source isn't summary-only"
+  // without re-deriving it from an absence of `feed-enrich` events in Axiom.
+  if (meta.feedContentDepth !== "summary-only") {
+    return new Map();
+  }
+  if (!(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled))) {
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "feed-enrich-skip",
+      reason: "flag-off",
+      sourceId: source.id,
+    });
     return new Map();
   }
   const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
   const deps = await buildEnrichDeps(env, thinChars, db);
-  if (!deps) return new Map();
+  if (!deps) {
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "feed-enrich-skip",
+      reason: "no-usable-model",
+      sourceId: source.id,
+    });
+    return new Map();
+  }
 
   return enrichNewThinItems(db, source, meta, rawReleases, env, {
     enrichFn: (item) => enrichFeedItem(item, deps),
