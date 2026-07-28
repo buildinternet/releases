@@ -53,6 +53,7 @@ export {
   generateContentForReleases,
 };
 import { type AnthropicEnv } from "../lib/anthropic.js";
+import { type TextModelEnv } from "../lib/text-model.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 
 /**
@@ -61,7 +62,12 @@ import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
  * the step closures that consume them so they never land in instance state.
  */
 export type PollAndFetchWorkflowEnv = InvalidationEnv &
-  AnthropicEnv & {
+  AnthropicEnv &
+  // The OpenRouter lane config (key, switch, per-lane model vars) rides here so
+  // `buildFetchOneEnv` can forward it. Omitting it is what silently pinned the
+  // marketing-classifier + feed-enrich lanes to Anthropic Haiku — see the
+  // history note in `_fetch-env.ts`.
+  TextModelEnv & {
     DB: D1Database;
     CRON_ENABLED?: string;
     GITHUB_TOKEN?: { get(): Promise<string> };
