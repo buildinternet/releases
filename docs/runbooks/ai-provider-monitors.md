@@ -42,7 +42,7 @@ See [logging.md](../architecture/logging.md) for `logEvent` payload conventions 
 ### Editing them programmatically
 
 The Axiom **MCP** (`mcp__axiom__*`) can create and update monitors — `createMonitor` /
-`updateMonitor`, alongside `checkMonitors` for state. All three monitors here were created and
+`updateMonitor`, alongside `checkMonitors` for state. All four monitors here were created and
 tuned through it. (Earlier docs, including
 [auth-audit-monitors.md](./auth-audit-monitors.md), said the MCP was read-only for monitors and
 that writes had to go through the management API with `AXIOM_MGMT_TOKEN`; that is no longer
