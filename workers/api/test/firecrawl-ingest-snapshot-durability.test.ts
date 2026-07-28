@@ -50,13 +50,39 @@ function mkDb() {
   return db;
 }
 
+/**
+ * Step fake that honors the step's retry policy, because the retry behavior is
+ * exactly what these tests assert.
+ *
+ * A spy that always invokes the callback once makes an `attempts === 1`
+ * assertion vacuous — it would pass whether or not quota errors are marked
+ * non-retryable, which is the entire claim under test. This one re-invokes on
+ * ordinary failures up to `retries.limit` and stops immediately on
+ * `NonRetryableError`, mirroring the Workflows runtime closely enough for the
+ * distinction to be observable.
+ */
 function mkStepSpy() {
   const names: string[] = [];
   const step = {
     do: async (name: string, a: unknown, b?: unknown) => {
       names.push(name);
+      const config = (typeof a === "function" ? undefined : a) as
+        | { retries?: { limit?: number } }
+        | undefined;
       const fn = (typeof a === "function" ? a : b) as () => Promise<unknown>;
-      return await fn();
+      const limit = config?.retries?.limit ?? 0;
+      let lastErr: unknown;
+      for (let attempt = 0; attempt <= limit; attempt += 1) {
+        try {
+          return await fn();
+        } catch (err) {
+          lastErr = err;
+          // NonRetryableError is the runtime's stop signal — honor it here or
+          // the fake would retry precisely what the code asked it not to.
+          if ((err as Error)?.name?.includes("NonRetryable")) throw err;
+        }
+      }
+      throw lastErr;
     },
     sleep: async () => {},
   } as unknown as WorkflowStep;
@@ -214,6 +240,30 @@ describe("FirecrawlIngestWorkflow — pre-extract snapshot durability", () => {
     expect(attempts).toBe(1);
     // NonRetryableError is what tells the Workflows runtime to stop.
     expect((thrown as Error)?.name).toMatch(/NonRetryable/);
+  });
+
+  // Control for the assertion above: proves the harness genuinely retries, so
+  // `attempts === 1` on the quota path is a real result rather than an artifact
+  // of a step fake that only ever calls its callback once.
+  it("does retry an ordinary extraction failure (control)", async () => {
+    const db = mkDb();
+    const { bucket } = mkBucket();
+    const { step } = mkStepSpy();
+
+    let attempts = 0;
+    const flaky = async () => {
+      attempts += 1;
+      throw new Error("socket hang up");
+    };
+
+    try {
+      await runWorkflow(db, bucket, flaky, step);
+    } catch {
+      // expected — retries exhaust and the workflow rethrows
+    }
+
+    // RETRY_FETCH is retries.limit = 3, so 1 initial + 3 retries.
+    expect(attempts).toBe(4);
   });
 
   // The rewrap to NonRetryableError keeps only the message, but the AI SDK
