@@ -701,3 +701,66 @@ describe("extractFromBody — one-shot ai_usage telemetry (issue #2166)", () => 
     expect(ev!.cacheHitRate).toBe(0);
   });
 });
+
+describe("extractFromBody — one-shot AI-SDK runtime failure (issue #2166)", () => {
+  // Before #2166 this tier always reached Anthropic. Routing it to OpenRouter
+  // without a runtime fallback would swap one single-provider dependency for
+  // another — an OpenRouter outage would break the tier handling the large
+  // majority of extractions. Config-time fail-open cannot cover an in-flight call.
+  test("degrades to the legacy Anthropic-direct path when the AI-SDK call throws", async () => {
+    const client = mockAnthropicClient([
+      {
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "tu_fallback",
+            name: "extract_releases",
+            input: {
+              releases: [
+                {
+                  title: "legacy-fallback",
+                  content: "served by anthropic direct",
+                  isBreaking: false,
+                },
+              ],
+            },
+          } as never,
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ]);
+
+    // A transport-level failure, i.e. what an OpenRouter outage looks like here.
+    const boomFetch = (async () => {
+      throw new Error("openrouter unreachable");
+    }) as unknown as typeof globalThis.fetch;
+
+    const model = anthropicSpikeModel({
+      apiKey: "sk-test",
+      model: "deepseek-v4-flash",
+      fetch: boomFetch,
+    });
+
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client, {
+        oneShotAiSdkModel: model,
+        oneShotAiSdkModelLabel: "deepseek-v4-flash",
+        oneShotAiSdkProvider: "openrouter",
+      }),
+    );
+
+    // Extraction succeeded via the legacy path instead of propagating the error.
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("legacy-fallback");
+    expect(result.mode).toBe("oneshot");
+  });
+});

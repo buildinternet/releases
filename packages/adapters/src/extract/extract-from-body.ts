@@ -112,51 +112,78 @@ async function runOneShot(
   if (deps.oneShotAiSdkModel) {
     const label = deps.oneShotAiSdkModelLabel ?? deps.oneShotModel ?? agentModel;
     const provider = deps.oneShotAiSdkProvider ?? "anthropic";
-    const { runOneShotAiSdk } = await import("./extract-oneshot-aisdk.js");
-    const result = await runOneShotAiSdk(
-      {
-        body: content,
-        systemPrompt: staticSystem,
-        guardrail,
-        userMessage: opts.userMessage,
-        maxOutputTokens,
-        preserveBody: opts.preserveBody,
-      },
-      { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
-    );
-    // Mirrors the other lanes' `ai_usage` event (workers/api/src/lib/text-model.ts's
-    // `withLaneUsageLogging` and `overviewUsageSink`) so Axiom shows the one-shot
-    // tier's routing — previously invisible since extract only logged to the
-    // `usage_log` D1 table.
-    //
-    // `promptTokens` / `cacheHitRate` replicate `cacheMetrics` in
-    // packages/ai/src/text-model.ts rather than importing it: packages/adapters
-    // deliberately does not depend on @releases/ai-internal (see the note in
-    // playbook-block.ts, which mirrors rather than imports for the same reason).
-    // They are NOT decoration — raw `input` is not comparable across providers,
-    // because OpenRouter's prompt count already includes the cached portion while
-    // Anthropic's excludes it. Since the whole point of this lane's telemetry is
-    // to compare Anthropic against OpenRouter routing, logging only raw `input`
-    // would make exactly the comparison it exists for come out wrong.
-    const promptTokens =
-      provider === "openrouter"
-        ? result.totalInput
-        : result.totalInput + result.cacheReadTokens + result.cacheWriteTokens;
-    logEvent("info", {
-      component: "ai",
-      event: "ai_usage",
-      lane: "extract-oneshot",
-      provider,
-      model: label,
-      input: result.totalInput,
-      output: result.totalOutput,
-      cacheCreate: result.cacheWriteTokens,
-      cacheRead: result.cacheReadTokens,
-      promptTokens,
-      cacheHitRate:
-        promptTokens > 0 ? Math.min(1, Math.max(0, result.cacheReadTokens / promptTokens)) : 0,
-    });
-    return { ...result, modelUsed: label };
+    try {
+      const { runOneShotAiSdk } = await import("./extract-oneshot-aisdk.js");
+      const result = await runOneShotAiSdk(
+        {
+          body: content,
+          systemPrompt: staticSystem,
+          guardrail,
+          userMessage: opts.userMessage,
+          maxOutputTokens,
+          preserveBody: opts.preserveBody,
+        },
+        { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
+      );
+      // Mirrors the other lanes' `ai_usage` event (workers/api/src/lib/text-model.ts's
+      // `withLaneUsageLogging` and `overviewUsageSink`) so Axiom shows the one-shot
+      // tier's routing — previously invisible since extract only logged to the
+      // `usage_log` D1 table.
+      //
+      // `promptTokens` / `cacheHitRate` replicate `cacheMetrics` in
+      // packages/ai/src/text-model.ts rather than importing it: packages/adapters
+      // deliberately does not depend on @releases/ai-internal (see the note in
+      // playbook-block.ts, which mirrors rather than imports for the same reason).
+      // They are NOT decoration — raw `input` is not comparable across providers,
+      // because OpenRouter's prompt count already includes the cached portion while
+      // Anthropic's excludes it. Since the whole point of this lane's telemetry is
+      // to compare Anthropic against OpenRouter routing, logging only raw `input`
+      // would make exactly the comparison it exists for come out wrong.
+      const promptTokens =
+        provider === "openrouter"
+          ? result.totalInput
+          : result.totalInput + result.cacheReadTokens + result.cacheWriteTokens;
+      logEvent("info", {
+        component: "ai",
+        event: "ai_usage",
+        lane: "extract-oneshot",
+        provider,
+        model: label,
+        input: result.totalInput,
+        output: result.totalOutput,
+        cacheCreate: result.cacheWriteTokens,
+        cacheRead: result.cacheReadTokens,
+        promptTokens,
+        cacheHitRate:
+          promptTokens > 0 ? Math.min(1, Math.max(0, result.cacheReadTokens / promptTokens)) : 0,
+      });
+      return { ...result, modelUsed: label };
+    } catch (err) {
+      // Degrade to the legacy direct-Anthropic call below rather than failing the
+      // extraction. Without this, moving the one-shot tier onto OpenRouter would
+      // TRADE one single-provider dependency for another: before #2166 this tier
+      // always reached Anthropic, so an OpenRouter outage would now break the tier
+      // that handles the large majority of extractions. `resolveToolLoopAiSdkModel`
+      // only fails open at config-resolution time (missing key/model) — it cannot
+      // help once the call itself is in flight.
+      //
+      // This also repairs the tool-loop's fallback: its catch retries via
+      // runOneShot, which now routes to the AI SDK, so an OpenRouter outage would
+      // otherwise have sent the "fallback" straight back to the provider that just
+      // failed. Now that retry reaches Anthropic as intended.
+      //
+      // Loud, not silent: a quietly-degrading lane is precisely what hid the
+      // three weeks of unintended Anthropic spend behind #2171.
+      logEvent("warn", {
+        component: "ai",
+        event: "extract-oneshot-aisdk-failed",
+        lane: "extract-oneshot",
+        provider,
+        model: label,
+        fallback: "anthropic-direct",
+        err: err instanceof Error ? err : String(err),
+      });
+    }
   }
 
   // Legacy path: direct Anthropic SDK call. Single forced-tool-call extraction
