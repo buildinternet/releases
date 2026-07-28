@@ -157,6 +157,7 @@ import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
 import { getActiveSessionRaw } from "../lib/active-fetch-session.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
+import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
@@ -647,7 +648,6 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     (src.type === "scrape" && meta.feedUrl != null)
   ) {
     // Feed, GitHub, App Store, and scrape sources with a discovered feedUrl: fetch server-side
-    const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
     const sessionId = c.req.query("sessionId") ?? undefined;
     const maxRaw = c.req.query("max");
     const maxParsed = maxRaw ? Number.parseInt(maxRaw, 10) : null;
@@ -665,31 +665,17 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     // already owns the crawl pipeline. See #1061.
     const maSessionHeader = c.req.header("X-Releases-MA-Session");
     const skipDelegation = maSessionHeader !== undefined && maSessionHeader.length > 0;
-    const result = await fetchOne(
-      db,
-      src,
-      {
-        GITHUB_TOKEN: githubToken,
-        RELEASES_INDEX: c.env.RELEASES_INDEX,
-        CHANGELOG_CHUNKS_INDEX: c.env.CHANGELOG_CHUNKS_INDEX,
-        EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
-        VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
-        OPENAI_API_KEY: c.env.OPENAI_API_KEY,
-        RELEASE_HUB: c.env.RELEASE_HUB,
-        WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
-        DB: c.env.DB,
-        DETERMINISTIC_UPDATE_WORKFLOW: c.env.DETERMINISTIC_UPDATE_WORKFLOW,
-        SOURCE_ACTOR: c.env.SOURCE_ACTOR,
-        STATUS_HUB: c.env.STATUS_HUB,
-        LATEST_CACHE: c.env.LATEST_CACHE,
-        MA_SESSIONS_DISABLED: c.env.MA_SESSIONS_DISABLED,
-        MA_DAILY_SPEND_CAP_ORG_CENTS: c.env.MA_DAILY_SPEND_CAP_ORG_CENTS,
-        MA_DAILY_SPEND_CAP_GLOBAL_CENTS: c.env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS,
-        MEDIA: c.env.MEDIA,
-        FLAGS: c.env.FLAGS,
-      },
-      { sessionId, dryRun, maxEntries: maxParsed ?? undefined, skipDelegation },
-    );
+    // Route through the single builder shared with the workflow ingest paths
+    // (#2171) — a hand-built literal here previously forwarded zero AI-lane
+    // keys (ANTHROPIC_API_KEY, OPENROUTER_*, FEED_ENRICH_*, SUMMARIZE_MODEL, …),
+    // so a manual fetch silently skipped feed enrichment. See _fetch-env.ts.
+    const fetchEnv = await buildFetchOneEnv(c.env);
+    const result = await fetchOne(db, src, fetchEnv, {
+      sessionId,
+      dryRun,
+      maxEntries: maxParsed ?? undefined,
+      skipDelegation,
+    });
     responsePayload = { fetched: true, ...result };
     if (result.releasesInserted > 0) {
       c.executionCtx.waitUntil(
