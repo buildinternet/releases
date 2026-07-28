@@ -51,7 +51,10 @@ describe("runSourceBackfill", () => {
     expect(report.deduped).toBe(2); // #a collapsed
     expect(report.dateRange.from).toBe("2024-01-01T00:00:00.000Z");
     expect(report.dateRange.to).toBe("2024-03-01T00:00:00.000Z");
-    expect(report.inserted).toBe(0);
+    // `null`, NOT 0 — see `SourceBackfillReport.inserted` (#2168 item 5a).
+    expect(report.inserted).toBeNull();
+    // `found` is what ingest would receive, known without running it.
+    expect(report.found).toBe(2);
     expect(report.via).toBe("supplied");
     expect(report.windows).toBe(2);
   });
@@ -90,6 +93,8 @@ describe("runSourceBackfill", () => {
     const report = await runSourceBackfill(SOURCE, { dryRun: false }, deps);
 
     expect(enrichCalls).toBe(0);
+    // A genuine 0: ingest ran and inserted nothing. The dry-run case reports
+    // `null` instead — these two must never collapse into the same value.
     expect(report.inserted).toBe(0);
   });
 });

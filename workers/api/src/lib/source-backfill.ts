@@ -34,10 +34,17 @@ export interface SourceBackfillReport {
   /** Unique-by-url count submitted to ingest. */
   deduped: number;
   dateRange: { from: string | null; to: string | null };
-  /** rawReleases.length reported by ingest (0 on dryRun). */
+  /** rawReleases.length handed to ingest. Equals `deduped` on both paths — a dry
+   *  run reports it rather than zeroing it, since it is already known. */
   found: number;
-  /** Rows actually inserted (0 on dryRun). */
-  inserted: number;
+  /**
+   * Rows actually inserted, or `null` when not computed — which today means a dry
+   * run. Deliberately NOT `0`: zero is a real commit-path answer ("ran, inserted
+   * nothing"), and collapsing "unknown" into it is what made ten dry runs report
+   * `new=0` and read as "no content was lost" during the 2026-07-23 recovery. A
+   * commit run on one of those sources then inserted 5 rows (#2168 item 5a).
+   */
+  inserted: number | null;
   dryRun: boolean;
   /** Caller hint, set ONLY when the Firecrawl ceiling reduced a deeper request
    *  and the run was capped with untouched tail. Populated by the route handler
@@ -100,8 +107,12 @@ export async function runSourceBackfill(
     extracted: extracted.releases.length,
     deduped: deduped.length,
     dateRange: dateRange(deduped),
-    found: 0,
-    inserted: 0,
+    // `found` is what ingest receives, i.e. `deduped.length` on both paths — known
+    // here without running ingest, so a dry run reports it instead of zeroing it.
+    found: deduped.length,
+    // Overwritten with the real count on the commit path below. Stays `null` on a
+    // dry run: nothing was inserted and the would-be-new count is not computed.
+    inserted: null,
     dryRun: opts.dryRun,
   };
 

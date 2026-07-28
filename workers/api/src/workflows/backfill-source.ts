@@ -114,7 +114,8 @@ interface WindowStepResult {
   deduped: number;
   insertedIds: string[];
   found: number;
-  inserted: number;
+  /** Rows written; `null` when not computed. See `SourceBackfillReport.inserted`. */
+  inserted: number | null;
   entries: Array<{ url: string | undefined; publishedAt: string | undefined }>;
 }
 
@@ -307,8 +308,14 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               extracted: entries.length,
               deduped: deduped.length,
               insertedIds: [],
-              found: 0,
-              inserted: 0,
+              // `found` is the count handed to the ingest call, which on the commit
+              // path is exactly `deduped.length` (`ingestRawReleases` returns
+              // `found: rawReleases.length`). The dry run already knows it, so
+              // reporting it is honest — the old hardcoded `0` was not.
+              found: deduped.length,
+              // Not computed on a dry run — `null`, never `0`. Sliver 2 resolves the
+              // real would-be-new count against stored URLs.
+              inserted: null,
               entries: deduped.map((e) => ({
                 url: e.url ?? undefined,
                 publishedAt: e.publishedAt?.toISOString(),
@@ -339,7 +346,9 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
     const report = await step.do("finalize", RETRY_POLL, async () => {
       const allExtracted = windowResults.reduce((n, r) => n + r.extracted, 0);
       const allFound = windowResults.reduce((n, r) => n + r.found, 0);
-      const allInserted = windowResults.reduce((n, r) => n + r.inserted, 0);
+      // `null` on a dry run, matching the per-window results. `dryRun` is read once
+      // from the payload and closed over, so windows can never disagree.
+      const allInserted = dryRun ? null : windowResults.reduce((n, r) => n + (r.inserted ?? 0), 0);
 
       // Aggregate globally-unique across windows: a URL straddling a slice
       // boundary appears in two adjacent windows, so per-window sums/flattens

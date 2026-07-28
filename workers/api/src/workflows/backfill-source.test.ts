@@ -189,8 +189,10 @@ describe("BackfillSourceWorkflow", () => {
     expect(report.windows as number).toBeGreaterThanOrEqual(2);
     expect(report.extracted as number).toBeGreaterThan(0);
     expect(report.deduped as number).toBeGreaterThan(0);
-    expect(report.inserted).toBe(0);
-    expect(report.found).toBe(0);
+    // `null`, never `0` — a dry run has not computed this. See #2168 item 5a.
+    expect(report.inserted).toBeNull();
+    // `found` is knowable without ingesting, so a dry run reports it for real.
+    expect(report.found).toBe(report.deduped);
     // dateRange from the per-window entries
     expect(report.dateRange).toBeDefined();
     const dr = report.dateRange as { from: string | null; to: string | null };

@@ -163,14 +163,17 @@ describe("POST /v1/workflows/backfill-source", () => {
       via: string;
       extracted: number;
       deduped: number;
-      inserted: number;
+      found: number;
+      inserted: number | null;
       dryRun: boolean;
       dateRange: { from: string | null; to: string | null };
     };
     expect(body.via).toBe("supplied");
     expect(body.extracted).toBe(3);
     expect(body.deduped).toBe(2);
-    expect(body.inserted).toBe(0);
+    // `null`, not 0 — the route must surface "not computed". See #2168 item 5a.
+    expect(body.inserted).toBeNull();
+    expect(body.found).toBe(2);
     expect(body.dryRun).toBe(true);
     expect(body.dateRange.from).toBe("2024-01-01T00:00:00.000Z");
     expect(body.dateRange.to).toBe("2024-03-01T00:00:00.000Z");
