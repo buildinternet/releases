@@ -189,8 +189,13 @@ describe("BackfillSourceWorkflow", () => {
     expect(report.windows as number).toBeGreaterThanOrEqual(2);
     expect(report.extracted as number).toBeGreaterThan(0);
     expect(report.deduped as number).toBeGreaterThan(0);
-    expect(report.inserted).toBe(0);
-    expect(report.found).toBe(0);
+    // `null` on a dry run (#2168 item 5a): nothing was inserted AND the would-be-new
+    // count was never computed. Reporting 0 conflated that with a real commit-path
+    // "inserted nothing" and produced a false all-clear during the 2026-07-23 recovery.
+    expect(report.inserted).toBeNull();
+    // `found` is the count ingest would receive — knowable without running it, so a
+    // dry run reports it rather than the old hardcoded 0.
+    expect(report.found).toBe(report.deduped);
     // dateRange from the per-window entries
     expect(report.dateRange).toBeDefined();
     const dr = report.dateRange as { from: string | null; to: string | null };

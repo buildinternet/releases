@@ -163,14 +163,19 @@ describe("POST /v1/workflows/backfill-source", () => {
       via: string;
       extracted: number;
       deduped: number;
-      inserted: number;
+      found: number;
+      inserted: number | null;
       dryRun: boolean;
       dateRange: { from: string | null; to: string | null };
     };
     expect(body.via).toBe("supplied");
     expect(body.extracted).toBe(3);
     expect(body.deduped).toBe(2);
-    expect(body.inserted).toBe(0);
+    // Dry run reports `null`, not 0 — see #2168 item 5a. A hardcoded 0 here is
+    // indistinguishable from a real commit result of "inserted nothing", which is
+    // how ten dry runs were read as "no content is missing" during recovery.
+    expect(body.inserted).toBeNull();
+    expect(body.found).toBe(2);
     expect(body.dryRun).toBe(true);
     expect(body.dateRange.from).toBe("2024-01-01T00:00:00.000Z");
     expect(body.dateRange.to).toBe("2024-03-01T00:00:00.000Z");
