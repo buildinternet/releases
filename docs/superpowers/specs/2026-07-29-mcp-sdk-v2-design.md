@@ -1,7 +1,11 @@
 # Adopt MCP spec 2026-07-28 in `workers/mcp`
 
 **Date:** 2026-07-29
-**Status:** Design approved, not yet implemented
+**Status:** Implemented — [PR #2190](https://github.com/buildinternet/releases/pull/2190). Read
+this as a historical design snapshot: the inline `> **Correction (2026-07-29, …)**` blockquotes
+below record where implementation disproved the design, and
+[mcp.md → Transport](../../architecture/mcp.md#transport) is the authoritative account of what
+actually shipped.
 **Sibling work:** [buildinternet/sunny#773](https://github.com/buildinternet/sunny/issues/773) and its Phase-1 PR [sunny#774](https://github.com/buildinternet/sunny/pull/774)
 
 ## Background

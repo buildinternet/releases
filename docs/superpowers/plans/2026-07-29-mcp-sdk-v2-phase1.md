@@ -521,7 +521,15 @@ Expected: PASS and clean. **If either fails**, revert `package.json` to `~4.3.6`
 
 - [ ] **Step 3: Verify in the main checkout**
 
-Worktree `tsc` runs on `workers/mcp` are known to falsely report a dual-zod split. Before trusting a **failure** here, re-run `npx tsc --noEmit` from `workers/mcp/` in `~/Code/releases` (the main checkout) on this branch.
+Worktree `tsc` runs on `workers/mcp` are known to falsely report a dual-zod split. Before trusting a **failure** here, re-run `npx tsc --noEmit` from `workers/mcp/` in the primary checkout on this branch.
+
+> **Correction (2026-07-29, during execution):** this step was deliberately skipped. The
+> primary checkout was on a different branch with a concurrent session active — which then
+> deleted this worktree mid-run. Cross-checking there would have been unsafe and, on a
+> different branch, meaningless. A re-run on a freshly-installed settled tree in the
+> worktree was substituted, and `tsc` passed, so the step's premise (distrusting a
+> *failure*) never triggered. Prefer the settled-tree re-run; only reach for another
+> checkout when it is genuinely on the same branch and idle.
 
 - [ ] **Step 4: Commit**
 
