@@ -94,9 +94,11 @@ async function handle(
   // Stateless v2 handler (#2189). `createServer` is passed as a FACTORY the
   // handler invokes per request — `legacy: "stateless"` (the default) serves
   // 2025-era `initialize` clients from the same factory, so the tool surface
-  // can't drift between wire eras. `responseMode: "json"` preserves the
-  // plain-JSON replies callers get today; without it the handler answers SSE
-  // whenever the Accept header allows one.
+  // can't drift between wire eras. `responseMode: "json"` governs only the
+  // modern (2026-07-28) leg, answering plain JSON instead of SSE for it; the
+  // SDK's legacy fallback builds its own transport and always answers
+  // SSE-framed regardless of this option, matching what agents@0.17 already
+  // did — so 2025-era callers see byte-identical framing, no regression.
   //
   // `route` and `allowedOriginHostnames` are NOT optional for us: the agents
   // wrapper does its own route matching and Origin validation, and its

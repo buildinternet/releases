@@ -82,3 +82,109 @@ describe("modern (2026-07-28) requests", () => {
     );
   });
 });
+
+describe("modern-era header requirement", () => {
+  it("rejects a modern request missing the Mcp-Method header", async () => {
+    const res = await worker.fetch(
+      new Request("https://mcp.releases.sh/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify(modernRpc("tools/list")),
+      }),
+      stubEnv(),
+      stubCtx(),
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+/**
+ * The legacy (no Mcp-Method header) leg is served by the MCP SDK's own
+ * fallback transport, which agents@0.17 also used and which always answers
+ * SSE-framed (`event: message\ndata: {...}\n\n`) regardless of
+ * `responseMode: "json"` — that option only reaches the modern leg. Pull the
+ * JSON-RPC payload out of the one `data:` line so the test can still assert
+ * on the actual result, not just the transport framing around it.
+ */
+function parseSseJsonRpc(text: string): unknown {
+  const dataLine = text.split("\n").find((line) => line.startsWith("data: "));
+  if (!dataLine) throw new Error(`no SSE data line found in: ${text}`);
+  return JSON.parse(dataLine.slice("data: ".length));
+}
+
+describe("legacy (2025-era) requests", () => {
+  it("still completes the initialize handshake and lists tools, unchanged SSE framing", async () => {
+    const env = stubEnv();
+    const ctx = stubCtx();
+    const legacy = (body: unknown) =>
+      new Request("https://mcp.releases.sh/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify(body),
+      });
+
+    const initRes = await worker.fetch(
+      legacy({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "legacy-client", version: "1.0.0" },
+        },
+      }),
+      env,
+      ctx,
+    );
+    expect(initRes.status).toBe(200);
+    // SSE-framed, not plain JSON — this leg is served by the SDK's own
+    // legacy fallback transport, byte-for-byte the same shape agents@0.17
+    // answered with. `responseMode: "json"` only governs the modern
+    // (2026-07-28) leg; it never reaches this fallback.
+    expect(initRes.headers.get("content-type")).toContain("text/event-stream");
+    const init = parseSseJsonRpc(await initRes.text()) as {
+      result: { serverInfo: { name: string } };
+    };
+    expect(init.result.serverInfo.name).toBe("releases");
+
+    const listRes = await worker.fetch(
+      legacy({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+      env,
+      ctx,
+    );
+    expect(listRes.status).toBe(200);
+    expect(listRes.headers.get("content-type")).toContain("text/event-stream");
+    const list = parseSseJsonRpc(await listRes.text()) as {
+      result: { tools: Array<{ name: string }> };
+    };
+    expect(list.result.tools.map((t) => t.name)).toContain("search");
+  });
+});
+
+describe("modern tools/call", () => {
+  it("routes a modern tools/call through the header + envelope path", async () => {
+    const res = await worker.fetch(
+      modernRequest(
+        modernRpc("tools/call", { name: "list_follows", arguments: {} }),
+        "tools/call",
+        "list_follows",
+      ),
+      stubEnv(),
+      stubCtx(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { result?: unknown; error?: unknown };
+    // The tool itself refuses anonymous callers (follows need a user
+    // principal) — what matters here is that dispatch reached it at all,
+    // i.e. a JSON-RPC result envelope rather than a transport-level error.
+    expect(body.result).toBeDefined();
+    expect(body.error).toBeUndefined();
+  });
+});
