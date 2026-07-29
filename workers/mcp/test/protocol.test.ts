@@ -188,3 +188,23 @@ describe("modern tools/call", () => {
     expect(body.error).toBeUndefined();
   });
 });
+
+describe("cache hints", () => {
+  it("advertises a private, hour-long TTL on tools/list", async () => {
+    const res = await worker.fetch(
+      modernRequest(modernRpc("tools/list"), "tools/list"),
+      stubEnv(),
+      stubCtx(),
+    );
+    const body = (await res.json()) as {
+      result: { _meta?: Record<string, unknown>; ttlMs?: number; cacheScope?: string };
+    };
+    // Confirmed against the actual wire response: the 2026-07-28 codec's
+    // `encodeResult` stamps `ttlMs`/`cacheScope` directly on the top-level
+    // result envelope (`body.result.ttlMs`), not under `_meta`. Assert on
+    // whichever carrier is present in case that ever changes.
+    const carrier = { ...body.result, ...(body.result._meta ?? {}) } as Record<string, unknown>;
+    expect(carrier.ttlMs).toBe(3_600_000);
+    expect(carrier.cacheScope).toBe("private");
+  });
+});

@@ -239,6 +239,14 @@ export interface CreateServerOptions {
   userToken?: string | null;
 }
 
+/**
+ * The catalogs are static per deploy — they only change on a redeploy — but
+ * every response is auth-gated: the caller's scopes decide which tools
+ * register. Hence `private` rather than `public`. `resources/read` is
+ * deliberately absent: those reads hit D1 and must not be cached.
+ */
+const LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "private" } as const;
+
 export async function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer(
     {
@@ -254,6 +262,11 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         tools: {},
         resources: {},
         prompts: {},
+      },
+      cacheHints: {
+        "tools/list": LIST_CACHE_HINT,
+        "prompts/list": LIST_CACHE_HINT,
+        "resources/templates/list": LIST_CACHE_HINT,
       },
     },
   );
