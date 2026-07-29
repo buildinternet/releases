@@ -1092,10 +1092,12 @@ export async function renderCheckOne(
  * No-change bookkeeping shared by the empty-feed branch and the summary-only
  * crawl novelty gate. Writes a `no_change` fetch_log row and advances the
  * source's exponential backoff (`consecutiveNoChange++`,
- * `nextFetchAfter = now + min(2^(n-1), 48)h`), resets the error counter, and
- * clears `changeDetectedAt`. `releasesFound` is what the feed surfaced this
- * poll — 0 for an empty feed, the item count when items were present but none
- * were new — so the fetch_log row stays honest about what we saw.
+ * `nextFetchAfter = now + min(2^(n-1), 48)h`), resets the error counter, stamps
+ * `lastFetchedAt` (this IS a completed, successful check — the source was
+ * fetched and found unchanged, not skipped; #2185), and clears
+ * `changeDetectedAt`. `releasesFound` is what the feed surfaced this poll — 0
+ * for an empty feed, the item count when items were present but none were new
+ * — so the fetch_log row stays honest about what we saw.
  */
 async function recordNoChange(
   db: D1Db,
@@ -1126,6 +1128,7 @@ async function recordNoChange(
         consecutiveErrors: 0,
         nextFetchAfter: nextFetch,
         changeDetectedAt: null,
+        lastFetchedAt: new Date().toISOString(),
       })
       .where(eq(sources.id, source.id)),
   ];
