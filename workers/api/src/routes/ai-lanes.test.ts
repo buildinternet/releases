@@ -17,7 +17,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, clearAllTables, type TestDatabase } from "../../../../tests/db-helper.js";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, releases, products } from "@buildinternet/releases-core/schema";
+import { eq } from "drizzle-orm";
 import { aiLaneRoutes } from "./ai-lanes.js";
 
 let testDatabase: TestDatabase;
@@ -295,5 +296,61 @@ describe("POST /v1/ai/lanes/:lane", () => {
       sourceId: "src_does_not_exist",
     });
     expect(res.status).toBe(404);
+  });
+
+  it("threads the source's product name into the summarize input", async () => {
+    // Regression: `productName` was hardcoded to null, so the summarize prompt
+    // silently omitted the `Product:` line that production ingest emits (see
+    // the leftJoin in lib/ingest-steps.ts). A release WITHOUT a product
+    // legitimately yields null — the bug was yielding null regardless of the DB.
+    await testDatabase.db.insert(products).values({
+      id: "prd_1",
+      orgId: "org_1",
+      name: "Acme Analytics",
+      slug: "acme-analytics",
+    });
+    await testDatabase.db
+      .update(sources)
+      .set({ productId: "prd_1" })
+      .where(eq(sources.id, "src_1"));
+
+    mockAnthropicFetch(
+      "<empty>false</empty>\n<title>t</title>\n<title_short>t</title_short>\n<summary>s</summary>\n<composition><bugs>0</bugs><features>1</features><enhancements>0</enhancements></composition>\n<breaking>none</breaking>\n<migration>none</migration>\n<importance>3</importance>",
+    );
+
+    const res = await post("/v1/ai/lanes/summarize", { releaseId: "rel_1" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { input: { productName: string | null } };
+    expect(body.input.productName).toBe("Acme Analytics");
+  });
+
+  it("reports a null product name when the source has no product", async () => {
+    mockAnthropicFetch(
+      "<empty>false</empty>\n<title>t</title>\n<title_short>t</title_short>\n<summary>s</summary>\n<composition><bugs>0</bugs><features>1</features><enhancements>0</enhancements></composition>\n<breaking>none</breaking>\n<migration>none</migration>\n<importance>3</importance>",
+    );
+
+    const res = await post("/v1/ai/lanes/summarize", { releaseId: "rel_1" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { input: { productName: string | null } };
+    expect(body.input.productName).toBeNull();
+  });
+
+  it("400s when apply:true is combined with inline overrides", async () => {
+    // A what-if probe must not be persistable: the write would describe content
+    // that isn't what's stored on the row.
+    const res = await post("/v1/ai/lanes/summarize", {
+      releaseId: "rel_1",
+      content: "Completely different body text.",
+      apply: true,
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as ErrorBody;
+    expect(body.error.type).toBe("validation");
+
+    // …and nothing was written.
+    const row = await testDatabase.db.query.releases.findFirst({
+      where: (r, { eq: e }) => e(r.id, "rel_1"),
+    });
+    expect(row?.summary).toBeNull();
   });
 });

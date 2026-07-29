@@ -31,7 +31,7 @@
  */
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { releases, sources, organizations } from "@buildinternet/releases-core/schema";
+import { releases, sources, organizations, products } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -103,6 +103,12 @@ interface ResolvedSource {
   name: string;
   metadata: string | null;
   orgSlug: string | null;
+  /** Parent product's name, when the source is bound to one. Threaded into the
+   *  summarize lane's prompt exactly as production ingest does — see the
+   *  `leftJoin(products, …)` in `../lib/ingest-steps.ts`. Null is a normal
+   *  value (most sources have no product); what matters is that it reflects
+   *  the DB rather than being hardcoded. */
+  productName: string | null;
 }
 
 async function loadRelease(
@@ -134,9 +140,13 @@ async function loadSource(
       name: sources.name,
       metadata: sources.metadata,
       orgSlug: organizations.slug,
+      productName: products.name,
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
+    // Same join production ingest uses (`lib/ingest-steps.ts`) — the product
+    // hangs off the source, not the release.
+    .leftJoin(products, eq(products.id, sources.productId))
     .where(eq(sources.id, sourceId));
   if (rows.length === 0) throw new NotFoundError("Source not found", { details: { sourceId } });
   return rows[0];
@@ -251,6 +261,23 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
     );
   }
 
+  // A what-if probe must not be writable. Inline fields override the values
+  // loaded from `releaseId` (see the override comment below), so applying one
+  // would persist output describing content that is NOT what's stored on the
+  // row — desynchronising summary/title from the body they claim to describe,
+  // with nothing in the response marking it. The override comment already
+  // asserted "apply stays false in that case"; this enforces it rather than
+  // trusting callers.
+  if (apply && (body.title !== undefined || body.content !== undefined || body.url !== undefined)) {
+    return respondError(
+      c,
+      new ValidationError(
+        "apply: true cannot be combined with inline title/content/url — those override the stored release, so the write would not describe the stored body. Drop the inline fields to apply, or drop apply to probe.",
+        { code: "bad_request" },
+      ),
+    );
+  }
+
   const db = createDb(c.env.DB);
 
   let release: ResolvedRelease | undefined;
@@ -275,7 +302,8 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
   // Inline fields override values loaded from releaseId — this is
   // deliberate: it's what lets an operator probe "what would the lane say
   // about this DIFFERENT title/content on this same stored release" without
-  // mutating anything (apply stays false in that case, since it's a what-if).
+  // mutating anything. Combining an override with `apply` is rejected above,
+  // so a what-if can never be persisted.
   const resolvedTitle = body.title ?? release?.title;
   const resolvedContent = body.content ?? release?.content;
   const resolvedUrl = body.url ?? release?.url ?? null;
@@ -361,7 +389,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
     const input: SummarizeReleaseInput = {
       orgSlug,
       sourceName,
-      productName: null,
+      productName: source?.productName ?? null,
       title: resolvedTitle,
       version: release?.version ?? null,
       url: resolvedUrl,
