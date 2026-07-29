@@ -206,8 +206,8 @@ const paginationFields = {
     .describe("Entries per page (1–200). Defaults to 50."),
 };
 
-function withPagination<T extends Record<string, z.ZodTypeAny>>(schema: T) {
-  return { ...schema, ...paginationFields };
+function withPagination<T extends z.ZodRawShape>(schema: T) {
+  return z.object({ ...schema, ...paginationFields });
 }
 
 export interface CreateServerOptions {
@@ -448,7 +448,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         "",
         "Use `entity` (product slug / prod_ id OR source slug / src_ id) to scope release results to one catalog entry. Product identifiers expand to every source under the product. Use `organization` to scope to a whole org. Release retrieval defaults to hybrid (FTS5 + semantic vectors fused via RRF); it silently degrades to lexical when vector infra is unavailable and flags the result.",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().describe("Search query"),
         type: z
           .array(z.enum(["orgs", "catalog", "releases", "collections"]))
@@ -517,7 +517,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .describe(
             "Keep only release hits published at or before this bound. Same input formats as `since`.",
           ),
-      },
+      }),
     },
     withSearchLog(
       "search",
@@ -546,7 +546,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       // tool's `structuredContent` payload; non-UI hosts ignore the field and
       // the model continues to read the rendered markdown in `content[0].text`.
       _meta: uiMeta(RELEASE_FEED_UI_URI),
-      inputSchema: {
+      inputSchema: z.object({
         product: z
           .string()
           .optional()
@@ -617,7 +617,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .describe(
             `Only include releases with an AI-scored \`importance\` >= this value (${IMPORTANCE_MIN}-${IMPORTANCE_MAX}; 5=landmark, 1=housekeeping). Releases with no score (unscored) are excluded when this is set. Mirrors the REST \`?minImportance=\` filter.`,
           ),
-      },
+      }),
     },
     cached(
       "get_latest_releases",
@@ -658,7 +658,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ...titled("Get catalog entry", READ_ONLY_HINTS),
       description:
         "Detail for a single catalog entry — accepts a prod_ id, src_ id, or an org-scoped coordinate in the form orgSlug/slug (e.g. 'vercel/nextjs' or 'vercel/next-js'). Returns the union of product / source detail fields depending on the entry kind. Source entries list tracked CHANGELOG files by path and byte size. Pass `include_changelog: true` to inline the root CHANGELOG, or `changelog_path` / `changelog_offset` / `changelog_limit` / `changelog_tokens` to embed a specific file or slice — heading-aligned, supports per-package files in monorepos (e.g. `packages/next/CHANGELOG.md`), and emits `totalTokens` / `sliceTokens` for LLM context budgeting. Files over 1MB are flagged as truncated so you know the tail is missing.",
-      inputSchema: {
+      inputSchema: z.object({
         identifier: z
           .string()
           .describe(
@@ -694,7 +694,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .describe(
             "Target slice size in tokens (cl100k_base). Takes precedence over changelog_limit. Recommended brackets: 2000, 5000, 10000, 20000. Passing this implies include_changelog.",
           ),
-      },
+      }),
     },
     cached(
       "get_catalog_entry",
@@ -737,7 +737,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ...titled("Get organization", READ_ONLY_HINTS),
       description:
         "Get detailed information about a single organization — accounts, tags, sources, products, aliases. When an AI-generated overview exists the response includes a short preview; pass `include_overview: true` to inline the full briefing (with a stale warning if the content is older than 30 days since last write).",
-      inputSchema: {
+      inputSchema: z.object({
         identifier: z
           .string()
           .describe(
@@ -749,7 +749,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .describe(
             "When true, inline the full AI-generated overview instead of the default first-paragraph preview.",
           ),
-      },
+      }),
     },
     cached(
       "get_organization",
@@ -766,13 +766,13 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         "",
         "Returns the matching org (with primary-vs-alias distinction) and any products whose alias targets the same domain. Pure resolution — does not probe the domain or materialize anything; unknown domains surface a 'no match' message. Use `lookup_domain` when you have a URL-shaped input; use `get_organization` when you already have a slug or id.",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: z.object({
         domain: z
           .string()
           .describe(
             "Domain to resolve. Any URL-shaped form is accepted; the server normalizes it.",
           ),
-      },
+      }),
     },
     cached("lookup_domain", async (params) => lookupDomain(db, params)),
   );
@@ -797,9 +797,9 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ...titled("Get collection", READ_ONLY_HINTS),
       description:
         "Detail for a single collection — name, description, and the ordered list of member organizations. Hidden / on-demand orgs never leak through; only publicly visible orgs appear in the member list.",
-      inputSchema: {
+      inputSchema: z.object({
         slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
-      },
+      }),
     },
     cached(
       "get_collection",
@@ -818,7 +818,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ].join("\n"),
       // Shares the release-feed UI with `get_latest_releases` — same payload shape.
       _meta: uiMeta(RELEASE_FEED_UI_URI),
-      inputSchema: {
+      inputSchema: z.object({
         slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
         limit: z
           .number()
@@ -839,7 +839,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .describe(
             "Include prerelease tags (alphas, betas, RCs). Defaults to false so the feed matches the public web view.",
           ),
-      },
+      }),
     },
     cached(
       "get_collection_releases",
@@ -853,9 +853,9 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ...titled("Get release", READ_ONLY_HINTS),
       description:
         "Fetch the full content of a single release by id. Release ids are returned by search or get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid.",
-      inputSchema: {
+      inputSchema: z.object({
         id: z.string().describe("Release id — 'rel_<nanoid>' or a bare 21-char nanoid"),
-      },
+      }),
     },
     cached(
       "get_release",

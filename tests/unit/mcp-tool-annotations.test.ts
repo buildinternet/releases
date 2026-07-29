@@ -110,3 +110,19 @@ describe("MCP tool annotations", () => {
     }
   });
 });
+
+describe("tool input schemas", () => {
+  it("advertises an object JSON Schema for a no-argument tool", async () => {
+    const tools = await listTools(stubEnv());
+    const listFollows = tools.find((t) => t.name === "list_follows");
+    expect(listFollows?.inputSchema).toMatchObject({ type: "object" });
+  });
+
+  it("advertises pagination fields on a paginated tool", async () => {
+    const tools = await listTools(stubEnv());
+    const listOrgs = tools.find((t) => t.name === "list_organizations");
+    expect(Object.keys(listOrgs?.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining(["page", "limit"]),
+    );
+  });
+});

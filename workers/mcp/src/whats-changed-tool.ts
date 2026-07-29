@@ -223,7 +223,7 @@ export function registerWhatsChangedTool(server: McpServer, env: Env) {
         "",
         "`package` is a tracked source slug or a GitHub `owner/repo` coordinate (set `ecosystem: \"github\"` for a bare coordinate). Reads already-indexed releases only. If the package isn't in the catalog you'll get a clear 'not tracked' answer (npm/PyPI names may not be mapped to a source yet).",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: z.object({
         package: z
           .string()
           .describe('Package identifier — a source slug or a GitHub "owner/repo" coordinate.'),
@@ -242,7 +242,7 @@ export function registerWhatsChangedTool(server: McpServer, env: Env) {
           .describe(
             `Only include entries with an AI-scored \`importance\` >= this value (${IMPORTANCE_MIN}-${IMPORTANCE_MAX}; 5=landmark, 1=housekeeping). Entries with no score (unscored) are excluded when this is set.`,
           ),
-      },
+      }),
     },
     async (params) => runWhatsChanged(env, params),
   );
