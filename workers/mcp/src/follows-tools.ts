@@ -1,4 +1,4 @@
-import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { type McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getSecret } from "@releases/lib/secrets";
 import { getEntityType } from "@buildinternet/releases-core/id";
@@ -128,11 +128,11 @@ export function registerFollowsTools(
         "",
         "Requires a signed-in user (a `relu_` user key or an OAuth token). `entity` is a typed id — an `org_…` id or a `prod_…` id — as returned by `search`, `get_organization`, or `get_catalog_entry`. Idempotent: following something you already follow is a no-op.",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: z.object({
         entity: z
           .string()
           .describe("Entity to follow — an `org_…` or `prod_…` id (from search / get_* results)."),
-      },
+      }),
     },
     async ({ entity }) => {
       if (!userToken) return userRequired();
@@ -169,9 +169,9 @@ export function registerFollowsTools(
       description: [
         "Stop following an organization or product. Requires a signed-in user. `entity` is an `org_…` or `prod_…` id. Idempotent: unfollowing something you don't follow is a no-op.",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: z.object({
         entity: z.string().describe("Entity to unfollow — an `org_…` or `prod_…` id."),
-      },
+      }),
     },
     async ({ entity }) => {
       if (!userToken) return userRequired();
@@ -202,7 +202,6 @@ export function registerFollowsTools(
       annotations: { title: "List follows", ...READ_HINTS },
       description:
         "List the organizations and products you follow (newest first). Requires a signed-in user.",
-      inputSchema: {},
     },
     async () => {
       if (!userToken) return userRequired();
@@ -235,7 +234,7 @@ export function registerFollowsTools(
         "",
         "Cursor-paginated: pass `cursor` from a prior response's `_meta.pagination.nextCursor` and optional `limit` (1–100, default 30).",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: z.object({
         cursor: z
           .string()
           .optional()
@@ -247,7 +246,7 @@ export function registerFollowsTools(
           .max(100)
           .optional()
           .describe("Entries per page (1–100). Defaults to 30."),
-      },
+      }),
     },
     async ({ cursor, limit }) => {
       if (!userToken) return userRequired();

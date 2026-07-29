@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client } from "@modelcontextprotocol/client";
+import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
 
 /**
@@ -108,5 +108,36 @@ describe("MCP tool annotations", () => {
       expect(meta?.ui?.resourceUri).toBe(expectedUri);
       expect(meta?.["ui/resourceUri"]).toBe(expectedUri);
     }
+  });
+});
+
+describe("tool input schemas", () => {
+  it("advertises an object JSON Schema for a no-argument tool", async () => {
+    const tools = await listTools(stubEnv());
+    const listFollows = tools.find((t) => t.name === "list_follows");
+    expect(listFollows?.inputSchema).toMatchObject({ type: "object" });
+  });
+
+  it("advertises pagination fields on a paginated tool", async () => {
+    const tools = await listTools(stubEnv());
+    const listOrgs = tools.find((t) => t.name === "list_organizations");
+    expect(Object.keys(listOrgs?.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining(["page", "limit"]),
+    );
+  });
+});
+
+describe("prompt arguments", () => {
+  it("still advertises completable prompt arguments after the v2 wrap", async () => {
+    const server = await createServer(stubEnv());
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0.0.0" });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+    const { prompts } = await client.listPrompts();
+    const whatsNew = prompts.find((p) => p.name === "whats_new");
+    expect(whatsNew?.arguments?.map((a) => a.name)).toEqual(
+      expect.arrayContaining(["product", "days"]),
+    );
+    await client.close();
   });
 });

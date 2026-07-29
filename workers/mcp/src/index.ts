@@ -1,4 +1,4 @@
-import { createMcpHandler } from "agents/mcp";
+import { createMcpHandler } from "agents/mcp/server";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
 import { resolveMcpAuth, machineTokenIdForUsage, peekMcpCall, emitMcpConsumption } from "./auth.js";
@@ -91,13 +91,40 @@ async function handle(
     });
   }
 
-  const server = await createServer(env, ctx, {
-    userAgent: request.headers.get("user-agent"),
-    authScopes: identity.scopes,
-    authToken: identity.token,
-    userToken: identity.userToken,
-  });
-  return createMcpHandler(server)(request, env, ctx);
+  // Stateless v2 handler (#2189). `createServer` is passed as a FACTORY the
+  // handler invokes per request — `legacy: "stateless"` (the default) serves
+  // 2025-era `initialize` clients from the same factory, so the tool surface
+  // can't drift between wire eras. `responseMode: "json"` governs only the
+  // modern (2026-07-28) leg, answering plain JSON instead of SSE for it; the
+  // SDK's legacy fallback builds its own transport and always answers
+  // SSE-framed regardless of this option, matching what agents@0.17 already
+  // did — so 2025-era callers see byte-identical framing, no regression.
+  //
+  // `route` and `allowedOriginHostnames` are NOT optional for us: the agents
+  // wrapper does its own route matching and Origin validation, and its
+  // defaults cover localhost and workers.dev only — a custom domain relies on
+  // Cloudflare routing unless named here. Omitting them makes the wrapper
+  // start rejecting our own callers.
+  return createMcpHandler(
+    () =>
+      createServer(env, ctx, {
+        userAgent: request.headers.get("user-agent"),
+        authScopes: identity.scopes,
+        authToken: identity.token,
+        userToken: identity.userToken,
+      }),
+    {
+      route: "/mcp",
+      responseMode: "json",
+      allowedOriginHostnames: [
+        "mcp.releases.sh",
+        "mcp-staging.releases.sh",
+        "mcp.releases.localhost",
+        "localhost",
+        "127.0.0.1",
+      ],
+    },
+  )(request, env, ctx);
 }
 
 export default {
