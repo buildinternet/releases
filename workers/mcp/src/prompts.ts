@@ -32,7 +32,7 @@ export function registerPrompts(server: McpServer, db: D1Db) {
       title: "What's new in a product",
       description:
         "Summarize recent changes for a product over the last N days. Uses the product's indexed releases.",
-      argsSchema: {
+      argsSchema: z.object({
         product: completable(
           z
             .string()
@@ -42,7 +42,7 @@ export function registerPrompts(server: McpServer, db: D1Db) {
           (value) => completeProductSlug(db, value),
         ),
         days: z.string().optional().describe("Look-back window in days (default 30)"),
-      },
+      }),
     },
     async ({ product, days }) => {
       const window = parseDays(days, 30);
@@ -67,7 +67,7 @@ export function registerPrompts(server: McpServer, db: D1Db) {
       title: "Compare two products",
       description:
         "Compare recent releases between two products to surface divergence and overlap in features, fixes, and breaking changes.",
-      argsSchema: {
+      argsSchema: z.object({
         productA: completable(
           z
             .string()
@@ -85,7 +85,7 @@ export function registerPrompts(server: McpServer, db: D1Db) {
           (value) => completeProductSlug(db, value),
         ),
         days: z.string().optional().describe("Look-back window in days (default 30)"),
-      },
+      }),
     },
     async ({ productA, productB, days }) => {
       const window = parseDays(days, 30);
@@ -110,7 +110,7 @@ export function registerPrompts(server: McpServer, db: D1Db) {
       title: "Catch me up on an organization",
       description:
         "Pull the AI-generated overview for an org plus its most recent releases — a quick status briefing.",
-      argsSchema: {
+      argsSchema: z.object({
         organization: completable(
           z
             .string()
@@ -123,7 +123,7 @@ export function registerPrompts(server: McpServer, db: D1Db) {
           .string()
           .optional()
           .describe("Look-back window in days for recent releases (default 14)"),
-      },
+      }),
     },
     async ({ organization, days }) => {
       const window = parseDays(days, 14);

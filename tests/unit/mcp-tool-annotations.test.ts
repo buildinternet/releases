@@ -126,3 +126,18 @@ describe("tool input schemas", () => {
     );
   });
 });
+
+describe("prompt arguments", () => {
+  it("still advertises completable prompt arguments after the v2 wrap", async () => {
+    const server = await createServer(stubEnv());
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0.0.0" });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+    const { prompts } = await client.listPrompts();
+    const whatsNew = prompts.find((p) => p.name === "whats_new");
+    expect(whatsNew?.arguments?.map((a) => a.name)).toEqual(
+      expect.arrayContaining(["product", "days"]),
+    );
+    await client.close();
+  });
+});
