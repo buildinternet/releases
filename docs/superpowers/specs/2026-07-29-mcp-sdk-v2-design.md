@@ -71,10 +71,21 @@ ahead of it.
 between eras. They stop receiving a session id — acceptable, since without Durable Objects
 that id never guaranteed isolate affinity anyway.
 
-`responseMode: "json"` preserves today's plain-JSON replies. This single option is what
-sunny had to hand-wire a second transport leg to achieve; on the `agents` wrapper it is a
-parameter, so we do not need `isLegacyRequest` branching or a hand-rolled
-`WebStandardStreamableHTTPServerTransport`.
+`responseMode: "json"` makes the 2026-07-28 leg answer plain JSON instead of SSE. On the
+`agents` wrapper this is a parameter, so we do not need `isLegacyRequest` branching or a
+hand-rolled `WebStandardStreamableHTTPServerTransport` the way sunny does — that's the
+structural win of building on `agents/mcp` rather than the SDK's transport directly.
+
+> **Correction (2026-07-29, recorded during implementation):** the paragraph above, as
+> originally written, claimed `responseMode: "json"` "preserves today's plain-JSON replies."
+> That was wrong on both counts, established empirically while building Phase 1:
+> `responseMode: "json"` only reaches the modern (2026-07-28) leg — the SDK's legacy fallback
+> builds its own transport and answers SSE regardless of the option — and there were never any
+> plain-JSON replies to preserve: `agents@0.17.3`, the handler this migration replaced,
+> returned `text/event-stream` on every response path. The human partner ruled explicitly to
+> keep the legacy leg SSE-framed (zero behavior change there) rather than hand-wire a second
+> transport to force it to JSON. See `docs/architecture/mcp.md#transport` for the corrected,
+> current account.
 
 **Ordering is unchanged and must stay that way.** Everything above the handler runs first:
 
@@ -100,13 +111,13 @@ Two details to preserve:
 
 ### 2. Dependencies
 
-| Package                        | From      | To                      |
-| ------------------------------ | --------- | ----------------------- |
-| `agents`                       | `^0.17.3` | `^0.20.1`               |
-| `@modelcontextprotocol/sdk`    | `^1.29.0` | removed as a direct dep |
-| `@modelcontextprotocol/server` | —         | `^2.0.0`                |
-| `@modelcontextprotocol/client` | —         | `^2.0.0` (tests)        |
-| `zod` (worker)                 | `~4.3.6`  | attempt `^4.4.3`        |
+| Package                        | From      | To                                                                                    |
+| ------------------------------ | --------- | ------------------------------------------------------------------------------------- |
+| `agents`                       | `^0.17.3` | `^0.20.1`                                                                             |
+| `@modelcontextprotocol/sdk`    | `^1.29.0` | removed as a direct dep                                                               |
+| `@modelcontextprotocol/server` | —         | `^2.0.0`                                                                              |
+| `@modelcontextprotocol/client` | —         | `^2.0.0` (tests)                                                                      |
+| `zod` (worker)                 | `~4.3.6`  | relaxed to `^4.4.3` — installs `4.4.3`; #1367's pin was not load-bearing under SDK v2 |
 
 `agents@0.20.1` declares all three MCP packages as **non-optional** peers, so v1 remains
 installed as a peer even though we stop importing it.
@@ -181,7 +192,8 @@ actually asserted rather than assumed:
 2. Modern-era `tools/call` — same envelope plus `Mcp-Name`. Asserts a non-error result.
 3. A modern request missing `Mcp-Method` → rejected.
 4. Legacy-era `initialize` → `tools/list` — asserts 2025-era clients still work and still get
-   plain JSON, not SSE.
+   SSE-framed replies, byte-for-byte the same shape `agents@0.17` answered with (see the
+   2026-07-29 correction note above: this leg was never plain JSON, and stays SSE by design).
 
 Manual gate before the PR: `bun run mcp:inspect:local` against the worker.
 
@@ -214,14 +226,14 @@ staged files.
 
 ## Risks
 
-| Risk                                                                          | Mitigation                                                                                 |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `agents@0.20` wrapper's `Host`/`Origin` validation rejects our custom domains | Set `route` and `allowedOriginHostnames` explicitly; assert in the new handler-level tests |
-| `peekMcpCall` body read conflicts with the v2 handler                         | Consumption test already covers this path; confirm it still passes                         |
-| Relaxing the `zod` pin resurfaces the #1367 dual-zod split                    | Revert to `~4.3.6` and record the concrete failure                                         |
-| Legacy clients silently start receiving SSE                                   | `responseMode: "json"` plus an explicit legacy-era test asserting the JSON body            |
-| Carved-out `bun.lock` not refreshed                                           | CI `--frozen-lockfile` catches it; refresh in the same commit                              |
-| Stale worktree `tsc` false positives on the dual-zod split                    | Known: verify in the main checkout before believing it                                     |
+| Risk                                                                          | Mitigation                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agents@0.20` wrapper's `Host`/`Origin` validation rejects our custom domains | Set `route` and `allowedOriginHostnames` explicitly; assert in the new handler-level tests                                                                                                        |
+| `peekMcpCall` body read conflicts with the v2 handler                         | Consumption test already covers this path; confirm it still passes                                                                                                                                |
+| Relaxing the `zod` pin resurfaces the #1367 dual-zod split                    | Revert to `~4.3.6` and record the concrete failure                                                                                                                                                |
+| Legacy clients' framing silently changes                                      | Explicit legacy-era test asserting SSE framing, byte-for-byte the `agents@0.17` shape (not `responseMode: "json"` — that option doesn't reach this leg; see the 2026-07-29 correction note above) |
+| Carved-out `bun.lock` not refreshed                                           | CI `--frozen-lockfile` catches it; refresh in the same commit                                                                                                                                     |
+| Stale worktree `tsc` false positives on the dual-zod split                    | Known: verify in the main checkout before believing it                                                                                                                                            |
 
 ## Success criteria
 

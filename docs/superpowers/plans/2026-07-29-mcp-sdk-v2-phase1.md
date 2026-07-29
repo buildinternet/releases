@@ -4,7 +4,9 @@
 
 **Goal:** Migrate `workers/mcp` from `@modelcontextprotocol/sdk` v1 to the v2 TypeScript SDK so `mcp.releases.sh` speaks MCP spec `2026-07-28`, while 2025-era clients keep working unchanged.
 
-**Architecture:** `workers/mcp` serves MCP through `agents/mcp` (Cloudflare Agents SDK), which already migrated upstream. In `agents@0.20.1`, `createMcpHandler` is the **stateless v2** handler taking an `McpServerFactory`; the sessionful SDK-v1 handler we use today is renamed `createLegacyMcpHandler`. So the cutover is a dependency bump plus a call-site change, not a transport rewrite. The handler's default `legacy: "stateless"` serves 2025-era `initialize` clients from the same factory, and `responseMode: "json"` preserves today's plain-JSON reply shape.
+**Architecture:** `workers/mcp` serves MCP through `agents/mcp` (Cloudflare Agents SDK), which already migrated upstream. In `agents@0.20.1`, `createMcpHandler` is the **stateless v2** handler taking an `McpServerFactory`; the sessionful SDK-v1 handler we use today is renamed `createLegacyMcpHandler`. So the cutover is a dependency bump plus a call-site change, not a transport rewrite. The handler's default `legacy: "stateless"` serves 2025-era `initialize` clients from the same factory, and `responseMode: "json"` makes the 2026-07-28 leg answer plain JSON instead of SSE.
+>
+> **Correction (2026-07-29, recorded during implementation):** this paragraph originally said `responseMode: "json"` "preserves today's plain-JSON reply shape." Execution found that's wrong: the option only reaches the modern (2026-07-28) leg, and `agents@0.17.3` — the handler being replaced — already answered every request `text/event-stream`, so there was no plain-JSON shape to preserve. The human partner ruled to keep the legacy leg SSE-framed, unchanged. See `docs/superpowers/specs/2026-07-29-mcp-sdk-v2-design.md` (its own correction note) and `docs/architecture/mcp.md#transport` for the accurate account.
 
 **Tech Stack:** Cloudflare Workers, `agents@^0.20.1`, `@modelcontextprotocol/server@^2.0.0`, `@modelcontextprotocol/client@^2.0.0`, zod 4, Bun test, Drizzle + D1.
 
@@ -346,6 +348,8 @@ Then replace lines 99–104 (the `const server = await createServer(...)` block 
 
 The `handle()` body above this is untouched. `resolveMcpAuth`, the rate limiter, `touchLastUsed`, and `peekMcpCall` all still run first, and `identity` is still in scope.
 
+> **Correction (2026-07-29, recorded during implementation):** the comment in the code block above (lines 318–320, "`responseMode: "json"` preserves the plain-JSON replies callers get today") is wrong for the reason explained in the top-of-file correction note. The comment actually committed in `workers/mcp/src/index.ts` says instead that `responseMode: "json"` governs only the modern leg, that the legacy fallback always answers SSE regardless of the option, and that this matches what `agents@0.17` already did — no regression. Trust the committed source over this planned snippet.
+
 - [ ] **Step 6: Migrate the test client**
 
 In `tests/mcp-test-helpers.ts`, replace lines 1–3:
@@ -610,7 +614,9 @@ git commit -m "refactor(mcp): wrap prompt argument schemas in z.object"
 
 ### Task 6: Round out wire-era coverage
 
-Task 2 proved the modern era serves `tools/list`. This adds the three cases that protect the contract: a modern `tools/call`, the header requirement, and — most important — that 2025-era clients still work and still get plain JSON rather than SSE.
+Task 2 proved the modern era serves `tools/list`. This adds the three cases that protect the contract: a modern `tools/call`, the header requirement, and — most important — that 2025-era clients still work.
+
+> **Correction (2026-07-29, recorded during implementation):** the phrase above ("still get plain JSON rather than SSE") and the `it(...)` title and code comment in the snippet below are wrong — the same mistake as the top-of-file correction note. The legacy leg was never plain JSON and does not become plain JSON here; it stays SSE-framed, matching `agents@0.17`. The test actually committed in `workers/mcp/test/protocol.test.ts` asserts `content-type` contains `text/event-stream` on the legacy leg and parses the JSON-RPC payload out of the `data:` line — the inverse of the snippet below. Trust the committed test over this planned one.
 
 **Files:**
 - Modify: `workers/mcp/test/protocol.test.ts`
@@ -761,7 +767,7 @@ Read the existing transport section first and preserve its structure and voice. 
 - The server speaks **both wire eras** from one `createServer` factory, so the tool surface cannot drift between them.
 - **2026-07-28**: no `initialize` handshake; each request carries its protocol version and client capabilities in reserved `_meta` keys (`io.modelcontextprotocol/protocolVersion`, `…/clientCapabilities`) plus the standard `Mcp-Method` / `Mcp-Name` headers (SEP-2243).
 - **2025-era**: the classic `initialize` → `tools/*` flow keeps working, served statelessly from the same factory. Clients no longer receive a session id — which cost nothing, because `workers/mcp` binds no Durable Objects and that id never guaranteed isolate affinity.
-- Replies are plain JSON (`responseMode: "json"`), not SSE.
+- Replies: modern (2026-07-28) is plain JSON (`responseMode: "json"`); legacy (2025-era) stays SSE-framed, unchanged from before this migration — `responseMode` doesn't reach the SDK's legacy fallback, and `agents@0.17` already answered SSE on every path, so nothing regressed. (**Correction, 2026-07-29:** this bullet originally said "Replies are plain JSON, not SSE" for both eras — wrong; see the top-of-file correction note.)
 - `tools/list`, `prompts/list`, and `resources/templates/list` carry `ttlMs: 3600000` / `cacheScope: "private"` — static per deploy, auth-gated. `resources/read` is uncached.
 - `GET`/`DELETE /mcp` remain unserved: no listening stream, no session to close. We do not implement `subscriptions/listen` — that is [#346](https://github.com/buildinternet/releases/issues/346).
 - The handler is `agents/mcp/server`'s `createMcpHandler`, and `route` + `allowedOriginHostnames` must be kept in sync with the deployed hostnames.
