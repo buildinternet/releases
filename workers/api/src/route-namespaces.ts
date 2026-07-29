@@ -51,6 +51,11 @@ export const publicWriteRoutes = ["listing"] as const;
 export const adminRoutes = [
   "sessions",
   "evaluate",
+  // POST /v1/ai/lanes/:lane — synchronous single-input invocation of one
+  // ingest-time AI lane (marketing/summarize/feed-enrich), for on-demand
+  // verification. Follows the /evaluate precedent (flat admin namespace,
+  // synchronous), not /workflows (async job dispatch). See routes/ai-lanes.ts.
+  "ai",
   "status/fetch-log",
   "status/fetch-activity",
   "status/usage",
