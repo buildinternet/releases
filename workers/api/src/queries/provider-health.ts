@@ -55,11 +55,15 @@ function clampInt(v: number | undefined, def: number, min: number, max: number):
  * Lead indicator for "ingest / the AI provider has stopped working", as
  * distinct from "this org just hasn't shipped in a while". Every active
  * (non-paused, non-deleted) source is compared against
- * `sources.last_fetched_at` — the timestamp a fetch writes on every
- * successful check, *including* `no_change` — rather than against its latest
- * release date. A source with a fresh `last_fetched_at` and no new release is
- * healthy-but-quiet; a source whose `last_fetched_at` has stopped moving is
- * broken, regardless of how its release history looks.
+ * `sources.last_fetched_at` — the timestamp a *completed* check writes,
+ * including a `recordNoChange` no-change verdict (#2185) — rather than
+ * against its latest release date. A source with a fresh `last_fetched_at`
+ * and no new release is healthy-but-quiet; a source whose `last_fetched_at`
+ * has stopped moving is broken, regardless of how its release history looks.
+ * (The one exception: `delegateScrapeToUpdateWorkflow`'s synthetic `no_change`
+ * handoff row deliberately leaves `last_fetched_at` alone — it marks a crawl
+ * delegated to a managed-agent session, not a finished check; the session's
+ * own fetch_log row stamps the column when the real check completes.)
  *
  * `daysSinceFetched` for a never-fetched source is measured from
  * `sources.created_at` (its onboarding time) so a brand-new source isn't

@@ -218,6 +218,38 @@ describe("fetchOne — feed fetch cycle", () => {
     expect(meta.feed4xxStreak).toBeUndefined();
   });
 
+  it("empty feed (recordNoChange early-exit): advances lastFetchedAt, not just consecutiveNoChange (#2185)", async () => {
+    // Regression test for #2185: `recordNoChange` handles the early-exit
+    // no-change path (an empty feed — `rawReleases.length === 0`), distinct
+    // from the "items parsed but all deduped" no-change path at the bottom of
+    // `fetchOne` (covered by the "second fetch with identical items" case
+    // above, which already stamps `lastFetchedAt` at :1993). Before the fix,
+    // `recordNoChange`'s update set omitted `lastFetchedAt` entirely, so a
+    // source that is successfully checked but genuinely empty/unchanged never
+    // advanced the column — staleness/provider-health surfaces that key off
+    // `last_fetched_at` would report it as broken even though the check
+    // succeeded.
+    const db = createTestDb();
+    await seedFeedSource(db);
+    const before = new Date("2026-06-01T00:00:00.000Z").toISOString();
+    await db.update(sources).set({ lastFetchedAt: before }).where(eq(sources.id, "src_a"));
+    nextFeedImpl = async () => ({ releases: [] });
+
+    const [seeded] = await db.select().from(sources).where(eq(sources.id, "src_a"));
+    // oxlint-disable-next-line no-explicit-any -- BunSQLiteDatabase vs DrizzleD1Database; works at runtime via the shim
+    const result = await fetchOne(db as any, seeded!, {} as never, { skipSideEffects: true });
+    expect(result.status).toBe("no_change");
+    expect(result.releasesFound).toBe(0);
+
+    const [row] = await db.select().from(sources).where(eq(sources.id, "src_a"));
+    expect(row!.lastFetchedAt).not.toBeNull();
+    expect(row!.lastFetchedAt).not.toBe(before);
+    expect(Date.parse(row!.lastFetchedAt!)).toBeGreaterThan(Date.parse(before));
+    // The rest of recordNoChange's bookkeeping still holds.
+    expect(row!.consecutiveNoChange).toBe(1);
+    expect(row!.nextFetchAfter).toBeTruthy();
+  });
+
   it("HTTP 404 on the feed: status=error, feed4xxStreak incremented (not the generic consecutiveErrors backoff)", async () => {
     const db = createTestDb();
     const source = await seedFeedSource(db);

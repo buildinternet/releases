@@ -20,8 +20,11 @@
  * even evaluate this source".
  *
  * `sources.last_fetched_at` — written on every SUCCESSFUL check, including a
- * `no_change` verdict — is that "we successfully evaluated this source"
- * timestamp; no new column is needed. A source whose latest attempt classifies
+ * `no_change` verdict (`recordNoChange`, #2185) — is that "we successfully
+ * evaluated this source" timestamp; no new column is needed. (The one
+ * exception is `delegateScrapeToUpdateWorkflow`'s synthetic `no_change`
+ * handoff row, which deliberately leaves the column alone — it's a delegation
+ * marker, not a completed check.) A source whose latest attempt classifies
  * as a provider quota shutoff is BROKEN regardless of how recent its releases
  * are; a source that simply has no new releases but whose latest attempt was
  * fine (success, no_change, or a non-quota error) is not broken and never
