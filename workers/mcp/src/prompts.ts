@@ -1,5 +1,4 @@
-import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { completable } from "@modelcontextprotocol/sdk/server/completable.js";
+import { type McpServer, completable } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { D1Db } from "./db.js";
 import { completeOrgSlug, completeProductSlug } from "./slug-completion.js";

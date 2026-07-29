@@ -1,6 +1,5 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
+import { Client } from "@modelcontextprotocol/client";
 import type { TestDatabase } from "./db-helper.js";
 import type { D1Db } from "../workers/mcp/src/db.js";
 
@@ -14,7 +13,7 @@ export function asD1(db: TestDatabase["db"]): D1Db {
  * it to an MCP `Client` via an in-memory transport pair.
  *
  * `workers/mcp` is excluded from the root workspaces and installs its own
- * copy of `@modelcontextprotocol/sdk`, so the `McpServer` class from this
+ * copy of `@modelcontextprotocol/server`, so the `McpServer` class from this
  * test's copy is nominally distinct from the one the worker's `register*`
  * helpers were typed against. This helper bridges the two with an internal
  * `unknown` cast so call sites don't have to repeat it.

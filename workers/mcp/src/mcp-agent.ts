@@ -1,5 +1,5 @@
 import { logEvent } from "@releases/lib/log-event";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { createDb } from "./db.js";
 import { makeReadCache, makeSearchReadCache } from "./lib/read-cache.js";
