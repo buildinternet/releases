@@ -35,6 +35,10 @@ function buildEnv(): PollAndFetchWorkflowEnv {
     FEED_ENRICH_MODEL: "deepseek/deepseek-v4-flash",
     SUMMARIZE_MODEL: "deepseek/deepseek-v4-flash",
     EXTRACT_MODEL: "deepseek/deepseek-v4-pro",
+    INDEXNOW_KEY: secret("indexnow-key"),
+    INDEXING_DISABLED: "false",
+    WEB_SERVICE_KEY: secret("web-service-key"),
+    WEB_BASE_URL: "https://releases.sh",
   } as unknown as PollAndFetchWorkflowEnv;
 }
 
@@ -81,5 +85,31 @@ describe("resolveFetchEnv (poll-and-fetch workflow)", () => {
     expect(fetchEnv.FEED_ENRICH_MODEL).toBe("deepseek/deepseek-v4-flash");
     expect(fetchEnv.SUMMARIZE_MODEL).toBe("deepseek/deepseek-v4-flash");
     expect(fetchEnv.EXTRACT_MODEL).toBe("deepseek/deepseek-v4-pro");
+  });
+
+  // The same drop, third occurrence — this time on the non-AI side effects, which
+  // the AI-only guard never covered. `INDEXNOW_KEY` was missing since the workflow
+  // path was introduced, so every workflow-driven fetch logged
+  // `indexnow / skipped / no_key_binding` and no search engine was ever pinged.
+  // Nothing errors; the skip is indistinguishable from "correctly disabled".
+  it("forwards the IndexNow key + kill switch so the ping isn't a permanent no-op", async () => {
+    const env = buildEnv();
+    const fetchEnv = await resolveFetchEnv(env);
+    expect(fetchEnv.INDEXNOW_KEY).toBe(env.INDEXNOW_KEY);
+    expect(fetchEnv.INDEXING_DISABLED).toBe("false");
+  });
+
+  it("forwards the web service key so on-demand ISR revalidation fires on ingest", async () => {
+    const env = buildEnv();
+    const fetchEnv = await resolveFetchEnv(env);
+    expect(fetchEnv.WEB_SERVICE_KEY).toBe(env.WEB_SERVICE_KEY);
+  });
+
+  // Shared by both pings for building target URLs. Both fall back to
+  // `https://releases.sh`, so a drop is invisible in prod and wrong everywhere
+  // else — staging/dev would silently aim at the production host.
+  it("forwards WEB_BASE_URL so the pings don't fall back to the prod host", async () => {
+    const fetchEnv = await resolveFetchEnv(buildEnv());
+    expect(fetchEnv.WEB_BASE_URL).toBe("https://releases.sh");
   });
 });

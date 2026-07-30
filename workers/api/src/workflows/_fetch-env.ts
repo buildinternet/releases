@@ -16,7 +16,14 @@
  * call for three weeks. That fail-open is deliberately SILENT (an empty model var
  * is the per-lane off switch), so the only symptom was an Anthropic bill — until
  * the account hit its spend cap on 2026-07-23 and both lanes started erroring.
- * The `AiCriticalFetchKeys` guard below now covers the OpenRouter set too.
+ * The guard below now covers the OpenRouter set too.
+ *
+ * And a third time: `INDEXNOW_KEY` was never forwarded at all, so the IndexNow
+ * ping logged `skipped / no_key_binding` on every workflow-driven fetch from the
+ * day this path shipped — no search engine was ever notified. The guard was
+ * named `AiCriticalFetchKeys` and scoped to AI bindings only, so a non-AI
+ * credential fell straight through it. It is now `CriticalFetchKeys` and covers
+ * any binding whose absence is indistinguishable from the feature being off.
  */
 import { getSecret } from "@releases/lib/secrets";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
@@ -24,6 +31,8 @@ import type { FetchOneEnv } from "../cron/poll-fetch.js";
 import type { AnthropicEnv } from "../lib/anthropic.js";
 import type { TextModelEnv } from "../lib/text-model.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
+import type { IndexNowEnv } from "../lib/indexnow.js";
+import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
 
 /**
  * The workflow-env fields forwarded into a `FetchOneEnv`. `FLAGS` rides on
@@ -31,7 +40,8 @@ import type { InvalidationEnv } from "../lib/latest-cache.js";
  * Every field is optional, so any concrete workflow env (PollAndFetchWorkflowEnv,
  * OnboardSourceWorkflowEnv, …) is structurally assignable.
  */
-export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv, TextModelEnv {
+export interface WorkflowFetchEnv
+  extends InvalidationEnv, AnthropicEnv, TextModelEnv, IndexNowEnv, WebRevalidateEnv {
   GITHUB_TOKEN?: { get(): Promise<string> };
   RELEASES_INDEX?: unknown;
   CHANGELOG_CHUNKS_INDEX?: unknown;
@@ -64,13 +74,20 @@ export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv, TextMod
 }
 
 /**
- * The forwarded fields whose silent omission disables an ingest-time AI pass:
- * the Anthropic client inputs (enrichment + marketing classifier), the
- * feed-enrich tuning vars, and the Browser-Rendering creds enrichment escalates
- * with. This is the exact set the original drop no-opped, and the set the
- * `*-resolve-env` regression tests pin.
+ * The forwarded fields whose silent omission disables an ingest-time side
+ * effect: the Anthropic client inputs (enrichment + marketing classifier), the
+ * feed-enrich tuning vars, the Browser-Rendering creds enrichment escalates
+ * with, and the outbound-ping credentials (IndexNow, web ISR revalidation).
+ *
+ * Scope note: this list was `AiCriticalFetchKeys` and covered only the AI
+ * bindings, which is how `INDEXNOW_KEY` fell through and left the IndexNow ping
+ * a permanent no-op on the workflow path from the day it shipped. The failure
+ * mode is not specific to AI passes — it is "an optional binding is dropped
+ * from an exhaustive projection, the omission type-checks, and the feature
+ * degrades to its disabled state in silence." Any binding whose absence is
+ * indistinguishable from being deliberately switched off belongs here.
  */
-type AiCriticalFetchKeys =
+type CriticalFetchKeys =
   | "ANTHROPIC_API_KEY"
   | "ANTHROPIC_BASE_URL"
   | "AI_GATEWAY_TOKEN"
@@ -85,10 +102,16 @@ type AiCriticalFetchKeys =
   | "FEED_ENRICH_MAX_PER_FIRE"
   | "FEED_THIN_CHARS"
   | "CLOUDFLARE_ACCOUNT_ID"
-  | "CLOUDFLARE_API_TOKEN";
+  | "CLOUDFLARE_API_TOKEN"
+  // Outbound pings. Both fail open to "skipped", so a drop looks exactly like
+  // the feature being off — see the scope note above.
+  | "INDEXNOW_KEY"
+  | "INDEXING_DISABLED"
+  | "WEB_SERVICE_KEY"
+  | "WEB_BASE_URL";
 
 /**
- * `FetchOneEnv` with the AI-critical keys promoted from optional to required —
+ * `FetchOneEnv` with the critical keys promoted from optional to required —
  * `-?` forces each KEY to appear in the builder's return literal (dropping a
  * line is a compile error), while `| undefined` preserves fail-open: the binding
  * itself may still resolve to undefined at runtime. Note this is deliberately
@@ -96,16 +119,16 @@ type AiCriticalFetchKeys =
  * reject the genuinely-optional source bindings the builder forwards.
  */
 type GuardedFetchOneEnv = FetchOneEnv & {
-  [K in AiCriticalFetchKeys]-?: FetchOneEnv[K] | undefined;
+  [K in CriticalFetchKeys]-?: FetchOneEnv[K] | undefined;
 };
 
 /**
  * Project a workflow env down to the `FetchOneEnv` slice. The only async work is
  * resolving the GitHub token secret; everything else is a binding hand-off. Keep
  * the field list exhaustive — a dropped binding silently no-ops the corresponding
- * ingest-time AI pass (see the module header). The {@link GuardedFetchOneEnv}
- * return type turns dropping one of the AI-critical bindings into a compile
- * error rather than a silent prod regression.
+ * ingest-time pass or outbound ping (see the module header). The
+ * {@link GuardedFetchOneEnv} return type turns dropping one of the critical
+ * bindings into a compile error rather than a silent prod regression.
  */
 export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFetchOneEnv> {
   const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
@@ -153,5 +176,12 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     FEED_THIN_CHARS: env.FEED_THIN_CHARS,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
     CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
+    // Outbound pings fired from fetchOne's post-insert effects. Missing since
+    // the workflow path shipped, which is why every workflow-driven fetch
+    // logged `indexnow / skipped / no_key_binding`.
+    INDEXNOW_KEY: env.INDEXNOW_KEY,
+    INDEXING_DISABLED: env.INDEXING_DISABLED,
+    WEB_SERVICE_KEY: env.WEB_SERVICE_KEY,
+    WEB_BASE_URL: env.WEB_BASE_URL,
   };
 }

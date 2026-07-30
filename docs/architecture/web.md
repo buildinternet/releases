@@ -55,7 +55,11 @@ Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 
 
 ## ISR revalidation
 
-Org, source, product and release pages are statically rendered. **Freshness comes from an ingest-time ping, not from the clock.** When `runBatchIngestEffects` inserts releases it calls `notifyWebRevalidate` (`workers/api/src/lib/web-revalidate.ts`) — a sibling of the IndexNow ping, same trigger and same fire-and-forget semantics — which POSTs the affected `{ orgSlug, sourceSlug?, productSlug? }` to web's `POST /api/revalidate`. The route's whole contract (bearer auth, body validation, path derivation) lives in `web/src/lib/revalidate-request.ts` so it is testable without `next/cache`; the route module only injects `revalidatePath` and the secret.
+Org, source, product and release pages are statically rendered. **Freshness comes from an ingest-time ping, not from the clock.** `notifyWebRevalidate` (`workers/api/src/lib/web-revalidate.ts`) — a sibling of the IndexNow ping, same trigger and same fire-and-forget semantics — POSTs the affected `{ orgSlug, sourceSlug?, productSlug? }` to web's `POST /api/revalidate`.
+
+It is wired at **both** post-insert effect sites, which are separate code paths: `runBatchIngestEffects` (batch route + scrape persister) and the inline effects block in `cron/poll-fetch.ts` (the workflow path, which does not call `runBatchIngestEffects`). Wiring only the first leaves the ping firing for manual fetches alone — the workflow is the dominant ingest driver.
+
+The credentials reach `fetchOne` through `buildFetchOneEnv` (`workers/api/src/workflows/_fetch-env.ts`), an exhaustive projection guarded by `CriticalFetchKeys`. **Any binding whose absence is indistinguishable from the feature being switched off must be listed there** — `INDEXNOW_KEY` was not, and the IndexNow ping was a silent no-op on the workflow path from the day it shipped. The route's whole contract (bearer auth, body validation, path derivation) lives in `web/src/lib/revalidate-request.ts` so it is testable without `next/cache`; the route module only injects `revalidatePath` and the secret.
 
 `export const revalidate = 86400` on those pages is the **backstop for a dropped ping**, not the mechanism. Time-based ISR fits this content badly: the long tail of org pages is low-traffic enough that a short window regenerates pages nothing changed on (writes ≈ requests), while a long one would leave fresh releases invisible. Windows and the shared default live in `web/src/lib/isr.ts`.
 
