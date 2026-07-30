@@ -24,6 +24,7 @@
  * named `AiCriticalFetchKeys` and scoped to AI bindings only, so a non-AI
  * credential fell straight through it. It is now `CriticalFetchKeys` and covers
  * any binding whose absence is indistinguishable from the feature being off.
+ * (IndexNow itself was removed in #2201 — the lesson outlived the feature.)
  */
 import { getSecret } from "@releases/lib/secrets";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
@@ -31,7 +32,6 @@ import type { FetchOneEnv } from "../cron/poll-fetch.js";
 import type { AnthropicEnv } from "../lib/anthropic.js";
 import type { TextModelEnv } from "../lib/text-model.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
-import type { IndexNowEnv } from "../lib/indexnow.js";
 import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
 
 /**
@@ -41,7 +41,7 @@ import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
  * OnboardSourceWorkflowEnv, …) is structurally assignable.
  */
 export interface WorkflowFetchEnv
-  extends InvalidationEnv, AnthropicEnv, TextModelEnv, IndexNowEnv, WebRevalidateEnv {
+  extends InvalidationEnv, AnthropicEnv, TextModelEnv, WebRevalidateEnv {
   GITHUB_TOKEN?: { get(): Promise<string> };
   RELEASES_INDEX?: unknown;
   CHANGELOG_CHUNKS_INDEX?: unknown;
@@ -77,11 +77,11 @@ export interface WorkflowFetchEnv
  * The forwarded fields whose silent omission disables an ingest-time side
  * effect: the Anthropic client inputs (enrichment + marketing classifier), the
  * feed-enrich tuning vars, the Browser-Rendering creds enrichment escalates
- * with, and the outbound-ping credentials (IndexNow, web ISR revalidation).
+ * with, and the web ISR revalidation credentials.
  *
  * Scope note: this list was `AiCriticalFetchKeys` and covered only the AI
- * bindings, which is how `INDEXNOW_KEY` fell through and left the IndexNow ping
- * a permanent no-op on the workflow path from the day it shipped. The failure
+ * bindings, which is how `INDEXNOW_KEY` fell through and left the (since
+ * removed) IndexNow ping a permanent no-op from the day it shipped. The failure
  * mode is not specific to AI passes — it is "an optional binding is dropped
  * from an exhaustive projection, the omission type-checks, and the feature
  * degrades to its disabled state in silence." Any binding whose absence is
@@ -103,10 +103,8 @@ type CriticalFetchKeys =
   | "FEED_THIN_CHARS"
   | "CLOUDFLARE_ACCOUNT_ID"
   | "CLOUDFLARE_API_TOKEN"
-  // Outbound pings. Both fail open to "skipped", so a drop looks exactly like
-  // the feature being off — see the scope note above.
-  | "INDEXNOW_KEY"
-  | "INDEXING_DISABLED"
+  // Outbound ping. Fails open to "skipped", so a drop looks exactly like the
+  // feature being off — see the scope note above.
   | "WEB_SERVICE_KEY"
   | "WEB_BASE_URL";
 
@@ -176,11 +174,7 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     FEED_THIN_CHARS: env.FEED_THIN_CHARS,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
     CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
-    // Outbound pings fired from fetchOne's post-insert effects. Missing since
-    // the workflow path shipped, which is why every workflow-driven fetch
-    // logged `indexnow / skipped / no_key_binding`.
-    INDEXNOW_KEY: env.INDEXNOW_KEY,
-    INDEXING_DISABLED: env.INDEXING_DISABLED,
+    // Outbound ping fired from fetchOne's post-insert effects.
     WEB_SERVICE_KEY: env.WEB_SERVICE_KEY,
     WEB_BASE_URL: env.WEB_BASE_URL,
   };

@@ -54,7 +54,6 @@ export {
 };
 import { type AnthropicEnv } from "../lib/anthropic.js";
 import { type TextModelEnv } from "../lib/text-model.js";
-import { type IndexNowEnv } from "../lib/indexnow.js";
 import { type WebRevalidateEnv } from "../lib/web-revalidate.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 
@@ -71,9 +70,7 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
   // history note in `_fetch-env.ts`.
   TextModelEnv &
   // Outbound-ping credentials, same reason: `buildFetchOneEnv` can only forward
-  // what this type admits. `INDEXNOW_KEY` was absent here, so the IndexNow ping
-  // skipped with `no_key_binding` on every workflow-driven fetch.
-  IndexNowEnv &
+  // what this type admits.
   WebRevalidateEnv & {
     DB: D1Database;
     CRON_ENABLED?: string;

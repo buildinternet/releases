@@ -85,7 +85,6 @@ import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
-import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
 import { notifyWebRevalidate, type WebRevalidateEnv } from "../lib/web-revalidate.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
@@ -706,8 +705,7 @@ export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 // source lock), STATUS_HUB, DETERMINISTIC_UPDATE_WORKFLOW, and the MA_* cap
 // vars. Summary-only crawl-enabled feeds delegate through it — see
 // {@link shouldDelegateToCrawl} / {@link delegateScrapeToUpdateWorkflow}.
-export interface FetchOneEnv
-  extends IndexNowEnv, WebRevalidateEnv, TextModelEnv, UpdateDispatchEnv {
+export interface FetchOneEnv extends WebRevalidateEnv, TextModelEnv, UpdateDispatchEnv {
   GITHUB_TOKEN?: string;
   /**
    * Optional Vectorize bindings for semantic-search side effects. Typed as
@@ -1564,8 +1562,8 @@ export async function ingestRawReleases(
   const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
 
   // Detect changesets cascade rows and demote them to coverage so they
-  // stay out of the default feed, the live tail, and per-source IndexNow
-  // counts. Synchronous: coverage state must be visible to the publish
+  // stay out of the default feed, the live tail, and the per-source
+  // revalidate ping. Synchronous: coverage state must be visible to the publish
   // path below.
   const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
     component: "poll-fetch",
@@ -1597,38 +1595,18 @@ export async function ingestRawReleases(
     );
   }
 
-  // Fire-and-forget IndexNow ping for the org/source/product surfaces whose
-  // lastmod just shifted. No-ops when INDEXING_DISABLED (staging) or the
-  // INDEXNOW_KEY binding is absent (dev). Per-release URLs are intentionally
-  // out of scope — see https://github.com/buildinternet/releases/issues/649.
+  // Bust web's ISR entries for the pages this insert just changed. This path
+  // runs its own effects rather than going through `runBatchIngestEffects`, so
+  // the ping has to be wired here too — it is the workflow (and therefore the
+  // dominant) ingest path, and wiring only the batch path left it firing for
+  // manual fetches alone.
   if (visiblePublishRows.length > 0) {
-    const slugResolvers = {
-      resolveOrgSlug: (id: string) => resolveOrgSlug(db, id),
-      resolveProductSlug: (id: string) => resolveProductSlug(db, id),
-    };
-
-    await notifyIndexNowForSource(
-      env,
-      slugResolvers,
-      {
-        slug: source.slug,
-        orgId: source.orgId,
-        productId: source.productId,
-        isHidden: source.isHidden,
-        discovery: source.discovery,
-      },
-      visiblePublishRows.length,
-    );
-
-    // Bust web's ISR entries for the pages this insert just changed. This path
-    // runs its own effects rather than going through `runBatchIngestEffects`,
-    // so the ping has to be wired here too — it is the workflow (and therefore
-    // the dominant) ingest path, and wiring only the batch path left it firing
-    // for manual fetches alone. Same fire-and-forget semantics as IndexNow;
-    // gating differs (see web-revalidate.ts on `discovery === "on_demand"`).
     await notifyWebRevalidate(
       env,
-      slugResolvers,
+      {
+        resolveOrgSlug: (id: string) => resolveOrgSlug(db, id),
+        resolveProductSlug: (id: string) => resolveProductSlug(db, id),
+      },
       {
         slug: source.slug,
         orgId: source.orgId,

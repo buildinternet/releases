@@ -75,7 +75,7 @@ Unbound optional bindings fail open: no `MEDIA` R2 → third-party media URLs st
 
 Values live in the dashboard, never in git. Forks provision their own store and rebind every `secrets_store_secrets` entry:
 
-`RELEASED_API_KEY`, `RELEASES_API_KEY`, `RELEASES_PROXY_KEY`, `GITHUB_TOKEN`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VOYAGER_API_KEY`, `ANTHROPIC_API_KEY`, `AI_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `WEBHOOK_HMAC_MASTER`, `INDEXNOW_KEY`, `WEB_SERVICE_KEY` (prod only — see below), `WEB_BOT_AUTH_PRIVATE_KEY`, `FIRECRAWL_API_KEY`, `FIRECRAWL_WEBHOOK_SECRET`, `RELEASES_GITHUB_WEBHOOK_SECRET`, `STAGING_ACCESS_KEY` (staging only).
+`RELEASED_API_KEY`, `RELEASES_API_KEY`, `RELEASES_PROXY_KEY`, `GITHUB_TOKEN`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VOYAGER_API_KEY`, `ANTHROPIC_API_KEY`, `AI_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `WEBHOOK_HMAC_MASTER`, `WEB_SERVICE_KEY` (prod only — see below), `WEB_BOT_AUTH_PRIVATE_KEY`, `FIRECRAWL_API_KEY`, `FIRECRAWL_WEBHOOK_SECRET`, `RELEASES_GITHUB_WEBHOOK_SECRET`, `STAGING_ACCESS_KEY` (staging only).
 
 Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api + discovery; unset → direct Anthropic. Local dev: `workers/*/.dev.vars.example`.
 
@@ -102,6 +102,6 @@ Staging uses a separate agent/env/vault/memstore set in `[env.staging]`. API wor
 
 ### Outside wrangler
 
-- **Web (Vercel):** `web/.env.example` — `NEXT_PUBLIC_BETTER_AUTH_URL`, `RELEASES_API_URL`, `INDEXNOW_KEY` (must match api secret), `RELEASES_SERVICE_KEY` (channel credential for API-worker → web internal endpoints, mirroring `RELEASES_PROXY_KEY` inbound; must match the api worker's `WEB_SERVICE_KEY`; deliberately unbound on staging so prod ingest can't reach staging web's ISR cache).
+- **Web (Vercel):** `web/.env.example` — `NEXT_PUBLIC_BETTER_AUTH_URL`, `RELEASES_API_URL`, `RELEASES_SERVICE_KEY` (channel credential for API-worker → web internal endpoints, mirroring `RELEASES_PROXY_KEY` inbound; must match the api worker's `WEB_SERVICE_KEY`; deliberately unbound on staging so prod ingest can't reach staging web's ISR cache).
 - **MCP Registry:** `sh.releases/mcp` — domain auth via `/.well-known/mcp-registry-auth`; CI secret `MCP_REGISTRY_PRIVATE_KEY_PEM`.
 - **Security disclosure:** `security@releases.sh`, [releases.sh/.well-known/security.txt](https://releases.sh/.well-known/security.txt) (no root `SECURITY.md`).

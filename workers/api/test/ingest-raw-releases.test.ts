@@ -63,7 +63,7 @@ describe("ingestRawReleases", () => {
     const [source] = await db.select().from(sources).where(eq(sources.id, "src_test"));
 
     // env: minimal — RELEASE_HUB=undefined skips publishReleaseEvents,
-    // INDEXNOW_ENABLED unset skips notifyIndexNowForSource, no R2/embed bindings.
+    // No WEB_SERVICE_KEY binding, so the revalidate ping short-circuits; no R2/embed bindings.
     const env = {
       RELEASE_HUB: undefined,
       DB: undefined,
