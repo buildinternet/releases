@@ -947,9 +947,14 @@ async function runIncrementalWithEscalation(
 
     try {
       await deps.repo.commitContentHash(source, digest);
-    } catch {
+    } catch (err) {
       // Best-effort — a failed commit just means the next zero-result fetch
       // re-checks (and possibly re-escalates); never a fetch-blocking error.
+      // Still worth a warn: a persistent failure here means every future
+      // zero-result fetch re-escalates instead of self-correcting.
+      deps.logger.warn(
+        `content-hash commit failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
