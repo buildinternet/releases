@@ -79,9 +79,58 @@ export type ProviderHealthScanResult = {
   scanned: number;
   broken: number;
   entries: ProviderHealthEntry[];
+  /**
+   * Whether the quota shutoff is corroborated as STILL in effect. A
+   * webhook/change-driven source (e.g. a Firecrawl monitor) is only attempted
+   * when its page changes, so its "latest attempt" can be a week old — long
+   * after the operator raised the cap and the rest of the fleet recovered.
+   * Reporting that stale verdict as "currently unable to ingest" cried wolf
+   * within days of this section shipping (2026-07-30 digest).
+   *
+   * False means: the fleet ran within the corroboration window and produced
+   * zero quota-classified errors, so the shutoff has cleared and the entries
+   * are aftermath — sources that failed during the outage and were never
+   * re-attempted (their missed ingest needs a manual re-fetch; it will not
+   * self-heal until the page next changes). Fail-closed: a fleet with no
+   * activity at all in the window cannot prove recovery, so that reads as
+   * still active.
+   */
+  outageActive: boolean;
 };
 
-const EMPTY: ProviderHealthScanResult = { scanned: 0, broken: 0, entries: [] };
+const EMPTY: ProviderHealthScanResult = { scanned: 0, broken: 0, entries: [], outageActive: false };
+
+/**
+ * How far back to look for corroborating quota errors when deciding whether a
+ * shutoff is still in effect. The poll fleet runs hundreds of evaluations a
+ * day (normal tier 4h / low tier 24h), so an active provider shutoff generates
+ * fresh quota errors continuously — 24 quiet hours across the whole fleet is
+ * strong evidence the cap was raised or reset.
+ */
+const CORROBORATION_HOURS = 24;
+
+/**
+ * True when the quota shutoff is corroborated as ongoing: either a
+ * quota-classified error occurred anywhere in the fleet within the window, or
+ * the fleet shows no activity at all (a dead fleet can't prove recovery, so
+ * this fails closed to "active"). Only called when at least one source's
+ * latest attempt classified as a quota shutoff.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- same drizzle override pattern as the scan
+async function isOutageActive(db: any, now: Date): Promise<boolean> {
+  const since = new Date(now.getTime() - CORROBORATION_HOURS * 3_600_000).toISOString();
+  const recentErrors: Array<{ error: string | null }> = await db.all(sql`
+    SELECT error FROM fetch_log
+    WHERE status = 'error' AND created_at >= ${since} AND error IS NOT NULL
+    LIMIT 500
+  `);
+  if (recentErrors.some((r) => classifyProviderQuota(r.error) !== null)) return true;
+  const activity: Array<{ n: number }> = await db.all(sql`
+    SELECT COUNT(*) AS n FROM fetch_log
+    WHERE status != 'dry_run' AND created_at >= ${since}
+  `);
+  return Number(activity[0]?.n ?? 0) === 0;
+}
 
 /**
  * Scan every active source's latest ingest attempt and flag the ones whose
@@ -91,13 +140,7 @@ const EMPTY: ProviderHealthScanResult = { scanned: 0, broken: 0, entries: [] };
  */
 export async function scanProviderHealth(
   env: ProviderHealthEnv,
-  // Unused: unlike the other staleness scans, this signal doesn't compare
-  // against "now" — it reads whether each source's LATEST attempt classifies
-  // as a quota shutoff. Kept for signature parity with `scanStaleSources` /
-  // `scanStaleFirecrawlSources` so `sendStalenessDigest` can call all three
-  // identically, and so a future `now`-relative refinement (e.g. suppressing
-  // an already-stale-by-days quota flag) has somewhere to land.
-  _now: Date = new Date(),
+  now: Date = new Date(),
 ): Promise<ProviderHealthScanResult> {
   if (env.CRON_ENABLED === "false") return EMPTY;
 
@@ -193,13 +236,16 @@ export async function scanProviderHealth(
     // broken the longest are the most operator-urgent.
     entries.sort((a, b) => (a.lastFetchedAt ?? "").localeCompare(b.lastFetchedAt ?? ""));
 
+    const outageActive = entries.length > 0 ? await isOutageActive(db, now) : false;
+
     logEvent(broken > 0 ? "warn" : "info", {
       component: "provider-health",
       event: "scan-complete",
       scanned: rows.length,
       broken,
+      outageActive,
     });
-    return { scanned: rows.length, broken, entries };
+    return { scanned: rows.length, broken, entries, outageActive };
   } catch (err) {
     logEvent("warn", {
       component: "provider-health",

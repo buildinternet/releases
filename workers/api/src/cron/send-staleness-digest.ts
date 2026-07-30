@@ -8,7 +8,7 @@ import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { scanStaleFirecrawlSources, type FirecrawlStalenessEnv } from "./firecrawl-staleness.js";
 import { scanStaleSources, type SourceStalenessEnv } from "./source-staleness.js";
 import { scanProviderHealth, type ProviderHealthEnv } from "./provider-health.js";
-import { buildStalenessDigestEmail } from "../lib/staleness-digest-email.js";
+import { buildStalenessDigestEmail, countNeedsAttention } from "../lib/staleness-digest-email.js";
 import { sendEmail, type EmailEnv } from "../lib/email.js";
 
 export type SendStalenessDigestEnv = SourceStalenessEnv &
@@ -47,18 +47,28 @@ export async function sendStalenessDigest(
       event: "provider-health-scan-error",
       err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
     });
-    providerHealth = { scanned: 0, broken: 0, entries: [] };
+    providerHealth = { scanned: 0, broken: 0, entries: [], outageActive: false };
   }
-  const total =
-    firstParty.entries.length + firecrawl.entries.length + providerHealth.entries.length;
 
-  if (total === 0) {
+  // Send only when something is actionable. Upstream-quiet transparent
+  // sources (a GitHub repo that simply stopped shipping) ride along as an
+  // informational section but never trigger an email by themselves — a daily
+  // "N sources overdue" email whose rows are mostly quiet vendors trained the
+  // operator to read the fleet as far more broken than it is.
+  const attention = countNeedsAttention({
+    firstParty: firstParty.entries,
+    firecrawl: firecrawl.entries,
+    providerHealth: providerHealth.entries,
+  });
+
+  if (attention === 0) {
     logEvent("info", {
       component: "staleness-digest",
       event: "skipped-empty",
       scannedFirstParty: firstParty.scanned,
       scannedFirecrawl: firecrawl.scanned,
       scannedProviderHealth: providerHealth.scanned,
+      upstreamQuiet: firstParty.entries.length,
     });
     return { emailed: false, firstParty: 0, firecrawl: 0, providerHealth: 0 };
   }
@@ -67,6 +77,7 @@ export async function sendStalenessDigest(
     firstParty: firstParty.entries,
     firecrawl: firecrawl.entries,
     providerHealth: providerHealth.entries,
+    providerOutageActive: providerHealth.outageActive,
     webOrigin: webOrigin(env),
     scannedAt: now.toISOString(),
   });
