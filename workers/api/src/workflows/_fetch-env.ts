@@ -25,6 +25,11 @@
  * credential fell straight through it. It is now `CriticalFetchKeys` and covers
  * any binding whose absence is indistinguishable from the feature being off.
  * (IndexNow itself was removed in #2201 — the lesson outlived the feature.)
+ *
+ * Scope of the guard: it protects THIS builder, not `FetchOneEnv` itself. A
+ * caller can construct the same type by hand and bypass it — `POST
+ * /v1/sources/video` did exactly that for months. If you need a `FetchOneEnv`,
+ * call this function; do not hand-roll the literal.
  */
 import { getSecret } from "@releases/lib/secrets";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";

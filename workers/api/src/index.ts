@@ -1070,12 +1070,12 @@ export default {
       ctx.waitUntil(
         loggedDispatch(
           "domain-demand-sweep-cron",
-          domainDemandSweep({
-            DB: env.DB,
-            CRON_ENABLED: env.CRON_ENABLED,
-            FLAGS: env.FLAGS,
-            LISTING_SELF_SERVE_ENABLED: env.LISTING_SELF_SERVE_ENABLED,
-          }),
+          // Pass the bindings whole rather than projecting. `DomainDemandSweepEnv`
+          // extends `WebBotAuthEnv`, and inherited fields are invisible when you
+          // check a hand-built literal against the interface body — which is how
+          // the signing key went missing and every manifest probe went out
+          // unsigned.
+          domainDemandSweep(env),
           alertEnv,
         ),
       );

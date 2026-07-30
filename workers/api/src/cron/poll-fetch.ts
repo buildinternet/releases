@@ -1575,12 +1575,13 @@ export async function ingestRawReleases(
       : publishRows;
 
   if (visiblePublishRows.length > 0 && env.RELEASE_HUB) {
+    // Spread rather than project: `PublishEnv` also carries `WEB_BASE_URL` (the
+    // origin each payload's slugged `webUrl` is built from), which a hand-built
+    // literal dropped — every event fell back to the hardcoded prod origin.
+    // `RELEASE_HUB` is restated because the guard above narrows it to defined,
+    // and `PublishEnv` requires it.
     await publishReleaseEvents(
-      {
-        RELEASE_HUB: env.RELEASE_HUB,
-        WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-        DB: env.DB,
-      },
+      { ...env, RELEASE_HUB: env.RELEASE_HUB },
       {
         src: {
           name: source.name,

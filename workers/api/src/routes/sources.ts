@@ -2296,25 +2296,17 @@ sourceRoutes.post(
     }
 
     const db = createDb(c.env.DB);
-    const result = await materializeVideoSource(
-      db,
-      {
-        RELEASES_INDEX: c.env.RELEASES_INDEX,
-        CHANGELOG_CHUNKS_INDEX: c.env.CHANGELOG_CHUNKS_INDEX,
-        EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
-        VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
-        OPENAI_API_KEY: c.env.OPENAI_API_KEY,
-        ANTHROPIC_API_KEY: c.env.ANTHROPIC_API_KEY,
-        ANTHROPIC_BASE_URL: c.env.ANTHROPIC_BASE_URL,
-        AI_GATEWAY_TOKEN: c.env.AI_GATEWAY_TOKEN,
-        RELEASE_HUB: c.env.RELEASE_HUB,
-        WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
-        DB: c.env.DB,
-        MEDIA: c.env.MEDIA,
-        FLAGS: c.env.FLAGS,
-      },
-      { url: body.url, orgSlug: body.orgSlug, orgId: body.orgId, productId: body.productId },
-    );
+    // `materializeVideoSource` takes the same `FetchOneEnv` the workflow paths
+    // build, so build it the same way. A hand-rolled literal here dropped the
+    // OpenRouter lane vars, the model vars and the revalidate credentials —
+    // every field is optional, so the omission type-checked and the backfill's
+    // marketing classifier silently ran on the wrong lane.
+    const result = await materializeVideoSource(db, await buildFetchOneEnv(c.env), {
+      url: body.url,
+      orgSlug: body.orgSlug,
+      orgId: body.orgId,
+      productId: body.productId,
+    });
 
     if (result.status === "bad_request") {
       return respondError(
