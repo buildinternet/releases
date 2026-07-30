@@ -340,6 +340,7 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
       return buildStalenessDigestEmail({
         scannedAt: new Date().toISOString(),
         webOrigin: web,
+        providerOutageActive: true,
         firstParty: [
           {
             sourceId: "src_sample_1",
@@ -351,6 +352,18 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
             windowDays: 21,
             daysSinceNewest: 30,
             newestRelease: "2026-05-01T00:00:00.000Z",
+            lastSeenAt: new Date().toISOString(),
+          },
+          {
+            sourceId: "src_sample_2",
+            slug: "example-sdk",
+            orgSlug: "example",
+            orgName: "Example Co",
+            sourceType: "github",
+            medianGapDays: 4,
+            windowDays: 14,
+            daysSinceNewest: 45,
+            newestRelease: "2026-04-15T00:00:00.000Z",
             lastSeenAt: new Date().toISOString(),
           },
         ],

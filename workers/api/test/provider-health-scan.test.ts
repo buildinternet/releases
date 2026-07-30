@@ -193,7 +193,7 @@ describe("scanProviderHealth", () => {
     seedLog({ sourceId: "src", status: "error", createdAt: iso(1 * HOUR), error: QUOTA_MESSAGE });
 
     const res = await scanProviderHealth({ ...baseEnv(), CRON_ENABLED: "false" });
-    expect(res).toEqual({ scanned: 0, broken: 0, entries: [] });
+    expect(res).toEqual({ scanned: 0, broken: 0, entries: [], outageActive: false });
   });
 
   // `scanned` names the population examined, not the failures found. It was
@@ -261,6 +261,85 @@ describe("scanProviderHealth", () => {
       },
     };
     const res = await scanProviderHealth({ DB: {} as never, _drizzleOverride: brokenDb });
-    expect(res).toEqual({ scanned: 0, broken: 0, entries: [] });
+    expect(res).toEqual({ scanned: 0, broken: 0, entries: [], outageActive: false });
+  });
+
+  // Corroboration (#2168 follow-up): a webhook/change-driven source's "latest
+  // attempt" can be a week old, so a quota verdict there may describe an
+  // outage that has long since cleared. `outageActive` cross-checks the fleet.
+  describe("outageActive corroboration", () => {
+    it("reports an active outage when the failing attempt is recent", async () => {
+      seedSource({ id: "broken", lastFetchedAt: iso(2 * DAY) });
+      seedLog({
+        sourceId: "broken",
+        status: "error",
+        createdAt: iso(1 * HOUR),
+        error: QUOTA_MESSAGE,
+      });
+
+      const res = await scanProviderHealth(baseEnv());
+      expect(res.broken).toBe(1);
+      expect(res.outageActive).toBe(true);
+    });
+
+    it("reports the outage as cleared when the fleet has run quota-clean for 24h+", async () => {
+      // The stale verdict: a change-driven source failed during the outage a
+      // week ago and was never re-attempted.
+      seedSource({ id: "webhook-driven", lastFetchedAt: iso(9 * DAY) });
+      seedLog({
+        sourceId: "webhook-driven",
+        status: "error",
+        createdAt: iso(7 * DAY),
+        error: QUOTA_MESSAGE,
+      });
+      // Meanwhile the rest of the fleet is active and healthy.
+      seedSource({ id: "healthy", lastFetchedAt: iso(1 * HOUR) });
+      seedLog({ sourceId: "healthy", status: "success", createdAt: iso(1 * HOUR) });
+
+      const res = await scanProviderHealth(baseEnv());
+      expect(res.broken).toBe(1);
+      expect(res.outageActive).toBe(false);
+    });
+
+    it("keeps the outage active when any recent fleet error still classifies as quota", async () => {
+      seedSource({ id: "webhook-driven", lastFetchedAt: iso(9 * DAY) });
+      seedLog({
+        sourceId: "webhook-driven",
+        status: "error",
+        createdAt: iso(7 * DAY),
+        error: QUOTA_MESSAGE,
+      });
+      // Another source hit the cap two hours ago — the shutoff is ongoing,
+      // even though that source itself has since recovered (its newest row is
+      // a success, so it isn't an entry).
+      seedSource({ id: "recent-hit", lastFetchedAt: iso(1 * HOUR) });
+      seedLog({
+        sourceId: "recent-hit",
+        status: "error",
+        createdAt: iso(2 * HOUR),
+        error: QUOTA_MESSAGE,
+      });
+      seedLog({ sourceId: "recent-hit", status: "success", createdAt: iso(1 * HOUR) });
+
+      const res = await scanProviderHealth(baseEnv());
+      expect(res.entries).toHaveLength(1);
+      expect(res.outageActive).toBe(true);
+    });
+
+    it("fails closed to active when the fleet shows no activity in the window", async () => {
+      // A dead fleet (cron stalled) produces no fresh quota errors — but that
+      // is absence of evidence, not evidence of recovery.
+      seedSource({ id: "webhook-driven", lastFetchedAt: iso(9 * DAY) });
+      seedLog({
+        sourceId: "webhook-driven",
+        status: "error",
+        createdAt: iso(7 * DAY),
+        error: QUOTA_MESSAGE,
+      });
+
+      const res = await scanProviderHealth(baseEnv());
+      expect(res.broken).toBe(1);
+      expect(res.outageActive).toBe(true);
+    });
   });
 });

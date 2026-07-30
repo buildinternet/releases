@@ -11,10 +11,46 @@ export type StalenessDigestInput = {
   firecrawl: FirecrawlStaleEntry[];
   /** Sources whose most recent ingest attempt failed as a provider quota/billing shutoff. */
   providerHealth: ProviderHealthEntry[];
+  /**
+   * Whether the quota shutoff behind `providerHealth` is corroborated as still
+   * in effect (see `ProviderHealthScanResult.outageActive`). When false, those
+   * entries are aftermath of a since-cleared outage — sources that failed
+   * during it and were never re-attempted — and must not be presented as
+   * "currently unable to ingest".
+   */
+  providerOutageActive: boolean;
   /** Web/admin origin for source links, e.g. https://releases.sh */
   webOrigin: string;
   scannedAt: string;
 };
+
+/**
+ * Source types whose fetch path is transparent: the upstream API tells us
+ * outright whether there are new releases (GitHub releases API, App Store
+ * lookup, video feeds). A quiet source of these types means the upstream
+ * simply hasn't shipped — our polling is demonstrably healthy — so it is
+ * informational, not a breakage signal. Scrape/feed/agent pipelines are
+ * opaque: extraction can silently fail or the page/feed can move, so quiet
+ * there genuinely may mean broken ingest.
+ */
+const TRANSPARENT_SOURCE_TYPES = new Set(["github", "appstore", "video"]);
+
+/**
+ * The actionable population for a digest run: an active provider shutoff (or
+ * a cleared one's missed ingests), opaque-pipeline first-party sources gone
+ * quiet, and dead Firecrawl monitors. Upstream-quiet transparent sources are
+ * excluded — they ride along informationally but should never by themselves
+ * trigger an email. `sendStalenessDigest` uses this to decide whether to send.
+ */
+export function countNeedsAttention(
+  input: Pick<StalenessDigestInput, "firstParty" | "firecrawl" | "providerHealth">,
+): number {
+  return (
+    input.providerHealth.length +
+    input.firstParty.filter((e) => !TRANSPARENT_SOURCE_TYPES.has(e.sourceType)).length +
+    input.firecrawl.length
+  );
+}
 
 function orgHeadline(orgName: string | null, orgSlug: string | null, slug: string): string {
   if (orgName && orgSlug && orgName !== orgSlug) return `${orgName} (${orgSlug}) — ${slug}`;
@@ -32,42 +68,60 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
   text: string;
   html: string;
 } {
-  const total = input.firstParty.length + input.firecrawl.length + input.providerHealth.length;
-  // A provider quota shutoff is the most urgent signal here — a systemic
-  // outage, not one flaky source — so it drives the subject line whenever
-  // present, ahead of ordinary staleness counts.
-  const hasProviderIssue = input.providerHealth.length > 0;
-  // Name the orgs that went quiet: "4 overdue" alone reads the same every day
-  // and says nothing about whether this run needs attention.
+  const providerActive = input.providerOutageActive ? input.providerHealth : [];
+  const providerAftermath = input.providerOutageActive ? [] : input.providerHealth;
+  const opaque = input.firstParty.filter((e) => !TRANSPARENT_SOURCE_TYPES.has(e.sourceType));
+  const upstreamQuiet = input.firstParty.filter((e) => TRANSPARENT_SOURCE_TYPES.has(e.sourceType));
+
+  // "Needs attention" is the actionable population: an active provider
+  // shutoff, opaque-pipeline sources gone quiet, a cleared outage's missed
+  // ingests, and dead Firecrawl monitors. Upstream-quiet transparent sources
+  // are appended informationally and deliberately kept out of the headline
+  // counts — counting a GitHub repo that simply stopped shipping as a source
+  // that "needs attention" made the fleet read far more broken than it is.
+  const attention =
+    providerActive.length + providerAftermath.length + opaque.length + input.firecrawl.length;
+  const hasProviderIssue = providerActive.length > 0;
+  // Name the orgs that need attention: "4 overdue" alone reads the same every
+  // day and says nothing about whether this run needs attention.
   const affected = subjectNames([
-    ...input.providerHealth.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
-    ...input.firstParty.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+    ...providerActive.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+    ...providerAftermath.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+    ...opaque.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
     ...input.firecrawl.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
   ]);
   const subject = hasProviderIssue
-    ? `[staleness] provider quota shutoff: ${input.providerHealth.length} source${input.providerHealth.length === 1 ? "" : "s"} unable to ingest${affected ? ` (${affected})` : ""}`
-    : `[staleness] ${total} source${total === 1 ? "" : "s"} overdue${affected ? `: ${affected}` : ""}`;
+    ? `[staleness] provider quota shutoff: ${providerActive.length} source${providerActive.length === 1 ? "" : "s"} unable to ingest${affected ? ` (${affected})` : ""}`
+    : attention > 0
+      ? `[staleness] ${attention} source${attention === 1 ? "" : "s"} need${attention === 1 ? "s" : ""} attention${affected ? `: ${affected}` : ""}`
+      : `[staleness] ${upstreamQuiet.length} source${upstreamQuiet.length === 1 ? "" : "s"} quiet upstream`;
 
-  // `total` now spans three scans, so the lead has to name the provider-health
-  // entries when there are any — otherwise the first line an operator reads
-  // during a quota shutoff describes those crit rows as merely "overdue", which
-  // is the exact misreading this section was added to prevent.
+  // The lead has to name the provider-health entries when there are any —
+  // otherwise the first line an operator reads during a quota shutoff
+  // describes those crit rows as merely "overdue", which is the exact
+  // misreading this section was added to prevent.
+  const quietSuffix =
+    upstreamQuiet.length > 0
+      ? ` A further ${upstreamQuiet.length} are healthy but quiet upstream (no new releases from the vendor).`
+      : "";
   const blocks: EmailBlock[] = [
     {
       t: "p",
       text: hasProviderIssue
-        ? `${total} source(s) need attention — including ${input.providerHealth.length} unable to ingest at all because the AI provider is cut off.`
-        : `${total} source(s) are overdue for new releases or monitor deliveries.`,
+        ? `${attention} source(s) need attention — including ${providerActive.length} unable to ingest at all because the AI provider is cut off.${quietSuffix}`
+        : attention > 0
+          ? `${attention} source(s) need attention.${quietSuffix}`
+          : `No sources need attention.${quietSuffix}`,
     },
   ];
 
-  if (input.providerHealth.length > 0) {
-    blocks.push({ t: "kicker", text: `Provider health (${input.providerHealth.length})` });
+  if (providerActive.length > 0) {
+    blocks.push({ t: "kicker", text: `Provider health (${providerActive.length})` });
     blocks.push({
       t: "fine",
       text: "Sources whose most recent ingest attempt failed because the AI provider itself is cut off (spend cap or billing shutoff) — not an ordinary transient error. This needs a human to raise the cap or wait out the stated reset; retrying will not help.",
     });
-    for (const e of input.providerHealth) {
+    for (const e of providerActive) {
       const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
       const regain = e.regainAccessAt ? `regains ${e.regainAccessAt}` : "no stated reset";
       blocks.push({
@@ -80,13 +134,34 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
     }
   }
 
-  if (input.firstParty.length > 0) {
-    blocks.push({ t: "kicker", text: `First-party (${input.firstParty.length})` });
+  if (providerAftermath.length > 0) {
+    blocks.push({
+      t: "kicker",
+      text: `Provider outage aftermath (${providerAftermath.length})`,
+    });
     blocks.push({
       t: "fine",
-      text: "Established-cadence sources we still poll but that have gone quiet past their overdue window.",
+      text: "Sources whose last attempt failed during a provider quota shutoff that has since cleared (no quota errors anywhere in the fleet for 24h+). They have not been re-attempted since — change-driven sources only run when their page changes — so the ingest that failed is still missing. Re-fetch these manually to recover it.",
     });
-    for (const e of input.firstParty) {
+    for (const e of providerAftermath) {
+      const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
+      blocks.push({
+        t: "entity",
+        coord: orgHeadline(e.orgName, e.orgSlug, e.slug),
+        metrics: `failed ${e.lastAttemptAt} · last evaluated ${e.lastFetchedAt ?? "(never)"} · ${e.sourceId}`,
+        url: adminUrl ?? undefined,
+        sev: "warn",
+      });
+    }
+  }
+
+  if (opaque.length > 0) {
+    blocks.push({ t: "kicker", text: `First-party — possible ingest breakage (${opaque.length})` });
+    blocks.push({
+      t: "fine",
+      text: "Scrape/feed sources with an established cadence that have gone quiet past their overdue window. These pipelines can fail silently — the page or feed may have moved, or extraction may be returning nothing — so a quiet one is worth a manual check.",
+    });
+    for (const e of opaque) {
       const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
       blocks.push({
         t: "entity",
@@ -112,6 +187,23 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
         metrics: `last fetch ${e.lastFetchedAt ?? "(never)"} · threshold ${e.staleHours}h (${e.thresholdBasis}) · ${e.sourceId}`,
         url: adminUrl ?? undefined,
         sev: "crit",
+      });
+    }
+  }
+
+  if (upstreamQuiet.length > 0) {
+    blocks.push({ t: "kicker", text: `Upstream quiet (${upstreamQuiet.length})` });
+    blocks.push({
+      t: "fine",
+      text: "Sources polled through transparent APIs (GitHub releases, App Store, video feeds) with nothing new past their usual cadence. Polling is healthy and succeeding — the vendor simply hasn't shipped. Informational only.",
+    });
+    for (const e of upstreamQuiet) {
+      const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
+      blocks.push({
+        t: "entity",
+        coord: orgHeadline(e.orgName, e.orgSlug, e.slug),
+        metrics: `quiet ${e.daysSinceNewest}d · window ${e.windowDays}d · median gap ${e.medianGapDays}d · newest ${e.newestRelease ?? "(never)"} · last seen ${e.lastSeenAt} · ${e.sourceId}`,
+        url: adminUrl ?? undefined,
       });
     }
   }
