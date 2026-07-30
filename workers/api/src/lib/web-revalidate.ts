@@ -14,10 +14,10 @@
  * costs at most one page staying stale until its backstop expires — which is
  * exactly what that backstop is for.
  *
- * Deliberately does NOT mirror IndexNow's `discovery === "on_demand"` gate: that
- * one exists to keep low-signal pages out of search-engine indexes, which says
- * nothing about whether the page's cached HTML is stale. An on-demand source's
- * pages still change and still need busting.
+ * Note on gating: `discovery === "on_demand"` is deliberately NOT a skip. Its
+ * only prior use was keeping low-signal pages out of search-engine indexes,
+ * which says nothing about whether the page's cached HTML is stale. An
+ * on-demand source's pages still change and still need busting.
  */
 
 import { logEvent } from "@releases/lib/log-event";
@@ -51,8 +51,8 @@ export interface RevalidateResult {
 
 const DEFAULT_BASE_URL = "https://releases.sh";
 const REVALIDATE_PATH = "/api/revalidate";
-// Same ceiling as the IndexNow ping: this runs inside fetchOne()'s waitUntil and
-// must not stretch the cron's per-source budget if web is slow or blackholed.
+// This runs inside fetchOne()'s waitUntil and must not stretch the cron's
+// per-source budget if web is slow or blackholed.
 const PING_TIMEOUT_MS = 2000;
 
 function logSkip(sourceSlug: string, reason: string): RevalidateResult {

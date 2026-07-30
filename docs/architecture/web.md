@@ -21,7 +21,7 @@ The bare second segment is a **product**: `/[org]/[slug]` resolves product-first
 
 Because a **shadowed** source's slug _is_ its product's slug, product-first resolution returns the product directly — no redirect, no broken URL; the bare URL's content just flips from source to product. Of ~71 member sources, ~23 collide; only those need `/sources/:id`. Non-shadowed members and all orphans keep their bare URL.
 
-- **Seam:** `web/src/lib/links.ts` is the single path builder for the web component tree — `productPath` emits bare, `sourceIdPath(id)` → `/sources/:id`. Server-rendered markdown/XML (`packages/rendering/src/formatters.ts`), the rename `revalidatePath`, and IndexNow construct product URLs independently and were swept to bare alongside the flip.
+- **Seam:** `web/src/lib/links.ts` is the single path builder for the web component tree — `productPath` emits bare, `sourceIdPath(id)` → `/sources/:id`. Server-rendered markdown/XML (`packages/rendering/src/formatters.ts`) and the rename `revalidatePath` construct product URLs independently and were swept to bare alongside the flip.
 - **Machine format routes stay at `/product/`:** `/api/format/[orgSlug]/product/[productSlug]` (and the matching `Sidebar formatPath`) are download surfaces, intentionally not moved.
 - **Reserved nested slugs** (`@buildinternet/releases-core/reserved-slugs`) gained `product`/`products`/`playbook`/`fetch-log`/`admin` so no slug can shadow a static second-segment route. Creating a product whose slug shadows a same-org source **warns but allows** (the intended "wrap" mechanism).
 
@@ -55,11 +55,11 @@ Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 
 
 ## ISR revalidation
 
-Org, source, product and release pages are statically rendered. **Freshness comes from an ingest-time ping, not from the clock.** `notifyWebRevalidate` (`workers/api/src/lib/web-revalidate.ts`) — a sibling of the IndexNow ping, same trigger and same fire-and-forget semantics — POSTs the affected `{ orgSlug, sourceSlug?, productSlug? }` to web's `POST /api/revalidate`.
+Org, source, product and release pages are statically rendered. **Freshness comes from an ingest-time ping, not from the clock.** `notifyWebRevalidate` (`workers/api/src/lib/web-revalidate.ts`), fire-and-forget, POSTs the affected `{ orgSlug, sourceSlug?, productSlug? }` to web's `POST /api/revalidate`.
 
 It is wired at **both** post-insert effect sites, which are separate code paths: `runBatchIngestEffects` (batch route + scrape persister) and the inline effects block in `cron/poll-fetch.ts` (the workflow path, which does not call `runBatchIngestEffects`). Wiring only the first leaves the ping firing for manual fetches alone — the workflow is the dominant ingest driver.
 
-The credentials reach `fetchOne` through `buildFetchOneEnv` (`workers/api/src/workflows/_fetch-env.ts`), an exhaustive projection guarded by `CriticalFetchKeys`. **Any binding whose absence is indistinguishable from the feature being switched off must be listed there** — `INDEXNOW_KEY` was not, and the IndexNow ping was a silent no-op on the workflow path from the day it shipped. The route's whole contract (bearer auth, body validation, path derivation) lives in `web/src/lib/revalidate-request.ts` so it is testable without `next/cache`; the route module only injects `revalidatePath` and the secret.
+The credentials reach `fetchOne` through `buildFetchOneEnv` (`workers/api/src/workflows/_fetch-env.ts`), an exhaustive projection guarded by `CriticalFetchKeys`. **Any binding whose absence is indistinguishable from the feature being switched off must be listed there** — the now-removed `INDEXNOW_KEY` was not, and that ping was a silent no-op on the workflow path from the day it shipped (#2201). The route's whole contract (bearer auth, body validation, path derivation) lives in `web/src/lib/revalidate-request.ts` so it is testable without `next/cache`; the route module only injects `revalidatePath` and the secret.
 
 `export const revalidate = 86400` on those pages is the **backstop for a dropped ping**, not the mechanism. Time-based ISR fits this content badly: the long tail of org pages is low-traffic enough that a short window regenerates pages nothing changed on (writes ≈ requests), while a long one would leave fresh releases invisible. Windows and the shared default live in `web/src/lib/isr.ts`.
 
@@ -67,7 +67,7 @@ The credentials reach `fetchOne` through `buildFetchOneEnv` (`workers/api/src/wo
 
 Why it needs auth at all: `revalidatePath` marks entries stale and regeneration happens on the next request, so an open endpoint is a lever that converts a cheap POST into unbounded ISR writes — either by evict-then-request, or just by evicting and letting existing crawler traffic pay for the re-render. That is the exact line item this design exists to shrink.
 
-Gating differs from IndexNow's on purpose. `notifyWebRevalidate` skips on no-secret / zero-rows / hidden source / no org, but **not** on `discovery === "on_demand"` — that gate keeps low-signal pages out of search indexes, which says nothing about whether cached HTML is stale.
+`notifyWebRevalidate` skips on no-secret / zero-rows / hidden source / no org, but **not** on `discovery === "on_demand"` — that gate existed to keep low-signal pages out of search indexes, which says nothing about whether cached HTML is stale.
 
 > **The trap this replaced.** A route's regeneration period is the MIN of its `export const revalidate` and every fetch revalidate in its render tree, **layouts included**. A `next: { revalidate: 60 }` on the site-notice fetch — reached from the root layout — capped every route in the app at 60s for three weeks, silently overriding #2004's 900s bump; a second instance (`revalidate: 3600` on the header's GitHub star count) capped it at an hour. Nothing breaks at runtime; the only symptom is the Vercel ISR-write line item, which reached ~49% of the bill. `web/src/lib/isr.test.ts` walks the import graph from `app/layout.tsx` and fails if anything reachable from it caches below the floor.
 

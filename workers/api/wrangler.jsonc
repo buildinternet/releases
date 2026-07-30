@@ -170,7 +170,8 @@
     // workflow aborts before submitting.
     "BATCH_ENRICH_ENABLED": "false",
     "BATCH_ENRICH_MAX_COST_USD": "10",
-    // Public web origin used to build canonical URLs for IndexNow pings (#649).
+    // Public web origin — target for the ingest-time ISR revalidate ping and
+    // the base for canonical URLs in email/OAuth links.
     "WEB_BASE_URL": "https://releases.sh",
     // Better Auth public base URL — THIS worker (where /api/auth/* is served),
     // not the web origin. Drives OAuth callback + cross-subdomain cookie domain
@@ -657,14 +658,6 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "CLOUDFLARE_API_TOKEN",
     },
-    // IndexNow ownership key. A missing key makes the IndexNow ping a no-op.
-    // The same value must also live in Vercel env so web/src/proxy.ts can serve
-    // the ownership file at /{key}.txt.
-    {
-      "binding": "INDEXNOW_KEY",
-      "store_id": "a887a71cab084105b79706df23380723",
-      "secret_name": "INDEXNOW_KEY",
-    },
     // Bearer key for calling web's internal endpoints — the API-worker → web
     // direction, mirroring RELEASES_PROXY_KEY on the way in. Channel-scoped, not
     // per-feature: POST /api/revalidate is its first consumer, and the next
@@ -787,9 +780,9 @@
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",
-        // IndexNow always attempts now, but the helper short-circuits on
-        // INDEXING_DISABLED=true (set in staging), so staging never pings.
-        // See workers/api/src/lib/indexnow.ts.
+        // Present for URL building only. The web revalidate ping is inert in
+        // staging: WEB_SERVICE_KEY is deliberately unbound, so notifyWebRevalidate
+        // short-circuits at `no_secret_binding` and prod web is never touched.
         "WEB_BASE_URL": "https://releases.sh",
         // Feed content enrichment (#feed-enrich): ON in staging so this is the
         // validation surface before prod flips on. No cron fires here
@@ -995,14 +988,6 @@
           "binding": "BETTER_AUTH_SECRET",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "BETTER_AUTH_SECRET",
-        },
-        // Bound for parity with prod so wrangler doesn't warn about
-        // missing inheritance. The staging var INDEXING_DISABLED=true makes the
-        // helper short-circuit before ever calling .get() on this binding.
-        {
-          "binding": "INDEXNOW_KEY",
-          "store_id": "a887a71cab084105b79706df23380723",
-          "secret_name": "INDEXNOW_KEY",
         },
         // Deliberately NOT bound on staging: staging web is a separate
         // deployment whose ISR entries prod ingest must never touch. With no

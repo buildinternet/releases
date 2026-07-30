@@ -42,7 +42,7 @@ export interface ClusterPersistResult {
  * `onConflictDoNothing` so auto-decisions never overwrite a manual link.
  *
  * Returns the set of release IDs that were demoted to coverage — callers
- * can subtract these from publish lists, IndexNow counts, etc.
+ * can subtract these from publish lists, revalidate-ping counts, etc.
  */
 export async function clusterAndPersistCascades(
   db: ClusterDb,

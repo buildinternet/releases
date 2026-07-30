@@ -10,7 +10,7 @@
  *   write the caller needs reflected in the response, or a read needed to
  *   decide one.
  * - `runBatchIngestEffects` — the post-insert fire-and-forget extras: publish
- *   to the ReleaseHub DO, IndexNow ping, latest-cache invalidation, and
+ *   to the ReleaseHub DO, the web revalidate ping, latest-cache invalidation, and
  *   embed + `embeddedAt` marking. These already tolerate failure independently
  *   (each has its own catch/logEvent), so they run concurrently via
  *   `Promise.allSettled` rather than sequentially.
@@ -43,7 +43,6 @@ import { clusterAndPersistCascades } from "./cluster-cascades.js";
 import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
 import { publishReleaseEvents, type PublishEnv } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
-import { notifyIndexNowForSource, type IndexNowEnv } from "./indexnow.js";
 import { notifyWebRevalidate, type WebRevalidateEnv } from "./web-revalidate.js";
 import { resolveOrgSlug, resolveProductSlug } from "./slug-lookups.js";
 import { buildEmbedConfig, type EmbedEnv } from "@releases/search/embed-config.js";
@@ -97,14 +96,14 @@ export interface BatchIngestResult {
   inserted: number;
   total: number;
   insertedIds: string[];
-  /** rows for the publish/IndexNow effects, coverage rows already filtered out */
+  /** rows for the publish/revalidate effects, coverage rows already filtered out */
   visiblePublishRows: InsertedReleaseRow[];
 }
 
 /**
  * Env slice used by `ingestReleaseBatch`. Kept in sync with the API worker's
  * `Env.Bindings` (see `../index.ts`) the same way `InvalidationEnv` /
- * `PublishEnv` / `IndexNowEnv` are.
+ * `PublishEnv` / `WebRevalidateEnv` are.
  */
 export interface BatchIngestEnv {
   FLAGS?: FlagshipBinding;
@@ -118,8 +117,7 @@ export interface BatchIngestEnv {
  * Env slice used by `runBatchIngestEffects` — a union of the effect helpers'
  * own env slices, plus the embed config env.
  */
-export interface BatchEffectsEnv
-  extends PublishEnv, IndexNowEnv, WebRevalidateEnv, InvalidationEnv, EmbedEnv {
+export interface BatchEffectsEnv extends PublishEnv, WebRevalidateEnv, InvalidationEnv, EmbedEnv {
   // Typed loosely (matches the route's `Env.Bindings` Cloudflare `VectorizeIndex`)
   // and narrowed via cast at the call site below — see the note in
   // embedSourceSideEffect about why the cast is needed.
@@ -350,7 +348,7 @@ export async function ingestReleaseBatch(
 
   // Detect changesets cascade rows and demote them to coverage so they
   // don't dominate the feed, broadcast on the live tail, or trigger an
-  // IndexNow ping per row. Synchronous — we want coverage state visible
+  // revalidate ping per row. Synchronous — we want coverage state visible
   // to the downstream waitUntils, not racing them.
   const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
     component: "sources-batch",
@@ -370,11 +368,11 @@ export async function ingestReleaseBatch(
 }
 
 /**
- * The post-insert waitUntil extras: ReleaseHub publish, IndexNow, embed +
+ * The post-insert waitUntil extras: ReleaseHub publish, web revalidate, embed +
  * embeddedAt marking, latest-cache invalidation. Awaitable — the caller
  * decides whether to await inline or hand it to `waitUntil`.
  *
- * Publish/IndexNow/invalidate already tolerate failure independently (each
+ * Publish/revalidate/invalidate already tolerate failure independently (each
  * logs its own error internally), so they run concurrently via
  * `Promise.allSettled` rather than one blocking the others.
  */
@@ -415,34 +413,16 @@ export async function runBatchIngestEffects(
         }),
       );
     }
-    const slugResolvers = {
-      resolveOrgSlug: (id: string) => resolveOrgSlug(db, id),
-      resolveProductSlug: (id: string) => resolveProductSlug(db, id),
-    };
-
-    tasks.push(
-      notifyIndexNowForSource(
-        env,
-        slugResolvers,
-        {
-          slug: src.slug,
-          orgId: src.orgId,
-          productId: src.productId,
-          isHidden: src.isHidden,
-          discovery: src.discovery,
-        },
-        visiblePublishRows.length,
-      ),
-    );
-
-    // Bust web's ISR entries for the pages this write just changed. Sibling of
-    // the IndexNow ping (same trigger, same fire-and-forget semantics), but with
-    // its own gating — see the note in web-revalidate.ts on why `discovery ===
+    // Bust web's ISR entries for the pages this write just changed. Gating is
+    // its own — see the note in web-revalidate.ts on why `discovery ===
     // "on_demand"` is NOT a skip here.
     tasks.push(
       notifyWebRevalidate(
         env,
-        slugResolvers,
+        {
+          resolveOrgSlug: (id: string) => resolveOrgSlug(db, id),
+          resolveProductSlug: (id: string) => resolveProductSlug(db, id),
+        },
         {
           slug: src.slug,
           orgId: src.orgId,
