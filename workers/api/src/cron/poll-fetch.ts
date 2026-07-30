@@ -2,7 +2,7 @@ import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
 import { createDb, type D1Db } from "../db.js";
 import {
   sources,
-  sourcesVisible,
+  sourcesActive,
   releases,
   fetchLog,
   sourceChangelogFiles,
@@ -271,7 +271,13 @@ export async function queryDueSources(
   now: Date,
   opts?: { changeDetectEnabled?: boolean },
 ): Promise<Source[]> {
-  const notPaused = sql`${sourcesVisible.fetchPriority} != 'paused'`;
+  // Scheduling reads from sources_active, NOT sources_visible. This query is
+  // the sole feed for both the poll cron and the SourceActor re-seed
+  // heartbeat (`fanOutPollAndFetch`) — a source excluded here never gets its
+  // alarm seeded and silently stops ingesting. `is_hidden` is a display lever
+  // for public read paths (#1907); `fetch_priority = 'paused'` (below) is the
+  // fetch lever. A hidden-but-unpaused source must still be scheduled.
+  const notPaused = sql`${sourcesActive.fetchPriority} != 'paused'`;
   // Include sources that have a feed URL OR are GitHub type (GitHub sources
   // don't store a feedUrl — they use the GitHub releases API directly), OR
   // carry a `metadata.githubUrl` fetch override (#831 — scrape sources opting
@@ -280,16 +286,16 @@ export async function queryDueSources(
   // those to a detector from the playbook's `fetchQuirks` (unreliable class is a
   // no-op, so the widened filter doesn't explode poll volume).
   const pollable = opts?.changeDetectEnabled
-    ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore' OR ${sourcesVisible.type} IN ('scrape','agent'))`
-    : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore')`;
+    ? sql`(json_extract(${sourcesActive.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesActive.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesActive.type} = 'github' OR ${sourcesActive.type} = 'appstore' OR ${sourcesActive.type} IN ('scrape','agent'))`
+    : sql`(json_extract(${sourcesActive.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesActive.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesActive.type} = 'github' OR ${sourcesActive.type} = 'appstore')`;
 
   // Build OR conditions for each tier using sql template to avoid enum type issues
   const tierConditions = (Object.keys(TIER_INTERVALS) as PollTier[]).map((tier) => {
     const hours = TIER_INTERVALS[tier];
     const cutoff = new Date(now.getTime() - hours * 3600_000).toISOString();
     return and(
-      sql`${sourcesVisible.fetchPriority} = ${tier}`,
-      or(isNull(sourcesVisible.lastPolledAt), sql`${sourcesVisible.lastPolledAt} < ${cutoff}`),
+      sql`${sourcesActive.fetchPriority} = ${tier}`,
+      or(isNull(sourcesActive.lastPolledAt), sql`${sourcesActive.lastPolledAt} < ${cutoff}`),
     );
   });
 
@@ -301,7 +307,7 @@ export async function queryDueSources(
     .from(organizations)
     .where(eq(organizations.fetchPaused, true));
 
-  const orgNotFetchPaused = sql`${sourcesVisible.orgId} NOT IN (${pausedOrgIds})`;
+  const orgNotFetchPaused = sql`${sourcesActive.orgId} NOT IN (${pausedOrgIds})`;
 
   // Honor the smart-fetch exponential backoff. The no-change / error paths in
   // `fetchOne` stamp `nextFetchAfter` (1h→48h on repeat no_change, up to 72h on
@@ -309,16 +315,16 @@ export async function queryDueSources(
   // interval alone and the backoff only gated the `?mode=stale` agent endpoint.
   // A null (never backed off) or past `nextFetchAfter` is ready to poll.
   const nowIso = now.toISOString();
-  const backoffReady = sql`(${sourcesVisible.nextFetchAfter} IS NULL OR ${sourcesVisible.nextFetchAfter} <= ${nowIso})`;
+  const backoffReady = sql`(${sourcesActive.nextFetchAfter} IS NULL OR ${sourcesActive.nextFetchAfter} <= ${nowIso})`;
 
   // Firecrawl-owned sources are ingested via the inbound webhook + workflow, not
   // the poll cron — exclude them from BOTH the inline and workflow fan-out paths
   // (this query gates both). enabled === true → json_extract returns 1; absent → NULL.
-  const notFirecrawl = sql`(json_extract(${sourcesVisible.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesVisible.metadata}, '$.firecrawl.enabled') != 1)`;
+  const notFirecrawl = sql`(json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') != 1)`;
 
   return db
     .select()
-    .from(sourcesVisible)
+    .from(sourcesActive)
     .where(
       and(
         pollable,
