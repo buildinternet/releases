@@ -9,7 +9,7 @@ import { DigestFormatLinks } from "@/components/digest-format-links";
 import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex } from "./_lib/digest-data";
 
-export const revalidate = 900;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params,

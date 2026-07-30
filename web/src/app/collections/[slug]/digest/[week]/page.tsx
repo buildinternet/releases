@@ -20,7 +20,7 @@ import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
 // sync with applyCacheInit's default (web/src/lib/api.ts).
-export const revalidate = 900;
+export const revalidate = 86400;
 
 const SITE_URL = "https://releases.sh";
 const MAX_TITLE_LEN = 70;

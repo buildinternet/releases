@@ -48,6 +48,7 @@ import type {
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { StoredSiteNotice } from "@buildinternet/releases-core/site-notice";
 import { apiBaseUrl, serverApiKey } from "./env";
+import { DEFAULT_REVALIDATE_SECONDS as ISR_DEFAULT_REVALIDATE_SECONDS } from "./isr";
 
 export type {
   ReleaseSummaryItem,
@@ -187,12 +188,16 @@ export type FetchCacheInit = { cache?: RequestCache; next?: { revalidate?: numbe
  * A statically-rendered route's regeneration frequency is the MIN of its
  * `export const revalidate` and every fetch revalidate on it, so this default
  * governs how often the org/source/product ISR pages regenerate (and thus their
- * Vercel ISR write volume). It MUST stay in sync with the `revalidate = 900`
- * literals on those pages — a lower value here silently overrides them. 15 min
- * keeps freshly-ingested releases visible quickly (ingestion writes via the API
- * worker, not Next's revalidatePath) while keeping regeneration writes bounded.
+ * Vercel ISR write volume). It MUST stay in sync with the `revalidate` literals
+ * on those pages — a lower value here silently overrides them, which is exactly
+ * how #2004's 900s bump sat inert for three weeks (see `lib/isr.ts`).
+ *
+ * Freshness does not ride on this clock. The API worker pings
+ * `POST /api/revalidate` when a release is ingested, so the affected pages
+ * regenerate on the write that actually changed them; 24h is the backstop for a
+ * dropped ping, not the mechanism.
  */
-const DEFAULT_REVALIDATE_SECONDS = 900;
+const DEFAULT_REVALIDATE_SECONDS = ISR_DEFAULT_REVALIDATE_SECONDS;
 
 /**
  * Apply cache-or-ISR options to a RequestInit, defaulting to
@@ -394,8 +399,13 @@ export function emptyResults(query: string): UnifiedSearchResponse {
 
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
-  siteNotice: () =>
-    fetchApi<{ notice: StoredSiteNotice | null }>("/v1/site-notice", { next: { revalidate: 60 } }),
+  // No revalidate override: `<SiteNotice>` renders in the ROOT LAYOUT, so any
+  // window set here becomes the ceiling for every statically-rendered route in
+  // the app. Publishing a notice busts the cache on demand via
+  // `revalidatePath("/", "layout")` in `app/actions/site-notice.ts`, so the
+  // inherited backstop is the staleness bound only when a notice is published
+  // outside the admin form (e.g. curl straight at the API).
+  siteNotice: () => fetchApi<{ notice: StoredSiteNotice | null }>("/v1/site-notice"),
   latestReleases: async (
     opts: { count?: number; excludeSourceTypes?: string[] } = {},
   ): Promise<LatestReleaseItem[]> => {
