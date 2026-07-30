@@ -33,6 +33,7 @@ import {
   extractFromBody,
   mapEntries,
   CRAWL_SYSTEM_PROMPT,
+  CLOUDFLARE_SYSTEM_PROMPT,
   type KnownRelease,
   type MappedEntry,
 } from "@releases/adapters/extract";
@@ -816,17 +817,148 @@ async function runScrapePath(
     return finalize(persister, source, result.releases, start);
   }
 
-  const result = await runIncrementalExtraction(
+  const releases = await runIncrementalWithEscalation(
     source,
-    {
-      markdown,
-      knownReleases,
-      guidance,
-    },
+    markdown,
+    knownReleases,
+    guidance,
     deps,
   );
 
-  return finalize(persister, source, result.releases, start);
+  return finalize(persister, source, releases, start);
+}
+
+/**
+ * Run the incremental Haiku pass, then — when it comes back empty —
+ * cross-check whether that zero is trustworthy before reporting `no_change`
+ * (#2193).
+ *
+ * `runIncrementalExtraction` feeds the model a fixed ~200-line window
+ * (`findContentStart` + `lineCap`). Confirmed on langchain-changelog
+ * (docs.langchain.com/langsmith/changelog, a Mintlify page): the window
+ * lands correctly on real content at line 0, but the newest single entry
+ * alone runs ~285 markdown lines — the window is exhausted mid-entry, and
+ * every older unindexed entry below it never enters the model's view. The
+ * result is a clean `releasesFound: 0` indistinguishable from genuine
+ * "nothing new", so the source silently rots until something else (the
+ * staleness digest, 30+ days later) notices.
+ *
+ * A zero is suspicious when either:
+ *   - the model itself set `needsMoreContext` (it told us the slice looked
+ *     incomplete), or
+ *   - the page's content hash differs from the last hash this path
+ *     committed (the scrape/incremental path never tracked one before this
+ *     change, so the first zero after this ships always counts as
+ *     "changed" — self-corrects once a baseline is committed below).
+ *
+ * On a suspicious zero, escalate ONCE to a full-body extraction
+ * (`extractFromBody`, which already tiers into the tool-loop above
+ * `LARGE_BODY_TOKEN_THRESHOLD` — no separate wiring needed here). The content
+ * hash is committed after the escalation attempt (success or not) so a
+ * subsequent byte-identical fetch doesn't re-escalate forever — only the
+ * exact fetch that first observes changed content pays the extra cost.
+ *
+ * Fail-open throughout: any error checking or committing the hash, or
+ * running the escalation call, degrades to today's behavior (the original
+ * empty incremental result) rather than blocking the fetch.
+ */
+async function runIncrementalWithEscalation(
+  source: Source,
+  markdown: string,
+  knownReleases: KnownRelease[],
+  guidance: { parseInstructions?: string; playbookContext?: string },
+  deps: Awaited<ReturnType<typeof buildWorkerExtractDeps>>,
+): Promise<MappedEntry[]> {
+  const result = await runIncrementalExtraction(
+    source,
+    { markdown, knownReleases, guidance },
+    deps,
+  );
+
+  if (result.releases.length > 0) {
+    return result.releases;
+  }
+
+  const digest = sha256Hex(markdown);
+  let contentChanged = true;
+  try {
+    contentChanged = !(await deps.repo.peekContentHash(source, digest));
+  } catch (err) {
+    // Fail-open: an error checking the hash must never block the fetch —
+    // degrade to today's behavior (trust the empty incremental result).
+    contentChanged = false;
+    deps.logger.warn(
+      `content-hash peek failed for ${source.slug}; skipping escalation: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const suspicious = contentChanged || result.needsMoreContext;
+  let releases = result.releases;
+
+  if (suspicious) {
+    try {
+      const escalation = await extractFromBody(
+        {
+          body: markdown,
+          systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
+          userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
+          guidance,
+          sourceUrl: source.url,
+          fetchUrl: source.url,
+          useToolLoop:
+            deps.extractToolLoopEnabled || getSourceMeta(source).extractStrategy === "toolloop",
+        },
+        deps,
+      );
+
+      await deps.repo.logUsage({
+        operation: "agent-ingest",
+        model: escalation.modelUsed,
+        inputTokens: escalation.totalInput,
+        outputTokens: escalation.totalOutput,
+        sourceId: source.id,
+        sourceSlug: source.slug,
+        releaseCount: escalation.entries.length,
+        extractionMode: escalation.mode,
+        toolRounds: escalation.toolRounds,
+        toolChars: escalation.toolChars,
+        fallbackReason: escalation.fallbackReason,
+        cacheReadTokens: escalation.cacheReadTokens,
+        cacheWriteTokens: escalation.cacheWriteTokens,
+      });
+
+      releases = mapEntries(escalation.entries, { sourceUrl: source.url });
+
+      logEvent(releases.length > 0 ? "info" : "warn", {
+        component: "scrape-fetch",
+        event: "incremental-escalation",
+        sourceSlug: source.slug,
+        needsMoreContext: result.needsMoreContext,
+        contentChanged,
+        escalationEntries: releases.length,
+      });
+    } catch (err) {
+      // Fail-open: an escalation failure must never block the fetch — fall
+      // back to the (empty) incremental result.
+      deps.logger.warn(
+        `incremental escalation failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    try {
+      await deps.repo.commitContentHash(source, digest);
+    } catch (err) {
+      // Best-effort — a failed commit just means the next zero-result fetch
+      // re-checks (and possibly re-escalates); never a fetch-blocking error.
+      // Still worth a warn: a persistent failure here means every future
+      // zero-result fetch re-escalates instead of self-correcting.
+      deps.logger.warn(
+        `content-hash commit failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return releases;
 }
 
 async function finalize(
