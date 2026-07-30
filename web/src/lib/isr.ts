@@ -29,5 +29,13 @@ export const DEFAULT_REVALIDATE_SECONDS = 86_400;
  *
  * Fetches outside the layout tree are unconstrained: a route handler caching
  * its own upstream for an hour only affects its own route.
+ *
+ * MUST stay an independent literal — do NOT define it as
+ * `DEFAULT_REVALIDATE_SECONDS`. The likeliest future regression is someone
+ * "tuning" that default down; if the floor is an alias of it, the floor moves
+ * too and the guard reports green while the whole site re-caps at the new
+ * value. `isr.test.ts` asserts the default sits at or above this
+ * independently, which is what catches a lowered default propagating through
+ * `applyCacheInit` — indirection the source scan cannot see.
  */
-export const ISR_REVALIDATE_FLOOR_SECONDS = DEFAULT_REVALIDATE_SECONDS;
+export const ISR_REVALIDATE_FLOOR_SECONDS = 86_400;

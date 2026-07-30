@@ -78,12 +78,28 @@ export async function notifyWebRevalidate(
   if (source.isHidden) return logSkip(sourceSlug, "source_hidden");
   if (!source.orgId) return logSkip(sourceSlug, "no_org");
 
-  const secret = await env.WEB_SERVICE_KEY.get();
-  if (!secret) return logSkip(sourceSlug, "secret_unset");
+  // Resolve phase gets its own try: a Secrets Store hiccup or a D1 blip here is
+  // as likely as the ping failing, and an escaping rejection would be swallowed
+  // whole by `Promise.allSettled` in runBatchIngestEffects — no log line, no
+  // result, page silently stale until the backstop. Separate from the ping's
+  // catch so `resolve-failed` and `ping-failed` stay distinguishable in Axiom;
+  // one means we never got as far as calling web, the other means web didn't
+  // answer.
+  let secret: string | undefined;
+  let orgSlug: string | null;
+  let productSlug: string | null;
+  try {
+    secret = await env.WEB_SERVICE_KEY.get();
+    if (!secret) return logSkip(sourceSlug, "secret_unset");
 
-  const orgSlug = await db.resolveOrgSlug(source.orgId);
-  if (!orgSlug) return logSkip(sourceSlug, "no_org");
-  const productSlug = source.productId ? await db.resolveProductSlug(source.productId) : null;
+    orgSlug = await db.resolveOrgSlug(source.orgId);
+    if (!orgSlug) return logSkip(sourceSlug, "no_org");
+    productSlug = source.productId ? await db.resolveProductSlug(source.productId) : null;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logEvent("warn", { component: "web-revalidate", event: "resolve-failed", sourceSlug, err });
+    return { status: "error", reason: msg };
+  }
 
   const baseUrl = (env.WEB_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "");
   const fetchImpl = opts?.fetchImpl ?? fetch;

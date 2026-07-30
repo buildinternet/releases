@@ -149,6 +149,66 @@ describe("notifyWebRevalidate", () => {
     expect(res.httpStatus).toBe(401);
   });
 
+  // The pre-flight awaits (secret read, slug lookups) are as failure-prone as the
+  // ping itself. Left outside the try they escape as a rejected promise, which
+  // `Promise.allSettled` in runBatchIngestEffects swallows — no log line, no
+  // result, and the page silently stays stale until the backstop.
+  it("swallows a rejected secret binding and reports it as an error", async () => {
+    const { calls, fetchImpl } = recorder();
+    const res = await notifyWebRevalidate(
+      envOn({
+        WEB_SERVICE_KEY: {
+          async get() {
+            throw new Error("secrets store unavailable");
+          },
+        },
+      }),
+      DB,
+      SOURCE,
+      1,
+      { fetchImpl },
+    );
+
+    expect(res.status).toBe("error");
+    expect(res.reason).toContain("secrets store unavailable");
+    expect(calls).toEqual([]);
+  });
+
+  it("swallows a rejected org-slug lookup and reports it as an error", async () => {
+    const { calls, fetchImpl } = recorder();
+    const failingDb = {
+      async resolveOrgSlug() {
+        throw new Error("D1_ERROR: network");
+      },
+      resolveProductSlug: DB.resolveProductSlug,
+    };
+    const res = await notifyWebRevalidate(envOn(), failingDb, SOURCE, 1, { fetchImpl });
+
+    expect(res.status).toBe("error");
+    expect(res.reason).toContain("D1_ERROR");
+    expect(calls).toEqual([]);
+  });
+
+  it("swallows a rejected product-slug lookup and reports it as an error", async () => {
+    const { calls, fetchImpl } = recorder();
+    const failingDb = {
+      resolveOrgSlug: DB.resolveOrgSlug,
+      async resolveProductSlug() {
+        throw new Error("D1_ERROR: network");
+      },
+    };
+    const res = await notifyWebRevalidate(
+      envOn(),
+      failingDb,
+      { ...SOURCE, productId: "prod_1" },
+      1,
+      { fetchImpl },
+    );
+
+    expect(res.status).toBe("error");
+    expect(calls).toEqual([]);
+  });
+
   // A dropped ping must never fail the ingest that triggered it — the page just
   // stays stale until the 24h backstop in web's `lib/isr.ts`.
   it("swallows a network failure and reports it as an error", async () => {
