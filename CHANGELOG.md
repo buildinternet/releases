@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 28, 2026
+
+**Added**
+- Admin status page gains a Health tab — sources are ranked by last successful check timestamp (not release recency), with an amber/red alert banner when multiple orgs' checks have stalled; a frozen timestamp distinguishes a provider outage from an ordinary quiet period.
+- Operator staleness digest now leads with AI provider quota alerts — when a provider cuts off access the digest reports it first: which provider, its stated restore time, and the verbatim message, so a shutoff surfaces in hours rather than days.
+
+**Fixed**
+- Backfill dry runs now report honest counts — `inserted` is `null` instead of a fabricated zero, and a `notStored` field shows exactly how many extracted URLs aren't yet in the index.
+
 ## July 22, 2026
 
 **Changed**
