@@ -1,14 +1,19 @@
+import { DEFAULT_REVALIDATE_SECONDS } from "@/lib/isr";
 import { GITHUB_REPO_URL } from "./nav-items";
 
-// Fetch the monorepo's star count from the public GitHub API. Cached in Next's
-// data cache for an hour so we make at most one request per hour (well under
-// the 60/hr unauthenticated limit), and every render reuses the cached value.
-// Any failure returns null and the CTA simply renders without a count.
+// Fetch the monorepo's star count from the public GitHub API. Any failure
+// returns null and the CTA simply renders without a count.
+//
+// This renders inside <Header>, which lives in the ROOT LAYOUT — so this
+// window is the ceiling for every statically-rendered route in the app, not
+// just for this component. It was 3600, which quietly capped the whole site at
+// hourly regeneration. A cosmetic star count is not worth 24 rebuilds a day of
+// every page; keep it pinned to the shared backstop.
 async function fetchStarCount(): Promise<number | null> {
   try {
     const res = await fetch("https://api.github.com/repos/buildinternet/releases", {
       headers: { Accept: "application/vnd.github+json" },
-      next: { revalidate: 3600 },
+      next: { revalidate: DEFAULT_REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { stargazers_count?: unknown };

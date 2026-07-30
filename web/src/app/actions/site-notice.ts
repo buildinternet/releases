@@ -54,7 +54,11 @@ export async function setSiteNoticeAction(notice: SiteNotice): Promise<ActionRes
   }
 
   // The banner renders in the root layout (every route) and the card on the home
-  // page — bust both. (Prod web cache picks up via the ~60s ISR window.)
+  // page — bust both. This is the ONLY thing that makes a published notice
+  // appear promptly: the notice fetch inherits the 24h ISR backstop (see
+  // `lib/isr.ts`), deliberately, because a short window there would cap every
+  // statically-rendered route in the app. A notice published outside this form
+  // (curl straight at the API) is stale until that backstop expires.
   revalidatePath("/", "layout");
   return { ok: true };
 }

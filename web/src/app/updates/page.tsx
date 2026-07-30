@@ -25,10 +25,10 @@ const DESCRIPTION = "Everything shipped on releases.sh — published through our
 // this first page — see the loading effect in `updates-feed.tsx`.
 const FIRST_PAGE_LIMIT = 100;
 
-// ISR: same 15 min window as org pages. Soft-fail GraphQL below so a deploy
+// ISR: same window as org pages — regenerated on ingest, 24h backstop. Soft-fail GraphQL below so a deploy
 // window (web before API / unknown persisted hash) doesn't fail the Next build
 // the way a hard throw on a static route would (#2047).
-export const revalidate = 900;
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: `${TITLE} · releases.sh`,

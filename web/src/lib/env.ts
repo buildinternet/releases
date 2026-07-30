@@ -33,3 +33,18 @@ export function serverApiKey(): string | undefined {
 export function staticBaseUrlEnv(): string | undefined {
   return legacyEnv("RELEASES_BASE_URL", "RELEASED_BASE_URL");
 }
+
+/**
+ * Shared key for first-party backend callers of web's internal endpoints — the
+ * API-worker → web direction, mirroring `RELEASES_PROXY_KEY` on the way in.
+ *
+ * Channel-scoped, NOT per-feature: `POST /api/revalidate` is simply its first
+ * consumer, and the next internal endpoint reuses this rather than adding
+ * another secret to provision and rotate. See `lib/service-auth.ts`.
+ *
+ * Undefined when unset, which fails those endpoints closed. No legacy
+ * `RELEASED_` alias — this name is new.
+ */
+export function serviceKey(): string | undefined {
+  return process.env.RELEASES_SERVICE_KEY;
+}

@@ -44,6 +44,7 @@ import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
 import { publishReleaseEvents, type PublishEnv } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { notifyIndexNowForSource, type IndexNowEnv } from "./indexnow.js";
+import { notifyWebRevalidate, type WebRevalidateEnv } from "./web-revalidate.js";
 import { resolveOrgSlug, resolveProductSlug } from "./slug-lookups.js";
 import { buildEmbedConfig, type EmbedEnv } from "@releases/search/embed-config.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
@@ -117,7 +118,8 @@ export interface BatchIngestEnv {
  * Env slice used by `runBatchIngestEffects` — a union of the effect helpers'
  * own env slices, plus the embed config env.
  */
-export interface BatchEffectsEnv extends PublishEnv, IndexNowEnv, InvalidationEnv, EmbedEnv {
+export interface BatchEffectsEnv
+  extends PublishEnv, IndexNowEnv, WebRevalidateEnv, InvalidationEnv, EmbedEnv {
   // Typed loosely (matches the route's `Env.Bindings` Cloudflare `VectorizeIndex`)
   // and narrowed via cast at the call site below — see the note in
   // embedSourceSideEffect about why the cast is needed.
@@ -413,19 +415,39 @@ export async function runBatchIngestEffects(
         }),
       );
     }
+    const slugResolvers = {
+      resolveOrgSlug: (id: string) => resolveOrgSlug(db, id),
+      resolveProductSlug: (id: string) => resolveProductSlug(db, id),
+    };
+
     tasks.push(
       notifyIndexNowForSource(
         env,
-        {
-          resolveOrgSlug: (id) => resolveOrgSlug(db, id),
-          resolveProductSlug: (id) => resolveProductSlug(db, id),
-        },
+        slugResolvers,
         {
           slug: src.slug,
           orgId: src.orgId,
           productId: src.productId,
           isHidden: src.isHidden,
           discovery: src.discovery,
+        },
+        visiblePublishRows.length,
+      ),
+    );
+
+    // Bust web's ISR entries for the pages this write just changed. Sibling of
+    // the IndexNow ping (same trigger, same fire-and-forget semantics), but with
+    // its own gating — see the note in web-revalidate.ts on why `discovery ===
+    // "on_demand"` is NOT a skip here.
+    tasks.push(
+      notifyWebRevalidate(
+        env,
+        slugResolvers,
+        {
+          slug: src.slug,
+          orgId: src.orgId,
+          productId: src.productId,
+          isHidden: src.isHidden,
         },
         visiblePublishRows.length,
       ),

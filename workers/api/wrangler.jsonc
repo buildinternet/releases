@@ -665,6 +665,18 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "INDEXNOW_KEY",
     },
+    // Bearer key for calling web's internal endpoints — the API-worker → web
+    // direction, mirroring RELEASES_PROXY_KEY on the way in. Channel-scoped, not
+    // per-feature: POST /api/revalidate is its first consumer, and the next
+    // internal endpoint reuses this rather than adding another secret to
+    // provision and rotate. The same value must live in Vercel env as
+    // RELEASES_SERVICE_KEY. A missing binding makes those calls a no-op (for
+    // revalidate: pages fall back to their 24h ISR backstop).
+    {
+      "binding": "WEB_SERVICE_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "WEB_SERVICE_KEY",
+    },
     {
       "binding": "WEB_BOT_AUTH_PRIVATE_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
@@ -992,6 +1004,9 @@
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "INDEXNOW_KEY",
         },
+        // Deliberately NOT bound on staging: staging web is a separate
+        // deployment whose ISR entries prod ingest must never touch. With no
+        // binding the helper short-circuits at `no_secret_binding`.
         {
           "binding": "AI_GATEWAY_TOKEN",
           "store_id": "a887a71cab084105b79706df23380723",

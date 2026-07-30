@@ -3,7 +3,7 @@ import { enableOnDemandIsr } from "@/lib/static-params";
 
 // On-demand ISR segment config kept so the redirect route still participates
 // in the same static-params / cache story as sibling org tabs.
-export const revalidate = 900;
+export const revalidate = 86400;
 export const generateStaticParams = enableOnDemandIsr;
 
 /**

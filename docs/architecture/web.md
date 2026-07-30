@@ -53,6 +53,20 @@ Next.js's `opengraph-image.tsx` file convention (one per route segment, cascadin
 
 Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 24h of CDN hits; static routes (`/`, `/docs/*`) render at build. Tests in `tests/unit/og-helpers.test.ts`.
 
+## ISR revalidation
+
+Org, source, product and release pages are statically rendered. **Freshness comes from an ingest-time ping, not from the clock.** When `runBatchIngestEffects` inserts releases it calls `notifyWebRevalidate` (`workers/api/src/lib/web-revalidate.ts`) — a sibling of the IndexNow ping, same trigger and same fire-and-forget semantics — which POSTs the affected `{ orgSlug, sourceSlug?, productSlug? }` to web's `POST /api/revalidate`. The route's whole contract (bearer auth, body validation, path derivation) lives in `web/src/lib/revalidate-request.ts` so it is testable without `next/cache`; the route module only injects `revalidatePath` and the secret.
+
+`export const revalidate = 86400` on those pages is the **backstop for a dropped ping**, not the mechanism. Time-based ISR fits this content badly: the long tail of org pages is low-traffic enough that a short window regenerates pages nothing changed on (writes ≈ requests), while a long one would leave fresh releases invisible. Windows and the shared default live in `web/src/lib/isr.ts`.
+
+**Auth is a channel credential, not a per-feature one.** `RELEASES_SERVICE_KEY` (Vercel) / `WEB_SERVICE_KEY` (Secrets Store) authenticates first-party backend callers of web's internal endpoints — the API-worker → web direction, mirroring `RELEASES_PROXY_KEY` on the way in. `/api/revalidate` opened that trust boundary but does not own it: the next internal endpoint reuses the same key via `verifyServiceKey` (`web/src/lib/service-auth.ts`) rather than minting its own secret. It is deliberately NOT the root `RELEASES_API_KEY` — a leak should mean "someone can bust caches", not "someone is API root". The corollary is that everything behind this key shares a blast radius, so an endpoint that can do materially more damage than cache invalidation is a reason to revisit the boundary rather than quietly widen it.
+
+Why it needs auth at all: `revalidatePath` marks entries stale and regeneration happens on the next request, so an open endpoint is a lever that converts a cheap POST into unbounded ISR writes — either by evict-then-request, or just by evicting and letting existing crawler traffic pay for the re-render. That is the exact line item this design exists to shrink.
+
+Gating differs from IndexNow's on purpose. `notifyWebRevalidate` skips on no-secret / zero-rows / hidden source / no org, but **not** on `discovery === "on_demand"` — that gate keeps low-signal pages out of search indexes, which says nothing about whether cached HTML is stale.
+
+> **The trap this replaced.** A route's regeneration period is the MIN of its `export const revalidate` and every fetch revalidate in its render tree, **layouts included**. A `next: { revalidate: 60 }` on the site-notice fetch — reached from the root layout — capped every route in the app at 60s for three weeks, silently overriding #2004's 900s bump; a second instance (`revalidate: 3600` on the header's GitHub star count) capped it at an hour. Nothing breaks at runtime; the only symptom is the Vercel ISR-write line item, which reached ~49% of the bill. `web/src/lib/isr.test.ts` walks the import graph from `app/layout.tsx` and fails if anything reachable from it caches below the floor.
+
 ## On-demand lookup field in search responses
 
 `GET /v1/search` (lexical + hybrid) and the MCP `search` tool include a `lookup` field when the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-DB search returned zero hits (no orgs, no catalog entries, no release/changelog-chunk hits). When either condition fails, the route skips the lookup call and `lookup` is `null`. Shape:
