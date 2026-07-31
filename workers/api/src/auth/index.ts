@@ -20,7 +20,6 @@ import { stripe as stripePlugin } from "@better-auth/stripe";
 import Stripe from "stripe";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
@@ -677,107 +676,74 @@ function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
 }
 
 /**
- * Scoped, credentialed CORS for `/api/auth/*` AND every session-authed browser
- * surface (see {@link CREDENTIALED_CORS_MOUNT_PATHS} / index.ts). The worker's
- * global `cors()` is wildcard-origin / no-credentials, which cannot carry
- * `Access-Control-Allow-Credentials`; these surfaces need a reflected origin +
- * credentials so the browser will send and store the session cookie. MUST be
- * registered BEFORE the global `cors()` so it owns the preflight (the first
- * matching CORS middleware answers OPTIONS and returns). Allow-list mirrors
- * {@link authTrustedOrigins}: the releases.sh/.localhost family (our first-party
- * web surfaces), every operator-configured `BETTER_AUTH_TRUSTED_ORIGINS` entry —
- * exact origins OR host wildcards (Vercel preview / the portless dev host + its
- * worktree subdomains via a `*.` entry; see {@link matchesTrustedOrigin}) — and
- * bare-loopback origins outside production. Keeping the two in lockstep means
- * CORS never silently blocks an origin Better Auth already trusts.
- *
- * `DELETE` is allowed for the `/v1/api-keys/:id` revoke endpoint; `PUT` for
- * `/v1/me/digest` cadence writes; `PATCH` for `/v1/me/webhooks/:id` updates
- * (pause/resume, filter edits). Better Auth's own `/api/auth/*` routes are
- * POST/GET only, so the extra verbs are no-ops there. The allow-list must cover
- * every method any credentialed handler uses or the browser blocks that preflight.
- *
- * The Sentinel client (`sentinelClient`, #1544) stamps every `/api/auth/*` request
- * with custom `X-Visitor-Id` / `X-Request-Id` fingerprint headers (and `X-PoW-Solution`
- * on a proof-of-work challenge retry). These MUST be in `allowHeaders` or the browser
- * blocks the cross-origin preflight for EVERY auth call — get-session, Google One Tap,
- * and the regular SSO callback alike. {@link AUTH_CORS_ALLOWED_HEADERS} is asserted in
- * sync with the headers the sentinel client actually sets by a drift test (auth.test.ts)
- * that scans `@better-auth/infra`'s client bundle, so a future package bump that adds a
- * header fails CI instead of silently breaking sign-in.
+ * Baseline CORS preflight allow-list. The Sentinel client (#1544) stamps
+ * `/api/auth/*` with `X-Visitor-Id` / `X-Request-Id` / `X-PoW-Solution` — these
+ * must be listed or auth preflights fail. Drift-tested against the installed
+ * `@better-auth/infra` client in auth.test.ts. Preflights may also request
+ * extra headers; those are unioned in at request time.
  */
 export const AUTH_CORS_ALLOWED_HEADERS = [
   "Content-Type",
   "Authorization",
-  // Sentinel client fingerprint / PoW headers — see the note above.
   "X-Visitor-Id",
   "X-Request-Id",
   "X-PoW-Solution",
 ] as const;
 
 /**
- * Hono mount patterns for {@link authCorsMiddleware}. **Single source of truth**
- * for the path carve-out: {@link isCredentialedCorsPath} is derived from this
- * list, and `index.ts` mounts the same patterns. When adding a session-cookie
- * browser client (`credentials: "include"`), add a mount here only.
- *
- * Anonymous public-write listing routes (`/v1/listing/validate`,
- * `/v1/listing/activate`) stay on wildcard CORS — do not list them here.
+ * True when `origin` may receive credentialed CORS (reflected ACAO +
+ * credentials). Same allow-list as Better Auth: releases family, operator
+ * `BETTER_AUTH_TRUSTED_ORIGINS`, loopback off-prod.
  */
-export const CREDENTIALED_CORS_MOUNT_PATHS = [
-  "/api/auth/*",
-  "/v1/api-keys",
-  "/v1/api-keys/*",
-  "/v1/me/*",
-  "/v1/workspaces",
-  "/v1/workspaces/*",
-  // Ownership claims + self-serve promote (#1947) — signed-in only.
-  "/v1/listing/claim",
-  "/v1/listing/claim/*",
-  "/v1/listing/claims",
-  "/v1/listing/promote",
-] as const;
-
-/**
- * Match a request path against a Hono-style mount pattern (`/foo` or `/foo/*`).
- * `/foo/*` also matches the exact `/foo` base — same as Hono's middleware
- * matcher (session attach on claim routes relies on this).
- */
-function matchesCredentialedCorsMount(path: string, pattern: string): boolean {
-  if (pattern.endsWith("/*")) {
-    const base = pattern.slice(0, -2);
-    return path === base || path.startsWith(`${base}/`);
-  }
-  return path === pattern;
+export function isTrustedCorsOrigin(
+  origin: string,
+  env: { ENVIRONMENT?: string; BETTER_AUTH_TRUSTED_ORIGINS?: string },
+): boolean {
+  if (!origin) return false;
+  if (isReleasesFamilyOrigin(origin)) return true;
+  if (matchesTrustedOrigin(origin, extraTrustedOrigins(env as Bindings))) return true;
+  if (env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) return true;
+  return false;
 }
 
 /**
- * True when `path` (no query string) is owned by {@link authCorsMiddleware}.
- * Derived from {@link CREDENTIALED_CORS_MOUNT_PATHS} so mounts and the public
- * `cors()` skip stay in lockstep without a second hand-maintained list.
+ * Worker-wide CORS (#2205), keyed on origin not path:
+ * trusted first-party → reflect + credentials; else → `*` (no credentials);
+ * no Origin → no CORS headers. New session-cookie browser surfaces need no
+ * registration — only the trusted-origin list shared with Better Auth.
  */
-export function isCredentialedCorsPath(path: string): boolean {
-  return CREDENTIALED_CORS_MOUNT_PATHS.some((pattern) =>
-    matchesCredentialedCorsMount(path, pattern),
-  );
-}
+export function apiCorsMiddleware(): MiddlewareHandler<Env> {
+  return async (c, next) => {
+    const origin = c.req.header("Origin");
+    if (origin) {
+      if (isTrustedCorsOrigin(origin, c.env as Bindings)) {
+        c.header("Access-Control-Allow-Origin", origin);
+        c.header("Access-Control-Allow-Credentials", "true");
+        c.header("Vary", "Origin", { append: true });
+      } else {
+        c.header("Access-Control-Allow-Origin", "*");
+      }
+    }
 
-export function authCorsMiddleware(): MiddlewareHandler<Env> {
-  return cors({
-    origin: (origin, c) => {
-      if (!origin) return null;
-      if (isReleasesFamilyOrigin(origin)) return origin;
-      const env = c.env as Bindings;
-      if (matchesTrustedOrigin(origin, extraTrustedOrigins(env))) return origin;
-      if (env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) return origin;
-      return null;
-    },
-    allowHeaders: [...AUTH_CORS_ALLOWED_HEADERS],
-    allowMethods: ["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    exposeHeaders: ["Content-Length"],
-    maxAge: 600,
-    credentials: true,
-  });
+    if (c.req.method === "OPTIONS") {
+      c.header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
+      c.header("Access-Control-Max-Age", "600");
+      const requested = c.req.header("Access-Control-Request-Headers");
+      const headers = requested
+        ? [
+            ...new Set([
+              ...AUTH_CORS_ALLOWED_HEADERS,
+              ...requested.split(/\s*,\s*/).filter(Boolean),
+            ]),
+          ]
+        : [...AUTH_CORS_ALLOWED_HEADERS];
+      c.header("Access-Control-Allow-Headers", headers.join(", "));
+      c.header("Vary", "Access-Control-Request-Headers", { append: true });
+      return c.body(null, 204);
+    }
+
+    await next();
+  };
 }
 
 /**

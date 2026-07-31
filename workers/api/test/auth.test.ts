@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createTestDb } from "./setup";
@@ -21,7 +20,7 @@ import {
   displayEmailBackfill,
   resolveLastLoginMethodOverride,
   authTrustedOrigins,
-  authCorsMiddleware,
+  apiCorsMiddleware,
   AUTH_CORS_ALLOWED_HEADERS,
   deriveCookieDomain,
   derivePasskeyRp,
@@ -351,42 +350,48 @@ describe("authTrustedOrigins", () => {
   });
 });
 
-describe("authCorsMiddleware origin allow-list", () => {
-  // Drive a real CORS preflight through the middleware and read back the
-  // reflected Access-Control-Allow-Origin (null when the origin is rejected).
-  async function preflightOrigin(
+describe("apiCorsMiddleware origin policy", () => {
+  // Drive a real CORS preflight through the single origin-based middleware.
+  // Trusted origins are reflected with credentials; untrusted get `*` without.
+  async function preflight(
     origin: string,
     env: { ENVIRONMENT?: string; BETTER_AUTH_TRUSTED_ORIGINS?: string } = {},
-  ): Promise<string | null> {
+    extra: { method?: string; requestHeaders?: string } = {},
+  ): Promise<Response> {
     const app = new Hono();
-    app.use("/api/auth/*", authCorsMiddleware());
+    app.use("*", apiCorsMiddleware());
     app.get("/api/auth/ok", (c) => c.text("ok"));
-    const res = await app.request(
-      "/api/auth/ok",
-      { method: "OPTIONS", headers: { Origin: origin, "Access-Control-Request-Method": "POST" } },
-      env as never,
-    );
-    return res.headers.get("access-control-allow-origin");
-  }
-
-  // Read back the methods the preflight advertises. The session-authed self-serve
-  // surface (/v1/me/*) shares this middleware and includes PUT (/v1/me/digest sets
-  // cadence), so the cross-origin preflight must allow it or the browser blocks the
-  // toggle as a CORS violation.
-  async function preflightMethods(requestMethod: string): Promise<string[]> {
-    const app = new Hono();
-    app.use("/api/auth/*", authCorsMiddleware());
-    app.get("/api/auth/ok", (c) => c.text("ok"));
-    const res = await app.request(
+    app.get("/v1/ping", (c) => c.text("pong"));
+    return app.request(
       "/api/auth/ok",
       {
         method: "OPTIONS",
         headers: {
-          Origin: "https://releases.sh",
-          "Access-Control-Request-Method": requestMethod,
+          Origin: origin,
+          "Access-Control-Request-Method": extra.method ?? "POST",
+          ...(extra.requestHeaders
+            ? { "Access-Control-Request-Headers": extra.requestHeaders }
+            : {}),
         },
       },
-      { ENVIRONMENT: "production" } as never,
+      env as never,
+    );
+  }
+
+  async function preflightOrigin(
+    origin: string,
+    env: { ENVIRONMENT?: string; BETTER_AUTH_TRUSTED_ORIGINS?: string } = {},
+  ): Promise<string | null> {
+    return (await preflight(origin, env)).headers.get("access-control-allow-origin");
+  }
+
+  async function preflightMethods(requestMethod: string): Promise<string[]> {
+    const res = await preflight(
+      "https://releases.sh",
+      { ENVIRONMENT: "production" },
+      {
+        method: requestMethod,
+      },
     );
     return (res.headers.get("access-control-allow-methods") ?? "")
       .split(",")
@@ -394,26 +399,11 @@ describe("authCorsMiddleware origin allow-list", () => {
       .filter(Boolean);
   }
 
-  // Read back the request headers the preflight advertises as allowed. The Sentinel
-  // client (#1544) stamps every /api/auth/* call with X-Visitor-Id / X-Request-Id (and
-  // X-PoW-Solution on a challenge retry); if any are missing from Access-Control-Allow-
-  // Headers the browser blocks the cross-origin preflight for EVERY auth request —
-  // get-session, Google One Tap, and the regular SSO callback alike.
   async function preflightAllowedHeaders(requestHeaders: string): Promise<string[]> {
-    const app = new Hono();
-    app.use("/api/auth/*", authCorsMiddleware());
-    app.get("/api/auth/ok", (c) => c.text("ok"));
-    const res = await app.request(
-      "/api/auth/ok",
-      {
-        method: "OPTIONS",
-        headers: {
-          Origin: "https://releases.sh",
-          "Access-Control-Request-Method": "POST",
-          "Access-Control-Request-Headers": requestHeaders,
-        },
-      },
-      { ENVIRONMENT: "production" } as never,
+    const res = await preflight(
+      "https://releases.sh",
+      { ENVIRONMENT: "production" },
+      { requestHeaders },
     );
     return (res.headers.get("access-control-allow-headers") ?? "")
       .split(",")
@@ -447,7 +437,7 @@ describe("authCorsMiddleware origin allow-list", () => {
     const clientBundle = readFileSync(require.resolve("@better-auth/infra/client"), "utf8");
     const sentHeaders = new Set<string>();
     for (const m of clientBundle.matchAll(/\.set\(\s*["'](X-[A-Za-z0-9-]+)["']/g)) {
-      sentHeaders.add(m[1].toLowerCase());
+      sentHeaders.add(m[1]!.toLowerCase());
     }
     // Sanity: the scan must find the known fingerprint headers, or the bundle shape changed
     // and the regex needs revisiting (a silently-empty match set would make this test inert).
@@ -459,22 +449,22 @@ describe("authCorsMiddleware origin allow-list", () => {
     expect(missing).toEqual([]);
   });
 
-  it("reflects the releases.sh family in production", async () => {
-    expect(await preflightOrigin("https://releases.sh", { ENVIRONMENT: "production" })).toBe(
-      "https://releases.sh",
-    );
+  it("reflects the releases.sh family in production with credentials", async () => {
+    const res = await preflight("https://releases.sh", { ENVIRONMENT: "production" });
+    expect(res.headers.get("access-control-allow-origin")).toBe("https://releases.sh");
+    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
     expect(await preflightOrigin("https://app.releases.sh", { ENVIRONMENT: "production" })).toBe(
       "https://app.releases.sh",
     );
   });
 
-  it("rejects bare-loopback origins in production", async () => {
-    expect(
-      await preflightOrigin("http://localhost:3000", { ENVIRONMENT: "production" }),
-    ).toBeNull();
-    expect(
-      await preflightOrigin("http://127.0.0.1:3000", { ENVIRONMENT: "production" }),
-    ).toBeNull();
+  it("uses wildcard (no credentials) for bare-loopback in production", async () => {
+    // Untrusted in prod → public `*`, not null — browsers still fail closed on
+    // credentials:include because * cannot carry Access-Control-Allow-Credentials.
+    expect(await preflightOrigin("http://localhost:3000", { ENVIRONMENT: "production" })).toBe("*");
+    const res = await preflight("http://127.0.0.1:3000", { ENVIRONMENT: "production" });
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });
 
   it("allows bare-loopback origins outside production", async () => {
@@ -485,7 +475,6 @@ describe("authCorsMiddleware origin allow-list", () => {
   });
 
   it("reflects an exact configured BETTER_AUTH_TRUSTED_ORIGINS host in any environment", async () => {
-    // A one-off dev/preview host trusted by exact match.
     const custom = "https://custom-dev.example.com";
     expect(
       await preflightOrigin(custom, {
@@ -493,8 +482,6 @@ describe("authCorsMiddleware origin allow-list", () => {
         BETTER_AUTH_TRUSTED_ORIGINS: custom,
       }),
     ).toBe(custom);
-    // A portless/preview host explicitly trusted in prod is honored by CORS too —
-    // the allow-list stays in lockstep with authTrustedOrigins.
     const preview = "https://feat-x.vercel.app";
     expect(
       await preflightOrigin(preview, {
@@ -505,8 +492,6 @@ describe("authCorsMiddleware origin allow-list", () => {
   });
 
   it("matches a wildcard BETTER_AUTH_TRUSTED_ORIGINS entry against subdomains (incl. worktree hosts)", async () => {
-    // This is the case an exact-match list can't cover: a single `*.` entry trusts
-    // every subdomain, so worktree-prefixed dev hosts clear CORS with no per-host config.
     const wild = "*.releases.local.buildinternet.dev";
     expect(
       await preflightOrigin("https://feat-x.releases.local.buildinternet.dev", {
@@ -514,78 +499,56 @@ describe("authCorsMiddleware origin allow-list", () => {
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
     ).toBe("https://feat-x.releases.local.buildinternet.dev");
-    // Honored in any environment — extras are operator-configured, so prod-safety is
-    // "don't list dev domains in prod's env", consistent with the exact-match path above.
     expect(
       await preflightOrigin("https://deep.nested.releases.local.buildinternet.dev", {
         ENVIRONMENT: "production",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
     ).toBe("https://deep.nested.releases.local.buildinternet.dev");
-    // The wildcard does NOT match the apex (no leading-dot segment) — list it
-    // separately, exactly as Better Auth requires.
+    // Apex not matched by `*.` → untrusted → public `*`.
     expect(
       await preflightOrigin("https://releases.local.buildinternet.dev", {
         ENVIRONMENT: "development",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
-    ).toBeNull();
-    // A wildcard must not leak across the dot boundary it anchors on.
+    ).toBe("*");
     expect(
       await preflightOrigin("https://evil-buildinternet.dev", {
         ENVIRONMENT: "development",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
-    ).toBeNull();
+    ).toBe("*");
   });
 
-  it("rejects unknown origins regardless of environment", async () => {
-    expect(
-      await preflightOrigin("https://evil.example.com", { ENVIRONMENT: "development" }),
-    ).toBeNull();
-    expect(
-      await preflightOrigin("https://evil.example.com", { ENVIRONMENT: "production" }),
-    ).toBeNull();
+  it("uses wildcard for unknown origins (public API) without credentials", async () => {
+    for (const env of [{ ENVIRONMENT: "development" }, { ENVIRONMENT: "production" }] as const) {
+      const res = await preflight("https://evil.example.com", env);
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+      expect(res.headers.get("access-control-allow-credentials")).toBeNull();
+    }
   });
-});
 
-describe("public CORS skips /api/auth/* (no wildcard clobbering of credentialed auth CORS)", () => {
-  // Mirrors the middleware wiring in src/index.ts: authCorsMiddleware owns the
-  // credentialed CORS on /api/auth/*, and the wildcard public cors() runs on every
-  // OTHER path (guarded by a path check). Without that guard the wildcard cors
-  // overwrites Access-Control-Allow-Origin with "*" on the ACTUAL (non-preflight)
-  // auth response — which a browser rejects for `credentials: "include"` requests.
-  // The preflight stays fine (authCorsMiddleware short-circuits OPTIONS), so only
-  // a real browser catches it; this locks the behavior in.
-  function makeApp() {
+  it("reflects credentials on an actual GET for first-party; * for third-party", async () => {
     const app = new Hono();
-    app.use("/api/auth/*", authCorsMiddleware());
-    const publicReadCors = cors();
-    app.use("*", (c, next) =>
-      c.req.path.startsWith("/api/auth/") ? next() : publicReadCors(c, next),
-    );
+    app.use("*", apiCorsMiddleware());
     app.get("/api/auth/ok", (c) => c.text("ok"));
     app.get("/v1/ping", (c) => c.text("pong"));
-    return app;
-  }
 
-  it("reflects the origin (not '*') with credentials on an actual GET to /api/auth/*", async () => {
-    const res = await makeApp().request(
+    const authRes = await app.request(
       "/api/auth/ok",
       { headers: { Origin: "https://releases.sh" } },
       { ENVIRONMENT: "production" } as never,
     );
-    expect(res.headers.get("access-control-allow-origin")).toBe("https://releases.sh");
-    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
-  });
+    expect(authRes.headers.get("access-control-allow-origin")).toBe("https://releases.sh");
+    expect(authRes.headers.get("access-control-allow-credentials")).toBe("true");
 
-  it("keeps wildcard CORS on non-auth public routes", async () => {
-    const res = await makeApp().request(
+    const publicRes = await app.request(
       "/v1/ping",
       { headers: { Origin: "https://anything.example" } },
       { ENVIRONMENT: "production" } as never,
     );
-    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(publicRes.headers.get("access-control-allow-origin")).toBe("*");
+    expect(publicRes.headers.get("access-control-allow-credentials")).toBeNull();
   });
 });
 

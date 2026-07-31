@@ -26,7 +26,7 @@ export function isStagingGateExemptPath(pathname: string): boolean {
  * bound (only in `[env.staging]`), every request must carry a matching
  * `X-Releases-Staging-Key` header or receive a 401, except for
  * `STAGING_GATE_EXEMPT_PATHS` (public, secret-free endpoints). CORS preflight is
- * handled earlier by `cors()`, so OPTIONS never reaches this middleware.
+ * handled earlier by `apiCorsMiddleware`, so OPTIONS never reaches this middleware.
  *
  * Holdover until Cloudflare Access is in front of `*-staging.releases.sh`
  * (see issue #444). Skipping the binding in prod/local leaves behavior unchanged.
