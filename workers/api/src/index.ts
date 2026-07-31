@@ -9,9 +9,7 @@ import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
 import type { JWTVerifyGetKey } from "@releases/lib/oauth-jwt";
 import {
   createAuth,
-  authCorsMiddleware,
-  CREDENTIALED_CORS_MOUNT_PATHS,
-  isCredentialedCorsPath,
+  apiCorsMiddleware,
   runAuthWithWaitUntil,
   type BetterAuthInstance,
 } from "./auth/index.js";
@@ -493,18 +491,11 @@ app.onError((err, c) => {
 // the heuristic-caching rationale.
 app.use("*", cacheDefaultDeny());
 
-// Credentialed CORS for first-party session-cookie surfaces, then public
-// wildcard CORS for everything else. MUST register credentialed first so it
-// owns the preflight. Path list is CREDENTIALED_CORS_MOUNT_PATHS (single source
-// of truth; isCredentialedCorsPath is derived from it). If the wildcard also
-// ran on those paths it would clobber ACAO with `*`, which browsers reject for
-// credentials: "include". See auth/index.ts.
-const credentialedCors = authCorsMiddleware();
-for (const path of CREDENTIALED_CORS_MOUNT_PATHS) {
-  app.use(path, credentialedCors);
-}
-const publicReadCors = cors();
-app.use("*", (c, next) => (isCredentialedCorsPath(c.req.path) ? next() : publicReadCors(c, next)));
+// Single origin-based CORS for the whole worker (#2205): trusted first-party
+// origins get reflected ACAO + credentials; everyone else gets `*`. No path
+// carve-outs — new session-cookie surfaces need no registration. See
+// apiCorsMiddleware in auth/index.ts.
+app.use("*", apiCorsMiddleware());
 app.use("*", stagingAccessGate());
 app.use("*", blockIndexing());
 
@@ -521,7 +512,7 @@ app.use("*", async (c, next) => {
 // the REST API's OWN RFC 9728 document — it is itself an OAuth resource server
 // (#1483 verifies "Sign in with Releases" JWTs whose `aud` is this origin),
 // mirroring the MCP worker's surface. See oauth-discovery.ts. CORS for these
-// non-/api/auth paths is handled by the wildcard `publicReadCors` above.
+// non-/api/auth paths is handled by apiCorsMiddleware above.
 app.get("/.well-known/oauth-authorization-server", async (c) =>
   forwardWellKnown(
     await createAuth(c.env),

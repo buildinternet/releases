@@ -20,14 +20,15 @@ write/admin scope is refused; see remote-mode.md) is gated by `requireSession`
 (Better Auth session cookie), not by the Bearer-token middleware. It is intentionally
 absent from both `publicReadRoutes` and `adminRoutes` in
 `workers/api/src/route-namespaces.ts` (so neither the public-read nor admin auth loop
-touches it) and from the public-read OpenAPI coverage gate. Its credentialed CORS is
-carved out alongside `/api/auth/*` in `index.ts`. This bucket is for first-party,
-current-user browser operations; it is not a general extension point.
+touches it) and from the public-read OpenAPI coverage gate. CORS is origin-based
+worker-wide (`apiCorsMiddleware` in `auth/index.ts`): first-party browser origins
+get credentialed reflection automatically — no per-route carve-out. This bucket is
+for first-party, current-user browser operations; it is not a general extension point.
 
 The `/v1/me/*` user-follows and personalized-feed surface sits in its own
 principal-gated bucket (`requireFollowsPrincipal`), absent from both
-`publicReadRoutes` and `adminRoutes` and using the same credentialed CORS carve-out
-in `index.ts`. Unlike `/v1/api-keys` it is **not** behind a feature flag — follows is
+`publicReadRoutes` and `adminRoutes`. Same origin-based CORS as the rest of the
+worker. Unlike `/v1/api-keys` it is **not** behind a feature flag — follows is
 enabled by default.
 
 The gate resolves a user from **either** a Better Auth session (cookie, or a
