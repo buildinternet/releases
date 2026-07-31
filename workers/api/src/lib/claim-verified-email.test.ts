@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { formatClaimVerifiedEmail, sendClaimVerifiedEmail } from "./claim-verified-email.js";
+import {
+  formatClaimVerifiedEmail,
+  formatClaimVerifiedOperatorEmail,
+  notifyClaimVerified,
+  onClaimVerified,
+  sendClaimVerifiedEmail,
+} from "./claim-verified-email.js";
 
 const base = {
   domain: "acme.com",
@@ -7,6 +13,17 @@ const base = {
   orgSlug: "acme",
   webOrigin: "https://releases.sh",
 } as const;
+
+const operatorBase = {
+  domain: "acme.com",
+  orgName: "Acme",
+  orgSlug: "acme",
+  method: "well-known" as const,
+  ownerEmail: "owner@example.com",
+  userId: "user_1",
+  claimId: "clm_1",
+  verifiedAt: "2026-07-31T12:00:00.000Z",
+};
 
 describe("formatClaimVerifiedEmail", () => {
   it("names the domain in the subject", () => {
@@ -52,6 +69,26 @@ describe("formatClaimVerifiedEmail", () => {
   });
 });
 
+describe("formatClaimVerifiedOperatorEmail", () => {
+  it("uses the [ownership] subject filter prefix and names the domain", () => {
+    const { subject } = formatClaimVerifiedOperatorEmail(operatorBase, base.webOrigin);
+    expect(subject).toBe("[ownership] verified: acme.com");
+  });
+
+  it("includes owner contact and claim identifiers", () => {
+    const { text, html } = formatClaimVerifiedOperatorEmail(operatorBase, base.webOrigin);
+    expect(text).toContain("owner@example.com");
+    expect(text).toContain("clm_1");
+    expect(text).toContain("user_1");
+    expect(html).toContain("owner@example.com");
+  });
+
+  it("includes the org page URL", () => {
+    const { text } = formatClaimVerifiedOperatorEmail(operatorBase, base.webOrigin);
+    expect(text).toContain("https://releases.sh/acme");
+  });
+});
+
 describe("sendClaimVerifiedEmail", () => {
   it("never throws when AUTH_EMAIL is absent", async () => {
     await expect(
@@ -66,5 +103,17 @@ describe("sendClaimVerifiedEmail", () => {
         },
       ),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("notifyClaimVerified", () => {
+  it("never throws when SEND_EMAIL is absent", async () => {
+    await expect(notifyClaimVerified({}, operatorBase)).resolves.toBeUndefined();
+  });
+});
+
+describe("onClaimVerified", () => {
+  it("never throws when both bindings are absent", async () => {
+    await expect(onClaimVerified({}, operatorBase)).resolves.toBeUndefined();
   });
 });

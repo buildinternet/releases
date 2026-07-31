@@ -16,7 +16,10 @@ import {
 import { buildDigestEmail } from "./digest-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
 import { formatPollFetchAlert } from "./poll-fetch-alert.js";
-import { formatClaimVerifiedEmail } from "./claim-verified-email.js";
+import {
+  formatClaimVerifiedEmail,
+  formatClaimVerifiedOperatorEmail,
+} from "./claim-verified-email.js";
 import { formatRecommendationAckEmail, formatRecommendationEmail } from "./recommendation-email.js";
 import { buildNoResultsAlert } from "./search-no-results.js";
 import { formatCronCrashAlert } from "./send-alert.js";
@@ -41,6 +44,7 @@ export type EmailSampleId =
   | "digest.weekly"
   | "recommendation.ack"
   | "listing.claim-verified"
+  | "operator.claim-verified"
   | "operator.recommendation"
   | "operator.feedback"
   | "operator.cron-report"
@@ -106,6 +110,12 @@ export const EMAIL_SAMPLE_CATALOG: EmailSampleMeta[] = [
     label: "Ownership verified",
     description: "Confirmation after a successful domain ownership claim",
     channel: "auth",
+  },
+  {
+    id: "operator.claim-verified",
+    label: "Ownership verified (admin)",
+    description: "Internal alert when someone verifies domain ownership",
+    channel: "operator",
   },
   {
     id: "operator.recommendation",
@@ -346,6 +356,20 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
         method: "well-known",
         webOrigin: web,
       });
+    case "operator.claim-verified":
+      return formatClaimVerifiedOperatorEmail(
+        {
+          domain: "example.com",
+          orgName: "Example Co",
+          orgSlug: "example",
+          method: "well-known",
+          ownerEmail: "owner@example.com",
+          userId: "user_sample",
+          claimId: "clm_sample",
+          verifiedAt: new Date().toISOString(),
+        },
+        web,
+      );
     case "operator.recommendation":
       return formatRecommendationEmail(SAMPLE_RECOMMENDATION);
     case "operator.feedback":

@@ -395,8 +395,9 @@ a host.
   it verifies (`verified: false` is a valid outcome, not an error). The claim must belong to the
   caller (404 otherwise — no existence oracle to probe other users' claims). An overdue pending
   claim flips to `expired` on the check and returns a `409 ConflictError`. On first successful
-  verification (pending → verified only), fire-and-forget confirmation mail goes out via
-  `AUTH_EMAIL` (`sendClaimVerifiedEmail`); mail failure never fails the verify response.
+  verification (pending → verified only), fire-and-forget mail goes out for both the owner
+  (`AUTH_EMAIL` confirmation) and operators (`SEND_EMAIL` → `EMAIL_NOTIFY_TO`, subject
+  `[ownership] verified: {domain}`); either path failing never fails the verify response.
 - `GET /v1/listing/claims` — the caller's own claims, org-pointer joined; lazily expires overdue
   pending rows on read.
 

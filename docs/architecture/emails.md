@@ -8,11 +8,11 @@ order. No sender hand-rolls markup.
 
 ## Lanes
 
-| Lane     | Messages                                                                                                                                                                 | Tone                                     |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, ownership claim verified                                                         | accent                                   |
-| Reader   | daily + weekly follow digest                                                                                                                                             | accent                                   |
-| Operator | cron report, staleness digest, recommendation, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
+| Lane     | Messages                                                                                                                                                                                           | Tone                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, ownership claim verified                                                                                   | accent                                   |
+| Reader   | daily + weekly follow digest                                                                                                                                                                       | accent                                   |
+| Operator | cron report, staleness digest, recommendation, ownership claim verified, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
 
 The lane label sits in the masthead; the tone colors the 3px rule at the top of
 the message (azure / amber / red), so severity reads before the subject does.

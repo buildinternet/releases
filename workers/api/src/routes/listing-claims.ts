@@ -33,7 +33,7 @@ import { normalizeListingDomain } from "../lib/listing/validate.js";
 import { resolveDomainOrg } from "../lib/well-known/stub.js";
 import { verifyDomainControl } from "../lib/listing/claim-verify.js";
 import { promoteStubOrg, type PromoteStubResult } from "../lib/well-known/promote.js";
-import { sendClaimVerifiedEmail } from "../lib/claim-verified-email.js";
+import { onClaimVerified } from "../lib/claim-verified-email.js";
 import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 import { requireListingEnabled } from "./listing.js";
@@ -305,15 +305,18 @@ listingClaimHandlers.post(
       });
 
       // First successful verification only (already-verified short-circuits above).
-      // Fire-and-forget via AUTH_EMAIL — never fail the verify response.
+      // Owner confirmation (AUTH_EMAIL) + operator notify (SEND_EMAIL) — fail-open.
       // `result.method` is always set when verified; check narrows the type.
       if (result.method) {
-        const send = sendClaimVerifiedEmail(c.env, {
-          to: session.user.email,
+        const send = onClaimVerified(c.env, {
+          ownerEmail: session.user.email,
           domain: org.domain ?? "",
           orgName: org.name,
           orgSlug: org.slug,
           method: result.method,
+          userId: session.user.id,
+          claimId: claim.id,
+          verifiedAt: now,
         });
         const waitUntil = execWaitUntil(c);
         if (waitUntil) waitUntil(send);
