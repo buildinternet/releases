@@ -4,6 +4,7 @@ import {
   ListingActivateBodySchema,
   ListingValidationResultSchema,
   ListingActivateResultSchema,
+  ListingCapabilitiesSchema,
 } from "../src/api-types.js";
 
 describe("listing schemas", () => {
@@ -68,5 +69,22 @@ describe("listing schemas", () => {
         trackingRequested: true,
       }).success,
     ).toBe(true);
+  });
+
+  it("capabilities is a strict two-boolean map", () => {
+    expect(
+      ListingCapabilitiesSchema.safeParse({
+        selfServeEnabled: true,
+        promotionEnabled: false,
+      }).success,
+    ).toBe(true);
+    expect(ListingCapabilitiesSchema.safeParse({ selfServeEnabled: true }).success).toBe(false);
+    expect(
+      ListingCapabilitiesSchema.safeParse({
+        selfServeEnabled: true,
+        promotionEnabled: false,
+        extra: 1,
+      }).success,
+    ).toBe(false);
   });
 });

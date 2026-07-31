@@ -42,6 +42,37 @@ function app(db: ReturnType<typeof createTestDb>, env: Record<string, unknown> =
   });
 }
 
+describe("GET /v1/listing/capabilities", () => {
+  it("returns both flags, always reachable with no auth", async () => {
+    const res = await app(createTestDb(), {
+      LISTING_SELF_SERVE_ENABLED: "true",
+      LISTING_SELF_SERVE_PROMOTION_ENABLED: "false",
+    })(new Request("https://x/v1/listing/capabilities"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { selfServeEnabled: boolean; promotionEnabled: boolean };
+    expect(body).toEqual({ selfServeEnabled: true, promotionEnabled: false });
+  });
+
+  it("still returns 200 when both kill switches are off", async () => {
+    const res = await app(createTestDb(), {
+      LISTING_SELF_SERVE_ENABLED: "false",
+      LISTING_SELF_SERVE_PROMOTION_ENABLED: "false",
+    })(new Request("https://x/v1/listing/capabilities"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { selfServeEnabled: boolean; promotionEnabled: boolean };
+    expect(body).toEqual({ selfServeEnabled: false, promotionEnabled: false });
+  });
+
+  it("reports promotionEnabled true when that wrangler var is set", async () => {
+    const res = await app(createTestDb(), {
+      LISTING_SELF_SERVE_PROMOTION_ENABLED: "true",
+    })(new Request("https://x/v1/listing/capabilities"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { promotionEnabled: boolean };
+    expect(body.promotionEnabled).toBe(true);
+  });
+});
+
 describe("POST /v1/listing/validate", () => {
   it("returns the projection for an unlisted domain, no auth required", async () => {
     mockManifestFetch(MANIFEST);
@@ -228,7 +259,7 @@ describe("wiring: /v1/listing is a public-write namespace", () => {
     expect(res.status).toBe(404);
   });
 
-  it("registers /listing/validate and /listing/activate in the OpenAPI spec", async () => {
+  it("registers /listing/validate, /listing/activate, and /listing/capabilities in the OpenAPI spec", async () => {
     const v1 = new Hono<Env>();
     mountV1Routes(v1);
     const composedApp = new Hono<Env>();
@@ -242,5 +273,6 @@ describe("wiring: /v1/listing is a public-write namespace", () => {
     const spec = (await res.json()) as { paths?: Record<string, Record<string, unknown>> };
     expect(spec.paths?.["/listing/validate"]?.post).toBeTruthy();
     expect(spec.paths?.["/listing/activate"]?.post).toBeTruthy();
+    expect(spec.paths?.["/listing/capabilities"]?.get).toBeTruthy();
   });
 });

@@ -16,6 +16,7 @@ import {
 import { buildDigestEmail } from "./digest-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
 import { formatPollFetchAlert } from "./poll-fetch-alert.js";
+import { formatClaimVerifiedEmail } from "./claim-verified-email.js";
 import { formatRecommendationAckEmail, formatRecommendationEmail } from "./recommendation-email.js";
 import { buildNoResultsAlert } from "./search-no-results.js";
 import { formatCronCrashAlert } from "./send-alert.js";
@@ -39,6 +40,7 @@ export type EmailSampleId =
   | "digest.daily"
   | "digest.weekly"
   | "recommendation.ack"
+  | "listing.claim-verified"
   | "operator.recommendation"
   | "operator.feedback"
   | "operator.cron-report"
@@ -97,6 +99,12 @@ export const EMAIL_SAMPLE_CATALOG: EmailSampleMeta[] = [
     id: "recommendation.ack",
     label: "Submission thank-you",
     description: "Acknowledgment after /submit with a contact email",
+    channel: "auth",
+  },
+  {
+    id: "listing.claim-verified",
+    label: "Ownership verified",
+    description: "Confirmation after a successful domain ownership claim",
     channel: "auth",
   },
   {
@@ -330,6 +338,14 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
     }
     case "recommendation.ack":
       return formatRecommendationAckEmail(SAMPLE_RECOMMENDATION, web);
+    case "listing.claim-verified":
+      return formatClaimVerifiedEmail({
+        domain: "example.com",
+        orgName: "Example Co",
+        orgSlug: "example",
+        method: "well-known",
+        webOrigin: web,
+      });
     case "operator.recommendation":
       return formatRecommendationEmail(SAMPLE_RECOMMENDATION);
     case "operator.feedback":

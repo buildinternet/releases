@@ -10,7 +10,7 @@ order. No sender hand-rolls markup.
 
 | Lane     | Messages                                                                                                                                                                 | Tone                                     |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack                                                                                   | accent                                   |
+| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, ownership claim verified                                                         | accent                                   |
 | Reader   | daily + weekly follow digest                                                                                                                                             | accent                                   |
 | Operator | cron report, staleness digest, recommendation, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
 

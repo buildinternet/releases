@@ -22,13 +22,18 @@ import {
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
-import { attachFollowsSession } from "../middleware/auth.js";
+import {
+  attachFollowsSession,
+  execWaitUntil,
+  type AuthSessionContext,
+} from "../middleware/auth.js";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { normalizeListingDomain } from "../lib/listing/validate.js";
 import { resolveDomainOrg } from "../lib/well-known/stub.js";
 import { verifyDomainControl } from "../lib/listing/claim-verify.js";
 import { promoteStubOrg, type PromoteStubResult } from "../lib/well-known/promote.js";
+import { sendClaimVerifiedEmail } from "../lib/claim-verified-email.js";
 import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 import { requireListingEnabled } from "./listing.js";
@@ -37,7 +42,7 @@ const CLAIM_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Db = ReturnType<typeof createDb>;
 
-function requireSession(c: Context<Env>): { user: { id: string } } | null {
+function requireSession(c: Context<Env>): AuthSessionContext | null {
   const session = c.get("session");
   return session ?? null;
 }
@@ -298,6 +303,22 @@ listingClaimHandlers.post(
         userId: session.user.id,
         method: result.method,
       });
+
+      // First successful verification only (already-verified short-circuits above).
+      // Fire-and-forget via AUTH_EMAIL — never fail the verify response.
+      // `result.method` is always set when verified; check narrows the type.
+      if (result.method) {
+        const send = sendClaimVerifiedEmail(c.env, {
+          to: session.user.email,
+          domain: org.domain ?? "",
+          orgName: org.name,
+          orgSlug: org.slug,
+          method: result.method,
+        });
+        const waitUntil = execWaitUntil(c);
+        if (waitUntil) waitUntil(send);
+        else void send;
+      }
     } else {
       logEvent("info", {
         component: "listing",
