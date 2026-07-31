@@ -100,8 +100,7 @@ union that composes the **existing** detail shapes (no new shape definitions):
 
 ```ts
 type ResolveResponse =
-  | { kind: "product"; product: ProductDetail }
-  | { kind: "source"; source: SourceDetail }; // SourceDetail already carries productSlug
+  { kind: "product"; product: ProductDetail } | { kind: "source"; source: SourceDetail }; // SourceDetail already carries productSlug
 // 404 not_found when neither matches
 ```
 

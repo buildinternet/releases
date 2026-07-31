@@ -53,9 +53,7 @@ Status filter pills render counts from the server's `statusCounts` rollup, so `E
 
 ```jsonc
 {
-  "entries": [
-    /* existing row shape, unchanged */
-  ],
+  "entries": [/* existing row shape, unchanged */],
   "nextCursor": "2026-04-18T21:12:04.001Z|fl_abc123", // null when no more pages
   "totalCount": 1842, // omitted on cursor pages
   "statusCounts": {

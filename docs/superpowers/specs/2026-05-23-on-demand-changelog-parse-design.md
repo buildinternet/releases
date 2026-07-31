@@ -230,9 +230,7 @@ The handler applies the decision-#3 resolution order, then returns:
   "parsable": true,
   "format": null, // populated only for source=changelog_file
   "file": null, // {path,url,rawUrl,size,truncated} only for source=changelog_file
-  "releases": [
-    /* ParsedChangelogRelease[] */
-  ],
+  "releases": [/* ParsedChangelogRelease[] */],
   "stats": {
     "releasesParsed": 37,
     "headingsScanned": 0, // file source only

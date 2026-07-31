@@ -36,23 +36,23 @@
     "./deterministic-update": "./src/deterministic-update.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.9",
+    "@ai-sdk/anthropic": "^4.0.26",
     "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-core": "workspace:*",
-    "@openrouter/ai-sdk-provider": "^2.10",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
-    "@rowanmanning/feed-parser": "^2.1.3",
-    "ai": "^7.0.17",
-    "fast-xml-parser": "^5.9.3",
+    "@rowanmanning/feed-parser": "^2.1.4",
+    "ai": "^7.0.45",
+    "fast-xml-parser": "^5.10.1",
     "jsonpath-plus": "^10.4.0",
     "linkedom": "^0.18.13",
     "partial-json": "^0.1.7",
-    "tldts": "^7.4.7",
+    "tldts": "^7.4.10",
     "turndown": "^7.2.4"
   },
   "devDependencies": {
-    "@mendable/firecrawl-js": "^4.29.2",
+    "@mendable/firecrawl-js": "^4.32.0",
     "@types/turndown": "^5.0.6"
   }
 }
