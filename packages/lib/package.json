@@ -36,6 +36,6 @@
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "jose": "^6.2.3"
+    "jose": "^6.2.5"
   }
 }

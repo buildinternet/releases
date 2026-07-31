@@ -50,14 +50,7 @@ poll cron.
 - `describeFetchPlan(source: Source): FetchPlan` where
   ```ts
   type FetchStrategy =
-    | "github"
-    | "feed"
-    | "appstore"
-    | "video"
-    | "crawl"
-    | "scrape"
-    | "agent"
-    | "firecrawl";
+    "github" | "feed" | "appstore" | "video" | "crawl" | "scrape" | "agent" | "firecrawl";
   interface FetchPlan {
     strategy: FetchStrategy;
     strategyLabel: string; // "GitHub API", "RSS feed", "Browser scrape", "Firecrawl", …

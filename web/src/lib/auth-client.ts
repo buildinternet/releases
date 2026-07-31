@@ -10,24 +10,29 @@ import {
 import { dashClient, sentinelClient } from "@better-auth/infra/client";
 
 /**
- * `@better-auth/infra`'s client plugins ship `.d.ts` types built against an OLDER
- * `better-auth` (its devDependency is pinned to 1.6.15), so under a newer core the
- * `getActions` signature on its plugins no longer structurally matches the one
- * `BetterAuthClientPlugin` now requires. A single non-conforming element in the
- * `plugins` tuple poisons the whole client's inferred type — stripping `passkey`,
- * `oneTap`, `magicLink`, `device`, etc. — and breaks `next build`'s type check (#1620).
+ * Client plugins whose `getActions` / `getAtoms` signatures lag the core's
+ * `BetterAuthClientPlugin` (extra `options` arg + stricter `BetterFetch`
+ * generics as of better-auth 1.6.25). Today that is:
+ *   - `@better-auth/infra` dash/sentinel (types still built against an older
+ *     core, #1620)
+ *   - first-party `oneTap` under 1.6.25
+ * A single non-conforming element in the `plugins` tuple poisons the whole
+ * client's inferred type — stripping `passkey`, `magicLink`, `device`, etc. —
+ * and breaks `next build`'s type check.
  *
- * This swaps ONLY the offending `getActions` member for the shape the current core
- * expects, preserving each plugin's `id` / `$InferServerPlugin` / `pathMethods` so
- * session and action inference for the rest of the client stay intact (a blanket
- * cast to `BetterAuthClientPlugin` instead erases `$InferServerPlugin` and collapses
- * `useSession()` to `never`). We never call dash/sentinel action methods on the
- * client — they're registered only for their endpoint + fetch-hook side effects — so
- * narrowing `getActions` is lossless. Drop once `@better-auth/infra` ships types
- * built against this core.
+ * This swaps ONLY the offending members for the shapes the current core
+ * expects, preserving each plugin's `id` / `$InferServerPlugin` /
+ * `pathMethods` so session and action inference for the rest of the client
+ * stay intact (a blanket cast to `BetterAuthClientPlugin` instead erases
+ * `$InferServerPlugin` and collapses `useSession()` to `never`). Safe for
+ * plugins we never call action methods on (dash/sentinel), and for oneTap
+ * whose `oneTap()` action is still re-exported via `$InferServerPlugin`.
+ * Do NOT wrap passkey/magicLink/device — their client-side getActions methods
+ * (`addPasskey`, `signIn.passkey`, …) would be erased from inference.
  */
 const asClientPlugin = <P>(p: P) =>
-  p as unknown as Omit<P, "getActions"> & Pick<BetterAuthClientPlugin, "getActions">;
+  p as unknown as Omit<P, "getActions" | "getAtoms"> &
+    Pick<BetterAuthClientPlugin, "getActions" | "getAtoms">;
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 
@@ -145,7 +150,11 @@ export const authClient = createAuthClient({
     // server seam: the worker registers oneTap() only when Google's secrets resolve,
     // and this bundle reveals it only when the public id is present. Omitted → no
     // Google GSI script loads and `authClient.oneTap` stays undefined.
-    ...(GOOGLE_ONE_TAP_CLIENT_ID ? [oneTapClient({ clientId: GOOGLE_ONE_TAP_CLIENT_ID })] : []),
+    // asClientPlugin: oneTap's getActions/getAtoms lag better-auth 1.6.25's
+    // BetterAuthClientPlugin (see asClientPlugin note above).
+    ...(GOOGLE_ONE_TAP_CLIENT_ID
+      ? [asClientPlugin(oneTapClient({ clientId: GOOGLE_ONE_TAP_CLIENT_ID }))]
+      : []),
     // Device authorization (RFC 8628) — the browser half of `releases login`.
     // Registers `authClient.device()` (verify a user code) plus `device.approve` /
     // `device.deny`, used by the /device and /device/approve pages. Takes no options
@@ -176,8 +185,7 @@ export const authClient = createAuthClient({
     // Organization plugin (client half) — user-tenancy "Workspaces". Registers
     // `organization.*` actions (create / setActive / list / …) plus the
     // useListOrganizations() / useActiveOrganization() hooks, used by the
-    // /account/workspaces panel. Core plugin on the same better-auth version, so it
-    // needs no `asClientPlugin` type-shim. Takes no options; inert until invoked.
+    // /account/workspaces panel. Takes no options; inert until invoked.
     organizationClient(),
   ],
 });
