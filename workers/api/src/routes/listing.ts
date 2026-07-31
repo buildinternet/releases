@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import {
   ListingValidateBodySchema,
   ListingActivateBodySchema,
+  ListingCapabilitiesSchema,
   errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { organizations } from "@buildinternet/releases-core/schema";
@@ -24,6 +25,40 @@ import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 
 export const listingRoutes = new Hono<Env>();
+
+/**
+ * Public capability flags for the listing UI. Always reachable — does NOT
+ * refuse when either kill switch is off — so the web can hide CTAs instead of
+ * offering a button that 404s with "Not found".
+ */
+listingRoutes.get(
+  "/listing/capabilities",
+  describeRoute({
+    tags: ["Listing"],
+    summary: "Listing-lane capability flags",
+    description:
+      "Returns whether the self-serve listing lane and self-serve promotion are currently enabled. Public and anonymous; always reachable even when either kill switch is off (so clients can hide CTAs rather than offer a button that 404s).",
+    responses: {
+      200: {
+        description: "ListingCapabilities",
+        content: {
+          "application/json": { schema: resolver(ListingCapabilitiesSchema) },
+        },
+      },
+    },
+  }),
+  async (c) => {
+    const [selfServeEnabled, promotionEnabled] = await Promise.all([
+      flag(c.env.FLAGS, c.env.LISTING_SELF_SERVE_ENABLED, FLAGS.listingSelfServeEnabled),
+      flag(
+        c.env.FLAGS,
+        c.env.LISTING_SELF_SERVE_PROMOTION_ENABLED,
+        FLAGS.listingSelfServePromotionEnabled,
+      ),
+    ]);
+    return c.json({ selfServeEnabled, promotionEnabled });
+  },
+);
 
 /**
  * Self-serve listing lane (#1947 phase 2). Both routes are PUBLIC and

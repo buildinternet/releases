@@ -363,6 +363,7 @@ export {
   ListingPromoteLocatorOutcomeSchema,
   ListingPromoteLocatorSchema,
   ListingPromoteResultSchema,
+  ListingCapabilitiesSchema,
   type ListingValidateBody,
   type ListingActivateBody,
   type ListingIssue,
@@ -381,6 +382,7 @@ export {
   type ListingPromoteLocatorOutcome,
   type ListingPromoteLocator,
   type ListingPromoteResult,
+  type ListingCapabilities,
 } from "./schemas/listing.js";
 export {
   SourceListItemSchema,

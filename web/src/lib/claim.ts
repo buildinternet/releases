@@ -13,6 +13,7 @@ import type {
   ClaimVerifyResult,
   ListingClaimsResult,
   ListingPromoteResult,
+  ListingCapabilities,
 } from "@buildinternet/releases-api-types";
 import { apiBase } from "./user-api";
 
@@ -83,7 +84,8 @@ export async function listClaims(): Promise<OrgClaim[]> {
 /**
  * Self-serve Tier-1 promotion (#1947 PR B). Requires a verified claim on the
  * domain — the API 403s otherwise — and 404s when the promotion kill switch
- * is off (distinct from the listing-lane switch).
+ * is off (distinct from the listing-lane switch). Prefer checking
+ * {@link fetchListingCapabilities} before offering the CTA.
  */
 export async function promoteListing(domain: string): Promise<ListingPromoteResult> {
   return requestClaimJson<ListingPromoteResult>(
@@ -96,4 +98,31 @@ export async function promoteListing(domain: string): Promise<ListingPromoteResu
     },
     "Could not enable tracking. Please try again.",
   );
+}
+
+const CAPABILITIES_OFF: ListingCapabilities = {
+  selfServeEnabled: false,
+  promotionEnabled: false,
+};
+
+/**
+ * Public capability flags for the listing lane. Always reachable even when
+ * either kill switch is off — fail-closed to both-false on transport/error so
+ * the UI never offers a promote CTA it can't fulfill.
+ */
+export async function fetchListingCapabilities(): Promise<ListingCapabilities> {
+  try {
+    const res = await fetch(`${apiBase()}/v1/listing/capabilities`, {
+      // Anonymous; no credentials needed.
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return CAPABILITIES_OFF;
+    const body = (await res.json()) as Partial<ListingCapabilities>;
+    return {
+      selfServeEnabled: body.selfServeEnabled === true,
+      promotionEnabled: body.promotionEnabled === true,
+    };
+  } catch {
+    return CAPABILITIES_OFF;
+  }
 }

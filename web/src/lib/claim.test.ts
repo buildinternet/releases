@@ -3,7 +3,8 @@ import { describe, it, expect, afterEach, beforeEach } from "bun:test";
 const ORIG = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
 process.env.NEXT_PUBLIC_BETTER_AUTH_URL = "https://api.test";
 
-const { startClaim, verifyClaim, listClaims, promoteListing } = await import("./claim.js");
+const { startClaim, verifyClaim, listClaims, promoteListing, fetchListingCapabilities } =
+  await import("./claim.js");
 
 type Call = { url: string; init?: RequestInit };
 let calls: Call[] = [];
@@ -197,5 +198,31 @@ describe("claim client", () => {
       throw new TypeError("Failed to fetch");
     }) as typeof fetch;
     await expect(promoteListing("acme.com")).rejects.toThrow(/Could not reach the server/);
+  });
+
+  it("fetchListingCapabilities returns the two flags", async () => {
+    mockFetch({ selfServeEnabled: true, promotionEnabled: false });
+    const caps = await fetchListingCapabilities();
+    expect(caps).toEqual({ selfServeEnabled: true, promotionEnabled: false });
+    expect(calls[0]!.url).toBe("https://api.test/v1/listing/capabilities");
+  });
+
+  it("fetchListingCapabilities fail-closes to both-false on non-2xx", async () => {
+    mockFetch({ error: { message: "nope" } }, false, 500);
+    await expect(fetchListingCapabilities()).resolves.toEqual({
+      selfServeEnabled: false,
+      promotionEnabled: false,
+    });
+  });
+
+  it("fetchListingCapabilities fail-closes on transport failure", async () => {
+    calls = [];
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    await expect(fetchListingCapabilities()).resolves.toEqual({
+      selfServeEnabled: false,
+      promotionEnabled: false,
+    });
   });
 });

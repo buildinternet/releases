@@ -168,3 +168,16 @@ export const ListingPromoteResultSchema = z.strictObject({
   locators: z.array(ListingPromoteLocatorSchema),
 });
 export type ListingPromoteResult = z.infer<typeof ListingPromoteResultSchema>;
+
+/**
+ * Public capability flags for the listing lane. Anonymous + always reachable
+ * (does NOT 404 when either kill switch is off) so the web UI can hide CTAs
+ * instead of offering a button that fails with "Not found".
+ */
+export const ListingCapabilitiesSchema = z.strictObject({
+  /** `listing-self-serve-enabled` — validate / activate / claim / verify. */
+  selfServeEnabled: z.boolean(),
+  /** `listing-self-serve-promotion-enabled` — POST /v1/listing/promote. */
+  promotionEnabled: z.boolean(),
+});
+export type ListingCapabilities = z.infer<typeof ListingCapabilitiesSchema>;

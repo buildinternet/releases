@@ -111,7 +111,7 @@ export default async function OrgReleasesPage({
       <>
         <JsonLd data={jsonLd} />
         <StubLocations orgName={org.name} locations={org.locations ?? []} />
-        <ClaimPanel orgSlug={orgSlug} domain={org.domain} />
+        <ClaimPanel orgSlug={orgSlug} domain={org.domain} locations={org.locations ?? []} />
       </>
     );
   }

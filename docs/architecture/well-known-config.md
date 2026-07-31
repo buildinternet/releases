@@ -394,7 +394,10 @@ a host.
 - `POST /v1/listing/claim/verify { claimId }` — checks the proof and returns `200` whether or not
   it verifies (`verified: false` is a valid outcome, not an error). The claim must belong to the
   caller (404 otherwise — no existence oracle to probe other users' claims). An overdue pending
-  claim flips to `expired` on the check and returns a `409 ConflictError`.
+  claim flips to `expired` on the check and returns a `409 ConflictError`. On first successful
+  verification (pending → verified only), fire-and-forget mail goes out for both the owner
+  (`AUTH_EMAIL` confirmation) and operators (`SEND_EMAIL` → `EMAIL_NOTIFY_TO`, subject
+  `[ownership] verified: {domain}`); either path failing never fails the verify response.
 - `GET /v1/listing/claims` — the caller's own claims, org-pointer joined; lazily expires overdue
   pending rows on read.
 
@@ -447,6 +450,14 @@ A verified owner promotes their claimed stub straight to `tracked`, no curator r
 sibling of `listing-self-serve-enabled` but deliberately separate: promotion creates live fetching
 sources (real spend), unlike the zero-cost stub/claim lanes, so it warrants its own incident lever.
 Off ⇒ `404` (checked after the listing-lane flag, so a fully-off listing lane still 404s first).
+AI summaries stay off unless the org has `auto_generate_content` (stubs land with it `false`);
+marketing filter / feed enrich are also opt-in. The real cost of promote for tier-1 locators is
+poll traffic + storage, not Haiku.
+
+**Capabilities probe.** `GET /v1/listing/capabilities` → `{ selfServeEnabled, promotionEnabled }`.
+Public, anonymous, and **always reachable** even when either kill switch is off — so the web can
+hide CTAs instead of offering a button that 404s with "Not found". Fail-closed client: transport
+or non-2xx → both flags false.
 
 **Rate limit.** `LISTING_DOMAIN_RATE_LIMITER`, key `listing-promote:<domain>` — same 3/min-per-domain
 binding verify already uses, just a distinct key prefix.
@@ -454,10 +465,11 @@ binding verify already uses, just a distinct key prefix.
 **Auth.** Same user-principal gate as claim/verify/list — root and `relk_` machine tokens don't
 carry a claim, so they keep using the admin `POST /v1/orgs/:slug/promote` route instead.
 
-**Web.** The claim panel's verified state (`web/src/components/org/claim-panel.tsx`) gains an
-"Enable tracking" button that calls `promoteListing()` (`web/src/lib/claim.ts`) and renders a
-locator-outcome summary ("N sources live, M queued for curator review") linking to the now-tracked
-org page on success.
+**Web.** The claim panel (`web/src/components/org/claim-panel.tsx`) loads capabilities first.
+Verified + promotion off → waiting copy, no Enable-tracking button. Verified + promotion on →
+locator eligibility preview (tier-1 live vs tier-2 queued, same classification as materialize) and
+the promote CTA (hidden when the org has no declared locations). Success renders the
+locator-outcome summary linking to the now-tracked org.
 
 ## Out of scope (phase 2+)
 
