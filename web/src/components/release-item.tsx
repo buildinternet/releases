@@ -46,7 +46,9 @@ function mediaSrc(item: FeedMediaItem) {
   return item.r2Url ?? item.url;
 }
 
-/** Clickable feed thumbnail — side-rail preview (single attachment) or chip (gallery). */
+/** Clickable feed thumbnail — side-rail preview (single attachment) or chip (gallery).
+ *  Unmounts the zoom button when the asset fails so a broken URL never leaves an
+ *  empty control in the feed. Parent failed-state is required for the button shell. */
 function FeedMediaThumb({
   id,
   item,
@@ -58,10 +60,13 @@ function FeedMediaThumb({
   meta: RowMeta;
   variant: "side" | "chip";
 }) {
+  const [failed, setFailed] = useState(false);
   const src = mediaSrc(item);
   const alt = item.alt || "";
   const { ref, open } = useLightboxImage<HTMLButtonElement>({ id, src, alt, ...meta });
   const isChip = variant === "chip";
+
+  if (failed) return null;
 
   return (
     <button
@@ -88,10 +93,57 @@ function FeedMediaThumb({
           height={isChip ? CHIP_THUMB_PX : 72}
           className={isChip ? "h-full w-full object-cover" : SIDE_IMAGE_CLASS}
           unoptimized={IMG_TRANSFORM_ON || undefined}
+          fallback="hide"
+          onLoadError={() => setFailed(true)}
         />
       )}
     </button>
   );
+}
+
+/** Video-row poster + optional outbound watch link. Unmounts the whole shell
+ *  (including a focusable empty `<a>`) when the poster fails. */
+function VideoFeedPoster({
+  src,
+  alt,
+  href,
+  watchLabel,
+}: {
+  src: string;
+  alt: string;
+  href?: string | null;
+  watchLabel: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  const image = (
+    <FallbackImage
+      src={src}
+      alt={alt}
+      width={160}
+      height={90}
+      className="rounded-md object-cover w-[160px] h-[90px] outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+      unoptimized={IMG_TRANSFORM_ON || undefined}
+      fallback="hide"
+      chrome={<PlayBadge size="sm" />}
+      onLoadError={() => setFailed(true)}
+    />
+  );
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel={EXTERNAL_UGC_REL}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Watch on ${watchLabel}`}
+        className="group relative shrink-0"
+      >
+        {image}
+      </a>
+    );
+  }
+  return <div className="relative shrink-0">{image}</div>;
 }
 
 const markdownClasses =
@@ -137,22 +189,17 @@ export function ReleaseListItem({
     [release.media, markdownContent],
   );
 
-  // Video rows: the thumbnail + play badge link out to the source video (the
-  // play affordance should play, not toggle the row). Defined once so the
-  // linked and (url-less) plain variants don't duplicate the image markup.
-  const videoThumbnailInner =
+  // Video rows: poster + play badge (optionally linked to the source video so
+  // the play affordance plays rather than toggling the row). Shell unmounts on
+  // poster failure so we never leave a focusable empty link.
+  const videoPoster =
     video && thumbnail ? (
-      <>
-        <FallbackImage
-          src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 320)}
-          alt={thumbnail.alt || ""}
-          width={160}
-          height={90}
-          className="rounded-md object-cover w-[160px] h-[90px] outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
-          unoptimized={IMG_TRANSFORM_ON || undefined}
-        />
-        <PlayBadge size="sm" />
-      </>
+      <VideoFeedPoster
+        src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 320)}
+        alt={thumbnail.alt || ""}
+        href={release.url}
+        watchLabel={video.label}
+      />
     ) : null;
 
   // Feed title hierarchy (#feed-title): lead with a descriptive headline and
@@ -374,21 +421,7 @@ export function ReleaseListItem({
             }}
           >
             <div className="flex items-start gap-3">
-              {thumbnail &&
-                (release.url ? (
-                  <a
-                    href={release.url}
-                    target="_blank"
-                    rel={EXTERNAL_UGC_REL}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label={`Watch on ${video.label}`}
-                    className="group relative shrink-0"
-                  >
-                    {videoThumbnailInner}
-                  </a>
-                ) : (
-                  <div className="relative shrink-0">{videoThumbnailInner}</div>
-                ))}
+              {videoPoster}
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className={headingClasses}>
                   {release.id ? (

@@ -328,7 +328,8 @@ function ResultCard({
         {thumbnail && (
           // Video hits overlay a play badge so the still reads as playable,
           // matching the feed video row. The card itself links to the release
-          // page (the byline carries "Watch on {provider}"). #1206
+          // page (the byline carries "Watch on {provider}"). `fallback="hide"`
+          // + `chrome` drop a broken poster and its play badge together. #1206
           <div className={video ? "group relative shrink-0" : "shrink-0"}>
             <FallbackImage
               src={thumbnail.src}
@@ -336,8 +337,9 @@ function ResultCard({
               width={120}
               height={72}
               className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+              fallback="hide"
+              chrome={video ? <PlayBadge size="sm" /> : undefined}
             />
-            {video && <PlayBadge size="sm" />}
           </div>
         )}
       </div>

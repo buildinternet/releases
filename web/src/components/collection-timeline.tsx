@@ -883,6 +883,7 @@ function tagKey(item: TagListItem<CollectionReleaseItemView>) {
 
 function PostHero({ release }: { release: CollectionReleaseItemView }) {
   const [expanded, setExpanded] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
   const thumbnail = findThumbnail(release);
   // Lead with the enriched headline (matches the org feed) instead of the raw
   // `title` column, which is often a terse "Session Folders".
@@ -895,11 +896,14 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
   // The raw content/summary fields are stripped from this timeline's payload
   // (#1918), so `hasMore` arrives precomputed server-side.
   const hasMore = !!release.hasMore;
+  // Parent failed-state drives the 2-col grid: `fallback="hide"` alone would
+  // leave an empty gray media pane in the right column.
+  const showThumb = !!thumbnail && !thumbFailed;
 
   return (
     <article
       className={`grid border border-stone-200 dark:border-stone-800 rounded-lg bg-white dark:bg-stone-900 overflow-hidden ${
-        thumbnail ? "md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]" : "grid-cols-1"
+        showThumb ? "md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]" : "grid-cols-1"
       }`}
     >
       <div className="p-5 md:p-6 min-w-0">
@@ -951,7 +955,7 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
           <ClusterChip count={release.coverageCount} />
         </div>
       </div>
-      {thumbnail && (
+      {showThumb && thumbnail && (
         <div className="bg-stone-50 dark:bg-stone-950/50 p-4 flex items-center justify-center">
           <FallbackImage
             src={thumbnail.r2Url ?? thumbnail.url}
@@ -959,6 +963,8 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
             width={400}
             height={260}
             className="rounded-md object-cover w-full h-auto max-h-64"
+            fallback="hide"
+            onLoadError={() => setThumbFailed(true)}
           />
         </div>
       )}
@@ -1000,6 +1006,7 @@ function ProductPostGroup({
 
 function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
   const [expanded, setExpanded] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   // Lead with the descriptive headline — it's the useful part. The version is
   // secondary metadata, demoted to a small dim mono tag beside it. Falls back to
@@ -1012,6 +1019,8 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
   // so `hasMore` arrives precomputed server-side.
   const hasMore = !!release.hasMore;
   const thumbnail = findThumbnail(release);
+  // Same as PostHero: grid column must collapse when the poster 404s.
+  const showThumb = !!thumbnail && !thumbFailed;
 
   return (
     <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
@@ -1040,7 +1049,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
       </div>
       <div
         className={`mt-2.5 grid gap-4 ${
-          thumbnail ? "md:grid-cols-[minmax(0,1fr)_minmax(0,200px)]" : ""
+          showThumb ? "md:grid-cols-[minmax(0,1fr)_minmax(0,200px)]" : ""
         }`}
       >
         <div className="min-w-0">
@@ -1066,7 +1075,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
             )}
           </div>
         </div>
-        {thumbnail && (
+        {showThumb && thumbnail && (
           <div className="flex items-start justify-center">
             <FallbackImage
               src={thumbnail.r2Url ?? thumbnail.url}
@@ -1074,6 +1083,8 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
               width={200}
               height={130}
               className="rounded-md object-cover w-full h-auto max-h-40 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+              fallback="hide"
+              onLoadError={() => setThumbFailed(true)}
             />
           </div>
         )}
@@ -1194,6 +1205,7 @@ function CommitLogRow({ release }: { release: CollectionReleaseItemView }) {
             width={56}
             height={32}
             className="rounded-md object-cover w-14 h-8 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+            fallback="hide"
           />
         )}
         {release.prerelease && (
