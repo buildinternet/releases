@@ -3,6 +3,22 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 30, 2026
+
+**Changed**
+- New releases appear on the site sooner — page revalidation is now triggered at ingest time rather than waiting for a background schedule.
+
+**Fixed**
+- Incremental extraction now escalates to a full-page pass when a scrape window returns zero results on a page whose content has changed — sources with long individual entries no longer silently stall between fetch cycles.
+- Video sources now trigger site revalidation and route through the configured AI models on initial ingest; both were silently skipped before.
+- Staleness digest no longer re-reports provider outages that have already been cleared.
+
+## July 29, 2026
+
+**Added**
+- MCP server now implements MCP spec `2026-07-28` — modern clients receive plain JSON responses; 2025-era clients continue receiving SSE framing unchanged.
+- `POST /v1/ai/lanes/:lane` — invoke any ingest-time AI lane (marketing classifier, summarizer, or feed-enrich) against a stored release or inline content; `apply: true` writes the result back, including product context the summarizer uses when available.
+
 ## July 28, 2026
 
 **Added**
