@@ -707,25 +707,53 @@ export function isTrustedCorsOrigin(
 }
 
 /**
+ * Apply credentialed / public CORS headers onto a finalized response.
+ * Mutates `headers` in place so it works for both Hono-built responses and
+ * raw `Response` objects (Better Auth's `auth.handler` returns the latter).
+ */
+function applyCorsHeaders(
+  headers: Headers,
+  origin: string,
+  env: { ENVIRONMENT?: string; BETTER_AUTH_TRUSTED_ORIGINS?: string },
+): void {
+  if (isTrustedCorsOrigin(origin, env)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Credentials", "true");
+    headers.append("Vary", "Origin");
+  } else {
+    headers.set("Access-Control-Allow-Origin", "*");
+  }
+}
+
+/**
  * Worker-wide CORS (#2205), keyed on origin not path:
  * trusted first-party → reflect + credentials; else → `*` (no credentials);
  * no Origin → no CORS headers. New session-cookie browser surfaces need no
  * registration — only the trusted-origin list shared with Better Auth.
+ *
+ * Headers for non-OPTIONS requests are applied AFTER `next()`. Setting them
+ * before is lost when a handler returns a raw `Response` (Hono replaces
+ * `c.res` and does not merge pre-set `c.header()` values) — which is exactly
+ * what `/api/auth/*` does via Better Auth. That regression shipped in #2207
+ * and broke production `get-session` (200 with no ACAO). OPTIONS still returns
+ * early with headers on a Hono-built body, so it never hit the bug.
  */
 export function apiCorsMiddleware(): MiddlewareHandler<Env> {
   return async (c, next) => {
     const origin = c.req.header("Origin");
-    if (origin) {
-      if (isTrustedCorsOrigin(origin, c.env as Bindings)) {
-        c.header("Access-Control-Allow-Origin", origin);
-        c.header("Access-Control-Allow-Credentials", "true");
-        c.header("Vary", "Origin", { append: true });
-      } else {
-        c.header("Access-Control-Allow-Origin", "*");
-      }
-    }
+    const env = c.env as Bindings;
 
     if (c.req.method === "OPTIONS") {
+      // Hono-built body — c.header() is fine (no raw Response replacement).
+      if (origin) {
+        if (isTrustedCorsOrigin(origin, env)) {
+          c.header("Access-Control-Allow-Origin", origin);
+          c.header("Access-Control-Allow-Credentials", "true");
+          c.header("Vary", "Origin", { append: true });
+        } else {
+          c.header("Access-Control-Allow-Origin", "*");
+        }
+      }
       c.header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
       c.header("Access-Control-Max-Age", "600");
       const requested = c.req.header("Access-Control-Request-Headers");
@@ -743,6 +771,12 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
     }
 
     await next();
+
+    // 101 (WebSocket upgrade) headers are immutable — same skip as cacheDefaultDeny.
+    if (c.res.status === 101) return;
+    // Must mutate the finalized response: raw Response returns (Better Auth)
+    // replace c.res and drop any pre-next c.header() values.
+    if (origin) applyCorsHeaders(c.res.headers, origin, env);
   };
 }
 
