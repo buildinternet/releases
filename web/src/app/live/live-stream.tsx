@@ -55,46 +55,71 @@ function firstVideo(media: MediaItem[]): MediaItem | null {
 // Inline media preview — one asset per card to keep the feed scannable. A hosted
 // video wins (play-thumbnail linking out to its watch page, mirroring the
 // release-detail card); otherwise the first image/gif renders as a bounded
-// thumbnail. Null when the release carries no previewable media.
+// thumbnail. Null when the release carries no previewable media. Broken assets
+// hide entirely (no empty aspect-ratio shell / orphan play badge).
 function MediaPreview({ release, heading }: { release: LiveRelease; heading: string }) {
   const video = firstVideo(release.media);
-  if (video) {
+  if (video?.linkUrl) {
     const poster = video.r2Url ?? video.url;
     return (
-      <a
+      <LiveVideoThumb
         href={video.linkUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={video.alt ? `Watch video: ${video.alt}` : "Watch video"}
-        className="group relative mt-3 block aspect-video w-full max-w-sm overflow-hidden rounded-lg border border-stone-200 bg-black no-underline dark:border-stone-800"
-      >
-        <FallbackImage
-          src={releaseThumbUrl(poster, 1280)}
-          alt={video.alt || heading}
-          width={1280}
-          height={720}
-          className="h-full w-full object-cover"
-          unoptimized={IMG_TRANSFORM_ON || undefined}
-        />
-        <PlayBadge size="sm" />
-      </a>
+        label={video.alt ? `Watch video: ${video.alt}` : "Watch video"}
+        src={releaseThumbUrl(poster, 1280)}
+        alt={video.alt || heading}
+      />
     );
   }
   const img = firstImage(release.media);
-  if (img) {
-    return (
-      <div className="mt-3">
-        <FallbackImage
-          src={img.r2Url ?? img.url}
-          alt={img.alt || heading}
-          width={480}
-          height={300}
-          className="rounded-md object-cover max-h-56 w-auto border border-stone-200 dark:border-stone-800"
-        />
-      </div>
-    );
-  }
-  return null;
+  if (!img) return null;
+  // Margin lives on the image so `fallback="hide"` leaves no empty wrapper.
+  return (
+    <FallbackImage
+      src={img.r2Url ?? img.url}
+      alt={img.alt || heading}
+      width={480}
+      height={300}
+      className="mt-3 rounded-md object-cover max-h-56 w-auto border border-stone-200 dark:border-stone-800"
+      fallback="hide"
+    />
+  );
+}
+
+/** Linked video poster shell — unmounts the whole card when the poster 404s. */
+function LiveVideoThumb({
+  src,
+  alt,
+  href,
+  label,
+}: {
+  src: string;
+  alt: string;
+  href: string;
+  label: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      className="group relative mt-3 block aspect-video w-full max-w-sm overflow-hidden rounded-lg border border-stone-200 bg-black no-underline dark:border-stone-800"
+    >
+      <FallbackImage
+        src={src}
+        alt={alt}
+        width={1280}
+        height={720}
+        className="h-full w-full object-cover"
+        unoptimized={IMG_TRANSFORM_ON || undefined}
+        fallback="hide"
+        chrome={<PlayBadge size="sm" />}
+        onLoadError={() => setFailed(true)}
+      />
+    </a>
+  );
 }
 
 // Org avatar for the byline. Unlike the shared `OrgAvatar`, this omits itself

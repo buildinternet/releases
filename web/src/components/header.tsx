@@ -10,8 +10,7 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
 export function Header() {
   const devAdmin = isLocalAdminEnabled();
-  // Local dev gets a loud orange "DEV" badge so the environment is unmistakable
-  // at a glance; deployed preview/prod keep the subtle gray "preview" chip.
+  // Orange "dev" badge for local only; production ships with no environment chip.
   const isLocalDev = process.env.NODE_ENV === "development";
   return (
     <header
@@ -49,13 +48,9 @@ export function Header() {
           <rect x="14" y="40" width="36" height="6" rx="1.5" fill="oklch(0.60 0.18 252)" />
         </svg>
         releases.sh
-        {isLocalDev ? (
+        {isLocalDev && (
           <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-stone-950 bg-amber-400 rounded px-1.5 py-0.5 leading-none">
             dev
-          </span>
-        ) : (
-          <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500 border border-stone-300 dark:border-stone-700 rounded px-1.5 py-0.5 leading-none">
-            preview
           </span>
         )}
       </Link>

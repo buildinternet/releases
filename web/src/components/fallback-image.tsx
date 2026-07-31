@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { isOptimizableImage } from "@/lib/sanitize";
 
@@ -28,9 +28,30 @@ interface FallbackImageProps {
    * `/cdn-cgi/image/` transform) so next/image doesn't re-process them.
    */
   unoptimized?: boolean;
+  /**
+   * What to render when the image fails to load.
+   * - `placeholder` (default): dashed "Image unavailable" chip — fine for
+   *   body/content surfaces where the layout already reserved space.
+   * - `hide`: render nothing. Prefer this for compact thumbnails / highlight
+   *   reels so a broken asset never leaves a jagged broken-image icon.
+   */
+  fallback?: "placeholder" | "hide";
+  /**
+   * Sibling chrome (e.g. a play badge) that co-hides with the image when
+   * `fallback="hide"`. Parent must still supply a `relative` wrapper for
+   * absolutely positioned overlays. Prefer this over a local failed-state
+   * when only the image + badge need to vanish.
+   */
+  chrome?: ReactNode;
+  /**
+   * Fires when the image fails to load (after the local failed state flips).
+   * Use when outer chrome (zoom button, grid cell, linked video shell) must
+   * also unmount — `fallback="hide"` / `chrome` alone only cover the image tree.
+   */
+  onLoadError?: () => void;
 }
 
-/** next/image wrapper that renders a placeholder on load error. */
+/** next/image wrapper that degrades on load error (placeholder or hide). */
 export function FallbackImage({
   src,
   alt,
@@ -38,10 +59,16 @@ export function FallbackImage({
   height,
   className,
   unoptimized,
+  fallback = "placeholder",
+  chrome,
+  onLoadError,
 }: FallbackImageProps) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <Placeholder className={className} />;
-  return (
+  if (failed) {
+    if (fallback === "hide") return null;
+    return <Placeholder className={className} />;
+  }
+  const image = (
     <Image
       src={src}
       alt={alt}
@@ -49,8 +76,18 @@ export function FallbackImage({
       height={height}
       className={className}
       unoptimized={unoptimized ?? !isOptimizableImage(src)}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true);
+        onLoadError?.();
+      }}
     />
+  );
+  if (chrome == null) return image;
+  return (
+    <>
+      {image}
+      {chrome}
+    </>
   );
 }
 

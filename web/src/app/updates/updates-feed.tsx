@@ -430,16 +430,16 @@ function FullEntry({
         />
       )}
       {thumbSrc && (
-        <div className="mt-3 max-w-[660px]">
-          <FallbackImage
-            src={releaseThumbUrl(thumbSrc, 1320)}
-            alt={thumbnail?.alt || ""}
-            width={660}
-            height={180}
-            className="h-auto w-full rounded-lg border border-stone-200 object-cover dark:border-stone-800"
-            unoptimized={IMG_TRANSFORM_ON || undefined}
-          />
-        </div>
+        // Margin/max-width on the image so `fallback="hide"` leaves no empty shell.
+        <FallbackImage
+          src={releaseThumbUrl(thumbSrc, 1320)}
+          alt={thumbnail?.alt || ""}
+          width={660}
+          height={180}
+          className="mt-3 max-w-[660px] h-auto w-full rounded-lg border border-stone-200 object-cover dark:border-stone-800"
+          unoptimized={IMG_TRANSFORM_ON || undefined}
+          fallback="hide"
+        />
       )}
     </article>
   );

@@ -6,6 +6,7 @@ import { appRowInfoFromWire } from "@/lib/app-source";
 import { ImportanceMarker } from "./importance-marker";
 import { AppStoreIcon } from "./app-store-icon";
 import { AppPlatformCue } from "./app-platform-cue";
+import { ReleaseThumb } from "./release-thumb";
 
 interface RelatedRailProps {
   anchorReleaseId: string | null;
@@ -23,9 +24,6 @@ const CARD_CLASS =
 /** Headline type scale: up to two balanced lines, no hard clip. */
 const HEADLINE_CLASS =
   "font-semibold text-[14px] text-stone-900 dark:text-stone-100 line-clamp-2 text-balance";
-/** Right-hand release thumbnail — small enough not to outweigh the copy. */
-const CARD_IMAGE_CLASS =
-  "shrink-0 w-10 h-10 rounded-md object-cover bg-stone-100 dark:bg-stone-800";
 
 /**
  * "Related" rail of semantically similar *releases*. Both flavors are
@@ -166,15 +164,7 @@ export function ReleaseCard({ item }: ReleaseCardProps) {
           </div>
         </div>
         {item.thumbnail && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={item.thumbnail.url}
-            alt={item.thumbnail.alt ?? ""}
-            className={CARD_IMAGE_CLASS}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-          />
+          <ReleaseThumb src={item.thumbnail.url} alt={item.thumbnail.alt ?? ""} size="md" />
         )}
       </Link>
     </div>

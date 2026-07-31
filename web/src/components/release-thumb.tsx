@@ -1,9 +1,14 @@
+"use client";
+
+import { useState } from "react";
+
 /**
  * Shared compact release-media thumbnail. One treatment reused across the home
  * ticker, org "latest releases" teaser, "also covered by" rail, and lookup
  * preview so every compact release surface reads as one system — matching the
- * related-rail card thumbnail. Renders nothing when `src` is falsy, so callers
- * pass a possibly-empty url without branching.
+ * related-rail card thumbnail. Renders nothing when `src` is falsy **or the
+ * image fails to load**, so broken media never leaves a jagged placeholder on
+ * marketing/compact surfaces.
  *
  * Placement: sit the thumb in the **content** row (left or right of the title),
  * never in the attribution chrome next to a relative timestamp — that reads as
@@ -18,7 +23,8 @@ export function ReleaseThumb({
   alt?: string;
   size?: "sm" | "md";
 }) {
-  if (!src) return null;
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
   const box = size === "sm" ? "w-8 h-8" : "w-10 h-10";
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
@@ -29,6 +35,7 @@ export function ReleaseThumb({
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
     />
   );
 }
