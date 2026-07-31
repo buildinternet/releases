@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import {
   authMiddleware,
   publicReadAuthMiddleware,
@@ -672,26 +671,6 @@ for (const r of publicWriteRoutes) {
   v1.use(`/${r}/*`, dbHealthCheck);
 }
 
-// Admin / write paths — scope CORS to known first-party origins so the
-// global wildcard (set above on `app`) is overridden for these routes.
-// Browsers already refuse credentialed requests to wildcard origins; this is
-// defense-in-depth. Add staging frontend origins here when one ships.
-// NOTE: This must be registered AFTER app.use("*", cors()) so that Hono's
-// header writes resolve to the stricter value for admin paths.
-const ALLOWED_ADMIN_ORIGINS = [
-  "https://releases.sh",
-  // staging.releases.sh is the expected staging web host once it ships;
-  // add it here when the staging frontend is deployed.
-];
-const adminCors = cors({
-  origin: ALLOWED_ADMIN_ORIGINS,
-  credentials: true,
-});
-for (const r of adminRoutes) {
-  v1.use(`/${r}`, adminCors);
-  v1.use(`/${r}/*`, adminCors);
-}
-
 // Self-serve API keys: per-IP limiter on the read (GET list) path for parity
 // with public reads. It no-ops on POST/DELETE (non-safe methods); those are
 // session-gated. (See routing.md — the session-authed self-serve bucket.)
@@ -911,12 +890,12 @@ v1.use("/feedback", dbHealthCheck);
 // …but the triage write-path (/feedback/:id — PATCH/DELETE) is admin-only,
 // mirroring the /v1/admin/feedback read-back. Only the sub-paths are gated; the
 // bare /feedback above stays open. Strict CORS like the other admin paths.
-v1.use("/feedback/*", adminCors, authMiddleware, dbHealthCheck);
+v1.use("/feedback/*", authMiddleware, dbHealthCheck);
 
 // /recommendations mirrors /feedback: bare POST is open with in-handler
 // rate limiting; sub-path triage operations are admin-only.
 v1.use("/recommendations", dbHealthCheck);
-v1.use("/recommendations/*", adminCors, authMiddleware, dbHealthCheck);
+v1.use("/recommendations/*", authMiddleware, dbHealthCheck);
 
 // Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
 // `/v1` gets a self-describing payload pointing at the OpenAPI spec, the

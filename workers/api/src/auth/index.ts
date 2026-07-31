@@ -676,35 +676,24 @@ function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
 }
 
 /**
- * Headers always allowed on CORS preflights. The Sentinel client
- * (`sentinelClient`, #1544) stamps every `/api/auth/*` request with
- * `X-Visitor-Id` / `X-Request-Id` (and `X-PoW-Solution` on a proof-of-work
- * challenge retry) — these MUST be listed or the browser blocks every auth
- * preflight. Asserted in sync with the installed `@better-auth/infra` client
- * bundle by a drift test in auth.test.ts.
- *
- * Preflights that request additional headers (public API callers) get those
- * reflected too — see {@link apiCorsMiddleware}.
+ * Baseline CORS preflight allow-list. The Sentinel client (#1544) stamps
+ * `/api/auth/*` with `X-Visitor-Id` / `X-Request-Id` / `X-PoW-Solution` — these
+ * must be listed or auth preflights fail. Drift-tested against the installed
+ * `@better-auth/infra` client in auth.test.ts. Preflights may also request
+ * extra headers; those are unioned in at request time.
  */
 export const AUTH_CORS_ALLOWED_HEADERS = [
   "Content-Type",
   "Authorization",
-  // Sentinel client fingerprint / PoW headers — see the note above.
   "X-Visitor-Id",
   "X-Request-Id",
   "X-PoW-Solution",
 ] as const;
 
-const API_CORS_ALLOW_METHODS = "POST, GET, PUT, PATCH, DELETE, OPTIONS, HEAD";
-const API_CORS_MAX_AGE = "600";
-
 /**
  * True when `origin` may receive credentialed CORS (reflected ACAO +
- * `Access-Control-Allow-Credentials: true`). Mirrors the Better Auth trusted-
- * origin allow-list: releases.sh/.localhost family, operator-configured
- * `BETTER_AUTH_TRUSTED_ORIGINS` (exact or host wildcards), and bare-loopback
- * outside production. Keeping CORS and Better Auth in lockstep means a first-
- * party browser never clears one check and fails the other.
+ * credentials). Same allow-list as Better Auth: releases family, operator
+ * `BETTER_AUTH_TRUSTED_ORIGINS`, loopback off-prod.
  */
 export function isTrustedCorsOrigin(
   origin: string,
@@ -718,19 +707,10 @@ export function isTrustedCorsOrigin(
 }
 
 /**
- * Single worker-wide CORS policy (#2205). Keyed on **origin**, not path:
- *
- *  • trusted first-party origin → reflect it + credentials (session cookies)
- *  • any other Origin → `Access-Control-Allow-Origin: *` (public read API)
- *  • no Origin → no CORS headers (non-browser / same-origin)
- *
- * Browsers forbid `*` with credentials, so untrusted sites can never read
- * cookie-authed responses even though public routes stay open. New session-
- * cookie browser surfaces need no CORS registration — only the trusted-origin
- * list (already shared with Better Auth).
- *
- * Replaces the dual stack (credentialed path carve-outs + wildcard public
- * `cors()`) that missed listing claim in prod.
+ * Worker-wide CORS (#2205), keyed on origin not path:
+ * trusted first-party → reflect + credentials; else → `*` (no credentials);
+ * no Origin → no CORS headers. New session-cookie browser surfaces need no
+ * registration — only the trusted-origin list shared with Better Auth.
  */
 export function apiCorsMiddleware(): MiddlewareHandler<Env> {
   return async (c, next) => {
@@ -746,26 +726,20 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
     }
 
     if (c.req.method === "OPTIONS") {
-      c.header("Access-Control-Allow-Methods", API_CORS_ALLOW_METHODS);
-      c.header("Access-Control-Max-Age", API_CORS_MAX_AGE);
-      // Always allow the auth/sentinel set; also reflect any preflight-requested
-      // headers so public API clients are not blocked on custom ones.
+      c.header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
+      c.header("Access-Control-Max-Age", "600");
       const requested = c.req.header("Access-Control-Request-Headers");
-      const allowed = new Set<string>(AUTH_CORS_ALLOWED_HEADERS.map((h) => h.toLowerCase()));
-      if (requested) {
-        for (const h of requested.split(/\s*,\s*/)) {
-          if (h) allowed.add(h.toLowerCase());
-        }
-      }
-      c.header("Access-Control-Allow-Headers", [...allowed].join(", "));
+      const headers = requested
+        ? [
+            ...new Set([
+              ...AUTH_CORS_ALLOWED_HEADERS,
+              ...requested.split(/\s*,\s*/).filter(Boolean),
+            ]),
+          ]
+        : [...AUTH_CORS_ALLOWED_HEADERS];
+      c.header("Access-Control-Allow-Headers", headers.join(", "));
       c.header("Vary", "Access-Control-Request-Headers", { append: true });
-      c.res.headers.delete("Content-Length");
-      c.res.headers.delete("Content-Type");
-      return new Response(null, {
-        status: 204,
-        statusText: "No Content",
-        headers: c.res.headers,
-      });
+      return c.body(null, 204);
     }
 
     await next();
