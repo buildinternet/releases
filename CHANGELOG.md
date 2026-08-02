@@ -3,6 +3,16 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 31, 2026
+
+**Added**
+- Self-serve listing: verified owners now receive a confirmation email when their domain claim is first accepted. The claim panel shows promotion eligibility tier (live feed/GitHub/App Store vs. queued page/file scan) when promotion is available, or a status note when it isn't — no more dead "Enable tracking" button.
+
+**Fixed**
+- Several browser-side flows — signing in, domain ownership claim, and listing promote — were failing due to CORS gaps; all resolved.
+- Broken media thumbnails now hide cleanly instead of leaving jagged icons, orphaned play badges, or empty click targets on cards across the feed, search, collections, and live stream.
+- `/docs/api/errors` now loads — the sidebar link existed but the page route was missing.
+
 ## July 30, 2026
 
 **Changed**
