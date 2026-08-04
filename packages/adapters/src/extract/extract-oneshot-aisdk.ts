@@ -29,6 +29,7 @@ import {
   modelAcceptsTemperature,
 } from "./shared.js";
 import type { ExtractedEntry, ExtractLogger } from "./types.js";
+import { agentTelemetry } from "../agent-telemetry.js";
 
 /** Same shape as `extract-with-tools-aisdk.ts`'s `EPHEMERAL` — duplicated locally
  *  rather than shared because it's a two-line literal and the two files are
@@ -54,6 +55,8 @@ export interface OneShotAiSdkOpts {
   userMessage: string;
   maxOutputTokens: number;
   preserveBody?: boolean;
+  /** Typed source id for Agents traces only. */
+  sourceId?: string;
 }
 
 export interface OneShotAiSdkResult {
@@ -94,6 +97,7 @@ export async function runOneShotAiSdk(
     // Opus 4.7+ / Fable, which 400 on it. Mirrors the legacy runOneShot gate.
     ...(modelAcceptsTemperature(deps.modelLabel) ? { temperature: EXTRACTION_TEMPERATURE } : {}),
     maxOutputTokens: opts.maxOutputTokens,
+    ...agentTelemetry({ functionId: "extract-oneshot", sourceId: opts.sourceId }),
   });
 
   const usage = result.usage;

@@ -127,11 +127,6 @@ export async function regenerateOverviewChunk(
   let generated = 0;
   let skipped = 0;
   const failedSlugs: string[] = [];
-  const genOpts: GenerateOverviewOptions = {
-    timeoutMs: resolved.timeoutMs,
-    onUsage: resolved.onUsage,
-  };
-
   for (const c of candidates) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- per-org sequential: D1 + one LLM call each
@@ -140,6 +135,12 @@ export async function regenerateOverviewChunk(
         skipped++;
         continue;
       }
+      // Per-org conversation id groups overview turns in the Agents dashboard.
+      const genOpts: GenerateOverviewOptions = {
+        timeoutMs: resolved.timeoutMs,
+        onUsage: resolved.onUsage,
+        conversationId: c.orgSlug,
+      };
       // oxlint-disable-next-line no-await-in-loop
       const { body, citations, truncated } = await generateOverviewWithRetry(
         resolved.model,

@@ -28,6 +28,7 @@
     "./extract/types": "./src/extract/types.ts",
     "./extract/aisdk": "./src/extract/extract-with-tools-aisdk.ts",
     "./lane-model": "./src/lane-model.ts",
+    "./agent-telemetry": "./src/agent-telemetry.ts",
     "./github-probe": "./src/github-probe.ts",
     "./scrape-fetch": "./src/scrape-fetch.ts",
     "./scrape-persister": "./src/scrape-persister.ts",

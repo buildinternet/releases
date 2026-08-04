@@ -61,6 +61,8 @@ export interface MarketingClassifierInput {
   url: string | null;
   /** Optional per-source hint from `SourceMetadata.marketingFilterHint`. */
   hint?: string | null;
+  /** Typed source id for Agents traces only — not included in the model prompt. */
+  sourceId?: string;
 }
 
 export type MarketingClassifierUsage = TextModelUsage;
@@ -182,6 +184,7 @@ export async function classifyMarketing(
     user: buildClassifierInput(input),
     maxTokens: MAX_OUTPUT_TOKENS,
     cacheSystem: true,
+    sourceId: input.sourceId,
   });
 
   const verdict = parseMarketingVerdict(raw);

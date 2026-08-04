@@ -4,6 +4,7 @@
  */
 
 import { generateText, type LanguageModel } from "ai";
+import { agentTelemetry } from "./agent-telemetry";
 import type { TextModel, TextModelRequest, TextModelResult } from "./text-model";
 
 const EPHEMERAL = { anthropic: { cacheControl: { type: "ephemeral" } } } as const;
@@ -31,6 +32,11 @@ function usageFromGenerateText(
 export interface AisdkTextModelOpts {
   /** Per-call timeout (ms) passed to `AbortSignal.timeout`. */
   timeoutMs?: number;
+  /**
+   * Cloudflare Agents dashboard lane name (`gen_ai.agent.name`). Prefer the
+   * same string as OpenRouter Broadcast `generationName` / `ai_usage.lane`.
+   */
+  functionId?: string;
 }
 
 /** Wrap a ready `LanguageModel` as a `TextModel` for the cheap-call lane helpers. */
@@ -53,6 +59,14 @@ export function aisdkTextModel(
         // internal SDK retries would amplify cost and stall workflow tests.
         maxRetries: 0,
         ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+        ...(opts?.functionId
+          ? agentTelemetry({
+              functionId: opts.functionId,
+              conversationId: req.conversationId,
+              sourceId: req.sourceId,
+              releaseId: req.releaseId,
+            })
+          : {}),
       });
       return { text: res.text, usage: usageFromGenerateText(res) };
     },

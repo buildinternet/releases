@@ -11,6 +11,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { generateText, Output, parsePartialJson, type LanguageModel } from "ai";
 import { z } from "zod";
+import { agentTelemetry } from "./agent-telemetry";
 import {
   resolveOverviewCitations,
   type PostHocExtraction,
@@ -341,6 +342,11 @@ export interface GenerateOverviewOptions {
   timeoutMs?: number;
   /** Called once per model call with its token usage, for `ai_usage` logging. */
   onUsage?: (usage: OverviewCallUsage) => void;
+  /**
+   * Optional per-org conversation id for Cloudflare Agents traces
+   * (`gen_ai.conversation.id`). Prefer the org slug or id — never PII.
+   */
+  conversationId?: string;
 }
 
 /** Best-effort extract of OpenRouter's reported cost from provider metadata (undefined for Anthropic). */
@@ -407,6 +413,7 @@ export async function generateOverview(
       // attempt on transient errors), preserving the lane's billed-call budget.
       maxRetries: 0,
       ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+      ...agentTelemetry({ functionId: "org-overview", conversationId: opts?.conversationId }),
     });
     opts?.onUsage?.({
       inputTokens: res.usage.inputTokens ?? 0,

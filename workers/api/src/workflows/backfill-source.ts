@@ -281,6 +281,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
                 userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
                 sourceUrl: source.url,
                 fetchUrl: source.url,
+                sourceId,
               },
               extractDeps,
             );

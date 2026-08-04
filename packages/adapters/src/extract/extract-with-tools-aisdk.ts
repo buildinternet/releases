@@ -37,6 +37,7 @@ import {
   type ModelMessage,
   type ToolResultPart,
 } from "ai";
+import { agentTelemetry } from "../agent-telemetry.js";
 import { buildPreview } from "./preview-builder.js";
 import {
   EXTRACTION_TEMPERATURE,
@@ -232,6 +233,7 @@ export async function extractWithToolsAiSdk(
         }
         return { messages };
       },
+      ...agentTelemetry({ functionId: "extract-toolloop", sourceId: opts.sourceId }),
     });
 
   let result: Awaited<ReturnType<typeof run>>;

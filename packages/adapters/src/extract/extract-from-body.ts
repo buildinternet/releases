@@ -45,6 +45,11 @@ export interface ExtractFromBodyOpts {
    * to the one-shot tier (the only tier crawl-target ingest uses). See #1343.
    */
   preserveBody?: boolean;
+  /**
+   * Typed source id (`src_…`) for Cloudflare Agents traces only — not sent to
+   * the model. Callers that have the Source in hand should set this.
+   */
+  sourceId?: string;
 }
 
 export interface ExtractFromBodyResult {
@@ -123,6 +128,7 @@ async function runOneShot(
           userMessage: opts.userMessage,
           maxOutputTokens,
           preserveBody: opts.preserveBody,
+          sourceId: opts.sourceId,
         },
         { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
       );
@@ -279,6 +285,7 @@ export async function extractFromBody(
       sourceUrl: opts.sourceUrl,
       fetchUrl: opts.fetchUrl,
       approxTokens,
+      sourceId: opts.sourceId,
     };
 
     try {

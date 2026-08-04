@@ -94,6 +94,8 @@ export interface ExtractWithToolsOpts {
   sourceUrl: string;
   fetchUrl: string;
   approxTokens?: number;
+  /** Typed source id for Cloudflare Agents traces only (AI-SDK path). */
+  sourceId?: string;
 }
 
 export interface ExtractWithToolsResult {

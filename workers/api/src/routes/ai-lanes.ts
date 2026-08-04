@@ -340,6 +340,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       content: resolvedContent ?? "",
       url: resolvedUrl,
       hint: marketingFilterHint ?? null,
+      sourceId: source?.id,
     };
     const verdict = await runLane(lane, () => classifyMarketing(model, input));
     const { provider, model: modelName } = splitModelId(model.id);
@@ -394,6 +395,8 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       version: release?.version ?? null,
       url: resolvedUrl,
       content: resolvedContent,
+      sourceId: source?.id,
+      releaseId: release?.id,
     };
     const result = await runLane(lane, () => summarizeRelease(model, input));
     const { provider, model: modelName } = splitModelId(model.id);
@@ -451,7 +454,12 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       new ServiceUnavailableError("No text-model provider configured for the feed-enrich lane"),
     );
   }
-  const input = { markdown: resolvedContent, title: resolvedTitle ?? "" };
+  const input = {
+    markdown: resolvedContent,
+    title: resolvedTitle ?? "",
+    sourceId: source?.id,
+    releaseId: release?.id,
+  };
   const result = await runLane(lane, () => extractArticle(model, input));
   const { provider, model: modelName } = splitModelId(model.id);
 

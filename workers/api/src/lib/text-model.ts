@@ -35,12 +35,15 @@ import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { estimateCost } from "@releases/lib/anthropic-pricing";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
+import { ensureAgentTracing } from "./agent-tracing.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
 
 export interface TextModelEnv extends AnthropicEnv {
   /** "production" | "staging" — tags OpenRouter Broadcast traces by environment. */
   ENVIRONMENT?: string;
   FLAGS?: FlagshipBinding;
+  /** Flagship fallback for `agent-trace-payloads-enabled` (message/tool payload recording). */
+  AGENT_TRACE_PAYLOADS_ENABLED?: string;
   OPENROUTER_API_KEY?: SecretBinding;
   OPENROUTER_BASE_URL?: string;
   MARKETING_CLASSIFIER_MODEL?: string;
@@ -134,6 +137,8 @@ async function resolveTextModel(
     timeoutMs?: number;
   },
 ): Promise<TextModel | null> {
+  // Register Cloudflare Agents AI-SDK telemetry (payload flag re-read each call).
+  await ensureAgentTracing(env);
   const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
 
   if (useOpenRouter) {
@@ -158,7 +163,10 @@ async function resolveTextModel(
             },
           }),
           `openrouter:${model}`,
-          opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : undefined,
+          {
+            functionId: opts.generationName,
+            ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+          },
         ),
         opts.generationName,
         env,
@@ -193,7 +201,10 @@ async function resolveTextModel(
         ...(gatewayOpts.gatewayToken ? { gatewayToken: gatewayOpts.gatewayToken } : {}),
       }),
       `anthropic:${opts.anthropicModel}`,
-      opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : undefined,
+      {
+        functionId: opts.generationName,
+        ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+      },
     ),
     opts.generationName,
     env,
@@ -330,6 +341,9 @@ function overviewUsageSink(
 export async function resolveOverviewModel(
   env: TextModelEnv,
 ): Promise<ResolvedOverviewModel | null> {
+  // Overview uses generateText directly (not aisdkTextModel) — still needs the
+  // global Agents telemetry registration for spans to land in the dashboard.
+  await ensureAgentTracing(env);
   const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
 
   if (useOpenRouter) {

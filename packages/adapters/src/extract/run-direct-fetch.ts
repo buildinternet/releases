@@ -113,6 +113,7 @@ export async function runDirectFetchExtraction(
       guidance: opts.guidance,
       sourceUrl: source.url,
       fetchUrl: opts.fetchUrl,
+      sourceId: source.id,
       useToolLoop:
         deps.extractToolLoopEnabled || getSourceMeta(source).extractStrategy === "toolloop",
     },
