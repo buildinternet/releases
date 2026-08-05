@@ -152,7 +152,7 @@ describe("resolveSummarizeModel — model var is the per-lane gate", () => {
   it("on the OpenRouter path, disables reasoning and excludes GMICloud (#1633)", async () => {
     const env = baseEnv({
       FLAGS: flagsBinding({ "openrouter-enabled": true }),
-      SUMMARIZE_MODEL: "deepseek/deepseek-v4-flash",
+      SUMMARIZE_MODEL: "~deepseek/deepseek-v4-flash-latest",
     });
     const body = await captureOpenRouterBody(resolveSummarizeModel, env);
     expect(body.reasoning).toEqual({ enabled: false });

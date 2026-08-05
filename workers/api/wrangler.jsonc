@@ -123,7 +123,9 @@
     // token budget is not spent thinking, and exclude the GMICloud provider whose
     // DeepSeek latency is an outlier. (Prior baseline: gemini-2.5-flash-lite, set
     // per the #1469 release-content eval.)
-    "SUMMARIZE_MODEL": "deepseek/deepseek-v4-flash",
+    // `~…-latest` is OpenRouter's rolling alias so we pick up the current Flash
+    // snapshot without a redeploy on each DeepSeek revision.
+    "SUMMARIZE_MODEL": "~deepseek/deepseek-v4-flash-latest",
     // OpenRouter model for the large-body EXTRACTION tool-loop (issue #1536).
     // Consulted only when `openrouter-enabled` is on; empty → extraction stays on
     // Anthropic (fail-open). OPENROUTER_API_KEY is already bound below.
@@ -139,7 +141,8 @@
     // shell-page detection and does not truncate (verified on a long-changelog
     // fixture). The async Message-Batches enrichment path is unaffected (always
     // Anthropic; OpenRouter has no Batches API).
-    "FEED_ENRICH_MODEL": "deepseek/deepseek-v4-flash",
+    // Rolling Flash alias — see SUMMARIZE_MODEL note above.
+    "FEED_ENRICH_MODEL": "~deepseek/deepseek-v4-flash-latest",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
@@ -757,17 +760,18 @@
         // `openrouter-enabled` flag. Mirrors prod.
         "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
         // OpenRouter cheap-call model for the live summarizer + collection daily
-        // summaries; gated by the `openrouter-enabled` flag. deepseek-v4-flash per
-        // the #1633 bench (reasoning disabled + GMICloud excluded by the summarize
-        // lanes); empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
-        "SUMMARIZE_MODEL": "deepseek/deepseek-v4-flash",
+        // summaries; gated by the `openrouter-enabled` flag. Rolling Flash alias
+        // (`~…-latest`) per the #1633 bench (reasoning disabled + GMICloud
+        // excluded by the summarize lanes); empty → stays on Anthropic Haiku
+        // (fail-open). Mirrors prod.
+        "SUMMARIZE_MODEL": "~deepseek/deepseek-v4-flash-latest",
         // OpenRouter extraction model (issue #1536); gated by `openrouter-enabled`.
         // Empty → stays on Anthropic (fail-open). Mirrors prod.
         "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
         // OpenRouter feed-enrichment article model; gated by `openrouter-enabled`.
-        // deepseek-v4-flash per the article-extract eval. Empty → Anthropic Haiku
-        // (fail-open). Mirrors prod.
-        "FEED_ENRICH_MODEL": "deepseek/deepseek-v4-flash",
+        // Rolling Flash alias per the article-extract eval. Empty → Anthropic
+        // Haiku (fail-open). Mirrors prod.
+        "FEED_ENRICH_MODEL": "~deepseek/deepseek-v4-flash-latest",
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
         "BATCH_SUMMARIZE_ENABLED": "false",
         "BATCH_SUMMARIZE_MAX_COST_USD": "10",

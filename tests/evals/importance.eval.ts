@@ -2,7 +2,7 @@
  * Importance-score regression eval. LOCAL, AD-HOC ONLY — calls the real
  * Anthropic API (or an OpenRouter candidate). Run:
  *   bun run eval:importance                                        # Anthropic baseline (Haiku)
- *   EVAL_OPENROUTER_MODEL=deepseek/deepseek-v4-flash bun run eval:importance   # prod live lane
+ *   EVAL_OPENROUTER_MODEL=~deepseek/deepseek-v4-flash-latest bun run eval:importance   # prod live lane
  *
  * Never part of `bun test`. The score is produced by the SAME `summarizeRelease`
  * call as title/summary/breaking (no extra request), so this runs each fixture

@@ -32,8 +32,8 @@ function buildEnv(): PollAndFetchWorkflowEnv {
     OPENROUTER_API_KEY: secret("sk-or-test"),
     OPENROUTER_BASE_URL: "https://openrouter.example/api/v1",
     MARKETING_CLASSIFIER_MODEL: "google/gemini-2.5-flash-lite",
-    FEED_ENRICH_MODEL: "deepseek/deepseek-v4-flash",
-    SUMMARIZE_MODEL: "deepseek/deepseek-v4-flash",
+    FEED_ENRICH_MODEL: "~deepseek/deepseek-v4-flash-latest",
+    SUMMARIZE_MODEL: "~deepseek/deepseek-v4-flash-latest",
     EXTRACT_MODEL: "deepseek/deepseek-v4-pro",
     WEB_SERVICE_KEY: secret("web-service-key"),
     WEB_BASE_URL: "https://releases.sh",
@@ -80,8 +80,8 @@ describe("resolveFetchEnv (poll-and-fetch workflow)", () => {
   it("forwards every per-lane OpenRouter model var", async () => {
     const fetchEnv = await resolveFetchEnv(buildEnv());
     expect(fetchEnv.MARKETING_CLASSIFIER_MODEL).toBe("google/gemini-2.5-flash-lite");
-    expect(fetchEnv.FEED_ENRICH_MODEL).toBe("deepseek/deepseek-v4-flash");
-    expect(fetchEnv.SUMMARIZE_MODEL).toBe("deepseek/deepseek-v4-flash");
+    expect(fetchEnv.FEED_ENRICH_MODEL).toBe("~deepseek/deepseek-v4-flash-latest");
+    expect(fetchEnv.SUMMARIZE_MODEL).toBe("~deepseek/deepseek-v4-flash-latest");
     expect(fetchEnv.EXTRACT_MODEL).toBe("deepseek/deepseek-v4-pro");
   });
 

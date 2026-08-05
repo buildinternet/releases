@@ -185,7 +185,7 @@ describe("openRouterChat", () => {
     await openRouterChat(
       {
         apiKey: "k",
-        model: "deepseek/deepseek-v4-flash",
+        model: "~deepseek/deepseek-v4-flash-latest",
         reasoning: { enabled: false },
         provider: { ignore: ["gmicloud"] },
       },
