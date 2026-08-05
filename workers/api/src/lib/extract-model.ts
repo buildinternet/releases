@@ -11,10 +11,12 @@ import {
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
+import { ensureAgentTracing } from "./agent-tracing.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
 
 export interface ExtractModelEnv extends AnthropicEnv {
   FLAGS?: FlagshipBinding;
+  AGENT_TRACE_PAYLOADS_ENABLED?: string;
   OPENROUTER_ENABLED?: string;
   OPENROUTER_API_KEY?: SecretBinding;
   OPENROUTER_BASE_URL?: string;
@@ -31,6 +33,9 @@ export async function resolveExtractAiSdkModel(
   env: ExtractModelEnv,
   anthropicModel: string,
 ): Promise<ResolvedExtractAiSdkModel | undefined> {
+  // Extract one-shot + tool-loop both call generateText — register Agents
+  // telemetry so those spans show up under the Agents dashboard.
+  await ensureAgentTracing(env);
   let openrouterEnabled = false;
   let openRouterApiKey: string | null = null;
   try {

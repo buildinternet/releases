@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
+    "agents": "^0.20.1",
     "@better-auth/api-key": "^1.6.25",
     "@better-auth/core": "^1.6.25",
     "@better-auth/infra": "^0.3.7",

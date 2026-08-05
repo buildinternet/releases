@@ -254,6 +254,8 @@ export async function generateContentForReleases(
         version: row.version,
         url: row.url,
         content: row.content,
+        sourceId: source.id,
+        releaseId: row.id,
       });
       totalTokens +=
         result.usage.input +

@@ -261,6 +261,18 @@ export const FLAGS = {
     description:
       "Single switch for the secondary cheap-call AI lanes (marketing classifier, summarizer, feed-enrich, large-body extract). On = lanes with an OpenRouter model var route to OpenRouter; off = Anthropic Haiku.",
   },
+  // Off by default: span payloads can be large (release bodies) and count as
+  // Workers Observability events. Flip on briefly when debugging a bad tool
+  // call / model decision in the Agents dashboard, then flip off.
+  agentTracePayloadsEnabled: {
+    key: "agent-trace-payloads-enabled",
+    env: "AGENT_TRACE_PAYLOADS_ENABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description:
+      "Record message + tool payloads on Cloudflare Agents AI-SDK spans (session replay). Off = metadata-only spans (tokens, model, duration). Leave off unless actively debugging.",
+  },
   // default:false → the nightly sweep runs in OBSERVE-ONLY mode (logs candidates
   // without deleting) so you can watch what it would purge in Axiom first.
   oauthClientReaperEnabled: {

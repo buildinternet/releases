@@ -1275,6 +1275,7 @@ async function classifyMarketingForReleases(
           content: raw.content,
           url: raw.url ?? null,
           hint: meta.marketingFilterHint ?? null,
+          sourceId: source.id,
         });
         inputTokens += verdict.usage.input;
         cacheCreateTokens += verdict.usage.cacheCreate;

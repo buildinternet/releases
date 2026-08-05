@@ -1388,7 +1388,13 @@ interface EnrichBackfillOpts {
 }
 
 interface EnrichBackfillDeps {
-  enrichFn: (item: { url: string; title: string; summary: string }) => Promise<EnrichResult>;
+  enrichFn: (item: {
+    url: string;
+    title: string;
+    summary: string;
+    sourceId?: string;
+    releaseId?: string;
+  }) => Promise<EnrichResult>;
   regenerate: (ids: string[]) => Promise<void>;
 }
 
@@ -1425,7 +1431,13 @@ export async function runEnrichBackfill(
   for (const row of candidates) {
     const attemptedAt = new Date().toISOString();
     // oxlint-disable-next-line no-await-in-loop -- bounded by `limit`
-    const res = await deps.enrichFn({ url: row.url!, title: row.title, summary: row.content });
+    const res = await deps.enrichFn({
+      url: row.url!,
+      title: row.title,
+      summary: row.content,
+      sourceId,
+      releaseId: row.id,
+    });
     if (res.status !== "enriched" || !res.content) {
       report.skipped++;
       // oxlint-disable-next-line no-await-in-loop

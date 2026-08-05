@@ -143,3 +143,14 @@ describe("openrouterEnabled flag", () => {
     });
   });
 });
+
+describe("agentTracePayloadsEnabled flag", () => {
+  it("is registered off by default (payloads are an explicit debug lever)", () => {
+    expect(FLAGS.agentTracePayloadsEnabled).toMatchObject({
+      key: "agent-trace-payloads-enabled",
+      env: "AGENT_TRACE_PAYLOADS_ENABLED",
+      default: false,
+      kind: "kill-switch",
+    });
+  });
+});

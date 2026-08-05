@@ -26,6 +26,14 @@ export interface TextModelRequest {
    * (Anthropic ephemeral block). Silently ignored by the OpenRouter adapter.
    */
   cacheSystem?: boolean;
+  /**
+   * Cloudflare Agents trace correlation — typed entity ids only (`src_…` /
+   * `rel_…`), never PII. Mapped onto `gen_ai.conversation.id` + runtime_context.
+   */
+  sourceId?: string;
+  releaseId?: string;
+  /** Override conversation id; defaults to releaseId then sourceId. */
+  conversationId?: string;
 }
 
 export interface TextModelResult {

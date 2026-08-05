@@ -59,6 +59,26 @@ Two routing modes:
 
 Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) are configured in the Cloudflare dashboard, not in this repo. This PR is passthrough only: flip the env var and telemetry starts flowing. Per-route cache config and provider fallbacks land in follow-up changes once there's a week of baseline metrics.
 
+## Cloudflare Agents tracing (AI SDK)
+
+Worker-side AI SDK calls (`generateText` in extract, cheap-call lanes, org overviews) emit **agent-aware spans** into Workers Observability when:
+
+1. `observability.traces.enabled` is on in wrangler (already set for api/mcp/discovery/webhooks, exporting to `axiom-traces`), and
+2. the API worker registers `createAISDKTelemetry()` from `agents/observability/ai` (`workers/api/src/lib/agent-tracing.ts`, invoked from the model resolvers; re-evaluated per call so Flagship flips take effect mid-isolate).
+
+Each call tags a lane via AI SDK v7 `telemetry.functionId` + `runtimeContext` (`@releases/adapters/agent-telemetry`, re-exported as `@releases/ai-internal/agent-telemetry`):
+
+| Attribute                                                  | Source                                                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `gen_ai.agent.name`                                        | Lane `functionId` (`marketing-classifier`, `summarize-release`, `extract-oneshot`, …) |
+| `gen_ai.agent.id`                                          | `releases-api`                                                                        |
+| `gen_ai.conversation.id`                                   | Prefer `releaseId`, else `sourceId` (or org slug for overviews)                       |
+| `cloudflare.agents.runtime_context.sourceId` / `releaseId` | Typed entity ids when the caller has them                                             |
+
+**Payload recording** (message + tool args/results for session replay) is gated by Flagship kill switch **`agent-trace-payloads-enabled`** (default **off**; wrangler fallback `AGENT_TRACE_PAYLOADS_ENABLED`). Leave it off — release bodies already live in D1 and payload spans burn observability events. Flip on briefly when debugging a bad tool call / model decision in the Agents dashboard, then flip off. Create the key in **both** Flagship apps (`releases-platform` + `releases-platform-staging`) per the feature-flag convention.
+
+Inspect traces in the [Agents dashboard](https://dash.cloudflare.com/?to=/:account/agents) (session replay + waterfall) or the existing Axiom OTLP destination. **Anthropic managed agents** (discovery/worker sessions) do **not** appear here — they run on Anthropic infra; their cost stays on StatusHub / the Anthropic console / AI Gateway as before. Agent tracing is free while in beta; after 2026-10-01 it rides Workers Observability event pricing.
+
 ## OpenRouter Broadcast observability
 
 The cheap-call OpenRouter lanes (marketing classifier, live summarizer, feed-enrichment article extractor — see [`packages/ai/src/text-model.ts`](../../packages/ai/src/text-model.ts)) attach optional **Broadcast** trace tags to every request via `OpenRouterTrace` on `openRouterChat`. Broadcast is OpenRouter's account-level observability side-channel: it forwards a copy of each traced request (tokens, cost, latency, model, and our tags) to a configured destination. It is **not** provider fan-out, and it adds no per-call latency (forwarding is server-side, after the response returns).

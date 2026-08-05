@@ -451,6 +451,12 @@ export interface SummarizeReleaseInput {
   /** Canonical release URL. `releases.url` is nullable in the schema, so callers may omit it. */
   url: string | null;
   content: string;
+  /**
+   * Optional typed ids for Cloudflare Agents traces only — NOT included in the
+   * model prompt. Prefer both when known so the Agents dashboard can filter.
+   */
+  sourceId?: string;
+  releaseId?: string;
 }
 
 export interface ReleaseContentUsage {
@@ -707,6 +713,8 @@ export async function summarizeRelease(
     user: releaseBlock,
     maxTokens: MAX_OUTPUT_TOKENS,
     cacheSystem: true,
+    sourceId: input.sourceId,
+    releaseId: input.releaseId,
   });
 
   return {

@@ -92,13 +92,21 @@ export function parseArticleResponse(raw: string): string {
 
 export async function extractArticle(
   model: TextModel,
-  args: { markdown: string; title: string },
+  args: {
+    markdown: string;
+    title: string;
+    /** Typed ids for Agents traces only — not included in the model prompt. */
+    sourceId?: string;
+    releaseId?: string;
+  },
 ): Promise<{ content: string; usage: ArticleExtractUsage }> {
   const { text: raw, usage } = await model.complete({
     system: SYSTEM_PROMPT,
     user: buildArticleInput({ markdown: args.markdown, title: args.title }),
     maxTokens: MAX_OUTPUT_TOKENS,
     cacheSystem: true,
+    sourceId: args.sourceId,
+    releaseId: args.releaseId,
   });
 
   return { content: parseArticleResponse(raw), usage };

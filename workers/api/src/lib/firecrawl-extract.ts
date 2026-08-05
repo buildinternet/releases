@@ -159,6 +159,7 @@ export async function extractFirecrawlMarkdown(
         : `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
       sourceUrl: source.url,
       fetchUrl: source.url,
+      sourceId: source.id,
       // Pair the body-preserving prompt with the matching tool schema so the
       // tool's `content` field reinforces "verbatim" instead of contradicting it.
       preserveBody: isCrawlPage,
@@ -298,6 +299,7 @@ export async function extractChangelogAllWindows(
         userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
         sourceUrl: source.url,
         fetchUrl: source.url,
+        sourceId: source.id,
       },
       extractDeps,
     );

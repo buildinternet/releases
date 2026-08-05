@@ -53,6 +53,8 @@ export interface EnrichDeps {
   extractArticleFn: (args: {
     markdown: string;
     title: string;
+    sourceId?: string;
+    releaseId?: string;
   }) => Promise<{ content: string; media: ReleaseMedia[] }>;
   /** Rendered-markdown fetch for escalation; `null` when CF creds are not bound. */
   renderFn: ((url: string) => Promise<string | null>) | null;
@@ -70,6 +72,9 @@ export interface EnrichItem {
   url: string;
   title: string;
   summary: string;
+  /** Typed ids for Agents traces on the extractArticle call. */
+  sourceId?: string;
+  releaseId?: string;
 }
 
 /** Local alias for the canonical improvement bar (see `enrichmentFloor`). */
@@ -123,7 +128,12 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
       const html = await res.text();
       clearTimeout(timer);
       const markdown = htmlToMarkdown(html);
-      const { content, media } = await deps.extractArticleFn({ markdown, title: item.title });
+      const { content, media } = await deps.extractArticleFn({
+        markdown,
+        title: item.title,
+        sourceId: item.sourceId,
+        releaseId: item.releaseId,
+      });
       if (content.length >= floor) {
         return { status: "enriched", via: "fetch", content, media };
       }
@@ -147,7 +157,12 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
     try {
       const markdown = await deps.renderFn(item.url);
       if (markdown) {
-        const { content, media } = await deps.extractArticleFn({ markdown, title: item.title });
+        const { content, media } = await deps.extractArticleFn({
+          markdown,
+          title: item.title,
+          sourceId: item.sourceId,
+          releaseId: item.releaseId,
+        });
         if (content.length >= floor) {
           return { status: "enriched", via: "render", content, media };
         }
@@ -176,18 +191,20 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
  *                    the token usage and model. Fail-open: errors are swallowed.
  */
 export function makeExtractArticleFn(
-  runExtract: (
-    markdown: string,
-    title: string,
-  ) => Promise<{ content: string; usage?: ArticleExtractUsage }>,
+  runExtract: (args: {
+    markdown: string;
+    title: string;
+    sourceId?: string;
+    releaseId?: string;
+  }) => Promise<{ content: string; usage?: ArticleExtractUsage }>,
   onUsage?: (usage: ArticleExtractUsage, model: string) => Promise<void>,
   /** Model id recorded on the `usage_log` row. Defaults to the Anthropic Haiku
    *  baseline; `buildEnrichDeps` passes the actually-resolved model (which may
    *  be a cheap OpenRouter model when the lane is switched over). */
   modelId: string = ARTICLE_MODEL,
 ): EnrichDeps["extractArticleFn"] {
-  return async ({ markdown, title }) => {
-    const result = await runExtract(markdown, title);
+  return async (args) => {
+    const result = await runExtract(args);
     if (onUsage && result.usage) {
       try {
         await onUsage(result.usage, modelId);
@@ -243,7 +260,7 @@ export async function buildEnrichDeps(
       : null;
 
   const extractArticleFn = makeExtractArticleFn(
-    (markdown, title) => extractArticle(model, { markdown, title }),
+    (args) => extractArticle(model, args),
     db
       ? (usage, usedModel) =>
           logUsage(
@@ -380,6 +397,8 @@ export async function enrichNewThinItems(
       url: raw.url!,
       title: raw.title,
       summary: raw.content ?? "",
+      // Pre-insert: no release id yet; source id still groups the turn.
+      sourceId: source.id,
     });
     // Treat enriched-without-content as a failure (mirrors runEnrichBackfill):
     // only mark succeeded when there's a real body to apply.

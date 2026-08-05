@@ -177,6 +177,7 @@ export async function runAgentExtraction(
         guidance: opts.guidance,
         sourceUrl: source.url,
         fetchUrl: source.url,
+        sourceId: source.id,
       },
       deps,
     );
@@ -234,6 +235,7 @@ export async function runAgentExtraction(
               guidance: opts.guidance,
               sourceUrl: source.url,
               fetchUrl: source.url,
+              sourceId: source.id,
             },
             deps,
           );

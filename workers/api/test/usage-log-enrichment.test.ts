@@ -70,7 +70,7 @@ describe("usage_log — feed enrichment (enrich-extract)", () => {
           { status: 200, headers: { "content-type": "text/html" } },
         )) as typeof fetch,
       extractArticleFn: makeExtractArticleFn(
-        async (_markdown: string, _title: string) => ({
+        async () => ({
           content:
             "Full article body content that is long enough to clear the improvement bar for enrichment purposes.",
           usage: { input: 50, output: 20, cacheCreate: 0, cacheRead: 5 },
@@ -164,7 +164,7 @@ describe("usage_log — feed enrichment (enrich-extract)", () => {
           { status: 200, headers: { "content-type": "text/html" } },
         )) as typeof fetch,
       extractArticleFn: makeExtractArticleFn(
-        async (_markdown: string, _title: string) => ({
+        async () => ({
           content:
             "Full article body content that is long enough to clear the improvement bar for enrichment purposes in the backfill path.",
           usage: { input: 60, output: 30, cacheCreate: 0, cacheRead: 8 },

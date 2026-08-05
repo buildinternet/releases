@@ -736,6 +736,7 @@ async function runScrapePath(
         guidance,
         sourceUrl: source.url,
         fetchUrl: source.url,
+        sourceId: source.id,
         // Crawl bodies are the largest we extract (multi-page concatenations can
         // run 100K–700K+ tokens), so inlining the whole thing one-shot blows the
         // input budget and routinely maxes the output cap without committing a
@@ -905,6 +906,7 @@ async function runIncrementalWithEscalation(
           guidance,
           sourceUrl: source.url,
           fetchUrl: source.url,
+          sourceId: source.id,
           useToolLoop:
             deps.extractToolLoopEnabled || getSourceMeta(source).extractStrategy === "toolloop",
         },
