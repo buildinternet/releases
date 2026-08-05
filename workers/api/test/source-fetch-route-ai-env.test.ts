@@ -44,10 +44,10 @@ function buildRouteEnv(): Env["Bindings"] {
     CLOUDFLARE_API_TOKEN: secret("cf-token"),
     ENVIRONMENT: "production",
     OPENROUTER_ENABLED: "false",
-    SUMMARIZE_MODEL: "deepseek/deepseek-v4-flash",
+    SUMMARIZE_MODEL: "~deepseek/deepseek-v4-flash-latest",
     EXTRACT_MODEL: "deepseek/deepseek-v4-pro",
     MARKETING_CLASSIFIER_MODEL: "google/gemini-2.5-flash-lite",
-    FEED_ENRICH_MODEL: "deepseek/deepseek-v4-flash",
+    FEED_ENRICH_MODEL: "~deepseek/deepseek-v4-flash-latest",
   } as unknown as Env["Bindings"];
 }
 
@@ -73,8 +73,8 @@ describe("buildFetchOneEnv from the manual-fetch route's Env (#2171)", () => {
   it("forwards the OpenRouter lane vars", async () => {
     const env = buildRouteEnv();
     const fetchEnv = await buildFetchOneEnv(env);
-    expect(fetchEnv.SUMMARIZE_MODEL).toBe("deepseek/deepseek-v4-flash");
-    expect(fetchEnv.FEED_ENRICH_MODEL).toBe("deepseek/deepseek-v4-flash");
+    expect(fetchEnv.SUMMARIZE_MODEL).toBe("~deepseek/deepseek-v4-flash-latest");
+    expect(fetchEnv.FEED_ENRICH_MODEL).toBe("~deepseek/deepseek-v4-flash-latest");
     expect(fetchEnv.MARKETING_CLASSIFIER_MODEL).toBe("google/gemini-2.5-flash-lite");
   });
 });
