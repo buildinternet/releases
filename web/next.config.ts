@@ -35,9 +35,9 @@ const devAllowedOrigins = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, ".."),
   allowedDevOrigins: devAllowedOrigins,
-  experimental: {
-    viewTransition: true,
-  },
+  // Next 16.3 removed the `viewTransition` config flag entirely — the App
+  // Router's <ViewTransition> integration now works with no configuration,
+  // so `experimental.viewTransition` no longer type-checks and isn't needed.
   transpilePackages: [
     "@buildinternet/releases-core",
     "@buildinternet/releases-api-types",
