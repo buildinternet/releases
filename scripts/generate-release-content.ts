@@ -1,31 +1,34 @@
 #!/usr/bin/env bun
 /**
  * Manual release-content generator. Populates `title_generated`,
- * `title_short`, and `summary` on `releases` rows that match a filter,
- * via Anthropic Haiku 4.5 + a single tuned system prompt.
+ * `title_short`, and `summary` on `releases` rows that match a filter.
+ *
+ * Default provider matches production's cheap summarize lane: OpenRouter +
+ * DeepSeek Flash (`~deepseek/deepseek-v4-flash-latest`, overridable via
+ * `SUMMARIZE_MODEL` / `RELEASE_CONTENT_MODEL`). Anthropic Message Batches
+ * (Haiku) remain available as an explicit opt-in for large discounted
+ * backfills — OpenRouter has no Batches API equivalent.
  *
  * This is an operational tool — run as needed, not on a cron. Ingest
  * paths do not call it today. Use it for backfills, ad-hoc patch-ups of
  * specific orgs, or to regenerate after a prompt change.
  *
  * Usage:
- *   bun scripts/generate-release-content.ts                       # prints cost estimate and exits (no API calls)
- *   bun scripts/generate-release-content.ts --apply               # submit batch to Anthropic, write to D1 prod
+ *   bun scripts/generate-release-content.ts                       # cost estimate, no API calls
+ *   bun scripts/generate-release-content.ts --apply               # OpenRouter DeepSeek realtime → D1
  *   bun scripts/generate-release-content.ts --orgs=vercel         # one or more org slugs (comma-sep)
  *   bun scripts/generate-release-content.ts --orgs=all --since=30 # everything in past N days
  *   bun scripts/generate-release-content.ts --apply --since=1
  *   bun scripts/generate-release-content.ts --apply --max-cost=25 # override $10 default ceiling
- *   bun scripts/generate-release-content.ts --apply --no-batch    # fall back to real-time path
+ *   bun scripts/generate-release-content.ts --apply --anthropic-batch  # Anthropic Batches (Haiku, -50%)
+ *   bun scripts/generate-release-content.ts --apply --anthropic         # Anthropic Haiku realtime
  *
- * Without --apply, the script fetches the candidate list, prints the cost estimate, and exits
- * without making any Anthropic API calls (neither batch nor real-time).
+ * `--no-batch` is accepted as a deprecated no-op: realtime is already the
+ * default (OpenRouter). Use `--anthropic` for Anthropic realtime, or
+ * `--anthropic-batch` for the old Batches default.
  *
- * Cost: by default this routes through the Anthropic Message Batches API
- * for a flat 50% discount on input + output (incl. cache). Trade-off is
- * up to ~24h latency — acceptable for a backfill, never for a live feed.
- * Pass `--no-batch` for fast iteration when comparing prompt revisions;
- * that path uses real-time `messages.create` with a CONCURRENCY=5 pool
- * (the historical behavior of this script). See issue #967.
+ * Without --apply, the script fetches the candidate list, prints the cost
+ * estimate, and exits without making provider API calls.
  *
  * Budget guard: before any API calls, the script estimates total cost from
  * candidate count + body sizes and aborts if the estimate exceeds
@@ -50,16 +53,51 @@ import {
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
-import { buildLaneAnthropicModel } from "@releases/adapters/lane-model";
+import { buildLaneAnthropicModel, buildLaneOpenRouterModel } from "@releases/adapters/lane-model";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 import { adminPatch, adminPost } from "./lib/admin-client.js";
 
 const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
 const noBatch = argv.includes("--no-batch");
+const anthropicBatch = argv.includes("--anthropic-batch");
+const anthropicRealtime = argv.includes("--anthropic");
 const orgsArg = argv.find((a) => a.startsWith("--orgs="))?.split("=")[1];
 const sinceArg = argv.find((a) => a.startsWith("--since="))?.split("=")[1];
 const maxCostArg = argv.find((a) => a.startsWith("--max-cost="))?.split("=")[1];
+
+/** Provider path. Default matches prod summarize: OpenRouter DeepSeek Flash realtime. */
+type ProviderPath = "openrouter-realtime" | "anthropic-realtime" | "anthropic-batch";
+function resolveProviderPath(): ProviderPath {
+  if (anthropicBatch && anthropicRealtime) {
+    logger.error("pass only one of --anthropic-batch or --anthropic");
+    process.exit(1);
+  }
+  if (anthropicBatch && noBatch) {
+    logger.error("--no-batch conflicts with --anthropic-batch (realtime vs batches)");
+    process.exit(1);
+  }
+  if (anthropicBatch) return "anthropic-batch";
+  if (anthropicRealtime) return "anthropic-realtime";
+  // Deprecated: --no-batch used to mean "skip Batches → Anthropic realtime".
+  // Batches are no longer the default, so --no-batch alone is a no-op on the
+  // OpenRouter realtime path. Warn once so muscle memory doesn't assume Anthropic.
+  if (noBatch) {
+    logger.warn(
+      "--no-batch is deprecated: realtime OpenRouter is already the default. Use --anthropic for Anthropic Haiku realtime, or --anthropic-batch for Anthropic Batches.",
+    );
+  }
+  return "openrouter-realtime";
+}
+const providerPath = resolveProviderPath();
+const useAnthropicBatch = providerPath === "anthropic-batch";
+
+/** Same rolling alias as workers/api wrangler.jsonc SUMMARIZE_MODEL. */
+const DEFAULT_OPENROUTER_MODEL = "~deepseek/deepseek-v4-flash-latest";
+const openRouterModel =
+  process.env.RELEASE_CONTENT_MODEL?.trim() ||
+  process.env.SUMMARIZE_MODEL?.trim() ||
+  DEFAULT_OPENROUTER_MODEL;
 
 const orgs = !orgsArg
   ? ["openai", "anthropic"]
@@ -89,9 +127,16 @@ if (maxCostArg && (Number.isNaN(maxCostUsd) || maxCostUsd <= 0)) {
   process.exit(1);
 }
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
-if (!apiKey) {
-  logger.error("ANTHROPIC_API_KEY not set");
+const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+if (providerPath.startsWith("anthropic") && !anthropicApiKey) {
+  logger.error("ANTHROPIC_API_KEY not set (required for --anthropic / --anthropic-batch)");
+  process.exit(1);
+}
+if (providerPath === "openrouter-realtime" && !openRouterApiKey) {
+  logger.error(
+    "OPENROUTER_API_KEY not set (default path). Set it, or pass --anthropic / --anthropic-batch for Anthropic.",
+  );
   process.exit(1);
 }
 
@@ -339,7 +384,7 @@ async function runBatch(
 
   logger.info(`submitting batch of ${eligible.length} request${eligible.length === 1 ? "" : "s"}…`);
   const submitted = await submitBatch(
-    client,
+    anthropicClient!,
     eligible.map(({ row, input }) => ({
       custom_id: row.id,
       params: {
@@ -380,7 +425,7 @@ async function runBatch(
   // would be redundant heartbeats. The final "ended" state is logged once
   // unconditionally below, so we don't need to re-emit it here.
   let lastDone = -1;
-  const finalBatch = await pollBatch(client, submitted.id, {
+  const finalBatch = await pollBatch(anthropicClient!, submitted.id, {
     onPoll: (b) => {
       const done =
         b.request_counts.succeeded +
@@ -413,7 +458,7 @@ async function runBatch(
   // Wrapping the SDK type at the boundary keeps the parser exported from
   // release-content.ts free of the wider Anthropic namespace (see comment on
   // parseReleaseContent for the workspace dupe-install rationale).
-  const parsed = await collectResults(client, submitted.id, (message) => {
+  const parsed = await collectResults(anthropicClient!, submitted.id, (message) => {
     const raw = message.content
       .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
       .map((b) => b.text)
@@ -458,21 +503,56 @@ async function runBatch(
   };
 }
 
-// Route through the CF AI Gateway when ANTHROPIC_BASE_URL is set (so this tool's
-// spend is attributed alongside the worker paths); falls back to direct Anthropic
-// when unset, so local runs are unchanged. Same pattern as scripts/run-eval-task.ts.
+// Anthropic path: route through the CF AI Gateway when ANTHROPIC_BASE_URL is set
+// (so spend is attributed alongside the worker paths); falls back to direct
+// Anthropic when unset. Same pattern as scripts/run-eval-task.ts.
 const anthropicGateway = {
   baseURL: process.env.ANTHROPIC_BASE_URL,
   gatewayToken: process.env.AI_GATEWAY_TOKEN,
 };
-const client = buildAnthropicClient({ apiKey, ...anthropicGateway });
-// Real-time path: AI SDK TextModel seam. Batch path: Anthropic Batches API (no OR batch).
-const realtimeModel = aisdkTextModel(
-  buildLaneAnthropicModel({ apiKey, model: MODEL, ...anthropicGateway }),
-  `anthropic:${MODEL}`,
-);
+const anthropicClient = anthropicApiKey
+  ? buildAnthropicClient({ apiKey: anthropicApiKey, ...anthropicGateway })
+  : null;
 
-const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${noBatch ? "real-time" : "batched"})`;
+// Real-time path: AI SDK TextModel seam (OpenRouter default, Anthropic opt-in).
+// Batch path: Anthropic Message Batches API only (--anthropic-batch; no OR batch).
+const realtimeModel =
+  providerPath === "openrouter-realtime"
+    ? aisdkTextModel(
+        buildLaneOpenRouterModel({
+          apiKey: openRouterApiKey!,
+          model: openRouterModel,
+          baseURL: process.env.OPENROUTER_BASE_URL,
+          sessionId: "script-generate-release-content",
+          referer: "https://releases.sh",
+          title: "Releases",
+          // Mirror workers/api resolveSummarizeModel: don't burn the small
+          // output budget on CoT; skip outlier DeepSeek latency via gmicloud.
+          providerPrefs: { ignore: ["gmicloud"] },
+          reasoning: { enabled: false },
+          trace: {
+            generationName: "script-generate-release-content",
+            environment: process.env.ENVIRONMENT,
+          },
+        }),
+        `openrouter:${openRouterModel}`,
+      )
+    : aisdkTextModel(
+        buildLaneAnthropicModel({
+          apiKey: anthropicApiKey!,
+          model: MODEL,
+          ...anthropicGateway,
+        }),
+        `anthropic:${MODEL}`,
+      );
+
+const pathLabel =
+  providerPath === "openrouter-realtime"
+    ? `openrouter realtime (${openRouterModel})`
+    : providerPath === "anthropic-batch"
+      ? `anthropic batch (${MODEL})`
+      : `anthropic realtime (${MODEL})`;
+const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${pathLabel})`;
 
 logger.info(`mode: ${mode}`);
 logger.info(`orgs: ${orgs ? orgs.join(",") : "all"}`);
@@ -489,24 +569,34 @@ logger.info(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
 // requests inside one batch submission share the cached system prompt too.
 const estInputTokens = rows.reduce((sum, r) => sum + 4000 + Math.ceil(r.content.length / 4), 0);
 const estOutputTokens = rows.length * 300;
-const estCost = estimateCost(
-  { inputTokens: estInputTokens, outputTokens: estOutputTokens },
-  MODEL,
-  { batch: !noBatch },
-);
-const estCostUsd = estCost?.totalUsd ?? 0;
-logger.info(
-  `estimated cost: $${estCostUsd.toFixed(4)} (${estInputTokens.toLocaleString()} input + ${estOutputTokens.toLocaleString()} output tokens${noBatch ? "" : ", batch -50%"})`,
-);
+let estCostUsd = 0;
+let estCostLabel = "";
+if (useAnthropicBatch || providerPath === "anthropic-realtime") {
+  const estCost = estimateCost(
+    { inputTokens: estInputTokens, outputTokens: estOutputTokens },
+    MODEL,
+    { batch: useAnthropicBatch },
+  );
+  estCostUsd = estCost?.totalUsd ?? 0;
+  estCostLabel = useAnthropicBatch
+    ? `Haiku 4.5 batch -50%; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`
+    : `Haiku 4.5 list; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`;
+} else {
+  // OpenRouter DeepSeek Flash rough list estimate for the budget guard.
+  // Actual billed cost comes from OpenRouter; this is intentionally approximate.
+  estCostUsd = (estInputTokens / 1e6) * 0.15 + (estOutputTokens / 1e6) * 0.6;
+  estCostLabel = `OpenRouter ${openRouterModel} rough list; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`;
+}
+logger.info(`estimated cost: ${estCostUsd.toFixed(4)} (${estCostLabel})`);
 if (estCostUsd > maxCostUsd) {
   logger.error(
-    `estimated cost $${estCostUsd.toFixed(2)} exceeds --max-cost $${maxCostUsd.toFixed(2)}; re-run with a higher --max-cost or narrow --orgs/--since`,
+    `estimated cost ${estCostUsd.toFixed(2)} exceeds --max-cost ${maxCostUsd.toFixed(2)}; re-run with a higher --max-cost or narrow --orgs/--since`,
   );
   process.exit(1);
 }
 
 if (!apply) {
-  logger.info(`pass --apply to run (${noBatch ? "real-time" : "batch"} path); no API calls made`);
+  logger.info(`pass --apply to run (${pathLabel}); no API calls made`);
   process.exit(0);
 }
 
@@ -514,14 +604,18 @@ let batchRunId: string | null = null;
 let batchFinalExpired = 0;
 let batchFinalCanceled = 0;
 let perRow: PerRow[];
-if (noBatch) {
-  perRow = await runRealtime(rows);
-} else {
+if (useAnthropicBatch) {
+  if (!anthropicClient) {
+    logger.error("ANTHROPIC_API_KEY not set");
+    process.exit(1);
+  }
   const result = await runBatch(rows, { estCostUsd });
   perRow = result.perRow;
   batchRunId = result.batchRunId;
   batchFinalExpired = result.finalExpired;
   batchFinalCanceled = result.finalCanceled;
+} else {
+  perRow = await runRealtime(rows);
 }
 
 let totalInput = 0;
@@ -597,16 +691,32 @@ for (const entry of perRow) {
 await pool(pendingWrites, CONCURRENCY, writeRow);
 written = pendingWrites.length;
 
-const finalCost = estimateCost(
-  {
-    inputTokens: totalInput,
-    cacheWriteTokens: totalCacheCreate,
-    cacheReadTokens: totalCacheRead,
-    outputTokens: totalOutput,
-  },
-  MODEL,
-  { batch: !noBatch },
-);
+const finalCost =
+  useAnthropicBatch || providerPath === "anthropic-realtime"
+    ? estimateCost(
+        {
+          inputTokens: totalInput,
+          cacheWriteTokens: totalCacheCreate,
+          cacheReadTokens: totalCacheRead,
+          outputTokens: totalOutput,
+        },
+        MODEL,
+        { batch: useAnthropicBatch },
+      )
+    : {
+        totalUsd:
+          (totalInput / 1e6) * 0.15 +
+          (totalCacheCreate / 1e6) * 0.15 +
+          (totalCacheRead / 1e6) * 0.015 +
+          (totalOutput / 1e6) * 0.6,
+      };
+
+const finalCostLabel =
+  providerPath === "openrouter-realtime"
+    ? `OpenRouter ${openRouterModel} rough list`
+    : useAnthropicBatch
+      ? "Haiku 4.5 batch price = list x 0.5"
+      : "Haiku 4.5 list price";
 
 logger.info(
   `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}, skipped ${skippedEmpty} empty-body, failed ${failed}`,
@@ -614,9 +724,7 @@ logger.info(
 logger.info(
   `tokens: ${totalInput} in (cache create ${totalCacheCreate}, cache read ${totalCacheRead}), ${totalOutput} out`,
 );
-logger.info(
-  `est cost: $${(finalCost?.totalUsd ?? 0).toFixed(4)} (Haiku 4.5${noBatch ? " list price" : " batch price = list × 0.5"})`,
-);
+logger.info(`est cost: $${(finalCost?.totalUsd ?? 0).toFixed(4)} (${finalCostLabel})`);
 
 // Finalize the batch_runs row. actualCostUsd = null when zero requests ran
 // (batch expired/canceled entirely); otherwise sum of succeeded requests' cost.
