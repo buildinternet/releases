@@ -3,10 +3,12 @@ name: generating-release-content
 description: >
   Generate the AI fields on releases — `title_generated`, `title_short`,
   `summary`, and `composition` — for one release, a window, or a backfill,
-  via Claude Code sub-agents and direct SDK calls. Use when iterating on
-  prompts, running provider/model experiments, or filling in a
-  small-to-medium backfill outside the production ingest path or the
-  Batches API. (Managed agents can spawn sub-agents now too; the dispatch
+  via Claude Code sub-agents and direct SDK calls (OpenRouter/DeepSeek to
+  match production summarize). Use when iterating on prompts, running
+  provider/model experiments, or filling in a small-to-medium backfill
+  outside the production ingest path. Large backfills: prefer
+  scripts/generate-release-content.ts (OpenRouter by default; Anthropic
+  Batches via --anthropic-batch). (Managed agents can spawn sub-agents now too; the dispatch
   scaffolding for this skill just isn't wired up on that side yet.)
 ---
 
@@ -25,7 +27,7 @@ The fields are the same whether you're generating for the first time or rewritin
 
 ## Prompt is canonical in code, not in this skill
 
-The system prompt and all parsing rules live in `packages/ai/src/release-content.ts`. Read it directly; do **not** paraphrase it back into the user message. The same module is consumed by the ingest worker (`workers/api/src/workflows/poll-and-fetch.ts`), the Batches script (`scripts/generate-release-content.ts`), and this skill, so any drift between local-agent output and ingest-time output starts there.
+The system prompt and all parsing rules live in `packages/ai/src/release-content.ts`. Read it directly; do **not** paraphrase it back into the user message. The same module is consumed by the ingest worker (`workers/api/src/workflows/poll-and-fetch.ts`), the backfill script (`scripts/generate-release-content.ts`, OpenRouter by default), and this skill, so any drift between local-agent output and ingest-time output starts there.
 
 Re-export from that file:
 
@@ -33,7 +35,7 @@ Re-export from that file:
 - `buildReleaseBlock(input)` — build the user message body from a `SummarizeReleaseInput` (org slug, source name, product name, title, version, url, content)
 - `isEmptyContent(body)` — short-circuit boilerplate-only bodies; skip the model and write NULLs
 - `parseReleaseContent(text)` — pull `<title>`, `<title_short>`, `<summary>`, `<composition>` (plus `<breaking>`/`<migration>`, which this skill's write paths drop — see above) out of a response
-- `MODEL` (`claude-haiku-4-5`), `MAX_OUTPUT_TOKENS` (420 — 280 pre-#1696 cap + buffer for the breaking/migration tags), `MAX_BODY_CHARS` (8000)
+- `MODEL` (`claude-haiku-4-5` — Anthropic fallback / `--anthropic*` paths only), `MAX_OUTPUT_TOKENS` (420 — 280 pre-#1696 cap + buffer for the breaking/migration tags), `MAX_BODY_CHARS` (8000). Live summarize + the backfill script default to OpenRouter `~deepseek/deepseek-v4-flash-latest` (`SUMMARIZE_MODEL` / `RELEASE_CONTENT_MODEL`).
 
 For experiments that change the prompt, edit `SYSTEM_PROMPT` in place on a branch and run this skill against a small org — that's exactly what the upstream module exists for.
 
@@ -46,7 +48,7 @@ For experiments that change the prompt, edit `SYSTEM_PROMPT` in place on a branc
 
 When **not** to use this:
 
-- **Large backfills (>200 rows).** Prefer `bun scripts/generate-release-content.ts --orgs=… --since=… --apply`. The Batches API gives a 50% discount and runs offline; local sub-agents pay full price and consume your session's token budget.
+- **Large backfills (>200 rows).** Prefer `bun scripts/generate-release-content.ts --orgs=… --since=… --apply` (OpenRouter DeepSeek realtime by default, same family as prod summarize). For a deliberate Anthropic Batches run (50% Haiku discount, up to ~24h), add `--anthropic-batch`. Local sub-agents pay full session token budget.
 - **Live ingest gaps.** The poll-fetch workflow already generates content at ingest time when the org is opted in, and a manual `source fetch` that inserts rows follows up with a fill pass over the source's remaining nulls (up to 100). If new rows are landing with nulls, the bug is in the worker, not in this skill.
 
 ## Step 1: Pick candidates
@@ -88,20 +90,20 @@ For experiments, write the candidate set to disk so the same input is reused acr
 
 Three modes, pick by candidate count:
 
-| Count  | Mode                               | Model      | Why                                                                                                      |
-| ------ | ---------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
-| 1–10   | **Inline** (parent calls SDK)      | Haiku 4.5  | Mirrors production ingest exactly (`summarizeRelease()`). Best for parity experiments.                   |
-| 10–200 | **Parallel sub-agents**            | **Sonnet** | The agentic loop benefits from stronger reasoning around the long instruction-tuned prompt.              |
-| 200+   | **Delegate to the Batches script** | Haiku 4.5  | Same model as production; 50% Batches API discount; ~24h latency. `scripts/generate-release-content.ts`. |
+| Count  | Mode                                | Model                     | Why                                                                                                                          |
+| ------ | ----------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1–10   | **Inline** (parent calls SDK)       | OpenRouter DeepSeek Flash | Mirrors production ingest (`summarizeRelease()` via OpenRouter when `openrouter-enabled`). Best for parity.                     |
+| 10–200 | **Parallel sub-agents**             | **Sonnet**                | The agentic loop benefits from stronger reasoning around the long instruction-tuned prompt.                                  |
+| 200+   | **Delegate to the backfill script** | OpenRouter DeepSeek Flash | Same family as production summarize. Default: `scripts/generate-release-content.ts --apply`. Add `--anthropic-batch` for Haiku Batches (-50%, ~24h). |
 
-**Why Sonnet for sub-agents but Haiku for the other two modes:** the production ingest path is a single-shot Anthropic API call (`summarizeRelease()` in `packages/ai/src/release-content.ts`) — Haiku 4.5 is great at that. A Claude Code sub-agent is _not_ a single-shot call; it's an agent loop that loads the SYSTEM_PROMPT from a file, narrates, and applies the rules across multiple turns. In a 4 vs 5 row Sonnet/Haiku A/B run on production candidates, Sonnet sub-agents were 4/4 clean; Haiku sub-agents were 3/5 — the two failures were a forbidden `"Neon blog:"` title prefix and a wrongly-null composition. The model difference vanishes once you drop the agent loop and call the SDK directly (Mode A / Mode C), which is why those modes use Haiku.
+**Why Sonnet for sub-agents but DeepSeek/Haiku for the other two modes:** the production ingest path is a single-shot `summarizeRelease()` call (OpenRouter DeepSeek Flash when `openrouter-enabled` is on; Anthropic Haiku as fail-open).
 
 ### Mode A: Inline (1 release at a time)
 
 The parent — you — is the inference. No `Agent` dispatch. For each candidate row:
 
 1. Build the input with `buildReleaseBlock(row)` from `@releases/ai-internal/release-content`.
-2. Call `summarizeRelease(client, input)` from the same module — this _is_ the production codepath. Pass an Anthropic client constructed against `ANTHROPIC_API_KEY` (the parent has env access; sub-agents do not).
+2. Call `summarizeRelease(model, input)` from the same module — this _is_ the production codepath. Prefer an OpenRouter TextModel via `buildLaneOpenRouterModel` + `OPENROUTER_API_KEY` (same as the backfill script default / prod summarize). Anthropic Haiku is the fail-open / `--anthropic` path.
 3. Write via the CLI (see Step 3).
 
 This is the parity-experiment mode. Output matches what the ingest worker would write byte-for-byte, because it's running the same module with the same model.
@@ -203,15 +205,22 @@ After each agent returns, lint the payload before writing:
 - Convert any empty-string field to null before writing.
 - Re-prompt or fall back to inline mode for rejects.
 
-### Mode C: Batches script (200+ releases)
+### Mode C: Backfill script (200+ releases)
 
 Don't reinvent. Run:
 
 ```bash
+# Default: OpenRouter DeepSeek Flash realtime (matches prod summarize)
 bun scripts/generate-release-content.ts --orgs=<slugs> --since=<days> --apply
+
+# Explicit Anthropic Message Batches (Haiku, 50% discount, up to ~24h)
+bun scripts/generate-release-content.ts --orgs=<slugs> --since=<days> --apply --anthropic-batch
+
+# Explicit Anthropic Haiku realtime
+bun scripts/generate-release-content.ts --orgs=<slugs> --since=<days> --apply --anthropic
 ```
 
-The script handles candidate selection, empty-body short-circuit, batch submission, polling, budget guard (`--max-cost`, default $10), and per-row D1 writes. Use the local sub-agent path only when you specifically need it (prompt iteration, model bake-off, sub-200 patch-up).
+Requires `OPENROUTER_API_KEY` on the default path (override model with `SUMMARIZE_MODEL` or `RELEASE_CONTENT_MODEL`). Anthropic paths need `ANTHROPIC_API_KEY`. The script handles candidate selection, empty-body short-circuit, budget guard (`--max-cost`, default $10), and per-row D1 writes. `--no-batch` is a deprecated no-op (realtime is already the default). Use the local sub-agent path only when you specifically need it (prompt iteration, model bake-off, sub-200 patch-up).
 
 ## Step 3: Write the rows
 
@@ -253,11 +262,11 @@ Real incidents have come from sub-agents quietly working around upstream errors:
 
 - **Sub-agent's CLI write denied** (`Permission denied` on `releases admin release update`) → the agent should NOT retry with raw `curl` or invent a different write path. Return the structured payload to the parent; the parent writes.
 - **`wrangler d1 execute` errors** → STOP and surface. Do not generate from a partial candidate set silently.
-- **Provider API thoughts** inside a sub-agent ("let me just call Anthropic directly with `ANTHROPIC_API_KEY`") → no. The skill assumes the parent's inference is the inference. Reading `.env` is forbidden across this corpus. The only legitimate provider call is the parent's own Anthropic call (Mode A) or the Batches script (Mode C).
+- **Provider API thoughts** inside a sub-agent ("let me just call OpenRouter/Anthropic directly") — no. The skill assumes the parent's inference is the inference. Reading `.env` is forbidden across this corpus. The only legitimate provider call is the parent's own SDK call (Mode A) or the backfill script (Mode C).
 - **Out-of-skill data sources** ("let me also check the project blog for context") → no. The only input is the release row. If `content` is empty, the answer is NULLs, not enrichment.
 
 ## Composing With Other Skills
 
 - **`parsing-changelogs`** is the upstream pipeline. If `content` looks structurally wrong (HTML chrome embedded, anchor IDs not stripped), the issue is in the source's parse step, not in this skill. Fix the source, refetch, then regenerate.
 - **`maintaining-orgs`** dispatches per-org regen agents that run `regenerating-overviews`. Release content is a finer grain — it can be invoked inside a `maintaining-orgs` run as a follow-up step on the same org window, or independently. The two skills don't share state.
-- **`scripts/generate-release-content.ts`** is the production backfill. This skill is its local-experiment sibling; the prompt and parse contract are shared via `packages/ai/src/release-content.ts`.
+- **`scripts/generate-release-content.ts`** is the production backfill (OpenRouter/DeepSeek by default; `--anthropic-batch` for Anthropic Batches). This skill is its local-experiment sibling; the prompt and parse contract are shared via `packages/ai/src/release-content.ts`.
