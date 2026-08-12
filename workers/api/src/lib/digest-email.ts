@@ -98,9 +98,17 @@ function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): st
   return DIGEST_DATE_FMT.format(new Date(end.getTime() - DAY_MS));
 }
 
+/**
+ * Where a release row in the digest sends the reader. Mirrors the web feed policy
+ * in `web/src/lib/release-link.ts` (`releaseLinkTarget`): `/release/<id>` pages are
+ * noindexed stubs of upstream content, so the default click goes straight to the
+ * upstream page whenever the release has a referenceable http(s) URL. The on-site
+ * permalink stays the fallback — the slugged canonical (`webUrl`, populated when the
+ * row is mapped with a webBase), then the bare-ID path, which 308s to canonical.
+ */
 function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {
-  // Prefer the slugged canonical (`webUrl`, populated when the row is mapped
-  // with a webBase); fall back to the bare-ID path, which 308s to canonical.
+  const upstream = (r.url ?? "").trim();
+  if (/^https?:\/\//i.test(upstream)) return upstream;
   return r.webUrl ?? `${baseUrl}/release/${r.id}`;
 }
 

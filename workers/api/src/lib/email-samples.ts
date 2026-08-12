@@ -216,7 +216,10 @@ function sampleDigestRelease(): ReleaseLatestItem {
     titleGenerated: null,
     titleShort: "Sample release",
     publishedAt: new Date().toISOString(),
-    url: "https://releases.sh/release/rel_sample_1",
+    // Upstream source URL — the digest's default link target (see `releaseUrl` in
+    // digest-email.ts). Kept as a third-party-looking URL so the preview is
+    // representative rather than exercising the internal-permalink fallback.
+    url: "https://example.com/changelog#sample-release",
     media: [],
     source: {
       slug: "changelog",
