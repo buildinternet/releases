@@ -96,8 +96,12 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   always render `robots: noindex, follow` — they are stubs of upstream
   content, useful for direct links but not worth crawl budget (#1601
   index-bloat cleanup; the curated `sitemap-releases.xml` from #1181 was
-  retired with the blanket noindex). Friendly URLs propagate via shared
-  links, OG tags, and crawls of org/feed pages.
+  retired with the blanket noindex). `robots.txt` also carries
+  `Disallow: /release/` — GSC showed Google had already deindexed the
+  release pages wholesale while still recrawling them, so there was no
+  indexed cohort left that needed to see the noindex before blocking
+  crawl outright. Friendly URLs propagate via shared links, OG tags, and
+  crawls of org/feed pages.
 - **Default feed links go to the source.** Web feed surfaces (org/product/
   source feeds, homepage ticker, `/updates`, `/live`, `/following`,
   collections) link a release row's title straight to its upstream `url`
