@@ -18,7 +18,6 @@ import type {
   SourceChangelogResponse,
   ChangelogFileSummary,
   SitemapPayload,
-  SitemapReleasesPayload,
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
   ReleaseCoverageSibling,
@@ -88,7 +87,6 @@ export type {
   SourceChangelogResponse,
   ChangelogFileSummary,
   SitemapPayload,
-  SitemapReleasesPayload,
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
   ReleaseCoverageSibling,
@@ -436,7 +434,6 @@ export const api = {
     return { items: body?.items ?? [], emptyOrgCount: body?.meta?.emptyOrgCount ?? 0 };
   },
   sitemap: () => fetchApi<SitemapPayload>("/v1/sitemap"),
-  sitemapReleases: () => fetchApi<SitemapReleasesPayload>("/v1/sitemap/releases"),
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
   sources: (independent?: boolean) =>
     fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),

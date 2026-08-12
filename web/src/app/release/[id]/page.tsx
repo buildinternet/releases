@@ -35,7 +35,6 @@ import { resolveVideoEmbed } from "@/lib/video-source";
 import { OrgAvatar } from "@/components/org-avatar";
 import { ReportIssue } from "@/components/report-issue";
 import { productPath } from "@/lib/links";
-import { shouldNoIndexRelease } from "@/lib/release-noindex";
 import { buildReleaseOpenGraph } from "./release-og";
 import { shouldShowSummaryLede } from "./summary-lede";
 
@@ -161,18 +160,15 @@ export async function generateMetadata({
     // replaced deleted `_` and backticks, publishing `whatschanged` to
     // crawlers and link previews).
     const description = clamp(stripMarkdown(release.summary ?? release.content ?? ""), 160);
-    const shouldNoIndex = shouldNoIndexRelease({
-      content: release.content,
-      summary: release.summary,
-      sourceIsHidden: release.source.isHidden,
-      org: release.source.org,
-    });
     return {
       // Clamp so the <title> doesn't run long enough for search engines to
       // truncate it; the global `%s — releases.sh` template still adds the brand.
       title: clampTitle(`${titleHeading} — ${release.source.name}`),
       description: description || `${heading} release notes for ${release.source.name}`,
-      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
+      // Release pages are stubs of upstream content — every one is noindexed
+      // so crawl budget goes to the unique surfaces (org/product/source pages,
+      // collections, /updates). follow:true keeps internal links crawlable.
+      robots: { index: false, follow: true },
       openGraph: buildReleaseOpenGraph(releasePath(release), {
         publishedAt: release.publishedAt,
         orgSlug: release.source.org?.slug ?? null,
@@ -180,7 +176,7 @@ export async function generateMetadata({
       alternates: { canonical: releasePath(release) },
     };
   } catch {
-    return { title: "Release" };
+    return { title: "Release", robots: { index: false, follow: true } };
   }
 }
 

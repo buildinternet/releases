@@ -7,7 +7,12 @@
 
 import { describe, test, expect } from "bun:test";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
-import { buildEntitySitemapEntries, buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
+import {
+  buildEntitySitemapEntries,
+  buildOrgSitemapEntries,
+  buildUpdatesSitemapEntries,
+} from "@/lib/sitemap-entries";
+import { renderSitemapXml } from "@/lib/sitemap-xml";
 
 const BASE = "https://releases.sh";
 
@@ -253,5 +258,51 @@ describe("sitemap uniqueness (full-entry-list assertion)", () => {
 
     const all = [...entityUrls, ...updatesUrls];
     expect(new Set(all).size).toBe(all.length);
+  });
+});
+
+describe("buildOrgSitemapEntries", () => {
+  test("each org emits bare URL + overview + sources tabs, lastmod only from lastActivity", () => {
+    const entries = buildOrgSitemapEntries(
+      [
+        { slug: "acme", lastActivity: "2026-08-01T00:00:00Z" },
+        { slug: "quiet-co", lastActivity: null },
+      ] as SitemapPayload["orgs"],
+      BASE,
+    );
+    expect(entries.map((e) => String(e.url))).toEqual([
+      `${BASE}/acme`,
+      `${BASE}/acme/overview`,
+      `${BASE}/acme/sources`,
+      `${BASE}/quiet-co`,
+      `${BASE}/quiet-co/overview`,
+      `${BASE}/quiet-co/sources`,
+    ]);
+    expect(entries[0]?.lastModified).toEqual(new Date("2026-08-01T00:00:00Z"));
+    // No fabricated `now` fallback for orgs without activity.
+    expect(entries[3]?.lastModified).toBeUndefined();
+  });
+});
+
+describe("renderSitemapXml", () => {
+  test("serializes entries with optional fields and escapes the loc", () => {
+    const xml = renderSitemapXml([
+      {
+        url: `${BASE}/a&b`,
+        lastModified: new Date("2026-08-01T00:00:00Z"),
+        changeFrequency: "daily",
+        priority: 0.8,
+      },
+      { url: `${BASE}/plain` },
+    ]);
+    expect(xml).toContain("<loc>https://releases.sh/a&amp;b</loc>");
+    expect(xml).toContain("<lastmod>2026-08-01T00:00:00.000Z</lastmod>");
+    expect(xml).toContain("<changefreq>daily</changefreq>");
+    expect(xml).toContain("<priority>0.8</priority>");
+    // Optional fields are omitted, not emitted empty.
+    const plain = xml.slice(xml.indexOf("<loc>https://releases.sh/plain</loc>"));
+    expect(plain).not.toContain("<lastmod>");
+    expect(plain).not.toContain("<changefreq>");
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
   });
 });

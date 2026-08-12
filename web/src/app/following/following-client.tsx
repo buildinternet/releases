@@ -14,6 +14,8 @@ import { isTag, rollupTags, type TagListItem } from "@/components/collection-tim
 import { DigestCard } from "./digest-card";
 import { FeedTokenCard } from "./feed-token-card";
 import { ImportanceMarker } from "@/components/importance-marker";
+import { releaseLinkTarget } from "@/lib/release-link";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import type {
   Follow,
   PersonalizedFeedResponse,
@@ -460,10 +462,12 @@ function FeedCommitRow({
   const productLabel = release.product?.name ?? release.source.name;
   const summary = release.summary?.trim() || "";
   const chip = orgChips.get(release.source.orgSlug ?? "");
+  const link = releaseLinkTarget(release);
 
   return (
     <Link
-      href={`/release/${release.id}`}
+      href={link?.href ?? `/release/${release.id}`}
+      {...(link?.external ? { target: "_blank", rel: EXTERNAL_UGC_REL } : {})}
       className="grid grid-cols-[auto_auto_1fr] items-center gap-3 px-3 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-900/60"
     >
       <span className="flex items-center gap-2 min-w-0">
@@ -499,13 +503,15 @@ function FeedRow({ item, orgChips }: { item: ReleaseLatestItem; orgChips: Map<st
   const orgSlug = item.source.orgSlug;
   const chip = orgSlug ? orgChips.get(orgSlug) : undefined;
   const bylineHref = orgSlug ? `/${orgSlug}/${item.product?.slug ?? item.source.slug}` : null;
+  const itemLink = releaseLinkTarget(item);
 
   return (
     <li className="rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
       <div className="flex items-baseline gap-1.5">
         <ImportanceMarker importance={item.importance} />
         <Link
-          href={`/release/${item.id}`}
+          href={itemLink?.href ?? `/release/${item.id}`}
+          {...(itemLink?.external ? { target: "_blank", rel: EXTERNAL_UGC_REL } : {})}
           className="text-[15px] font-semibold leading-snug text-stone-900 underline-offset-2 hover:underline dark:text-stone-100"
         >
           {displayTitle}

@@ -92,9 +92,31 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   stream + webhook fan-out + Slack card), and the **digest emails**. All
   derive from `releasePath()` + a `releaseWebBase(env)`-style origin — no
   new queries; the slug is a request-time string transform.
-- **Sitemap:** release pages remain excluded (#1601 index-bloat cleanup);
-  friendly URLs propagate via shared links, OG tags, and crawls of org/feed
-  pages.
+- **Sitemap + indexing:** the sitemap is split by page class for per-file GSC
+  index-coverage reporting — `sitemap.xml` (static/editorial core: home,
+  docs, categories, `/updates` days), `sitemap-orgs.xml` (orgs, products,
+  sources), `sitemap-collections.xml` (collections + digests), all listed in
+  robots.txt. Release pages are excluded from every sitemap and
+  always render `robots: noindex, follow` — they are stubs of upstream
+  content, useful for direct links but not worth crawl budget (#1601
+  index-bloat cleanup; the curated `sitemap-releases.xml` from #1181 was
+  retired with the blanket noindex). `robots.txt` also carries
+  `Disallow: /release/` — GSC showed Google had already deindexed the
+  release pages wholesale while still recrawling them, so there was no
+  indexed cohort left that needed to see the noindex before blocking
+  crawl outright. Friendly URLs propagate via shared links, OG tags, and
+  crawls of org/feed pages.
+- **Default feed links go to the source.** Web feed surfaces (org/product/
+  source feeds, homepage ticker, `/updates`, `/live`, `/following`,
+  collections) link a release row's title straight to its upstream `url`
+  when it has a referenceable http(s) one, via `releaseLinkTarget()`
+  (`web/src/lib/release-link.ts`) / `<ReleaseTitleLink>`. The on-site
+  `/release/<id>` page stays reachable as a secondary affordance ("Read
+  more" / "Details" / lightbox) and as the fallback when no URL exists —
+  it's a permalink, not the default destination. This also strips the
+  internal-link paths crawlers used to discover `/release/` URLs. Search
+  results still link internally (the hit payload carries no upstream URL;
+  `/search` is noindexed anyway).
 
 ## Org-scoped routes (#690 + #698)
 

@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next";
-import { api, ApiSetupError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
-import { buildEntitySitemapEntries, buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
+import { buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
 
 // Render on-demand (not during `next build`) so a cold worker / slow D1 can't
 // time out the Vercel export. The API response already carries Cache-Control,
@@ -20,12 +20,22 @@ type StaticRoute = {
   priority: number;
 };
 
+// The sitemap is split by page class so GSC reports index coverage per
+// submitted file: this one carries the static/editorial core (home, docs,
+// categories, /updates days); `sitemap-orgs.xml` carries the registry surface
+// (orgs, products, sources); `sitemap-collections.xml` carries collections +
+// digests. All three are listed in robots.txt.
+//
 // A sitemap should list only canonical, indexable, content-bearing URLs.
 // Deliberately excluded:
 //   - /search — `robots: index:false`; a noindex URL must not be in the sitemap.
 //   - /live — a real-time feed whose content duplicates the homepage + /updates;
 //     it carries no unique indexable value, and a `changeFrequency: "always"`
 //     entry just burns crawl budget. Still reachable in-nav, just not submitted.
+//   - /release/* — individual release pages are noindexed stubs of upstream
+//     content (release/[id]/page.tsx) and robots.txt-blocked; the retired
+//     sitemap-releases.xml is gone. Crawl budget goes to
+//     org/product/source/collection pages instead.
 const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/", changeFrequency: "hourly", priority: 1.0 },
   { path: "/updates", changeFrequency: "daily", priority: 0.7 },
@@ -79,81 +89,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: r.priority,
   }));
 
-  let dynamicEntries: MetadataRoute.Sitemap = [];
+  // Category overlays have no real updatedAt — same reasoning as
+  // staticEntries above, omit rather than fake `now`.
+  const categoryEntries: MetadataRoute.Sitemap = CATEGORIES.map((slug) => ({
+    url: `${BASE_URL}/categories/${slug}`,
+    changeFrequency: "daily" as const,
+    priority: 0.5,
+  }));
 
-  try {
-    const data = await api.sitemap();
+  // /tags/[slug] pages are indexable but deliberately NOT sitemapped here —
+  // considered for this PR and deferred (candidate rule: only tags with
+  // >=5 releases). Revisit as its own decision.
 
-    // Each org emits the bare URL (Releases feed — the default landing) plus
-    // Overview and Sources tabs. `/:org/releases` 308s to the bare URL and is
-    // deliberately omitted so the sitemap only lists canonical paths.
-    const orgEntries: MetadataRoute.Sitemap = data.orgs.flatMap((org) => {
-      // Only a real lastActivity drives lastmod; no fabricated `now` fallback.
-      const lastModified = org.lastActivity ? new Date(org.lastActivity) : undefined;
-      return [
-        {
-          url: `${BASE_URL}/${org.slug}`,
-          lastModified,
-          changeFrequency: "daily" as const,
-          priority: 0.8,
-        },
-        {
-          url: `${BASE_URL}/${org.slug}/overview`,
-          lastModified,
-          changeFrequency: "weekly" as const,
-          priority: 0.6,
-        },
-        {
-          url: `${BASE_URL}/${org.slug}/sources`,
-          lastModified,
-          changeFrequency: "weekly" as const,
-          priority: 0.6,
-        },
-      ];
-    });
-
-    // Products + sources (incl. #1190 shadow routing) come from the pure helper.
-    const entityEntries = buildEntitySitemapEntries(data, BASE_URL);
-
-    const collectionEntries: MetadataRoute.Sitemap = (data.collections ?? []).map((co) => ({
-      url: `${BASE_URL}/collections/${co.slug}`,
-      lastModified: new Date(co.updatedAt),
-      changeFrequency: "weekly",
-      priority: 0.6,
-    }));
-
-    // Weekly digest permalinks — the net-new editorial surface (WS3).
-    // `lastModified` = generation time; digests are immutable-ish once
-    // written, so no fabricated "now" fallback.
-    const digestEntries: MetadataRoute.Sitemap = (data.digests ?? []).map((d) => ({
-      url: `${BASE_URL}/collections/${d.collectionSlug}/digest/${d.weekStart}`,
-      lastModified: new Date(d.generatedAt),
-      changeFrequency: "monthly" as const,
-      priority: 0.5,
-    }));
-
-    // Category overlays have no real updatedAt — same reasoning as
-    // staticEntries above, omit rather than fake `now`.
-    const categoryEntries: MetadataRoute.Sitemap = CATEGORIES.map((slug) => ({
-      url: `${BASE_URL}/categories/${slug}`,
-      changeFrequency: "daily" as const,
-      priority: 0.5,
-    }));
-
-    // /tags/[slug] pages are indexable but deliberately NOT sitemapped here —
-    // considered for this PR and deferred (candidate rule: only tags with
-    // >=5 releases). Revisit as its own decision.
-
-    dynamicEntries = [
-      ...orgEntries,
-      ...entityEntries,
-      ...collectionEntries,
-      ...digestEntries,
-      ...categoryEntries,
-    ];
-  } catch (err) {
-    if (!(err instanceof ApiSetupError)) throw err;
-  }
-
-  return [...staticEntries, ...dynamicEntries, ...(await updatesEntries())];
+  return [...staticEntries, ...categoryEntries, ...(await updatesEntries())];
 }
