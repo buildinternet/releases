@@ -57,9 +57,14 @@ export const SitemapPayloadSchema = z.object({
 });
 
 /**
- * Per-release row in `GET /v1/sitemap/releases` (#1181, scoped down). Carries
- * exactly what the web needs to build the slugged canonical `/release/...`
- * URL (`releasePath()` inputs) plus `fetchedAt` for `<lastmod>`.
+ * Per-release row previously returned by `GET /v1/sitemap/releases` (#1181,
+ * scoped down). Carries what the web needed to build the slugged canonical
+ * `/release/...` URL (`releasePath()` inputs) plus `fetchedAt` for `<lastmod>`.
+ *
+ * @deprecated The endpoint was retired in #2219 — its only consumer
+ * (`sitemap-releases.xml`) was removed in #2218 when release pages went
+ * `noindex`. Kept for one minor version per the deprecation lane; will be
+ * removed in a future minor.
  */
 export const SitemapReleaseSchema = z.object({
   id: z.string(),
@@ -72,8 +77,12 @@ export const SitemapReleaseSchema = z.object({
 });
 
 /**
- * Payload for the curated release sitemap: visible releases with a summary
- * and importance at or above the experiment threshold, newest first, capped.
+ * Payload previously returned by the curated release sitemap endpoint.
+ *
+ * @deprecated The endpoint was retired in #2219 — its only consumer
+ * (`sitemap-releases.xml`) was removed in #2218 when release pages went
+ * `noindex`. Kept for one minor version per the deprecation lane; will be
+ * removed in a future minor.
  */
 export const SitemapReleasesPayloadSchema = z.object({
   releases: z.array(SitemapReleaseSchema),

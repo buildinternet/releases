@@ -643,7 +643,9 @@ export interface CreateUserApiKeyBody {
 
 export type SitemapSource = z.infer<typeof SitemapSourceSchema>;
 export type SitemapPayload = z.infer<typeof SitemapPayloadSchema>;
+/** @deprecated The `GET /v1/sitemap/releases` endpoint was retired in #2219. */
 export type SitemapRelease = z.infer<typeof SitemapReleaseSchema>;
+/** @deprecated The `GET /v1/sitemap/releases` endpoint was retired in #2219. */
 export type SitemapReleasesPayload = z.infer<typeof SitemapReleasesPayloadSchema>;
 
 // ── Related (Vectorize neighbors) ──
