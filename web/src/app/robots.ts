@@ -18,8 +18,13 @@ export default function robots(): MetadataRoute.Robots {
       // non-robots.txt-respecting crawler.
       disallow: ["/api/", "/.well-known/", "/release/"],
     },
-    // One curated sitemap of durable landing pages; /release/* is never
-    // sitemapped.
-    sitemap: [`${BASE_URL}/sitemap.xml`],
+    // Curated sitemaps of durable landing pages, split by page class so GSC
+    // reports index coverage per file (static/editorial core, registry
+    // surface, collections). /release/* is never sitemapped.
+    sitemap: [
+      `${BASE_URL}/sitemap.xml`,
+      `${BASE_URL}/sitemap-orgs.xml`,
+      `${BASE_URL}/sitemap-collections.xml`,
+    ],
   };
 }

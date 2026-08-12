@@ -28,6 +28,42 @@ export function buildUpdatesSitemapEntries(
 }
 
 /**
+ * Pure construction of the org sitemap entries from a `/v1/sitemap` payload.
+ * Each org emits the bare URL (Releases feed — the default landing) plus
+ * Overview and Sources tabs. `/:org/releases` 308s to the bare URL and is
+ * deliberately omitted so the sitemap only lists canonical paths. Only a real
+ * `lastActivity` drives lastmod; no fabricated `now` fallback.
+ */
+export function buildOrgSitemapEntries(
+  orgs: SitemapPayload["orgs"],
+  baseUrl: string,
+): MetadataRoute.Sitemap {
+  return orgs.flatMap((org) => {
+    const lastModified = org.lastActivity ? new Date(org.lastActivity) : undefined;
+    return [
+      {
+        url: `${baseUrl}/${org.slug}`,
+        lastModified,
+        changeFrequency: "daily" as const,
+        priority: 0.8,
+      },
+      {
+        url: `${baseUrl}/${org.slug}/overview`,
+        lastModified,
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+      },
+      {
+        url: `${baseUrl}/${org.slug}/sources`,
+        lastModified,
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+      },
+    ];
+  });
+}
+
+/**
  * Pure construction of the product + source sitemap entries from a
  * `/v1/sitemap` payload. Lives in its own side-effect-free module (no Next.js
  * app imports, no docs/flags machinery) so the #1190 shadow-routing logic is
