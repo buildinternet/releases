@@ -26,6 +26,9 @@ type StaticRoute = {
 //   - /live — a real-time feed whose content duplicates the homepage + /updates;
 //     it carries no unique indexable value, and a `changeFrequency: "always"`
 //     entry just burns crawl budget. Still reachable in-nav, just not submitted.
+//   - /release/* — individual release pages are noindexed stubs of upstream
+//     content (release/[id]/page.tsx); the retired sitemap-releases.xml is
+//     gone. Crawl budget goes to org/product/source/collection pages instead.
 const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/", changeFrequency: "hourly", priority: 1.0 },
   { path: "/updates", changeFrequency: "daily", priority: 0.7 },

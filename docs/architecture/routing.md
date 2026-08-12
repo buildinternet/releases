@@ -92,9 +92,12 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   stream + webhook fan-out + Slack card), and the **digest emails**. All
   derive from `releasePath()` + a `releaseWebBase(env)`-style origin — no
   new queries; the slug is a request-time string transform.
-- **Sitemap:** release pages remain excluded (#1601 index-bloat cleanup);
-  friendly URLs propagate via shared links, OG tags, and crawls of org/feed
-  pages.
+- **Sitemap + indexing:** release pages are excluded from every sitemap and
+  always render `robots: noindex, follow` — they are stubs of upstream
+  content, useful for direct links but not worth crawl budget (#1601
+  index-bloat cleanup; the curated `sitemap-releases.xml` from #1181 was
+  retired with the blanket noindex). Friendly URLs propagate via shared
+  links, OG tags, and crawls of org/feed pages.
 
 ## Org-scoped routes (#690 + #698)
 
