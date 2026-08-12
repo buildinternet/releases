@@ -44,6 +44,14 @@ to break one message at a time:
   tags for the HTML part and `stripMarkdown` flattens it for the text part
   (`@releases/rendering/strip-markdown`). Escaping it verbatim shows readers
   asterisks.
+- **Release rows link upstream, not to `/release/`.** `/release/<id>` pages are
+  noindexed stubs of upstream content, so a digest's release titles and version
+  pills send the reader to the release's own `url` whenever it is http(s), the
+  same policy the web feed applies via `releaseLinkTarget()`
+  (`web/src/lib/release-link.ts`). The on-site permalink is the fallback:
+  slugged `webUrl`, then the bare-ID path, which 308s to canonical. "and N more"
+  in a rollup still goes to the product page — that's an org surface, not a
+  release stub.
 
 ## Subject lines
 

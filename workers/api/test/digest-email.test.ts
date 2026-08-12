@@ -49,7 +49,10 @@ describe("buildDigestEmail", () => {
     expect(subject).toContain("2");
     expect(text).toContain("ShortHeadline"); // titleShort preferred over title, matching the feed UI
     expect(text).not.toContain("RawLongTitle");
-    expect(text).toContain("https://releases.sh/release/rel_1");
+    // Release rows link upstream, not to the noindexed /release/ stub — same policy
+    // as the web feed's releaseLinkTarget().
+    expect(text).toContain("https://acme.com/changelog/1");
+    expect(text).not.toContain("https://releases.sh/release/rel_1");
     expect(text).toContain("reld_x");
     expect(html).toContain("Unsubscribe");
     expect(html).toContain("https://releases.sh/following");
@@ -61,6 +64,29 @@ describe("buildDigestEmail", () => {
     // max-width and lines run the full width of a wide reading pane.
     expect(html).toStartWith("<!doctype html>");
     expect(html).toContain("max-width:600px");
+  });
+
+  it("falls back to the on-site permalink when a release has no upstream http(s) url", () => {
+    const { text: slugged } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "daily",
+      releases: [rel({ url: null, webUrl: "https://releases.sh/release/rel_1-thing" })],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+    });
+    expect(slugged).toContain("https://releases.sh/release/rel_1-thing");
+
+    // No webUrl either → the bare-ID path, which 308s to canonical.
+    const { text: bare } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "daily",
+      releases: [rel({ url: null })],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+    });
+    expect(bare).toContain("https://releases.sh/release/rel_1");
   });
 
   it("compresses a per-product version burst to the newest release + notes", () => {
@@ -103,7 +129,7 @@ describe("buildDigestEmail", () => {
     expect(text).toContain("Latest — Fixed a socket leak");
     // "and N more" links to the product page; the pill itself links to the release.
     expect(text).toContain("https://releases.sh/acme/widget");
-    expect(html).toContain('href="https://releases.sh/release/t1"');
+    expect(html).toContain('href="https://acme.com/changelog/1"');
     expect(html).toContain(">4.2.1</a>");
     expect(html).toContain("and 1 more");
     expect(html).toContain("&middot; 2 releases");
