@@ -9,6 +9,8 @@ import { appRowInfoFromWire } from "@/lib/app-source";
 import { isRoutineAppRelease } from "@buildinternet/releases-core/importance";
 import { pickReleaseThumb } from "@/lib/media";
 import { OrgAvatar } from "./org-avatar";
+import { releaseLinkTarget } from "@/lib/release-link";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { AppStoreIcon } from "./app-store-icon";
 import { AppPlatformCue } from "./app-platform-cue";
 import { ReleaseThumb } from "./release-thumb";
@@ -130,9 +132,13 @@ export function Card({ slide }: { slide: Slide }) {
   const orgName = release.source.org.name;
   const productName = release.source.product?.name?.trim();
   const showProduct = !!productName && productName.toLowerCase() !== orgName.toLowerCase();
+  // Default card click goes to the upstream source when the release has a
+  // referenceable URL; /release/{id} is the fallback (see release-link.ts).
+  const link = releaseLinkTarget(release);
   return (
     <Link
-      href={`/release/${release.id}`}
+      href={link?.href ?? `/release/${release.id}`}
+      {...(link?.external ? { target: "_blank", rel: EXTERNAL_UGC_REL } : {})}
       data-ticker-card
       className="snap-start flex-none basis-[88%] sm:basis-[calc(33.333%-0.5rem)] lg:basis-[calc(25%-0.5625rem)] flex flex-col gap-2 p-4 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700 hover:shadow-sm transition-[border-color,box-shadow] shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
     >

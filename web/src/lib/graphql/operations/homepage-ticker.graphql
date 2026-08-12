@@ -4,6 +4,7 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
       id
       title
       version
+      url
       publishedAt
       titleGenerated
       titleShort

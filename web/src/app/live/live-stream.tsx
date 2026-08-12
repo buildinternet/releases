@@ -10,7 +10,8 @@ import { orgAvatarSrc } from "@/components/org-avatar";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { FallbackImage } from "@/components/fallback-image";
 import { PlayBadge } from "@/components/play-badge";
-import { ExternalLinkIcon } from "@/components/external-link-icon";
+import { releaseLinkTarget } from "@/lib/release-link";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
@@ -201,7 +202,15 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
       <div className="mt-2.5 flex items-baseline gap-2 flex-wrap">
         <ImportanceMarker importance={release.importance} />
         <h3 className="m-0 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
-          <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
+          {/* Default click → upstream source when the release has one (see
+              release-link.ts); the on-site page stays on the Details link. */}
+          <Link
+            href={releaseLinkTarget(release)?.href ?? `/release/${release.id}`}
+            {...(releaseLinkTarget(release)?.external
+              ? { target: "_blank", rel: EXTERNAL_UGC_REL }
+              : {})}
+            className="hover:underline underline-offset-2"
+          >
             {heading}
           </Link>
         </h3>
@@ -222,16 +231,15 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
 
       <div className="mt-2.5 flex items-center gap-2 text-stone-400 dark:text-stone-500">
         {release.source.type && <SourceTypeIcon type={release.source.type} size={12} />}
-        {release.url && (
-          <a
-            href={release.url}
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* The heading now links to the source, so this slot carries the
+            on-site permalink instead of a duplicate outbound link. */}
+        {release.id && (
+          <Link
+            href={`/release/${release.id}`}
             className="inline-flex items-center gap-1 text-[11px] hover:text-stone-700 dark:hover:text-stone-200"
           >
-            <ExternalLinkIcon size={11} />
-            Source
-          </a>
+            Details
+          </Link>
         )}
       </div>
     </article>

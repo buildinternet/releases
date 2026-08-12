@@ -13,6 +13,7 @@ import {
   type CollectionDailySummary,
 } from "@/lib/api";
 import { type CollectionReleaseItemView } from "@/lib/release-view";
+import { ReleaseTitleLink } from "@/components/release-title-link";
 import { memberKey } from "@/lib/member-key";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
@@ -914,13 +915,7 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
         )}
         <h3 className="m-0 flex items-baseline gap-1.5 text-[18px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
           <ImportanceMarker importance={release.importance} />
-          {release.id ? (
-            <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
-              {heading}
-            </Link>
-          ) : (
-            heading
-          )}
+          <ReleaseTitleLink release={release}>{heading}</ReleaseTitleLink>
         </h3>
         {versionLabel && versionLabel !== heading && (
           <div className="mt-1 font-mono text-[11.5px] text-stone-400 dark:text-stone-500">
@@ -936,16 +931,11 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
               Show more
             </button>
           )}
-          {release.url && (
-            <a
-              href={release.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`${subduedLinkClass} inline-flex items-center gap-1`}
-            >
-              Read post
-              <ExternalLinkIcon size={11} />
-            </a>
+          {/* Title links to the source now; this slot keeps the on-site permalink. */}
+          {release.id && (
+            <Link href={`/release/${release.id}`} className={subduedLinkClass}>
+              Details
+            </Link>
           )}
           {release.prerelease && (
             <span title="Pre-release (beta, rc, nightly, preview)" className={preBadgeClass}>
@@ -1027,13 +1017,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
       <div className="flex items-baseline gap-2 flex-wrap">
         <ImportanceMarker importance={release.importance} />
         <span className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
-          {release.id ? (
-            <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
-              {headline}
-            </Link>
-          ) : (
-            headline
-          )}
+          <ReleaseTitleLink release={release}>{headline}</ReleaseTitleLink>
         </span>
         {versionTag && (
           <span className="font-mono text-[11.5px] text-stone-400 dark:text-stone-500">
@@ -1062,16 +1046,11 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
                 Show more
               </button>
             )}
-            {release.url && (
-              <a
-                href={release.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${subduedLinkClass} inline-flex items-center gap-1`}
-              >
-                Read post
-                <ExternalLinkIcon size={11} />
-              </a>
+            {/* Title links to the source now; this slot keeps the on-site permalink. */}
+            {release.id && (
+              <Link href={`/release/${release.id}`} className={subduedLinkClass}>
+                Details
+              </Link>
             )}
           </div>
         </div>

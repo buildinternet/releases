@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useId, ViewTransition } from "react";
+import { useState, useMemo, useId, ViewTransition, type ReactNode } from "react";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
 import type { ReleaseItemView } from "@/lib/release-view";
@@ -27,6 +27,7 @@ import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
 import { PlayBadge } from "./play-badge";
 import { useLightboxImage, type LightboxEntry } from "./lightbox";
+import { releaseLinkTarget } from "@/lib/release-link";
 
 /** Release context shared by every previewable image in one feed row. */
 type RowMeta = Pick<
@@ -211,6 +212,40 @@ export function ReleaseListItem({
   // layout below. See `.context/2026-05-29-feed-version-title-hierarchy.md`.
   const { descriptive, versionLabel } = deriveFeedTitle(release);
 
+  // Default click target: the upstream source URL when the release has one,
+  // the on-site /release/{id} page only as fallback (see release-link.ts).
+  // The internal page stays reachable via "Read more →" and the lightbox.
+  const linkTarget = releaseLinkTarget(release);
+
+  // Heading link shared by the App Store / video / standard row layouts.
+  // stopPropagation keeps a heading click from also toggling the expandable
+  // row wrappers (App Store / video rows).
+  const headingLink = (children: ReactNode) => {
+    if (!linkTarget) return children;
+    if (linkTarget.external) {
+      return (
+        <a
+          href={linkTarget.href}
+          target="_blank"
+          rel={EXTERNAL_UGC_REL}
+          onClick={(e) => e.stopPropagation()}
+          className="hover:underline underline-offset-2"
+        >
+          {children}
+        </a>
+      );
+    }
+    return (
+      <Link
+        href={linkTarget.href}
+        onClick={(e) => e.stopPropagation()}
+        className="hover:underline underline-offset-2"
+      >
+        {children}
+      </Link>
+    );
+  };
+
   // Context shown alongside the image in the lightbox so a zoomed-in screenshot
   // still says which release it belongs to: title, org avatar + name byline, and
   // links to the on-site detail page (primary) and the original source (secondary).
@@ -322,19 +357,7 @@ export function ReleaseListItem({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-1.5">
                   <h2 id={titleId} className={headingClasses}>
-                    {release.id ? (
-                      <Link
-                        href={`/release/${release.id}`}
-                        className="hover:underline underline-offset-2"
-                      >
-                        {appStore.appName}
-                        {release.version && (
-                          <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
-                            v{release.version}
-                          </span>
-                        )}
-                      </Link>
-                    ) : (
+                    {headingLink(
                       <>
                         {appStore.appName}
                         {release.version && (
@@ -342,21 +365,9 @@ export function ReleaseListItem({
                             v{release.version}
                           </span>
                         )}
-                      </>
+                      </>,
                     )}
                   </h2>
-                  {release.url && (
-                    <a
-                      href={release.url}
-                      target="_blank"
-                      rel={EXTERNAL_UGC_REL}
-                      aria-label="Open original source"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs"
-                    >
-                      ↗
-                    </a>
-                  )}
                 </div>
                 <div className="text-[13px] text-stone-500 dark:text-stone-400">
                   Available for {appStore.label}
@@ -424,16 +435,7 @@ export function ReleaseListItem({
               {videoPoster}
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className={headingClasses}>
-                  {release.id ? (
-                    <Link
-                      href={`/release/${release.id}`}
-                      className="hover:underline underline-offset-2"
-                    >
-                      {headingInner}
-                    </Link>
-                  ) : (
-                    headingInner
-                  )}
+                  {headingLink(headingInner)}
                 </h2>
                 <div className="text-[13px] text-stone-500 dark:text-stone-400">
                   Watch on {video.label}
@@ -484,30 +486,16 @@ export function ReleaseListItem({
             <div className="flex items-baseline gap-1.5 mb-1">
               <ImportanceMarker importance={release.importance} />
               <h2 id={titleId} className={headingClasses}>
-                {release.id ? (
+                {linkTarget && !linkTarget.external && release.id ? (
+                  // View transition only makes sense for in-app navigation to
+                  // the detail page; external titles open the source directly.
                   <ViewTransition name={`rel-${release.id}`} default="none">
-                    <Link
-                      href={`/release/${release.id}`}
-                      className="hover:underline underline-offset-2"
-                    >
-                      {headingInner}
-                    </Link>
+                    {headingLink(headingInner)}
                   </ViewTransition>
                 ) : (
-                  headingInner
+                  headingLink(headingInner)
                 )}
               </h2>
-              {release.url && (
-                <a
-                  href={release.url}
-                  target="_blank"
-                  rel={EXTERNAL_UGC_REL}
-                  aria-label="Open original source"
-                  className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs inline-flex items-center justify-center w-7 h-7 -my-2 -mx-1 rounded"
-                >
-                  ↗
-                </a>
-              )}
               <RollupBadge type={release.type} />
               <BreakingChip level={release.breaking} />
               <ClusterChip count={release.coverageCount} />

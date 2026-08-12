@@ -98,6 +98,17 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   index-bloat cleanup; the curated `sitemap-releases.xml` from #1181 was
   retired with the blanket noindex). Friendly URLs propagate via shared
   links, OG tags, and crawls of org/feed pages.
+- **Default feed links go to the source.** Web feed surfaces (org/product/
+  source feeds, homepage ticker, `/updates`, `/live`, `/following`,
+  collections) link a release row's title straight to its upstream `url`
+  when it has a referenceable http(s) one, via `releaseLinkTarget()`
+  (`web/src/lib/release-link.ts`) / `<ReleaseTitleLink>`. The on-site
+  `/release/<id>` page stays reachable as a secondary affordance ("Read
+  more" / "Details" / lightbox) and as the fallback when no URL exists —
+  it's a permalink, not the default destination. This also strips the
+  internal-link paths crawlers used to discover `/release/` URLs. Search
+  results still link internally (the hit payload carries no upstream URL;
+  `/search` is noindexed anyway).
 
 ## Org-scoped routes (#690 + #698)
 
