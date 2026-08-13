@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 12, 2026
+
+**Changed**
+- Release title links now go directly to the upstream changelog entry across all feed surfaces — org and product pages, the homepage ticker, `/updates`, live stream, following, and collection timelines — as well as in digest emails. The on-site release detail page remains reachable via a secondary "Read more" or "Details" link on each card.
+
 ## July 31, 2026
 
 **Added**
