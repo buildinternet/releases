@@ -1,5 +1,11 @@
 # @buildinternet/releases-api-types
 
+## 0.50.1
+
+### Patch Changes
+
+- 2d6d9c3: Deprecate `SitemapReleaseSchema` / `SitemapReleasesPayloadSchema` (and the `SitemapRelease` / `SitemapReleasesPayload` types). `GET /v1/sitemap/releases` was retired (#2219) as consumer-less after `sitemap-releases.xml` was removed from web in #2218. The exports stay for one minor version per the deprecation lane before removal.
+
 ## 0.50.0
 
 ### Minor Changes
