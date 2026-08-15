@@ -32,11 +32,12 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { scrapeFetch, type ScrapeEnv } from "@releases/adapters/scrape-fetch";
 import { runScrapeFetchLoop } from "@releases/adapters/deterministic-update";
 import { classifyUsFatal } from "@releases/lib/session-error-classify";
-import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret, getSecretWithFallback, type SecretBinding } from "@releases/lib/secrets";
 import { createDb } from "../db.js";
 import { d1ScrapePersister } from "../lib/d1-scrape-persister.js";
+import type { TextModelEnv } from "../lib/text-model.js";
 import {
   runContentAndEmbedSteps,
   runInvalidateLatestCacheStep,
@@ -48,7 +49,7 @@ import { releaseSourceLocks } from "../lib/source-lock.js";
 import { notifyUpdateStatusHub } from "../lib/update-dispatch.js";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
 
-export interface DeterministicUpdateWorkflowEnv {
+export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
   /**
    * Self service binding (this worker). Only the extraction-time HTTP calls
    * (content-hash, playbook, usage log via `buildWorkerExtractDeps`'s
@@ -61,21 +62,13 @@ export interface DeterministicUpdateWorkflowEnv {
   RELEASED_API_KEY?: SecretBinding;
   /** Staging gate key — attached to self-calls so they clear the gate on api-staging. */
   STAGING_ACCESS_KEY?: SecretBinding;
-  ANTHROPIC_API_KEY?: SecretBinding;
-  ANTHROPIC_BASE_URL?: string;
-  AI_GATEWAY_TOKEN?: SecretBinding;
   CLOUDFLARE_ACCOUNT_ID?: SecretBinding;
   CLOUDFLARE_API_TOKEN?: SecretBinding;
-  FLAGS?: FlagshipBinding;
   EXTRACT_TOOLLOOP_ENABLED?: string;
   RAW_SNAPSHOT_CAPTURE_ENABLED?: string;
-  /** OpenRouter extraction lane (#1536) — same fail-open contract as discovery. */
-  OPENROUTER_ENABLED?: string;
   // Narrowed to the non-nullable get() the ScrapeEnv / WebBotAuthEnv seams
   // declare (mirrors `_fetch-env.ts`); the Secrets Store binding satisfies it.
   OPENROUTER_API_KEY?: { get(): Promise<string> };
-  OPENROUTER_BASE_URL?: string;
-  EXTRACT_MODEL?: string;
   WEB_BOT_AUTH_ENABLED?: string;
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
   STATUS_HUB?: DurableObjectNamespace;
