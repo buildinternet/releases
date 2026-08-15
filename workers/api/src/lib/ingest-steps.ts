@@ -41,7 +41,7 @@ import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
 import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
-import { resolveSummarizeModel } from "./text-model.js";
+import { resolveSummarizeModel, type TextModelEnv } from "./text-model.js";
 import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "./d1-limits.js";
 import { logUsage } from "./usage-log.js";
 // Type-only — erased at compile, so no runtime import cycle with the workflow
@@ -120,7 +120,7 @@ const MAX_AUTOGEN_BODY_CHARS = 50_000;
 export async function generateContentForReleases(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
   db: any,
-  env: PollAndFetchWorkflowEnv,
+  env: TextModelEnv,
   source: Source,
   insertedIds: string[],
   // `ignoreAutoGenerateGate` drops the org-level `auto_generate_content` opt-in

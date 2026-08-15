@@ -104,6 +104,9 @@ export function d1ScrapePersister(opts: {
       await runBatchIngestEffects(db, env, source, result, {
         skipEmbed: true,
         skipInvalidate: true,
+        // DeterministicUpdate runs generate + embed as durable steps later.
+        // Summarizing here would double-call the model on every scrape persist.
+        skipSummarize: true,
       });
       return { inserted: result.inserted, insertedIds: result.insertedIds };
     },

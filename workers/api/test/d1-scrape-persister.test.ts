@@ -165,8 +165,12 @@ describe("d1ScrapePersister.insertReleases", () => {
     expect(JSON.parse(dark.media ?? "[]")).toEqual([
       { type: "image", url: "https://example.com/shot.png" },
     ]);
-    // Embed is skipped (workflow runs it as a durable step) — no embeddedAt.
-    for (const r of stored) expect(r.embeddedAt).toBeNull();
+    // Embed + generate are skipped (workflow runs both as durable steps).
+    for (const r of stored) {
+      expect(r.embeddedAt).toBeNull();
+      expect(r.titleGenerated).toBeNull();
+      expect(r.summary).toBeNull();
+    }
   });
 
   it("returns an empty result without touching the DB for an empty batch", async () => {

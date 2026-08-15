@@ -9,11 +9,15 @@
  *   cascade coverage clustering, total count. Everything here is either a
  *   write the caller needs reflected in the response, or a read needed to
  *   decide one.
- * - `runBatchIngestEffects` — the post-insert fire-and-forget extras: publish
- *   to the ReleaseHub DO, the web revalidate ping, latest-cache invalidation, and
- *   embed + `embeddedAt` marking. These already tolerate failure independently
- *   (each has its own catch/logEvent), so they run concurrently via
- *   `Promise.allSettled` rather than sequentially.
+ * - `runBatchIngestEffects` — the post-insert extras: publish to the ReleaseHub
+ *   DO, the web revalidate ping, latest-cache invalidation, generate-content
+ *   (same eligibility as poll), then embed + `embeddedAt` marking. Publish /
+ *   revalidate / invalidate tolerate failure independently and run concurrently
+ *   via `Promise.allSettled`. Generate is awaited *before* embed so the
+ *   Vectorize payload sees `summary` / `title_generated` when the org is opted
+ *   in — matching `runContentAndEmbedSteps`. The scrape persister skips both
+ *   generate and embed; the DeterministicUpdate workflow runs them as durable
+ *   steps later.
  *
  * Request-shaped concerns (body parsing, `releases`-array validation, `mode`
  * validation → `enrichMode`) stay in the route handler — they're HTTP
@@ -50,6 +54,8 @@ import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import type { MediaTransformBinding } from "./media-ingest.js";
+import { generateContentForReleases } from "./ingest-steps.js";
+import type { TextModelEnv } from "./text-model.js";
 
 /**
  * Shape-coerce media via {@link normalizeMediaBind}, then rewrite each item's
@@ -115,14 +121,56 @@ export interface BatchIngestEnv {
 
 /**
  * Env slice used by `runBatchIngestEffects` — a union of the effect helpers'
- * own env slices, plus the embed config env.
+ * own env slices, plus the embed config env and the summarize-lane bindings
+ * `generateContentForReleases` reads via `resolveSummarizeModel`.
  */
-export interface BatchEffectsEnv extends PublishEnv, WebRevalidateEnv, InvalidationEnv, EmbedEnv {
+export interface BatchEffectsEnv
+  extends PublishEnv, WebRevalidateEnv, InvalidationEnv, EmbedEnv, TextModelEnv {
   // Typed loosely (matches the route's `Env.Bindings` Cloudflare `VectorizeIndex`)
   // and narrowed via cast at the call site below — see the note in
   // embedSourceSideEffect about why the cast is needed.
   RELEASES_INDEX: unknown;
 }
+
+/** Rows loaded for the embed pass — the subset `embedAndUpsertReleases` reads. */
+export type BatchEmbedRow = {
+  id: string;
+  title: string;
+  content: string;
+  summary: string | null;
+  version: string | null;
+  publishedAt: string | null;
+  sourceId: string;
+  type: ReleaseType;
+};
+
+export type BatchEffectsOpts = {
+  skipEmbed?: boolean;
+  skipInvalidate?: boolean;
+  /**
+   * Skip the generate-content fill. The D1 scrape persister passes this
+   * because DeterministicUpdate runs `generateContentForReleases` as a
+   * durable workflow step later — without it, a scrape update would
+   * summarize twice.
+   */
+  skipSummarize?: boolean;
+  /**
+   * Test seam. Production omits this and uses `generateContentForReleases`.
+   * Same injection style as `runGenerateContent({ generate })`.
+   */
+  generateContent?: (
+    db: D1Db,
+    env: BatchEffectsEnv,
+    src: Source,
+    insertedIds: string[],
+  ) => Promise<number>;
+  /**
+   * Test seam. Production omits this and uses `embedAndUpsertReleases`.
+   * Called with the rows loaded *after* generate so a test can assert the
+   * embed payload already carries `summary`.
+   */
+  embedReleases?: (rows: BatchEmbedRow[]) => Promise<void>;
+};
 
 /**
  * Durable core: deny filter, title dedup, media R2 mirror, chunked upsert,
@@ -368,20 +416,24 @@ export async function ingestReleaseBatch(
 }
 
 /**
- * The post-insert waitUntil extras: ReleaseHub publish, web revalidate, embed +
- * embeddedAt marking, latest-cache invalidation. Awaitable — the caller
- * decides whether to await inline or hand it to `waitUntil`.
+ * The post-insert waitUntil extras: ReleaseHub publish, web revalidate,
+ * latest-cache invalidation, generate-content, then embed + `embeddedAt`
+ * marking. Awaitable — the caller decides whether to await inline or hand
+ * it to `waitUntil`.
  *
  * Publish/revalidate/invalidate already tolerate failure independently (each
  * logs its own error internally), so they run concurrently via
- * `Promise.allSettled` rather than one blocking the others.
+ * `Promise.allSettled` rather than one blocking the others. Generate is
+ * sequential with embed (generate first) so the embed SELECT sees
+ * `summary` / `title_generated` when the org is opted in. A generate
+ * failure is fail-open: we still embed the raw body.
  */
 export async function runBatchIngestEffects(
   db: D1Db,
   env: BatchEffectsEnv,
   src: Source,
   result: BatchIngestResult,
-  opts?: { skipEmbed?: boolean; skipInvalidate?: boolean },
+  opts?: BatchEffectsOpts,
 ): Promise<void> {
   const { visiblePublishRows, insertedIds } = result;
   const tasks: Array<Promise<unknown>> = [];
@@ -390,7 +442,8 @@ export async function runBatchIngestEffects(
   // `tail -f`, the upcoming web live view, webhook delivery) see new
   // releases in real time. Coverage-side rows are excluded — they're
   // not shown in default feeds and shouldn't broadcast on the live tail
-  // either.
+  // either. Publish stays concurrent with generate: the live payload
+  // omits `summary` by contract (`events.md`).
   if (visiblePublishRows.length > 0) {
     tasks.push(
       publishReleaseEvents(env, {
@@ -434,94 +487,112 @@ export async function runBatchIngestEffects(
     );
   }
 
-  // Fire-and-forget: embed the rows we just wrote. Never fails the write —
-  // embedAndUpsertReleases catches every error internally and logs to
-  // console.
-  if (!opts?.skipEmbed && insertedIds.length > 0) {
-    tasks.push(
-      (async () => {
-        try {
-          const embedConfig = await buildEmbedConfig(env);
-          if (!embedConfig) return;
-          // Load the rows back so we have full content, category, etc.
-          // We need the org/product category for metadata filtering.
-          const [orgRow] = src.orgId
-            ? await db
-                .select({ category: organizations.category })
-                .from(organizations)
-                .where(eq(organizations.id, src.orgId))
-            : [{ category: null as string | null }];
-          // D1 bind-param cap is 100; chunk the IN clause so we stay
-          // well clear of the limit even if the caller posts a large
-          // batch. See `./d1-limits.ts`.
-          const rowsToEmbed: Array<{
-            id: string;
-            title: string;
-            content: string;
-            summary: string | null;
-            version: string | null;
-            publishedAt: string | null;
-            sourceId: string;
-            type: ReleaseType;
-          }> = [];
-          for (let i = 0; i < insertedIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
-            const slice = insertedIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
-            // oxlint-disable-next-line no-await-in-loop -- D1 chunked select (100 bind param limit for inArray)
-            const rows = await db
-              .select({
-                id: releases.id,
-                title: releases.title,
-                content: releases.content,
-                summary: releases.summary,
-                version: releases.version,
-                publishedAt: releases.publishedAt,
-                sourceId: releases.sourceId,
-                type: releases.type,
-              })
-              .from(releases)
-              .where(inArray(releases.id, slice));
-            rowsToEmbed.push(...rows);
-          }
-
-          const category = orgRow?.category ?? null;
-          await embedAndUpsertReleases({
-            // oxlint-disable-next-line no-map-spread -- copy-on-write required; r is a DB row
-            releases: rowsToEmbed.map((r) => ({
-              ...r,
-              orgId: src.orgId,
-              productId: src.productId,
-              category,
-            })),
-            // See note in embedSourceSideEffect about the cast.
-            vectorIndex:
-              env.RELEASES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
-            embedConfig,
-            onPersisted: async (ids) => {
-              if (ids.length === 0) return;
-              // Mark the rows as embedded. D1's 100 bind-param cap means
-              // the embeddedAt SET + N IN-clause ids must total ≤100, so
-              // we chunk IDs — see `./d1-limits.ts`.
-              const now = new Date().toISOString();
-              for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
-                const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
-                // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
-                await db
-                  .update(releases)
-                  .set({ embeddedAt: now })
-                  .where(inArray(releases.id, slice));
-              }
-            },
-          });
-        } catch (err) {
-          logEvent("warn", {
-            component: "sources-batch",
-            event: "embed-side-effect-failed",
-            err: err instanceof Error ? err : String(err),
-          });
-        }
-      })(),
-    );
+  const shouldGenerate = !opts?.skipSummarize && insertedIds.length > 0;
+  const shouldEmbed = !opts?.skipEmbed && insertedIds.length > 0;
+  if (shouldGenerate || shouldEmbed) {
+    tasks.push(generateThenEmbed(db, env, src, insertedIds, opts));
   }
 
   await Promise.allSettled(tasks);
+}
+
+/**
+ * Generate (opt-in, fail-open) then embed. Split out of `runBatchIngestEffects`
+ * so publish/revalidate stay concurrent with this chain instead of waiting
+ * on the LLM.
+ */
+async function generateThenEmbed(
+  db: D1Db,
+  env: BatchEffectsEnv,
+  src: Source,
+  insertedIds: string[],
+  opts?: BatchEffectsOpts,
+): Promise<void> {
+  if (!opts?.skipSummarize && insertedIds.length > 0) {
+    try {
+      const generate = opts?.generateContent ?? generateContentForReleases;
+      await generate(db, env, src, insertedIds);
+    } catch (err) {
+      logEvent("warn", {
+        component: "sources-batch",
+        event: "generate-side-effect-failed",
+        sourceId: src.id,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
+  }
+
+  if (opts?.skipEmbed || insertedIds.length === 0) return;
+
+  try {
+    // Load the rows back so we have full content, category, and (when
+    // generate just ran) the new summary. Chunk the IN clause for D1's
+    // 100 bind-param cap — see `./d1-limits.ts`.
+    const [orgRow] = src.orgId
+      ? await db
+          .select({ category: organizations.category })
+          .from(organizations)
+          .where(eq(organizations.id, src.orgId))
+      : [{ category: null as string | null }];
+    const rowsToEmbed: BatchEmbedRow[] = [];
+    for (let i = 0; i < insertedIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+      const slice = insertedIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+      // oxlint-disable-next-line no-await-in-loop -- D1 chunked select (100 bind param limit for inArray)
+      const rows = await db
+        .select({
+          id: releases.id,
+          title: releases.title,
+          content: releases.content,
+          summary: releases.summary,
+          version: releases.version,
+          publishedAt: releases.publishedAt,
+          sourceId: releases.sourceId,
+          type: releases.type,
+        })
+        .from(releases)
+        .where(inArray(releases.id, slice));
+      rowsToEmbed.push(...rows);
+    }
+
+    if (opts?.embedReleases) {
+      await opts.embedReleases(rowsToEmbed);
+      return;
+    }
+
+    const embedConfig = await buildEmbedConfig(env);
+    if (!embedConfig) return;
+
+    const category = orgRow?.category ?? null;
+    await embedAndUpsertReleases({
+      // oxlint-disable-next-line no-map-spread -- copy-on-write required; r is a DB row
+      releases: rowsToEmbed.map((r) => ({
+        ...r,
+        orgId: src.orgId,
+        productId: src.productId,
+        category,
+      })),
+      // See note in embedSourceSideEffect about the cast.
+      vectorIndex:
+        env.RELEASES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
+      embedConfig,
+      onPersisted: async (ids) => {
+        if (ids.length === 0) return;
+        // Mark the rows as embedded. D1's 100 bind-param cap means
+        // the embeddedAt SET + N IN-clause ids must total ≤100, so
+        // we chunk IDs — see `./d1-limits.ts`.
+        const now = new Date().toISOString();
+        for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+          const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+          // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
+          await db.update(releases).set({ embeddedAt: now }).where(inArray(releases.id, slice));
+        }
+      },
+    });
+  } catch (err) {
+    logEvent("warn", {
+      component: "sources-batch",
+      event: "embed-side-effect-failed",
+      err: err instanceof Error ? err : String(err),
+    });
+  }
 }
