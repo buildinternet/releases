@@ -1,111 +1,32 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { mockModule } from "../../../tests/mock-module.js";
-
-type FakeSub = {
-  id: string;
-  scope?: "org" | "follows";
-  orgId: string | null;
-  url: string;
-  sourceId: string | null;
-  description: string | null;
-  enabled: boolean;
-  secretVersion: number;
-  createdAt: string;
-  lastSuccessAt: string | null;
-  lastErrorAt: string | null;
-  lastErrorMsg: string | null;
-  consecutiveFailures: number;
-  disabledReason: string | null;
-};
-
-const store: FakeSub[] = [];
-let nextId = 1;
-
-// Queue spy: records all messages sent via WEBHOOK_DELIVERY_QUEUE.send().
-const queueMessages: unknown[] = [];
-
-// Stub the worker-local query module so the route exercises real validation/
-// signing logic against an in-memory store, without standing up a D1 fake.
-await mockModule(
-  "../src/webhooks/queries.js",
-  () => ({
-    insertWebhookSubscription: async (
-      _db: unknown,
-      input: { orgId: string; url: string; sourceId: string | null; description: string | null },
-    ) => {
-      const row: FakeSub = {
-        id: `whk_test${String(nextId++).padStart(4, "0")}`,
-        orgId: input.orgId,
-        url: input.url,
-        sourceId: input.sourceId,
-        description: input.description,
-        enabled: true,
-        secretVersion: 1,
-        createdAt: new Date().toISOString(),
-        lastSuccessAt: null,
-        lastErrorAt: null,
-        lastErrorMsg: null,
-        consecutiveFailures: 0,
-        disabledReason: null,
-      };
-      store.push(row);
-      return row;
-    },
-    getWebhookSubscriptionById: async (_db: unknown, id: string) =>
-      store.find((s) => s.id === id) ?? null,
-    listWebhookSubscriptionsByOrg: async (
-      _db: unknown,
-      orgId: string,
-      opts?: { enabledOnly?: boolean },
-    ) => store.filter((s) => s.orgId === orgId && (!opts?.enabledOnly || s.enabled)),
-    updateWebhookSubscription: async (
-      _db: unknown,
-      id: string,
-      updates: Partial<{
-        url: string;
-        description: string | null;
-        enabled: boolean;
-        disabledReason: string | null;
-        consecutiveFailures: number;
-      }>,
-    ) => {
-      const idx = store.findIndex((s) => s.id === id);
-      if (idx === -1) return null;
-      Object.assign(store[idx], updates);
-      return { ...store[idx] };
-    },
-    deleteWebhookSubscription: async (_db: unknown, id: string) => {
-      const idx = store.findIndex((s) => s.id === id);
-      if (idx !== -1) store.splice(idx, 1);
-    },
-    bumpWebhookSecretVersion: async (_db: unknown, id: string) => {
-      const sub = store.find((s) => s.id === id);
-      if (!sub) return null;
-      sub.secretVersion += 1;
-      return sub.secretVersion;
-    },
-    matchWebhookSubscriptions: async (_db: unknown, orgIds: string[]) =>
-      orgIds.length === 0
-        ? []
-        : store.filter((s) => s.enabled && s.orgId && orgIds.includes(s.orgId)),
-    matchFollowsScopedWebhookSubscriptions: async () =>
-      store.filter((s) => s.enabled && (s as { scope?: string }).scope === "follows"),
-    loadFollowTargetsForUsers: async () => new Map(),
-  }),
-  import.meta.url,
-);
-
-// Imports must follow mock.module so the route picks up the stub.
-const { Hono } = await import("hono");
-const { webhooksRoutes } = await import("../src/routes/webhooks.js");
+/**
+ * Admin `/v1/webhooks` route tests.
+ *
+ * Uses a real migrated `createTestDb()` handle — the same seam as
+ * `me-webhooks.test.ts`. A previous in-memory FakeSub + `mock.module` of
+ * `webhooks/queries.js` leaked process-globally (Bun cannot restore it) and
+ * made `/v1/me/webhooks` create-vs-read split-brain whenever Linux loaded
+ * this file first.
+ */
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { Hono } from "hono";
+import { eq } from "drizzle-orm";
+import { organizations, webhookSubscriptions } from "@buildinternet/releases-core/schema";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { webhooksRoutes } from "../src/routes/webhooks.js";
 
 const TEST_MASTER_KEY = "a".repeat(64);
+const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
+const ORG_ID = "org_test";
+
+const queueMessages: unknown[] = [];
+
+let h: TestDatabase;
 
 function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
   const masterKey = opts === undefined ? TEST_MASTER_KEY : (opts.masterKey ?? TEST_MASTER_KEY);
-  const withQueue = opts?.withQueue !== false; // default true
+  const withQueue = opts?.withQueue !== false;
   const fakeEnv: Record<string, unknown> = {
-    DB: {},
+    DB: h.db,
     WEBHOOK_HMAC_MASTER: masterKey !== null ? { get: async () => masterKey } : undefined,
   };
   if (withQueue) {
@@ -122,11 +43,28 @@ function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
   return (req: Request) => app.fetch(req, fakeEnv);
 }
 
-beforeEach(() => {
-  store.length = 0;
+async function createSub(
+  fetch: (req: Request) => Promise<Response> | Response,
+  body: Record<string, unknown> = {},
+): Promise<{ id: string; signingKey: string }> {
+  const res = await fetch(
+    new Request("https://x.test/v1/webhooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: ORG_ID, url: PUBLIC_HOOK_URL, ...body }),
+    }),
+  );
+  expect(res.status).toBe(201);
+  return (await res.json()) as { id: string; signingKey: string };
+}
+
+beforeEach(async () => {
+  h = createTestDb();
   queueMessages.length = 0;
-  nextId = 1;
+  await h.db.insert(organizations).values({ id: ORG_ID, name: "Test Org", slug: "test-org" });
 });
+
+afterEach(() => h.cleanup());
 
 describe("POST /v1/webhooks", () => {
   it("creates a subscription and returns id + signing key", async () => {
@@ -135,7 +73,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
+        body: JSON.stringify({ orgId: ORG_ID, url: PUBLIC_HOOK_URL }),
       }),
     );
     expect(res.status).toBe(201);
@@ -150,7 +88,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "http://insecure/u" }),
+        body: JSON.stringify({ orgId: ORG_ID, url: "http://insecure/u" }),
       }),
     );
     expect(res.status).toBe(400);
@@ -162,7 +100,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://10.0.0.1/hook" }),
+        body: JSON.stringify({ orgId: ORG_ID, url: "https://10.0.0.1/hook" }),
       }),
     );
     expect(res.status).toBe(400);
@@ -174,7 +112,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "not-a-url" }),
+        body: JSON.stringify({ orgId: ORG_ID, url: "not-a-url" }),
       }),
     );
     expect(res.status).toBe(400);
@@ -186,7 +124,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: "https://1.1.1.1/hook" }),
+        body: JSON.stringify({ url: PUBLIC_HOOK_URL }),
       }),
     );
     expect(res.status).toBe(400);
@@ -198,7 +136,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test" }),
+        body: JSON.stringify({ orgId: ORG_ID }),
       }),
     );
     expect(res.status).toBe(400);
@@ -208,18 +146,12 @@ describe("POST /v1/webhooks", () => {
 describe("GET /v1/webhooks", () => {
   it("returns 200 with the subscriptions seeded for an org", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const res = await fetch(new Request("https://x.test/v1/webhooks?org=org_test"));
+    await createSub(fetch);
+    const res = await fetch(new Request(`https://x.test/v1/webhooks?org=${ORG_ID}`));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { subscriptions: { id: string; orgId: string }[] };
     expect(body.subscriptions).toHaveLength(1);
-    expect(body.subscriptions[0].orgId).toBe("org_test");
+    expect(body.subscriptions[0]!.orgId).toBe(ORG_ID);
   });
 
   it("returns 400 when org param is missing", async () => {
@@ -232,37 +164,20 @@ describe("GET /v1/webhooks", () => {
 describe("GET /v1/webhooks/:id", () => {
   it("returns 404 for an unknown id even when other subscriptions exist", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
+    await createSub(fetch);
     const res = await fetch(new Request("https://x.test/v1/webhooks/whk_nonexistent"));
     expect(res.status).toBe(404);
   });
 
   it("returns 200 with the subscription for a known id", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
     const res = await fetch(new Request(`https://x.test/v1/webhooks/${id}`));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { id?: string };
     expect(body.id).toBe(id);
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PATCH /v1/webhooks/:id
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("PATCH /v1/webhooks/:id", () => {
   it("returns 404 for an unknown id", async () => {
@@ -279,14 +194,7 @@ describe("PATCH /v1/webhooks/:id", () => {
 
   it("returns 400 when url is invalid", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
@@ -299,14 +207,7 @@ describe("PATCH /v1/webhooks/:id", () => {
 
   it("returns 400 when url is HTTP (not HTTPS)", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
@@ -319,14 +220,7 @@ describe("PATCH /v1/webhooks/:id", () => {
 
   it("returns 400 when no recognized fields are provided", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
@@ -339,18 +233,11 @@ describe("PATCH /v1/webhooks/:id", () => {
 
   it("resets consecutiveFailures and clears disabledReason when enabled:true", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
-    // Manually set the subscription to disabled with some failures
-    store[0].enabled = false;
-    store[0].consecutiveFailures = 5;
-    store[0].disabledReason = "auto disabled";
+    const { id } = await createSub(fetch);
+    await h.db
+      .update(webhookSubscriptions)
+      .set({ enabled: false, consecutiveFailures: 5, disabledReason: "auto disabled" })
+      .where(eq(webhookSubscriptions.id, id));
 
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
@@ -360,7 +247,11 @@ describe("PATCH /v1/webhooks/:id", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as FakeSub;
+    const body = (await res.json()) as {
+      enabled: boolean;
+      consecutiveFailures: number;
+      disabledReason: string | null;
+    };
     expect(body.enabled).toBe(true);
     expect(body.consecutiveFailures).toBe(0);
     expect(body.disabledReason).toBeNull();
@@ -368,14 +259,7 @@ describe("PATCH /v1/webhooks/:id", () => {
 
   it("sets disabledReason to 'manually disabled' when enabled:false with no reason", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
 
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
@@ -385,21 +269,14 @@ describe("PATCH /v1/webhooks/:id", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as FakeSub;
+    const body = (await res.json()) as { enabled: boolean; disabledReason: string | null };
     expect(body.enabled).toBe(false);
     expect(body.disabledReason).toBe("manually disabled");
   });
 
   it("updates description and returns fresh subscription", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
 
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
@@ -409,27 +286,16 @@ describe("PATCH /v1/webhooks/:id", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as FakeSub;
+    const body = (await res.json()) as { id: string; description: string | null };
     expect(body.id).toBe(id);
     expect(body.description).toBe("updated description");
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /v1/webhooks/:id
-// ─────────────────────────────────────────────────────────────────────────────
-
 describe("DELETE /v1/webhooks/:id", () => {
   it("returns 204 for an existing subscription", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "DELETE",
@@ -440,14 +306,7 @@ describe("DELETE /v1/webhooks/:id", () => {
 
   it("subscription is gone after delete (GET returns 404)", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
     await fetch(
       new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "DELETE",
@@ -468,10 +327,6 @@ describe("DELETE /v1/webhooks/:id", () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /v1/webhooks/:id/rotate-secret
-// ─────────────────────────────────────────────────────────────────────────────
-
 describe("POST /v1/webhooks/:id/rotate-secret", () => {
   it("returns 404 for an unknown id", async () => {
     const fetch = makeApp();
@@ -485,15 +340,12 @@ describe("POST /v1/webhooks/:id/rotate-secret", () => {
 
   it("bumps secretVersion to 2 and returns a valid 64-hex signing key", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
-    expect(store[0].secretVersion).toBe(1);
+    const { id } = await createSub(fetch);
+    const [before] = await h.db
+      .select({ secretVersion: webhookSubscriptions.secretVersion })
+      .from(webhookSubscriptions)
+      .where(eq(webhookSubscriptions.id, id));
+    expect(before!.secretVersion).toBe(1);
 
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}/rotate-secret`, {
@@ -508,19 +360,10 @@ describe("POST /v1/webhooks/:id/rotate-secret", () => {
 
   it("returns a different signing key after rotation", async () => {
     const fetch = makeApp();
-    // First create and get the original signing key
-    const createRes = await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const original = (await createRes.json()) as { id: string; signingKey: string };
-    const id = original.id;
+    const original = await createSub(fetch);
 
     const rotateRes = await fetch(
-      new Request(`https://x.test/v1/webhooks/${id}/rotate-secret`, {
+      new Request(`https://x.test/v1/webhooks/${original.id}/rotate-secret`, {
         method: "POST",
       }),
     );
@@ -528,10 +371,6 @@ describe("POST /v1/webhooks/:id/rotate-secret", () => {
     expect(rotated.signingKey).not.toBe(original.signingKey);
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /v1/webhooks/:id/test
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("POST /v1/webhooks/:id/test", () => {
   it("returns 404 for an unknown id", async () => {
@@ -546,14 +385,7 @@ describe("POST /v1/webhooks/:id/test", () => {
 
   it("returns { enqueued: true, eventId } and sends the message to the queue", async () => {
     const fetch = makeApp();
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
 
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}/test`, {
@@ -565,7 +397,6 @@ describe("POST /v1/webhooks/:id/test", () => {
     expect(body.enqueued).toBe(true);
     expect(body.eventId).toMatch(/^evt_/);
 
-    // Verify the message was actually enqueued
     expect(queueMessages).toHaveLength(1);
     const msg = queueMessages[0] as {
       subscriptionId: string;
@@ -575,22 +406,14 @@ describe("POST /v1/webhooks/:id/test", () => {
       attempt: number;
     };
     expect(msg.subscriptionId).toBe(id);
-    expect(msg.url).toBe("https://1.1.1.1/hook");
+    expect(msg.url).toBe(PUBLIC_HOOK_URL);
     expect(msg.event.type).toBe("release.created");
     expect(msg.attempt).toBe(1);
   });
 
   it("returns 503 when WEBHOOK_DELIVERY_QUEUE binding is missing", async () => {
     const fetch = makeApp({ withQueue: false });
-    await fetch(
-      new Request("https://x.test/v1/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
-      }),
-    );
-    // POST creates the sub regardless of queue binding; only the /test endpoint needs the queue.
-    const id = store[0].id;
+    const { id } = await createSub(fetch);
 
     const res = await fetch(
       new Request(`https://x.test/v1/webhooks/${id}/test`, {
@@ -600,10 +423,6 @@ describe("POST /v1/webhooks/:id/test", () => {
     expect(res.status).toBe(503);
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /v1/webhooks/:id/deliveries
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("GET /v1/webhooks/:id/deliveries", () => {
   it("returns 503 (unavailable) when CLOUDFLARE_API_TOKEN is absent", async () => {
@@ -618,17 +437,15 @@ describe("GET /v1/webhooks/:id/deliveries", () => {
   });
 
   it("returns 400 when id is malformed (does not match whk_ pattern)", async () => {
-    // Build an app with CLOUDFLARE_* creds set (AE query still needs a mocked fetch).
     const fakeEnv: Record<string, unknown> = {
-      DB: {},
+      DB: h.db,
       WEBHOOK_HMAC_MASTER: { get: async () => TEST_MASTER_KEY },
       WEBHOOK_DELIVERY_QUEUE: { send: async () => {} },
       CLOUDFLARE_API_TOKEN: { get: async () => "fake-token" },
       CLOUDFLARE_ACCOUNT_ID: { get: async () => "fake-account" },
     };
-    const { Hono: H } = await import("hono");
-    const app = new H();
-    const v1 = new H();
+    const app = new Hono();
+    const v1 = new Hono();
     v1.route("/", webhooksRoutes);
     app.route("/v1", v1);
     const fetch = (req: Request) => app.fetch(req, fakeEnv);
