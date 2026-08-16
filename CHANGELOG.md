@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 15, 2026
+
+**Fixed**
+- Releases ingested through the batch API now have AI-generated titles and summaries before they are indexed for search — they previously embedded without generated content and had to wait for a background summarization pass.
+
 ## August 12, 2026
 
 **Changed**
