@@ -148,6 +148,11 @@ const btnBase =
 export const primaryButtonClass = `${btnBase} bg-[var(--accent)] text-[var(--on-accent)] hover:brightness-110`;
 export const outlineButtonClass = `${btnBase} border border-stone-200 bg-white text-stone-900 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800`;
 
+/** Auth-card field chrome — slightly taller/rounder than settings `inputClass`. */
+export const authInputClass =
+  "mt-2 w-full rounded-[11px] border border-stone-200 bg-white px-3.5 py-2.5 text-[14px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950/60 dark:text-stone-100 dark:placeholder:text-stone-500";
+export const authLabelClass = "block text-[12.5px] font-medium text-stone-700 dark:text-stone-200";
+
 /* ─────────────────────────── card chrome ─────────────────────────── */
 
 /** White card shell with an optional sticky-feeling action footer. */

@@ -15,3 +15,8 @@ Imported as `@releases/design-system` (and `/styles.css`, `/tokens.css`).
 Run `node build.mjs` (or `bun run build`) to produce `dist/` — it compiles the ESM bundle, the Tailwind CSS, and per-component `.d.ts` files, and copies the referenced font weights.
 
 **Private, workspace-only — not published to npm.**
+
+## What lives where
+
+- **Look** (tokens, class strings, thin wrappers) — this package. Buttons, inputs, cards, list rows, eyebrows. Feature UI styles with these constants rather than inventing another `inputClass`.
+- **Overlay behavior** (popover, select, dialog) — `web/src/components/ui`, Base UI primitives restyled onto the house stone tokens. New floating UI (filter menus, confirms, selects) uses those primitives. Do not add another `pointerdown` + Escape menu.

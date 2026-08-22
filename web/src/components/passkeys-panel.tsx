@@ -2,13 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { fieldLabelClass, inputClass, secondaryButtonClass } from "@releases/design-system";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useSession, passkey } from "@/lib/auth-client";
-
-const labelClass = "block text-sm font-medium text-stone-700 dark:text-stone-200";
-const inputClass =
-  "mt-1 w-full border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
-const buttonClass =
-  "inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
 
 /**
  * One passkey as returned by `passkey.listUserPasskeys`. The plugin's row carries
@@ -160,7 +156,7 @@ export function PasskeysPanel() {
         className="space-y-4 border border-stone-200 p-5 dark:border-stone-800"
       >
         <div>
-          <label htmlFor="passkey-name" className={labelClass}>
+          <label htmlFor="passkey-name" className={fieldLabelClass}>
             Name <span className="text-stone-400">(optional)</span>
           </label>
           <input
@@ -174,7 +170,7 @@ export function PasskeysPanel() {
         <p className="text-sm text-stone-500 dark:text-stone-400">
           Your browser will prompt you to create the passkey. Name it so you can recognize it later.
         </p>
-        <button type="submit" disabled={adding} className={buttonClass}>
+        <button type="submit" disabled={adding} className={secondaryButtonClass}>
           {adding ? "Waiting for your device…" : "Add a passkey"}
         </button>
       </form>
@@ -205,7 +201,7 @@ export function PasskeysPanel() {
                       className={`${inputClass} mt-0`}
                       aria-label="New passkey name"
                     />
-                    <button type="submit" className={buttonClass}>
+                    <button type="submit" className={secondaryButtonClass}>
                       Save
                     </button>
                     <button
@@ -238,32 +234,13 @@ export function PasskeysPanel() {
                       >
                         Rename
                       </button>
-                      {confirmId === pk.id ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => onDelete(pk.id)}
-                            className="inline-flex h-9 items-center justify-center border border-red-300 bg-white px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30"
-                          >
-                            Confirm remove
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmId(null)}
-                            className="text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmId(pk.id)}
-                          className="text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-                        >
-                          Remove
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmId(pk.id)}
+                        className="text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                      >
+                        Remove
+                      </button>
                     </div>
                   </>
                 )}
@@ -272,6 +249,19 @@ export function PasskeysPanel() {
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmId != null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmId(null);
+        }}
+        title="Remove passkey"
+        description="You’ll need this device again if you want to sign in with a passkey."
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (confirmId) void onDelete(confirmId);
+        }}
+      />
     </div>
   );
 }

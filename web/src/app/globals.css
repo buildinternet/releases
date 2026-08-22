@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@releases/design-system/tokens.css";
+@import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -342,4 +343,68 @@
   .lightbox-card {
     animation: none;
   }
+}
+
+/*
+  Overlay primitives (`web/src/components/ui`) speak shadcn/Base UI token
+  names (`bg-popover`, `border-input`, `text-muted-foreground`, …). Map those
+  onto the house stone palette here.
+
+  `--ui-*` is the prefix so nothing collides with brand `--accent` from
+  `@releases/design-system/tokens.css`. `--color-accent` is the *hover
+  wash* (stone), not the brand blue — existing UI uses `bg-[var(--accent)]`
+  / `text-[var(--accent)]` for brand. `--color-primary` is the brand accent,
+  for the rare overlay control that wants a filled action.
+*/
+:root {
+  --ui-bg: #ffffff;
+  --ui-fg: #1c1917; /* stone-900 */
+  --ui-popover: #ffffff;
+  --ui-popover-fg: #1c1917;
+  --ui-border: #e7e5e4; /* stone-200 */
+  --ui-input: #e7e5e4;
+  --ui-ring: #a8a29e; /* stone-400 */
+  --ui-muted: #f5f5f4; /* stone-100 */
+  --ui-muted-fg: #78716c; /* stone-500 */
+  --ui-destructive: #dc2626; /* red-600 */
+  --ui-secondary: #f5f5f4;
+  --ui-secondary-fg: #1c1917;
+  --ui-radius: 0.5625rem; /* 9px — matches DS buttons */
+}
+.dark {
+  --ui-bg: #0c0a09; /* stone-950 */
+  --ui-fg: #f5f5f4; /* stone-100 */
+  --ui-popover: #0c0a09;
+  --ui-popover-fg: #f5f5f4;
+  --ui-border: #292524; /* stone-800 */
+  --ui-input: #44403c; /* stone-700 */
+  --ui-ring: #78716c; /* stone-500 */
+  --ui-muted: #1c1917; /* stone-900 */
+  --ui-muted-fg: #a8a29e; /* stone-400 */
+  --ui-destructive: #f87171; /* red-400 */
+  --ui-secondary: #1c1917;
+  --ui-secondary-fg: #f5f5f4;
+}
+
+@theme inline {
+  --color-background: var(--ui-bg);
+  --color-foreground: var(--ui-fg);
+  --color-popover: var(--ui-popover);
+  --color-popover-foreground: var(--ui-popover-fg);
+  --color-border: var(--ui-border);
+  --color-input: var(--ui-input);
+  --color-ring: var(--ui-ring);
+  --color-muted: var(--ui-muted);
+  --color-muted-foreground: var(--ui-muted-fg);
+  --color-destructive: var(--ui-destructive);
+  --color-secondary: var(--ui-secondary);
+  --color-secondary-foreground: var(--ui-secondary-fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-accent: var(--ui-muted);
+  --color-accent-foreground: var(--ui-fg);
+  --radius-sm: calc(var(--ui-radius) * 0.6);
+  --radius-md: calc(var(--ui-radius) * 0.8);
+  --radius-lg: var(--ui-radius);
+  --radius-xl: calc(var(--ui-radius) * 1.4);
 }
