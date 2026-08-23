@@ -143,6 +143,34 @@
   color: inherit;
 }
 
+/* ── Docs tables ── */
+/* Markdown tables compose shadcn Table (2–3 col) and Item (4+ col records).
+   A little extra CSS: 3-col directories need a fixed layout so long keys
+   don't shove Description off the article, and inline `code` wraps as a chip
+   instead of overflowing. See `docs-table.tsx`. */
+.prose [data-slot="table"] {
+  margin: 0;
+}
+.prose [data-slot="table-container"] {
+  margin: 1.25em 0;
+}
+.prose [data-slot="table"][data-cols="3"] th:nth-child(1),
+.prose [data-slot="table"][data-cols="3"] td:nth-child(1) {
+  width: 13rem;
+}
+.prose [data-slot="table"][data-cols="3"] th:nth-child(2),
+.prose [data-slot="table"][data-cols="3"] td:nth-child(2) {
+  width: 8rem;
+}
+.prose [data-slot="table"] code,
+.prose [data-slot="item"] code {
+  display: inline-block;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  font-weight: 400;
+}
+
 /* ── Account menu pop-in ── */
 /* Subtle rise+fade for the header account dropdown and the sidebar workspace
    selector menu (the design's `om-pop`). */
