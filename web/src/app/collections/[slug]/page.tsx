@@ -109,7 +109,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
         {latestDigest && (
           <Link
             href={`/collections/${slug}/digest/${latestDigest.weekStart}`}
-            className="mt-2 inline-block text-[13px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]"
+            className="mt-2 inline-block text-[14px] font-medium text-[var(--accent)] transition-colors hover:underline"
             aria-label={`This week's digest: ${latestDigest.title}`}
           >
             This week: {latestDigest.title} →

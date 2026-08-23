@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CommandSyntax } from "@/components/command-syntax";
-import { CopyIcon } from "@/components/copy-icon";
 import { OpenInAgentMenu } from "@/components/open-in-agent-menu";
+import { CopyButton } from "@/components/ui/copy-button";
 import { resolveTarget } from "@/lib/agent-launch";
-import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 type TabId = (typeof tabs)[number]["id"];
 
@@ -39,12 +38,12 @@ const tabs = [
 
 export function InstallTabs() {
   const [active, setActive] = useState<TabId>("npm");
-  const { copied, copy } = useCopyToClipboard();
+  const copyRef = useRef<HTMLButtonElement>(null);
 
   const current = tabs.find((t) => t.id === active)!;
 
   return (
-    <div className="w-full max-w-[540px] mx-auto">
+    <div className="w-full">
       <div className="flex overflow-x-auto border-b border-stone-200 dark:border-stone-700 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((tab) => (
           <button
@@ -61,20 +60,21 @@ export function InstallTabs() {
         ))}
       </div>
 
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          onClick={() => copy(current.command)}
-          aria-label={copied ? "Copied" : `Copy command: ${current.command}`}
-          className="min-w-0 flex-1 text-left bg-stone-100 dark:bg-stone-900 border border-t-0 border-stone-200 dark:border-stone-700 rounded-b-lg px-4 py-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-800/80 transition-colors"
-        >
-          <code className="min-w-0 flex-1 text-[13px] font-mono text-stone-700 dark:text-stone-300 whitespace-pre-wrap break-words pointer-events-none">
-            <CommandSyntax command={current.command} />
-          </code>
-          <span className="shrink-0 p-1.5 text-stone-400 dark:text-stone-500">
-            <CopyIcon copied={copied} />
-          </span>
-        </button>
+      <div
+        onClick={() => copyRef.current?.click()}
+        className="w-full flex items-center justify-between gap-3 bg-stone-100 dark:bg-stone-900 border border-t-0 border-stone-200 dark:border-stone-700 rounded-b-lg px-4 py-3 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-800/80 transition-colors"
+      >
+        <code className="min-w-0 flex-1 text-[13px] font-mono text-stone-700 dark:text-stone-300 whitespace-pre-wrap break-words pointer-events-none">
+          <CommandSyntax command={current.command} />
+        </code>
+        <CopyButton
+          ref={copyRef}
+          text={current.command}
+          aria-label={`Copy command: ${current.command}`}
+        />
+      </div>
+
+      <div className="mt-2 flex justify-end">
         <OpenInAgentMenu target={resolveTarget(active)} className="shrink-0" />
       </div>
     </div>
