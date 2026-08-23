@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CopyIcon } from "@/components/copy-icon";
-import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { CopyButton } from "@/components/ui/copy-button";
 
 type TerminalPane = {
   label: string;
@@ -18,7 +17,6 @@ function formatTokens(n: number): string {
 
 export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
   const [active, setActive] = useState(0);
-  const { copied, copy } = useCopyToClipboard();
 
   const current = panes[active];
   const fullText = current.command ? `$ ${current.command}\n${current.output}` : current.output;
@@ -54,14 +52,10 @@ export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
         )}
       </div>
       <div className="group relative overflow-hidden rounded-md border border-stone-200 bg-stone-100 dark:border-stone-800 dark:bg-[oklch(0.268_0.007_286.3)]">
-        <button
-          type="button"
-          onClick={() => copy(fullText)}
-          aria-label={copied ? "Copied" : "Copy to clipboard"}
-          className="absolute top-2 right-2 rounded-md p-1.5 text-stone-400 opacity-0 transition-opacity hover:bg-stone-200 hover:text-stone-700 group-hover:opacity-100 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-200"
-        >
-          <CopyIcon copied={copied} size={14} />
-        </button>
+        <CopyButton
+          text={fullText}
+          className="absolute top-2 right-2 opacity-0 transition-opacity hover:bg-stone-200 group-hover:opacity-100 focus-visible:opacity-100 dark:hover:bg-stone-800"
+        />
         <div className="overflow-x-auto">
           <pre className="m-0 !border-0 !bg-transparent p-4 pr-12 font-mono text-[13px] leading-relaxed">
             {current.command && (

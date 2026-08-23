@@ -1,17 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { CommandSyntax } from "@/components/command-syntax";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CommandTabs } from "@/components/command-tabs";
 
-type TabId = "standalone" | "plugin";
-
-const tabs: ReadonlyArray<{
-  id: TabId;
-  label: string;
-  commands: ReadonlyArray<string>;
-  note: string;
-}> = [
+const tabs = [
   {
     id: "standalone",
     label: "Standalone (any agent)",
@@ -27,58 +18,16 @@ const tabs: ReadonlyArray<{
     ],
     note: "Adds the skills plus the bundled MCP server and /releases command.",
   },
-];
+] as const;
 
 export function SkillsInstall() {
-  const [active, setActive] = useState<TabId>("standalone");
-  const copyRef = useRef<HTMLButtonElement>(null);
-  const current = tabs.find((t) => t.id === active)!;
-  const copyText = current.commands.join("\n");
-  const isMultiline = current.commands.length > 1;
-
   return (
-    <div className="not-prose my-6 w-full max-w-[640px]">
-      <div className="flex border-b border-stone-200 dark:border-stone-700">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActive(tab.id)}
-            className={`shrink-0 px-4 py-2 text-[13px] font-medium transition-colors ${
-              active === tab.id
-                ? "-mb-px border-b-2 border-stone-900 text-stone-900 dark:border-stone-100 dark:text-stone-100"
-                : "text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div
-        onClick={() => copyRef.current?.click()}
-        className={`flex cursor-pointer justify-between gap-3 rounded-b-lg border border-t-0 border-stone-200 bg-stone-100 px-4 py-3 transition-colors hover:bg-stone-200 dark:border-stone-700 dark:bg-stone-900 dark:hover:bg-stone-800/80 ${
-          isMultiline ? "items-start" : "items-center"
-        }`}
-      >
-        <div className="pointer-events-none flex min-w-0 flex-col gap-1">
-          {current.commands.map((cmd) => (
-            <code
-              key={cmd}
-              className="whitespace-pre-wrap break-words font-mono text-[13px] text-stone-700 dark:text-stone-300"
-            >
-              <CommandSyntax command={cmd} />
-            </code>
-          ))}
-        </div>
-        <CopyButton
-          ref={copyRef}
-          text={copyText}
-          aria-label={`Copy command: ${copyText}`}
-          className={isMultiline ? "-mt-1" : undefined}
-        />
-      </div>
-      <p className="mt-2 text-[12px] text-stone-500 dark:text-stone-500">{current.note}</p>
-    </div>
+    <CommandTabs
+      tabs={tabs}
+      className="not-prose my-6 w-full max-w-[640px]"
+      footer={(active) => (
+        <p className="mt-2 text-[12px] text-stone-500 dark:text-stone-500">{active.note}</p>
+      )}
+    />
   );
 }

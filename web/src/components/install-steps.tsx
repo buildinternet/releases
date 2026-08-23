@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CommandSyntax } from "@/components/command-syntax";
-import { CopyIcon } from "@/components/copy-icon";
-import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { CopyButton } from "@/components/ui/copy-button";
 
 const cliOptions = [
   { id: "npm", label: "npm", command: "npm install -g @buildinternet/releases" },
@@ -38,25 +37,21 @@ function CodeBlock({
   command: string;
   variant?: "boxed" | "inline";
 }) {
-  const { copied, copy } = useCopyToClipboard();
+  const copyRef = useRef<HTMLButtonElement>(null);
   const surface =
     variant === "inline"
       ? "bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-700"
       : "bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800";
   return (
-    <button
-      type="button"
-      onClick={() => copy(command)}
-      aria-label={copied ? "Copied" : `Copy command: ${command}`}
+    <div
+      onClick={() => copyRef.current?.click()}
       className={`${surface} w-full text-left rounded px-3 py-2 flex items-center justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
     >
       <code className="min-w-0 flex-1 text-[12px] font-mono text-stone-700 dark:text-stone-300 whitespace-pre-wrap break-words pointer-events-none">
         <CommandSyntax command={command} />
       </code>
-      <span className="shrink-0 text-stone-400 dark:text-stone-500">
-        <CopyIcon copied={copied} size={14} />
-      </span>
-    </button>
+      <CopyButton ref={copyRef} text={command} aria-label={`Copy command: ${command}`} />
+    </div>
   );
 }
 
