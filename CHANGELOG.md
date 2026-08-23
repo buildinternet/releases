@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 22, 2026
+
+**Changed**
+- Search timeframe filters now open as a popover on the search bar — the same control is reused on org, source, and collection timeline views.
+- Webhook settings now use proper selects for format and type, and destructive actions (delete, rotate, revoke) open a confirmation dialog instead of a browser prompt.
+
 ## August 15, 2026
 
 **Fixed**
