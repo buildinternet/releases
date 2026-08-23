@@ -1765,32 +1765,28 @@ export async function listCatalog(
   ]);
 
   const entries: CatalogEntry[] = [
-    ...productRows.map(
-      (p): CatalogEntry => ({
-        slug: p.slug,
-        name: p.name,
-        orgSlug: p.orgSlug,
-        orgName: p.orgName,
-        category: p.category,
-        description: p.description,
-        url: p.url,
-        entryType: "product",
-      }),
-    ),
-    ...orphanSourceRows.map(
-      (s): CatalogEntry => ({
-        slug: s.slug,
-        name: s.name,
-        orgSlug: s.orgSlug,
-        orgName: s.orgName,
-        category: null,
-        description: null,
-        url: s.url,
-        entryType: "source",
-        sourceType: s.type,
-        lastFetchedAt: s.lastFetchedAt,
-      }),
-    ),
+    ...productRows.map((p): CatalogEntry => ({
+      slug: p.slug,
+      name: p.name,
+      orgSlug: p.orgSlug,
+      orgName: p.orgName,
+      category: p.category,
+      description: p.description,
+      url: p.url,
+      entryType: "product",
+    })),
+    ...orphanSourceRows.map((s): CatalogEntry => ({
+      slug: s.slug,
+      name: s.name,
+      orgSlug: s.orgSlug,
+      orgName: s.orgName,
+      category: null,
+      description: null,
+      url: s.url,
+      entryType: "source",
+      sourceType: s.type,
+      lastFetchedAt: s.lastFetchedAt,
+    })),
   ];
 
   // entryType + slug tiebreakers keep page boundaries stable when product and

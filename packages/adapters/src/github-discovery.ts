@@ -344,8 +344,8 @@ const CHANGELOG_FILENAMES_LC = new Set(CHANGELOG_FILENAMES.map((f) => f.toLowerC
 /**
  * Directory segments whose CHANGELOGs are noise for "what did this project
  * ship" — vendored deps, build output, and test fixtures. A whole-tree search
- * matches files anywhere, so without this it would surface e.g.
- * `node_modules/**​/CHANGELOG.md`.
+ * matches files anywhere, so without this it would surface CHANGELOG.md
+ * files under node_modules and similar.
  */
 const CHANGELOG_EXCLUDE_DIRS = new Set([
   "node_modules",
