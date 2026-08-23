@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/sdk": "^0.120.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "agents": "^0.20.1",
     "zod": "^4.4.3"
