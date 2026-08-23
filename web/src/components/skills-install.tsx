@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CommandSyntax } from "@/components/command-syntax";
-import { CopyIcon } from "@/components/copy-icon";
-import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { CopyButton } from "@/components/ui/copy-button";
 
 type TabId = "standalone" | "plugin";
 
@@ -32,9 +31,10 @@ const tabs: ReadonlyArray<{
 
 export function SkillsInstall() {
   const [active, setActive] = useState<TabId>("standalone");
-  const { copied, copy } = useCopyToClipboard();
+  const copyRef = useRef<HTMLButtonElement>(null);
   const current = tabs.find((t) => t.id === active)!;
   const copyText = current.commands.join("\n");
+  const isMultiline = current.commands.length > 1;
 
   return (
     <div className="not-prose my-6 w-full max-w-[640px]">
@@ -56,8 +56,10 @@ export function SkillsInstall() {
       </div>
 
       <div
-        onClick={() => copy(copyText)}
-        className="flex cursor-pointer items-start justify-between gap-3 rounded-b-lg border border-t-0 border-stone-200 bg-stone-100 px-4 py-3 transition-colors hover:bg-stone-200 dark:border-stone-700 dark:bg-stone-900 dark:hover:bg-stone-800/80"
+        onClick={() => copyRef.current?.click()}
+        className={`flex cursor-pointer justify-between gap-3 rounded-b-lg border border-t-0 border-stone-200 bg-stone-100 px-4 py-3 transition-colors hover:bg-stone-200 dark:border-stone-700 dark:bg-stone-900 dark:hover:bg-stone-800/80 ${
+          isMultiline ? "items-start" : "items-center"
+        }`}
       >
         <div className="pointer-events-none flex min-w-0 flex-col gap-1">
           {current.commands.map((cmd) => (
@@ -69,9 +71,12 @@ export function SkillsInstall() {
             </code>
           ))}
         </div>
-        <span className="shrink-0 p-1.5 text-stone-400 dark:text-stone-500">
-          <CopyIcon copied={copied} />
-        </span>
+        <CopyButton
+          ref={copyRef}
+          text={copyText}
+          aria-label={`Copy command: ${copyText}`}
+          className={isMultiline ? "-mt-1" : undefined}
+        />
       </div>
       <p className="mt-2 text-[12px] text-stone-500 dark:text-stone-500">{current.note}</p>
     </div>

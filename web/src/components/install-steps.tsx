@@ -48,7 +48,7 @@ function CodeBlock({
       type="button"
       onClick={() => copy(command)}
       aria-label={copied ? "Copied" : `Copy command: ${command}`}
-      className={`${surface} w-full text-left rounded px-3 py-2 flex items-start justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
+      className={`${surface} w-full text-left rounded px-3 py-2 flex items-center justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
     >
       <code className="min-w-0 flex-1 text-[12px] font-mono text-stone-700 dark:text-stone-300 whitespace-pre-wrap break-words pointer-events-none">
         <CommandSyntax command={command} />
