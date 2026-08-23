@@ -13,14 +13,6 @@ import { docMarkdownComponents } from "@/components/markdown-components";
 const markdownComponents = {
   ...docMarkdownComponents,
   pre: CodeBlock,
-  // GFM tables have a min-content width that can exceed the prose column;
-  // without a scroll container they paint across the gap onto the sticky
-  // TOC rail. Scroll wide tables inside their own box instead.
-  table: (props: React.ComponentProps<"table">) => (
-    <div className="overflow-x-auto">
-      <table {...props} />
-    </div>
-  ),
 };
 
 const SLOT_PATTERN = /<!--\s*slot:([a-z0-9-]+)\s*-->/gi;

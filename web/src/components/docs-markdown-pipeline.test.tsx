@@ -59,4 +59,32 @@ describe("docs markdown pipeline", () => {
     expect(html).toContain('id="setup"');
     expect(html).toContain('id="setup-1"');
   });
+
+  it("keeps 2-column tables as a shadcn Table", () => {
+    const html = renderDoc(`
+| Flag | Description |
+| ---- | ----------- |
+| \`--json\` | Machine-readable output |
+`);
+    expect(html).toContain('data-slot="table-container"');
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('data-cols="2"');
+    expect(html).toContain("<th");
+    expect(html).toContain("--json");
+  });
+
+  it("renders 4-column comparison tables as shadcn Items", () => {
+    const html = renderDoc(`
+| Shape | Surfaces | Input | Output |
+| ----- | -------- | ----- | ------ |
+| **Page-based** | \`/v1/sources\` | \`page\` + \`limit\` | \`{ items, pagination }\` |
+`);
+    expect(html).toContain('data-slot="item-group"');
+    expect(html).toContain('data-slot="item"');
+    expect(html).toContain("Surfaces");
+    expect(html).toContain("Input");
+    expect(html).toContain("Output");
+    expect(html).toContain("/v1/sources");
+    expect(html).not.toContain("<table");
+  });
 });

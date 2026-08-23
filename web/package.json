@@ -24,6 +24,7 @@
     "@shikijs/themes": "^4.4.1",
     "@tailwindcss/typography": "^0.5.20",
     "better-auth": "^1.6.25",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",

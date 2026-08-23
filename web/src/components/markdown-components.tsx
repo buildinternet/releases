@@ -7,6 +7,7 @@ import {
   isSafeImgSrc,
 } from "@/lib/sanitize";
 import { HeadingAnchor } from "./heading-anchor";
+import { docsTableComponents } from "./docs-table";
 import { youtubeEmbedUrl, youtubeVideoId } from "@/lib/video-source";
 import { MEDIA_VIDEO_ON, shouldRenderAsVideo } from "@/lib/media";
 import { FallbackPlainImage } from "./fallback-image";
@@ -198,14 +199,17 @@ export const detailMarkdownComponents = createMarkdownComponents({
  *  page title — the markdown body's leading `# Title` IS the page's single <h1>.
  *  Demoting here would strip the only h1 from the page (Ahrefs "H1 missing",
  *  June 2026). Each doc body carries exactly one top-level `#`. */
-export const docMarkdownComponents = createMarkdownComponents({
-  imgClass: "my-3",
-  videoClass: "my-4 max-w-2xl",
-  demoteHeadings: 0,
-  // Docs run `rehype-slug` (see MarkdownDoc), so their headings carry stable
-  // ids — render the hover anchor affordance so sections are grab-able.
-  headingAnchors: true,
-});
+export const docMarkdownComponents = {
+  ...createMarkdownComponents({
+    imgClass: "my-3",
+    videoClass: "my-4 max-w-2xl",
+    demoteHeadings: 0,
+    // Docs run `rehype-slug` (see MarkdownDoc), so their headings carry stable
+    // ids — render the hover anchor affordance so sections are grab-able.
+    headingAnchors: true,
+  }),
+  ...docsTableComponents,
+};
 
 /**
  * Collapsed variant that hides images and video embeds.
