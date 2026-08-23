@@ -164,12 +164,12 @@ async function getCollectionPageRest(slug: string): Promise<CollectionPageData> 
   // routes fail independently (prefer partial page over 500).
   const [detail, releases, summariesRes] = await Promise.all([
     api.collectionDetail(slug),
-    api.collectionReleases(slug, { limit: DEFAULT_RELEASE_LIMIT }).catch(
-      (): CollectionReleasesResponse => ({
+    api
+      .collectionReleases(slug, { limit: DEFAULT_RELEASE_LIMIT })
+      .catch((): CollectionReleasesResponse => ({
         releases: [],
         pagination: { nextCursor: null, limit: DEFAULT_RELEASE_LIMIT },
-      }),
-    ),
+      })),
     api.collectionDailySummaries(slug).catch(() => ({ summaries: [] as CollectionDailySummary[] })),
   ]);
 
