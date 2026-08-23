@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
+import { fieldLabelClass, inputClass, secondaryButtonClass } from "@releases/design-system";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   listApiKeys,
   createApiKey,
@@ -10,12 +12,6 @@ import {
   type UserApiKey,
   type CreatedUserApiKey,
 } from "@/lib/api-keys";
-
-const labelClass = "block text-sm font-medium text-stone-700 dark:text-stone-200";
-const inputClass =
-  "mt-1 w-full rounded-[9px] border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none transition focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
-const buttonClass =
-  "inline-flex h-10 items-center justify-center rounded-[9px] border border-stone-200 bg-white px-4 text-sm font-medium text-stone-800 transition hover:border-stone-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-600";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -152,10 +148,14 @@ export function ApiKeysPanel({
             {revealed.key}
           </code>
           <div className="mt-3 flex gap-2">
-            <button type="button" onClick={onCopy} className={buttonClass}>
+            <button type="button" onClick={onCopy} className={secondaryButtonClass}>
               {copied ? "Copied" : "Copy"}
             </button>
-            <button type="button" onClick={() => setRevealed(null)} className={buttonClass}>
+            <button
+              type="button"
+              onClick={() => setRevealed(null)}
+              className={secondaryButtonClass}
+            >
               I've saved it
             </button>
           </div>
@@ -167,7 +167,7 @@ export function ApiKeysPanel({
         className="space-y-4 rounded-xl border border-stone-200 p-5 dark:border-stone-800"
       >
         <div>
-          <label htmlFor="key-name" className={labelClass}>
+          <label htmlFor="key-name" className={fieldLabelClass}>
             Name
           </label>
           <input
@@ -182,7 +182,7 @@ export function ApiKeysPanel({
         <p className="text-sm text-stone-500 dark:text-stone-400">
           Keys are read-only — they can search and read the catalog, but cannot modify it.
         </p>
-        <button type="submit" disabled={creating || !name.trim()} className={buttonClass}>
+        <button type="submit" disabled={creating || !name.trim()} className={secondaryButtonClass}>
           {creating ? "Creating…" : "Create key"}
         </button>
       </form>
@@ -207,37 +207,31 @@ export function ApiKeysPanel({
                     {k.expiresAt ? ` · expires ${formatDate(k.expiresAt)}` : ""}
                   </p>
                 </div>
-                {confirmId === k.id ? (
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onRevoke(k.id)}
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-red-300 bg-white px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30"
-                    >
-                      Confirm revoke
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmId(null)}
-                      className={buttonClass}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmId(k.id)}
-                    className="shrink-0 text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-                  >
-                    Revoke
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setConfirmId(k.id)}
+                  className="shrink-0 text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                >
+                  Revoke
+                </button>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmId != null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmId(null);
+        }}
+        title="Revoke API key"
+        description="This key will stop working immediately. You can’t undo this."
+        confirmLabel="Revoke"
+        onConfirm={() => {
+          if (confirmId) void onRevoke(confirmId);
+        }}
+      />
     </div>
   );
 }

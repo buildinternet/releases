@@ -3,6 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { UserWebhookListItem, UserWebhookScope } from "@buildinternet/releases-api-types";
+import { inputClass, smallButtonClass } from "@releases/design-system";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import {
   createWebhook,
@@ -17,11 +26,6 @@ import {
 } from "@/lib/webhooks";
 
 const MAX_ORG_WEBHOOKS = 10;
-
-const inputClass =
-  "mt-1 w-full rounded border border-stone-200 bg-white px-2 py-1.5 text-[13px] text-stone-900 outline-none focus:border-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100";
-const buttonClass =
-  "rounded border border-stone-200 px-3 py-1.5 text-[13px] text-stone-700 transition hover:border-stone-300 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-600 dark:hover:text-stone-100";
 
 function subscriptionLabel(sub: UserWebhookListItem): string {
   if (sub.description?.trim()) return sub.description.trim();
@@ -179,6 +183,7 @@ export function WebhooksPanel({
 
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [activityId, setActivityId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<null | { kind: "delete" | "rotate"; id: string }>(null);
   const { copied, copy } = useCopyToClipboard();
 
   const orgCount = subs.filter((s) => s.scope === "org").length;
@@ -263,11 +268,6 @@ export function WebhooksPanel({
   }
 
   async function onRotate(id: string) {
-    if (
-      !window.confirm("Rotate the signing key? Update your verifier — old signatures will fail.")
-    ) {
-      return;
-    }
     setBusyId(id);
     setError(null);
     setSuccess(null);
@@ -280,12 +280,13 @@ export function WebhooksPanel({
       setError(e instanceof Error ? e.message : "Failed to rotate signing key.");
     } finally {
       setBusyId(null);
+      setConfirm(null);
     }
   }
 
   async function onDelete(id: string) {
-    if (!window.confirm("Delete this webhook? This cannot be undone.")) return;
     await runAction(id, () => deleteWebhook(id));
+    setConfirm(null);
   }
 
   if (loading) return null;
@@ -315,10 +316,10 @@ export function WebhooksPanel({
             {revealedKey}
           </code>
           <div className="flex gap-2">
-            <button type="button" onClick={() => copy(revealedKey)} className={buttonClass}>
+            <button type="button" onClick={() => copy(revealedKey)} className={smallButtonClass}>
               {copied ? "Copied" : "Copy key"}
             </button>
-            <button type="button" onClick={() => setRevealedKey(null)} className={buttonClass}>
+            <button type="button" onClick={() => setRevealedKey(null)} className={smallButtonClass}>
               Dismiss
             </button>
           </div>
@@ -361,7 +362,7 @@ export function WebhooksPanel({
                         await testWebhook(sub.id);
                       })
                     }
-                    className={buttonClass}
+                    className={smallButtonClass}
                   >
                     {busy ? "…" : "Send test"}
                   </button>
@@ -373,7 +374,7 @@ export function WebhooksPanel({
                         await updateWebhook(sub.id, { enabled: !sub.enabled });
                       })
                     }
-                    className={buttonClass}
+                    className={smallButtonClass}
                   >
                     {sub.enabled ? "Pause" : "Resume"}
                   </button>
@@ -385,8 +386,8 @@ export function WebhooksPanel({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void onRotate(sub.id)}
-                      className={buttonClass}
+                      onClick={() => setConfirm({ kind: "rotate", id: sub.id })}
+                      className={smallButtonClass}
                     >
                       Rotate key
                     </button>
@@ -395,14 +396,14 @@ export function WebhooksPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => setActivityId((cur) => (cur === sub.id ? null : sub.id))}
-                    className={buttonClass}
+                    className={smallButtonClass}
                   >
                     {activityId === sub.id ? "Hide activity" : "Activity"}
                   </button>
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void onDelete(sub.id)}
+                    onClick={() => setConfirm({ kind: "delete", id: sub.id })}
                     className="text-red-500 hover:text-red-700 hover:underline underline-offset-2 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
                   >
                     Delete
@@ -477,7 +478,7 @@ export function WebhooksPanel({
                 value={orgSlug}
                 onChange={(e) => setOrgSlug(e.target.value)}
                 placeholder="vercel"
-                className={inputClass}
+                className={`${inputClass} mt-1`}
                 required
               />
               <p className="mt-1 text-[11px] text-stone-400">
@@ -496,7 +497,7 @@ export function WebhooksPanel({
                 value={productSlug}
                 onChange={(e) => setProductSlug(e.target.value)}
                 placeholder="next-js"
-                className={inputClass}
+                className={`${inputClass} mt-1`}
               />
             </div>
             <div>
@@ -511,7 +512,7 @@ export function WebhooksPanel({
                 value={sourceSlug}
                 onChange={(e) => setSourceSlug(e.target.value)}
                 placeholder="changelog"
-                className={inputClass}
+                className={`${inputClass} mt-1`}
               />
             </div>
           </>
@@ -524,16 +525,28 @@ export function WebhooksPanel({
           >
             Release type (optional)
           </label>
-          <select
-            id="webhook-release-type"
-            value={releaseType}
-            onChange={(e) => setReleaseType(e.target.value as "" | "feature" | "rollup")}
-            className={inputClass}
+          <Select
+            value={releaseType === "" ? "any" : releaseType}
+            onValueChange={(v) => {
+              if (v === "any" || v === "feature" || v === "rollup") {
+                setReleaseType(v === "any" ? "" : v);
+              }
+            }}
+            items={[
+              { value: "any", label: "Any" },
+              { value: "feature", label: "Feature" },
+              { value: "rollup", label: "Rollup" },
+            ]}
           >
-            <option value="">Any</option>
-            <option value="feature">Feature</option>
-            <option value="rollup">Rollup</option>
-          </select>
+            <SelectTrigger id="webhook-release-type" className="mt-1 h-10 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Any</SelectItem>
+              <SelectItem value="feature">Feature</SelectItem>
+              <SelectItem value="rollup">Rollup</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
@@ -543,15 +556,24 @@ export function WebhooksPanel({
           >
             Format
           </label>
-          <select
-            id="webhook-format"
+          <Select
             value={format}
-            onChange={(e) => setFormat(e.target.value as UserWebhookFormat)}
-            className={inputClass}
+            onValueChange={(v) => {
+              if (v === "json" || v === "slack") setFormat(v);
+            }}
+            items={[
+              { value: "json", label: "JSON (signed payload)" },
+              { value: "slack", label: "Slack message" },
+            ]}
           >
-            <option value="json">JSON (signed payload)</option>
-            <option value="slack">Slack message</option>
-          </select>
+            <SelectTrigger id="webhook-format" className="mt-1 h-10 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="json">JSON (signed payload)</SelectItem>
+              <SelectItem value="slack">Slack message</SelectItem>
+            </SelectContent>
+          </Select>
           {format === "slack" && (
             <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
               Posts a formatted message to a Slack incoming webhook URL (hooks.slack.com). No
@@ -577,7 +599,7 @@ export function WebhooksPanel({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://your.app/releases"
-            className={inputClass}
+            className={`${inputClass} mt-1`}
             required
           />
         </div>
@@ -594,7 +616,7 @@ export function WebhooksPanel({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Production hook"
-            className={inputClass}
+            className={`${inputClass} mt-1`}
           />
         </div>
 
@@ -606,11 +628,30 @@ export function WebhooksPanel({
             (scope === "org" && (!orgSlug.trim() || !canCreateOrg)) ||
             (scope === "follows" && !canCreateFollows)
           }
-          className={buttonClass}
+          className={smallButtonClass}
         >
           {creating ? "Creating…" : "Create webhook"}
         </button>
       </form>
+
+      <ConfirmDialog
+        open={confirm != null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={confirm?.kind === "rotate" ? "Rotate signing key" : "Delete webhook"}
+        description={
+          confirm?.kind === "rotate"
+            ? "Update your verifier — old signatures will fail."
+            : "This cannot be undone. Delivery history for this endpoint will be removed."
+        }
+        confirmLabel={confirm?.kind === "rotate" ? "Rotate" : "Delete"}
+        pending={busyId === confirm?.id}
+        onConfirm={() => {
+          if (confirm?.kind === "rotate") void onRotate(confirm.id);
+          else if (confirm?.kind === "delete") void onDelete(confirm.id);
+        }}
+      />
     </div>
   );
 }

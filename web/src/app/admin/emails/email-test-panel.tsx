@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { inputClass } from "@releases/design-system";
 
 type EmailSample = {
   id: string;
@@ -14,9 +15,6 @@ type SendState =
   | { status: "sending"; id: string }
   | { status: "ok"; id: string; message: string }
   | { status: "error"; id: string; message: string };
-
-const inputClass =
-  "w-full max-w-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
 
 export function EmailTestPanel({
   samples,
@@ -128,7 +126,7 @@ export function EmailTestPanel({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className={inputClass}
+          className={`${inputClass} max-w-md`}
         />
         <p className="mt-2 text-[13px] text-stone-500 dark:text-stone-400">
           Subjects are prefixed with{" "}

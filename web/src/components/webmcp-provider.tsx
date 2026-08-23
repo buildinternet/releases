@@ -291,7 +291,16 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
       { signal },
     );
 
-    return () => ctrl.abort();
+    return () => {
+      // Strict Mode remounts this effect in dev; Chrome then reports
+      // abort() as "signal is aborted without reason" and Next's overlay
+      // treats it as a runtime error. Unregister is still best-effort.
+      try {
+        ctrl.abort();
+      } catch {
+        /* already aborted / listener threw AbortError */
+      }
+    };
   }, [apiBaseUrl]);
 
   return null;

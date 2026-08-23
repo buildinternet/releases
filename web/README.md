@@ -37,7 +37,9 @@ at `https://releases.localhost`. Needs the API worker running alongside it (`bun
 have any data to render.
 
 Stack: Next.js + Tailwind CSS, consuming `@buildinternet/releases-api-types` for REST wire types
-and `@releases/design-system` for the shared token/component vocabulary.
+and `@releases/design-system` for the shared token/component vocabulary. Overlay behavior
+(popover, select, dialog) lives in `src/components/ui` — Base UI primitives restyled onto the
+house tokens. New floating UI uses those; look still comes from the design system.
 
 ## Deploy
 

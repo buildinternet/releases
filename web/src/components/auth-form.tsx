@@ -18,6 +18,8 @@ import {
   AuthError,
   AuthHeading,
   Code,
+  authInputClass,
+  authLabelClass,
   outlineButtonClass,
   primaryButtonClass,
 } from "@/components/auth-flow";
@@ -112,9 +114,8 @@ function prettyError(error: { message?: string } | null, mode: Mode): string {
     : "Could not sign you in. Please try again.";
 }
 
-const inputClass =
-  "mt-2 w-full rounded-[11px] border border-stone-200 bg-white px-3.5 py-2.5 text-[14px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950/60 dark:text-stone-100 dark:placeholder:text-stone-500";
-const labelClass = "block text-[12.5px] font-medium text-stone-700 dark:text-stone-200";
+const inputClass = authInputClass;
+const labelClass = authLabelClass;
 
 /**
  * Small pill marking the method the returning user last signed in with. Uses

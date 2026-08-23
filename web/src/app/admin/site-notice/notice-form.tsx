@@ -7,6 +7,7 @@ import {
   type SiteNotice,
   type StoredSiteNotice,
 } from "@buildinternet/releases-core/site-notice";
+import { inputClass, textareaClass } from "@releases/design-system";
 import { SiteNoticeView } from "@/components/site-notice-view";
 import { setSiteNoticeAction } from "@/app/actions/site-notice";
 
@@ -17,9 +18,6 @@ const PRESETS: { label: string; color: string }[] = [
   { label: "Danger", color: "#dc2626" },
   { label: "Neutral", color: "#44403c" },
 ];
-
-const inputClass =
-  "w-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
 
 export function NoticeForm({ current }: { current: StoredSiteNotice | null }) {
   const [active, setActive] = useState(current?.active ?? false);
@@ -82,7 +80,7 @@ export function NoticeForm({ current }: { current: StoredSiteNotice | null }) {
           value={message}
           onChange={(e) => setMessage(e.target.value.slice(0, 280))}
           rows={2}
-          className={inputClass}
+          className={textareaClass}
         />
       </div>
 

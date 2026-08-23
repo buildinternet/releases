@@ -5,7 +5,6 @@ import { SearchProvider } from "@/components/search-provider";
 import { SearchResultsLive } from "@/components/search-results-live";
 import { parseSearchFilter } from "@/lib/search-filter";
 import { SearchCliHint } from "@/components/search-cli-hint";
-import { SearchTimeframe } from "@/components/search-timeframe";
 import { parseRangeKey, rangeSince } from "@/lib/search-range";
 import type { UnifiedSearchResponse } from "@/lib/api";
 
@@ -45,10 +44,7 @@ export default async function SearchPage({
       <div className="min-h-screen">
         <div className="max-w-2xl mx-auto px-6 pt-12 pb-12">
           <h1 className="font-pixel text-2xl mb-4">Search</h1>
-          <SearchBar />
-          <div className="mt-2 flex justify-end">
-            <SearchTimeframe />
-          </div>
+          <SearchBar withFilters />
           <SearchCliHint />
           <SearchResultsLive initialFilter={filter} />
         </div>
