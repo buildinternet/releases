@@ -353,7 +353,7 @@ describe("idempotentPost", () => {
     expect(await rowCount(thrown.fixtureDb!)).toBe(0);
   });
 
-  test("a release that affects zero rows or throws replaces a client response with 503", async () => {
+  test("a release that affects zero rows or throws restores a retry barrier", async () => {
     const zero = makeHarness({
       execute: async (c) => {
         await zero.fixtureDb!.delete(idempotencyRecords);
@@ -363,9 +363,15 @@ describe("idempotentPost", () => {
     const zeroResponse = await zero.request("/effect", withKey());
     expect(zeroResponse.status).toBe(503);
     expect(await errorCode(zeroResponse)).toBe("idempotency_unavailable");
+    const zeroRetry = await zero.request("/effect", withKey());
+    expect(zeroRetry.status).toBe(409);
+    expect(await errorCode(zeroRetry)).toBe("idempotency_in_progress");
+    expect(zero.executions()).toBe(1);
+    expect(await rowCount(zero.fixtureDb!)).toBe(1);
 
     const throwing = makeHarness({
-      execute: async (c) => {
+      execute: async (c, call) => {
+        if (call === 1) await throwing.fixtureDb!.delete(idempotencyRecords);
         (throwing.db as unknown as { delete: () => never }).delete = () => {
           throw new Error("release unavailable");
         };
@@ -375,6 +381,11 @@ describe("idempotentPost", () => {
     const throwResponse = await throwing.request("/effect", withKey());
     expect(throwResponse.status).toBe(503);
     expect(await errorCode(throwResponse)).toBe("idempotency_unavailable");
+    const throwRetry = await throwing.request("/effect", withKey());
+    expect(throwRetry.status).toBe(409);
+    expect(await errorCode(throwRetry)).toBe("idempotency_in_progress");
+    expect(throwing.executions()).toBe(1);
+    expect(await rowCount(throwing.fixtureDb!)).toBe(1);
   });
 
   test("returned 5xx and unexpected throws retain processing and block another execution", async () => {
@@ -441,7 +452,7 @@ describe("idempotentPost", () => {
     }
   });
 
-  test("encryption and completion failures return 503 instead of the handler 2xx", async () => {
+  test("encryption and completion failures return 503 and retain a retry barrier", async () => {
     const subtle = crypto.subtle as unknown as {
       encrypt: typeof crypto.subtle.encrypt;
     };
@@ -470,6 +481,34 @@ describe("idempotentPost", () => {
     const response = await zero.request("/effect", withKey());
     expect(response.status).toBe(503);
     expect(await errorCode(response)).toBe("idempotency_unavailable");
+    const zeroRetry = await zero.request("/effect", withKey());
+    expect(zeroRetry.status).toBe(409);
+    expect(await errorCode(zeroRetry)).toBe("idempotency_in_progress");
+    expect(zero.executions()).toBe(1);
+    expect(await rowCount(zero.fixtureDb!)).toBe(1);
+
+    const throwing = makeHarness({
+      execute: async (_c, call) => {
+        if (call === 1) {
+          await throwing.fixtureDb!.delete(idempotencyRecords);
+          (throwing.db as unknown as { update: () => never }).update = () => {
+            throw new Error("completion unavailable");
+          };
+        }
+        return new Response("created", {
+          status: 201,
+          headers: { "Content-Type": "text/plain" },
+        });
+      },
+    });
+    const throwResponse = await throwing.request("/effect", withKey());
+    expect(throwResponse.status).toBe(503);
+    expect(await errorCode(throwResponse)).toBe("idempotency_unavailable");
+    const throwRetry = await throwing.request("/effect", withKey());
+    expect(throwRetry.status).toBe(409);
+    expect(await errorCode(throwRetry)).toBe("idempotency_in_progress");
+    expect(throwing.executions()).toBe(1);
+    expect(await rowCount(throwing.fixtureDb!)).toBe(1);
   });
 
   test("a handler 2xx does not settle before its guarded completion succeeds", async () => {

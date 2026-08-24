@@ -173,6 +173,21 @@ export async function releaseIdempotency(
   return released.length === 1;
 }
 
+export async function retainIdempotency(
+  db: Db,
+  input: {
+    principalHash: string;
+    keyHash: string;
+    requestHash: string;
+    attemptId: string;
+    now: string;
+    expiresAt: string;
+  },
+): Promise<boolean> {
+  const retained = await claimIdempotency(db, input);
+  return retained.kind !== "unavailable";
+}
+
 export async function sweepExpiredIdempotency(
   db: Db,
   input: { now: string; limit: number },

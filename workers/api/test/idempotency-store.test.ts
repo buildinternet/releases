@@ -6,6 +6,7 @@ import {
   claimIdempotency,
   completeIdempotency,
   releaseIdempotency,
+  retainIdempotency,
   sweepExpiredIdempotency,
 } from "../src/lib/idempotency-store";
 
@@ -196,6 +197,62 @@ describe("idempotency store", () => {
           attemptId: "attempt-two",
         }),
       ).toEqual({ kind: "claimed", attemptId: "attempt-two" });
+    } finally {
+      cleanup();
+    }
+  });
+
+  test("retention recreates a missing processing barrier with the original attempt", async () => {
+    const { db, storeDb, cleanup } = migratedDb();
+    try {
+      expect(await retainIdempotency(storeDb, BASE)).toBe(true);
+      expect(
+        await db
+          .select({
+            requestHash: idempotencyRecords.requestHash,
+            state: idempotencyRecords.state,
+            attemptId: idempotencyRecords.attemptId,
+            createdAt: idempotencyRecords.createdAt,
+            expiresAt: idempotencyRecords.expiresAt,
+          })
+          .from(idempotencyRecords),
+      ).toEqual([
+        {
+          requestHash: "r".repeat(64),
+          state: "processing",
+          attemptId: "attempt-one",
+          createdAt: "2026-08-24T12:00:00.000Z",
+          expiresAt: "2026-08-25T12:00:00.000Z",
+        },
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test("retention preserves another live winner instead of overwriting its ownership", async () => {
+    const { db, storeDb, cleanup } = migratedDb();
+    try {
+      await claimIdempotency(storeDb, {
+        ...BASE,
+        requestHash: "x".repeat(64),
+        attemptId: "attempt-new-winner",
+      });
+
+      expect(await retainIdempotency(storeDb, BASE)).toBe(true);
+      expect(
+        await db
+          .select({
+            requestHash: idempotencyRecords.requestHash,
+            attemptId: idempotencyRecords.attemptId,
+          })
+          .from(idempotencyRecords),
+      ).toEqual([
+        {
+          requestHash: "x".repeat(64),
+          attemptId: "attempt-new-winner",
+        },
+      ]);
     } finally {
       cleanup();
     }

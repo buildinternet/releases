@@ -18,6 +18,7 @@ import {
   claimIdempotency,
   completeIdempotency,
   releaseIdempotency,
+  retainIdempotency,
 } from "../lib/idempotency-store.js";
 import { respondError } from "../lib/error-response.js";
 
@@ -177,6 +178,17 @@ async function confirmedRelease(
   }
 }
 
+async function confirmedRetention(
+  db: ReturnType<typeof createDb>,
+  input: Parameters<typeof retainIdempotency>[1],
+): Promise<boolean> {
+  try {
+    return await retainIdempotency(db, input);
+  } catch {
+    return false;
+  }
+}
+
 export async function idempotentPost<T>(
   c: Context<Env>,
   options: {
@@ -228,16 +240,17 @@ export async function idempotentPost<T>(
 
   const db = createDb(c.env.DB);
   const now = new Date();
+  const claimInput = {
+    principalHash,
+    keyHash,
+    requestHash,
+    attemptId: crypto.randomUUID(),
+    now: now.toISOString(),
+    expiresAt: new Date(now.getTime() + RETENTION_MS).toISOString(),
+  };
   let claim: Awaited<ReturnType<typeof claimIdempotency>>;
   try {
-    claim = await claimIdempotency(db, {
-      principalHash,
-      keyHash,
-      requestHash,
-      attemptId: crypto.randomUUID(),
-      now: now.toISOString(),
-      expiresAt: new Date(now.getTime() + RETENTION_MS).toISOString(),
-    });
+    claim = await claimIdempotency(db, claimInput);
   } catch {
     return unavailable(c);
   }
@@ -284,13 +297,18 @@ export async function idempotentPost<T>(
     response = await options.execute(preclaimInput);
   } catch (error) {
     if (isReleasesError(error) && error.status >= 400 && error.status < 500) {
-      if (!(await confirmedRelease(db, identity))) return unavailable(c);
+      if (!(await confirmedRelease(db, identity))) {
+        await confirmedRetention(db, claimInput);
+        return unavailable(c);
+      }
     }
     throw error;
   }
 
   if (response.status >= 300 && response.status < 500) {
-    return (await confirmedRelease(db, identity)) ? response : unavailable(c);
+    if (await confirmedRelease(db, identity)) return response;
+    await confirmedRetention(db, claimInput);
+    return unavailable(c);
   }
   if (response.status < 200 || response.status >= 300) return response;
 
@@ -313,8 +331,12 @@ export async function idempotentPost<T>(
       responseBody: encryptedBody,
       completedAt: new Date().toISOString(),
     });
-    if (!completed) return unavailable(c);
+    if (!completed) {
+      await confirmedRetention(db, claimInput);
+      return unavailable(c);
+    }
   } catch {
+    await confirmedRetention(db, claimInput);
     return unavailable(c);
   }
   return response;
