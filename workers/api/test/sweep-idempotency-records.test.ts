@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { count, eq, lte } from "drizzle-orm";
-import { idempotencyGuards } from "@buildinternet/releases-core/schema";
+import { idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../tests/db-helper";
 import { cronRuns } from "../src/db/schema-cron.js";
 import { CRON_NAME, sweepIdempotencyRecords } from "../src/cron/sweep-idempotency-records.js";
@@ -10,8 +10,8 @@ const COMPLETED_AT = new Date("2026-08-24T12:00:00.250Z");
 
 type Db = ReturnType<typeof createTestDb>["db"];
 
-async function seedGuard(db: Db, id: number, expiresAt: string): Promise<void> {
-  await db.insert(idempotencyGuards).values({
+async function seedRecord(db: Db, id: number, expiresAt: string): Promise<void> {
+  await db.insert(idempotencyRecords).values({
     principalHash: `principal-${id}`.padEnd(64, "p"),
     keyHash: `key-${id}`.padEnd(64, "k"),
     requestHash: `request-${id}`.padEnd(64, "r"),
@@ -22,15 +22,15 @@ async function seedGuard(db: Db, id: number, expiresAt: string): Promise<void> {
   });
 }
 
-async function guardCount(db: Db): Promise<number> {
-  const [{ value }] = await db.select({ value: count() }).from(idempotencyGuards);
+async function recordCount(db: Db): Promise<number> {
+  const [{ value }] = await db.select({ value: count() }).from(idempotencyRecords);
   return value;
 }
 
 describe("sweepIdempotencyRecords", () => {
   test("CRON_ENABLED=false does not create a run or delete an expired record", async () => {
     const { db } = createTestDb();
-    await seedGuard(db, 1, "2026-08-24T11:59:59.999Z");
+    await seedRecord(db, 1, "2026-08-24T11:59:59.999Z");
 
     await sweepIdempotencyRecords({
       DB: {} as D1Database,
@@ -39,16 +39,16 @@ describe("sweepIdempotencyRecords", () => {
       _now: NOW,
     });
 
-    expect(await guardCount(db)).toBe(1);
+    expect(await recordCount(db)).toBe(1);
     expect(await db.select().from(cronRuns).where(eq(cronRuns.cronName, CRON_NAME))).toEqual([]);
   });
 
   test("deletes at most one 500-record expired batch and records candidates and deletions", async () => {
     const { db } = createTestDb();
     for (let index = 0; index < 501; index++) {
-      await seedGuard(db, index, "2026-08-24T11:59:59.999Z");
+      await seedRecord(db, index, "2026-08-24T11:59:59.999Z");
     }
-    await seedGuard(db, 999, "2026-08-24T12:00:00.001Z");
+    await seedRecord(db, 999, "2026-08-24T12:00:00.001Z");
 
     await sweepIdempotencyRecords({
       DB: {} as D1Database,
@@ -57,11 +57,11 @@ describe("sweepIdempotencyRecords", () => {
       _completedAt: COMPLETED_AT,
     });
 
-    expect(await guardCount(db)).toBe(2);
+    expect(await recordCount(db)).toBe(2);
     const [{ value: expiredRemaining }] = await db
       .select({ value: count() })
-      .from(idempotencyGuards)
-      .where(lte(idempotencyGuards.expiresAt, NOW.toISOString()));
+      .from(idempotencyRecords)
+      .where(lte(idempotencyRecords.expiresAt, NOW.toISOString()));
     expect(expiredRemaining).toBe(1);
     const [run] = await db.select().from(cronRuns).where(eq(cronRuns.cronName, CRON_NAME));
     expect(run?.status).toBe("done");

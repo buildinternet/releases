@@ -118,12 +118,17 @@ meWebhookHandlers.post(
     return idempotentPost<WebhookCreateInput>(c, {
       principal: userIdempotencyPrincipal(session.user.id),
       body: "json",
-      preclaim: async () => {
+      preclaim: async (bytes) => {
         const masterKey = await requireMasterKey(c);
         if (masterKey instanceof Response) return masterKey;
         let body: Record<string, unknown>;
         try {
-          body = (await c.req.json()) as Record<string, unknown>;
+          // Already streamed + capped by idempotentPost when present — avoid
+          // a second read of the request body.
+          body =
+            bytes === undefined
+              ? ((await c.req.json()) as Record<string, unknown>)
+              : (JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>);
         } catch {
           return respondError(
             c,

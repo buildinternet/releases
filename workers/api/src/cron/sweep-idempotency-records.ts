@@ -6,7 +6,7 @@
  * monopolize D1 capacity when a backlog accumulates.
  */
 import { count, lte } from "drizzle-orm";
-import { idempotencyGuards } from "@buildinternet/releases-core/schema";
+import { idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
@@ -47,19 +47,27 @@ export async function sweepIdempotencyRecords(env: SweepIdempotencyRecordsEnv): 
   const runId = await insertRunningRow(db, { cronName: CRON_NAME, startedAt: nowIso });
 
   try {
-    const [{ value: candidates }] = await db
-      .select({ value: count() })
-      .from(idempotencyGuards)
-      .where(lte(idempotencyGuards.expiresAt, nowIso));
     const deleted = await sweepExpiredIdempotency(db, { now: nowIso, limit: SWEEP_LIMIT });
-    const notes = `candidates=${candidates} deleted=${deleted} limit=${SWEEP_LIMIT}`;
+
+    // A full batch means more expired records may remain past the limit; only
+    // pay for a follow-up count in that case to flag the backlog.
+    let backlogRemaining = 0;
+    if (deleted === SWEEP_LIMIT) {
+      const [{ value: remaining }] = await db
+        .select({ value: count() })
+        .from(idempotencyRecords)
+        .where(lte(idempotencyRecords.expiresAt, nowIso));
+      backlogRemaining = remaining;
+    }
+
+    const notes = `deleted=${deleted} limit=${SWEEP_LIMIT} backlogRemaining=${backlogRemaining}`;
 
     await finalizeRunRow(db, runId, {
       endedAt: completionIso(),
       status: "done",
-      candidates,
+      candidates: deleted + backlogRemaining,
       dispatched: deleted,
-      skippedOverCap: Math.max(0, candidates - deleted),
+      skippedOverCap: backlogRemaining,
       dispatchErrors: 0,
       sessionsStarted: [],
       dispatchErrorDetail: [],
@@ -69,9 +77,9 @@ export async function sweepIdempotencyRecords(env: SweepIdempotencyRecordsEnv): 
     logEvent("info", {
       component: "sweep-idempotency-records",
       event: "done",
-      candidates,
       deleted,
       limit: SWEEP_LIMIT,
+      backlogRemaining,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

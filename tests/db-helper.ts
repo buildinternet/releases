@@ -190,7 +190,6 @@ export function makeD1Shim(sqlite: Database): D1Database {
  * so each test sees an empty DB without having to reason about dependencies.
  */
 export function clearAllTables(db: TestDb): void {
-  db.delete(schema.idempotencyGuards).run();
   db.delete(schema.idempotencyRecords).run();
   db.delete(schema.orgTags).run();
   db.delete(schema.productTags).run();

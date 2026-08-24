@@ -42,6 +42,15 @@ export async function parseJsonBody(c: Context<Env>): Promise<Record<string, unk
   }
 }
 
+/** Same result shape as {@link parseJsonBody}, from an already-buffered body. */
+function parseJsonBodyFromBytes(bytes: Uint8Array): Record<string, unknown> | null {
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 /** Parse a stored permissions JSON string into a permission map (null on failure). */
 export function parsePermissions(raw: string | null): Record<string, string[]> | null {
   if (!raw) return null;
@@ -85,8 +94,8 @@ userApiKeyHandlers.post(
     return idempotentPost(c, {
       principal: userIdempotencyPrincipal(session.user.id),
       body: "json",
-      preclaim: async () => {
-        const body = await parseJsonBody(c);
+      preclaim: async (bytes) => {
+        const body = bytes === undefined ? await parseJsonBody(c) : parseJsonBodyFromBytes(bytes);
         if (!body)
           return respondError(
             c,

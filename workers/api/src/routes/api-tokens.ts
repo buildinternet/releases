@@ -45,6 +45,15 @@ async function parseJsonBody(c: Context<Env>): Promise<Record<string, unknown> |
   }
 }
 
+/** Same result shape as {@link parseJsonBody}, from an already-buffered body. */
+function parseJsonBodyFromBytes(bytes: Uint8Array): Record<string, unknown> | null {
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 /** Validate a raw `scopes` value → array of known scopes, or null if absent/empty/invalid. */
 function validateScopes(raw: unknown): string[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -89,8 +98,8 @@ apiTokenRoutes.post(
         environment: c.env.ENVIRONMENT,
       }),
       body: "json",
-      preclaim: async () => {
-        const body = await parseJsonBody(c);
+      preclaim: async (bytes) => {
+        const body = bytes === undefined ? await parseJsonBody(c) : parseJsonBodyFromBytes(bytes);
         if (!body)
           return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
 

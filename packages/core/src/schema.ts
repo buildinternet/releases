@@ -1624,25 +1624,6 @@ export const apiTokens = sqliteTable(
   ],
 );
 
-export const idempotencyGuards = sqliteTable(
-  "idempotency_guards",
-  {
-    principalHash: text("principal_hash").notNull(),
-    keyHash: text("key_hash").notNull(),
-    requestHash: text("request_hash").notNull(),
-    state: text("state", { enum: ["processing", "completed"] }).notNull(),
-    attemptId: text("attempt_id").notNull(),
-    createdAt: text("created_at").notNull(),
-    completedAt: text("completed_at"),
-    expiresAt: text("expires_at").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.principalHash, table.keyHash] }),
-    check("idempotency_guards_state_check", sql`${table.state} IN ('processing', 'completed')`),
-    index("idx_idempotency_guards_expires_at").on(table.expiresAt),
-  ],
-);
-
 export const idempotencyRecords = sqliteTable(
   "idempotency_records",
   {
@@ -1661,5 +1642,6 @@ export const idempotencyRecords = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.principalHash, table.keyHash] }),
     check("idempotency_records_state_check", sql`${table.state} IN ('processing', 'completed')`),
+    index("idx_idempotency_records_expires_at").on(table.expiresAt),
   ],
 );

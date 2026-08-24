@@ -40,23 +40,23 @@ responses use the standard nested envelope; see [errors.md](errors.md).
 
 ## D1 storage invariants
 
-`idempotency_guards` is the authoritative table for admission, fingerprint and
-state checks, expiry, and cleanup. Its `(principal_hash, key_hash)` key,
-`attempt_id`, request fingerprint, state, and expiry decide whether a handler
-may execute. `idx_idempotency_guards_expires_at` is the only idempotency expiry
-index.
+A single `idempotency_records` table holds both the admission barrier and the
+encrypted response. Its `(principal_hash, key_hash)` primary key, `attempt_id`,
+request fingerprint, `state`, and `expires_at` decide whether a handler may
+execute; the same row's `response_status`/`response_headers`/`response_body`
+columns hold the encrypted replay once the request completes.
+`idx_idempotency_records_expires_at` is the only idempotency expiry index.
 
-`idempotency_records` is the paired mutable encrypted-response table. D1
-triggers create a processing response row when a guard is inserted, delete that
-row when its guard is deleted, and advance the matching guard to completed only
-when the response row completes with the same attempt. The completion trigger
-aborts if it cannot update exactly one processing guard.
+A claim inserts one `processing` row. Completion updates that same row to
+`completed` and fills in the response columns in one statement, scoped to the
+claiming `attempt_id` still in `processing` state — no second table, no
+triggers to keep in sync.
 
-Replay requires both a completed guard and its matching completed response row
-with all recorded response fields. A missing, incomplete, or mismatched response
-fails closed as `503 idempotency_unavailable`; it never permits handler
-re-execution. Releasing or expiring a guard removes the paired response row via
-the delete trigger.
+Replay requires a `completed` row with all three response columns populated.
+A missing, incomplete, or mismatched response fails closed as `503
+idempotency_unavailable`; it never permits handler re-execution. Releasing or
+expiring a row deletes it outright — there is no paired row to keep
+consistent.
 
 ## Supported routes
 
@@ -93,9 +93,10 @@ response, IV, and ciphertext are likewise not logged.
 ## Cleanup and failure boundary
 
 The daily 05:00 UTC API cron runs `sweep-idempotency-records`. It removes at
-most 500 expired guards per run through the guard expiry index and writes
-candidate/deletion counts to `cron_runs`; the delete trigger removes paired
-response rows, and live guards are untouched.
+most 500 expired records per run through the expiry index and writes the
+deletion count to `cron_runs`; live records are untouched. It only pays for a
+follow-up `count(*)` (to flag a remaining backlog) when the delete hits the
+500-row limit — an empty or partial batch skips that extra round trip.
 
 The D1 claim, replay record, and completion checks prevent repeat route
 execution within the contract. They are not a distributed transaction with an

@@ -18,14 +18,18 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { newFeedbackId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
-import { readJsonBodyCapped } from "../lib/json-body.js";
+import {
+  parseJsonBodyCapped,
+  readJsonBodyCapped,
+  type ReadJsonBodyResult,
+} from "../lib/json-body.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyFeedback } from "../lib/feedback-email.js";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { respondError } from "../lib/error-response.js";
 import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
-import { idempotentPost } from "../middleware/idempotency.js";
+import { idempotentPost, MAX_BODY_BYTES } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
 import {
   ValidationError,
@@ -39,9 +43,6 @@ export const feedbackRoutes = new Hono<Env>();
 const MIN_MESSAGE = 5;
 const MAX_MESSAGE = 4000;
 const MAX_CONTACT = 200;
-// The largest fields sum to ~4.3KB; 64KB leaves generous headroom while
-// rejecting absurd payloads before we parse them.
-const MAX_BODY_BYTES = 64 * 1024;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 // Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
@@ -89,13 +90,19 @@ feedbackRoutes.post(
     return idempotentPost(c, {
       principal: anonymousIdempotencyPrincipal(),
       body: "json",
-      preclaim: async () => {
-        const contentLength = Number(c.req.header("content-length") ?? "0");
-        if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-          return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
+      preclaim: async (bytes) => {
+        let parsed: ReadJsonBodyResult;
+        if (bytes === undefined) {
+          const contentLength = Number(c.req.header("content-length") ?? "0");
+          if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+            return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
+          }
+          parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
+        } else {
+          // Already streamed + capped by idempotentPost — parse directly, no
+          // second read of the request body.
+          parsed = parseJsonBodyCapped(bytes);
         }
-
-        const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
         if (!parsed.ok) {
           return respondError(c, new ValidationError(undefined, { code: parsed.error }));
         }

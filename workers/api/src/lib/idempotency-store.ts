@@ -1,5 +1,5 @@
 import { and, eq, lte, sql } from "drizzle-orm";
-import { idempotencyGuards, idempotencyRecords } from "@buildinternet/releases-core/schema";
+import { idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 
 export type IdempotencyState = "processing" | "completed";
@@ -36,7 +36,7 @@ export async function claimIdempotency(
 ): Promise<ClaimResult> {
   for (let admissionAttempt = 0; admissionAttempt < MAX_ADMISSION_ATTEMPTS; admissionAttempt++) {
     const inserted = await db
-      .insert(idempotencyGuards)
+      .insert(idempotencyRecords)
       .values({
         principalHash: input.principalHash,
         keyHash: input.keyHash,
@@ -47,7 +47,7 @@ export async function claimIdempotency(
         expiresAt: input.expiresAt,
       })
       .onConflictDoNothing()
-      .returning({ attemptId: idempotencyGuards.attemptId });
+      .returning({ attemptId: idempotencyRecords.attemptId });
 
     if (inserted.length === 1) {
       return { kind: "claimed", attemptId: inserted[0].attemptId };
@@ -55,16 +55,19 @@ export async function claimIdempotency(
 
     const [existing] = await db
       .select({
-        requestHash: idempotencyGuards.requestHash,
-        state: idempotencyGuards.state,
-        attemptId: idempotencyGuards.attemptId,
-        expiresAt: idempotencyGuards.expiresAt,
+        requestHash: idempotencyRecords.requestHash,
+        state: idempotencyRecords.state,
+        attemptId: idempotencyRecords.attemptId,
+        expiresAt: idempotencyRecords.expiresAt,
+        responseStatus: idempotencyRecords.responseStatus,
+        responseHeaders: idempotencyRecords.responseHeaders,
+        responseBody: idempotencyRecords.responseBody,
       })
-      .from(idempotencyGuards)
+      .from(idempotencyRecords)
       .where(
         and(
-          eq(idempotencyGuards.principalHash, input.principalHash),
-          eq(idempotencyGuards.keyHash, input.keyHash),
+          eq(idempotencyRecords.principalHash, input.principalHash),
+          eq(idempotencyRecords.keyHash, input.keyHash),
         ),
       )
       .limit(1);
@@ -75,15 +78,15 @@ export async function claimIdempotency(
 
     if (existing.expiresAt <= input.now) {
       await db
-        .delete(idempotencyGuards)
+        .delete(idempotencyRecords)
         .where(
           and(
-            eq(idempotencyGuards.principalHash, input.principalHash),
-            eq(idempotencyGuards.keyHash, input.keyHash),
-            lte(idempotencyGuards.expiresAt, input.now),
+            eq(idempotencyRecords.principalHash, input.principalHash),
+            eq(idempotencyRecords.keyHash, input.keyHash),
+            lte(idempotencyRecords.expiresAt, input.now),
           ),
         )
-        .returning({ attemptId: idempotencyGuards.attemptId });
+        .returning({ attemptId: idempotencyRecords.attemptId });
       continue;
     }
 
@@ -95,28 +98,10 @@ export async function claimIdempotency(
       return { kind: "processing" };
     }
 
-    const [response] = await db
-      .select({
-        responseStatus: idempotencyRecords.responseStatus,
-        responseHeaders: idempotencyRecords.responseHeaders,
-        responseBody: idempotencyRecords.responseBody,
-      })
-      .from(idempotencyRecords)
-      .where(
-        and(
-          eq(idempotencyRecords.principalHash, input.principalHash),
-          eq(idempotencyRecords.keyHash, input.keyHash),
-          eq(idempotencyRecords.attemptId, existing.attemptId),
-          eq(idempotencyRecords.state, "completed"),
-        ),
-      )
-      .limit(1);
-
     if (
-      !response ||
-      response.responseStatus === null ||
-      response.responseHeaders === null ||
-      response.responseBody === null
+      existing.responseStatus === null ||
+      existing.responseHeaders === null ||
+      existing.responseBody === null
     ) {
       return { kind: "unavailable" };
     }
@@ -125,9 +110,9 @@ export async function claimIdempotency(
       kind: "completed",
       record: {
         requestHash: existing.requestHash,
-        responseStatus: response.responseStatus,
-        responseHeaders: response.responseHeaders,
-        responseBody: response.responseBody,
+        responseStatus: existing.responseStatus,
+        responseHeaders: existing.responseHeaders,
+        responseBody: existing.responseBody,
         expiresAt: existing.expiresAt,
       },
     };
@@ -175,18 +160,43 @@ export async function releaseIdempotency(
   input: { principalHash: string; keyHash: string; attemptId: string },
 ): Promise<boolean> {
   const released = await db
-    .delete(idempotencyGuards)
+    .delete(idempotencyRecords)
     .where(
       and(
-        eq(idempotencyGuards.principalHash, input.principalHash),
-        eq(idempotencyGuards.keyHash, input.keyHash),
-        eq(idempotencyGuards.attemptId, input.attemptId),
-        eq(idempotencyGuards.state, "processing"),
+        eq(idempotencyRecords.principalHash, input.principalHash),
+        eq(idempotencyRecords.keyHash, input.keyHash),
+        eq(idempotencyRecords.attemptId, input.attemptId),
+        eq(idempotencyRecords.state, "processing"),
       ),
     )
     .returning();
 
   return released.length === 1;
+}
+
+/**
+ * Cheap confirmation that a claimed guard row is still there in `processing`
+ * state — a single indexed SELECT, for the common case where a guard we
+ * claimed was never deleted and doesn't need the full {@link claimIdempotency}
+ * admission loop to "retain" it.
+ */
+export async function isGuardActive(
+  db: Db,
+  input: { principalHash: string; keyHash: string; attemptId: string },
+): Promise<boolean> {
+  const [row] = await db
+    .select({ attemptId: idempotencyRecords.attemptId })
+    .from(idempotencyRecords)
+    .where(
+      and(
+        eq(idempotencyRecords.principalHash, input.principalHash),
+        eq(idempotencyRecords.keyHash, input.keyHash),
+        eq(idempotencyRecords.attemptId, input.attemptId),
+        eq(idempotencyRecords.state, "processing"),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
 }
 
 export async function retainIdempotency(
@@ -213,10 +223,10 @@ export async function sweepExpiredIdempotency(
   }
 
   const deleted = await db.all<{ rowid: number }>(sql`
-    DELETE FROM idempotency_guards
+    DELETE FROM idempotency_records
     WHERE rowid IN (
       SELECT rowid
-      FROM idempotency_guards
+      FROM idempotency_records
       WHERE expires_at <= ${input.now}
       ORDER BY expires_at
       LIMIT ${input.limit}

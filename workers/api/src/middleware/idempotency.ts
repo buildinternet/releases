@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { hashSecret } from "@buildinternet/releases-core/api-token";
 import {
   ConflictError,
   isReleasesError,
@@ -17,12 +18,19 @@ import type { IdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import {
   claimIdempotency,
   completeIdempotency,
+  isGuardActive,
   releaseIdempotency,
   retainIdempotency,
 } from "../lib/idempotency-store.js";
 import { respondError } from "../lib/error-response.js";
 
-const MAX_BODY_BYTES = 64 * 1024;
+/**
+ * Shared 64 KiB request-body cap. Exported so route `preclaim` callbacks that
+ * still buffer their own request body (the no-`Idempotency-Key` fast path,
+ * where this middleware never reads the body itself) can reuse the same
+ * threshold instead of redeclaring it.
+ */
+export const MAX_BODY_BYTES = 64 * 1024;
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 const KEY_PATTERN = /^[\x21-\x7e]{16,255}$/;
 const encoder = new TextEncoder();
@@ -183,6 +191,11 @@ async function confirmedRetention(
   input: Parameters<typeof retainIdempotency>[1],
 ): Promise<boolean> {
   try {
+    // The guard row we claimed is almost always still sitting there untouched
+    // (we never released it on this path) — a single targeted SELECT confirms
+    // that cheaply. Only fall back to the full admission loop when it isn't,
+    // e.g. a concurrent sweep already reaped it.
+    if (await isGuardActive(db, input)) return true;
     return await retainIdempotency(db, input);
   } catch {
     return false;
@@ -194,13 +207,19 @@ export async function idempotentPost<T>(
   options: {
     principal: IdempotencyPrincipal | null;
     body: "json" | "empty";
-    preclaim: () => Promise<T | Response>;
+    /**
+     * Called with the already-buffered, cap-checked request body whenever
+     * this middleware has read it itself (the `Idempotency-Key` path below) —
+     * `undefined` on the no-header fast path, where the middleware never
+     * touches the body and `preclaim` must read it itself exactly as before.
+     */
+    preclaim: (body: Uint8Array | undefined) => Promise<T | Response>;
     execute: (input: T) => Promise<Response>;
   },
 ): Promise<Response> {
   const rawIdempotencyKey = c.req.header("idempotency-key");
   if (rawIdempotencyKey === undefined) {
-    const input = await options.preclaim();
+    const input = await options.preclaim(undefined);
     return input instanceof Response ? input : options.execute(input);
   }
 
@@ -232,10 +251,10 @@ export async function idempotentPost<T>(
 
   const [principalHash, keyHash, requestHash] = await Promise.all([
     hashPrincipal(options.principal),
-    sha256Hex(encoder.encode(rawIdempotencyKey)),
+    hashSecret(rawIdempotencyKey),
     requestFingerprint(c, body),
   ]);
-  const preclaimInput = await options.preclaim();
+  const preclaimInput = await options.preclaim(body);
   if (preclaimInput instanceof Response) return preclaimInput;
 
   const db = createDb(c.env.DB);

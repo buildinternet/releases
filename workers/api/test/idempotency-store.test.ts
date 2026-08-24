@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { asc } from "drizzle-orm";
-import { idempotencyGuards, idempotencyRecords } from "@buildinternet/releases-core/schema";
+import { idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../tests/db-helper";
 import {
   claimIdempotency,
@@ -77,35 +77,13 @@ function scriptedAdmissionDb(input: {
 }
 
 describe("idempotency store", () => {
-  test("the first insert atomically creates an authoritative guard and response row", async () => {
+  test("the first insert atomically creates an authoritative processing record", async () => {
     const { db, storeDb, cleanup } = migratedDb();
     try {
       expect(await claimIdempotency(storeDb, BASE)).toEqual({
         kind: "claimed",
         attemptId: "attempt-one",
       });
-      expect(await db.select().from(idempotencyGuards)).toHaveLength(1);
-      expect(await db.select().from(idempotencyRecords)).toHaveLength(1);
-    } finally {
-      cleanup();
-    }
-  });
-
-  test("admission rolls back the guard if its response row cannot be created", async () => {
-    const { db, storeDb, cleanup } = migratedDb();
-    try {
-      await db.insert(idempotencyRecords).values({
-        principalHash: BASE.principalHash,
-        keyHash: BASE.keyHash,
-        requestHash: BASE.requestHash,
-        state: "processing",
-        attemptId: "orphaned-attempt",
-        createdAt: BASE.now,
-        expiresAt: BASE.expiresAt,
-      });
-
-      await expect(claimIdempotency(storeDb, BASE)).rejects.toThrow();
-      expect(await db.select().from(idempotencyGuards)).toHaveLength(0);
       expect(await db.select().from(idempotencyRecords)).toHaveLength(1);
     } finally {
       cleanup();
@@ -128,26 +106,7 @@ describe("idempotency store", () => {
     }
   });
 
-  test("a missing response row leaves the guard authoritative for matching retries", async () => {
-    const { db, storeDb, cleanup } = migratedDb();
-    try {
-      await claimIdempotency(storeDb, BASE);
-      await db.delete(idempotencyRecords);
-
-      expect(
-        await claimIdempotency(storeDb, {
-          ...BASE,
-          attemptId: "attempt-two",
-        }),
-      ).toEqual({ kind: "processing" });
-      expect(await db.select().from(idempotencyGuards)).toHaveLength(1);
-      expect(await db.select().from(idempotencyRecords)).toHaveLength(0);
-    } finally {
-      cleanup();
-    }
-  });
-
-  test("a completed guard with a missing response fails closed without reopening admission", async () => {
+  test("a completed record with a missing response fails closed without reopening admission", async () => {
     const { db, storeDb, cleanup } = migratedDb();
     try {
       await claimIdempotency(storeDb, BASE);
@@ -160,7 +119,12 @@ describe("idempotency store", () => {
         responseBody: "encrypted-response",
         completedAt: "2026-08-24T12:00:01.000Z",
       });
-      await db.delete(idempotencyRecords);
+      // Simulate a corrupted/never-populated response on an otherwise-completed row.
+      await db.update(idempotencyRecords).set({
+        responseStatus: null,
+        responseHeaders: null,
+        responseBody: null,
+      });
 
       expect(
         await claimIdempotency(storeDb, {
@@ -175,7 +139,7 @@ describe("idempotency store", () => {
           attemptId: "attempt-three",
         }),
       ).toEqual({ kind: "conflict" });
-      expect(await db.select().from(idempotencyGuards)).toHaveLength(1);
+      expect(await db.select().from(idempotencyRecords)).toHaveLength(1);
     } finally {
       cleanup();
     }
@@ -252,8 +216,11 @@ describe("idempotency store", () => {
       expect(await completeIdempotency(storeDb, completion)).toBe(false);
       expect(
         await db
-          .select({ state: idempotencyGuards.state, completedAt: idempotencyGuards.completedAt })
-          .from(idempotencyGuards),
+          .select({
+            state: idempotencyRecords.state,
+            completedAt: idempotencyRecords.completedAt,
+          })
+          .from(idempotencyRecords),
       ).toEqual([{ state: "completed", completedAt: completion.completedAt }]);
     } finally {
       cleanup();
@@ -435,12 +402,6 @@ describe("idempotency store", () => {
           .select({ keyHash: idempotencyRecords.keyHash })
           .from(idempotencyRecords)
           .orderBy(asc(idempotencyRecords.expiresAt)),
-      ).toEqual([{ keyHash: "c".repeat(64) }, { keyHash: "d".repeat(64) }]);
-      expect(
-        await db
-          .select({ keyHash: idempotencyGuards.keyHash })
-          .from(idempotencyGuards)
-          .orderBy(asc(idempotencyGuards.expiresAt)),
       ).toEqual([{ keyHash: "c".repeat(64) }, { keyHash: "d".repeat(64) }]);
     } finally {
       cleanup();
