@@ -118,23 +118,13 @@ meWebhookHandlers.post(
     return idempotentPost<WebhookCreateInput>(c, {
       principal: userIdempotencyPrincipal(session.user.id),
       body: "json",
-      preclaim: async (bytes) => {
+      preclaim: async (parsed) => {
         const masterKey = await requireMasterKey(c);
         if (masterKey instanceof Response) return masterKey;
-        let body: Record<string, unknown>;
-        try {
-          // Already streamed + capped by idempotentPost when present — avoid
-          // a second read of the request body.
-          body =
-            bytes === undefined
-              ? ((await c.req.json()) as Record<string, unknown>)
-              : (JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>);
-        } catch {
-          return respondError(
-            c,
-            new ValidationError("invalid JSON body", { code: "invalid_json" }),
-          );
-        }
+        // Not object-checked (matches prior behavior): a non-object body
+        // (e.g. `null`) falls through to the same TypeError this route has
+        // always thrown on a top-level property access.
+        const body = parsed as Record<string, unknown>;
         const url = body.url;
         if (typeof url !== "string" || !url) {
           return respondError(c, new ValidationError("url is required", { code: "bad_request" }));

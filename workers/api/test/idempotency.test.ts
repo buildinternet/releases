@@ -76,7 +76,12 @@ function makeHarness(options: HarnessOptions = {}) {
     executions: () => executions,
     preclaims: () => preclaims,
     request(path = "/effect", init: RequestInit = {}) {
-      return app.request(`https://api.example.test${path}`, { method: "POST", ...init }, env);
+      // Centralized JSON parsing (`body: "json"`, the harness default) now
+      // requires a syntactically valid body even when a test doesn't care
+      // about its contents — default to an empty JSON object rather than
+      // making every unrelated test send one explicitly.
+      const body = init.body ?? "{}";
+      return app.request(`https://api.example.test${path}`, { method: "POST", body, ...init }, env);
     },
   };
 }
