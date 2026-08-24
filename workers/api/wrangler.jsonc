@@ -563,6 +563,14 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "RELEASES_PROXY_KEY",
     },
+    // AES-256-GCM key for opted-in HTTP idempotency response replay. Provision
+    // the 32-byte base64 value in Secrets Store before applying its migration or
+    // deploying this worker; missing/invalid configuration fails closed (503).
+    {
+      "binding": "IDEMPOTENCY_ENCRYPTION_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "IDEMPOTENCY_ENCRYPTION_KEY",
+    },
     {
       "binding": "GITHUB_TOKEN",
       "store_id": "a887a71cab084105b79706df23380723",
@@ -957,6 +965,13 @@
           "binding": "RELEASES_PROXY_KEY",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "RELEASES_PROXY_KEY",
+        },
+        // Keep staging's idempotency deployment fail-closed too. Provision this
+        // secret before its migration/deploy; it is intentionally not a var.
+        {
+          "binding": "IDEMPOTENCY_ENCRYPTION_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "IDEMPOTENCY_ENCRYPTION_KEY",
         },
         {
           "binding": "GITHUB_TOKEN",

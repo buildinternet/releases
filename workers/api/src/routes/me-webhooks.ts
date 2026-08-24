@@ -3,6 +3,7 @@
  * User-owned rows carry `user_id`; the delivery pipeline is unchanged.
  */
 import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { createDb } from "../db.js";
 import {
   insertWebhookSubscription,
@@ -42,6 +43,9 @@ import type { DeliveryMessage } from "../webhooks/types.js";
 
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
+import { userIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { idempotentPost } from "../middleware/idempotency.js";
+import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -61,6 +65,31 @@ function jsonSubscription(sub: WebhookSubscription) {
   return { ...sub, ...userWebhookDeliveryHealth(sub) };
 }
 
+const encoder = new TextEncoder();
+
+type WebhookCreateInput =
+  | {
+      scope: "follows";
+      masterKey: string;
+      url: string;
+      releaseType: WebhookSubscription["releaseType"];
+      format: WebhookFormat;
+      description: string | null;
+      db: ReturnType<typeof createDb>;
+    }
+  | {
+      scope: "org";
+      masterKey: string;
+      url: string;
+      releaseType: WebhookSubscription["releaseType"];
+      format: WebhookFormat;
+      description: string | null;
+      db: ReturnType<typeof createDb>;
+      org: { id: string; slug: string; name: string };
+      resolvedSourceId: string | null;
+      resolvedProductId: string | null;
+    };
+
 meWebhookHandlers.get("/me/webhooks", async (c) => {
   const session = c.get("session");
   if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
@@ -73,186 +102,223 @@ meWebhookHandlers.get("/me/webhooks", async (c) => {
   return c.json({ subscriptions });
 });
 
-meWebhookHandlers.post("/me/webhooks", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+meWebhookHandlers.post(
+  "/me/webhooks",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Webhooks"],
+      summary: "Create a personal webhook subscription",
+      successStatus: 201,
+      successDescription: "Created webhook subscription, including its one-time signing key.",
+    }),
+  ),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    return idempotentPost<WebhookCreateInput>(c, {
+      principal: userIdempotencyPrincipal(session.user.id),
+      body: "json",
+      preclaim: async (bytes) => {
+        const masterKey = await requireMasterKey(c);
+        if (masterKey instanceof Response) return masterKey;
+        let body: Record<string, unknown>;
+        try {
+          // Already streamed + capped by idempotentPost when present — avoid
+          // a second read of the request body.
+          body =
+            bytes === undefined
+              ? ((await c.req.json()) as Record<string, unknown>)
+              : (JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>);
+        } catch {
+          return respondError(
+            c,
+            new ValidationError("invalid JSON body", { code: "invalid_json" }),
+          );
+        }
+        const url = body.url;
+        if (typeof url !== "string" || !url) {
+          return respondError(c, new ValidationError("url is required", { code: "bad_request" }));
+        }
+        if (encoder.encode(url).byteLength > 2048) {
+          return respondError(
+            c,
+            new ValidationError("url must be at most 2048 bytes", { code: "bad_request" }),
+          );
+        }
+        const description = typeof body.description === "string" ? body.description : null;
+        if (description && encoder.encode(description).byteLength > 1000) {
+          return respondError(
+            c,
+            new ValidationError("description must be at most 1000 bytes", { code: "bad_request" }),
+          );
+        }
+        const urlError = await assertPublicWebhookTarget(url);
+        if (urlError)
+          return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
 
-  const masterKey = await requireMasterKey(c);
-  if (masterKey instanceof Response) return masterKey;
+        const format: WebhookFormat = body.format === "slack" ? "slack" : "json";
+        if (format === "slack") {
+          const slackError = validateSlackWebhookUrl(url);
+          if (slackError)
+            return respondError(c, new ValidationError(slackError, { code: "bad_request" }));
+        }
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
-  }
+        const scope = body.scope === "follows" ? "follows" : "org";
+        const db = getDb(c);
+        if (scope === "follows") {
+          const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
+          const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
+          const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
+          const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
+          const productId = typeof body.productId === "string" ? body.productId : undefined;
+          const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
+          if (orgId || orgSlug || sourceId || sourceSlug || productId || productSlug) {
+            return respondError(
+              c,
+              new ValidationError(
+                "follows-scoped webhooks must not include orgId, orgSlug, sourceId, sourceSlug, productId, or productSlug",
+                { code: "bad_request" },
+              ),
+            );
+          }
 
-  const url = body.url;
-  if (typeof url !== "string" || !url) {
-    return respondError(c, new ValidationError("url is required", { code: "bad_request" }));
-  }
-  const urlError = await assertPublicWebhookTarget(url);
-  if (urlError) return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
+          const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
+          if (releaseTypeFilter === "invalid") {
+            return respondError(
+              c,
+              new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
+            );
+          }
 
-  const format = body.format === "slack" ? "slack" : "json";
-  if (format === "slack") {
-    const slackError = validateSlackWebhookUrl(url);
-    if (slackError)
-      return respondError(c, new ValidationError(slackError, { code: "bad_request" }));
-  }
+          return {
+            scope: "follows",
+            masterKey,
+            url,
+            releaseType: releaseTypeFilter,
+            format,
+            description,
+            db,
+          };
+        }
 
-  const scope = body.scope === "follows" ? "follows" : "org";
-  const db = getDb(c);
-  const description = typeof body.description === "string" ? body.description : null;
+        const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
+        const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
+        if (!orgId && !orgSlug) {
+          return respondError(
+            c,
+            new ValidationError("orgId or orgSlug is required", { code: "bad_request" }),
+          );
+        }
 
-  if (scope === "follows") {
-    const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
-    const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
-    const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
-    const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
-    const productId = typeof body.productId === "string" ? body.productId : undefined;
-    const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
-    if (orgId || orgSlug || sourceId || sourceSlug || productId || productSlug) {
-      return respondError(
-        c,
-        new ValidationError(
-          "follows-scoped webhooks must not include orgId, orgSlug, sourceId, sourceSlug, productId, or productSlug",
-          { code: "bad_request" },
-        ),
-      );
-    }
+        const org = await resolveWebhookOrg(db, { orgId, orgSlug });
+        if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
-    const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
-    if (releaseTypeFilter === "invalid") {
-      return respondError(
-        c,
-        new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
-      );
-    }
+        const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
+        const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
+        const productId = typeof body.productId === "string" ? body.productId : undefined;
+        const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
+        const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
+        if (releaseTypeFilter === "invalid") {
+          return respondError(
+            c,
+            new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
+          );
+        }
 
-    const existing = await getUserFollowsWebhookSubscription(db, session.user.id);
-    if (existing) {
-      return respondError(
-        c,
-        new RateLimitedError(
-          `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
-          { code: "limit_exceeded" },
-        ),
-      );
-    }
+        let resolvedSourceId: string | null = null;
+        let resolvedSourceProductId: string | null = null;
+        if (sourceId || sourceSlug) {
+          const source = await resolveWebhookSource(db, org.id, { sourceId, sourceSlug });
+          if (!source) {
+            return respondError(c, new NotFoundError("Source not found for this organization"));
+          }
+          resolvedSourceId = source.id;
+          resolvedSourceProductId = source.productId;
+        }
 
-    const sub = await insertWebhookSubscription(db, {
-      scope: "follows",
-      orgId: null,
-      url,
-      sourceId: null,
-      releaseType: releaseTypeFilter,
-      format,
-      description,
-      userId: session.user.id,
-    });
+        let resolvedProductId: string | null = null;
+        if (productId || productSlug) {
+          const product = await resolveWebhookProduct(db, org.id, { productId, productSlug });
+          if (!product) {
+            return respondError(c, new NotFoundError("Product not found for this organization"));
+          }
+          resolvedProductId = product.id;
+        }
 
-    const signingKey =
-      format === "slack" ? undefined : await signingKeyFor(masterKey, sub.id, sub.secretVersion);
-    return c.json(
-      {
-        ...jsonSubscription(sub),
-        orgSlug: null,
-        orgName: null,
-        ...(signingKey ? { signingKey } : {}),
+        if (sourceProductFilterMismatch(resolvedSourceProductId, resolvedProductId)) {
+          return respondError(
+            c,
+            new ValidationError("source does not belong to the specified product filter", {
+              code: "bad_request",
+            }),
+          );
+        }
+
+        return {
+          scope: "org",
+          masterKey,
+          url,
+          releaseType: releaseTypeFilter,
+          format,
+          description,
+          db,
+          org,
+          resolvedSourceId,
+          resolvedProductId,
+        };
       },
-      201,
-    );
-  }
-
-  const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
-  const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
-  if (!orgId && !orgSlug) {
-    return respondError(
-      c,
-      new ValidationError("orgId or orgSlug is required", { code: "bad_request" }),
-    );
-  }
-
-  const org = await resolveWebhookOrg(db, { orgId, orgSlug });
-  if (!org) return respondError(c, new NotFoundError("Organization not found"));
-
-  const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
-  const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
-  const productId = typeof body.productId === "string" ? body.productId : undefined;
-  const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
-  const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
-  if (releaseTypeFilter === "invalid") {
-    return respondError(
-      c,
-      new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
-    );
-  }
-
-  let resolvedSourceId: string | null = null;
-  let resolvedSourceProductId: string | null = null;
-  if (sourceId || sourceSlug) {
-    const source = await resolveWebhookSource(db, org.id, { sourceId, sourceSlug });
-    if (!source) {
-      return respondError(c, new NotFoundError("Source not found for this organization"));
-    }
-    resolvedSourceId = source.id;
-    resolvedSourceProductId = source.productId;
-  }
-
-  let resolvedProductId: string | null = null;
-  if (productId || productSlug) {
-    const product = await resolveWebhookProduct(db, org.id, { productId, productSlug });
-    if (!product) {
-      return respondError(c, new NotFoundError("Product not found for this organization"));
-    }
-    resolvedProductId = product.id;
-  }
-
-  if (sourceProductFilterMismatch(resolvedSourceProductId, resolvedProductId)) {
-    return respondError(
-      c,
-      new ValidationError("source does not belong to the specified product filter", {
-        code: "bad_request",
-      }),
-    );
-  }
-
-  const count = await countUserOrgWebhookSubscriptions(db, session.user.id);
-  if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
-    return respondError(
-      c,
-      new RateLimitedError(
-        `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
-        { code: "limit_exceeded" },
-      ),
-    );
-  }
-
-  const sub = await insertWebhookSubscription(db, {
-    scope: "org",
-    orgId: org.id,
-    url,
-    sourceId: resolvedSourceId,
-    productId: resolvedProductId,
-    releaseType: releaseTypeFilter,
-    format,
-    description,
-    userId: session.user.id,
-  });
-
-  const signingKey =
-    format === "slack" ? undefined : await signingKeyFor(masterKey, sub.id, sub.secretVersion);
-  return c.json(
-    {
-      ...jsonSubscription(sub),
-      orgSlug: org.slug,
-      orgName: org.name,
-      ...(signingKey ? { signingKey } : {}),
-    },
-    201,
-  );
-});
+      execute: async (input) => {
+        if (input.scope === "follows") {
+          const existing = await getUserFollowsWebhookSubscription(input.db, session.user.id);
+          if (existing) {
+            return respondError(
+              c,
+              new RateLimitedError(
+                `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
+                { code: "limit_exceeded" },
+              ),
+            );
+          }
+        } else {
+          const count = await countUserOrgWebhookSubscriptions(input.db, session.user.id);
+          if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
+            return respondError(
+              c,
+              new RateLimitedError(
+                `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
+                { code: "limit_exceeded" },
+              ),
+            );
+          }
+        }
+        const sub = await insertWebhookSubscription(input.db, {
+          scope: input.scope,
+          orgId: input.scope === "follows" ? null : input.org.id,
+          url: input.url,
+          sourceId: input.scope === "follows" ? null : input.resolvedSourceId,
+          productId: input.scope === "follows" ? null : input.resolvedProductId,
+          releaseType: input.releaseType,
+          format: input.format,
+          description: input.description,
+          userId: session.user.id,
+        });
+        const signingKey =
+          input.format === "slack"
+            ? undefined
+            : await signingKeyFor(input.masterKey, sub.id, sub.secretVersion);
+        return c.json(
+          {
+            ...jsonSubscription(sub),
+            orgSlug: input.scope === "follows" ? null : input.org.slug,
+            orgName: input.scope === "follows" ? null : input.org.name,
+            ...(signingKey ? { signingKey } : {}),
+          },
+          201,
+        );
+      },
+    });
+  },
+);
 
 meWebhookHandlers.get("/me/webhooks/:id", async (c) => {
   const session = c.get("session");
@@ -419,90 +485,122 @@ meWebhookHandlers.delete("/me/webhooks/:id", async (c) => {
   return new Response(null, { status: 204 });
 });
 
-meWebhookHandlers.post("/me/webhooks/:id/rotate-secret", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-
-  const masterKey = await requireMasterKey(c);
-  if (masterKey instanceof Response) return masterKey;
-
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return respondError(c, new NotFoundError());
-
-  const newVersion = await bumpWebhookSecretVersion(db, id);
-  if (newVersion === null) return respondError(c, new NotFoundError());
-
-  const signingKey = await signingKeyFor(masterKey, id, newVersion);
-  return c.json({ secretVersion: newVersion, signingKey });
-});
-
-meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-
-  const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
-  if (!queue) {
-    return respondError(
-      c,
-      new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
-        code: "service_unavailable",
-        details: { resource: "queue" },
-      }),
-    );
-  }
-
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const sub = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!sub) return respondError(c, new NotFoundError());
-
-  const testLimitersEnabled = c.env.WEBHOOK_TEST_RATE_LIMIT_ENABLED !== "false";
-  const rateResult = await checkWebhookTestRateLimit(
-    {
-      sub: testLimitersEnabled ? c.env.WEBHOOK_TEST_SUB_RATE_LIMITER : undefined,
-      user: testLimitersEnabled ? c.env.WEBHOOK_TEST_USER_RATE_LIMITER : undefined,
-    },
-    session.user.id,
-    id,
-  );
-  if (rateResult !== "ok") {
-    c.header("Retry-After", String(WEBHOOK_TEST_RATE_WINDOW_SECONDS));
-    return respondError(c, new RateLimitedError(webhookTestRateLimitMessage(rateResult)));
-  }
-
-  const synthetic: DeliveryMessage = {
-    subscriptionId: sub.id,
-    url: sub.url,
-    secretVersion: sub.secretVersion,
-    format: sub.format,
-    event: {
-      id: newEventId(),
-      seq: 0,
-      ts: Date.now(),
-      type: "release.created",
-      release: {
-        id: "rel_synthetic",
-        title: "Webhook test",
-        version: null,
-        publishedAt: null,
-        sourceName: "synthetic",
-        sourceSlug: "synthetic",
-        summary: "This is a synthetic test event from your Releases webhook subscription.",
-        titleGenerated: null,
-        titleShort: null,
-        media: [],
-        contentChars: null,
-        contentTokens: null,
+meWebhookHandlers.post(
+  "/me/webhooks/:id/rotate-secret",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Webhooks"],
+      summary: "Rotate a personal webhook signing key",
+      successStatus: 200,
+      successDescription: "The new secret version and one-time signing key.",
+    }),
+  ),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    return idempotentPost(c, {
+      principal: userIdempotencyPrincipal(session.user.id),
+      body: "empty",
+      preclaim: async () => {
+        const masterKey = await requireMasterKey(c);
+        if (masterKey instanceof Response) return masterKey;
+        const id = c.req.param("id");
+        const db = getDb(c);
+        const owned = await getUserWebhookSubscription(db, session.user.id, id);
+        if (!owned) return respondError(c, new NotFoundError());
+        return { masterKey, id, db };
       },
-    },
-    attempt: 1,
-  };
+      execute: async ({ masterKey, id, db }) => {
+        const newVersion = await bumpWebhookSecretVersion(db, id);
+        if (newVersion === null) return respondError(c, new NotFoundError());
+        const signingKey = await signingKeyFor(masterKey, id, newVersion);
+        return c.json({ secretVersion: newVersion, signingKey });
+      },
+    });
+  },
+);
 
-  await queue.send(synthetic);
-  return c.json({ enqueued: true, eventId: synthetic.event.id });
-});
+meWebhookHandlers.post(
+  "/me/webhooks/:id/test",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Webhooks"],
+      summary: "Queue a personal webhook test delivery",
+      successStatus: 200,
+      successDescription: "The queued synthetic event identifier.",
+    }),
+  ),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    return idempotentPost(c, {
+      principal: userIdempotencyPrincipal(session.user.id),
+      body: "empty",
+      preclaim: async () => {
+        const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
+        if (!queue) {
+          return respondError(
+            c,
+            new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
+              code: "service_unavailable",
+              details: { resource: "queue" },
+            }),
+          );
+        }
+        const id = c.req.param("id");
+        const sub = await getUserWebhookSubscription(getDb(c), session.user.id, id);
+        if (!sub) return respondError(c, new NotFoundError());
+        return { id, queue, sub };
+      },
+      execute: async ({ id, queue, sub }) => {
+        const testLimitersEnabled = c.env.WEBHOOK_TEST_RATE_LIMIT_ENABLED !== "false";
+        const rateResult = await checkWebhookTestRateLimit(
+          {
+            sub: testLimitersEnabled ? c.env.WEBHOOK_TEST_SUB_RATE_LIMITER : undefined,
+            user: testLimitersEnabled ? c.env.WEBHOOK_TEST_USER_RATE_LIMITER : undefined,
+          },
+          session.user.id,
+          id,
+        );
+        if (rateResult !== "ok") {
+          c.header("Retry-After", String(WEBHOOK_TEST_RATE_WINDOW_SECONDS));
+          return respondError(c, new RateLimitedError(webhookTestRateLimitMessage(rateResult)));
+        }
+
+        const synthetic: DeliveryMessage = {
+          subscriptionId: sub.id,
+          url: sub.url,
+          secretVersion: sub.secretVersion,
+          format: sub.format,
+          event: {
+            id: newEventId(),
+            seq: 0,
+            ts: Date.now(),
+            type: "release.created",
+            release: {
+              id: "rel_synthetic",
+              title: "Webhook test",
+              version: null,
+              publishedAt: null,
+              sourceName: "synthetic",
+              sourceSlug: "synthetic",
+              summary: "This is a synthetic test event from your Releases webhook subscription.",
+              titleGenerated: null,
+              titleShort: null,
+              media: [],
+              contentChars: null,
+              contentTokens: null,
+            },
+          },
+          attempt: 1,
+        };
+
+        await queue.send(synthetic);
+        return c.json({ enqueued: true, eventId: synthetic.event.id });
+      },
+    });
+  },
+);
 
 meWebhookHandlers.get("/me/webhooks/:id/deliveries", async (c) => {
   const session = c.get("session");

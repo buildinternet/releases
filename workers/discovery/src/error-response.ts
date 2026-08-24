@@ -23,6 +23,7 @@ const DEFAULT_CODE_BY_TYPE: Record<ErrorType, ErrorCode> = {
   insufficient_scope: "insufficient_scope",
   not_found: "not_found",
   conflict: "conflict",
+  too_large: "payload_too_large",
   rate_limited: "rate_limited",
   upstream: "upstream_error",
   unavailable: "service_unavailable",

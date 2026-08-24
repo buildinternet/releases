@@ -2,19 +2,26 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { user } from "../../workers/api/src/db/schema-auth.js";
+import { apikey } from "../../workers/api/src/db/schema-auth.js";
 import { userApiKeyHandlers } from "../../workers/api/src/routes/user-api-keys.js";
 import type { Env } from "../../workers/api/src/index.js";
 
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());
 
-function env() {
+const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const IDEMPOTENCY_KEY = "user-key-create-1";
+
+function env(idempotencySecret: string | null = IDEMPOTENCY_SECRET) {
   return {
     ENVIRONMENT: "test",
     BETTER_AUTH_SECRET: "test-secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     BETTER_AUTH_URL: "https://api.releases.localhost",
     USER_API_KEYS_ENABLED: "true",
     DB: h!.db,
+    ...(idempotencySecret === null
+      ? {}
+      : { IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => idempotencySecret } }),
     // oxlint-disable-next-line no-explicit-any
   } as any;
 }
@@ -44,11 +51,17 @@ function appAs(userId: string) {
   return a;
 }
 
-async function post(userId: string, body: unknown) {
+async function post(
+  userId: string,
+  body: unknown,
+  options: { idempotencyKey?: string; secret?: string | null } = {},
+) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   return appAs(userId).request(
     "/api-keys",
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
-    env(),
+    { method: "POST", headers, body: JSON.stringify(body) },
+    env(options.secret),
   );
 }
 
@@ -105,6 +118,57 @@ describe("POST /v1/api-keys (create)", () => {
     expect((await post("user_1", { name: "k", scope: "read", expiresInDays: 999 })).status).toBe(
       400,
     );
+  });
+
+  it("replays the reveal-once API key once and stores one credential", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    const first = await post(
+      "user_1",
+      { name: "ci", scope: "read" },
+      { idempotencyKey: IDEMPOTENCY_KEY },
+    );
+    const firstBody = (await first.clone().json()) as { key: string };
+    const replay = await post(
+      "user_1",
+      { name: "ci", scope: "read" },
+      { idempotencyKey: IDEMPOTENCY_KEY },
+    );
+    expect(replay.status).toBe(201);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(((await replay.json()) as { key: string }).key).toBe(firstBody.key);
+    expect((await h.db.select().from(apikey)).length).toBe(1);
+  });
+
+  it("conflicts for a changed API-key request and leaves headerless creates independent", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    expect(
+      (await post("user_1", { name: "first" }, { idempotencyKey: IDEMPOTENCY_KEY })).status,
+    ).toBe(201);
+    expect(
+      (await post("user_1", { name: "changed" }, { idempotencyKey: IDEMPOTENCY_KEY })).status,
+    ).toBe(409);
+    expect((await post("user_1", { name: "second" })).status).toBe(201);
+    expect((await post("user_1", { name: "third" })).status).toBe(201);
+    expect((await h.db.select().from(apikey)).length).toBe(3);
+  });
+
+  it("requires idempotency encryption before creating an API key", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    expect(
+      (await post("user_1", { name: "ci" }, { idempotencyKey: IDEMPOTENCY_KEY, secret: null }))
+        .status,
+    ).toBe(503);
+    expect((await h.db.select().from(apikey)).length).toBe(0);
+  });
+
+  it("enforces the API-key name UTF-8 byte cap", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    expect((await post("user_1", { name: "é".repeat(100) })).status).toBe(201);
+    expect((await post("user_1", { name: "é".repeat(100) + "a" })).status).toBe(400);
   });
 });
 

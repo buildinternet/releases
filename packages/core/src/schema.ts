@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   index,
   check,
+  primaryKey,
 } from "drizzle-orm/sqlite-core";
 import {
   newSourceId,
@@ -1620,5 +1621,27 @@ export const apiTokens = sqliteTable(
       "api_tokens_principal_type_check",
       sql`${table.principalType} IN ('internal', 'agent', 'user')`,
     ),
+  ],
+);
+
+export const idempotencyRecords = sqliteTable(
+  "idempotency_records",
+  {
+    principalHash: text("principal_hash").notNull(),
+    keyHash: text("key_hash").notNull(),
+    requestHash: text("request_hash").notNull(),
+    state: text("state", { enum: ["processing", "completed"] }).notNull(),
+    attemptId: text("attempt_id").notNull(),
+    responseStatus: integer("response_status"),
+    responseHeaders: text("response_headers"),
+    responseBody: text("response_body"),
+    createdAt: text("created_at").notNull(),
+    completedAt: text("completed_at"),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.principalHash, table.keyHash] }),
+    check("idempotency_records_state_check", sql`${table.state} IN ('processing', 'completed')`),
+    index("idx_idempotency_records_expires_at").on(table.expiresAt),
   ],
 );

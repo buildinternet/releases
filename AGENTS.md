@@ -128,6 +128,7 @@ Deep dives live in `docs/architecture/`. A reader's guide with task-based entry 
 - [logging.md](docs/architecture/logging.md) — per-runtime logging: `logEvent()` for workers vs. the `fs`-backed logger for CLI/neutral packages, payload conventions, severity, `Error` unwrapping.
 - [routing.md](docs/architecture/routing.md) — REST route surface: naming buckets, org-scoped routes + dual-registration, the `/v1/lookups` resolver family + on-demand GitHub materialization, org catalog, entity resolution, pagination shape, OpenAPI coverage gate.
 - [errors.md](docs/architecture/errors.md) — standardized error envelope: taxonomy source of truth, the three-layer package split (core/api-types/lib), producers (`respondError`) + consumers, how to add a code.
+- [idempotency.md](docs/architecture/idempotency.md) — optional replay-safe POST contract, encryption secret provisioning, supported routes, cleanup, and failure boundary.
 - [taxonomy.md](docs/architecture/taxonomy.md) — classification axes: source `kind`, products, release type, tags, categories, collections, and how they differ.
 - [semantic-search.md](docs/architecture/semantic-search.md) — Vectorize indexes, hybrid RRF, query cache, related-entity rails.
 - [mcp.md](docs/architecture/mcp.md) — remote MCP server, scope enforcement, WebMCP parity, MCP Registry listing.

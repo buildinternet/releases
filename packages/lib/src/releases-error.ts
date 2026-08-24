@@ -12,6 +12,7 @@ const GENERIC_MESSAGE: Record<ErrorType, string> = {
   insufficient_scope: "Insufficient scope",
   not_found: "Not found",
   conflict: "Conflict",
+  too_large: "Payload too large",
   rate_limited: "Too many requests",
   upstream: "Upstream service error",
   unavailable: "Service unavailable",
@@ -31,6 +32,7 @@ const DEFAULT_CODE_BY_TYPE: Record<ErrorType, ErrorCode> = {
   insufficient_scope: "insufficient_scope",
   not_found: "not_found",
   conflict: "conflict",
+  too_large: "payload_too_large",
   rate_limited: "rate_limited",
   upstream: "upstream_error",
   unavailable: "service_unavailable",
@@ -117,6 +119,12 @@ export class NotFoundError extends ReleasesError {
 export class ConflictError extends ReleasesError {
   constructor(message = "Conflict", opts: ReleasesErrorOptions = {}) {
     super("conflict", message, { code: "conflict", ...opts });
+  }
+}
+
+export class PayloadTooLargeError extends ReleasesError {
+  constructor(message = "Payload too large", opts: ReleasesErrorOptions = {}) {
+    super("too_large", message, { code: "payload_too_large", ...opts });
   }
 }
 

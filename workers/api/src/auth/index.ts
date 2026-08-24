@@ -685,6 +685,7 @@ function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
 export const AUTH_CORS_ALLOWED_HEADERS = [
   "Content-Type",
   "Authorization",
+  "Idempotency-Key",
   "X-Visitor-Id",
   "X-Request-Id",
   "X-PoW-Solution",
@@ -776,6 +777,7 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
     if (c.res.status === 101) return;
     // Must mutate the finalized response: raw Response returns (Better Auth)
     // replace c.res and drop any pre-next c.header() values.
+    c.res.headers.set("Access-Control-Expose-Headers", "Idempotency-Replayed");
     if (origin) applyCorsHeaders(c.res.headers, origin, env);
   };
 }
@@ -829,6 +831,9 @@ async function resolveApiKeyHookOwner(ctx: ApiKeyHookCtx): Promise<string | unde
   return typeof body?.userId === "string" ? body.userId : undefined;
 }
 
+const API_KEY_NAME_MAX_BYTES = 200;
+const utf8Encoder = new TextEncoder();
+
 /**
  * Better Auth plugin governing the user-key (`relu_`) lane: a per-user active-key
  * cap (before `/api-key/create`) and an audit trail (after create/delete). The
@@ -852,13 +857,27 @@ function apiKeyGovernancePlugin(deps: {
   return {
     id: "api-key-governance",
     hooks: {
-      // BEFORE create: enforce the per-user active-key cap. Fail OPEN on an
-      // unexpected count error — the cap is anti-sprawl, not a security control,
-      // and must never break key creation on a transient DB hiccup.
+      // BEFORE create/update: enforce a byte-length cap. On create, also enforce
+      // the active-key cap. The count check fails open because it is anti-sprawl,
+      // not a security control, and must never break key creation on a transient
+      // DB hiccup.
       before: [
         {
-          matcher: (ctx) => ctx.path === "/api-key/create",
+          matcher: (ctx) => ctx.path === "/api-key/create" || ctx.path === "/api-key/update",
           handler: createAuthMiddleware(async (ctx) => {
+            const name = (ctx.body as { name?: unknown } | undefined)?.name;
+            if (
+              typeof name === "string" &&
+              utf8Encoder.encode(name).byteLength > API_KEY_NAME_MAX_BYTES
+            ) {
+              throw new APIError("BAD_REQUEST", {
+                code: "INVALID_NAME_LENGTH",
+                message: `API key name must be at most ${API_KEY_NAME_MAX_BYTES} bytes`,
+              });
+            }
+
+            if (ctx.path === "/api-key/update") return;
+
             const userId = await resolveApiKeyHookOwner(ctx);
             if (!userId) return; // no resolvable owner — the endpoint itself will 401
             let active: number;
@@ -1358,6 +1377,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
           apiKey({
             // Public-facing user keys. Distinct prefix from the relk_ machine lane.
             defaultPrefix: USER_API_KEY_PREFIX,
+            maximumNameLength: 200,
             requireName: true,
             enableMetadata: true,
             // Default tier (single config). Per-key overrides land at creation time.

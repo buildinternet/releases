@@ -46,6 +46,21 @@ function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
  * unauthenticated POST routes (`/feedback`, `/recommendations`); keep the cheap
  * `Content-Length` pre-check at the call site as a fast-path for honest clients.
  */
+/**
+ * Parse an already-buffered, already-cap-checked body (e.g. bytes handed
+ * back by `idempotentPost`, which streams and caps the body itself). Same
+ * result shape as {@link readJsonBodyCapped} for a byte-array input, minus
+ * the streaming/size-limit work — that was already done by the caller.
+ */
+export function parseJsonBodyCapped(bytes: Uint8Array): ReadJsonBodyResult {
+  try {
+    const text = new TextDecoder().decode(bytes);
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+}
+
 export async function readJsonBodyCapped(
   req: Request,
   maxBytes: number,

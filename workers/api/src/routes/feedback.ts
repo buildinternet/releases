@@ -8,6 +8,7 @@
  * is volume-capped separately in feedback-email.ts.
  */
 import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { eq } from "drizzle-orm";
 import {
   feedback,
@@ -17,12 +18,19 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { newFeedbackId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
-import { readJsonBodyCapped } from "../lib/json-body.js";
+import {
+  parseJsonBodyCapped,
+  readJsonBodyCapped,
+  type ReadJsonBodyResult,
+} from "../lib/json-body.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyFeedback } from "../lib/feedback-email.js";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { respondError } from "../lib/error-response.js";
+import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { idempotentPost, MAX_BODY_BYTES } from "../middleware/idempotency.js";
+import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
 import {
   ValidationError,
   ServiceUnavailableError,
@@ -35,9 +43,6 @@ export const feedbackRoutes = new Hono<Env>();
 const MIN_MESSAGE = 5;
 const MAX_MESSAGE = 4000;
 const MAX_CONTACT = 200;
-// The largest fields sum to ~4.3KB; 64KB leaves generous headroom while
-// rejecting absurd payloads before we parse them.
-const MAX_BODY_BYTES = 64 * 1024;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 // Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
@@ -56,79 +61,90 @@ function coerceClientKind(v: unknown): string {
     : "external";
 }
 
-feedbackRoutes.post("/feedback", async (c) => {
-  if (await flag(c.env.FLAGS, c.env.FEEDBACK_DISABLED, FLAGS.feedbackDisabled)) {
-    return respondError(c, new ServiceUnavailableError());
-  }
-
-  // Cheap fast-path: reject an honestly-declared oversized payload before we
-  // read a byte. Advisory only — a chunked or Content-Length-spoofed request
-  // sails past this, so the streaming cap below is the guard that holds.
-  const contentLength = Number(c.req.header("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-    return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
-  }
-
-  // Per-IP rate limit. publicRateLimitMiddleware only covers safe methods, so
-  // this open POST needs its own. Kill switch defaults ON (only "false" opts
-  // out); no-ops when the binding is absent (e.g. staging, tests without it).
-  const limiter =
-    c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
-  if (limiter) {
-    const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-    const { success } = await limiter.limit({ key: `feedback:${ip}` });
-    if (!success) {
-      c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-      return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
+feedbackRoutes.post(
+  "/feedback",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Feedback"],
+      summary: "Submit product feedback",
+      successStatus: 202,
+      successDescription: "Accepted feedback identifier.",
+    }),
+  ),
+  async (c) => {
+    if (await flag(c.env.FLAGS, c.env.FEEDBACK_DISABLED, FLAGS.feedbackDisabled)) {
+      return respondError(c, new ServiceUnavailableError());
     }
-  }
 
-  // Enforce the byte cap by streaming the body (the Content-Length check above
-  // is advisory). Bails at MAX_BODY_BYTES with payload_too_large.
-  const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
-  if (!parsed.ok) {
-    return respondError(c, new ValidationError(undefined, { code: parsed.error }));
-  }
-  // JSON literals like `null`, numbers, strings, and arrays parse fine but
-  // aren't the object shape we read fields off — guard before access.
-  if (typeof parsed.value !== "object" || parsed.value === null) {
-    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
-  }
-  const body = parsed.value as Record<string, unknown>;
+    const limiter =
+      c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
+    if (limiter) {
+      const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+      const { success } = await limiter.limit({ key: `feedback:${ip}` });
+      if (!success) {
+        c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+        return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
+      }
+    }
 
-  const rawMessage = sanitizeString(body.message, MAX_MESSAGE);
-  const message = rawMessage ? stripControl(rawMessage).trim() : null;
-  if (!message || message.length < MIN_MESSAGE) {
-    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
-  }
+    return idempotentPost(c, {
+      principal: anonymousIdempotencyPrincipal(),
+      body: "json",
+      preclaim: async (bytes) => {
+        let parsed: ReadJsonBodyResult;
+        if (bytes === undefined) {
+          const contentLength = Number(c.req.header("content-length") ?? "0");
+          if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+            return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
+          }
+          parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
+        } else {
+          // Already streamed + capped by idempotentPost — parse directly, no
+          // second read of the request body.
+          parsed = parseJsonBodyCapped(bytes);
+        }
+        if (!parsed.ok) {
+          return respondError(c, new ValidationError(undefined, { code: parsed.error }));
+        }
+        if (typeof parsed.value !== "object" || parsed.value === null) {
+          return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
+        }
+        const body = parsed.value as Record<string, unknown>;
+        const rawMessage = sanitizeString(body.message, MAX_MESSAGE);
+        const message = rawMessage ? stripControl(rawMessage).trim() : null;
+        if (!message || message.length < MIN_MESSAGE) {
+          return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
+        }
 
-  const rawContact = sanitizeString(body.contact, MAX_CONTACT);
-  const contact = rawContact ? stripControl(rawContact).trim() || null : null;
-
-  const db = getDb(c);
-  const row = {
-    id: newFeedbackId(),
-    createdAt: Date.now(),
-    message,
-    contact,
-    type: coerceType(body.type),
-    status: "new",
-    archived: false,
-    cliVersion: sanitizeText(body.cliVersion, 32),
-    clientKind: coerceClientKind(body.clientKind),
-    anonId: sanitizeText(body.anonId, 64),
-    os: sanitizeText(body.os, 64),
-    arch: sanitizeText(body.arch, 64),
-    runtime: sanitizeText(body.runtime, 64),
-    surface: sanitizeText(body.surface, 32) ?? "cli",
-  };
-
-  await db.insert(feedback).values(row);
-
-  c.executionCtx.waitUntil(notifyFeedback(c.env, row));
-
-  return c.json({ ok: true, id: row.id }, 202);
-});
+        const rawContact = sanitizeString(body.contact, MAX_CONTACT);
+        return {
+          message,
+          contact: rawContact ? stripControl(rawContact).trim() || null : null,
+          type: coerceType(body.type),
+          cliVersion: sanitizeText(body.cliVersion, 32),
+          clientKind: coerceClientKind(body.clientKind),
+          anonId: sanitizeText(body.anonId, 64),
+          os: sanitizeText(body.os, 64),
+          arch: sanitizeText(body.arch, 64),
+          runtime: sanitizeText(body.runtime, 64),
+          surface: sanitizeText(body.surface, 32) ?? "cli",
+        };
+      },
+      execute: async (input) => {
+        const row = {
+          id: newFeedbackId(),
+          createdAt: Date.now(),
+          ...input,
+          status: "new",
+          archived: false,
+        };
+        await getDb(c).insert(feedback).values(row);
+        c.executionCtx.waitUntil(notifyFeedback(c.env, row));
+        return c.json({ ok: true, id: row.id }, 202);
+      },
+    });
+  },
+);
 
 // ── Triage write-path (admin-gated) ──
 //

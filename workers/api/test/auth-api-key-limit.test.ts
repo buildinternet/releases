@@ -96,6 +96,7 @@ interface ApiKeyApi {
   createApiKey: (a: {
     body: { name: string; userId: string; permissions: Record<string, string[]> };
   }) => Promise<{ id: string }>;
+  updateApiKey: (a: { body: { keyId: string; userId: string; name: string } }) => Promise<unknown>;
 }
 
 async function buildAuth() {
@@ -110,6 +111,26 @@ async function buildAuth() {
 }
 
 describe("user API key cap (before-hook) + audit (after-hook)", () => {
+  it("enforces the UTF-8 name cap for native create and update", async () => {
+    const { api, db } = await buildAuth();
+    const atLimit = "é".repeat(100);
+    const overLimit = `${atLimit}a`;
+    const created = await api.createApiKey({
+      body: { name: atLimit, userId: "owner-bytes", permissions: { api: ["read"] } },
+    });
+    await expect(
+      api.createApiKey({
+        body: { name: overLimit, userId: "owner-bytes", permissions: { api: ["read"] } },
+      }),
+    ).rejects.toBeTruthy();
+    await expect(
+      api.updateApiKey({ body: { keyId: created.id, userId: "owner-bytes", name: overLimit } }),
+    ).rejects.toBeTruthy();
+    expect((await db.select().from(apikey).where(eq(apikey.id, created.id)).get())?.name).toBe(
+      atLimit,
+    );
+  });
+
   it("allows up to the cap, then rejects further creates with API_KEY_LIMIT_REACHED", async () => {
     const { api } = await buildAuth();
 

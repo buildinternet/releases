@@ -60,6 +60,8 @@ export interface OAuthJwtConfig {
 export interface VerifiedOAuthToken {
   /** `sub` — the user id, or null for an M2M (client_credentials) token. */
   subject: string | null;
+  /** Stable OAuth client identity projected from a signed client claim, or null. */
+  clientId: string | null;
   /** API ladder scopes (`read`/`write`/`admin`) carried by the token. */
   scopes: string[];
   /** `https://releases.sh/role` claim, or null. Informational. */
@@ -106,6 +108,18 @@ export function extractApiScopes(payload: JWTPayload): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Extract a stable client identifier from a verified OAuth payload. Providers use
+ * several spelling conventions; only a non-empty signed string is accepted.
+ */
+function extractOAuthClientId(payload: JWTPayload): string | null {
+  const claims = payload as Record<string, unknown>;
+  for (const claim of [claims.azp, claims.client_id, claims.clientId]) {
+    if (typeof claim === "string" && claim.length > 0) return claim;
+  }
+  return null;
 }
 
 /**
@@ -180,6 +194,7 @@ export async function verifyOAuthJwt(
     const role = (payload as Record<string, unknown>)["https://releases.sh/role"];
     return {
       subject: typeof payload.sub === "string" ? payload.sub : null,
+      clientId: extractOAuthClientId(payload),
       scopes: extractApiScopes(payload),
       role: typeof role === "string" ? role : null,
       raw: payload,
