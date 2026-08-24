@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { Hono, type Context } from "hono";
 import { eq } from "drizzle-orm";
-import { idempotencyRecords } from "@buildinternet/releases-core/schema";
+import { idempotencyGuards, idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { ServiceUnavailableError, ValidationError } from "@releases/lib/releases-error";
 import { createTestDb, type TestDb } from "../../../tests/db-helper";
 import type { Env } from "../src/index";
@@ -94,6 +94,10 @@ async function errorCode(response: Response): Promise<string> {
 
 async function rowCount(db: TestDb): Promise<number> {
   return (await db.select().from(idempotencyRecords)).length;
+}
+
+async function guardCount(db: TestDb): Promise<number> {
+  return (await db.select().from(idempotencyGuards)).length;
 }
 
 function deferred<T>() {
@@ -281,6 +285,44 @@ describe("idempotentPost", () => {
     expect((await winnerPromise).status).toBe(201);
   });
 
+  test("a missing response row cannot admit a retry while the first execution is running", async () => {
+    const started = deferred<void>();
+    const finish = deferred<void>();
+    const harness = makeHarness({
+      execute: async (_c, call) => {
+        if (call === 1) {
+          started.resolve();
+          await finish.promise;
+        }
+        return new Response("created", {
+          status: 201,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      },
+    });
+
+    const firstPromise = harness.request("/effect", withKey());
+    await started.promise;
+    await harness.fixtureDb!.delete(idempotencyRecords);
+
+    try {
+      const retry = await harness.request("/effect", withKey());
+
+      expect(retry.status).toBe(409);
+      expect(await errorCode(retry)).toBe("idempotency_in_progress");
+      expect(retry.headers.get("Retry-After")).toBe("1");
+      expect(harness.executions()).toBe(1);
+    } finally {
+      finish.resolve();
+    }
+
+    expect((await firstPromise).status).toBe(503);
+    const retainedRetry = await harness.request("/effect", withKey());
+    expect(retainedRetry.status).toBe(409);
+    expect(await errorCode(retainedRetry)).toBe("idempotency_in_progress");
+    expect(harness.executions()).toBe(1);
+  });
+
   test("exhausted store contention returns unavailable without execution", async () => {
     const db = {
       insert() {
@@ -356,7 +398,7 @@ describe("idempotentPost", () => {
   test("a release that affects zero rows or throws restores a retry barrier", async () => {
     const zero = makeHarness({
       execute: async (c) => {
-        await zero.fixtureDb!.delete(idempotencyRecords);
+        await zero.fixtureDb!.delete(idempotencyGuards);
         return respondError(c, new ValidationError("correctable"));
       },
     });
@@ -370,8 +412,7 @@ describe("idempotentPost", () => {
     expect(await rowCount(zero.fixtureDb!)).toBe(1);
 
     const throwing = makeHarness({
-      execute: async (c, call) => {
-        if (call === 1) await throwing.fixtureDb!.delete(idempotencyRecords);
+      execute: async (c) => {
         (throwing.db as unknown as { delete: () => never }).delete = () => {
           throw new Error("release unavailable");
         };
@@ -485,16 +526,14 @@ describe("idempotentPost", () => {
     expect(zeroRetry.status).toBe(409);
     expect(await errorCode(zeroRetry)).toBe("idempotency_in_progress");
     expect(zero.executions()).toBe(1);
-    expect(await rowCount(zero.fixtureDb!)).toBe(1);
+    expect(await rowCount(zero.fixtureDb!)).toBe(0);
+    expect(await guardCount(zero.fixtureDb!)).toBe(1);
 
     const throwing = makeHarness({
-      execute: async (_c, call) => {
-        if (call === 1) {
-          await throwing.fixtureDb!.delete(idempotencyRecords);
-          (throwing.db as unknown as { update: () => never }).update = () => {
-            throw new Error("completion unavailable");
-          };
-        }
+      execute: async () => {
+        (throwing.db as unknown as { update: () => never }).update = () => {
+          throw new Error("completion unavailable");
+        };
         return new Response("created", {
           status: 201,
           headers: { "Content-Type": "text/plain" },
@@ -553,7 +592,7 @@ describe("idempotentPost", () => {
     });
     expect((await harness.request("/effect", withKey())).status).toBe(503);
     await harness
-      .fixtureDb!.update(idempotencyRecords)
+      .fixtureDb!.update(idempotencyGuards)
       .set({ expiresAt: "2000-01-01T00:00:00.000Z" });
 
     const reclaimed = await harness.request("/effect", withKey());
