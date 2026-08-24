@@ -168,7 +168,7 @@ describe("POST /v1/api-keys (create)", () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
     expect((await post("user_1", { name: "é".repeat(100) })).status).toBe(201);
-    expect((await post("user_1", { name: "é".repeat(101) })).status).toBe(400);
+    expect((await post("user_1", { name: "é".repeat(100) + "a" })).status).toBe(400);
   });
 });
 

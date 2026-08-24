@@ -269,7 +269,7 @@ describe("/v1/me/webhooks", () => {
             body: JSON.stringify({
               orgSlug: "acme",
               url: PUBLIC_HOOK_URL,
-              description: "é".repeat(501),
+              description: "é".repeat(500) + "a",
             }),
           },
           env,
