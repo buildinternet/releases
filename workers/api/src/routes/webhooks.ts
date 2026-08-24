@@ -24,6 +24,8 @@ import {
 } from "../webhooks/shared.js";
 import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
 import { respondError } from "../lib/error-response.js";
+import { authenticatedIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { idempotentPost } from "../middleware/idempotency.js";
 import {
   ValidationError,
   NotFoundError,
@@ -155,53 +157,59 @@ webhooksRoutes.post("/webhooks/:id/rotate-secret", async (c) => {
 });
 
 webhooksRoutes.post("/webhooks/:id/test", async (c) => {
-  const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
-  if (!queue) {
-    return respondError(
-      c,
-      new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
-        code: "service_unavailable",
-        details: { resource: "queue" },
-      }),
-    );
-  }
-
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const sub = await getWebhookSubscriptionById(db, id);
-  if (!sub) {
-    return respondError(c, new NotFoundError());
-  }
-
-  const synthetic: DeliveryMessage = {
-    subscriptionId: sub.id,
-    url: sub.url,
-    secretVersion: sub.secretVersion,
-    event: {
-      id: newEventId(),
-      seq: 0,
-      ts: Date.now(),
-      type: "release.created",
-      release: {
-        id: "rel_synthetic",
-        title: "Webhook test",
-        version: null,
-        publishedAt: null,
-        sourceName: "synthetic",
-        sourceSlug: "synthetic",
-        summary: "This is a synthetic test event from `releases admin webhook test`.",
-        titleGenerated: null,
-        titleShort: null,
-        media: [],
-        contentChars: null,
-        contentTokens: null,
-      },
+  return idempotentPost(c, {
+    principal: authenticatedIdempotencyPrincipal({
+      auth: c.get("auth"),
+      localAuthSkip: c.get("localAuthSkip"),
+      environment: c.env.ENVIRONMENT,
+    }),
+    body: "empty",
+    preclaim: async () => {
+      const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
+      if (!queue) {
+        return respondError(
+          c,
+          new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
+            code: "service_unavailable",
+            details: { resource: "queue" },
+          }),
+        );
+      }
+      const sub = await getWebhookSubscriptionById(getDb(c), c.req.param("id"));
+      if (!sub) return respondError(c, new NotFoundError());
+      return { queue, sub };
     },
-    attempt: 1,
-  };
-
-  await queue.send(synthetic);
-  return c.json({ enqueued: true, eventId: synthetic.event.id });
+    execute: async ({ queue, sub }) => {
+      const synthetic: DeliveryMessage = {
+        subscriptionId: sub.id,
+        url: sub.url,
+        secretVersion: sub.secretVersion,
+        event: {
+          id: newEventId(),
+          seq: 0,
+          ts: Date.now(),
+          type: "release.created",
+          release: {
+            id: "rel_synthetic",
+            title: "Webhook test",
+            version: null,
+            publishedAt: null,
+            sourceName: "synthetic",
+            sourceSlug: "synthetic",
+            summary: "This is a synthetic test event from `releases admin webhook test`.",
+            titleGenerated: null,
+            titleShort: null,
+            media: [],
+            contentChars: null,
+            contentTokens: null,
+          },
+        },
+        attempt: 1,
+      };
+      await queue.send(synthetic);
+      return c.json({ enqueued: true, eventId: synthetic.event.id });
+    },
+  });
 });
 
 webhooksRoutes.get("/webhooks/:id/deliveries", async (c) => {

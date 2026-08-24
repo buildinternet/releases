@@ -15,6 +15,7 @@ import { meWebhookHandlers } from "../src/routes/me-webhooks.js";
 const TEST_MASTER_KEY = "a".repeat(64);
 const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const IDEMPOTENCY_KEY = "webhook-create-01";
+const TEST_IDEMPOTENCY_KEY = "webhook-test-idem-01";
 const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
 const SLACK_HOOK_URL = "https://hooks.slack.com/services/T012AB/B034CD/Xy7zSecret";
 const queueMessages: unknown[] = [];
@@ -637,6 +638,171 @@ describe("/v1/me/webhooks", () => {
 
     const test = await a.request(`/me/webhooks/${id}/test`, { method: "POST" }, env);
     expect(test.status).toBe(200);
+    expect(queueMessages).toHaveLength(1);
+  });
+
+  it("POST test idempotency replays one queued event", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+    const init = { method: "POST", headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY } };
+
+    const first = await a.request(`/me/webhooks/${id}/test`, init, env);
+    const replay = await a.request(`/me/webhooks/${id}/test`, init, env);
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.json()).toEqual(await first.json());
+    expect(queueMessages).toHaveLength(1);
+  });
+
+  it("POST test idempotency rejects an opted-in non-empty body before enqueue", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const res = await a.request(
+      `/me/webhooks/${id}/test`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY, "Content-Type": "application/json" },
+        body: "{}",
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect(queueMessages).toHaveLength(0);
+  });
+
+  it("POST test idempotency conflicts when its key targets another subscription", async () => {
+    const { a, env } = app();
+    const create = async () => {
+      const res = await a.request(
+        "/me/webhooks",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+        },
+        env,
+      );
+      return (await res.json()) as { id: string };
+    };
+    const firstSub = await create();
+    const secondSub = await create();
+
+    await a.request(
+      `/me/webhooks/${firstSub.id}/test`,
+      { method: "POST", headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY } },
+      env,
+    );
+    const conflict = await a.request(
+      `/me/webhooks/${secondSub.id}/test`,
+      { method: "POST", headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY } },
+      env,
+    );
+
+    expect(conflict.status).toBe(409);
+    expect(queueMessages).toHaveLength(1);
+  });
+
+  it("POST test idempotency applies its winner-only limiter once", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+    let limits = 0;
+    const limitedEnv = {
+      ...env,
+      WEBHOOK_TEST_SUB_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    };
+    const init = { method: "POST", headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY } };
+
+    await a.request(`/me/webhooks/${id}/test`, init, limitedEnv);
+    await a.request(`/me/webhooks/${id}/test`, init, limitedEnv);
+
+    expect(limits).toBe(1);
+  });
+
+  it("POST test idempotency reports a matching queued request as in progress", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+    let signalStarted!: () => void;
+    let releaseSend!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    const pendingEnv = {
+      ...env,
+      WEBHOOK_DELIVERY_QUEUE: {
+        send: async (message: unknown) => {
+          queueMessages.push(message);
+          signalStarted();
+          await release;
+        },
+      },
+    };
+    const init = { method: "POST", headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY } };
+    const first = a.request(`/me/webhooks/${id}/test`, init, pendingEnv);
+    await started;
+    const pending = await a.request(`/me/webhooks/${id}/test`, init, pendingEnv);
+    releaseSend();
+
+    expect(pending.status).toBe(409);
+    expect(
+      (await pending.json()) as {
+        error: { code: string; type: string; message: string };
+      },
+    ).toEqual({
+      error: {
+        code: "idempotency_in_progress",
+        type: "conflict",
+        message: "A matching request is already in progress",
+      },
+    });
+    expect((await first).status).toBe(200);
     expect(queueMessages).toHaveLength(1);
   });
 

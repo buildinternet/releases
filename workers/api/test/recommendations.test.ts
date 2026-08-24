@@ -2,12 +2,19 @@ import { describe, expect, it } from "bun:test";
 import { recommendations } from "@buildinternet/releases-core/schema";
 import { createTestApp, createTestDb } from "./setup";
 
+const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const IDEMPOTENCY_KEY = "recommendation-idem-01";
+
 async function makeApp(db = createTestDb(), env: Record<string, unknown> = {}) {
   const { recommendationRoutes } = await import("../src/routes/recommendations.js");
   return {
     db,
     fetch: createTestApp(db, recommendationRoutes, {
-      env: { SEND_EMAIL: undefined, ...env },
+      env: {
+        SEND_EMAIL: undefined,
+        IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
+        ...env,
+      },
     }),
   };
 }
@@ -16,6 +23,18 @@ function post(body: unknown) {
   return new Request("http://x/v1/recommendations", {
     method: "POST",
     headers: { "content-type": "application/json", "user-agent": "test-agent" },
+    body: JSON.stringify(body),
+  });
+}
+
+function idempotentPost(body: unknown, key = IDEMPOTENCY_KEY) {
+  return new Request("http://x/v1/recommendations", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "user-agent": "test-agent",
+      "idempotency-key": key,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -119,6 +138,69 @@ describe("POST /v1/recommendations", () => {
   it("returns 503 when RECOMMENDATIONS_DISABLED=true", async () => {
     const { db, fetch } = await makeApp(undefined, { RECOMMENDATIONS_DISABLED: "true" });
     const res = await fetch(post({ url: "https://example.com/releases" }));
+    expect(res.status).toBe(503);
+    expect(await db.select().from(recommendations)).toHaveLength(0);
+  });
+
+  it("idempotency creates one recommendation and replays its original id", async () => {
+    const { db, fetch } = await makeApp();
+    const body = { url: "https://example.com/releases", note: "One request only" };
+
+    const first = await fetch(idempotentPost(body));
+    const replay = await fetch(idempotentPost(body));
+
+    expect(first.status).toBe(202);
+    expect(replay.status).toBe(202);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.json()).toEqual(await first.json());
+    expect(await db.select().from(recommendations)).toHaveLength(1);
+  });
+
+  it("idempotency validates again before claiming so an invalid request leaves its key reusable", async () => {
+    const { db, fetch } = await makeApp();
+
+    const invalid = await fetch(idempotentPost({ url: "ftp://example.com/releases" }));
+    const valid = await fetch(idempotentPost({ url: "https://example.com/releases" }));
+
+    expect(invalid.status).toBe(400);
+    expect(valid.status).toBe(202);
+    expect(await db.select().from(recommendations)).toHaveLength(1);
+  });
+
+  it("idempotency evaluates the anonymous limiter on replay but inserts once", async () => {
+    let limits = 0;
+    const { db, fetch } = await makeApp(undefined, {
+      FEEDBACK_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    });
+    const body = { url: "https://example.com/releases" };
+
+    await fetch(idempotentPost(body));
+    await fetch(idempotentPost(body));
+
+    expect(limits).toBe(2);
+    expect(await db.select().from(recommendations)).toHaveLength(1);
+  });
+
+  it("idempotency conflicts when an anonymous key is reused with changed bytes", async () => {
+    const { db, fetch } = await makeApp();
+    await fetch(idempotentPost({ url: "https://example.com/releases", note: "first" }));
+    const conflict = await fetch(
+      idempotentPost({ url: "https://example.com/releases", note: "second" }),
+    );
+
+    expect(conflict.status).toBe(409);
+    expect(await db.select().from(recommendations)).toHaveLength(1);
+  });
+
+  it("idempotency without its encryption secret does not insert", async () => {
+    const { db, fetch } = await makeApp(undefined, { IDEMPOTENCY_ENCRYPTION_KEY: undefined });
+    const res = await fetch(idempotentPost({ url: "https://example.com/releases" }));
+
     expect(res.status).toBe(503);
     expect(await db.select().from(recommendations)).toHaveLength(0);
   });

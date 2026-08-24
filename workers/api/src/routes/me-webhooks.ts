@@ -490,67 +490,72 @@ meWebhookHandlers.post("/me/webhooks/:id/rotate-secret", async (c) => {
 meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
   const session = c.get("session");
   if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-
-  const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
-  if (!queue) {
-    return respondError(
-      c,
-      new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
-        code: "service_unavailable",
-        details: { resource: "queue" },
-      }),
-    );
-  }
-
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const sub = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!sub) return respondError(c, new NotFoundError());
-
-  const testLimitersEnabled = c.env.WEBHOOK_TEST_RATE_LIMIT_ENABLED !== "false";
-  const rateResult = await checkWebhookTestRateLimit(
-    {
-      sub: testLimitersEnabled ? c.env.WEBHOOK_TEST_SUB_RATE_LIMITER : undefined,
-      user: testLimitersEnabled ? c.env.WEBHOOK_TEST_USER_RATE_LIMITER : undefined,
+  return idempotentPost(c, {
+    principal: userIdempotencyPrincipal(session.user.id),
+    body: "empty",
+    preclaim: async () => {
+      const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
+      if (!queue) {
+        return respondError(
+          c,
+          new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
+            code: "service_unavailable",
+            details: { resource: "queue" },
+          }),
+        );
+      }
+      const id = c.req.param("id");
+      const sub = await getUserWebhookSubscription(getDb(c), session.user.id, id);
+      if (!sub) return respondError(c, new NotFoundError());
+      return { id, queue, sub };
     },
-    session.user.id,
-    id,
-  );
-  if (rateResult !== "ok") {
-    c.header("Retry-After", String(WEBHOOK_TEST_RATE_WINDOW_SECONDS));
-    return respondError(c, new RateLimitedError(webhookTestRateLimitMessage(rateResult)));
-  }
+    execute: async ({ id, queue, sub }) => {
+      const testLimitersEnabled = c.env.WEBHOOK_TEST_RATE_LIMIT_ENABLED !== "false";
+      const rateResult = await checkWebhookTestRateLimit(
+        {
+          sub: testLimitersEnabled ? c.env.WEBHOOK_TEST_SUB_RATE_LIMITER : undefined,
+          user: testLimitersEnabled ? c.env.WEBHOOK_TEST_USER_RATE_LIMITER : undefined,
+        },
+        session.user.id,
+        id,
+      );
+      if (rateResult !== "ok") {
+        c.header("Retry-After", String(WEBHOOK_TEST_RATE_WINDOW_SECONDS));
+        return respondError(c, new RateLimitedError(webhookTestRateLimitMessage(rateResult)));
+      }
 
-  const synthetic: DeliveryMessage = {
-    subscriptionId: sub.id,
-    url: sub.url,
-    secretVersion: sub.secretVersion,
-    format: sub.format,
-    event: {
-      id: newEventId(),
-      seq: 0,
-      ts: Date.now(),
-      type: "release.created",
-      release: {
-        id: "rel_synthetic",
-        title: "Webhook test",
-        version: null,
-        publishedAt: null,
-        sourceName: "synthetic",
-        sourceSlug: "synthetic",
-        summary: "This is a synthetic test event from your Releases webhook subscription.",
-        titleGenerated: null,
-        titleShort: null,
-        media: [],
-        contentChars: null,
-        contentTokens: null,
-      },
+      const synthetic: DeliveryMessage = {
+        subscriptionId: sub.id,
+        url: sub.url,
+        secretVersion: sub.secretVersion,
+        format: sub.format,
+        event: {
+          id: newEventId(),
+          seq: 0,
+          ts: Date.now(),
+          type: "release.created",
+          release: {
+            id: "rel_synthetic",
+            title: "Webhook test",
+            version: null,
+            publishedAt: null,
+            sourceName: "synthetic",
+            sourceSlug: "synthetic",
+            summary: "This is a synthetic test event from your Releases webhook subscription.",
+            titleGenerated: null,
+            titleShort: null,
+            media: [],
+            contentChars: null,
+            contentTokens: null,
+          },
+        },
+        attempt: 1,
+      };
+
+      await queue.send(synthetic);
+      return c.json({ enqueued: true, eventId: synthetic.event.id });
     },
-    attempt: 1,
-  };
-
-  await queue.send(synthetic);
-  return c.json({ enqueued: true, eventId: synthetic.event.id });
+  });
 });
 
 meWebhookHandlers.get("/me/webhooks/:id/deliveries", async (c) => {

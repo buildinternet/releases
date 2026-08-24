@@ -1,8 +1,12 @@
 import { describe, it, expect } from "bun:test";
+import { Hono } from "hono";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../../../tests/db-helper";
 import { feedback } from "@buildinternet/releases-core/schema";
+
+const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const IDEMPOTENCY_KEY = "feedback-idempotency-01";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -12,13 +16,17 @@ function mkDb() {
 }
 
 async function makeApp(db: ReturnType<typeof mkDb>, env: Record<string, unknown> = {}) {
-  const { Hono } = await import("hono");
   const { feedbackRoutes } = await import("../src/routes/feedback.js");
   const app = new Hono();
   const v1 = new Hono();
   v1.route("/", feedbackRoutes);
   app.route("/v1", v1);
-  const fakeEnv = { DB: db, SEND_EMAIL: undefined, ...env };
+  const fakeEnv = {
+    DB: db,
+    SEND_EMAIL: undefined,
+    IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
+    ...env,
+  };
   return (req: Request) =>
     app.fetch(req, fakeEnv, {
       waitUntil() {},
@@ -30,6 +38,14 @@ function post(body: unknown) {
   return new Request("http://x/v1/feedback", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function idempotentPost(body: unknown, key = IDEMPOTENCY_KEY) {
+  return new Request("http://x/v1/feedback", {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": key },
     body: JSON.stringify(body),
   });
 }
@@ -246,6 +262,78 @@ describe("POST /v1/feedback", () => {
     await fetch(post({ message: "fresh feedback, not archived" }));
     const rows = await db.select().from(feedback);
     expect(rows[0]!.archived).toBe(false);
+  });
+
+  it("idempotency creates one feedback row and replays its original id", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const body = { message: "This should be stored only once." };
+
+    const first = await fetch(idempotentPost(body));
+    const replay = await fetch(idempotentPost(body));
+
+    expect(first.status).toBe(202);
+    expect(replay.status).toBe(202);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.json()).toEqual(await first.json());
+    expect(await db.select().from(feedback)).toHaveLength(1);
+  });
+
+  it("idempotency conflicts when the shared anonymous key is reused for another route", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const feedbackResponse = await fetch(idempotentPost({ message: "This is feedback content." }));
+    const { recommendationRoutes } = await import("../src/routes/recommendations.js");
+    const recommendationsApp = new Hono();
+    recommendationsApp.route("/v1", recommendationRoutes);
+    const recommendationResponse = await recommendationsApp.fetch(
+      new Request("http://x/v1/recommendations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_KEY,
+        },
+        body: JSON.stringify({ url: "https://example.com/releases" }),
+      }),
+      {
+        DB: db,
+        SEND_EMAIL: undefined,
+        IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
+      },
+      { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+    );
+
+    expect(feedbackResponse.status).toBe(202);
+    expect(recommendationResponse.status).toBe(409);
+  });
+
+  it("idempotency evaluates the anonymous limiter on replay but inserts once", async () => {
+    const db = mkDb();
+    let limits = 0;
+    const fetch = await makeApp(db, {
+      FEEDBACK_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    });
+    const body = { message: "This should only be inserted once." };
+
+    await fetch(idempotentPost(body));
+    await fetch(idempotentPost(body));
+
+    expect(limits).toBe(2);
+    expect(await db.select().from(feedback)).toHaveLength(1);
+  });
+
+  it("idempotency without its encryption secret does not insert", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db, { IDEMPOTENCY_ENCRYPTION_KEY: undefined });
+    const res = await fetch(idempotentPost({ message: "The secret is unavailable." }));
+
+    expect(res.status).toBe(503);
+    expect(await db.select().from(feedback)).toHaveLength(0);
   });
 });
 

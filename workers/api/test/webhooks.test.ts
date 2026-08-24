@@ -15,6 +15,8 @@ import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { webhooksRoutes } from "../src/routes/webhooks.js";
 
 const TEST_MASTER_KEY = "a".repeat(64);
+const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const TEST_IDEMPOTENCY_KEY = "webhook-test-idem-02";
 const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
 const ORG_ID = "org_test";
 
@@ -28,6 +30,7 @@ function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
   const fakeEnv: Record<string, unknown> = {
     DB: h.db,
     WEBHOOK_HMAC_MASTER: masterKey !== null ? { get: async () => masterKey } : undefined,
+    IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
   };
   if (withQueue) {
     fakeEnv.WEBHOOK_DELIVERY_QUEUE = {
@@ -37,6 +40,10 @@ function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
     };
   }
   const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.set("localAuthSkip", true);
+    await next();
+  });
   const v1 = new Hono();
   v1.route("/", webhooksRoutes);
   app.route("/v1", v1);
@@ -409,6 +416,56 @@ describe("POST /v1/webhooks/:id/test", () => {
     expect(msg.url).toBe(PUBLIC_HOOK_URL);
     expect(msg.event.type).toBe("release.created");
     expect(msg.attempt).toBe(1);
+  });
+
+  it("test idempotency queues once and replays the original event", async () => {
+    const fetch = makeApp();
+    const { id } = await createSub(fetch);
+    const init = {
+      method: "POST",
+      headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY },
+    };
+
+    const first = await fetch(new Request(`https://x.test/v1/webhooks/${id}/test`, init));
+    const replay = await fetch(new Request(`https://x.test/v1/webhooks/${id}/test`, init));
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.json()).toEqual(await first.json());
+    expect(queueMessages).toHaveLength(1);
+  });
+
+  it("test idempotency keeps headerless requests independent", async () => {
+    const fetch = makeApp();
+    const { id } = await createSub(fetch);
+
+    await fetch(new Request(`https://x.test/v1/webhooks/${id}/test`, { method: "POST" }));
+    await fetch(new Request(`https://x.test/v1/webhooks/${id}/test`, { method: "POST" }));
+
+    expect(queueMessages).toHaveLength(2);
+  });
+
+  it("test idempotency conflicts when its key targets another subscription", async () => {
+    const fetch = makeApp();
+    const first = await createSub(fetch);
+    const second = await createSub(fetch, { url: "https://1.1.1.1/another-hook" });
+
+    await fetch(
+      new Request(`https://x.test/v1/webhooks/${first.id}/test`, {
+        method: "POST",
+        headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY },
+      }),
+    );
+    const conflict = await fetch(
+      new Request(`https://x.test/v1/webhooks/${second.id}/test`, {
+        method: "POST",
+        headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY },
+      }),
+    );
+
+    expect(conflict.status).toBe(409);
+    expect(queueMessages).toHaveLength(1);
   });
 
   it("returns 503 when WEBHOOK_DELIVERY_QUEUE binding is missing", async () => {
