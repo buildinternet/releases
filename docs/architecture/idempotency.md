@@ -38,6 +38,26 @@ means the service cannot safely establish or replay the result; retry later with
 the same key rather than assuming the requested effect did not happen. All error
 responses use the standard nested envelope; see [errors.md](errors.md).
 
+## D1 storage invariants
+
+`idempotency_guards` is the authoritative table for admission, fingerprint and
+state checks, expiry, and cleanup. Its `(principal_hash, key_hash)` key,
+`attempt_id`, request fingerprint, state, and expiry decide whether a handler
+may execute. `idx_idempotency_guards_expires_at` is the only idempotency expiry
+index.
+
+`idempotency_records` is the paired mutable encrypted-response table. D1
+triggers create a processing response row when a guard is inserted, delete that
+row when its guard is deleted, and advance the matching guard to completed only
+when the response row completes with the same attempt. The completion trigger
+aborts if it cannot update exactly one processing guard.
+
+Replay requires both a completed guard and its matching completed response row
+with all recorded response fields. A missing, incomplete, or mismatched response
+fails closed as `503 idempotency_unavailable`; it never permits handler
+re-execution. Releasing or expiring a guard removes the paired response row via
+the delete trigger.
+
 ## Supported routes
 
 Only these routes implement the contract:
@@ -73,8 +93,9 @@ response, IV, and ciphertext are likewise not logged.
 ## Cleanup and failure boundary
 
 The daily 05:00 UTC API cron runs `sweep-idempotency-records`. It removes at
-most 500 expired records per run and writes candidate/deletion counts to
-`cron_runs`; live records are untouched.
+most 500 expired guards per run through the guard expiry index and writes
+candidate/deletion counts to `cron_runs`; the delete trigger removes paired
+response rows, and live guards are untouched.
 
 The D1 claim, replay record, and completion checks prevent repeat route
 execution within the contract. They are not a distributed transaction with an

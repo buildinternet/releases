@@ -49,7 +49,7 @@
 **Files:**
 
 - Modify: `packages/core/src/schema.ts`
-- Create: `workers/api/migrations/20260824000000_add_idempotency_records.sql`
+- Create: `workers/api/migrations/20260824000000_add_idempotency_records.sql` (the retained migration name creates both tables and synchronization triggers)
 - Create: `workers/api/src/lib/idempotency-store.ts`
 - Create: `workers/api/test/idempotency-store.test.ts`
 - Modify: `tests/db-helper.ts`
@@ -113,11 +113,27 @@ export async function sweepExpiredIdempotency(
 ): Promise<number>;
 ```
 
-- `idempotencyRecords` columns: `principalHash`, `keyHash`, `requestHash`, `state`, `attemptId`, nullable `responseStatus`/`responseHeaders`/`responseBody`, `createdAt`, nullable `completedAt`, and `expiresAt`. Composite primary key `(principal_hash, key_hash)`, state `CHECK`, and `idx_idempotency_records_expires_at` are present in both Drizzle and SQL.
+- Final storage shape: `idempotencyGuards` is the authoritative admission,
+  state, expiry, and cleanup table, with the composite primary key, state
+  check, and `idx_idempotency_guards_expires_at`. `idempotencyRecords` is its
+  mutable encrypted-response partner with the same identity/attempt metadata
+  and nullable response fields. Guard-insert, guard-delete, and
+  response-completion triggers respectively create, remove, and complete the
+  paired rows; no response-table expiry index is needed. A completed guard with
+  a missing/incomplete/mismatched response is unavailable and must not rerun.
 
 - [ ] **Step 1: Write the failing store tests**
 
-Add tests that prove: one insert claims; a matching duplicate is `processing`; a different request hash is `conflict`; a completed row returns stored response fields; expired rows can be conditionally reclaimed; an old attempt cannot complete/release a new claim; successful complete/release affect exactly one row; sweep deletes at most `limit` expired rows and keeps live rows. Add a deterministic scripted-adapter test for the reclaim interleaving `insert conflict → read missing → retry insert wins`, and a second case that exhausts exactly three admission attempts and returns `unavailable`.
+Add tests that prove: one guard insert claims and creates its paired response
+row; a matching duplicate is `processing`; a different request hash is
+`conflict`; a completed guard returns stored response fields; a missing response
+for a completed guard is `unavailable`; expired guards can be conditionally
+reclaimed; an old attempt cannot complete/release a new claim; successful
+complete/release affect exactly one guard; sweep deletes at most `limit` expired
+guards and keeps live rows. Add a deterministic scripted-adapter test for the
+reclaim interleaving `insert conflict → read missing → retry insert wins`, and a
+second case that exhausts exactly three admission attempts and returns
+`unavailable`.
 
 Use literal hashes and ISO timestamps so expectations do not reuse production hash helpers:
 
@@ -136,15 +152,31 @@ const BASE = {
 
 Run: `bun test workers/api/test/idempotency-store.test.ts`
 
-Expected: FAIL because `idempotency-store.ts` and `idempotencyRecords` do not exist.
+Expected: FAIL because `idempotency-store.ts` and the guard/response tables do
+not exist.
 
-- [ ] **Step 3: Add the shared table and migration**
+- [ ] **Step 3: Add the guard/response tables and migration**
 
-Import `primaryKey` from `drizzle-orm/sqlite-core`, add the table with the exact fields/index/check above, and write matching `CREATE TABLE`/`CREATE INDEX` SQL. Add `db.delete(schema.idempotencyRecords).run()` to `clearAllTables()`.
+Import `primaryKey` from `drizzle-orm/sqlite-core`, add the authoritative guard
+table with the exact fields/index/check above plus its mutable response table,
+and write matching `CREATE TABLE`/`CREATE INDEX`/trigger SQL. Add both tables to
+`clearAllTables()`.
 
 - [ ] **Step 4: Implement the minimum store state machine**
 
-Use `insert(...).onConflictDoNothing().returning({ attemptId })` for admission. On conflict, read the row; if the row disappeared between the losing insert and read, retry admission. For an expired row, delete only when the same PK still has `expires_at <= now`, then retry whether this contender deleted it or lost that delete race. Bound the full admission/read/reclaim loop to exactly three insert attempts; return `unavailable` instead of executing after exhaustion. Completion and release predicates include PK, `attemptId`, and `state = 'processing'`; success is `returning().length === 1`. Implement the bounded sweep as one atomic SQLite/D1 delete of rowids selected by `expires_at <= now ORDER BY expires_at LIMIT limit`, and reject non-positive limits in TypeScript before SQL.
+Use `insert(...).onConflictDoNothing().returning({ attemptId })` on guards for
+admission. On conflict, read the guard; if it disappeared between the losing
+insert and read, retry admission. For an expired guard, delete only when the
+same PK still has `expires_at <= now`, then retry whether this contender deleted
+it or lost that delete race. Bound the full admission/read/reclaim loop to
+exactly three insert attempts; return `unavailable` instead of executing after
+exhaustion. Completion updates the paired response row, whose trigger must
+complete exactly one matching processing guard; release deletes that guard and
+its trigger deletes the paired response. A completed guard lacking a matching
+complete response fails closed as `unavailable`. Implement the bounded sweep as
+one atomic SQLite/D1 delete of guard rowids selected by `expires_at <= now ORDER
+BY expires_at LIMIT limit`, and reject non-positive limits in TypeScript before
+SQL.
 
 - [ ] **Step 5: Run GREEN and schema gates**
 
@@ -527,7 +559,10 @@ git commit -m "feat(api): make queued and anonymous writes idempotent"
 
 - [ ] **Step 1: Write failing sweep tests**
 
-Model the existing cron-run tests. Prove `CRON_ENABLED=false` no-ops; a fixed `_now` deletes only expired records in batches of 500; live records remain; the cron-run row records candidate/deleted counts; deletion failure finalizes aborted then rethrows.
+Model the existing cron-run tests. Prove `CRON_ENABLED=false` no-ops; a fixed
+`_now` deletes only expired guards in batches of 500 (and their trigger-managed
+response rows); live guards remain; the cron-run row records candidate/deleted
+counts; deletion failure finalizes aborted then rethrows.
 
 - [ ] **Step 2: Run sweep RED**
 
@@ -537,7 +572,11 @@ Expected: FAIL because the cron module does not exist.
 
 - [ ] **Step 3: Implement and register cleanup**
 
-Create the cron module with `logEvent`, `_drizzleOverride`, and `_now` seams. Dispatch it alongside `sweepSearchQueries` in the existing `0 5 * * *` branch so no new Wrangler trigger is needed; give it its own `cron_runs` name and `waitUntil`/`loggedDispatch` call.
+Create the cron module with `logEvent`, `_drizzleOverride`, and `_now` seams.
+Dispatch it alongside `sweepSearchQueries` in the existing `0 5 * * *` branch
+so no new Wrangler trigger is needed; give it its own `cron_runs` name and
+`waitUntil`/`loggedDispatch` call. The bounded delete targets expired guards;
+their delete trigger removes paired response rows.
 
 - [ ] **Step 4: Run sweep GREEN**
 

@@ -114,17 +114,24 @@ full 24-hour window.
 
 ## Storage design
 
-Add a D1 `idempotency_records` table represented in the shared Drizzle schema.
-Its logical fields are:
+The implementation uses two D1 tables represented in the shared Drizzle
+schema. `idempotency_guards` is authoritative for admission, conflicts,
+processing/completed state, expiry, and cleanup. It has the composite
+`(principal_hash, key_hash)` primary key, `request_hash`, `state`, claimant
+`attempt_id`, timestamps, and `idx_idempotency_guards_expires_at`.
 
-- `principal_hash` and `key_hash`, forming the primary key;
-- `request_hash`;
-- `state` (`processing` or `completed`);
-- a random `attempt_id` owned by the claimant;
-- `response_status`, `response_headers`, and encrypted `response_body` for a
-  completed record;
-- `created_at`, `completed_at`, and `expires_at`; and
-- an index on `expires_at` for cleanup.
+`idempotency_records` is the paired, mutable encrypted-response table. It
+holds the same identity, fingerprint, attempt, state, and retention metadata
+plus nullable `response_status`, `response_headers`, and encrypted
+`response_body`. It is not an independent source of admission or expiry truth
+and has no expiry-cleanup index.
+
+Triggers keep the pair synchronized: inserting a guard creates its processing
+response row; deleting a guard deletes its response row; and completing the
+response row updates the matching processing guard (same primary key and
+`attempt_id`) to completed, aborting the response update if that guard update
+does not affect exactly one row. Thus only a guard insert authorizes handler
+execution, and deleting an expired or released guard removes both rows.
 
 The principal identifier is also hashed so the table does not become a secondary
 identity log. The request hash is SHA-256 over a versioned binary encoding of the
@@ -135,10 +142,13 @@ fingerprint fields, avoiding delimiter ambiguity.
 The wrapper performs one conflict-safe `INSERT ... ON CONFLICT DO NOTHING` to
 claim a key. A successful insert is the only permission to run the handler.
 
-If the insert loses, the wrapper reads the existing record and chooses replay,
-in-progress conflict, or fingerprint conflict. If the record is expired, the
-wrapper conditionally deletes it and retries the insert. Concurrent reclaimers
-still converge on a single winning insert.
+If the insert loses, the wrapper reads the existing guard and chooses replay,
+in-progress conflict, or fingerprint conflict. A completed guard can replay
+only when its matching completed response row has the same `attempt_id` and all
+recorded response fields. A missing, mismatched, or incomplete response row is
+`idempotency_unavailable`, never permission to rerun the handler. If the guard
+is expired, the wrapper conditionally deletes it and retries the insert.
+Concurrent reclaimers still converge on a single winning insert.
 
 Every completion or release statement is guarded by the claimant's `attempt_id`
 and `state = 'processing'`, so an old handler cannot mutate a later claim. These
@@ -147,14 +157,18 @@ test fixture's transaction behavior.
 
 ### Completion and release
 
-- A bounded 2xx response is encrypted and changes the record to `completed`.
-- A normal 3xx or 4xx response releases the claim, so corrected input can reuse
-  the key. Authentication occurs before the wrapper, and header/key validation
-  also occurs before the claim.
+- A bounded 2xx response is encrypted and completes the mutable response row;
+  its completion trigger changes the matching guard to `completed` in the same
+  D1 statement boundary.
+- A normal 3xx or 4xx response releases the claim by deleting its processing
+  guard, which triggers deletion of the paired response row. Corrected input
+  can then reuse the key. Authentication occurs before the wrapper, and
+  header/key validation also occurs before the claim.
 - A thrown typed 4xx error releases the claim before propagating to the standard
   error responder.
 - A returned 5xx response, unexpected throw, response-capture failure, or
-  completion-write failure leaves the record in `processing` until expiry.
+  completion-write failure leaves the authoritative guard in `processing` until
+  expiry.
   Retrying is unsafe because the side effect may already have happened.
 
 For a handler-produced 2xx, the wrapper returns that response only after a
@@ -220,9 +234,10 @@ authorization visible.
 
 ## Cleanup and expiry
 
-A scheduled sweep deletes expired records in bounded batches. Claim processing
-also reclaims an expired matching record, so delayed cron execution cannot make a
-key unusable beyond the contract window.
+A scheduled sweep deletes expired guards in bounded batches through
+`idx_idempotency_guards_expires_at`; the delete trigger removes the paired
+response rows. Claim processing also reclaims an expired matching guard, so
+delayed cron execution cannot make a key unusable beyond the contract window.
 
 There is intentionally no short processing lease. These handlers normally finish
 in seconds; allowing a second claimant while the first may still be running would
@@ -239,7 +254,7 @@ does not claim distributed exactly-once delivery.
 
 In particular, queue sends and email/provider calls cannot be atomically
 committed with D1. If an external side effect succeeds and the Worker dies before
-the completed response is stored, the record remains `processing`: the client
+the completed response is stored, the guard remains `processing`: the client
 gets a temporary conflict instead of risking a duplicate. If D1 loses the claim
 itself, or a retry happens after expiry, downstream idempotency/outbox guarantees
 would be required for a stronger result. Adding a general outbox is outside this
