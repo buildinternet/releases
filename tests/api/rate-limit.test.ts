@@ -193,8 +193,14 @@ describe("publicRateLimitMiddleware", () => {
     );
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBe("60");
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("rate_limited");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error).toEqual({
+      code: "rate_limited",
+      type: "rate_limited",
+      message: "Too many requests. Please retry shortly.",
+    });
     expect(limiter.calls).toEqual(["9.9.9.9"]);
   });
 
@@ -330,8 +336,14 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBe("60");
     expect(res.headers.get("RateLimit-Policy")).toContain('"token"');
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("rate_limited");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error).toEqual({
+      code: "rate_limited",
+      type: "rate_limited",
+      message: "Too many requests. Please retry shortly.",
+    });
     expect(tokenLimiter.calls).toEqual([tokenId]);
   });
 

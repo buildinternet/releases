@@ -126,9 +126,9 @@ export function mountOpenApi(v1: Hono<Env>) {
               bearerAuth: {
                 type: "http",
                 scheme: "bearer",
-                bearerFormat: "rls_…",
+                bearerFormat: "relk_… | relu_… | OAuth JWT",
                 description:
-                  "Admin and write endpoints require a Bearer token. Issue and rotate via the operator CLI.",
+                  "Machine/operator tokens use the relk_ prefix; self-serve read-only user keys use relu_; Sign in with Releases supplies an OAuth access token. Required scope depends on the endpoint.",
               },
               ...(isStaging && {
                 stagingKey: {

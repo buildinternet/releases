@@ -476,7 +476,17 @@ describe("/v1/me/webhooks", () => {
 
     const test = await a.request(`/me/webhooks/${id}/test`, { method: "POST" }, limitedEnv);
     expect(test.status).toBe(429);
-    expect(((await test.json()) as { error: string }).error).toBe("rate_limited");
+    const body = (await test.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body).toEqual({
+      error: {
+        code: "rate_limited",
+        type: "rate_limited",
+        message: "Webhook test limit exceeded for this subscription (5 per minute)",
+      },
+    });
+    expect(test.headers.get("Retry-After")).toBe("60");
     expect(queueMessages).toHaveLength(0);
   });
 

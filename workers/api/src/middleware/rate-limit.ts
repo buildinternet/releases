@@ -11,7 +11,6 @@ import {
   classifyTokenId,
   accountBucketKey,
   policyHeader,
-  RATE_LIMITED_ERROR,
   selectTierLimiters,
   RATE_LIMIT_WINDOW_SECONDS,
   type RateLimitPrincipal,
@@ -24,6 +23,8 @@ import {
   validateAccountCredential,
   apiRouteFamily,
 } from "./auth.js";
+import { RateLimitedError } from "@releases/lib/releases-error";
+import { respondError } from "../lib/error-response.js";
 
 /** Anonymous-allowed events are sampled to bound public-read log volume. */
 const ANON_SAMPLE_RATE = 0.05;
@@ -202,7 +203,7 @@ export function publicRateLimit(opts: PublicRateLimitOptions = {}): MiddlewareHa
     if (success) return next();
     c.header("RateLimit", `"${plan.policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
     c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-    return c.json(RATE_LIMITED_ERROR, 429);
+    return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
   };
 }
 
