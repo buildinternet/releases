@@ -1358,6 +1358,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
           apiKey({
             // Public-facing user keys. Distinct prefix from the relk_ machine lane.
             defaultPrefix: USER_API_KEY_PREFIX,
+            maximumNameLength: 200,
             requireName: true,
             enableMetadata: true,
             // Default tier (single config). Per-key overrides land at creation time.

@@ -169,17 +169,6 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
           );
         }
 
-        const existing = await getUserFollowsWebhookSubscription(db, session.user.id);
-        if (existing) {
-          return respondError(
-            c,
-            new RateLimitedError(
-              `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
-              { code: "limit_exceeded" },
-            ),
-          );
-        }
-
         return {
           scope: "follows",
           masterKey,
@@ -244,17 +233,6 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
         );
       }
 
-      const count = await countUserOrgWebhookSubscriptions(db, session.user.id);
-      if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
-        return respondError(
-          c,
-          new RateLimitedError(
-            `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
-            { code: "limit_exceeded" },
-          ),
-        );
-      }
-
       return {
         scope: "org",
         masterKey,
@@ -269,6 +247,29 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
       };
     },
     execute: async (input) => {
+      if (input.scope === "follows") {
+        const existing = await getUserFollowsWebhookSubscription(input.db, session.user.id);
+        if (existing) {
+          return respondError(
+            c,
+            new RateLimitedError(
+              `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
+              { code: "limit_exceeded" },
+            ),
+          );
+        }
+      } else {
+        const count = await countUserOrgWebhookSubscriptions(input.db, session.user.id);
+        if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
+          return respondError(
+            c,
+            new RateLimitedError(
+              `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
+              { code: "limit_exceeded" },
+            ),
+          );
+        }
+      }
       const sub = await insertWebhookSubscription(input.db, {
         scope: input.scope,
         orgId: input.scope === "follows" ? null : input.org.id,

@@ -114,6 +114,46 @@ describe("/v1/me/webhooks", () => {
     expect((await h.db.select().from(webhookSubscriptions)).length).toBe(1);
   });
 
+  it("idempotency replays a follows subscription after its quota is full", async () => {
+    const { a, env } = app();
+    const init = {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "webhook-follows-01" },
+      body: JSON.stringify({ scope: "follows", url: PUBLIC_HOOK_URL }),
+    };
+    expect((await a.request("/me/webhooks", init, env)).status).toBe(201);
+    const replay = await a.request("/me/webhooks", init, env);
+
+    expect(replay.status).toBe(201);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect((await h.db.select().from(webhookSubscriptions)).length).toBe(1);
+  });
+
+  it("idempotency replays the tenth org subscription after its quota is full", async () => {
+    await h.db.insert(webhookSubscriptions).values(
+      Array.from({ length: 9 }, (_, index) => ({
+        id: `whk_seed_${index}`,
+        scope: "org" as const,
+        userId: "u1",
+        orgId: "org_a",
+        url: `https://1.1.1.1/seed-${index}`,
+        description: null,
+      })),
+    );
+    const { a, env } = app();
+    const init = {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "webhook-org-tenth" },
+      body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+    };
+    expect((await a.request("/me/webhooks", init, env)).status).toBe(201);
+    const replay = await a.request("/me/webhooks", init, env);
+
+    expect(replay.status).toBe(201);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect((await h.db.select().from(webhookSubscriptions)).length).toBe(10);
+  });
+
   it("idempotency conflicts on a changed webhook target and leaves validation failures reusable", async () => {
     const { a, env } = app();
     const headers = { "Content-Type": "application/json", "Idempotency-Key": IDEMPOTENCY_KEY };
@@ -174,8 +214,21 @@ describe("/v1/me/webhooks", () => {
     expect((await h.db.select().from(webhookSubscriptions)).length).toBe(0);
   });
 
-  it("byte cap rejects oversized webhook URLs and descriptions", async () => {
+  it("enforces exact UTF-8 byte boundaries for webhook URLs and descriptions", async () => {
     const { a, env } = app();
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orgSlug: "acme", url: `https://1.1.1.1/${"a".repeat(2032)}` }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(201);
     expect(
       (
         await a.request(
@@ -189,6 +242,23 @@ describe("/v1/me/webhooks", () => {
         )
       ).status,
     ).toBe(400);
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orgSlug: "acme",
+              url: PUBLIC_HOOK_URL,
+              description: "é".repeat(500),
+            }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(201);
     expect(
       (
         await a.request(

@@ -167,7 +167,7 @@ describe("POST /v1/api-keys (create)", () => {
   it("enforces the API-key name UTF-8 byte cap", async () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
-    expect((await post("user_1", { name: "x".repeat(32) })).status).toBe(201);
+    expect((await post("user_1", { name: "é".repeat(100) })).status).toBe(201);
     expect((await post("user_1", { name: "é".repeat(101) })).status).toBe(400);
   });
 });
