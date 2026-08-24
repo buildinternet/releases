@@ -19,7 +19,8 @@ import {
 import { assertPublicWebhookTarget, validateSlackWebhookUrl } from "../webhooks/url-safety.js";
 import {
   checkWebhookTestRateLimit,
-  webhookTestRateLimitResponse,
+  WEBHOOK_TEST_RATE_WINDOW_SECONDS,
+  webhookTestRateLimitMessage,
 } from "../webhooks/test-rate-limit.js";
 import type { WebhookSubscription, WebhookFormat } from "@buildinternet/releases-core/schema";
 import {
@@ -467,9 +468,8 @@ meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
     id,
   );
   if (rateResult !== "ok") {
-    const limited = webhookTestRateLimitResponse(rateResult);
-    c.header("Retry-After", String(limited.retryAfter));
-    return c.json(limited.body, limited.status);
+    c.header("Retry-After", String(WEBHOOK_TEST_RATE_WINDOW_SECONDS));
+    return respondError(c, new RateLimitedError(webhookTestRateLimitMessage(rateResult)));
   }
 
   const synthetic: DeliveryMessage = {

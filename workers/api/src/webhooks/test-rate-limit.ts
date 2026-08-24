@@ -32,18 +32,10 @@ export async function checkWebhookTestRateLimit(
   return "ok";
 }
 
-export function webhookTestRateLimitResponse(kind: Exclude<WebhookTestRateLimitResult, "ok">): {
-  status: 429;
-  body: { error: string; message: string };
-  retryAfter: number;
-} {
-  const message =
-    kind === "sub"
-      ? `Webhook test limit exceeded for this subscription (${WEBHOOK_TEST_SUB_QUOTA} per minute)`
-      : `Webhook test limit exceeded for your account (${WEBHOOK_TEST_USER_QUOTA} per minute)`;
-  return {
-    status: 429,
-    body: { error: "rate_limited", message },
-    retryAfter: WEBHOOK_TEST_RATE_WINDOW_SECONDS,
-  };
+export function webhookTestRateLimitMessage(
+  kind: Exclude<WebhookTestRateLimitResult, "ok">,
+): string {
+  return kind === "sub"
+    ? `Webhook test limit exceeded for this subscription (${WEBHOOK_TEST_SUB_QUOTA} per minute)`
+    : `Webhook test limit exceeded for your account (${WEBHOOK_TEST_USER_QUOTA} per minute)`;
 }
