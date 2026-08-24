@@ -72,33 +72,28 @@ recommendationRoutes.post(
     }),
   ),
   async (c) => {
+    if (await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)) {
+      return respondError(c, new ServiceUnavailableError());
+    }
+
+    const limiter =
+      c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
+    if (limiter) {
+      const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+      const { success } = await limiter.limit({ key: `recommendation:${ip}` });
+      if (!success) {
+        c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+        return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
+      }
+    }
+
     return idempotentPost(c, {
       principal: anonymousIdempotencyPrincipal(),
       body: "json",
       preclaim: async () => {
-        if (
-          await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)
-        ) {
-          return respondError(c, new ServiceUnavailableError());
-        }
-
         const contentLength = Number(c.req.header("content-length") ?? "0");
         if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
           return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
-        }
-
-        const limiter =
-          c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
-        if (limiter) {
-          const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-          const { success } = await limiter.limit({ key: `recommendation:${ip}` });
-          if (!success) {
-            c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-            return respondError(
-              c,
-              new RateLimitedError("Too many requests. Please retry shortly."),
-            );
-          }
         }
 
         const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);

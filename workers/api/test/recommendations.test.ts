@@ -213,6 +213,49 @@ describe("POST /v1/recommendations", () => {
     expect(await db.select().from(recommendations)).toHaveLength(1);
   });
 
+  it("idempotency debits the limiter before rejecting a malformed key", async () => {
+    let limits = 0;
+    const { fetch } = await makeApp(undefined, {
+      FEEDBACK_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    });
+
+    const response = await fetch(idempotentPost({ url: "https://example.com/releases" }, "bad"));
+
+    expect(response.status).toBe(400);
+    expect(limits).toBe(1);
+  });
+
+  it("idempotency debits the limiter before rejecting an oversized body", async () => {
+    let limits = 0;
+    const { fetch } = await makeApp(undefined, {
+      FEEDBACK_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    });
+    const response = await fetch(
+      new Request("http://x/v1/recommendations", {
+        method: "POST",
+        headers: {
+          "content-length": "100000",
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_KEY,
+        },
+        body: JSON.stringify({ url: "https://example.com/releases" }),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(limits).toBe(1);
+  });
+
   it("idempotency conflicts when an anonymous key is reused with changed bytes", async () => {
     const { db, fetch } = await makeApp();
     await fetch(idempotentPost({ url: "https://example.com/releases", note: "first" }));

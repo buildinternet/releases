@@ -381,6 +381,51 @@ describe("POST /v1/feedback", () => {
     expect(await db.select().from(feedback)).toHaveLength(1);
   });
 
+  it("idempotency debits the limiter before rejecting a malformed key", async () => {
+    const db = mkDb();
+    let limits = 0;
+    const fetch = await makeApp(db, {
+      FEEDBACK_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    });
+
+    const response = await fetch(idempotentPost({ message: "Valid feedback body." }, "bad"));
+
+    expect(response.status).toBe(400);
+    expect(limits).toBe(1);
+  });
+
+  it("idempotency debits the limiter before rejecting an oversized body", async () => {
+    const db = mkDb();
+    let limits = 0;
+    const fetch = await makeApp(db, {
+      FEEDBACK_RATE_LIMITER: {
+        limit: async () => {
+          limits++;
+          return { success: true };
+        },
+      },
+    });
+    const response = await fetch(
+      new Request("http://x/v1/feedback", {
+        method: "POST",
+        headers: {
+          "content-length": "100000",
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_KEY,
+        },
+        body: JSON.stringify({ message: "Valid feedback body." }),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(limits).toBe(1);
+  });
+
   it("idempotency without its encryption secret does not insert", async () => {
     const db = mkDb();
     const fetch = await makeApp(db, { IDEMPOTENCY_ENCRYPTION_KEY: undefined });
