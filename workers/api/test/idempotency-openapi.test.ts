@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
+import { ERROR_TYPES } from "@buildinternet/releases-core/errors";
 import type { Env } from "../src/index.js";
 import { mountV1Routes } from "../src/v1-routes.js";
 
@@ -61,7 +62,30 @@ async function idempotencySpec(): Promise<{ paths?: Record<string, { post?: Oper
   return (await response.json()) as { paths?: Record<string, { post?: Operation }> };
 }
 
+function expectStandardErrorEnvelope(schema: unknown, context: string): void {
+  expect(schema, context).toMatchObject({
+    type: "object",
+    required: ["error"],
+    properties: {
+      error: {
+        type: "object",
+        required: ["code", "type", "message"],
+        properties: {
+          code: { type: "string" },
+          type: { type: "string", enum: ERROR_TYPES },
+          message: { type: "string" },
+          details: {},
+        },
+      },
+    },
+  });
+}
+
 describe("idempotent POST OpenAPI contract", () => {
+  test("rejects a malformed idempotency error response schema", () => {
+    expect(() => expectStandardErrorEnvelope({ type: "string" }, "malformed")).toThrow();
+  });
+
   test("advertises the key contract on exactly the eight approved POST operations", async () => {
     const spec = await idempotencySpec();
     const advertisedPaths = Object.entries(spec.paths ?? {})
@@ -101,8 +125,14 @@ describe("idempotent POST OpenAPI contract", () => {
         type: "string",
         enum: ["true"],
       });
-      expect(responses["409"]?.content?.["application/json"]?.schema, path).toBeTruthy();
-      expect(responses["503"]?.content?.["application/json"]?.schema, path).toBeTruthy();
+      expectStandardErrorEnvelope(
+        responses["409"]?.content?.["application/json"]?.schema,
+        `${path} 409`,
+      );
+      expectStandardErrorEnvelope(
+        responses["503"]?.content?.["application/json"]?.schema,
+        `${path} 503`,
+      );
     }
   });
 });
