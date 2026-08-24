@@ -13,6 +13,8 @@ import { user } from "../src/db/schema-auth.js";
 import { meWebhookHandlers } from "../src/routes/me-webhooks.js";
 
 const TEST_MASTER_KEY = "a".repeat(64);
+const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const IDEMPOTENCY_KEY = "webhook-create-01";
 const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
 const SLACK_HOOK_URL = "https://hooks.slack.com/services/T012AB/B034CD/Xy7zSecret";
 const queueMessages: unknown[] = [];
@@ -28,6 +30,7 @@ function app() {
   a.route("/", meWebhookHandlers);
   const env = {
     DB: h.db,
+    IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
     WEBHOOK_HMAC_MASTER: { get: async () => TEST_MASTER_KEY },
     WEBHOOK_DELIVERY_QUEUE: {
       send: async (msg: unknown) => {
@@ -91,6 +94,118 @@ describe("/v1/me/webhooks", () => {
     expect(body.orgId).toBe("org_a");
     expect(body.orgSlug).toBe("acme");
     expect(body.signingKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("idempotency replays a webhook signing key and creates only one subscription", async () => {
+    const { a, env } = app();
+    const init = {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": IDEMPOTENCY_KEY },
+      body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+    };
+    const first = await a.request("/me/webhooks", init, env);
+    const firstText = await first.clone().text();
+    const replay = await a.request("/me/webhooks", init, env);
+
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.text()).toBe(firstText);
+    expect((await h.db.select().from(webhookSubscriptions)).length).toBe(1);
+  });
+
+  it("idempotency conflicts on a changed webhook target and leaves validation failures reusable", async () => {
+    const { a, env } = app();
+    const headers = { "Content-Type": "application/json", "Idempotency-Key": IDEMPOTENCY_KEY };
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ orgSlug: "acme", url: "http://invalid.test/hook" }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ orgSlug: "acme", url: "https://1.1.1.1/changed" }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(409);
+  });
+
+  it("idempotency requires encryption before creating a webhook", async () => {
+    const { a, env } = app();
+    const { IDEMPOTENCY_ENCRYPTION_KEY: _secret, ...withoutSecret } = env;
+    const response = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "webhook-create-02" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      withoutSecret,
+    );
+    expect(response.status).toBe(503);
+    expect((await h.db.select().from(webhookSubscriptions)).length).toBe(0);
+  });
+
+  it("byte cap rejects oversized webhook URLs and descriptions", async () => {
+    const { a, env } = app();
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orgSlug: "acme", url: `https://1.1.1.1/${"a".repeat(2033)}` }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await a.request(
+          "/me/webhooks",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orgSlug: "acme",
+              url: PUBLIC_HOOK_URL,
+              description: "é".repeat(501),
+            }),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(400);
   });
 
   it("POST with productSlug and releaseType stores filters", async () => {
@@ -561,6 +676,78 @@ describe("/v1/me/webhooks", () => {
 
     const list = await a.request("/me/webhooks", {}, env);
     expect(((await list.json()) as { subscriptions: unknown[] }).subscriptions).toHaveLength(0);
+  });
+});
+
+describe("POST /v1/me/webhooks/:id/rotate-secret", () => {
+  async function createSubscription() {
+    const { a, env } = app();
+    const response = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    return { a, env, id: ((await response.json()) as { id: string }).id };
+  }
+
+  it("idempotency replays the rotated signing key and increments once", async () => {
+    const { a, env, id } = await createSubscription();
+    const init = { method: "POST", headers: { "Idempotency-Key": "webhook-rotate-01" } };
+    const first = await a.request(`/me/webhooks/${id}/rotate-secret`, init, env);
+    const replay = await a.request(`/me/webhooks/${id}/rotate-secret`, init, env);
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.text()).toBe(await first.clone().text());
+    expect(
+      (await h.db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).get())
+        ?.secretVersion,
+    ).toBe(2);
+  });
+
+  it("idempotency rejects a rotation body before version change and fails closed without encryption", async () => {
+    const { a, env, id } = await createSubscription();
+    const bodyRejected = await a.request(
+      `/me/webhooks/${id}/rotate-secret`,
+      { method: "POST", headers: { "Idempotency-Key": "webhook-rotate-02" }, body: "unexpected" },
+      env,
+    );
+    expect(bodyRejected.status).toBe(400);
+    expect(
+      (await h.db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).get())
+        ?.secretVersion,
+    ).toBe(1);
+
+    const { IDEMPOTENCY_ENCRYPTION_KEY: _secret, ...withoutSecret } = env;
+    const unavailable = await a.request(
+      `/me/webhooks/${id}/rotate-secret`,
+      { method: "POST", headers: { "Idempotency-Key": "webhook-rotate-03" } },
+      withoutSecret,
+    );
+    expect(unavailable.status).toBe(503);
+    expect(
+      (await h.db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).get())
+        ?.secretVersion,
+    ).toBe(1);
+  });
+
+  it("keeps headerless rotations non-idempotent", async () => {
+    const { a, env, id } = await createSubscription();
+    expect(
+      (await a.request(`/me/webhooks/${id}/rotate-secret`, { method: "POST" }, env)).status,
+    ).toBe(200);
+    expect(
+      (await a.request(`/me/webhooks/${id}/rotate-secret`, { method: "POST" }, env)).status,
+    ).toBe(200);
+    expect(
+      (await h.db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).get())
+        ?.secretVersion,
+    ).toBe(3);
   });
 });
 

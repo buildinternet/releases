@@ -10,15 +10,24 @@ import { eq } from "drizzle-orm";
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());
 
-function call(db: TestDatabase["db"]) {
-  const a = new Hono<{ Variables: { auth?: AuthContext } }>();
+const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const IDEMPOTENCY_KEY = "token-create-key";
+
+function call(db: TestDatabase["db"], idempotencySecret: string | null = IDEMPOTENCY_SECRET) {
+  const a = new Hono<Env>();
   // Simulate the admin middleware having attached a root identity.
   a.use("*", async (c, next) => {
     c.set("auth", { kind: "root", scopes: ["*"] });
     await next();
   });
   a.route("/", apiTokenRoutes);
-  return (path: string, init?: RequestInit) => a.request(path, init, { DB: db });
+  return (path: string, init?: RequestInit) =>
+    a.request(path, init, {
+      DB: db,
+      ...(idempotencySecret === null
+        ? {}
+        : { IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => idempotencySecret } }),
+    } as Env["Bindings"]);
 }
 
 describe("POST /v1/tokens", () => {
@@ -73,6 +82,114 @@ describe("POST /v1/tokens", () => {
       body: JSON.stringify({ name: "x", scopes: ["*"] }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("replays the reveal-once token for the same idempotency key and request", async () => {
+    h = createTestDb();
+    const request = {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": IDEMPOTENCY_KEY },
+      body: JSON.stringify({ name: "CI", scopes: ["write", "read", "write"] }),
+    };
+
+    const first = await call(h.db)("/tokens", request);
+    const second = await call(h.db)("/tokens", request);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await second.text()).toBe(await first.clone().text());
+    expect((await h.db.select().from(apiTokens)).length).toBe(1);
+    expect(((await first.json()) as { scopes: string[] }).scopes).toEqual(["read", "write"]);
+  });
+
+  it("conflicts on a changed token request, while requests without a key remain independent", async () => {
+    h = createTestDb();
+    const keyed = call(h.db);
+    expect(
+      (
+        await keyed("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": IDEMPOTENCY_KEY },
+          body: JSON.stringify({ name: "one", scopes: ["read"] }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await keyed("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": IDEMPOTENCY_KEY },
+          body: JSON.stringify({ name: "two", scopes: ["read"] }),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await keyed("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "three", scopes: ["read"] }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await keyed("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "four", scopes: ["read"] }),
+        })
+      ).status,
+    ).toBe(201);
+    expect((await h.db.select().from(apiTokens)).length).toBe(3);
+  });
+
+  it("requires idempotency encryption before minting a token", async () => {
+    h = createTestDb();
+    const response = await call(h.db, null)("/tokens", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": IDEMPOTENCY_KEY },
+      body: JSON.stringify({ name: "CI", scopes: ["read"] }),
+    });
+    expect(response.status).toBe(503);
+    expect((await h.db.select().from(apiTokens)).length).toBe(0);
+  });
+
+  it("enforces UTF-8 byte caps for token fields", async () => {
+    h = createTestDb();
+    const request = call(h.db);
+    expect(
+      (
+        await request("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "é".repeat(100),
+            principalId: "é".repeat(127) + "a",
+            scopes: ["read"],
+          }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await request("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "é".repeat(101), scopes: ["read"] }),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request("/tokens", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "ok", principalId: "é".repeat(128), scopes: ["read"] }),
+        })
+      ).status,
+    ).toBe(400);
   });
 });
 
