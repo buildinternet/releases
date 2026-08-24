@@ -22,8 +22,10 @@ export type SweepIdempotencyRecordsEnv = {
   /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   // oxlint-disable-next-line no-explicit-any -- test seam, mirrors sibling sweeps
   _drizzleOverride?: any;
-  /** TEST-ONLY: pin the cleanup cutoff and cron timestamps. */
+  /** TEST-ONLY: pin the cleanup cutoff and cron start timestamp. */
   _now?: Date;
+  /** TEST-ONLY: pin the timestamp captured when the sweep completes. */
+  _completedAt?: Date;
 };
 
 export async function sweepIdempotencyRecords(env: SweepIdempotencyRecordsEnv): Promise<void> {
@@ -35,6 +37,7 @@ export async function sweepIdempotencyRecords(env: SweepIdempotencyRecordsEnv): 
   const db = env._drizzleOverride ?? createDb(env.DB);
   const now = env._now ?? new Date();
   const nowIso = now.toISOString();
+  const completionIso = () => (env._completedAt ?? new Date()).toISOString();
 
   await reconcileStaleRunning(db, {
     cronName: CRON_NAME,
@@ -52,7 +55,7 @@ export async function sweepIdempotencyRecords(env: SweepIdempotencyRecordsEnv): 
     const notes = `candidates=${candidates} deleted=${deleted} limit=${SWEEP_LIMIT}`;
 
     await finalizeRunRow(db, runId, {
-      endedAt: nowIso,
+      endedAt: completionIso(),
       status: "done",
       candidates,
       dispatched: deleted,
@@ -73,7 +76,7 @@ export async function sweepIdempotencyRecords(env: SweepIdempotencyRecordsEnv): 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await finalizeRunRow(db, runId, {
-      endedAt: nowIso,
+      endedAt: completionIso(),
       status: "aborted",
       abortReason: "config_missing",
       candidates: 0,

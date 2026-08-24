@@ -42,7 +42,12 @@ The optional request-idempotency contract uses these stable outcomes (full behav
 | 409  | `conflict`    | `idempotency_conflict`    | The same key was reused with a different request fingerprint.                               |
 | 409  | `conflict`    | `idempotency_in_progress` | A matching request is still processing; the response includes `Retry-After: 1`.             |
 | 503  | `unavailable` | `idempotency_unavailable` | Storage, encryption configuration, completion, or replay cannot safely confirm the outcome. |
-| 413  | `too_large`   | `payload_too_large`       | The request exceeds the applicable body limit.                                              |
+| 413  | `too_large`   | `payload_too_large`       | The idempotency-opted-in wrapper rejects a request that exceeds its applicable body limit.  |
+
+Legacy and headerless producers that construct `ValidationError` with
+`payload_too_large` intentionally remain `400` / `validation`; the status is
+derived from the error type, not the code alone. The idempotency wrapper is the
+opted-in `413` / `too_large` contract documented above.
 
 ## Known gaps
 

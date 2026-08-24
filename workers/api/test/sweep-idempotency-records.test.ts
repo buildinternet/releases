@@ -6,6 +6,7 @@ import { cronRuns } from "../src/db/schema-cron.js";
 import { CRON_NAME, sweepIdempotencyRecords } from "../src/cron/sweep-idempotency-records.js";
 
 const NOW = new Date("2026-08-24T12:00:00.000Z");
+const COMPLETED_AT = new Date("2026-08-24T12:00:00.250Z");
 
 type Db = ReturnType<typeof createTestDb>["db"];
 
@@ -53,6 +54,7 @@ describe("sweepIdempotencyRecords", () => {
       DB: {} as D1Database,
       _drizzleOverride: db,
       _now: NOW,
+      _completedAt: COMPLETED_AT,
     });
 
     expect(await guardCount(db)).toBe(2);
@@ -65,6 +67,9 @@ describe("sweepIdempotencyRecords", () => {
     expect(run?.status).toBe("done");
     expect(run?.candidates).toBe(501);
     expect(run?.dispatched).toBe(500);
+    expect(run?.startedAt).toBe(NOW.toISOString());
+    expect(run?.endedAt).toBe(COMPLETED_AT.toISOString());
+    expect(run?.durationMs).toBe(250);
   });
 
   test("finalizes the cron run as aborted before rethrowing a deletion failure", async () => {
@@ -79,6 +84,7 @@ describe("sweepIdempotencyRecords", () => {
         DB: {} as D1Database,
         _drizzleOverride: brokenDb,
         _now: NOW,
+        _completedAt: COMPLETED_AT,
       }),
     ).rejects.toThrow("D1 unavailable");
 
@@ -86,5 +92,8 @@ describe("sweepIdempotencyRecords", () => {
     expect(run?.status).toBe("aborted");
     expect(run?.dispatchErrors).toBe(1);
     expect(run?.notes).toContain("D1 unavailable");
+    expect(run?.startedAt).toBe(NOW.toISOString());
+    expect(run?.endedAt).toBe(COMPLETED_AT.toISOString());
+    expect(run?.durationMs).toBe(250);
   });
 });
