@@ -50,6 +50,20 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # workers/discovery, workers/mcp, and workers/webhooks are excluded from
+      # the root workspace and carry their own bun.lock — the root install
+      # doesn't populate their node_modules, but the root `bun run test` below
+      # includes their suites (mirrors ci.yml).
+      - name: Install workers/discovery deps
+        working-directory: workers/discovery
+        run: bun install --frozen-lockfile
+      - name: Install workers/mcp deps
+        working-directory: workers/mcp
+        run: bun install --frozen-lockfile
+      - name: Install workers/webhooks deps
+        working-directory: workers/webhooks
+        run: bun install --frozen-lockfile
+
       - name: Type-check
         run: npx tsc --noEmit
 
