@@ -1,5 +1,16 @@
 # @buildinternet/releases-api-types
 
+## 0.51.0
+
+### Minor Changes
+
+- 61c4d28: Add HTTP idempotency primitives from #2238: the `idempotency_records` schema table and the `idempotency_conflict` / `idempotency_in_progress` / `idempotency_unavailable` error codes. api-types is co-bumped per the release convention.
+
+### Patch Changes
+
+- Updated dependencies [61c4d28]
+  - @buildinternet/releases-core@0.30.0
+
 ## 0.50.1
 
 ### Patch Changes
