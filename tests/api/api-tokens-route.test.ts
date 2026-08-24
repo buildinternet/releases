@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { apiTokenRoutes } from "../../workers/api/src/routes/api-tokens.js";
 import type { AuthContext } from "../../workers/api/src/middleware/auth.js";
-import { apiTokens } from "@buildinternet/releases-core/schema";
+import { apiTokens, idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { parseApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 import { eq } from "drizzle-orm";
 
@@ -101,6 +101,44 @@ describe("POST /v1/tokens", () => {
     expect(await second.text()).toBe(await first.clone().text());
     expect((await h.db.select().from(apiTokens)).length).toBe(1);
     expect(((await first.json()) as { scopes: string[] }).scopes).toEqual(["read", "write"]);
+  });
+
+  it("canonicalizes a parseable oversized expiry before capture and replays the secret", async () => {
+    h = createTestDb();
+    const expiresAt = `${" ".repeat(65_200)}Jan 2, 2026`;
+    const body = JSON.stringify({ name: "expiry", scopes: ["read"], expiresAt });
+    expect(new TextEncoder().encode(body).byteLength).toBeLessThan(64 * 1024);
+    const request = {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "expiry-create-key" },
+      body,
+    };
+
+    const first = await call(h.db)("/tokens", request);
+    const second = await call(h.db)("/tokens", request);
+
+    expect(first.status).toBe(201);
+    expect((await first.clone().arrayBuffer()).byteLength).toBeLessThanOrEqual(64 * 1024);
+    expect(second.status).toBe(201);
+    expect(second.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await second.text()).toBe(await first.clone().text());
+    expect(((await first.json()) as { expiresAt: string }).expiresAt).toBe(
+      "2026-01-02T00:00:00.000Z",
+    );
+    expect((await h.db.select().from(apiTokens)).length).toBe(1);
+  });
+
+  it("rejects an invalid expiry before a token row or idempotency claim", async () => {
+    h = createTestDb();
+    const response = await call(h.db)("/tokens", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "invalid-expiry-key" },
+      body: JSON.stringify({ name: "expiry", scopes: ["read"], expiresAt: "not-a-date" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await h.db.select().from(apiTokens)).toHaveLength(0);
+    expect(await h.db.select().from(idempotencyRecords)).toHaveLength(0);
   });
 
   it("conflicts on a changed token request, while requests without a key remain independent", async () => {

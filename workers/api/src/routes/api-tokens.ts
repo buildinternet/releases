@@ -123,13 +123,16 @@ apiTokenRoutes.post(
           );
         }
 
-        const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
-        if (expiresAt && Number.isNaN(Date.parse(expiresAt))) {
+        const rawExpiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
+        if (rawExpiresAt && Number.isNaN(Date.parse(rawExpiresAt))) {
           return respondError(
             c,
             new ValidationError("expiresAt must be ISO-8601", { code: "bad_request" }),
           );
         }
+        const expiresAt = rawExpiresAt
+          ? new Date(Date.parse(rawExpiresAt)).toISOString()
+          : rawExpiresAt;
         return {
           name,
           scopes,
