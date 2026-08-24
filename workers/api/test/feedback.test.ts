@@ -15,7 +15,11 @@ function mkDb() {
   return drizzle(sqlite);
 }
 
-async function makeApp(db: ReturnType<typeof mkDb>, env: Record<string, unknown> = {}) {
+async function makeApp(
+  db: ReturnType<typeof mkDb>,
+  env: Record<string, unknown> = {},
+  executionCtx?: ExecutionContext,
+) {
   const { feedbackRoutes } = await import("../src/routes/feedback.js");
   const app = new Hono();
   const v1 = new Hono();
@@ -27,11 +31,10 @@ async function makeApp(db: ReturnType<typeof mkDb>, env: Record<string, unknown>
     IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
     ...env,
   };
-  return (req: Request) =>
-    app.fetch(req, fakeEnv, {
-      waitUntil() {},
-      passThroughOnException() {},
-    } as unknown as ExecutionContext);
+  const context =
+    executionCtx ??
+    ({ waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext);
+  return (req: Request) => app.fetch(req, fakeEnv, context);
 }
 
 function post(body: unknown) {
@@ -279,6 +282,25 @@ describe("POST /v1/feedback", () => {
     expect(await db.select().from(feedback)).toHaveLength(1);
   });
 
+  it("idempotency schedules its notification once across replay", async () => {
+    const db = mkDb();
+    const scheduled: Promise<unknown>[] = [];
+    const executionCtx = {
+      waitUntil(promise: Promise<unknown>) {
+        scheduled.push(promise);
+      },
+      passThroughOnException() {},
+    } as unknown as ExecutionContext;
+    const fetch = await makeApp(db, {}, executionCtx);
+    const body = { message: "This feedback notification is scheduled once." };
+
+    await fetch(idempotentPost(body));
+    await fetch(idempotentPost(body));
+    await Promise.all(scheduled);
+
+    expect(scheduled).toHaveLength(1);
+  });
+
   it("idempotency conflicts when the shared anonymous key is reused for another route", async () => {
     const db = mkDb();
     const fetch = await makeApp(db);
@@ -305,6 +327,38 @@ describe("POST /v1/feedback", () => {
 
     expect(feedbackResponse.status).toBe(202);
     expect(recommendationResponse.status).toBe(409);
+  });
+
+  it("idempotency conflicts when feedback request bytes change", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    await fetch(idempotentPost({ message: "The original feedback text." }));
+    const conflict = await fetch(idempotentPost({ message: "Changed feedback text now." }));
+
+    expect(conflict.status).toBe(409);
+    expect(await db.select().from(feedback)).toHaveLength(1);
+  });
+
+  it("idempotency leaves its key reusable after feedback validation fails", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const invalid = await fetch(idempotentPost({ message: "no" }));
+    const valid = await fetch(idempotentPost({ message: "This feedback is now valid." }));
+
+    expect(invalid.status).toBe(400);
+    expect(valid.status).toBe(202);
+    expect(await db.select().from(feedback)).toHaveLength(1);
+  });
+
+  it("keeps identical headerless feedback submissions independent", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const body = { message: "This feedback is intentionally duplicated." };
+
+    await fetch(post(body));
+    await fetch(post(body));
+
+    expect(await db.select().from(feedback)).toHaveLength(2);
   });
 
   it("idempotency evaluates the anonymous limiter on replay but inserts once", async () => {

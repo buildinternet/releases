@@ -1,11 +1,16 @@
 import { describe, expect, it } from "bun:test";
+import { Hono } from "hono";
 import { recommendations } from "@buildinternet/releases-core/schema";
 import { createTestApp, createTestDb } from "./setup";
 
 const IDEMPOTENCY_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const IDEMPOTENCY_KEY = "recommendation-idem-01";
 
-async function makeApp(db = createTestDb(), env: Record<string, unknown> = {}) {
+async function makeApp(
+  db = createTestDb(),
+  env: Record<string, unknown> = {},
+  executionCtx?: ExecutionContext,
+) {
   const { recommendationRoutes } = await import("../src/routes/recommendations.js");
   return {
     db,
@@ -15,6 +20,7 @@ async function makeApp(db = createTestDb(), env: Record<string, unknown> = {}) {
         IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
         ...env,
       },
+      executionCtx,
     }),
   };
 }
@@ -27,12 +33,12 @@ function post(body: unknown) {
   });
 }
 
-function idempotentPost(body: unknown, key = IDEMPOTENCY_KEY) {
+function idempotentPost(body: unknown, key = IDEMPOTENCY_KEY, userAgent = "test-agent") {
   return new Request("http://x/v1/recommendations", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "user-agent": "test-agent",
+      "user-agent": userAgent,
       "idempotency-key": key,
     },
     body: JSON.stringify(body),
@@ -156,6 +162,27 @@ describe("POST /v1/recommendations", () => {
     expect(await db.select().from(recommendations)).toHaveLength(1);
   });
 
+  it("idempotency schedules recommendation notification and ack once across replay", async () => {
+    const scheduled: Promise<unknown>[] = [];
+    const executionCtx = {
+      waitUntil(promise: Promise<unknown>) {
+        scheduled.push(promise);
+      },
+      passThroughOnException() {},
+    } as unknown as ExecutionContext;
+    const { fetch } = await makeApp(undefined, {}, executionCtx);
+    const body = {
+      url: "https://example.com/releases",
+      contactEmail: "user@example.com",
+    };
+
+    await fetch(idempotentPost(body));
+    await fetch(idempotentPost(body));
+    await Promise.all(scheduled);
+
+    expect(scheduled).toHaveLength(2);
+  });
+
   it("idempotency validates again before claiming so an invalid request leaves its key reusable", async () => {
     const { db, fetch } = await makeApp();
 
@@ -195,6 +222,53 @@ describe("POST /v1/recommendations", () => {
 
     expect(conflict.status).toBe(409);
     expect(await db.select().from(recommendations)).toHaveLength(1);
+  });
+
+  it("idempotency conflicts when a feedback key was first used by recommendations", async () => {
+    const { db, fetch } = await makeApp();
+    await fetch(idempotentPost({ url: "https://example.com/releases" }));
+    const { feedbackRoutes } = await import("../src/routes/feedback.js");
+    const feedbackApp = new Hono();
+    feedbackApp.route("/v1", feedbackRoutes);
+    const conflict = await feedbackApp.fetch(
+      new Request("http://x/v1/feedback", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_KEY,
+        },
+        body: JSON.stringify({ message: "A valid feedback message." }),
+      }),
+      {
+        DB: db,
+        SEND_EMAIL: undefined,
+        IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
+      },
+      { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+    );
+
+    expect(conflict.status).toBe(409);
+  });
+
+  it("idempotency ignores a retry User-Agent and preserves the winner User-Agent", async () => {
+    const { db, fetch } = await makeApp();
+    const body = { url: "https://example.com/releases" };
+    const first = await fetch(idempotentPost(body, IDEMPOTENCY_KEY, "winner-agent"));
+    const replay = await fetch(idempotentPost(body, IDEMPOTENCY_KEY, "retry-agent"));
+
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await replay.json()).toEqual(await first.json());
+    expect((await db.select().from(recommendations))[0]!.userAgent).toBe("winner-agent");
+  });
+
+  it("keeps identical headerless submissions independent", async () => {
+    const { db, fetch } = await makeApp();
+    const body = { url: "https://example.com/releases" };
+
+    await fetch(post(body));
+    await fetch(post(body));
+
+    expect(await db.select().from(recommendations)).toHaveLength(2);
   });
 
   it("idempotency without its encryption secret does not insert", async () => {

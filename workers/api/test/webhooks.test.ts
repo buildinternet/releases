@@ -24,7 +24,11 @@ const queueMessages: unknown[] = [];
 
 let h: TestDatabase;
 
-function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
+function makeApp(opts?: {
+  masterKey?: string | null;
+  withQueue?: boolean;
+  queue?: { send(message: unknown): Promise<void> };
+}) {
   const masterKey = opts === undefined ? TEST_MASTER_KEY : (opts.masterKey ?? TEST_MASTER_KEY);
   const withQueue = opts?.withQueue !== false;
   const fakeEnv: Record<string, unknown> = {
@@ -33,7 +37,7 @@ function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
     IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => IDEMPOTENCY_SECRET },
   };
   if (withQueue) {
-    fakeEnv.WEBHOOK_DELIVERY_QUEUE = {
+    fakeEnv.WEBHOOK_DELIVERY_QUEUE = opts?.queue ?? {
       send: async (msg: unknown) => {
         queueMessages.push(msg);
       },
@@ -466,6 +470,61 @@ describe("POST /v1/webhooks/:id/test", () => {
 
     expect(conflict.status).toBe(409);
     expect(queueMessages).toHaveLength(1);
+  });
+
+  it("test idempotency reports an admin retry as in progress while queueing", async () => {
+    let signalStarted!: () => void;
+    let releaseSend!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    const fetch = makeApp({
+      queue: {
+        send: async (message) => {
+          queueMessages.push(message);
+          signalStarted();
+          await release;
+        },
+      },
+    });
+    const { id } = await createSub(fetch);
+    const init = {
+      method: "POST",
+      headers: { "Idempotency-Key": TEST_IDEMPOTENCY_KEY },
+    };
+    const first = fetch(new Request(`https://x.test/v1/webhooks/${id}/test`, init));
+    await started;
+    const pending = await fetch(new Request(`https://x.test/v1/webhooks/${id}/test`, init));
+    releaseSend();
+
+    expect(pending.status).toBe(409);
+    expect((await pending.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "idempotency_in_progress" },
+    });
+    expect((await first).status).toBe(200);
+    expect(queueMessages).toHaveLength(1);
+  });
+
+  it("test idempotency rejects an admin request body before enqueue", async () => {
+    const fetch = makeApp();
+    const { id } = await createSub(fetch);
+
+    const response = await fetch(
+      new Request(`https://x.test/v1/webhooks/${id}/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": TEST_IDEMPOTENCY_KEY,
+        },
+        body: "{}",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(queueMessages).toHaveLength(0);
   });
 
   it("returns 503 when WEBHOOK_DELIVERY_QUEUE binding is missing", async () => {
