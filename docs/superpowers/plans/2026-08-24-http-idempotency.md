@@ -4,7 +4,15 @@
 
 **Goal:** Add a 24-hour, optional `Idempotency-Key` contract to the eight approved effectful POST routes, with atomic D1 admission, encrypted exact-response replay, strict principal isolation, and bounded cleanup.
 
-**Architecture:** A shared D1 table and store own the processing/completed state machine. A route-level Hono helper runs pre-claim validation, atomically admits one winner, captures and encrypts bounded responses, and replays completed results; each route supplies an explicit principal plus pre-claim and winner-only callbacks. Authentication remains outside the helper, while a dedicated principal adapter prevents session, machine-token, root, OAuth M2M, local-development, and anonymous namespaces from collapsing together.
+**Architecture:** Paired D1 tables own the state machine: authoritative
+`idempotency_guards` controls admission, state, expiry, and cleanup, while
+trigger-synchronized `idempotency_records` holds mutable encrypted responses. A
+route-level Hono helper runs pre-claim validation, atomically admits one winner,
+captures and encrypts bounded responses, and replays completed results; each
+route supplies an explicit principal plus pre-claim and winner-only callbacks.
+Authentication remains outside the helper, while a dedicated principal adapter
+prevents session, machine-token, root, OAuth M2M, local-development, and
+anonymous namespaces from collapsing together.
 
 **Tech Stack:** Bun, TypeScript strict mode, Hono, Cloudflare Workers Web Crypto, D1 + Drizzle ORM, `bun:test`, `hono-openapi`.
 
@@ -513,7 +521,12 @@ Expected: new duplicate/replay assertions fail.
 
 - [ ] **Step 7: Integrate anonymous routes**
 
-Keep flag, streaming cap, IP limiter, parsing, and sanitization in `preclaim`; insert and schedule emails only in `execute`. Use the fixed anonymous principal. Preserve the winning request's `User-Agent` in the inserted recommendation without adding it to the fingerprint.
+Run feature-availability checks and the anonymous IP limiter at handler ingress
+before `idempotentPost()` so they evaluate on every attempt, including replay.
+Keep capped parsing, sanitization, and validation in `preclaim`; insert and
+schedule emails only in `execute`. Use the fixed anonymous principal. Preserve
+the winning request's `User-Agent` in the inserted recommendation without
+adding it to the fingerprint.
 
 - [ ] **Step 8: Run GREEN and focused aggregate**
 
