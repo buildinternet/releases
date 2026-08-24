@@ -37,6 +37,12 @@ import { createAuth } from "../auth/index.js";
 import { apiScopesFromPermissions, clampUserKeyScopes } from "../auth/api-key-scope.js";
 import { respondError } from "../lib/error-response.js";
 
+declare module "hono" {
+  interface ContextVariableMap {
+    localAuthSkip?: true;
+  }
+}
+
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Custom header carrying the trusted-proxy shared secret. */
@@ -50,6 +56,7 @@ export type AuthContext =
       tokenId: string;
       scopes: string[];
       machinePrincipalType?: PrincipalType;
+      oauthClientId?: string;
     };
 
 /** Minimal session shape attached to the Hono context by `requireSession`. */
@@ -84,6 +91,7 @@ type ResolvedAuth =
       tokenId: string;
       scopes: string[];
       machinePrincipalType?: PrincipalType;
+      oauthClientId?: string;
     }
   | { kind: "rate_limited" }
   // skip=true means "local dev, no secret configured" — preserve open access.
@@ -334,6 +342,9 @@ async function resolveAuthUncached(
         kind: "token",
         tokenId: `oauth_${verified.subject ?? "m2m"}`,
         scopes: verified.scopes,
+        ...(verified.subject === null && verified.clientId
+          ? { oauthClientId: verified.clientId }
+          : {}),
       };
     }
     return { kind: "none", skip: false };
@@ -714,6 +725,7 @@ function createAuthMiddleware(opts: {
 
     if (auth.kind === "none") {
       if (auth.skip) {
+        c.set("localAuthSkip", true);
         await next();
         return;
       }

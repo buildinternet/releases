@@ -9,6 +9,7 @@ import {
   type CryptoKey,
 } from "jose";
 import { authMiddleware, publicReadAuthMiddleware } from "../src/middleware/auth";
+import type { Env } from "../src/index.js";
 
 /**
  * End-to-end wiring of the OAuth-JWT lane (#1483) through the API auth
@@ -32,15 +33,18 @@ beforeAll(async () => {
   keyResolver = createLocalJWKSet({ keys: [jwk] });
 });
 
-async function jwt(scope: string, opts: { aud?: string; iss?: string } = {}): Promise<string> {
-  return new SignJWT({ scope })
+async function jwt(
+  scope: string,
+  opts: { aud?: string; iss?: string; sub?: string | null; claims?: Record<string, unknown> } = {},
+): Promise<string> {
+  const signed = new SignJWT({ scope, ...opts.claims })
     .setProtectedHeader({ alg: "RS256", kid: "k1" })
     .setIssuer(opts.iss ?? ISSUER)
     .setAudience(opts.aud ?? ORIGIN)
-    .setSubject("user_42")
     .setIssuedAt()
-    .setExpirationTime("5m")
-    .sign(privateKey);
+    .setExpirationTime("5m");
+  if (opts.sub !== null) signed.setSubject(opts.sub ?? "user_42");
+  return signed.sign(privateKey);
 }
 
 function secretBinding(value: string) {
@@ -54,14 +58,13 @@ function env() {
 
 /** App that injects the local key resolver, then applies the given middleware. */
 function app(middleware: typeof authMiddleware) {
-  const a = new Hono();
+  const a = new Hono<Env>();
   a.use("*", async (c, next) => {
-    // @ts-expect-error — test-only context seam, typed on the real Env.
     c.set("oauthJwtKeyResolver", keyResolver);
     await next();
   });
   a.use("*", middleware);
-  a.get("/", (c) => c.json({ ok: true }));
+  a.get("/", (c) => c.json({ ok: true, auth: c.get("auth") }));
   a.post("/", (c) => c.json({ ok: true }));
   return a;
 }
@@ -128,5 +131,37 @@ describe("OAuth-JWT lane — REST auth middleware", () => {
     // Three base64url-ish segments but not signed by us → verify fails → 401.
     const res = await app(authMiddleware).request("/", auth("aaa.bbb.ccc"), env());
     expect(res.status).toBe(401);
+  });
+
+  it("preserves subjectless OAuth auth and attaches its signed client identity", async () => {
+    const res = await app(authMiddleware).request(
+      "/",
+      auth(await jwt("admin", { sub: null, claims: { azp: "client_42" } })),
+      env(),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      auth: { kind: string; tokenId: string; scopes: string[]; oauthClientId?: string };
+    };
+    expect(body.auth).toEqual({
+      kind: "token",
+      tokenId: "oauth_m2m",
+      scopes: ["admin"],
+      oauthClientId: "client_42",
+    });
+  });
+
+  it("preserves subjectless OAuth auth without an unsigned client fallback", async () => {
+    const res = await app(authMiddleware).request(
+      "/",
+      auth(await jwt("admin", { sub: null })),
+      env(),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { auth: { tokenId: string; oauthClientId?: string } };
+    expect(body.auth.tokenId).toBe("oauth_m2m");
+    expect(body.auth.oauthClientId).toBeUndefined();
   });
 });

@@ -18,7 +18,9 @@ type ErrorBody = { error: { code: string; type: string; message: string } };
 function adminApp() {
   const app = new Hono();
   app.use("*", authMiddleware);
-  app.get("/", (c) => c.json({ ok: true }));
+  app.get("/", (c) =>
+    c.json({ ok: true, localAuthSkip: (c.var as Record<string, unknown>).localAuthSkip }),
+  );
   return app;
 }
 
@@ -64,6 +66,8 @@ describe("authMiddleware — missing vs invalid", () => {
   it("preserves open access when no secret is configured (local dev)", async () => {
     const res = await adminApp().request("/", {}, {} as never);
     expect(res.status).toBe(200);
+    const body = (await res.json()) as { localAuthSkip?: true };
+    expect(body.localAuthSkip).toBe(true);
   });
 });
 

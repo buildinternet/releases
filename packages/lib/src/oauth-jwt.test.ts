@@ -34,8 +34,11 @@ beforeAll(async () => {
 /** Sign a token with the test key; overrides let each case bend one dimension. */
 async function sign(opts: {
   scope?: string | string[];
-  sub?: string;
+  sub?: string | null;
   role?: string;
+  azp?: unknown;
+  client_id?: unknown;
+  clientId?: unknown;
   issuer?: string;
   audience?: string;
   expiresIn?: string;
@@ -44,12 +47,15 @@ async function sign(opts: {
   const claims: Record<string, unknown> = {};
   if (opts.scope !== undefined) claims.scope = opts.scope;
   if (opts.role !== undefined) claims["https://releases.sh/role"] = opts.role;
+  if (opts.azp !== undefined) claims.azp = opts.azp;
+  if (opts.client_id !== undefined) claims.client_id = opts.client_id;
+  if (opts.clientId !== undefined) claims.clientId = opts.clientId;
   const jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer(opts.issuer ?? ISSUER)
-    .setAudience(opts.audience ?? AUDIENCE)
-    .setSubject(opts.sub ?? "user_123")
-    .setIssuedAt();
+    .setAudience(opts.audience ?? AUDIENCE);
+  if (opts.sub !== null) jwt.setSubject(opts.sub ?? "user_123");
+  jwt.setIssuedAt();
   if (opts.expired) jwt.setExpirationTime(Math.floor(Date.now() / 1000) - 60);
   else jwt.setExpirationTime(opts.expiresIn ?? "5m");
   return jwt.sign(privateKey);
@@ -137,6 +143,41 @@ describe("verifyOAuthJwt", () => {
     expect(res!.subject).toBe("user_abc");
     expect(res!.scopes).toEqual(["read", "write"]);
     expect(res!.role).toBe("curator");
+  });
+
+  it("projects the first non-empty signed OAuth client identity", async () => {
+    const azp = await verifyOAuthJwt(
+      await sign({ scope: "read", azp: "client-from-azp", client_id: "client-from-snake" }),
+      config(),
+    );
+    const snake = await verifyOAuthJwt(
+      await sign({
+        scope: "read",
+        azp: "",
+        client_id: "client-from-snake",
+        clientId: "client-from-camel",
+      }),
+      config(),
+    );
+    const camel = await verifyOAuthJwt(
+      await sign({ scope: "read", clientId: "client-from-camel" }),
+      config(),
+    );
+
+    expect(azp!.clientId).toBe("client-from-azp");
+    expect(snake!.clientId).toBe("client-from-snake");
+    expect(camel!.clientId).toBe("client-from-camel");
+  });
+
+  it("does not project missing or non-string OAuth client claims", async () => {
+    const missing = await verifyOAuthJwt(await sign({ scope: "read", sub: null }), config());
+    const nonString = await verifyOAuthJwt(
+      await sign({ scope: "read", sub: null, azp: 42, client_id: {}, clientId: [] }),
+      config(),
+    );
+
+    expect(missing!.clientId).toBeNull();
+    expect(nonString!.clientId).toBeNull();
   });
 
   it("returns null on a wrong issuer", async () => {
