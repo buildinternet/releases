@@ -42,15 +42,6 @@ export async function parseJsonBody(c: Context<Env>): Promise<Record<string, unk
   }
 }
 
-/** Same result shape as {@link parseJsonBody}, from an already-buffered body. */
-function parseJsonBodyFromBytes(bytes: Uint8Array): Record<string, unknown> | null {
-  try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 /** Parse a stored permissions JSON string into a permission map (null on failure). */
 export function parsePermissions(raw: string | null): Record<string, string[]> | null {
   if (!raw) return null;
@@ -94,13 +85,17 @@ userApiKeyHandlers.post(
     return idempotentPost(c, {
       principal: userIdempotencyPrincipal(session.user.id),
       body: "json",
-      preclaim: async (bytes) => {
-        const body = bytes === undefined ? await parseJsonBody(c) : parseJsonBodyFromBytes(bytes);
-        if (!body)
+      preclaim: async (parsed) => {
+        // `parsed === null` mirrors the old parse-failure branch (a literal
+        // JSON `null` body); every other non-object value falls through to
+        // field-level validation below exactly as before.
+        if (parsed === null) {
           return respondError(
             c,
             new ValidationError("Invalid JSON body", { code: "invalid_json" }),
           );
+        }
+        const body = parsed as Record<string, unknown>;
 
         const name = typeof body.name === "string" ? body.name.trim() : "";
         if (!name)

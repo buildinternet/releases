@@ -45,15 +45,6 @@ async function parseJsonBody(c: Context<Env>): Promise<Record<string, unknown> |
   }
 }
 
-/** Same result shape as {@link parseJsonBody}, from an already-buffered body. */
-function parseJsonBodyFromBytes(bytes: Uint8Array): Record<string, unknown> | null {
-  try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 /** Validate a raw `scopes` value → array of known scopes, or null if absent/empty/invalid. */
 function validateScopes(raw: unknown): string[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -98,10 +89,18 @@ apiTokenRoutes.post(
         environment: c.env.ENVIRONMENT,
       }),
       body: "json",
-      preclaim: async (bytes) => {
-        const body = bytes === undefined ? await parseJsonBody(c) : parseJsonBodyFromBytes(bytes);
-        if (!body)
+      json: { invalidJsonCode: "bad_request" },
+      preclaim: async (parsed) => {
+        // `parsed === null` mirrors the old parse-failure branch: a JSON body
+        // whose top-level value is literally `null` is treated the same as
+        // "no usable body" — every other non-object value (array, string,
+        // number, boolean) falls through to field-level validation below
+        // exactly as before, since the middleware already rejected anything
+        // that didn't parse as JSON at all.
+        if (parsed === null) {
           return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
+        }
+        const body = parsed as Record<string, unknown>;
 
         const name = typeof body.name === "string" ? body.name.trim() : "";
         if (!name)

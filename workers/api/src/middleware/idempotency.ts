@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { hashSecret } from "@buildinternet/releases-core/api-token";
+import type { ErrorCode } from "@buildinternet/releases-core/errors";
 import {
   ConflictError,
   isReleasesError,
@@ -23,14 +24,10 @@ import {
   retainIdempotency,
 } from "../lib/idempotency-store.js";
 import { respondError } from "../lib/error-response.js";
+import { parseJsonBodyCapped, readJsonBodyCapped } from "../lib/json-body.js";
 
-/**
- * Shared 64 KiB request-body cap. Exported so route `preclaim` callbacks that
- * still buffer their own request body (the no-`Idempotency-Key` fast path,
- * where this middleware never reads the body itself) can reuse the same
- * threshold instead of redeclaring it.
- */
-export const MAX_BODY_BYTES = 64 * 1024;
+/** Shared 64 KiB request-body cap, enforced on both the header and no-header paths. */
+const MAX_BODY_BYTES = 64 * 1024;
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 const KEY_PATTERN = /^[\x21-\x7e]{16,255}$/;
 const encoder = new TextEncoder();
@@ -122,6 +119,31 @@ async function requestBytes(c: Context<Env>): Promise<Uint8Array> {
   return readBodyLimited(c.req.raw.clone().body);
 }
 
+/**
+ * Resolve + cap-check + parse a JSON body on the no-`Idempotency-Key` path,
+ * where this middleware reads the body itself for the first time (there's no
+ * already-buffered `Uint8Array` to reuse, unlike the header path below).
+ * Mirrors what every `body: "json"` route used to hand-roll: a cheap
+ * `Content-Length` precheck, then the streaming cap in `readJsonBodyCapped`
+ * as the guard that actually holds against a chunked or header-spoofed body.
+ * Returns the parsed value, or the error `Response` to short-circuit with.
+ */
+async function resolveJsonBody(
+  c: Context<Env>,
+  invalidJsonCode: ErrorCode,
+  payloadTooLargeCode: ErrorCode,
+): Promise<unknown | Response> {
+  if (contentLengthExceedsLimit(c.req.header("content-length"))) {
+    return respondError(c, new ValidationError(undefined, { code: payloadTooLargeCode }));
+  }
+  const result = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
+  if (!result.ok) {
+    const code = result.error === "payload_too_large" ? payloadTooLargeCode : invalidJsonCode;
+    return respondError(c, new ValidationError(undefined, { code }));
+  }
+  return result.value;
+}
+
 async function requestFingerprint(c: Context<Env>, body: Uint8Array): Promise<string> {
   const url = new URL(c.req.url);
   return sha256Hex(
@@ -208,17 +230,36 @@ export async function idempotentPost<T>(
     principal: IdempotencyPrincipal | null;
     body: "json" | "empty";
     /**
-     * Called with the already-buffered, cap-checked request body whenever
-     * this middleware has read it itself (the `Idempotency-Key` path below) —
-     * `undefined` on the no-header fast path, where the middleware never
-     * touches the body and `preclaim` must read it itself exactly as before.
+     * Only meaningful when `body: "json"`. Lets a route keep its exact
+     * current error `code` for a syntactically-invalid body (default
+     * `"invalid_json"`) or an oversized one on the no-`Idempotency-Key` path
+     * (default `"payload_too_large"`) — the two codes routes have
+     * historically disagreed on. The header path's oversize case never
+     * reaches this: `requestBytes` throws `PayloadTooLargeError` (413)
+     * before either code applies.
      */
-    preclaim: (body: Uint8Array | undefined) => Promise<T | Response>;
+    json?: { invalidJsonCode?: ErrorCode; payloadTooLargeCode?: ErrorCode };
+    /**
+     * Called with the parsed JSON body (`body: "json"`, typed `unknown` —
+     * this middleware owns reading, cap-checking, and parsing on both the
+     * header and no-header paths) or `undefined` (`body: "empty"`, where
+     * there's nothing to parse and `preclaim` takes no argument).
+     */
+    preclaim: (body: unknown) => Promise<T | Response>;
     execute: (input: T) => Promise<Response>;
   },
 ): Promise<Response> {
+  const invalidJsonCode = options.json?.invalidJsonCode ?? "invalid_json";
+  const payloadTooLargeCode = options.json?.payloadTooLargeCode ?? "payload_too_large";
+
   const rawIdempotencyKey = c.req.header("idempotency-key");
   if (rawIdempotencyKey === undefined) {
+    if (options.body === "json") {
+      const parsed = await resolveJsonBody(c, invalidJsonCode, payloadTooLargeCode);
+      if (parsed instanceof Response) return parsed;
+      const input = await options.preclaim(parsed);
+      return input instanceof Response ? input : options.execute(input);
+    }
     const input = await options.preclaim(undefined);
     return input instanceof Response ? input : options.execute(input);
   }
@@ -254,7 +295,16 @@ export async function idempotentPost<T>(
     hashSecret(rawIdempotencyKey),
     requestFingerprint(c, body),
   ]);
-  const preclaimInput = await options.preclaim(body);
+
+  let preclaimArg: unknown;
+  if (options.body === "json") {
+    const parsed = parseJsonBodyCapped(body);
+    if (!parsed.ok) {
+      return respondError(c, new ValidationError(undefined, { code: invalidJsonCode }));
+    }
+    preclaimArg = parsed.value;
+  }
+  const preclaimInput = await options.preclaim(preclaimArg);
   if (preclaimInput instanceof Response) return preclaimInput;
 
   const db = createDb(c.env.DB);
