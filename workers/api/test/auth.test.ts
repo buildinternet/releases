@@ -426,6 +426,10 @@ describe("apiCorsMiddleware origin policy", () => {
     expect(allowed).toContain("x-pow-solution");
   });
 
+  it("CORS advertises Idempotency-Key in its default preflight allow-list", async () => {
+    expect(await preflightAllowedHeaders("")).toContain("idempotency-key");
+  });
+
   // Drift guard: the regression in #1544 was the auth CORS allow-list falling behind the
   // headers the sentinel client sends. Rather than re-hardcode "the three headers we know
   // about today", read the headers the INSTALLED @better-auth/infra client actually stamps
@@ -549,6 +553,20 @@ describe("apiCorsMiddleware origin policy", () => {
     );
     expect(publicRes.headers.get("access-control-allow-origin")).toBe("*");
     expect(publicRes.headers.get("access-control-allow-credentials")).toBeNull();
+  });
+
+  it("CORS exposes the idempotency replay marker on finalized non-OPTIONS responses", async () => {
+    const app = new Hono();
+    app.use("*", apiCorsMiddleware());
+    app.post("/v1/effect", () => new Response("ok", { status: 201 }));
+
+    const res = await app.request(
+      "/v1/effect",
+      { method: "POST", headers: { Origin: "https://releases.sh" } },
+      { ENVIRONMENT: "production" } as never,
+    );
+
+    expect(res.headers.get("access-control-expose-headers")).toContain("Idempotency-Replayed");
   });
 });
 

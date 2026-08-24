@@ -41,6 +41,7 @@ import { createDb } from "./db.js";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
 import { retierSources } from "./cron/retier.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
+import { sweepIdempotencyRecords } from "./cron/sweep-idempotency-records.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { sendStalenessDigest } from "./cron/send-staleness-digest.js";
@@ -966,7 +967,7 @@ export default {
   },
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
     // Daily retier runs at 03:00 UTC; the source staleness digest and the
-    // stub-demotion sweep at 04:00 UTC; search-queries retention at 05:00 UTC;
+    // stub-demotion sweep at 04:00 UTC; search-query and idempotency retention at 05:00 UTC;
     // poll-and-fetch hourly.
     // Build the alert env once for cron dispatches.
     const alertEnv: AlertEnv = {
@@ -985,6 +986,16 @@ export default {
             DB: env.DB,
             CRON_ENABLED: env.CRON_ENABLED,
             SEARCH_QUERY_RETENTION_DAYS: env.SEARCH_QUERY_RETENTION_DAYS,
+          }),
+          alertEnv,
+        ),
+      );
+      ctx.waitUntil(
+        loggedDispatch(
+          "sweep-idempotency-records-cron",
+          sweepIdempotencyRecords({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
           }),
           alertEnv,
         ),

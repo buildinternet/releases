@@ -34,7 +34,10 @@ Most contributors never need this inventory; self-hosters do.
    Flagship apps, rate limiters, and email.
 2. Replace IDs, routes, `store_id`, service bindings, and custom domains in the
    worker `wrangler.jsonc` files.
-3. Populate secrets from the checked-in `.dev.vars.example` files.
+3. Provision every Secrets Store secret referenced by the worker, including a valid
+   `IDEMPOTENCY_ENCRYPTION_KEY` for API deployments, before any idempotency migration
+   or deploy. Generate exactly 32 random bytes and base64-encode them; never place
+   the value in a vars or environment file. See [idempotency.md](idempotency.md).
 4. Run `./scripts/create-vectorize-indexes.sh`, then `bun run db:migrate:remote`,
    then `bun run deploy`.
 5. Deploy managed agents with `bun run deploy:agents` if you are using the
@@ -75,7 +78,7 @@ Unbound optional bindings fail open: no `MEDIA` R2 → third-party media URLs st
 
 Values live in the dashboard, never in git. Forks provision their own store and rebind every `secrets_store_secrets` entry:
 
-`RELEASED_API_KEY`, `RELEASES_API_KEY`, `RELEASES_PROXY_KEY`, `GITHUB_TOKEN`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VOYAGER_API_KEY`, `ANTHROPIC_API_KEY`, `AI_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `WEBHOOK_HMAC_MASTER`, `WEB_SERVICE_KEY` (prod only — see below), `WEB_BOT_AUTH_PRIVATE_KEY`, `FIRECRAWL_API_KEY`, `FIRECRAWL_WEBHOOK_SECRET`, `RELEASES_GITHUB_WEBHOOK_SECRET`, `STAGING_ACCESS_KEY` (staging only).
+`RELEASED_API_KEY`, `RELEASES_API_KEY`, `RELEASES_PROXY_KEY`, `IDEMPOTENCY_ENCRYPTION_KEY`, `GITHUB_TOKEN`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VOYAGER_API_KEY`, `ANTHROPIC_API_KEY`, `AI_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `WEBHOOK_HMAC_MASTER`, `WEB_SERVICE_KEY` (prod only — see below), `WEB_BOT_AUTH_PRIVATE_KEY`, `FIRECRAWL_API_KEY`, `FIRECRAWL_WEBHOOK_SECRET`, `RELEASES_GITHUB_WEBHOOK_SECRET`, `STAGING_ACCESS_KEY` (staging only).
 
 Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api + discovery; unset → direct Anthropic. Local dev: `workers/*/.dev.vars.example`.
 

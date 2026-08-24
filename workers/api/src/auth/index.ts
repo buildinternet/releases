@@ -685,6 +685,7 @@ function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
 export const AUTH_CORS_ALLOWED_HEADERS = [
   "Content-Type",
   "Authorization",
+  "Idempotency-Key",
   "X-Visitor-Id",
   "X-Request-Id",
   "X-PoW-Solution",
@@ -776,6 +777,7 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
     if (c.res.status === 101) return;
     // Must mutate the finalized response: raw Response returns (Better Auth)
     // replace c.res and drop any pre-next c.header() values.
+    c.res.headers.set("Access-Control-Expose-Headers", "Idempotency-Replayed");
     if (origin) applyCorsHeaders(c.res.headers, origin, env);
   };
 }

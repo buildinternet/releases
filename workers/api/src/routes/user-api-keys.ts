@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { describeRoute } from "hono-openapi";
 import { and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { apikey } from "../db/schema-auth.js";
@@ -24,6 +25,7 @@ import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { userIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
+import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -67,136 +69,155 @@ export function scopeLabel(permissions: Record<string, string[]> | null): ApiSco
 export const userApiKeyHandlers = new Hono<Env>();
 const encoder = new TextEncoder();
 
-userApiKeyHandlers.post("/api-keys", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-  return idempotentPost(c, {
-    principal: userIdempotencyPrincipal(session.user.id),
-    body: "json",
-    preclaim: async () => {
-      const body = await parseJsonBody(c);
-      if (!body)
-        return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
-
-      const name = typeof body.name === "string" ? body.name.trim() : "";
-      if (!name)
-        return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
-      if (encoder.encode(name).byteLength > 200) {
-        return respondError(
-          c,
-          new ValidationError("name must be at most 200 bytes", { code: "bad_request" }),
-        );
-      }
-
-      // The server-side scope ceiling: self-serve keys are capped at
-      // USER_API_KEY_MAX_SCOPE (read today). A missing scope defaults to the
-      // ceiling; anything above it is refused rather than silently downgraded so a
-      // caller asking for write gets an explicit error. Ceiling-aware, matching the
-      // auth-time clamp, so this stays correct if the ceiling is ever raised.
-      const requestedScope = body.scope === undefined ? USER_API_KEY_MAX_SCOPE : body.scope;
-      if (!isWithinUserKeyCeiling(requestedScope)) {
-        return respondError(
-          c,
-          new ValidationError(`scope must be '${USER_API_KEY_MAX_SCOPE}'`, { code: "bad_request" }),
-        );
-      }
-
-      let expiresIn: number | undefined;
-      if (body.expiresInDays !== undefined) {
-        const d = body.expiresInDays;
-        if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 365) {
+userApiKeyHandlers.post(
+  "/api-keys",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Authentication"],
+      summary: "Create a user API key",
+      successStatus: 201,
+      successDescription: "Created user API key, including the one-time secret.",
+    }),
+  ),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    return idempotentPost(c, {
+      principal: userIdempotencyPrincipal(session.user.id),
+      body: "json",
+      preclaim: async () => {
+        const body = await parseJsonBody(c);
+        if (!body)
           return respondError(
             c,
-            new ValidationError("expiresInDays must be an integer between 1 and 365", {
+            new ValidationError("Invalid JSON body", { code: "invalid_json" }),
+          );
+
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        if (!name)
+          return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
+        if (encoder.encode(name).byteLength > 200) {
+          return respondError(
+            c,
+            new ValidationError("name must be at most 200 bytes", { code: "bad_request" }),
+          );
+        }
+
+        // The server-side scope ceiling: self-serve keys are capped at
+        // USER_API_KEY_MAX_SCOPE (read today). A missing scope defaults to the
+        // ceiling; anything above it is refused rather than silently downgraded so a
+        // caller asking for write gets an explicit error. Ceiling-aware, matching the
+        // auth-time clamp, so this stays correct if the ceiling is ever raised.
+        const requestedScope = body.scope === undefined ? USER_API_KEY_MAX_SCOPE : body.scope;
+        if (!isWithinUserKeyCeiling(requestedScope)) {
+          return respondError(
+            c,
+            new ValidationError(`scope must be '${USER_API_KEY_MAX_SCOPE}'`, {
               code: "bad_request",
             }),
           );
         }
-        expiresIn = d * 24 * 60 * 60;
-      }
-      return { name, requestedScope, expiresIn };
-    },
-    execute: async ({ name, requestedScope, expiresIn }) => {
-      // Enforce the per-user active-key cap up front so the happy path returns a
-      // clean 409 instead of catching the create-hook's throw. The Better Auth
-      // `/api-key/create` before-hook re-checks this as the authoritative backstop
-      // (it also covers the native endpoint and a concurrent create-create race), so
-      // this is the friendly pre-check, not the only gate.
-      const activeCount = await countActiveUserKeys(createDb(c.env.DB), session.user.id);
-      if (activeCount >= USER_API_KEY_MAX_ACTIVE) {
-        return respondError(c, new ConflictError(API_KEY_LIMIT_MESSAGE, { code: "api_key_limit" }));
-      }
 
-      const auth = await createAuth(c.env);
-      // apiKey() is flag-gated, so betterAuth's inferred api type omits createApiKey;
-      // assert its shape with a precise (non-any) structural cast.
-      const api = auth.api as typeof auth.api & {
-        createApiKey: (a: {
-          body: {
-            name: string;
-            userId: string;
-            permissions: Record<string, string[]>;
-            metadata?: Record<string, unknown>;
-            expiresIn?: number;
-          };
-        }) => Promise<{
-          id: string;
-          key: string;
-          name: string | null;
-          start: string | null;
-          remaining: number | null;
-          // Better Auth may return these as Date, epoch ms, or ISO string depending
-          // on version — coerce via `new Date(...)` below rather than assuming Date.
-          expiresAt: Date | number | string | null;
-          createdAt: Date | number | string;
-        }>;
-      };
-
-      // `requestedScope` is validated to be within the user-key ceiling, which is
-      // exactly the ladder label scopeLabel(scopeToPermissions(scope)) round-trips.
-      // The create's audit (`api-key-created`, with the owning userId) is emitted by
-      // the `/api-key/create` after-hook in auth/index.ts — one chokepoint for both
-      // this route and the native endpoint — so it isn't logged again here.
-      let created;
-      try {
-        created = await api.createApiKey({
-          body: {
-            name,
-            userId: session.user.id,
-            permissions: scopeToPermissions(requestedScope),
-            metadata: { plan: "default" },
-            ...(expiresIn ? { expiresIn } : {}),
-          },
-        });
-      } catch (err) {
-        // The before-hook cap backstop throws this when a concurrent create slipped
-        // past the pre-check above — surface the same clean 409, not a 500.
-        if (err instanceof APIError && err.body?.code === API_KEY_LIMIT_CODE) {
+        let expiresIn: number | undefined;
+        if (body.expiresInDays !== undefined) {
+          const d = body.expiresInDays;
+          if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 365) {
+            return respondError(
+              c,
+              new ValidationError("expiresInDays must be an integer between 1 and 365", {
+                code: "bad_request",
+              }),
+            );
+          }
+          expiresIn = d * 24 * 60 * 60;
+        }
+        return { name, requestedScope, expiresIn };
+      },
+      execute: async ({ name, requestedScope, expiresIn }) => {
+        // Enforce the per-user active-key cap up front so the happy path returns a
+        // clean 409 instead of catching the create-hook's throw. The Better Auth
+        // `/api-key/create` before-hook re-checks this as the authoritative backstop
+        // (it also covers the native endpoint and a concurrent create-create race), so
+        // this is the friendly pre-check, not the only gate.
+        const activeCount = await countActiveUserKeys(createDb(c.env.DB), session.user.id);
+        if (activeCount >= USER_API_KEY_MAX_ACTIVE) {
           return respondError(
             c,
             new ConflictError(API_KEY_LIMIT_MESSAGE, { code: "api_key_limit" }),
           );
         }
-        throw err;
-      }
 
-      // The full key is returned exactly once and is never retrievable again.
-      return c.json(
-        {
-          key: created.key,
-          id: created.id,
-          name: created.name,
-          start: created.start,
-          scope: requestedScope,
-          remaining: created.remaining,
-          expiresAt: created.expiresAt ? new Date(created.expiresAt).toISOString() : null,
-          createdAt: new Date(created.createdAt).toISOString(),
-        },
-        201,
-      );
-    },
-  });
-});
+        const auth = await createAuth(c.env);
+        // apiKey() is flag-gated, so betterAuth's inferred api type omits createApiKey;
+        // assert its shape with a precise (non-any) structural cast.
+        const api = auth.api as typeof auth.api & {
+          createApiKey: (a: {
+            body: {
+              name: string;
+              userId: string;
+              permissions: Record<string, string[]>;
+              metadata?: Record<string, unknown>;
+              expiresIn?: number;
+            };
+          }) => Promise<{
+            id: string;
+            key: string;
+            name: string | null;
+            start: string | null;
+            remaining: number | null;
+            // Better Auth may return these as Date, epoch ms, or ISO string depending
+            // on version — coerce via `new Date(...)` below rather than assuming Date.
+            expiresAt: Date | number | string | null;
+            createdAt: Date | number | string;
+          }>;
+        };
+
+        // `requestedScope` is validated to be within the user-key ceiling, which is
+        // exactly the ladder label scopeLabel(scopeToPermissions(scope)) round-trips.
+        // The create's audit (`api-key-created`, with the owning userId) is emitted by
+        // the `/api-key/create` after-hook in auth/index.ts — one chokepoint for both
+        // this route and the native endpoint — so it isn't logged again here.
+        let created;
+        try {
+          created = await api.createApiKey({
+            body: {
+              name,
+              userId: session.user.id,
+              permissions: scopeToPermissions(requestedScope),
+              metadata: { plan: "default" },
+              ...(expiresIn ? { expiresIn } : {}),
+            },
+          });
+        } catch (err) {
+          // The before-hook cap backstop throws this when a concurrent create slipped
+          // past the pre-check above — surface the same clean 409, not a 500.
+          if (err instanceof APIError && err.body?.code === API_KEY_LIMIT_CODE) {
+            return respondError(
+              c,
+              new ConflictError(API_KEY_LIMIT_MESSAGE, { code: "api_key_limit" }),
+            );
+          }
+          throw err;
+        }
+
+        // The full key is returned exactly once and is never retrievable again.
+        return c.json(
+          {
+            key: created.key,
+            id: created.id,
+            name: created.name,
+            start: created.start,
+            scope: requestedScope,
+            remaining: created.remaining,
+            expiresAt: created.expiresAt ? new Date(created.expiresAt).toISOString() : null,
+            createdAt: new Date(created.createdAt).toISOString(),
+          },
+          201,
+        );
+      },
+    });
+  },
+);
 
 /** List the caller's self-serve API keys (shared by GET /api-keys and settings bootstrap). */
 export async function listUserApiKeys(

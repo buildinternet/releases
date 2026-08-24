@@ -33,6 +33,17 @@ Every non-2xx response from the API uses one wire shape — a nested envelope �
 
 Add the string to `ERROR_CODES` in `packages/core/src/errors.ts` (map it to an existing `type` — a new code never needs a new `ErrorType`), then construct it via a `ReleasesError` subclass with `{ code }`. No migration needed (it's not DB schema). The registry is compile-checked at producer sites, so a typo is a build error.
 
+## Idempotency and payload-limit outcomes
+
+The optional request-idempotency contract uses these stable outcomes (full behavior: [idempotency.md](idempotency.md)).
+
+| HTTP | Type          | Code                      | Meaning                                                                                     |
+| ---- | ------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
+| 409  | `conflict`    | `idempotency_conflict`    | The same key was reused with a different request fingerprint.                               |
+| 409  | `conflict`    | `idempotency_in_progress` | A matching request is still processing; the response includes `Retry-After: 1`.             |
+| 503  | `unavailable` | `idempotency_unavailable` | Storage, encryption configuration, completion, or replay cannot safely confirm the outcome. |
+| 413  | `too_large`   | `payload_too_large`       | The request exceeds the applicable body limit.                                              |
+
 ## Known gaps
 
 - Auth middleware/guards (`workers/api/src/middleware/auth.ts`, `auth/oauth-self-service-guard.ts`) still emit the legacy flat shape — deliberately outside Phase 3's `routes/**` scope (#1839).

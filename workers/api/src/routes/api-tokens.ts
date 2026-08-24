@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { describeRoute } from "hono-openapi";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
@@ -24,6 +25,7 @@ import { respondError } from "../lib/error-response.js";
 import { ValidationError, UnauthorizedError, NotFoundError } from "@releases/lib/releases-error";
 import { authenticatedIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
+import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
 
 export const apiTokenRoutes = new Hono<Env>();
 
@@ -69,93 +71,104 @@ function toPublicRow(row: typeof apiTokens.$inferSelect) {
   };
 }
 
-apiTokenRoutes.post("/tokens", async (c) => {
-  return idempotentPost(c, {
-    principal: authenticatedIdempotencyPrincipal({
-      auth: c.get("auth"),
-      localAuthSkip: c.get("localAuthSkip"),
-      environment: c.env.ENVIRONMENT,
+apiTokenRoutes.post(
+  "/tokens",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Authentication"],
+      summary: "Create a scoped API token",
+      successStatus: 201,
+      successDescription: "Created API token, including the one-time secret.",
     }),
-    body: "json",
-    preclaim: async () => {
-      const body = await parseJsonBody(c);
-      if (!body)
-        return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
+  ),
+  async (c) => {
+    return idempotentPost(c, {
+      principal: authenticatedIdempotencyPrincipal({
+        auth: c.get("auth"),
+        localAuthSkip: c.get("localAuthSkip"),
+        environment: c.env.ENVIRONMENT,
+      }),
+      body: "json",
+      preclaim: async () => {
+        const body = await parseJsonBody(c);
+        if (!body)
+          return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
 
-      const name = typeof body.name === "string" ? body.name.trim() : "";
-      if (!name)
-        return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
-      if (exceedsUtf8ByteLimit(name, 200))
-        return respondError(
-          c,
-          new ValidationError("name must be at most 200 bytes", { code: "bad_request" }),
-        );
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        if (!name)
+          return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
+        if (exceedsUtf8ByteLimit(name, 200))
+          return respondError(
+            c,
+            new ValidationError("name must be at most 200 bytes", { code: "bad_request" }),
+          );
 
-      const scopes = validateScopes(body.scopes);
-      if (!scopes)
-        return respondError(c, new ValidationError(SCOPES_HINT, { code: "bad_request" }));
+        const scopes = validateScopes(body.scopes);
+        if (!scopes)
+          return respondError(c, new ValidationError(SCOPES_HINT, { code: "bad_request" }));
 
-      const principalType =
-        typeof body.principalType === "string" ? body.principalType : "internal";
-      if (!(PRINCIPAL_TYPES as readonly string[]).includes(principalType)) {
-        return respondError(
-          c,
-          new ValidationError("invalid principalType", { code: "bad_request" }),
-        );
-      }
-      const principalId = typeof body.principalId === "string" ? body.principalId : null;
-      if (principalId && exceedsUtf8ByteLimit(principalId, 255)) {
-        return respondError(
-          c,
-          new ValidationError("principalId must be at most 255 bytes", { code: "bad_request" }),
-        );
-      }
+        const principalType =
+          typeof body.principalType === "string" ? body.principalType : "internal";
+        if (!(PRINCIPAL_TYPES as readonly string[]).includes(principalType)) {
+          return respondError(
+            c,
+            new ValidationError("invalid principalType", { code: "bad_request" }),
+          );
+        }
+        const principalId = typeof body.principalId === "string" ? body.principalId : null;
+        if (principalId && exceedsUtf8ByteLimit(principalId, 255)) {
+          return respondError(
+            c,
+            new ValidationError("principalId must be at most 255 bytes", { code: "bad_request" }),
+          );
+        }
 
-      const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
-      if (expiresAt && Number.isNaN(Date.parse(expiresAt))) {
-        return respondError(
-          c,
-          new ValidationError("expiresAt must be ISO-8601", { code: "bad_request" }),
-        );
-      }
-      return {
-        name,
-        scopes,
-        principalType: principalType as PrincipalType,
-        principalId,
-        expiresAt,
-      };
-    },
-    execute: async ({ name, scopes, principalType, principalId, expiresAt }) => {
-      const { token, lookupId, secret } = generateApiToken();
-      const tokenHash = await hashSecret(secret);
-      const auth = c.get("auth");
-      const createdBy = auth?.kind === "token" ? auth.tokenId : "static-key";
-      const [row] = await createDb(c.env.DB)
-        .insert(apiTokens)
-        .values({
-          id: newApiTokenId(),
-          lookupId,
-          tokenHash,
+        const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
+        if (expiresAt && Number.isNaN(Date.parse(expiresAt))) {
+          return respondError(
+            c,
+            new ValidationError("expiresAt must be ISO-8601", { code: "bad_request" }),
+          );
+        }
+        return {
           name,
-          scopes: JSON.stringify(scopes),
-          principalType,
+          scopes,
+          principalType: principalType as PrincipalType,
           principalId,
           expiresAt,
-          createdBy,
-        })
-        .returning();
-      logEvent("info", {
-        component: "api-tokens",
-        event: "minted",
-        tokenId: row!.id,
-        scopes,
-        principalType,
-      });
-      return c.json({ token, ...toPublicRow(row!) }, 201);
-    },
-  });
-});
+        };
+      },
+      execute: async ({ name, scopes, principalType, principalId, expiresAt }) => {
+        const { token, lookupId, secret } = generateApiToken();
+        const tokenHash = await hashSecret(secret);
+        const auth = c.get("auth");
+        const createdBy = auth?.kind === "token" ? auth.tokenId : "static-key";
+        const [row] = await createDb(c.env.DB)
+          .insert(apiTokens)
+          .values({
+            id: newApiTokenId(),
+            lookupId,
+            tokenHash,
+            name,
+            scopes: JSON.stringify(scopes),
+            principalType,
+            principalId,
+            expiresAt,
+            createdBy,
+          })
+          .returning();
+        logEvent("info", {
+          component: "api-tokens",
+          event: "minted",
+          tokenId: row!.id,
+          scopes,
+          principalType,
+        });
+        return c.json({ token, ...toPublicRow(row!) }, 201);
+      },
+    });
+  },
+);
 
 apiTokenRoutes.get("/tokens", async (c) => {
   const db = createDb(c.env.DB);

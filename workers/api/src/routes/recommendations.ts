@@ -3,6 +3,7 @@
  * recommendations and sends a best-effort operator email.
  */
 import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { eq } from "drizzle-orm";
 import {
   recommendations,
@@ -19,6 +20,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { respondError } from "../lib/error-response.js";
 import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
+import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
 import {
   ValidationError,
   ServiceUnavailableError,
@@ -59,94 +61,110 @@ function parseRecommendationType(v: unknown): string | null {
     : null;
 }
 
-recommendationRoutes.post("/recommendations", async (c) => {
-  return idempotentPost(c, {
-    principal: anonymousIdempotencyPrincipal(),
-    body: "json",
-    preclaim: async () => {
-      if (await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)) {
-        return respondError(c, new ServiceUnavailableError());
-      }
-
-      const contentLength = Number(c.req.header("content-length") ?? "0");
-      if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-        return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
-      }
-
-      const limiter =
-        c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
-      if (limiter) {
-        const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-        const { success } = await limiter.limit({ key: `recommendation:${ip}` });
-        if (!success) {
-          c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-          return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
+recommendationRoutes.post(
+  "/recommendations",
+  describeRoute(
+    idempotentPostOpenApi({
+      tags: ["Recommendations"],
+      summary: "Submit a source recommendation",
+      successStatus: 202,
+      successDescription: "Accepted recommendation identifier.",
+    }),
+  ),
+  async (c) => {
+    return idempotentPost(c, {
+      principal: anonymousIdempotencyPrincipal(),
+      body: "json",
+      preclaim: async () => {
+        if (
+          await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)
+        ) {
+          return respondError(c, new ServiceUnavailableError());
         }
-      }
 
-      const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
-      if (!parsed.ok) {
-        return respondError(c, new ValidationError(undefined, { code: parsed.error }));
-      }
-      if (typeof parsed.value !== "object" || parsed.value === null) {
-        return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
-      }
-      const body = parsed.value as Record<string, unknown>;
-      const type = parseRecommendationType(body.type);
-      if (!type) {
-        return respondError(
-          c,
-          new ValidationError(`type must be one of: ${RECOMMENDATION_TYPES.join(", ")}`, {
-            code: "bad_request",
-          }),
-        );
-      }
+        const contentLength = Number(c.req.header("content-length") ?? "0");
+        if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+          return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
+        }
 
-      const rawUrl = sanitizeString(body.url, MAX_URL);
-      const submittedUrl = rawUrl ? stripControl(rawUrl).trim() : null;
-      const url = submittedUrl ? normalizeSubmittedUrl(submittedUrl) : null;
-      if (!url) {
-        return respondError(
-          c,
-          new ValidationError("Provide a valid http(s) URL.", { code: "bad_request" }),
-        );
-      }
+        const limiter =
+          c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
+        if (limiter) {
+          const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+          const { success } = await limiter.limit({ key: `recommendation:${ip}` });
+          if (!success) {
+            c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+            return respondError(
+              c,
+              new RateLimitedError("Too many requests. Please retry shortly."),
+            );
+          }
+        }
 
-      const rawNote = sanitizeString(body.note ?? body.additionalInfo, MAX_NOTE);
-      const note = rawNote ? stripControl(rawNote).trim() || null : null;
-      const rawContact = sanitizeString(body.contactEmail ?? body.email, MAX_CONTACT_EMAIL);
-      const contactEmail = rawContact ? stripControl(rawContact).trim() || null : null;
-      if (contactEmail && !EMAIL_PATTERN.test(contactEmail)) {
-        return respondError(
-          c,
-          new ValidationError("Provide a valid email address.", { code: "bad_request" }),
-        );
-      }
+        const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
+        if (!parsed.ok) {
+          return respondError(c, new ValidationError(undefined, { code: parsed.error }));
+        }
+        if (typeof parsed.value !== "object" || parsed.value === null) {
+          return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
+        }
+        const body = parsed.value as Record<string, unknown>;
+        const type = parseRecommendationType(body.type);
+        if (!type) {
+          return respondError(
+            c,
+            new ValidationError(`type must be one of: ${RECOMMENDATION_TYPES.join(", ")}`, {
+              code: "bad_request",
+            }),
+          );
+        }
 
-      return {
-        type,
-        url,
-        note,
-        contactEmail,
-        surface: sanitizeText(body.surface, 32) ?? "web",
-        userAgent: sanitizeText(c.req.header("user-agent"), MAX_USER_AGENT),
-      };
-    },
-    execute: async (input) => {
-      const row = {
-        id: newRecommendationId(),
-        createdAt: Date.now(),
-        ...input,
-        status: "new",
-        archived: false,
-      };
-      await getDb(c).insert(recommendations).values(row);
-      c.executionCtx.waitUntil(notifyRecommendation(c.env, row));
-      if (row.contactEmail) c.executionCtx.waitUntil(sendRecommendationAck(c.env, row));
-      return c.json({ ok: true, id: row.id }, 202);
-    },
-  });
-});
+        const rawUrl = sanitizeString(body.url, MAX_URL);
+        const submittedUrl = rawUrl ? stripControl(rawUrl).trim() : null;
+        const url = submittedUrl ? normalizeSubmittedUrl(submittedUrl) : null;
+        if (!url) {
+          return respondError(
+            c,
+            new ValidationError("Provide a valid http(s) URL.", { code: "bad_request" }),
+          );
+        }
+
+        const rawNote = sanitizeString(body.note ?? body.additionalInfo, MAX_NOTE);
+        const note = rawNote ? stripControl(rawNote).trim() || null : null;
+        const rawContact = sanitizeString(body.contactEmail ?? body.email, MAX_CONTACT_EMAIL);
+        const contactEmail = rawContact ? stripControl(rawContact).trim() || null : null;
+        if (contactEmail && !EMAIL_PATTERN.test(contactEmail)) {
+          return respondError(
+            c,
+            new ValidationError("Provide a valid email address.", { code: "bad_request" }),
+          );
+        }
+
+        return {
+          type,
+          url,
+          note,
+          contactEmail,
+          surface: sanitizeText(body.surface, 32) ?? "web",
+          userAgent: sanitizeText(c.req.header("user-agent"), MAX_USER_AGENT),
+        };
+      },
+      execute: async (input) => {
+        const row = {
+          id: newRecommendationId(),
+          createdAt: Date.now(),
+          ...input,
+          status: "new",
+          archived: false,
+        };
+        await getDb(c).insert(recommendations).values(row);
+        c.executionCtx.waitUntil(notifyRecommendation(c.env, row));
+        if (row.contactEmail) c.executionCtx.waitUntil(sendRecommendationAck(c.env, row));
+        return c.json({ ok: true, id: row.id }, 202);
+      },
+    });
+  },
+);
 
 recommendationRoutes.patch("/recommendations/:id", async (c) => {
   const id = c.req.param("id");
