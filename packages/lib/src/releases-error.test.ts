@@ -10,6 +10,7 @@ import {
   UpstreamError,
   ConflictError,
   ServiceUnavailableError,
+  PayloadTooLargeError,
   ValidationError,
 } from "./releases-error";
 
@@ -111,4 +112,19 @@ test("Phase 3 promoted codes preserve the pre-migration HTTP status via their ty
   ] as const) {
     expect(ERROR_CODES).toContain(code);
   }
+});
+
+test("PayloadTooLargeError derives 413 from its additive error type", () => {
+  const error = new PayloadTooLargeError("Request exceeds 64 KiB");
+
+  expect(error.type).toBe("too_large");
+  expect(error.code).toBe("payload_too_large");
+  expect(error.status).toBe(413);
+  expect(error.toWire()).toEqual({
+    error: {
+      code: "payload_too_large",
+      type: "too_large",
+      message: "Request exceeds 64 KiB",
+    },
+  });
 });

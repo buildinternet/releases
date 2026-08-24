@@ -26,6 +26,7 @@ describe("discovery errorResponse", () => {
       [400, "validation", "validation_failed"],
       [401, "unauthorized", "unauthorized"],
       [409, "conflict", "conflict"],
+      [413, "too_large", "payload_too_large"],
       [429, "rate_limited", "rate_limited"],
       [500, "internal", "internal_error"],
       [503, "unavailable", "service_unavailable"],

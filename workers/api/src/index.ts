@@ -88,6 +88,7 @@ export type Env = {
     // RELEASES_API_KEY this only exempts requests from the public rate limiter —
     // it does NOT unlock admin-gated content. Sent as X-Releases-Proxy-Key.
     RELEASES_PROXY_KEY?: SecretBinding;
+    IDEMPOTENCY_ENCRYPTION_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
     RELEASE_HUB: DurableObjectNamespace;
     // Per-source fetch-scheduling actor (#1776). When bound, a source
@@ -470,6 +471,7 @@ export type Env = {
      * leave this unset and the JWKS is fetched from the AS endpoint.
      */
     oauthJwtKeyResolver?: JWTVerifyGetKey;
+    localAuthSkip?: true;
   };
 };
 

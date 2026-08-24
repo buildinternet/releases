@@ -15,14 +15,15 @@ test("statusForType maps each category to its status class", () => {
   expect(statusForType("insufficient_scope")).toBe(403);
   expect(statusForType("not_found")).toBe(404);
   expect(statusForType("conflict")).toBe(409);
+  expect(statusForType("too_large")).toBe(413);
   expect(statusForType("rate_limited")).toBe(429);
   expect(statusForType("upstream")).toBe(502);
   expect(statusForType("unavailable")).toBe(503);
   expect(statusForType("internal")).toBe(500);
 });
 
-test("there are exactly 10 error types", () => {
-  expect(ERROR_TYPES.length).toBe(10);
+test("there are exactly 11 error types", () => {
+  expect(ERROR_TYPES.length).toBe(11);
 });
 
 test("error codes are unique", () => {
@@ -35,10 +36,17 @@ test("statusToType maps known statuses back to their primary type", () => {
   expect(statusToType(403)).toBe("forbidden");
   expect(statusToType(404)).toBe("not_found");
   expect(statusToType(409)).toBe("conflict");
+  expect(statusToType(413)).toBe("too_large");
   expect(statusToType(429)).toBe("rate_limited");
   expect(statusToType(502)).toBe("upstream");
   expect(statusToType(503)).toBe("unavailable");
   expect(statusToType(500)).toBe("internal");
+});
+
+test("idempotency errors are stable registry codes", () => {
+  expect(ERROR_CODES).toContain("idempotency_conflict");
+  expect(ERROR_CODES).toContain("idempotency_in_progress");
+  expect(ERROR_CODES).toContain("idempotency_unavailable");
 });
 
 test("statusToType defaults an unmapped status to internal", () => {
