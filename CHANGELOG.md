@@ -3,6 +3,20 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 24, 2026
+
+**Added**
+- API writes now support `Idempotency-Key` — send the header on token creation, API key creation, webhook creation/rotation, webhook test dispatches, recommendations, and feedback requests to get the same response on any retry within 24 hours.
+
+**Fixed**
+- Rate limit error responses now use the standard structured error envelope and include `Retry-After` and rate limit policy headers.
+
+## August 23, 2026
+
+**Fixed**
+- Hovering a link in a collection digest no longer underlines every link on the page simultaneously; the current-week digest byline is now visually distinct instead of rendering in the dimmest text tier.
+- Docs tables are now readable at typical viewport widths — wide tables scroll horizontally instead of overflowing onto the TOC rail, and the `/docs/api/rest` pagination table has been reformatted to fit the column cleanly.
+
 ## August 22, 2026
 
 **Changed**
