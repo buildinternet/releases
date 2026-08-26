@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 25, 2026
+
+**Fixed**
+- Generic MCP clients (MCPJam and similar) can now complete OAuth against the hosted MCP server — extra grant types are intersected rather than rejected, unrecognized scopes are dropped, and both the origin and `/mcp` path are accepted as valid resource identifiers. Follow tools that forward the caller's Bearer token to the REST API now work end-to-end.
+
 ## August 24, 2026
 
 **Added**
