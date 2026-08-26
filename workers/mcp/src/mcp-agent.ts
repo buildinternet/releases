@@ -252,13 +252,17 @@ const LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "private" } as const;
  * type clients that render icons MUST support; SVG is the site favicon already
  * public at this URL. Inspector Overview tabs read this field.
  */
-export const MCP_SERVER_ICONS = [
+export const MCP_SERVER_ICONS: Array<{
+  src: string;
+  mimeType?: string;
+  sizes?: string[];
+}> = [
   {
     src: "https://releases.sh/icon.svg",
     mimeType: "image/svg+xml",
     sizes: ["any"],
   },
-] as const;
+];
 
 export async function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer(
