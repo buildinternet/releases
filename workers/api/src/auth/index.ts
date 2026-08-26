@@ -25,10 +25,21 @@ import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
-import { audienceVariants } from "@releases/lib/oauth-jwt";
+import { audienceVariants, mcpResourceAndOrigin } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
-import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
+import {
+  oauthAccessTokenClaims,
+  consentScopeViolation,
+  jwtSessionPayload,
+  OAUTH_SCOPES,
+} from "./entitlement.js";
+import { applyOAuthClientInterop } from "./oauth-client-interop.js";
+import {
+  oauthClientIdFromAuthorizationCode,
+  oauthUserIdFromAuthorizationCode,
+  restrictAuthorizationCodeValue,
+} from "./oauth-grant-scopes.js";
 import { ensureActiveWorkspace, isOrgOwnerOrAdmin } from "./workspace.js";
 import { preserveCustomAvatarOnUpdate } from "../lib/avatar-ingest.js";
 import { kvRateLimitStorage } from "./rate-limit-kv.js";
@@ -560,7 +571,11 @@ export function oauthValidAudiences(env: Bindings): string[] {
   }
   for (const entry of (env.OAUTH_RESOURCE_AUDIENCES ?? "").split(",")) {
     const trimmed = entry.trim();
-    if (trimmed) auds.add(trimmed);
+    if (!trimmed) continue;
+    // MCP identifiers only: origin AND /mcp so a client that copies either
+    // RFC 9728 `resource` (origin) or the transport URL still authorizes.
+    // Do not expand the API origin from BETTER_AUTH_URL the same way.
+    for (const id of mcpResourceAndOrigin(trimmed)) auds.add(id);
   }
   if (auds.size === 0) auds.add(DEFAULT_AUTH_ORIGIN);
   // Accept both the bare-origin and trailing-slash form of every audience. The
@@ -1095,7 +1110,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     githubClientSecret: await resolveSecret(env.GITHUB_CLIENT_SECRET),
   });
   const cookieDomain = deriveCookieDomain(env);
-  const db = deps.db ?? createDb(env.DB);
+  const db: AnyDb = deps.db ?? createDb(env.DB);
   const sendEmail: AuthEmailSender = deps.sendEmail ?? ((msg) => sendAuthEmail(env, msg));
   // Audit-event sink for human-auth business actions (sign-up, sign-in-success,
   // sign-out / session-revoked, email-verified, password-reset-completed). Tests
@@ -1103,6 +1118,19 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
   // are logged separately at the HTTP layer (see index.ts) — a 429 rate-limit
   // never reaches these hooks. See audit.ts and #1427.
   const audit: AuthAuditEmitter = deps.audit ?? makeAuthAudit(env);
+
+  /** Registered `oauth_client.scopes`, or {@link OAUTH_SCOPES} when the row is missing. */
+  async function registeredScopesForClientId(
+    clientId: string | undefined,
+  ): Promise<readonly string[]> {
+    if (!clientId) return OAUTH_SCOPES;
+    const [row] = await db
+      .select({ scopes: oauthClient.scopes })
+      .from(oauthClient)
+      .where(eq(oauthClient.clientId, clientId))
+      .limit(1);
+    return row?.scopes && row.scopes.length > 0 ? row.scopes : OAUTH_SCOPES;
+  }
 
   // Fire-and-forget an email send: hand the REAL send promise to the request's
   // `waitUntil` so it outlives the response (the Better Auth docs flag AWAITING the
@@ -1286,7 +1314,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       // across the two subdomains.
       loginPage: `${releaseWebBase(env)}/login`,
       consentPage: `${releaseWebBase(env)}/oauth/consent`, // page built in sub-project 3; path provisional
-      scopes: ["openid", "profile", "email", "offline_access", "read", "write", "admin"],
+      scopes: [...OAUTH_SCOPES],
       validAudiences: oauthValidAudiences(env),
       // RFC 7591 dynamic client registration. ON so off-the-shelf MCP clients
       // (Claude Desktop, MCP Inspector, agent runtimes) self-register a client_id
@@ -1624,24 +1652,54 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
           // Audit sign-out / session-revoked.
           delete: auditHooks.session.delete,
         },
+        // Generic MCP clients copy extras into authorize `scope=`. Rewrite the
+        // authorization-code blob at persist so token exchange cannot issue a
+        // scope the client (or the user) is not allowed. `hooks.before` on
+        // `/oauth2/token` does not see this value.
+        verification: {
+          create: {
+            before: async (data: { value?: unknown }) => {
+              const value = typeof data.value === "string" ? data.value : undefined;
+              if (!value || !value.includes("authorization_code")) return;
+              const allowedScopes = await registeredScopesForClientId(
+                oauthClientIdFromAuthorizationCode(value),
+              );
+              const userId = oauthUserIdFromAuthorizationCode(value);
+              let role: string | null | undefined;
+              if (userId) {
+                const [row] = await db
+                  .select({ role: user.role })
+                  .from(user)
+                  .where(eq(user.id, userId))
+                  .limit(1);
+                role = row?.role;
+              }
+              const next = restrictAuthorizationCodeValue(value, allowedScopes, role);
+              if (!next) return;
+              return { data: { ...data, value: next } };
+            },
+          },
+        },
       };
     })(),
-    // Per-user scope-entitlement gate on the OAuth consent submission. Rejects a
-    // consent that grants scopes beyond the signed-in user's role BEFORE it is
-    // persisted (the friendly, early half of the fail-closed pair; the token
-    // backstop above is authoritative). Only matches /oauth2/consent; everything
-    // else passes through. getSessionFromCtx reads the cookie/bearer session.
+    // Generic MCP client interop (DCR extra grant_types, kitchen-sink
+    // authorize/consent scope) then the per-user scope-entitlement gate on
+    // consent. Better Auth takes a single `hooks.before` middleware.
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== "/oauth2/consent") return;
-        const authed = await getSessionFromCtx(ctx);
+        const authed = ctx.path === "/oauth2/consent" ? await getSessionFromCtx(ctx) : null;
         const role = (authed?.user as { role?: string } | undefined)?.role;
-        if (consentScopeViolation(role, ctx.body as { accept?: unknown; scope?: unknown })) {
+        const oauthOverride = await applyOAuthClientInterop(ctx, registeredScopesForClientId, role);
+        const consentBody = (oauthOverride?.context.body ?? ctx.body) as
+          | { accept?: unknown; scope?: unknown }
+          | undefined;
+        if (ctx.path === "/oauth2/consent" && consentScopeViolation(role, consentBody)) {
           throw new APIError("BAD_REQUEST", {
             error: "invalid_scope",
             error_description: "requested scopes exceed your entitlement",
           });
         }
+        if (oauthOverride) return oauthOverride;
       }),
       // Response `after` hook: backfill `display_email` for Google One Tap
       // sign-ins. One Tap verifies its own ID token at `/one-tap/callback` and

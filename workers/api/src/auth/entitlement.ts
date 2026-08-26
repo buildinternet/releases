@@ -12,6 +12,15 @@
 /** Identity scopes everyone who signs in may grant. */
 export const IDENTITY_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 
+/** API scope ladder ids. Cumulative with {@link ROLE_LADDER} (read ⊂ write ⊂ admin). */
+export const API_SCOPES = ["read", "write", "admin"] as const;
+
+/**
+ * Full AS `scopes` list. DCR default (plugin default = `scopes`) and the
+ * fallback when an `oauth_client` row is missing on first-use rewrite.
+ */
+export const OAUTH_SCOPES = [...IDENTITY_SCOPES, ...API_SCOPES] as const;
+
 /** API scope ladder per role. Cumulative (read ⊂ write ⊂ admin). */
 export const ROLE_LADDER: Readonly<Record<string, readonly string[]>> = {
   user: ["read"],

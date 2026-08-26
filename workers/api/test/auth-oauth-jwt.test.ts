@@ -53,7 +53,11 @@ function secretBinding(value: string) {
 
 /** Env with the static-root secret + BETTER_AUTH_URL (issuer/audience origin). */
 function env() {
-  return { RELEASES_API_KEY: secretBinding("root-secret"), BETTER_AUTH_URL: ORIGIN } as never;
+  return {
+    RELEASES_API_KEY: secretBinding("root-secret"),
+    BETTER_AUTH_URL: ORIGIN,
+    OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh",
+  } as never;
 }
 
 /** App that injects the local key resolver, then applies the given middleware. */
@@ -108,10 +112,28 @@ describe("OAuth-JWT lane — REST auth middleware", () => {
     expect(res.status).toBe(200);
   });
 
-  it("treats a wrong-audience JWT as an invalid token (401) on an admin route", async () => {
+  it("admits a same-environment MCP-audience JWT (follows tools forward that Bearer)", async () => {
     const res = await app(authMiddleware).request(
       "/",
       auth(await jwt("admin", { aud: "https://mcp.releases.sh" })),
+      env(),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("admits a same-environment MCP /mcp-audience JWT", async () => {
+    const res = await app(authMiddleware).request(
+      "/",
+      auth(await jwt("admin", { aud: "https://mcp.releases.sh/mcp" })),
+      env(),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("treats a wrong-audience JWT as an invalid token (401) on an admin route", async () => {
+    const res = await app(authMiddleware).request(
+      "/",
+      auth(await jwt("admin", { aud: "https://elsewhere.example.com" })),
       env(),
     );
     expect(res.status).toBe(401);

@@ -20,6 +20,7 @@ import {
   isJwtShaped,
   verifyOAuthJwt,
   localKeyResolver,
+  mcpResourceAndOrigin,
   type OAuthJwtConfig,
   type JWTVerifyGetKey,
   type VerifiedOAuthToken,
@@ -112,6 +113,11 @@ function bearer(c: Context<Env>): string {
  * exact-match) — #1483 issuer-mismatch fix. Returns null when no origin can be
  * resolved (e.g. local dev without BETTER_AUTH_URL) — the JWT lane is then
  * simply inert. The JWKS URL is derived origin-relative as `${origin}/api/auth/jwks`.
+ *
+ * Same-environment MCP origin and `/mcp` are also accepted audiences: follows
+ * tools on the MCP worker forward the caller's Bearer to `/v1/me/*`, and those
+ * tokens are minted with `aud` = the MCP resource. Staging never lists a prod
+ * MCP host in `OAUTH_RESOURCE_AUDIENCES`.
  */
 function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
   if (!env.BETTER_AUTH_URL) return null;
@@ -121,7 +127,12 @@ function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
   } catch {
     return null;
   }
-  return { issuer: `${origin}/api/auth`, audience: origin };
+  const mcpAudiences = (env.OAUTH_RESOURCE_AUDIENCES ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .flatMap(mcpResourceAndOrigin);
+  return { issuer: `${origin}/api/auth`, audience: [origin, ...mcpAudiences] };
 }
 
 // This worker IS the authorization server, so it verifies its OWN OAuth/session

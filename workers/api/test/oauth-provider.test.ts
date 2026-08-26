@@ -66,14 +66,17 @@ describe("oauthValidAudiences", () => {
   it("unions the BETTER_AUTH_URL origin with OAUTH_RESOURCE_AUDIENCES entries", () => {
     const auds = oauthValidAudiences({
       BETTER_AUTH_URL: "https://api.releases.sh",
-      OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh, https://api.releases.sh",
+      OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh",
     } as never);
-    // Both slash-forms of each distinct origin, deduped, input-form first.
+    // API origin (slash pair) plus MCP origin AND /mcp (slash pairs). Generic
+    // clients send either RFC 9728 resource (origin) or the transport URL.
     expect(auds).toEqual([
       "https://api.releases.sh",
       "https://api.releases.sh/",
       "https://mcp.releases.sh",
       "https://mcp.releases.sh/",
+      "https://mcp.releases.sh/mcp",
+      "https://mcp.releases.sh/mcp/",
     ]);
   });
 
@@ -85,6 +88,15 @@ describe("oauthValidAudiences", () => {
       OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh",
     } as never);
     expect(auds).toContain("https://mcp.releases.sh/");
+  });
+
+  it("accepts origin/mcp as well as origin for MCP identifiers", () => {
+    const auds = oauthValidAudiences({
+      BETTER_AUTH_URL: "https://api.releases.sh",
+      OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh",
+    } as never);
+    expect(auds).toContain("https://mcp.releases.sh/mcp");
+    expect(auds).toContain("https://mcp.releases.sh");
   });
 
   it("falls back to the api origin (both forms) when nothing is configured", () => {
@@ -165,6 +177,30 @@ describe("oauth provider wiring", () => {
       }),
     );
     expect(regRes.ok).toBe(true);
+    const registered = await db.select().from(oauthClient);
+    expect(registered).toHaveLength(1);
+  });
+
+  it("tolerates extra DCR grant_types (device_code) rather than invalid_client_metadata", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const res = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "MCPJam",
+          redirect_uris: ["https://app.example.com/callback"],
+          token_endpoint_auth_method: "none",
+          grant_types: [
+            "authorization_code",
+            "refresh_token",
+            "urn:ietf:params:oauth:grant-type:device_code",
+          ],
+        }),
+      }),
+    );
+    expect(res.ok).toBe(true);
     const registered = await db.select().from(oauthClient);
     expect(registered).toHaveLength(1);
   });

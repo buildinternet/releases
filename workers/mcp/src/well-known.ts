@@ -41,9 +41,9 @@ export interface ProtectedResourceMetadata {
 /**
  * Build the protected-resource metadata document from the OAuth resource-server
  * env vars, falling back to the prod defaults the auth path uses so the two
- * surfaces never disagree. `resource` is the configured audience (bare origin),
- * which a compliant client echoes back as RFC 8707 `resource` — keeping the AS's
- * minted `aud` equal to what this resource server verifies.
+ * surfaces never disagree. `resource` is the configured audience (bare origin).
+ * The AS and this worker also accept the `/mcp` transport URL as `aud`; see
+ * mcp-cimd-interop.md.
  */
 export function buildProtectedResourceMetadata(env: Env): ProtectedResourceMetadata {
   return {
