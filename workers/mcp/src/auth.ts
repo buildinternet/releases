@@ -17,6 +17,7 @@ import { logEvent } from "@releases/lib/log-event";
 import {
   isJwtShaped,
   verifyOAuthJwt,
+  mcpResourceAndOrigin,
   type OAuthJwtConfig,
   type JWTVerifyGetKey,
 } from "@releases/lib/oauth-jwt";
@@ -40,9 +41,12 @@ const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
  * well-known.ts) so no new config is required there.
  */
 function oauthJwtConfig(env: Env): OAuthJwtConfig {
+  const audience = env.OAUTH_JWT_AUDIENCE || DEFAULT_OAUTH_AUDIENCE;
   return {
     issuer: env.OAUTH_JWT_ISSUER || DEFAULT_OAUTH_ISSUER,
-    audience: env.OAUTH_JWT_AUDIENCE || DEFAULT_OAUTH_AUDIENCE,
+    // Origin and `/mcp`: generic clients mint `aud` from whichever RFC 8707
+    // `resource` they sent. Discovery still advertises the origin.
+    audience: mcpResourceAndOrigin(audience),
   };
 }
 

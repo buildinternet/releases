@@ -150,9 +150,12 @@ grants `read`/`write`/`admin` on those surfaces.
   `https://api.releases.sh` in prod). The API worker's own audience is that same
   origin; the MCP worker's audience is its origin (`https://mcp.releases.sh`,
   already in `OAUTH_RESOURCE_AUDIENCES`), set via the MCP wrangler vars
-  `OAUTH_JWT_ISSUER` / `OAUTH_JWT_AUDIENCE` (staging overrides both). A token
-  minted for the MCP audience won't pass the API worker's audience check, and
-  vice-versa.
+  `OAUTH_JWT_ISSUER` / `OAUTH_JWT_AUDIENCE` (staging overrides both). Both
+  resource servers also accept the MCP `/mcp` transport URL as `aud` (generic
+  clients send either form). The API worker additionally accepts
+  same-environment MCP origin and `/mcp` so follows tools can forward the
+  caller's JWT to `/v1/me/*`. A token minted for a _different_ environment's
+  MCP host still fails. See [mcp-cimd-interop.md](mcp-cimd-interop.md).
 - **Additive, fail-consistent.** A JWT principal carries no forwardable
   credential (`token: null`), so MCP downstream `/v1/lookups` calls fall back to
   the root key (same as the `relu_` lane) and a JWT identity does **not** open

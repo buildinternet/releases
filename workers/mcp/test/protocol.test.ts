@@ -150,9 +150,10 @@ describe("legacy (2025-era) requests", () => {
     // (2026-07-28) leg; it never reaches this fallback.
     expect(initRes.headers.get("content-type")).toContain("text/event-stream");
     const init = parseSseJsonRpc(await initRes.text()) as {
-      result: { serverInfo: { name: string } };
+      result: { serverInfo: { name: string; icons?: { src: string }[] } };
     };
     expect(init.result.serverInfo.name).toBe("releases");
+    expect(init.result.serverInfo.icons?.[0]?.src).toBe("https://releases.sh/icon.svg");
 
     const listRes = await worker.fetch(
       legacy({ jsonrpc: "2.0", id: 2, method: "tools/list" }),

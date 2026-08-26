@@ -13,6 +13,8 @@ import {
   verifyOAuthJwt,
   defaultJwksUrl,
   audienceVariants,
+  mcpResourceAndOrigin,
+  expandAudiences,
   type OAuthJwtConfig,
 } from "./oauth-jwt.js";
 
@@ -237,6 +239,27 @@ describe("verifyOAuthJwt", () => {
     const token = await sign({ scope: "read", audience: "https://evil.example.com/" });
     expect(await verifyOAuthJwt(token, config())).toBeNull();
   });
+
+  it("verifies a /mcp aud when the config lists origin and /mcp", async () => {
+    const token = await sign({ scope: "read", audience: `${AUDIENCE}/mcp` });
+    const res = await verifyOAuthJwt(token, {
+      issuer: ISSUER,
+      audience: mcpResourceAndOrigin(AUDIENCE),
+      keyResolver,
+    });
+    expect(res).not.toBeNull();
+    expect(res!.scopes).toEqual(["read"]);
+  });
+
+  it("verifies an origin aud when the config lists origin and /mcp", async () => {
+    const token = await sign({ scope: "read", audience: AUDIENCE });
+    const res = await verifyOAuthJwt(token, {
+      issuer: ISSUER,
+      audience: mcpResourceAndOrigin(AUDIENCE),
+      keyResolver,
+    });
+    expect(res).not.toBeNull();
+  });
 });
 
 describe("audienceVariants", () => {
@@ -257,5 +280,43 @@ describe("audienceVariants", () => {
   it("keeps the input first (stable order)", () => {
     expect(audienceVariants("https://a/")[0]).toBe("https://a/");
     expect(audienceVariants("https://a")[0]).toBe("https://a");
+  });
+});
+
+describe("mcpResourceAndOrigin", () => {
+  it("adds /mcp next to an origin-shaped identifier", () => {
+    expect(mcpResourceAndOrigin("https://mcp.releases.sh")).toEqual([
+      "https://mcp.releases.sh",
+      "https://mcp.releases.sh/mcp",
+    ]);
+  });
+
+  it("adds the origin next to a /mcp identifier", () => {
+    expect(mcpResourceAndOrigin("https://mcp.releases.sh/mcp")).toEqual([
+      "https://mcp.releases.sh/mcp",
+      "https://mcp.releases.sh",
+    ]);
+  });
+
+  it("treats a trailing slash on /mcp the same as /mcp", () => {
+    expect(mcpResourceAndOrigin("https://mcp-staging.releases.sh/mcp/")).toEqual([
+      "https://mcp-staging.releases.sh/mcp/",
+      "https://mcp-staging.releases.sh",
+    ]);
+  });
+
+  it("passes through a non-URL value", () => {
+    expect(mcpResourceAndOrigin("not-a-url")).toEqual(["not-a-url"]);
+  });
+});
+
+describe("expandAudiences", () => {
+  it("flattens origin and /mcp through slash variants", () => {
+    expect(expandAudiences(mcpResourceAndOrigin("https://mcp.releases.sh"))).toEqual([
+      "https://mcp.releases.sh",
+      "https://mcp.releases.sh/",
+      "https://mcp.releases.sh/mcp",
+      "https://mcp.releases.sh/mcp/",
+    ]);
   });
 });

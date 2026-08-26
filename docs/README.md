@@ -71,6 +71,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 - **[web.md](architecture/web.md)** — the frontend feature reference: product-first URLs, changelog slicing, OG images, org overviews, categories, collections, the media/video pipeline, follows, and the admin hub.
 - **[webhooks.md](webhooks.md)** — the public subscriber contract: delivery headers, HMAC verification (with code samples), retries and DLQ.
 - **[mcp.md](architecture/mcp.md)** — the hosted MCP server: the tool/resource/prompt catalog, auth and scope enforcement, App UIs, and the MCP Registry listing.
+- **[mcp-cimd-interop.md](architecture/mcp-cimd-interop.md)** — generic MCP client OAuth (MCPJam-class): DCR extra `grant_types`, kitchen-sink `scope=`, origin vs `/mcp` resource, forwarded Bearer `aud` on REST.
 - **[workspaces.md](architecture/workspaces.md)** — user-tenancy Workspaces. Not the registry `organizations` — the doc opens with exactly that warning.
 - **[consumption-telemetry.md](architecture/consumption-telemetry.md)** — the demand gauge for programmatic (MCP/API) consumption.
 

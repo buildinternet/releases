@@ -45,8 +45,13 @@ export interface OAuthJwtConfig {
    * every real token (#1483 issuer-mismatch fix).
    */
   issuer: string;
-  /** Expected `aud` — this resource server's audience (e.g. `https://mcp.releases.sh`). */
-  audience: string;
+  /**
+   * Expected `aud` — this resource server's audience (e.g. `https://mcp.releases.sh`),
+   * or every identifier it accepts (origin and `/mcp` for the MCP worker; API
+   * origin plus same-environment MCP ids for REST, so a follows-tool Bearer
+   * minted for MCP verifies here).
+   */
+  audience: string | readonly string[];
   /** JWKS endpoint. Defaults to the issuer's origin + `/api/auth/jwks` (see `defaultJwksUrl`). */
   jwksUrl?: string;
   /**
@@ -166,6 +171,38 @@ export function audienceVariants(aud: string): string[] {
 }
 
 /**
+ * Origin and `/mcp` forms of an MCP resource identifier. Generic clients copy
+ * either RFC 9728 `resource` (the origin) or the transport URL (`origin/mcp`)
+ * into authorize `resource=` (RFC 8707). Call this only on MCP identifiers,
+ * never on the API origin: expanding `https://api.releases.sh` would invent
+ * a non-resource `…/mcp`.
+ *
+ * Both directions: an origin-shaped value gains `/mcp`, a `/mcp` value gains
+ * its origin. Trailing-slash `/mcp/` is treated as `/mcp`. Non-URLs pass
+ * through unchanged.
+ */
+export function mcpResourceAndOrigin(resource: string): string[] {
+  try {
+    const url = new URL(resource);
+    if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
+      return [resource, url.origin];
+    }
+    if (url.pathname === "/" || url.pathname === "") {
+      return [resource, `${url.origin}/mcp`];
+    }
+  } catch {
+    // Non-URL env values stay as configured.
+  }
+  return [resource];
+}
+
+/** Slash-tolerant expansion of one or many configured audiences. */
+export function expandAudiences(audience: string | readonly string[]): string[] {
+  const listed = typeof audience === "string" ? [audience] : [...audience];
+  return [...new Set(listed.flatMap(audienceVariants))];
+}
+
+/**
  * Verify an OAuth JWT access token against the AS JWKS. Checks signature,
  * `iss`, `aud`, and `exp` (jose enforces expiry). Returns the projected token on
  * success, or `null` on ANY failure (bad signature, wrong issuer/audience,
@@ -179,17 +216,18 @@ export async function verifyOAuthJwt(
   try {
     const { payload } = await jwtVerify(token, resolveKeySet(config), {
       issuer: config.issuer,
-      // Accept both the bare-origin and trailing-slash forms of the audience.
-      // The AS stamps `aud` verbatim from the client's RFC 8707 `resource`
-      // parameter, and MCP clients derive that resource via WHATWG URL
-      // normalization — `new URL("https://mcp.releases.sh").href` is
+      // Accept both the bare-origin and trailing-slash forms of every configured
+      // audience. The AS stamps `aud` verbatim from the client's RFC 8707
+      // `resource` parameter, and MCP clients derive that resource via WHATWG
+      // URL normalization — `new URL("https://mcp.releases.sh").href` is
       // `"https://mcp.releases.sh/"` — so a root-hosted resource server sees
       // tokens whose `aud` carries a trailing slash even though our configured
       // audience does not (and vice-versa for clients that honor the bare
       // protected-resource `resource` value). jose does exact per-entry string
       // matching, so we must offer both. Kept in lockstep with the AS allow-list
-      // (`oauthValidAudiences`), which emits the same pair.
-      audience: audienceVariants(config.audience),
+      // (`oauthValidAudiences`), which emits the same pairs. Multiple identifiers
+      // (origin and `/mcp`) are flattened the same way.
+      audience: expandAudiences(config.audience),
     });
     const role = (payload as Record<string, unknown>)["https://releases.sh/role"];
     return {

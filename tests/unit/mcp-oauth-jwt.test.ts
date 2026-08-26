@@ -82,6 +82,16 @@ describe("MCP OAuth-JWT lane", () => {
     }
   });
 
+  it("resolves a JWT whose aud is the /mcp transport URL", async () => {
+    const r = await resolveMcpAuth(
+      req({ Authorization: `Bearer ${await jwt("read", { aud: `${AUDIENCE}/mcp` })}` }),
+      env(),
+      { jwtKeyResolver: keyResolver },
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.identity.scopes).toEqual(["read"]);
+  });
+
   it("maps a read-only JWT to read scope", async () => {
     const r = await resolveMcpAuth(
       req({ Authorization: `Bearer ${await jwt("openid read")}` }),
