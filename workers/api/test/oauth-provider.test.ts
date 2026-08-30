@@ -205,6 +205,48 @@ describe("oauth provider wiring", () => {
     expect(registered).toHaveLength(1);
   });
 
+  it("registers an opencode-shaped body (bare loopback redirect, no application_type)", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const res = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "opencode",
+          redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    expect(res.ok).toBe(true);
+    const registered = await db.select().from(oauthClient);
+    expect(registered).toHaveLength(1);
+  });
+
+  it("registers a Cursor-shaped body (explicit web + private-use scheme + https)", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const res = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Cursor",
+          application_type: "web",
+          redirect_uris: [
+            "cursor://anysphere.cursor-mcp/oauth/callback",
+            "https://cursor.com/oauth/callback",
+          ],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    expect(res.ok).toBe(true);
+    const registered = await db.select().from(oauthClient);
+    expect(registered).toHaveLength(1);
+  });
+
   // Security guard: now that DCR is public + unauthenticated, the register
   // endpoint is the untrusted client's only input. A dangerous redirect scheme
   // (javascript:/data:/…) would execute in the authorizing user's browser, so the

@@ -26,6 +26,46 @@ describe("applyOAuthClientInterop", () => {
     });
   });
 
+  it("applies both grant_types intersection and application_type default in one register body", async () => {
+    const out = await applyOAuthClientInterop(
+      {
+        path: "/oauth2/register",
+        body: {
+          client_name: "opencode-like",
+          grant_types: ["authorization_code", "refresh_token", DEVICE_CODE],
+          redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+        },
+      },
+      async () => OAUTH_SCOPES,
+    );
+    expect(out).toEqual({
+      context: {
+        body: {
+          client_name: "opencode-like",
+          grant_types: ["authorization_code", "refresh_token"],
+          redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+          application_type: "native",
+        },
+      },
+    });
+  });
+
+  it("returns void for a register body needing neither rewrite", async () => {
+    const out = await applyOAuthClientInterop(
+      {
+        path: "/oauth2/register",
+        body: {
+          client_name: "Plain Web Client",
+          grant_types: ["authorization_code", "refresh_token"],
+          redirect_uris: ["https://app.example.com/callback"],
+          application_type: "web",
+        },
+      },
+      async () => OAUTH_SCOPES,
+    );
+    expect(out).toBeUndefined();
+  });
+
   it("downscopes kitchen-sink authorize scope= to the registered list", async () => {
     const out = await applyOAuthClientInterop(
       {
