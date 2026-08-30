@@ -20,6 +20,20 @@ This worker does implement RFC 8628 for the seeded `releases-cli` client (`devic
 
 **Do not.** Add `device_code` or `jwt-bearer` to the DCR supported-grant list without shipping that grant through oauth-provider. Do not implement RFC 8628 for DCR clients just so the metadata document parses. Do not add CIMD as a side effect of this interop fix: that is a 1.7 upgrade.
 
+## 1a. `invalid_client_metadata` on `application_type` (opencode, Cursor — forward-compat, not live on this stack)
+
+**Error (AS, DCR `POST /oauth2/register`, Better Auth 1.7 only):** `@better-auth/oauth-provider` 1.7 classifies a registration body that omits `application_type` as `"web"` (better-auth/better-auth#10913), then rejects loopback-http and private-use-scheme redirect URIs for a `"web"` client (better-auth/better-auth#10946) — even though RFC 8252 §7 requires exactly those URI shapes for a native client.
+
+**Why a generic client does it.** opencode registers a bare RFC 7591 body: a loopback `http://127.0.0.1:<port>/…` redirect URI and no `application_type` at all. Cursor registers an explicit `application_type: "web"` alongside a mixed redirect-URI set — a private-use-scheme `cursor://anysphere.cursor-mcp/oauth/callback` plus an `https://…` URI (see [forum.cursor.com/t/…/136907](https://forum.cursor.com/t/cursor-does-not-send-application-type-native-when-registering-mcp-oauth-clients/136907)). Neither client shape declares `application_type: "native"` even though both need native-client redirect-URI handling, and MCP's 2026-07-28 spec update requires native clients to send that field.
+
+**Rule.** Default a registration body with no `application_type` to `"native"` when its `redirect_uris` are consistent with a native client (loopback-http / private-use-scheme, or a private-use scheme mixed with valid-native https). Coerce an explicit `application_type: "web"` to `"native"` only when the client mixes in a private-use-scheme redirect URI and every URI is a valid-native shape — leave a `"web"` client with loopback-http-only or pure-https redirects untouched, and never touch an already-`"native"` body.
+
+**What we do.** `defaultRegistrationApplicationType` and `coerceExplicitWebToNativeForPrivateUseScheme` in `workers/api/src/auth/oauth-application-type.ts`, applied by `applyOAuthClientInterop` on `/oauth2/register` alongside the `grant_types` rewrite (composed on the same body).
+
+**This stack is `@better-auth/oauth-provider@1.6.25`.** Its register schema has no `application_type` field at all — zod strips the key — so this rewrite is behaviorally inert today: no client is accepted or rejected differently either way. It exists so (a) registration bodies are already MCP-2026-07-28-spec-correct, and (b) a future upgrade to Better Auth 1.7 does not regress opencode/Cursor-shaped clients. Ported from buildinternet/uploads PRs #885–#887; uploads PR #886 also carried a pnpm/bun dist patch for a 1.7-only native-client validator bug — that patch has no target on 1.6.25 and is deliberately not ported here.
+
+**Do not.** Port the uploads dist patch before this stack is actually on Better Auth 1.7. Widen the native-defaulting rule to plain `https://` redirect URIs (that is a legitimate web-client shape). Treat this section as live behavior on the current stack — verify against the pinned `@better-auth/oauth-provider` version before assuming otherwise.
+
 ## 2. `invalid_scope` on authorize or consent
 
 **Error (AS, `/oauth2/authorize` or `/oauth2/consent`):**
