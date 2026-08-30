@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, max, min, sql, type SQL } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
@@ -41,7 +42,6 @@ import {
   ProductActivityResponseSchema,
   ProductHeatmapResponseSchema,
   CollectionListResponseSchema,
-  errorEnvelopeSchema,
   ResolveResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
@@ -162,7 +162,7 @@ productRoutes.get(
       },
       400: {
         description: "Invalid kind value",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -222,11 +222,11 @@ productRoutes.get(
       },
       400: {
         description: "Invalid kind value",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -276,15 +276,15 @@ productRoutes.post(
       },
       400: {
         description: "Missing required fields",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Source or target org not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       409: {
         description: "Slug conflict or reserved slug",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -528,11 +528,11 @@ const getProductDetailRoute = describeRoute({
     400: {
       description:
         "Bare slug supplied on `/products/:identifier` (#698 — use the org-scoped path or `/v1/lookups/product-by-slug`)",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });
@@ -560,15 +560,15 @@ productRoutes.post(
       },
       400: {
         description: "Missing required fields or invalid category",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       409: {
         description: "Slug conflict or reserved slug",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -808,15 +808,15 @@ const patchProductRoute = describeRoute({
     },
     400: {
       description: "Invalid category or bare slug supplied on the bare path",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     409: {
       description: "Domain alias collision",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });
@@ -847,11 +847,11 @@ productRoutes.get(
       },
       400: {
         description: "Bare slug supplied on `/products/:identifier/tags`",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -886,11 +886,11 @@ productRoutes.put(
       },
       400: {
         description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -935,11 +935,11 @@ productRoutes.delete(
       },
       400: {
         description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -986,11 +986,11 @@ productRoutes.delete(
       },
       400: {
         description: "Bare slug supplied on `/products/:identifier`",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -1050,7 +1050,7 @@ const resolveRoute = describeRoute({
     },
     404: {
       description: "Neither a product nor a source matched",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });
@@ -1336,11 +1336,11 @@ const getProductActivityRoute = describeRoute({
     },
     400: {
       description: "Invalid date format or range",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });
@@ -1381,7 +1381,7 @@ const getProductHeatmapRoute = describeRoute({
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });
@@ -1419,7 +1419,7 @@ const getProductCollectionsRoute = describeRoute({
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });

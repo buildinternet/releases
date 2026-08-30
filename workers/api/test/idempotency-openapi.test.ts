@@ -48,7 +48,12 @@ const IDEMPOTENT_SUCCESS_STATUS: Record<(typeof IDEMPOTENT_POST_PATHS)[number], 
   "/feedback": "202",
 };
 
-async function idempotencySpec(): Promise<{ paths?: Record<string, { post?: Operation }> }> {
+type Spec = {
+  paths?: Record<string, { post?: Operation }>;
+  components?: { schemas?: Record<string, unknown> };
+};
+
+async function idempotencySpec(): Promise<Spec> {
   const v1 = new Hono<Env>();
   mountV1Routes(v1);
   const app = new Hono<Env>();
@@ -59,10 +64,15 @@ async function idempotencySpec(): Promise<{ paths?: Record<string, { post?: Oper
     { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
   );
   expect(response.status).toBe(200);
-  return (await response.json()) as { paths?: Record<string, { post?: Operation }> };
+  return (await response.json()) as Spec;
 }
 
-function expectStandardErrorEnvelope(schema: unknown, context: string): void {
+/** Every documented 4xx/5xx response now points here instead of inlining the schema. */
+function expectErrorEnvelopeRef(schema: unknown, context: string): void {
+  expect(schema, context).toEqual({ $ref: "#/components/schemas/ErrorEnvelope" });
+}
+
+function expectStandardErrorEnvelopeSchema(schema: unknown, context: string): void {
   expect(schema, context).toMatchObject({
     type: "object",
     required: ["error"],
@@ -83,7 +93,15 @@ function expectStandardErrorEnvelope(schema: unknown, context: string): void {
 
 describe("idempotent POST OpenAPI contract", () => {
   test("rejects a malformed idempotency error response schema", () => {
-    expect(() => expectStandardErrorEnvelope({ type: "string" }, "malformed")).toThrow();
+    expect(() => expectStandardErrorEnvelopeSchema({ type: "string" }, "malformed")).toThrow();
+  });
+
+  test("registers the single ErrorEnvelope schema every error response refs", async () => {
+    const spec = await idempotencySpec();
+    expectStandardErrorEnvelopeSchema(
+      spec.components?.schemas?.ErrorEnvelope,
+      "components.schemas.ErrorEnvelope",
+    );
   });
 
   test("advertises the key contract on exactly the eight approved POST operations", async () => {
@@ -125,11 +143,11 @@ describe("idempotent POST OpenAPI contract", () => {
         type: "string",
         enum: ["true"],
       });
-      expectStandardErrorEnvelope(
+      expectErrorEnvelopeRef(
         responses["409"]?.content?.["application/json"]?.schema,
         `${path} 409`,
       );
-      expectStandardErrorEnvelope(
+      expectErrorEnvelopeRef(
         responses["503"]?.content?.["application/json"]?.schema,
         `${path} 503`,
       );

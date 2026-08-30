@@ -30,7 +30,7 @@ export async function GET(
   try {
     resolved = await api.resolve({ orgSlug, slug: sourceSlug });
   } catch (err) {
-    return formatErrorResponse(err, "Not found");
+    return formatErrorResponse(err, "Not found", format);
   }
 
   if (resolved.kind === "product") {
@@ -51,7 +51,7 @@ export async function GET(
     try {
       source = await api.sourceDetail({ orgSlug, sourceSlug }, opts);
     } catch (err) {
-      return formatErrorResponse(err, "Source not found");
+      return formatErrorResponse(err, "Source not found", format);
     }
   }
 

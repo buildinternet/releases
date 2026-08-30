@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         api.collectionReleases(slug, { limit: ATOM_DEFAULT_MAX_ENTRIES }),
       ]);
     } catch (err) {
-      return formatErrorResponse(err, "Collection not found");
+      return formatErrorResponse(err, "Collection not found", format);
     }
     return collectionAtomResponse(request, collection, feed);
   }
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         api.collectionReleases(slug, { limit: 20 }),
       ]);
     } catch (err) {
-      return formatErrorResponse(err, "Collection not found");
+      return formatErrorResponse(err, "Collection not found", format);
     }
     const baseUrl = getBaseUrl(request);
     const detail = collectionToMarkdown(collection, { baseUrl });
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       api.collectionReleases(slug, { limit: 20 }),
     ]);
   } catch (err) {
-    return formatErrorResponse(err, "Collection not found");
+    return formatErrorResponse(err, "Collection not found", format);
   }
   return jsonFormatResponse({
     ...collection,

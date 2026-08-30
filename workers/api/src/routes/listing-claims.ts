@@ -1,11 +1,11 @@
 import { Hono, type Context } from "hono";
-import { describeRoute, resolver } from "hono-openapi";
+import { describeRoute } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   ListingClaimBodySchema,
   ListingClaimVerifyBodySchema,
   ListingPromoteBodySchema,
-  errorEnvelopeSchema,
   type OrgClaim,
   type ListingPromoteResult,
 } from "@buildinternet/releases-api-types";
@@ -115,15 +115,15 @@ listingClaimHandlers.post(
       200: { description: "Existing verified claim returned as-is (OrgClaim)" },
       401: {
         description: "Sign-in required",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Lane disabled, or the domain is not listed",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       429: {
         description: "Rate limited",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -213,19 +213,19 @@ listingClaimHandlers.post(
       200: { description: "ClaimVerifyResult (verified may be true or false)" },
       401: {
         description: "Sign-in required",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "No such claim for this caller",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       409: {
         description: "Claim expired",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       429: {
         description: "Rate limited",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -355,9 +355,9 @@ listingClaimHandlers.get(
       200: { description: "ListingClaimsResult" },
       401: {
         description: "Sign-in required",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
-      404: { description: "Lane disabled" },
+      404: errorResponse("Lane disabled"),
     },
   }),
   requireListingEnabled,
@@ -415,23 +415,23 @@ listingClaimHandlers.post(
       200: { description: "ListingPromoteResult" },
       401: {
         description: "Sign-in required",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       403: {
         description: "No verified claim on this domain",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Lane or promotion flag disabled, or the domain is not listed",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       409: {
         description: "Promotion already in progress for this org",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       429: {
         description: "Rate limited",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

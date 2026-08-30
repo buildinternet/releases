@@ -33,7 +33,7 @@ import {
   type ParsedChangelogRelease,
   type GitHubReleaseLike,
 } from "@buildinternet/releases-core/changelog-parse";
-import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
@@ -104,19 +104,19 @@ const fetchChangelogsRoute = describeRoute({
     },
     400: {
       description: "Missing/invalid `repo`, or not a parseable github owner/repo coordinate",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     404: {
       description: "Repo not found on GitHub",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     502: {
       description: "GitHub auth error or upstream 5xx",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     503: {
       description: "GitHub rate limit exceeded",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });
@@ -309,19 +309,19 @@ const parseChangelogRoute = describeRoute({
     },
     400: {
       description: "Missing/invalid `repo`, unparseable coordinate, or invalid `source`",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     404: {
       description: "Repo not found, or an explicit `path` that does not exist",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     502: {
       description: "GitHub auth error or upstream 5xx",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
     503: {
       description: "GitHub rate limit exceeded",
-      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
     },
   },
 });

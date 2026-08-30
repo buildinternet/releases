@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -10,7 +11,6 @@ import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError } from "@releases/lib/releases-error";
 import {
-  errorEnvelopeSchema,
   SourceSummariesResponseSchema,
   CreateSourceSummaryBodySchema,
   CreateSourceSummaryResponseSchema,
@@ -34,7 +34,7 @@ app.get(
       },
       404: {
         description: "Source not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -82,11 +82,11 @@ app.post(
       },
       400: {
         description: "Missing or invalid required fields",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Source not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

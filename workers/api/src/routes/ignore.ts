@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { z } from "zod";
 import { eq, and, or, count, desc } from "drizzle-orm";
@@ -14,7 +15,6 @@ import {
   AddIgnoredUrlBodySchema,
   AddIgnoredUrlResponseSchema,
   DeleteIgnoredUrlResponseSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
@@ -67,11 +67,11 @@ ignoreRoutes.get(
       },
       400: {
         description: "Malformed `url` query param",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -132,11 +132,11 @@ ignoreRoutes.post(
       },
       400: {
         description: "Missing required field: url",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -179,11 +179,11 @@ ignoreRoutes.delete(
       },
       400: {
         description: "Malformed `:url` path segment",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

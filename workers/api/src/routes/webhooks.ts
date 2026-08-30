@@ -28,6 +28,7 @@ import { respondError } from "../lib/error-response.js";
 import { authenticatedIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 import {
   ValidationError,
   NotFoundError,
@@ -158,16 +159,26 @@ webhooksRoutes.post("/webhooks/:id/rotate-secret", async (c) => {
   return c.json({ secretVersion: newVersion, signingKey });
 });
 
+const adminTestWebhookOpenApi = idempotentPostOpenApi({
+  tags: ["Webhooks"],
+  summary: "Queue an administrative webhook test delivery",
+  successStatus: 200,
+  successDescription: "The queued synthetic event identifier.",
+});
+
 webhooksRoutes.post(
   "/webhooks/:id/test",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Webhooks"],
-      summary: "Queue an administrative webhook test delivery",
-      successStatus: 200,
-      successDescription: "The queued synthetic event identifier.",
-    }),
-  ),
+  describeRoute({
+    ...adminTestWebhookOpenApi,
+    responses: {
+      ...adminTestWebhookOpenApi.responses,
+      403: errorResponse("Admin scope required"),
+      404: errorResponse("Webhook subscription not found"),
+      503: errorResponse(
+        "WEBHOOK_DELIVERY_QUEUE binding missing, or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
   async (c) => {
     return idempotentPost(c, {
       principal: authenticatedIdempotencyPrincipal({

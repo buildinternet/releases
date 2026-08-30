@@ -18,7 +18,7 @@ export async function GET(
   try {
     org = await api.orgDetail(orgSlug);
   } catch (err) {
-    return formatErrorResponse(err, "Organization not found");
+    return formatErrorResponse(err, "Organization not found", format);
   }
 
   const overview = org.overview;

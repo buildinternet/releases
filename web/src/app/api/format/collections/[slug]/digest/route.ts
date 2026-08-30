@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       api.collectionWeeklyDigests(slug, { limit: ATOM_DEFAULT_MAX_ENTRIES }),
     ]);
   } catch (err) {
-    return formatErrorResponse(err, "Collection not found");
+    return formatErrorResponse(err, "Collection not found", format);
   }
 
   if (format === "atom") {

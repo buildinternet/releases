@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq, and } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -13,7 +14,6 @@ import {
   RegenerateOverviewBodySchema,
   RegenerateOverviewResponseSchema,
   ProductOverviewResponseSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -75,11 +75,11 @@ app.post(
       },
       400: {
         description: "Missing required fields, malformed body, or invalid citations",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

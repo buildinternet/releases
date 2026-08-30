@@ -26,6 +26,7 @@ import { ValidationError, UnauthorizedError, NotFoundError } from "@releases/lib
 import { authenticatedIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 
 export const apiTokenRoutes = new Hono<Env>();
 
@@ -71,16 +72,25 @@ function toPublicRow(row: typeof apiTokens.$inferSelect) {
   };
 }
 
+const createTokenOpenApi = idempotentPostOpenApi({
+  tags: ["Authentication"],
+  summary: "Create a scoped API token",
+  successStatus: 201,
+  successDescription: "Created API token, including the one-time secret.",
+});
+
 apiTokenRoutes.post(
   "/tokens",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Authentication"],
-      summary: "Create a scoped API token",
-      successStatus: 201,
-      successDescription: "Created API token, including the one-time secret.",
-    }),
-  ),
+  describeRoute({
+    ...createTokenOpenApi,
+    responses: {
+      ...createTokenOpenApi.responses,
+      400: errorResponse(
+        "Invalid JSON body, missing/invalid name, scopes, principalType, principalId, or expiresAt",
+      ),
+      403: errorResponse("Admin scope required"),
+    },
+  }),
   async (c) => {
     return idempotentPost(c, {
       principal: authenticatedIdempotencyPrincipal({

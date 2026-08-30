@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq, count, isNotNull, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -48,7 +49,6 @@ import {
   UpdateCategoryResponseSchema,
   CategoryReleasesResponseSchema,
   TagDetailSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 
@@ -297,7 +297,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Slug is neither canonical nor a known alias",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -381,15 +381,15 @@ taxonomyRoutes.patch(
       },
       400: {
         description: "Empty body, malformed alias, or alias collides with a canonical slug",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Slug is not a canonical category",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       409: {
         description: "Alias is already claimed by a different category row",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -573,7 +573,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Slug is neither canonical nor a known alias",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -658,7 +658,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Tag not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

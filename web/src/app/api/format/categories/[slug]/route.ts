@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     try {
       feed = await api.categoryReleases(slug, { limit: ATOM_DEFAULT_MAX_ENTRIES });
     } catch (err) {
-      return formatErrorResponse(err, "Category not found");
+      return formatErrorResponse(err, "Category not found", format);
     }
     return categoryAtomResponse(request, { slug, name }, feed);
   }
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     try {
       feed = await api.categoryReleases(slug, { limit: 20 });
     } catch (err) {
-      return formatErrorResponse(err, "Category not found");
+      return formatErrorResponse(err, "Category not found", format);
     }
     const baseUrl = getBaseUrl(request);
     const body = categoryReleaseFeedToMarkdown(slug, name, feed.releases, feed.pagination, {
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       api.categoryReleases(slug, { limit: 20 }),
     ]);
   } catch (err) {
-    return formatErrorResponse(err, "Category not found");
+    return formatErrorResponse(err, "Category not found", format);
   }
   return jsonFormatResponse({
     slug,

@@ -24,7 +24,7 @@ export async function GET(
         api.orgReleases(orgSlug, { limit: ATOM_DEFAULT_MAX_ENTRIES }),
       ]);
     } catch (err) {
-      return formatErrorResponse(err, "Organization not found");
+      return formatErrorResponse(err, "Organization not found", format);
     }
     return orgAtomResponse(request, org, feed);
   }
@@ -37,7 +37,7 @@ export async function GET(
         api.orgReleases(orgSlug, { limit: 10 }),
       ]);
     } catch (err) {
-      return formatErrorResponse(err, "Organization not found");
+      return formatErrorResponse(err, "Organization not found", format);
     }
     const baseUrl = getBaseUrl(request);
     return markdownResponse(orgToMarkdown(org, { baseUrl, recentReleases: feed.releases }), {
@@ -50,7 +50,7 @@ export async function GET(
   try {
     org = await api.orgDetail(orgSlug);
   } catch (err) {
-    return formatErrorResponse(err, "Organization not found");
+    return formatErrorResponse(err, "Organization not found", format);
   }
 
   // The API's public-read endpoints gate admin-only fields (e.g. playbook)

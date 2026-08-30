@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -44,7 +45,6 @@ import {
   LinkReleaseCoverageResponseSchema,
   UnlinkReleaseCoverageResponseSchema,
   ReleasesWithMediaResponseSchema,
-  errorEnvelopeSchema,
   type ReleaseCoverageSibling,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
@@ -83,7 +83,7 @@ releaseRoutes.get(
       },
       400: {
         description: "Unsupported query — only `?hasMedia=true` is accepted",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -207,11 +207,11 @@ releaseRoutes.get(
       400: {
         description:
           "Invalid `exclude` value, unparseable `since`/`until`, invalid `minImportance`, or `source` and `org` both supplied",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Source or org not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -502,11 +502,11 @@ releaseRoutes.post(
       },
       400: {
         description: "Missing/invalid body, self-coverage, or malformed `decidedBy`",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "One or more release IDs not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

@@ -28,7 +28,7 @@ import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { estimateTokens } from "@buildinternet/releases-core/tokens";
 import { CHANGELOG_TOKEN_BRACKETS } from "@buildinternet/releases-core/changelog-slice";
 import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
-import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { createDb } from "../db.js";
 import { releaseWebBase } from "../queries/releases.js";
 import type { Env } from "../index.js";
@@ -185,7 +185,7 @@ whatsChangedRoutes.get(
       },
       400: {
         description: "Missing/invalid query parameters",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

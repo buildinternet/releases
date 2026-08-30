@@ -31,7 +31,7 @@ export async function productFormatResponse(
     // The product was already resolved by the caller, so only the feed fetch
     // can fail here — map upstream failures to the shared format-route error
     // (404 for a genuine not-found, else 502) instead of leaking a raw 500.
-    return formatErrorResponse(err, "Product not found");
+    return formatErrorResponse(err, "Product not found", format);
   }
 
   if (format === "atom") {

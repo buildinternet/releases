@@ -16,6 +16,29 @@ export default function NotFound() {
         >
           Back to home
         </Link>
+        <p className="text-xs text-stone-400 dark:text-stone-600 mt-10">
+          Where to look next:{" "}
+          <a
+            href="/llms.txt"
+            className="underline underline-offset-4 hover:text-stone-600 dark:hover:text-stone-300"
+          >
+            llms.txt
+          </a>
+          {", "}
+          <Link
+            href="/docs"
+            className="underline underline-offset-4 hover:text-stone-600 dark:hover:text-stone-300"
+          >
+            docs
+          </Link>
+          {", "}
+          <a
+            href="https://api.releases.sh/v1/docs"
+            className="underline underline-offset-4 hover:text-stone-600 dark:hover:text-stone-300"
+          >
+            API
+          </a>
+        </p>
       </div>
     </div>
   );

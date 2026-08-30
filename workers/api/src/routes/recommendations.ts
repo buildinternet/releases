@@ -20,6 +20,7 @@ import { respondError } from "../lib/error-response.js";
 import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 import {
   ValidationError,
   ServiceUnavailableError,
@@ -59,16 +60,26 @@ function parseRecommendationType(v: unknown): string | null {
     : null;
 }
 
+const recommendationsPostOpenApi = idempotentPostOpenApi({
+  tags: ["Recommendations"],
+  summary: "Submit a source recommendation",
+  successStatus: 202,
+  successDescription: "Accepted recommendation identifier.",
+});
+
 recommendationRoutes.post(
   "/recommendations",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Recommendations"],
-      summary: "Submit a source recommendation",
-      successStatus: 202,
-      successDescription: "Accepted recommendation identifier.",
-    }),
-  ),
+  describeRoute({
+    ...recommendationsPostOpenApi,
+    responses: {
+      ...recommendationsPostOpenApi.responses,
+      400: errorResponse("Invalid type, URL, or contact email"),
+      429: errorResponse("Rate limited"),
+      503: errorResponse(
+        "Recommendation intake disabled (kill switch), or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
   async (c) => {
     if (await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)) {
       return respondError(c, new ServiceUnavailableError());

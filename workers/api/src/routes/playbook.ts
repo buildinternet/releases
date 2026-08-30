@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -19,7 +20,6 @@ import {
   PlaybookResponseSchema,
   UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 
@@ -80,11 +80,11 @@ app.patch(
       },
       400: {
         description: "Missing or invalid `notes` field, or malformed JSON body",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

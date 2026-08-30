@@ -14,6 +14,7 @@ import { resolveSourceFromContext } from "../utils.js";
 import { validateJson } from "../lib/validate.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { hideInProduction } from "../openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 import { syncFirecrawlMonitor } from "../lib/firecrawl-sync.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -53,6 +54,11 @@ const postFirecrawlSyncRoute = describeRoute({
     200: {
       description: "Updated source metadata; the `firecrawl` block reflects the new monitor state.",
     },
+    400: errorResponse("Invalid body (schedule/proxy/goal/target)"),
+    401: errorResponse("Missing or invalid Bearer token"),
+    403: errorResponse("Token lacks write scope"),
+    404: errorResponse("Source not found"),
+    500: errorResponse("A required Firecrawl secret is unbound"),
   },
 });
 
