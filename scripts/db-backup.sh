@@ -72,6 +72,7 @@ done < <(
                AND name NOT LIKE 'releases_fts%'
                AND name != '_cf_KV'
                ORDER BY name" 2>/dev/null \
+    | sed -n '/^[[{]/,$p' \
     | python3 -c "import json,sys; print('\n'.join(r['name'] for r in json.load(sys.stdin)[0]['results']))"
 )
 if ((${#TABLES[@]} < 10)); then
