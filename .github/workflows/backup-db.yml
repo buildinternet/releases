@@ -1,0 +1,79 @@
+name: Backup prod D1
+
+# Nightly disaster-recovery backup of the production D1 (released-db).
+# Runs scripts/db-backup.sh (full data-only export, all real tables — see
+# docs/architecture/local-development.md → Prod D1 backups), encrypts the
+# dump with age, and stores it in two places:
+#   1. R2: buildinternet-backups/releases/ (off-laptop, same CF account)
+#   2. GHA artifact, 90-day retention (off-Cloudflare copy)
+#
+# The dump contains real user data, so it is ALWAYS encrypted before it
+# leaves the runner. Decryption needs the age private key, which lives only
+# on Zach's machine (~/Code/.backups/releases/age-backup-key.txt) — the
+# recipient below is the public half and is safe to commit.
+#
+# R2 retention is a 60-day lifecycle rule scoped to the releases/ prefix
+# (set via `wrangler r2 bucket lifecycle`); longer-tail weekly retention is
+# handled by the local `bun run db:backup` rotation.
+
+on:
+  schedule:
+    # 08:00 UTC = 4am ET: off-peak for the brief write pause during export.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup-db
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.4.0"
+  # wrangler 4.88+ requires Node 22+. bunx invokes wrangler's bin via the
+  # `#!/usr/bin/env node` shebang, so the runner's Node version is what counts.
+  NODE_VERSION: "24.15.0"
+  AGE_RECIPIENT: age1yl39fay4s3lwck56wdvh79v2ty2wjal8qxul5cl7hxk5q54kkefsl8tlhu
+
+jobs:
+  backup:
+    name: Export, encrypt, upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      - name: Run backup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_DIR: ${{ github.workspace }}/backup-out
+        run: ./scripts/db-backup.sh
+      - name: Encrypt dump
+        run: |
+          DUMP="$(ls backup-out/released-db-*.sql.gz)"
+          age -r "${AGE_RECIPIENT}" -o "${DUMP}.age" "${DUMP}"
+          rm -f "${DUMP}"
+          echo "DUMP_AGE=${DUMP}.age" >> "$GITHUB_ENV"
+          echo "DUMP_NAME=$(basename "${DUMP}.age")" >> "$GITHUB_ENV"
+      - name: Upload to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          bunx wrangler r2 object put \
+            "buildinternet-backups/releases/${DUMP_NAME}" \
+            --file "${DUMP_AGE}" --remote
+      - name: Upload artifact (off-Cloudflare copy)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.DUMP_NAME }}
+          path: ${{ env.DUMP_AGE }}
+          retention-days: 90
+          if-no-files-found: error
