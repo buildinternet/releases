@@ -66,17 +66,18 @@ TABLES=()
 while IFS= read -r table; do
   TABLES+=("${table}")
 done < <(
-  wrangler d1 execute released-db --remote --config workers/api/wrangler.jsonc --json \
+  bunx wrangler d1 execute released-db --remote --config workers/api/wrangler.jsonc --json \
     --command "SELECT name FROM sqlite_master WHERE type='table'
                AND name NOT LIKE 'sqlite_%'
                AND name NOT LIKE 'releases_fts%'
                AND name != '_cf_KV'
-               ORDER BY name" 2>/dev/null \
+               ORDER BY name" 2>"${WORK_DIR}/enumerate.err" \
     | sed -n '/^[[{]/,$p' \
     | python3 -c "import json,sys; print('\n'.join(r['name'] for r in json.load(sys.stdin)[0]['results']))"
 )
 if ((${#TABLES[@]} < 10)); then
   echo "error: table enumeration returned only ${#TABLES[@]} tables — refusing to back up a partial list" >&2
+  cat "${WORK_DIR}/enumerate.err" >&2 || true
   exit 1
 fi
 echo "Backing up ${#TABLES[@]} tables."
@@ -87,7 +88,7 @@ for table in "${TABLES[@]}"; do
 done
 
 echo "Exporting released-db (data-only, all real tables)..."
-wrangler d1 export released-db --remote --no-schema "${TABLE_ARGS[@]}" \
+bunx wrangler d1 export released-db --remote --no-schema "${TABLE_ARGS[@]}" \
   --output "${DUMP_FILE}" --config workers/api/wrangler.jsonc
 
 # Verify the dump actually contains data for the core tables. A backup that
