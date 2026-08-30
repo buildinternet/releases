@@ -140,9 +140,17 @@ export function checkUrlSanity(url: string | undefined, sourceUrl: string): stri
 
   let parsed: URL;
   try {
-    parsed = new URL(trimmed, sourceUrl);
+    // Absolute URLs parse without a base. Bun 1.4 / Node 26 reject an empty
+    // or invalid base even when the first argument is already absolute
+    // (`new URL("https://example.com/v1", "")` throws), so don't pass
+    // sourceUrl until the relative-URL fallback.
+    parsed = new URL(trimmed);
   } catch {
-    return `URL "${trimmed}" could not be parsed — use the release's canonical absolute URL.`;
+    try {
+      parsed = new URL(trimmed, sourceUrl);
+    } catch {
+      return `URL "${trimmed}" could not be parsed — use the release's canonical absolute URL.`;
+    }
   }
 
   let sourceHost: string;
