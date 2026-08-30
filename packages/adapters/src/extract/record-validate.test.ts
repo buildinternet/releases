@@ -56,6 +56,12 @@ describe("checkUrlSanity", () => {
     expect(reason).toMatch(/could not be parsed/i);
   });
 
+  test("accepts an absolute URL when the source base is empty (Bun 1.4 URL constructor)", () => {
+    // `new URL(absolute, "")` throws on Bun 1.4 / Node 26. Absolute entry
+    // URLs must still parse; an empty source only skips the host-family check.
+    expect(checkUrlSanity("https://example.com/changelog/v1", "")).toBeNull();
+  });
+
   describe("public-suffix-aware registrable domain (co.uk-style)", () => {
     const CO_UK_SOURCE = "https://www.example.co.uk/changelog";
 
@@ -195,14 +201,10 @@ describe("validateRecords", () => {
   });
 
   test("fails open when a check throws — record is accepted, not rejected", () => {
-    // sourceUrl that fails URL parsing inside checkUrlSanity's `new URL(sourceUrl)`
-    // is already handled gracefully (falls back to no host check), so to
-    // exercise the fail-open wrapper we pass an entry shape that would blow up
-    // a naive validator: this confirms validateRecords itself never throws.
+    // Empty sourceUrl used to be a cheap way to skip host matching. On Bun 1.4
+    // it must not turn a valid absolute entry URL into a parse rejection.
     const entries = [makeEntry({ url: "https://example.com/changelog/v1" })];
     expect(() => validateRecords(entries, { sourceUrl: "" })).not.toThrow();
-    // With an empty sourceUrl, host-mismatch check is skipped (no valid source
-    // host to compare against), so this entry is accepted.
     expect(validateRecords(entries, { sourceUrl: "" })).toEqual([]);
   });
 

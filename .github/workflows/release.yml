@@ -23,7 +23,7 @@ permissions:
   pull-requests: write # open/update the Version Packages PR
 
 env:
-  BUN_VERSION: "1.3.14"
+  BUN_VERSION: "1.4.0"
 
 jobs:
   version:
