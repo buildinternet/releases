@@ -28,6 +28,18 @@ const CONTEXT = `Quick facts:
 - Links below point to Markdown versions of each page. Any page on this site is also available as Markdown by appending \`.md\` to its URL (for example, ${BASE_URL}/docs/installation.md) or by sending \`Accept: text/markdown\` to the canonical URL.
 - Org and source pages have machine-readable suffixes — \`.md\` (LLM-friendly), \`.json\`, \`.atom\` — e.g. ${BASE_URL}/anthropic.md.`;
 
+const WHEN_TO_USE = `## When to use Releases
+
+Reach for Releases when the question is "what changed?" in the software you use, build on, or compete with:
+
+- Check what shipped across a stack this week — every release from the tools in use, including the ones that never got a version number.
+- Verify whether a specific fix or feature has actually landed before upgrading or debugging against it.
+- Watch a vendor: follow one company's releases across its blog, changelog, GitHub, and app-store notes.
+- See who has shipped integrations with a product recently.
+- Research roadmap and product-development opportunities: survey what the rest of the ecosystem is shipping as input for deciding what to build next.
+
+Public reads need no account or key. Fastest paths: \`releases search "<query>"\` (CLI), the \`search\` and \`whats_changed\` MCP tools, or \`GET ${API_BASE_URL}/v1/releases/latest\`. Releases covers what shipped — for how-to/API-usage documentation of a library, use a docs index instead.`;
+
 const MACHINE_ENDPOINTS = `## Machine-readable endpoints
 
 - [OpenAPI 3.1 spec](${API_BASE_URL}/v1/openapi.json): Every public REST endpoint's request and response shapes — the source of truth.
@@ -61,6 +73,8 @@ export function GET() {
 > ${SUMMARY}
 
 ${CONTEXT}
+
+${WHEN_TO_USE}
 
 ${sections}
 

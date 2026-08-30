@@ -28,14 +28,22 @@ interface MarkdownResponseOptions {
    * `X-Robots-Tag: noindex` instead, matching the `.json`/`.atom` treatment.
    */
   noindex?: boolean;
+  /**
+   * HTTP status code. Defaults to 200. When set to a non-200 status (e.g. a
+   * markdown 404 body), the canonical Link header is suppressed — a canonical
+   * pointer on an error response doesn't make sense — regardless of whether
+   * `canonical` was also passed.
+   */
+  status?: number;
 }
 
 export function markdownResponse(body: string, opts: MarkdownResponseOptions): NextResponse {
+  const status = opts.status ?? 200;
   const headers: Record<string, string> = {
     "Content-Type": "text/markdown; charset=utf-8",
     "Cache-Control": CACHE_POLICIES[opts.cache],
   };
-  if (opts.canonical) headers.Link = `<${opts.canonical}>; rel="canonical"`;
+  if (opts.canonical && status === 200) headers.Link = `<${opts.canonical}>; rel="canonical"`;
   if (opts.noindex) headers["X-Robots-Tag"] = "noindex";
-  return new NextResponse(body, { headers });
+  return new NextResponse(body, { status, headers });
 }

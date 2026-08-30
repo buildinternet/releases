@@ -45,7 +45,7 @@ export async function GET(
       api.collectionWeeklyDigest(slug, week),
     ]);
   } catch (err) {
-    return formatErrorResponse(err, "Digest not found");
+    return formatErrorResponse(err, "Digest not found", format);
   }
 
   const baseUrl = getBaseUrl(request);

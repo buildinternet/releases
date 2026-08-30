@@ -1,5 +1,6 @@
-import { generateSpecs } from "hono-openapi";
+import { generateSpecs, resolver } from "hono-openapi";
 import type { Hono } from "hono";
+import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
 import type { Env } from "./index.js";
 
 // Hides the route from /v1/openapi.json on production. Staging and local
@@ -96,6 +97,12 @@ export function mountOpenApi(v1: Hono<Env>) {
   // `ENVIRONMENT` is set in workers/api/wrangler.jsonc (production | staging).
   v1.get("/openapi.json", async (c) => {
     const isStaging = c.env.ENVIRONMENT === "staging";
+    // The single error schema every documented 4xx/5xx response references
+    // via `{ $ref: "#/components/schemas/ErrorEnvelope" }` (see
+    // `lib/openapi-error.ts`) instead of inlining the schema at each of the
+    // ~200 response sites.
+    const errorEnvelopeOpenApiSchema = (await resolver(errorEnvelopeSchema).toOpenAPISchema())
+      .schema;
     const spec = await generateSpecs(
       v1,
       {
@@ -122,6 +129,9 @@ export function mountOpenApi(v1: Hono<Env>) {
               ]
             : [{ url: "https://api.releases.sh", description: "Production" }],
           components: {
+            schemas: {
+              ErrorEnvelope: errorEnvelopeOpenApiSchema,
+            },
             securitySchemes: {
               bearerAuth: {
                 type: "http",

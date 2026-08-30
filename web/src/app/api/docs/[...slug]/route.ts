@@ -1,10 +1,17 @@
-import { type NextRequest } from "next/server";
-import { notFound } from "next/navigation";
+import { type NextRequest, NextResponse } from "next/server";
 import matter from "gray-matter";
 import { adminDocs } from "@/flags";
 import { getBaseUrl } from "@/lib/base-url";
 import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
+import { MARKDOWN_404_BODY } from "@/lib/markdown-404";
 import { markdownResponse } from "@/lib/markdown-response";
+
+function notFoundMarkdown(): NextResponse {
+  return new NextResponse(MARKDOWN_404_BODY, {
+    status: 404,
+    headers: { "Content-Type": "text/markdown; charset=utf-8" },
+  });
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string[] }> }) {
   const { slug: slugParts } = await params;
@@ -14,12 +21,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   try {
     doc = loadDoc(slug);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") notFound();
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return notFoundMarkdown();
     throw err;
   }
 
   const showAdmin = adminDocs;
-  if (doc.frontmatter.adminOnly && !showAdmin) notFound();
+  if (doc.frontmatter.adminOnly && !showAdmin) return notFoundMarkdown();
 
   const parsed = matter(doc.public);
   const transformed = showAdmin

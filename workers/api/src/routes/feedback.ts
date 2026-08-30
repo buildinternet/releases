@@ -26,6 +26,7 @@ import { respondError } from "../lib/error-response.js";
 import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 import {
   ValidationError,
   ServiceUnavailableError,
@@ -56,16 +57,26 @@ function coerceClientKind(v: unknown): string {
     : "external";
 }
 
+const feedbackPostOpenApi = idempotentPostOpenApi({
+  tags: ["Feedback"],
+  summary: "Submit product feedback",
+  successStatus: 202,
+  successDescription: "Accepted feedback identifier.",
+});
+
 feedbackRoutes.post(
   "/feedback",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Feedback"],
-      summary: "Submit product feedback",
-      successStatus: 202,
-      successDescription: "Accepted feedback identifier.",
-    }),
-  ),
+  describeRoute({
+    ...feedbackPostOpenApi,
+    responses: {
+      ...feedbackPostOpenApi.responses,
+      400: errorResponse("Missing/invalid JSON body, or message shorter than the minimum length"),
+      429: errorResponse("Rate limited"),
+      503: errorResponse(
+        "Feedback intake disabled (kill switch), or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
   async (c) => {
     if (await flag(c.env.FLAGS, c.env.FEEDBACK_DISABLED, FLAGS.feedbackDisabled)) {
       return respondError(c, new ServiceUnavailableError());

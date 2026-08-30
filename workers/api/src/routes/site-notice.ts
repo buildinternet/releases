@@ -9,6 +9,7 @@ import { validateJson } from "../lib/validate.js";
 import { getStoredSiteNotice, putStoredSiteNotice } from "../queries/site-settings.js";
 import { respondError } from "../lib/error-response.js";
 import { ForbiddenError } from "@releases/lib/releases-error";
+import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
 
 export const siteNoticeRoutes = new Hono<Env>();
 
@@ -61,7 +62,11 @@ siteNoticeRoutes.put(
         description: "The stored notice",
         content: { "application/json": { schema: resolver(SiteNoticeResponseSchema) } },
       },
-      403: { description: "Caller lacks admin scope" },
+      400: errorResponse("Invalid notice body"),
+      403: {
+        description: "Caller lacks admin scope",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
     },
   }),
   // In-handler admin guard: root key or a token with `admin` scope. Runs even in

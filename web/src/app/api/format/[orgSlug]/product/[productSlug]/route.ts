@@ -15,7 +15,7 @@ export async function GET(
   try {
     product = await api.productDetail({ orgSlug, productSlug });
   } catch (err) {
-    return formatErrorResponse(err, "Product not found");
+    return formatErrorResponse(err, "Product not found", format);
   }
 
   return productFormatResponse(request, orgSlug, product, format);

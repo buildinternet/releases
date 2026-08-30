@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -8,10 +9,7 @@ import { OVERVIEW_RELEASE_LIMIT } from "@buildinternet/releases-core/overview";
 import { fetchOverviewInputsForOrg } from "@releases/core-internal/overview-eligibility";
 import { authMiddleware } from "../middleware/auth.js";
 import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
-import {
-  OverviewInputsResponseSchema,
-  errorEnvelopeSchema,
-} from "@buildinternet/releases-api-types";
+import { OverviewInputsResponseSchema } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
@@ -57,11 +55,11 @@ app.get(
       },
       400: {
         description: "Invalid `window` or `limit` query parameter",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

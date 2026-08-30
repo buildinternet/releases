@@ -15,6 +15,7 @@ import { hideInProduction } from "../openapi.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { InternalError, ValidationError } from "@releases/lib/releases-error";
+import { errorResponse } from "../lib/openapi-error.js";
 
 export const errataRoutes = new Hono<Env>();
 
@@ -40,6 +41,11 @@ errataRoutes.put(
     description:
       "Admin-only write surface for the managed-agents errata store. Promotes stable observations from agent runs into the org's errata.md.",
     security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: 'Memory upserted (`status: "created" | "updated"`)' },
+      400: errorResponse("Invalid orgId, missing/empty content, or content exceeds the byte cap"),
+      403: errorResponse("Admin scope required"),
+    },
   }),
   validateJson(ErrataBodySchema),
   async (c) => {

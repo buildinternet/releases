@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   domainAliases,
@@ -40,7 +41,6 @@ import {
   LookupSourceBySlugResponseSchema,
   LookupProductBySlugResponseSchema,
   DomainLookupResponseSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 
 export const lookupRoutes = new Hono<Env>();
@@ -406,7 +406,7 @@ lookupRoutes.post(
       },
       400: {
         description: "Missing JSON body, unsupported provider, or malformed coordinate",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -500,11 +500,11 @@ lookupRoutes.get(
       },
       400: {
         description: "Missing `slug` query parameter",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "No source matches the slug",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -575,11 +575,11 @@ lookupRoutes.get(
       },
       400: {
         description: "Missing `coordinate`, or not a parseable github owner/repo coordinate",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "No visible source matches the coordinate",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -662,11 +662,11 @@ lookupRoutes.get(
       },
       400: {
         description: "Missing `slug` query parameter",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "No product matches the slug",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -729,16 +729,16 @@ lookupRoutes.get(
       },
       400: {
         description: "Missing or invalid `domain` query parameter",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description:
           "Domain doesn't match any registered org or product (and JIT found no valid manifest)",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       429: {
         description: "Per-IP rate limit on the outbound JIT probe branch",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

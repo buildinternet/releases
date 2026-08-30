@@ -31,6 +31,25 @@ describe("format response indexing headers", () => {
       expect(res.headers.get("X-Robots-Tag")).toBeNull();
       expect(res.headers.get("Link")).toBeNull();
     });
+
+    it("defaults to status 200 when no status is given", () => {
+      const res = markdownResponse("# hi", { cache: "static" });
+      expect(res.status).toBe(200);
+    });
+
+    it("honors an explicit status override", () => {
+      const res = markdownResponse("# 404", { cache: "static", status: 404 });
+      expect(res.status).toBe(404);
+    });
+
+    it("suppresses the canonical Link header on a non-200 status even when canonical is set", () => {
+      const res = markdownResponse("# 404", {
+        cache: "dynamic",
+        canonical: "https://releases.sh/vercel/nextjs",
+        status: 404,
+      });
+      expect(res.headers.get("Link")).toBeNull();
+    });
   });
 
   describe("jsonFormatResponse", () => {

@@ -1,5 +1,5 @@
-import { resolver, type DescribeRouteOptions } from "hono-openapi";
-import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
+import type { DescribeRouteOptions } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "./openapi-error.js";
 
 const RETENTION_DESCRIPTION =
   "Optional idempotency key. Reuse the same key only for an identical request; successful responses are replayable for 24 hours.";
@@ -41,11 +41,11 @@ export function idempotentPostOpenApi(input: {
       409: {
         description:
           "The key is already processing, or was reused with a different request fingerprint.",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       503: {
         description: "Idempotency storage or response replay is temporarily unavailable.",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   };

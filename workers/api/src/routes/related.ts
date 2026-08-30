@@ -15,6 +15,7 @@
 
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { sql, inArray, eq } from "drizzle-orm";
 import {
   sources,
@@ -36,7 +37,6 @@ import { isRoutineAppRelease } from "@buildinternet/releases-core/importance";
 import {
   RelatedReleasesResponseSchema,
   RelatedSourcesResponseSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { RelatedReleaseItem, RelatedSourceItem } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
@@ -130,11 +130,11 @@ relatedRoutes.get(
       },
       400: {
         description: "Missing `release` query parameter.",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "No release matches the supplied id.",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -428,11 +428,11 @@ relatedRoutes.get(
       },
       400: {
         description: "Missing `source` query parameter.",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
         description: "No source matches the supplied identifier.",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

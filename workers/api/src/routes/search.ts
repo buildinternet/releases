@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { logEvent } from "@releases/lib/log-event";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/rendering/formatters.js";
@@ -7,7 +8,6 @@ import {
   foldSourcesIntoCatalog,
   mergeCollectionHits,
   UnifiedSearchResponseSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import type {
@@ -413,7 +413,7 @@ searchRoutes.get(
       400: {
         description:
           "Missing `q`, invalid `domain` hostname, unknown `kind` or `category` value, or unparseable `since`/`until`",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     release = await api.release(id);
   } catch (err) {
-    return formatErrorResponse(err, "Release not found");
+    return formatErrorResponse(err, "Release not found", "md");
   }
   return markdownResponse(releaseToMarkdown(release, { baseUrl: getBaseUrl(request) }), {
     // No standalone `/release/:id` HTML page exists, so there's no canonical

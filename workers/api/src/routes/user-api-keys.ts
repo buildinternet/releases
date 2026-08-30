@@ -26,6 +26,7 @@ import { respondError } from "../lib/error-response.js";
 import { userIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -69,16 +70,24 @@ export function scopeLabel(permissions: Record<string, string[]> | null): ApiSco
 export const userApiKeyHandlers = new Hono<Env>();
 const encoder = new TextEncoder();
 
+const createUserApiKeyOpenApi = idempotentPostOpenApi({
+  tags: ["Authentication"],
+  summary: "Create a user API key",
+  successStatus: 201,
+  successDescription: "Created user API key, including the one-time secret.",
+});
+
 userApiKeyHandlers.post(
   "/api-keys",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Authentication"],
-      summary: "Create a user API key",
-      successStatus: 201,
-      successDescription: "Created user API key, including the one-time secret.",
-    }),
-  ),
+  describeRoute({
+    ...createUserApiKeyOpenApi,
+    responses: {
+      ...createUserApiKeyOpenApi.responses,
+      400: errorResponse("Invalid JSON body, name, scope, or expiresInDays"),
+      401: errorResponse("Sign-in required"),
+      409: errorResponse("Active user API key limit reached"),
+    },
+  }),
   async (c) => {
     const session = c.get("session");
     if (!session) return respondError(c, new UnauthorizedError("Sign in required"));

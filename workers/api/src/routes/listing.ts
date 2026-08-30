@@ -1,11 +1,11 @@
 import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
 import { eq } from "drizzle-orm";
 import {
   ListingValidateBodySchema,
   ListingActivateBodySchema,
   ListingCapabilitiesSchema,
-  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { FLAGS, flag } from "@releases/lib/flags";
@@ -101,10 +101,10 @@ listingRoutes.post(
       "Fetches https://{domain}/.well-known/releases.json live (HTTPS-only, 64KB, 5s), validates it against the v2 manifest schema, and returns a preview: identity, products, and per-locator classification, plus whether the domain is already listed. Public and anonymous; rate limited.",
     responses: {
       200: { description: "ListingValidationResult" },
-      404: { description: "Lane disabled" },
+      404: errorResponse("Lane disabled"),
       429: {
         description: "Rate limited",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),
@@ -141,16 +141,16 @@ listingRoutes.post(
       200: { description: "Existing stub; tracking stamp updated (ListingActivateResult)" },
       409: {
         description: "Domain already listed (tracked)",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       400: {
         description: "Manifest invalid or unfetchable",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
-      404: { description: "Lane disabled" },
+      404: errorResponse("Lane disabled"),
       429: {
         description: "Rate limited",
-        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
   }),

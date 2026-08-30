@@ -46,6 +46,7 @@ import { respondError } from "../lib/error-response.js";
 import { userIdempotencyPrincipal } from "../lib/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -102,16 +103,28 @@ meWebhookHandlers.get("/me/webhooks", async (c) => {
   return c.json({ subscriptions });
 });
 
+const createWebhookOpenApi = idempotentPostOpenApi({
+  tags: ["Webhooks"],
+  summary: "Create a personal webhook subscription",
+  successStatus: 201,
+  successDescription: "Created webhook subscription, including its one-time signing key.",
+});
+
 meWebhookHandlers.post(
   "/me/webhooks",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Webhooks"],
-      summary: "Create a personal webhook subscription",
-      successStatus: 201,
-      successDescription: "Created webhook subscription, including its one-time signing key.",
-    }),
-  ),
+  describeRoute({
+    ...createWebhookOpenApi,
+    responses: {
+      ...createWebhookOpenApi.responses,
+      400: errorResponse("Invalid url/description/scope/releaseType, or an unsafe webhook target"),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Organization, source, or product not found"),
+      429: errorResponse("Maximum webhook subscriptions per account reached"),
+      503: errorResponse(
+        "WEBHOOK_HMAC_MASTER not configured, or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
   async (c) => {
     const session = c.get("session");
     if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
@@ -475,16 +488,26 @@ meWebhookHandlers.delete("/me/webhooks/:id", async (c) => {
   return new Response(null, { status: 204 });
 });
 
+const rotateWebhookSecretOpenApi = idempotentPostOpenApi({
+  tags: ["Webhooks"],
+  summary: "Rotate a personal webhook signing key",
+  successStatus: 200,
+  successDescription: "The new secret version and one-time signing key.",
+});
+
 meWebhookHandlers.post(
   "/me/webhooks/:id/rotate-secret",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Webhooks"],
-      summary: "Rotate a personal webhook signing key",
-      successStatus: 200,
-      successDescription: "The new secret version and one-time signing key.",
-    }),
-  ),
+  describeRoute({
+    ...rotateWebhookSecretOpenApi,
+    responses: {
+      ...rotateWebhookSecretOpenApi.responses,
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Webhook subscription not found, or not owned by the caller"),
+      503: errorResponse(
+        "WEBHOOK_HMAC_MASTER not configured, or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
   async (c) => {
     const session = c.get("session");
     if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
@@ -510,16 +533,27 @@ meWebhookHandlers.post(
   },
 );
 
+const testWebhookOpenApi = idempotentPostOpenApi({
+  tags: ["Webhooks"],
+  summary: "Queue a personal webhook test delivery",
+  successStatus: 200,
+  successDescription: "The queued synthetic event identifier.",
+});
+
 meWebhookHandlers.post(
   "/me/webhooks/:id/test",
-  describeRoute(
-    idempotentPostOpenApi({
-      tags: ["Webhooks"],
-      summary: "Queue a personal webhook test delivery",
-      successStatus: 200,
-      successDescription: "The queued synthetic event identifier.",
-    }),
-  ),
+  describeRoute({
+    ...testWebhookOpenApi,
+    responses: {
+      ...testWebhookOpenApi.responses,
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Webhook subscription not found, or not owned by the caller"),
+      429: errorResponse("Per-subscription or per-user test-delivery rate limit exceeded"),
+      503: errorResponse(
+        "WEBHOOK_DELIVERY_QUEUE binding missing, or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
   async (c) => {
     const session = c.get("session");
     if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
