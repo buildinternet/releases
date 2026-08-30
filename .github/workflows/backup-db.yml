@@ -3,24 +3,29 @@ name: Backup prod D1
 # Nightly disaster-recovery backup of the production D1 (released-db).
 # Runs scripts/db-backup.sh (full data-only export, all real tables — see
 # docs/architecture/local-development.md → Prod D1 backups), encrypts the
-# dump with age, and stores it in two places:
-#   1. R2: buildinternet-backups/releases/ (off-laptop, same CF account)
-#   2. GHA artifact, 90-day retention (off-Cloudflare copy)
+# dump with age, and uploads it to R2: buildinternet-backups/releases/.
+#
+# NO GHA artifact: this repo is public, and artifacts on public repos are
+# downloadable by any signed-in GitHub user — even encrypted, the prod DB
+# must not be published. The off-Cloudflare copy is the local
+# `bun run db:backup` lane.
 #
 # The dump contains real user data, so it is ALWAYS encrypted before it
 # leaves the runner. Decryption needs the age private key, which lives only
-# on Zach's machine (~/Code/.backups/releases/age-backup-key.txt) — the
+# on the operator's machine (~/Code/.backups/releases/age-backup-key.txt) — the
 # recipient below is the public half and is safe to commit.
 #
-# R2 retention is a 60-day lifecycle rule scoped to the releases/ prefix
-# (set via `wrangler r2 bucket lifecycle`); longer-tail weekly retention is
-# handled by the local `bun run db:backup` rotation.
+# R2 retention is a 365-day lifecycle rule scoped to the releases/ prefix
+# (set via `wrangler r2 bucket lifecycle`, rule `releases-db-expiry`).
 
 on:
   schedule:
     # 08:00 UTC = 4am ET: off-peak for the brief write pause during export.
     - cron: "0 8 * * *"
   workflow_dispatch:
+  # TEMPORARY pre-merge smoke trigger — remove before merging.
+  push:
+    branches: [claude/d1-local-backup-strategy-5e20a5]
 
 concurrency:
   group: backup-db
@@ -70,10 +75,3 @@ jobs:
           bunx wrangler r2 object put \
             "buildinternet-backups/releases/${DUMP_NAME}" \
             --file "${DUMP_AGE}" --remote
-      - name: Upload artifact (off-Cloudflare copy)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ${{ env.DUMP_NAME }}
-          path: ${{ env.DUMP_AGE }}
-          retention-days: 90
-          if-no-files-found: error
