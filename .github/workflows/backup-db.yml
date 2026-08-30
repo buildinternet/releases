@@ -23,9 +23,6 @@ on:
     # 08:00 UTC = 4am ET: off-peak for the brief write pause during export.
     - cron: "0 8 * * *"
   workflow_dispatch:
-  # TEMPORARY pre-merge smoke trigger — remove before merging.
-  push:
-    branches: [claude/d1-local-backup-strategy-5e20a5]
 
 concurrency:
   group: backup-db

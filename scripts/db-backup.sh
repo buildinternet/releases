@@ -92,14 +92,16 @@ bunx wrangler d1 export released-db --remote --no-schema "${TABLE_ARGS[@]}" \
   --output "${DUMP_FILE}" --config workers/api/wrangler.jsonc
 
 # Verify the dump actually contains data for the core tables. A backup that
-# silently exported nothing is worse than a failed run.
+# silently exported nothing is worse than a failed run. Counts are NOT
+# printed: in CI this log is public (public repo), and row counts — user
+# counts especially — shouldn't be published nightly.
 for table in organizations sources releases user; do
   count="$(grep -c "^INSERT INTO \"${table}\"" "${DUMP_FILE}" || true)"
   if ((count == 0)); then
     echo "error: verification failed — no INSERT rows for table '${table}' in the dump" >&2
     exit 1
   fi
-  echo "  ${table}: ${count} insert statements"
+  echo "  ${table}: ok"
 done
 
 gzip -9 -c "${DUMP_FILE}" > "${OUT_FILE}"
