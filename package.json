@@ -44,6 +44,7 @@
     "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",
     "db:query": "node scripts/run-timed.mjs 30 -- wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
     "db:pull": "./scripts/db-pull.sh",
+    "db:backup": "./scripts/db-backup.sh",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
