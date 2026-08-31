@@ -3,6 +3,13 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 30, 2026
+
+**Added**
+- OpenAPI spec now registers the error envelope as a named `ErrorEnvelope` component — previously inlined anonymously at every error response, so code generators and API tooling can reference the `{ error: { code, type, message, details? } }` shape directly.
+- Nonexistent API and docs paths return a `text/markdown` 404 body — with pointers to `llms.txt`, the docs index, the REST API base, and the OpenAPI spec — so AI agents and tools hitting a wrong endpoint get actionable next steps instead of an HTML shell or empty body.
+- `llms.txt` gains a "When to use" section: what questions releases.sh answers well (what shipped across a stack, who shipped integrations, roadmap/product research), the fastest call paths (CLI, MCP tools, REST), and an explicit non-goal.
+
 ## August 25, 2026
 
 **Fixed**
