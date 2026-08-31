@@ -20,14 +20,17 @@
  * registration. Both opencode and Cursor fail `/oauth2/register` on 1.7
  * unless the registration body is corrected before the plugin validates it.
  *
- * This stack pins `@better-auth/oauth-provider@1.6.25`. Its register schema
- * has no `application_type` field at all, so zod strips the key and this
- * rewrite is behaviorally inert today — no client is rejected either way.
- * It exists for two reasons: (a) emit MCP-2026-07-28-spec-correct
- * registration bodies now, and (b) make a future upgrade to Better Auth 1.7
- * not regress opencode/Cursor-shaped clients. Uploads PR #886 also carried a
- * pnpm/bun dist patch for a 1.7-only native-client validator bug; that patch
- * is 1.7-only and has no target here, so it is deliberately not ported.
+ * This stack now runs `@better-auth/oauth-provider@1.7.2`, where the register
+ * schema does carry `application_type` — so this rewrite is live, not the
+ * inert forward-compat it was under the 1.6.25 pin it was written against.
+ *
+ * Routing Cursor to the native branch exposes a second upstream bug: 1.7's
+ * native validator accepts only authority-free reverse-domain private-use
+ * URIs, and rejects the host-bearing `cursor://anysphere.cursor-mcp/oauth/callback`
+ * form (better-auth/better-auth#10956, #10946 — not fixed as of 1.7.2). The
+ * dist patch from uploads PR #886 is therefore ported here as
+ * `patches/@better-auth%2Foauth-provider@1.7.2.patch`; delete it once an
+ * upstream release ships the fix.
  *
  * All helpers here are pure: they never mutate the input body, and return
  * `undefined` to mean "no change" so callers can leave the document as

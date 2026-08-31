@@ -92,7 +92,8 @@
     "@anthropic-ai/sdk": "^0.120.0"
   },
   "overrides": {
-    "kysely": "^0.28.17"
+    "kysely": "^0.28.17",
+    "better-call": "1.4.0"
   },
   "keywords": [
     "changelog",
@@ -147,5 +148,8 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "bun@1.4.0"
+  "packageManager": "bun@1.4.0",
+  "patchedDependencies": {
+    "@better-auth/oauth-provider@1.7.2": "patches/@better-auth%2Foauth-provider@1.7.2.patch"
+  }
 }

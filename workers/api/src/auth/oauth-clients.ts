@@ -74,6 +74,19 @@ export async function hashClientSecret(secret: string): Promise<string> {
   return base64Url.encode(new Uint8Array(digest), { padding: false });
 }
 
+/**
+ * Whether a client row is a PUBLIC (PKCE, secretless) client.
+ *
+ * Better Auth 1.7 dropped the `public` column from the `oauthClient` model —
+ * publicness is now carried solely by `token_endpoint_auth_method: "none"`, and
+ * the adapter strips the unknown field on write. Read both: the auth method is
+ * authoritative for anything written on 1.7+, the retained legacy column covers
+ * rows created under 1.6.
+ */
+export function isPublicClientRow(row: Record<string, unknown>): boolean {
+  return row.tokenEndpointAuthMethod === "none" || Boolean(row.public);
+}
+
 /** Project a raw adapter row to the secret-free public shape. */
 export function toPublicClient(row: Record<string, unknown>): PublicOAuthClient {
   return {
@@ -83,7 +96,7 @@ export function toPublicClient(row: Record<string, unknown>): PublicOAuthClient 
     scopes: (row.scopes as string[]) ?? [],
     trusted: Boolean(row.skipConsent),
     disabled: Boolean(row.disabled),
-    public: Boolean(row.public),
+    public: isPublicClientRow(row),
     type: (row.type as string | null) ?? null,
     tokenEndpointAuthMethod: (row.tokenEndpointAuthMethod as string | null) ?? null,
     createdAt: row.createdAt,
@@ -173,7 +186,7 @@ export async function rotateClientSecret(
 ): Promise<RotateResult> {
   const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
   if (!row) return { status: "not_found" };
-  if (row.public) return { status: "public_no_secret" };
+  if (isPublicClientRow(row)) return { status: "public_no_secret" };
   const rawSecret = generateClientSecret();
   await adapter.update({
     model: OAUTH_CLIENT_MODEL,

@@ -228,7 +228,10 @@ function ConnectionsSection() {
     setBusy(provider);
     setError(null);
     try {
-      const res = await unlinkAccount({ providerId: provider, accountId });
+      // Better Auth 1.7 keys account identity on (issuer, accountId) and
+      // dropped `providerId` from the unlink input — `accountId` alone
+      // identifies the row. `provider` is still used for the UI copy below.
+      const res = await unlinkAccount({ accountId });
       if (res?.error) {
         setError(res.error.message ?? `Could not disconnect ${PROVIDER_META[provider].label}.`);
         return;
