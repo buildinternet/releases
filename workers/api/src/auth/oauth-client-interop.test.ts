@@ -92,7 +92,7 @@ describe("applyOAuthClientInterop", () => {
       "user",
     );
     expect(out).toEqual({
-      context: { body: { accept: true, client_id: "c1", scope: "openid read" } },
+      context: { body: { accept: true, client_id: "c1", scope: "openid read offline_access" } },
     });
   });
 });

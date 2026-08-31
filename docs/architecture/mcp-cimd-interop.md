@@ -52,6 +52,14 @@ invalid_scope: The following scopes are invalid: extra, admin
 
 **Do not.** Expand DCR default scopes to whatever a client puts in `scope=`. Do not fail the whole authorize when a usable subset remains. Do not grant `admin` to a non-admin because the client copied it from discovery.
 
+### 2a. `offline_access`: no refresh token without it
+
+**Symptom.** The client gets a 1h access token and no `refresh_token`, so the user is bounced through interactive re-auth at expiry. `@better-auth/oauth-provider` issues a refresh token only when the grant's scopes carry `offline_access`; MCP clients build `scope=` from the protected-resource metadata (`workers/mcp/src/well-known.ts`), which advertises the API ladder (`read write admin`) and no identity scopes, so they never ask for it.
+
+**What we do.** `offline_access` is an `IDENTITY_SCOPE` (`workers/api/src/auth/entitlement.ts`), so it is in the provider `scopes` list — which is also the DCR registration default — and every role is entitled to it. `oauth-grant-scopes.ts` then _unions_ it into the rewritten scope on authorize, consent, and the code blob for any client registered with it. Existing `oauth_client` rows were backfilled by `workers/api/migrations/20260831130000_oauth_client_offline_access.sql`. Ported from [uploads#913](https://github.com/buildinternet/uploads/pull/913).
+
+**Do not.** Let an `offline_access`-only request through: with no real scope alongside it the rewrite clears the list so the plugin's `invalid_scope` fires, rather than minting a refresh-token-only grant. Note the plugin also requires PKCE (or an OIDC nonce) once `offline_access` is in the request — a non-issue here, since our clients are PKCE clients and the plugin defaults `requirePKCE` to true even for confidential ones.
+
 ## 3. `invalid_target` / requested resource not configured
 
 **Error (AS, authorize):**

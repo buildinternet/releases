@@ -30,13 +30,45 @@ describe("restrictOAuthQueryScopes", () => {
   });
 
   it("leaves the query alone when every requested id is already allowed", () => {
-    expect(restrictOAuthQueryScopes({ scope: "openid read" }, SELF_REGISTERED)).toBeUndefined();
+    // …except for the offline_access union, which is always appended for a
+    // client registered with it (that is the point of the rewrite).
+    expect(restrictOAuthQueryScopes({ scope: "openid read" }, SELF_REGISTERED)).toEqual({
+      scope: "openid read offline_access",
+    });
   });
 
   it("does not strip admin at authorize (no role): a later admin login can grant it", () => {
+    expect(restrictOAuthQueryScopes({ scope: "read write admin" }, SELF_REGISTERED)).toEqual({
+      scope: "read write admin offline_access",
+    });
+  });
+
+  it("unions offline_access into a resource-metadata scope list so a refresh token is issued", () => {
+    // MCP clients copy `scope=` from the protected-resource metadata, which
+    // advertises the API ladder only — without the union the plugin never
+    // issues a refresh token (buildinternet/uploads#913).
     expect(
-      restrictOAuthQueryScopes({ scope: "read write admin" }, SELF_REGISTERED),
+      restrictOAuthQueryScopes({ client_id: "c1", scope: "read write" }, SELF_REGISTERED),
+    ).toEqual({ client_id: "c1", scope: "read write offline_access" });
+  });
+
+  it("does not union offline_access for a client not registered with it", () => {
+    expect(
+      restrictOAuthQueryScopes({ scope: "read" }, ["openid", "read", "write"]),
     ).toBeUndefined();
+  });
+
+  it("rejects an offline_access-only request rather than minting a refresh-only grant", () => {
+    expect(restrictOAuthQueryScopes({ scope: "offline_access" }, SELF_REGISTERED)).toEqual({
+      scope: "",
+    });
+    // …including when the only other id is unknown or unentitled.
+    expect(restrictOAuthQueryScopes({ scope: "offline_access nope" }, SELF_REGISTERED)).toEqual({
+      scope: "",
+    });
+    expect(
+      restrictOAuthQueryScopes({ scope: "offline_access admin" }, SELF_REGISTERED, "user"),
+    ).toEqual({ scope: "" });
   });
 
   it("returns undefined when there is no scope to rewrite", () => {
@@ -70,7 +102,7 @@ describe("restrictOAuthConsentBody", () => {
       ),
     ).toEqual({
       accept: true,
-      scope: "openid read",
+      scope: "openid read offline_access",
     });
   });
 
@@ -81,7 +113,7 @@ describe("restrictOAuthConsentBody", () => {
         SELF_REGISTERED,
         "admin",
       ),
-    ).toBeUndefined();
+    ).toEqual({ accept: true, scope: "openid read write admin offline_access" });
   });
 
   it("injects a filtered scope from oauth_query when the body omitted one", () => {
@@ -128,7 +160,7 @@ describe("restrictAuthorizationCodeValue", () => {
       query: { client_id: "c1", scope: "openid read admin" },
     });
     const next = restrictAuthorizationCodeValue(value, SELF_REGISTERED, "user");
-    expect(JSON.parse(next ?? "").query.scope).toBe("openid read");
+    expect(JSON.parse(next ?? "").query.scope).toBe("openid read offline_access");
   });
 
   it("leaves non-authorization_code values alone", () => {
