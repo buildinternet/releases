@@ -13,12 +13,31 @@
  * also intersect with {@link entitledScopes} so a non-admin kitchen-sink
  * request does not fail the existing consent entitlement gate.
  *
+ * Also unions `offline_access` into the grant for clients registered with it —
+ * without it the plugin never issues a refresh token (see {@link OFFLINE_ACCESS}).
+ *
  * Known ids stay in lockstep with {@link OAUTH_SCOPES}.
  */
 
 import { entitledScopes, OAUTH_SCOPES } from "./entitlement.js";
 
 const KNOWN_SCOPES: ReadonlySet<string> = new Set(OAUTH_SCOPES);
+
+/**
+ * `@better-auth/oauth-provider` issues a refresh token ONLY when the grant's
+ * scopes carry `offline_access` (see the `isRefreshToken` guard in the plugin's
+ * token issuance). MCP clients build `scope=` from the protected-resource
+ * metadata's `scopes_supported`, which advertises the API ladder
+ * (`read write admin`) and never the identity scopes — so without a server-side
+ * union every MCP/OAuth client gets an access token with no refresh token and a
+ * forced interactive re-auth at expiry. Union it in for any client registered
+ * with it, but only when the filtered request still grants a real (non-
+ * `offline_access`) scope, so a nothing-grantable request keeps its RFC 6749
+ * §3.3 `invalid_scope` and a refresh-token-only grant can't be minted.
+ *
+ * Ported from buildinternet/uploads#913.
+ */
+const OFFLINE_ACCESS = "offline_access";
 
 function filterScopeString(
   scope: string,
@@ -31,6 +50,18 @@ function filterScopeString(
   if (role !== undefined) {
     const entitled = new Set(entitledScopes(role));
     permitted = permitted.filter((id) => entitled.has(id));
+  }
+  const grantsRealScope = permitted.some((id) => id !== OFFLINE_ACCESS);
+  if (!grantsRealScope) {
+    // An offline_access-only request must not survive: it would mint a
+    // refresh-token-only grant with no resource access. Dropping it lands in
+    // the plugin's invalid_scope path like any other nothing-grantable request.
+    permitted = [];
+  } else if (allow.has(OFFLINE_ACCESS) && !permitted.includes(OFFLINE_ACCESS)) {
+    // Entitlement is not re-checked here: offline_access is an IDENTITY_SCOPE,
+    // so `entitledScopes()` grants it to every role (including the fail-closed
+    // read-only default).
+    permitted.push(OFFLINE_ACCESS);
   }
   const next = permitted.join(" ");
   return next === requested.join(" ") ? undefined : next;

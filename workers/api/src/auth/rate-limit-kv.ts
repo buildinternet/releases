@@ -12,20 +12,40 @@
  * scopes the change to rate-limit data only, whereas configuring
  * `secondaryStorage` would also relocate session + verification records to KV.
  *
- * Tradeoff: KV is eventually consistent and this is the non-atomic
- * check-then-increment path (Better Auth's `legacyConsume` — customStorage has
- * no atomic `consume`), so a single key's counter is best-effort under
- * concurrency. That is acceptable here: the edge per-IP native limiter in front
- * of `/api/auth/*` is the strict first gate, and this per-key limiter is the
- * precise-but-soft second layer. The win is structural — flood writes no longer
- * touch the shared D1.
+ * Tradeoff: KV is eventually consistent and has no atomic compare-and-set, so
+ * `consume()` here is a read-decide-write and a single key's counter is
+ * best-effort under concurrency. That is acceptable here: the edge per-IP
+ * native limiter in front of `/api/auth/*` is the strict first gate, and this
+ * per-key limiter is the precise-but-soft second layer. The win is structural —
+ * flood writes no longer touch the shared D1.
+ *
+ * Better Auth 1.7 replaced the `get`/`set` custom-storage contract with a single
+ * `consume(key, rule)` step (the separate shape could not enforce a distributed
+ * limit under concurrency). The decision logic below mirrors the upstream
+ * `decideConsume` reducer exactly — same rolling-window reset, same
+ * `count >= max` rejection, same `retryAfter` rounding — so KV and the database
+ * backend behave identically apart from the atomicity caveat above.
  */
 
-/** Better Auth's rate-limit record shape (model `rateLimit`). */
+/** Better Auth's rate-limit record shape (model `rateLimit`). `lastRequest` is epoch ms. */
 export interface RateLimitRecord {
   key: string;
   count: number;
   lastRequest: number;
+}
+
+/** One rate-limit rule as Better Auth passes it to `consume`. */
+export interface RateLimitRule {
+  /** Rolling window length, in seconds. */
+  window: number;
+  /** Maximum requests allowed within the window. */
+  max: number;
+}
+
+/** Better Auth's `consume` verdict: allowed, plus seconds until the window frees up. */
+export interface RateLimitDecision {
+  allowed: boolean;
+  retryAfter: number | null;
 }
 
 /**
@@ -44,31 +64,61 @@ interface RateLimitKv {
 }
 
 /**
- * Build the `rateLimit.customStorage` object backed by `kv`. Implements the
- * `get`/`set` contract Better Auth's limiter uses; the third `set` argument is
- * an `update` flag (not a TTL), so the TTL is the fixed
- * {@link AUTH_RATE_LIMIT_KV_TTL_SECONDS}. A malformed/legacy stored value reads
- * as `null` (fail-open to a fresh window) rather than throwing.
+ * Read one stored record. A missing, malformed, or wrong-shape value reads as
+ * `null` (fail-open to a fresh window) rather than throwing — a corrupt counter
+ * must never 500 the sign-in path. Exported for tests.
+ */
+export async function readRecord(kv: RateLimitKv, key: string): Promise<RateLimitRecord | null> {
+  const raw = await kv.get(key);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<RateLimitRecord>;
+    if (typeof parsed?.count !== "number" || typeof parsed?.lastRequest !== "number") return null;
+    return { key, count: parsed.count, lastRequest: parsed.lastRequest };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the `rateLimit.customStorage` object backed by `kv`, implementing Better
+ * Auth 1.7's single-step `consume(key, rule)` contract. Every write carries a
+ * TTL of at least {@link AUTH_RATE_LIMIT_KV_TTL_SECONDS} — stretched to the
+ * rule's own window when that is longer — so counters self-expire without ever
+ * being dropped mid-window.
  */
 export function kvRateLimitStorage(kv: RateLimitKv) {
   return {
-    async get(key: string): Promise<RateLimitRecord | null> {
-      const raw = await kv.get(key);
-      if (!raw) return null;
-      try {
-        const parsed = JSON.parse(raw) as Partial<RateLimitRecord>;
-        if (typeof parsed?.count !== "number" || typeof parsed?.lastRequest !== "number") {
-          return null;
-        }
-        return { key, count: parsed.count, lastRequest: parsed.lastRequest };
-      } catch {
-        return null;
+    async consume(key: string, rule: RateLimitRule): Promise<RateLimitDecision> {
+      const now = Date.now();
+      const windowMs = rule.window * 1000;
+      const data = await readRecord(kv, key);
+
+      const write = async (record: RateLimitRecord): Promise<void> => {
+        await kv.put(key, JSON.stringify(record), {
+          // Never expire the counter before its own window closes: a rule with
+          // a window longer than the floor would otherwise lose its record
+          // mid-window and hand the caller a fresh quota.
+          expirationTtl: Math.max(AUTH_RATE_LIMIT_KV_TTL_SECONDS, Math.ceil(rule.window)),
+        });
+      };
+
+      // No record, or the rolling window has elapsed: start a fresh window.
+      if (!data || now - data.lastRequest >= windowMs) {
+        await write({ key, count: 1, lastRequest: now });
+        return { allowed: true, retryAfter: null };
       }
-    },
-    async set(key: string, value: RateLimitRecord, _update?: boolean): Promise<void> {
-      await kv.put(key, JSON.stringify(value), {
-        expirationTtl: AUTH_RATE_LIMIT_KV_TTL_SECONDS,
-      });
+      // Limit already reached inside the live window: reject, don't advance
+      // `lastRequest` (upstream leaves the record untouched, so the window still
+      // expires on schedule rather than being extended by rejected attempts).
+      if (data.count >= rule.max) {
+        return {
+          allowed: false,
+          retryAfter: Math.ceil((data.lastRequest + windowMs - now) / 1000),
+        };
+      }
+      await write({ key, count: data.count + 1, lastRequest: now });
+      return { allowed: true, retryAfter: null };
     },
   };
 }

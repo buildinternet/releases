@@ -65,6 +65,9 @@ import {
   oauthAccessToken,
   oauthRefreshToken,
   oauthConsent,
+  oauthResource,
+  oauthClientResource,
+  oauthClientAssertion,
   jwks,
   passkey,
   authOrganization,
@@ -554,7 +557,10 @@ const DEFAULT_AUTH_ORIGIN = "https://api.releases.sh";
 const APP_NAME = "Releases";
 
 /**
- * Valid `aud` values for issued OAuth access tokens: the origin of this AS
+ * Protected resources this AS issues access tokens for — fed to the 1.7
+ * `resources` model (and `clientRegistrationAllowedResources`), which replaced
+ * the 1.6 `validAudiences` list. Still the set of valid `aud` values: the origin
+ * of this AS
  * (`BETTER_AUTH_URL`) unioned with every comma-separated entry of
  * `OAUTH_RESOURCE_AUDIENCES` (the resource servers — e.g. the MCP worker). Pure
  * + exported so it's unit-testable. Falls back to the prod API origin when
@@ -1315,7 +1321,26 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       loginPage: `${releaseWebBase(env)}/login`,
       consentPage: `${releaseWebBase(env)}/oauth/consent`, // page built in sub-project 3; path provisional
       scopes: [...OAUTH_SCOPES],
-      validAudiences: oauthValidAudiences(env),
+      // Better Auth 1.7 replaced the flat `validAudiences` list with the
+      // persisted `resources` model: each identifier becomes an `oauth_resource`
+      // row (seeded at boot, `resourceSeedMode` defaults to the safe
+      // "insertOnly") and is the RFC 8707 `resource` value a client may request;
+      // the minted token's `aud` is bound to it. Same identifiers as before, so
+      // the MCP worker's `OAUTH_JWT_AUDIENCE` needs no change.
+      resources: oauthValidAudiences(env),
+      // 1.7 rejects a DCR request carrying `resources` unless they're
+      // whitelisted. Mark ours *allowed* (client selects) rather than *default*
+      // (force-attached to every client), preserving the 1.6 behavior where any
+      // registered client could target these audiences.
+      clientRegistrationAllowedResources: oauthValidAudiences(env),
+      // Grace window (seconds) for refresh-token rotation replay: a refresh
+      // token presented again within 60s of its rotation replays the original
+      // rotation response instead of revoking the token family. Concurrent
+      // refreshers and network retries — routine in MCP clients holding one
+      // session across several tabs/processes — otherwise trip reuse detection
+      // and force a full re-authorization. Matches the grace window Better
+      // Auth's own mcp() plugin defaults to. Option added in 1.7.
+      refreshTokenReuseInterval: 60,
       // RFC 7591 dynamic client registration. ON so off-the-shelf MCP clients
       // (Claude Desktop, MCP Inspector, agent runtimes) self-register a client_id
       // via the public /oauth2/register endpoint instead of an admin minting one.
@@ -1514,6 +1539,12 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
         oauthAccessToken,
         oauthRefreshToken,
         oauthConsent,
+        // Better Auth 1.7 oauth-provider tables: the persisted resource model
+        // (seeded from `resources` above), the per-client resource binding, and
+        // the private_key_jwt assertion jti store.
+        oauthResource,
+        oauthClientResource,
+        oauthClientAssertion,
         jwks,
         passkey,
         // Organization plugin ("Workspaces") + the @better-auth/stripe subscription

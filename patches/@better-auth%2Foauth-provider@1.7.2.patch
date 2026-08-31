@@ -1,0 +1,40 @@
+diff --git a/dist/authorize-BmTe2VYG.mjs b/dist/authorize-BmTe2VYG.mjs
+index 42c943dd45aa3d297a14edcc056a14e7ddd54680..b0eb5d8db91e68a3bbadd026961126628e1499be 100644
+--- a/dist/authorize-BmTe2VYG.mjs
++++ b/dist/authorize-BmTe2VYG.mjs
+@@ -1643,8 +1643,25 @@ const FORBIDDEN_NATIVE_REDIRECT_SCHEMES = new Set([
+ 	"mailto:",
+ 	"javascript:",
+ 	"data:",
+-	"vbscript:"
++	"vbscript:",
++	// patch(better-auth#10956): union with upstream's NON_PRIVATE_USE_SCHEMES.
++	"http:",
++	"https:",
++	"ws:",
++	"wss:"
+ ]);
++// patch(better-auth#10956, better-auth#10946): accept host-bearing
++// non-reserved custom-scheme redirect URIs (e.g. cursor://host/path) for
++// native clients, alongside the existing authority-free reverse-domain form.
++// Delete once a Better Auth release ships the upstream fix.
++function isHostBearingPrivateUseRedirectUri(uri) {
++	if (FORBIDDEN_NATIVE_REDIRECT_SCHEMES.has(uri.protocol)) return false;
++	if (uri.host.length === 0) return false;
++	return uri.pathname.startsWith("/");
++}
++function isNativePrivateUseRedirectUri(uri) {
++	return isReverseDomainPrivateUseRedirectUri(uri) || isHostBearingPrivateUseRedirectUri(uri);
++}
+ function invalidRedirectUri(description) {
+ 	throw new APIError("BAD_REQUEST", {
+ 		error: "invalid_redirect_uri",
+@@ -1708,7 +1725,7 @@ function validateClientRedirectUri(redirectUri, applicationType) {
+ 		if (!isAllowedNativeHttpLoopback) invalidRedirectUri(`native clients may use http only on the exact loopback hosts localhost, 127.0.0.1, or [::1]: ${redirectUri}`);
+ 		return;
+ 	}
+-	if (FORBIDDEN_NATIVE_REDIRECT_SCHEMES.has(url.protocol) || !isReverseDomainPrivateUseRedirectUri(url)) invalidRedirectUri(`native private-use redirect URI schemes must be well-formed reverse-domain names, omit the naming authority, and must not use a reserved scheme: ${redirectUri}`);
++	if (FORBIDDEN_NATIVE_REDIRECT_SCHEMES.has(url.protocol) || !isNativePrivateUseRedirectUri(url)) invalidRedirectUri(`native private-use redirect URI schemes must not use a reserved scheme; they must be an authority-free reverse-domain URI or a custom-scheme URI with an authority: ${redirectUri}`);
+ }
+ function assertValidRegistrationJwks(jwks) {
+ 	const result = validatePublicClientJwks(jwks);

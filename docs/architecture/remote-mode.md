@@ -152,10 +152,23 @@ grants `read`/`write`/`admin` on those surfaces.
   already in `OAUTH_RESOURCE_AUDIENCES`), set via the MCP wrangler vars
   `OAUTH_JWT_ISSUER` / `OAUTH_JWT_AUDIENCE` (staging overrides both). Both
   resource servers also accept the MCP `/mcp` transport URL as `aud` (generic
-  clients send either form). The API worker additionally accepts
+  clients send either form). On Better Auth 1.7 the accepted set is the plugin's
+  persisted `resources` model (an `oauth_resource` row per identifier, seeded at
+  boot with the default `insertOnly` mode) rather than the 1.6 flat
+  `validAudiences` list; the identifiers are unchanged, so the MCP worker's
+  `OAUTH_JWT_AUDIENCE` needed no edit. The same list is passed as
+  `clientRegistrationAllowedResources` so a DCR client may still request them.
+  The API worker additionally accepts
   same-environment MCP origin and `/mcp` so follows tools can forward the
   caller's JWT to `/v1/me/*`. A token minted for a _different_ environment's
   MCP host still fails. See [mcp-cimd-interop.md](mcp-cimd-interop.md).
+- **Refresh-token rotation grace.** `oauthProvider({ refreshTokenReuseInterval: 60 })`:
+  a refresh token presented again within 60s of its rotation replays the stored
+  rotation response instead of revoking the token family. Without it, concurrent
+  refreshers and network retries — routine for an MCP client holding one session
+  across several tabs or processes — trip reuse detection and force a full
+  re-authorization. Persisted in the `oauth_refresh_token.rotation_replay_*`
+  columns; the option exists only on Better Auth 1.7+.
 - **Additive, fail-consistent.** A JWT principal carries no forwardable
   credential (`token: null`), so MCP downstream `/v1/lookups` calls fall back to
   the root key (same as the `relu_` lane) and a JWT identity does **not** open

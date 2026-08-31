@@ -228,7 +228,12 @@ function ConnectionsSection() {
     setBusy(provider);
     setError(null);
     try {
-      const res = await unlinkAccount({ providerId: provider, accountId });
+      // Better Auth 1.7 dropped `providerId` from the unlink input. Its
+      // `accountId` field is the LOCAL account row id (`account.id` from
+      // `listAccounts()`), not the provider-assigned `account.accountId` —
+      // `/unlink-account` matches on `account.id === accountId`.
+      // `provider` is still used for the UI copy below.
+      const res = await unlinkAccount({ accountId });
       if (res?.error) {
         setError(res.error.message ?? `Could not disconnect ${PROVIDER_META[provider].label}.`);
         return;
@@ -279,7 +284,7 @@ function ConnectionsSection() {
                       <button
                         type="button"
                         disabled={busy === provider}
-                        onClick={() => onDisconnect(provider, linked.accountId)}
+                        onClick={() => onDisconnect(provider, linked.id)}
                         className={confirmRemoveButtonClass}
                       >
                         {busy === provider ? "Disconnecting…" : "Confirm"}
