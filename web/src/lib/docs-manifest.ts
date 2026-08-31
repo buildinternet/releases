@@ -32,6 +32,10 @@ const ENTRIES: readonly Seed[] = [
   { slug: "skills", section: "Getting Started", label: "Skills" },
   { slug: "examples", section: "Getting Started", label: "Examples" },
 
+  { slug: "guides/find-a-changelog", section: "Guides", label: "Find a Changelog" },
+  { slug: "guides/changelog-rss-feed", section: "Guides", label: "Changelog to RSS" },
+  { slug: "guides/release-notifications", section: "Guides", label: "Get Notified" },
+
   { slug: "listing", section: "For Owners", label: "Get Listed" },
 
   { slug: "integrations/slack", section: "Integrations", label: "Slack" },
