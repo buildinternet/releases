@@ -1,4 +1,11 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  uniqueIndex,
+  customType,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Better Auth core schema — `user` / `session` / `account` / `verification`.
@@ -31,6 +38,45 @@ const timestampCol = (name: string) =>
   integer(name, { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date());
+
+/**
+ * A TEXT column holding JSON, for tables the **Better Auth adapter** writes.
+ *
+ * Do NOT use drizzle's `text(name, { mode: "json" })` on these: the Better Auth
+ * adapter factory already serializes `json` / `string[]` fields itself when the
+ * backend reports `supportsJSON: false` / `supportsArrays: false` — which the
+ * drizzle adapter does for every non-`pg` provider, SQLite/D1 included. So the
+ * adapter hands drizzle a STRING, `mode: "json"` stringifies it a second time,
+ * and the row lands double-JSON-encoded (`json_type(scopes) = 'text'`). Better
+ * Auth's own reads survive it (drizzle parses one level, the adapter's
+ * `safeJSONParse` the other), but any direct drizzle read — e.g.
+ * `registeredScopesForClientId` — gets a string where an array is declared.
+ * Every prod `oauth_client` row back to June 2026 carries the defect; the data
+ * fix is migration 20260901000000_oauth_json_double_encoded.sql.
+ *
+ * `toDriver` passes an already-serialized string through verbatim (single
+ * encoding) and serializes anything else, so both the adapter and our own
+ * drizzle writes produce the same on-disk shape. `fromDriver` peels up to two
+ * levels, so a legacy double-encoded row still reads back as a value — the
+ * schema fix is safe to deploy before or after the data migration.
+ */
+const jsonCol = <T>(name: string) =>
+  customType<{ data: T; driverData: string }>({
+    dataType: () => "text",
+    toDriver: (value) => (typeof value === "string" ? value : JSON.stringify(value)),
+    fromDriver: (value) => {
+      let parsed: unknown = value;
+      // Two passes at most: one for a healthy row, two for a double-encoded one.
+      for (let i = 0; i < 2 && typeof parsed === "string"; i++) {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          break;
+        }
+      }
+      return parsed as T;
+    },
+  })(name);
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -267,12 +313,12 @@ export const oauthClient = sqliteTable(
     name: text("name"),
     icon: text("icon"),
     uri: text("uri"),
-    redirectUris: text("redirect_uris", { mode: "json" }).$type<string[]>().notNull(),
-    postLogoutRedirectUris: text("post_logout_redirect_uris", { mode: "json" }).$type<string[]>(),
-    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
-    grantTypes: text("grant_types", { mode: "json" }).$type<string[]>(),
-    responseTypes: text("response_types", { mode: "json" }).$type<string[]>(),
-    contacts: text("contacts", { mode: "json" }).$type<string[]>(),
+    redirectUris: jsonCol<string[]>("redirect_uris").notNull(),
+    postLogoutRedirectUris: jsonCol<string[]>("post_logout_redirect_uris"),
+    scopes: jsonCol<string[]>("scopes").notNull(),
+    grantTypes: jsonCol<string[]>("grant_types"),
+    responseTypes: jsonCol<string[]>("response_types"),
+    contacts: jsonCol<string[]>("contacts"),
     tokenEndpointAuthMethod: text("token_endpoint_auth_method"),
     /**
      * Deprecated in Better Auth 1.7 (superseded by `tokenEndpointAuthMethod` /
@@ -293,12 +339,12 @@ export const oauthClient = sqliteTable(
     softwareStatement: text("software_statement"),
     userId: text("user_id"),
     referenceId: text("reference_id"),
-    metadata: text("metadata", { mode: "json" }),
+    metadata: jsonCol<Record<string, unknown>>("metadata"),
     // Better Auth 1.7 additions (migration 20260831000000). `applicationType`
     // is the RFC 7591 field the DCR interop layer in auth/oauth-application-type.ts
     // defaults/coerces to "native" for loopback + private-use-scheme clients.
     clientDiscoveryId: text("client_discovery_id"),
-    clientCredentialsScopes: text("client_credentials_scopes", { mode: "json" }).$type<string[]>(),
+    clientCredentialsScopes: jsonCol<string[]>("client_credentials_scopes"),
     backchannelLogoutUri: text("backchannel_logout_uri"),
     backchannelLogoutSessionRequired: integer("backchannel_logout_session_required", {
       mode: "boolean",
@@ -323,13 +369,13 @@ export const oauthAccessToken = sqliteTable(
     refreshId: text("refresh_id"),
     userId: text("user_id"),
     referenceId: text("reference_id"),
-    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+    scopes: jsonCol<string[]>("scopes").notNull(),
     // Better Auth 1.7 additions (migration 20260831000000): RFC 8707 resource
     // binding, requested UserInfo claims, DPoP confirmation, revocation stamp.
     authorizationCodeId: text("authorization_code_id"),
-    resources: text("resources", { mode: "json" }).$type<string[]>(),
-    requestedUserInfoClaims: text("requested_user_info_claims", { mode: "json" }).$type<string[]>(),
-    confirmation: text("confirmation", { mode: "json" }),
+    resources: jsonCol<string[]>("resources"),
+    requestedUserInfoClaims: jsonCol<string[]>("requested_user_info_claims"),
+    confirmation: jsonCol<Record<string, unknown>>("confirmation"),
     revoked: integer("revoked", { mode: "timestamp" }),
     createdAt: timestampCol("created_at"),
     expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
@@ -351,7 +397,7 @@ export const oauthRefreshToken = sqliteTable(
     sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
     userId: text("user_id").notNull(),
     referenceId: text("reference_id"),
-    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+    scopes: jsonCol<string[]>("scopes").notNull(),
     // Revocation timestamp, not a boolean flag: a Date when revoked, NULL while active.
     revoked: integer("revoked", { mode: "timestamp" }),
     authTime: integer("auth_time", { mode: "timestamp" }),
@@ -360,12 +406,12 @@ export const oauthRefreshToken = sqliteTable(
     // presented again inside the grace window replays the stored rotation
     // response instead of revoking the family.
     authorizationCodeId: text("authorization_code_id"),
-    resources: text("resources", { mode: "json" }).$type<string[]>(),
-    requestedUserInfoClaims: text("requested_user_info_claims", { mode: "json" }).$type<string[]>(),
+    resources: jsonCol<string[]>("resources"),
+    requestedUserInfoClaims: jsonCol<string[]>("requested_user_info_claims"),
     rotatedAt: integer("rotated_at", { mode: "timestamp" }),
     rotationReplayResponse: text("rotation_replay_response"),
     rotationReplayExpiresAt: integer("rotation_replay_expires_at", { mode: "timestamp" }),
-    confirmation: text("confirmation", { mode: "json" }),
+    confirmation: jsonCol<Record<string, unknown>>("confirmation"),
     createdAt: timestampCol("created_at"),
     expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
   },
@@ -382,10 +428,10 @@ export const oauthConsent = sqliteTable(
     userId: text("user_id").notNull(),
     clientId: text("client_id").notNull(),
     referenceId: text("reference_id"),
-    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+    scopes: jsonCol<string[]>("scopes").notNull(),
     // Better Auth 1.7 additions (migration 20260831000000).
-    resources: text("resources", { mode: "json" }).$type<string[]>(),
-    requestedUserInfoClaims: text("requested_user_info_claims", { mode: "json" }).$type<string[]>(),
+    resources: jsonCol<string[]>("resources"),
+    requestedUserInfoClaims: jsonCol<string[]>("requested_user_info_claims"),
     createdAt: timestampCol("created_at"),
     updatedAt: timestampCol("updated_at"),
   },
@@ -407,12 +453,12 @@ export const oauthResource = sqliteTable("oauth_resource", {
   refreshTokenTtl: integer("refresh_token_ttl"),
   signingAlgorithm: text("signing_algorithm"),
   signingKeyId: text("signing_key_id"),
-  allowedScopes: text("allowed_scopes", { mode: "json" }).$type<string[]>(),
-  customClaims: text("custom_claims", { mode: "json" }),
+  allowedScopes: jsonCol<string[]>("allowed_scopes"),
+  customClaims: jsonCol<Record<string, unknown>>("custom_claims"),
   dpopBoundAccessTokensRequired: integer("dpop_bound_access_tokens_required", { mode: "boolean" }),
   disabled: integer("disabled", { mode: "boolean" }),
   policyVersion: integer("policy_version"),
-  metadata: text("metadata", { mode: "json" }),
+  metadata: jsonCol<Record<string, unknown>>("metadata"),
   createdAt: integer("created_at", { mode: "timestamp" }),
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 });
@@ -432,7 +478,7 @@ export const oauthClientResource = sqliteTable(
     resourceId: text("resource_id")
       .notNull()
       .references(() => oauthResource.identifier),
-    metadata: text("metadata", { mode: "json" }),
+    metadata: jsonCol<Record<string, unknown>>("metadata"),
     createdAt: integer("created_at", { mode: "timestamp" }),
   },
   (t) => [uniqueIndex("idx_oauth_client_resource_client_resource").on(t.clientId, t.resourceId)],
