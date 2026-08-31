@@ -4,6 +4,9 @@ import { sql } from "drizzle-orm";
 import { createTestDb } from "./setup";
 import { oauthClient } from "../src/db/schema-auth.js";
 import { createAuth } from "../src/auth/index.js";
+import type { Env } from "../src/index.js";
+
+type Bindings = Env["Bindings"];
 
 /**
  * Regression coverage for the double-JSON-encoding defect on the Better Auth
@@ -20,7 +23,7 @@ const baseEnv = {
   BETTER_AUTH_SECRET: "test-secret-value-at-least-32-characters-long",
   BETTER_AUTH_URL: "https://api.releases.localhost",
   WEB_BASE_URL: "https://releases.localhost",
-} as never;
+} satisfies Partial<Bindings> as Bindings;
 
 const MIGRATION = "workers/api/migrations/20260901000000_oauth_json_double_encoded.sql";
 
