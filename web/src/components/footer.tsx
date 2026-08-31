@@ -42,6 +42,14 @@ const COLUMNS: FooterColumn[] = [
     links: FEATURED_COLLECTIONS,
   },
   {
+    title: "Guides",
+    links: [
+      { label: "Find a Changelog", href: "/docs/guides/find-a-changelog" },
+      { label: "Changelog to RSS", href: "/docs/guides/changelog-rss-feed" },
+      { label: "Get Notified", href: "/docs/guides/release-notifications" },
+    ],
+  },
+  {
     title: "Docs",
     links: [
       { label: "Docs", href: "/docs" },
@@ -90,34 +98,38 @@ export function Footer() {
       className="border-t border-stone-200 dark:border-stone-800 mt-auto"
       style={{ viewTransitionName: "site-footer" }}
     >
-      <div className="max-w-5xl mx-auto px-6 pt-10 pb-6 grid grid-cols-2 gap-8 text-xs sm:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
-        <div className="col-span-2 sm:col-span-1">
-          <div>
-            <Link
-              href="/"
-              className="font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
-            >
-              releases.sh
-            </Link>
-          </div>
+      <div className="max-w-5xl mx-auto px-6 pt-10 pb-8 text-xs">
+        {/* Brand row — full width so the nav grid below can wrap into as many
+            rows as the viewport needs without competing with the tagline. */}
+        <div className="mb-8">
+          <Link
+            href="/"
+            className="font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
+          >
+            releases.sh
+          </Link>
           <p className="mt-2 max-w-[30ch] text-stone-500 dark:text-stone-400">
             A registry of release notes from across the web.
           </p>
         </div>
-        {COLUMNS.map((column) => (
-          <nav key={column.title}>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
-              {column.title}
-            </div>
-            <ul className="space-y-2">
-              {column.links.map((link) => (
-                <li key={link.label}>
-                  <FooterLinkItem link={link} />
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ))}
+        {/* Nav grid — columns wrap: 2-up on phones (3 rows), 3-up from `sm`
+            (2 rows), one row of 5 from `lg`. */}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
+          {COLUMNS.map((column) => (
+            <nav key={column.title} aria-label={column.title}>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
+                {column.title}
+              </div>
+              <ul className="space-y-2">
+                {column.links.map((link) => (
+                  <li key={link.label}>
+                    <FooterLinkItem link={link} />
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
+        </div>
       </div>
 
       {/* Family bar — maintainer credit + a quiet cross-link to the sibling
