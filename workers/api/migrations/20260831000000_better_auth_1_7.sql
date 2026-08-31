@@ -10,11 +10,30 @@
 -- Nullable at the DB level (SQLite can't add a NOT NULL column to a populated
 -- table); Better Auth always populates it on insert. Backfill mirrors
 -- `createOAuthAccountIssuer` / `createLocalAccountIssuer` from @better-auth/core.
+--
+-- Both helpers run the provider id through `encodeURIComponent` before
+-- concatenating, so the backfill has to do the same or a provider id with a
+-- reserved character would be stored under a different account key than the
+-- one `findAccountByKey` computes at sign-in. SQLite has no
+-- `encodeURIComponent`, so the REPLACE chain below percent-encodes exactly the
+-- ASCII characters `encodeURIComponent` escapes (`%` first, so the escapes it
+-- introduces are not re-encoded). Non-ASCII provider ids are not encoded here;
+-- this deployment only ever writes `credential`, `google`, and `github`, all of
+-- which encode to themselves.
 ALTER TABLE account ADD COLUMN issuer TEXT;
 UPDATE account
 SET issuer = CASE
   WHEN provider_id = 'credential' THEN 'local:credential'
-  ELSE 'local:oauth:' || provider_id
+  ELSE 'local:oauth:' || replace(replace(replace(replace(replace(replace(
+       replace(replace(replace(replace(replace(replace(
+       replace(replace(replace(replace(replace(replace(
+       replace(replace(replace(replace(replace(replace(
+         provider_id,
+         '%', '%25'), ' ', '%20'), '"', '%22'), '#', '%23'), '$', '%24'),
+         '&', '%26'), '+', '%2B'), ',', '%2C'), '/', '%2F'), ':', '%3A'),
+         ';', '%3B'), '<', '%3C'), '=', '%3D'), '>', '%3E'), '?', '%3F'),
+         '@', '%40'), '[', '%5B'), '\', '%5C'), ']', '%5D'), '^', '%5E'),
+         '`', '%60'), '{', '%7B'), '|', '%7C'), '}', '%7D')
 END
 WHERE issuer IS NULL;
 -- Lookup index for findAccountByKey({ issuer, accountId }). Deliberately NOT

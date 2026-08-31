@@ -101,11 +101,18 @@ describe("kvRateLimitStorage.consume", () => {
     expect(stored(kv, "b").count).toBe(1);
   });
 
-  it("writes with the fixed TTL", async () => {
+  it("writes with the floor TTL for windows shorter than it", async () => {
     const kv = fakeKv();
     await kvRateLimitStorage(kv).consume(KEY, RULE);
     expect(kv.puts).toHaveLength(1);
     expect(kv.puts[0].options?.expirationTtl).toBe(AUTH_RATE_LIMIT_KV_TTL_SECONDS);
+  });
+
+  it("stretches the TTL to cover a window longer than the floor", async () => {
+    const kv = fakeKv();
+    const window = AUTH_RATE_LIMIT_KV_TTL_SECONDS + 90.5;
+    await kvRateLimitStorage(kv).consume(KEY, { window, max: 3 });
+    expect(kv.puts[0].options?.expirationTtl).toBe(Math.ceil(window));
   });
 
   it("keeps the TTL above KV's 60s minimum and the 60s default window", () => {

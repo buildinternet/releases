@@ -82,8 +82,10 @@ export async function readRecord(kv: RateLimitKv, key: string): Promise<RateLimi
 
 /**
  * Build the `rateLimit.customStorage` object backed by `kv`, implementing Better
- * Auth 1.7's single-step `consume(key, rule)` contract. Every write carries the
- * fixed {@link AUTH_RATE_LIMIT_KV_TTL_SECONDS} TTL so counters self-expire.
+ * Auth 1.7's single-step `consume(key, rule)` contract. Every write carries a
+ * TTL of at least {@link AUTH_RATE_LIMIT_KV_TTL_SECONDS} — stretched to the
+ * rule's own window when that is longer — so counters self-expire without ever
+ * being dropped mid-window.
  */
 export function kvRateLimitStorage(kv: RateLimitKv) {
   return {
@@ -94,7 +96,10 @@ export function kvRateLimitStorage(kv: RateLimitKv) {
 
       const write = async (record: RateLimitRecord): Promise<void> => {
         await kv.put(key, JSON.stringify(record), {
-          expirationTtl: AUTH_RATE_LIMIT_KV_TTL_SECONDS,
+          // Never expire the counter before its own window closes: a rule with
+          // a window longer than the floor would otherwise lose its record
+          // mid-window and hand the caller a fresh quota.
+          expirationTtl: Math.max(AUTH_RATE_LIMIT_KV_TTL_SECONDS, Math.ceil(rule.window)),
         });
       };
 
