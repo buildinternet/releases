@@ -224,6 +224,54 @@ describe("oauth provider wiring", () => {
     expect(registered).toHaveLength(1);
   });
 
+  // Regression (#2256 follow-up): Better Auth 1.7's `resources` model defaults
+  // `enforcePerClientResources` to true, which rejects an authorize carrying an
+  // RFC 8707 `resource` parameter unless the client is LINKED to that resource
+  // via oauth_client_resource. MCP clients (claude.ai's connector) send
+  // `resource` at authorize time, never as a DCR field, so they are never
+  // linked — the AS redirected back to the callback with
+  // `error=invalid_target`, which claude.ai surfaces as `oauth_error=non_standard`.
+  it("accepts an authorize carrying a resource parameter from a DCR-registered client", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const redirectUri = "https://claude.ai/api/mcp/auth_callback";
+    const regRes = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Claude",
+          redirect_uris: [redirectUri],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    expect(regRes.ok).toBe(true);
+    const { client_id: clientId } = (await regRes.json()) as { client_id: string };
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: "read write",
+      state: "xyz",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      code_challenge_method: "S256",
+      // The AS's own origin is always a seeded resource identifier.
+      resource: "https://api.releases.localhost",
+    });
+    const res = await auth.handler(
+      new Request(`https://api.releases.localhost/api/auth/oauth2/authorize?${params}`, {
+        redirect: "manual",
+      }),
+    );
+    const location = res.headers.get("location") ?? "";
+    // Unauthenticated, so the expected outcome is the login redirect — never an
+    // error redirect back to the client's callback.
+    expect(location).not.toContain("error=invalid_target");
+    expect(location.startsWith(redirectUri)).toBe(false);
+  });
+
   it("registers a Cursor-shaped body (explicit web + private-use scheme + https)", async () => {
     const db = createTestDb();
     const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });

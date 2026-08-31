@@ -158,6 +158,13 @@ grants `read`/`write`/`admin` on those surfaces.
   `validAudiences` list; the identifiers are unchanged, so the MCP worker's
   `OAUTH_JWT_AUDIENCE` needed no edit. The same list is passed as
   `clientRegistrationAllowedResources` so a DCR client may still request them.
+  **`enforcePerClientResources` is set to `false`.** It defaults to `true` in
+  1.7, which requires every client to be linked to each requested `resource`
+  through an `oauth_client_resource` row and otherwise fails the authorize with
+  `error=invalid_target`. MCP clients send `resource` as an authorize/token
+  parameter, never as a DCR field, so no client is ever linked; `false` restores
+  the 1.6 behavior where any registered client may target an enabled resource,
+  with the token still `aud`-bound to the one requested.
   The API worker additionally accepts
   same-environment MCP origin and `/mcp` so follows tools can forward the
   caller's JWT to `/v1/me/*`. A token minted for a _different_ environment's

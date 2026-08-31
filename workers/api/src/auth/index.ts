@@ -1333,6 +1333,19 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       // (force-attached to every client), preserving the 1.6 behavior where any
       // registered client could target these audiences.
       clientRegistrationAllowedResources: oauthValidAudiences(env),
+      // `enforcePerClientResources` defaults to TRUE in 1.7 (RFC 8707 §3):
+      // /oauth2/authorize and /oauth2/token then require the client to be linked
+      // to every requested `resource` through an `oauth_client_resource` row, and
+      // otherwise redirect back with `error=invalid_target` ("client … is not
+      // linked to resource(s) …"). Standard MCP clients (claude.ai's connector
+      // included) send `resource` as an authorize/token PARAMETER, never as a DCR
+      // field, so they are never linked — and every already-registered client
+      // predates the table entirely. There is no admin flow to link third-party
+      // clients, and 1.6's `validAudiences` let any registered client target these
+      // audiences. `false` restores that: any enabled resource is requestable,
+      // while the minted token stays `aud`-bound to the requested one.
+      // Matches buildinternet/uploads (apps/auth/src/auth.ts).
+      enforcePerClientResources: false,
       // Grace window (seconds) for refresh-token rotation replay: a refresh
       // token presented again within 60s of its rotation replays the original
       // rotation response instead of revoking the token family. Concurrent
