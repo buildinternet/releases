@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd web && bun run dev -- --port 3900"],
+      "port": 3900
+    }
+  ]
+}
