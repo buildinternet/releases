@@ -3,6 +3,14 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## August 31, 2026
+
+**Added**
+- Docs site gains three how-to guides: locating a changelog source for a product, converting any changelog to an RSS/Atom feed, and setting up release notifications.
+
+**Fixed**
+- MCP clients can now complete OAuth authorization — resource-request validation was incorrectly blocking clients that hadn't pre-declared their target resource, and a column encoding bug was silently discarding scope grants on new OAuth client registrations.
+
 ## August 30, 2026
 
 **Added**
