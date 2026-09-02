@@ -56,8 +56,7 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "./Dockerfile",
-      "image_build_context": "../../",
+      "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:174e06b6ba6e",
       "instance_type": "basic",
       "max_instances": 5,
     },
@@ -169,8 +168,7 @@
       "containers": [
         {
           "class_name": "Sandbox",
-          "image": "./Dockerfile",
-          "image_build_context": "../../",
+          "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:174e06b6ba6e",
           "instance_type": "basic",
           "max_instances": 2,
         },

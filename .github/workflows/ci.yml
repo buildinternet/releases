@@ -233,6 +233,14 @@ jobs:
         #   bun scripts/render-managed-agents.ts
         run: bun scripts/render-managed-agents.ts --check
 
+      - name: Verify discovery Sandbox image tag is pinned (#2261)
+        # Fails if workers/discovery/wrangler.jsonc's containers[].image fields
+        # (root + env.staging) don't pin the content hash of the Dockerfile's
+        # current inputs — catches a stale pin at PR time instead of at
+        # deploy. Pure git/hash — no network or Docker. Fix locally with:
+        #   bun run containers:image write
+        run: bun run containers:image check
+
       - name: Run tests
         run: bun run test
 

@@ -181,6 +181,22 @@ jobs:
       - name: Install discovery worker deps
         working-directory: workers/discovery
         run: bun install --frozen-lockfile
+      # #2261: wrangler.jsonc pins containers[].image to a content-hash tag
+      # instead of building from ./Dockerfile on every deploy. `ensure` is a
+      # no-op once that tag is pushed (checked via `wrangler containers images
+      # list --json`, the only trusted exists oracle — see
+      # scripts/discovery-container-image.ts); otherwise it builds the image
+      # with `docker` (preinstalled on ubuntu-latest, no setup-buildx step
+      # needed — native linux/amd64) and pushes it. Prod and staging pin the
+      # SAME tag (confirmed: wrangler accepts one registry image reference
+      # for both container apps), so whichever matrix leg runs first pushes
+      # it; the other's `ensure` then finds it already there. A push is
+      # itself idempotent (same content, same tag) if both legs somehow race.
+      - name: Ensure discovery Sandbox image is pushed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun run containers:image ensure
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

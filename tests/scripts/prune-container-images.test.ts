@@ -3,12 +3,15 @@ import {
   buildKeepSet,
   deployedVersionIds,
   digestFromImageRef,
+  extractPinnedTags,
   findRepoEntry,
   keepTagsForEnv,
   parseArgs,
   planPrune,
+  resolveTagsFromGitHistory,
   tagForVersionId,
 } from "../../scripts/prune-container-images.ts";
+import { REGISTRY_PREFIX } from "../../scripts/discovery-container-image.ts";
 
 const deploy = (id: string, pct = 100) => ({ versions: [{ version_id: id, percentage: pct }] });
 
@@ -62,6 +65,47 @@ describe("prune-container-images", () => {
       digestFromImageRef("registry.cloudflare.com/acct/released-discovery-sandbox:b6bd9f6b"),
     ).toBeNull();
     expect(digestFromImageRef(undefined)).toBeNull();
+  });
+
+  it("extracts pinned content-hash tags from wrangler.jsonc text", () => {
+    const raw = [
+      `"image": "${REGISTRY_PREFIX}:abc123def456",`,
+      `"image": "${REGISTRY_PREFIX}:abc123def456",`,
+    ].join("\n");
+    expect(extractPinnedTags(raw, REGISTRY_PREFIX)).toEqual(new Set(["abc123def456"]));
+    expect(extractPinnedTags(`"image": "./Dockerfile"`, REGISTRY_PREFIX)).toEqual(new Set());
+  });
+
+  it("resolves content-hash keep tags from wrangler.jsonc history on origin/main", () => {
+    const shas = ["sha1", "sha2", "sha3"];
+    const contentAt: Record<string, string> = {
+      sha1: `"image": "${REGISTRY_PREFIX}:aaaa11112222"`,
+      sha2: `"image": "${REGISTRY_PREFIX}:bbbb33334444"`,
+      // sha3 pre-dates the pin (still ./Dockerfile) — contributes no tags.
+      sha3: `"image": "./Dockerfile"`,
+    };
+    const tags = resolveTagsFromGitHistory({
+      n: 3,
+      repoPrefix: REGISTRY_PREFIX,
+      path: "workers/discovery/wrangler.jsonc",
+      gitLog: () => shas,
+      gitShowAt: (sha) => contentAt[sha]!,
+    });
+    expect(tags).toEqual(new Set(["aaaa11112222", "bbbb33334444"]));
+  });
+
+  it("skips a commit gitShowAt fails to read instead of throwing", () => {
+    const tags = resolveTagsFromGitHistory({
+      n: 2,
+      repoPrefix: REGISTRY_PREFIX,
+      path: "workers/discovery/wrangler.jsonc",
+      gitLog: () => ["a", "b"],
+      gitShowAt: (sha) => {
+        if (sha === "a") throw new Error("no such path at this revision");
+        return `"image": "${REGISTRY_PREFIX}:cccc55556666"`;
+      },
+    });
+    expect(tags).toEqual(new Set(["cccc55556666"]));
   });
 
   it("parses flags with a dry-run default", () => {
