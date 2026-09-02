@@ -103,6 +103,16 @@ Provisioned via `bun run deploy:agents` / `scripts/sync-agent-skills.ts`. IDs in
 
 Staging uses a separate agent/env/vault/memstore set in `[env.staging]`. API worker binds `MEMORY_STORE_ERRATA_ID` only.
 
+### Container image retention
+
+The discovery worker's `Sandbox` container is built from `workers/discovery/Dockerfile` on every `wrangler deploy`, so each deploy pushes a new tag to the managed registry (`releases-discovery-sandbox` for prod, `releases-discovery-staging-sandbox-staging` for staging). Nothing prunes them, and Cloudflare caps managed-registry storage at [50 GB per account](https://developers.cloudflare.com/containers/platform/limits/) — a hard limit shared with the Sunny project on the same account, so an unpruned repo eventually breaks every deploy on the account.
+
+- **Keep policy:** per environment, the currently deployed Worker version's tag plus the previous 5 deployed versions (`wrangler rollback` targets). Everything else in `releases-discovery-sandbox` is deletable.
+- **Tag ↔ version link:** the tag is the first 8 hex chars of the Worker version id (`wrangler deployments list --json`). `versions view` never exposes the image, so the script proves the link before deleting: the live app's image digest (`wrangler containers info`) must equal the registry digest of the kept "current" tag.
+- **Run:** `CLOUDFLARE_ACCOUNT_ID=<Build Internet account> bun run containers:prune` (dry run) → review → add `--yes`. Only `wrangler containers images list --json` is trusted as the exists/doesn't oracle; the registry tags endpoint under-reports and `docker manifest inspect` reports expired logins as "missing".
+- **Scope:** only `releases-discovery-sandbox`. The staging repo is absent from the wrangler listing (so the script refuses to reason about it), and `sunny-render*` repos are never touched.
+- **Blob sharing:** layers dedupe across tags (a 200 MB image; ~4 GB of unique blobs across 700 tags), so what the cap counts may differ from the per-tag sum. The dashboard is the only place that shows account-wide usage.
+
 ### Outside wrangler
 
 - **Web (Vercel):** `web/.env.example` — `NEXT_PUBLIC_BETTER_AUTH_URL`, `RELEASES_API_URL`, `RELEASES_SERVICE_KEY` (channel credential for API-worker → web internal endpoints, mirroring `RELEASES_PROXY_KEY` inbound; must match the api worker's `WEB_SERVICE_KEY`; deliberately unbound on staging so prod ingest can't reach staging web's ISR cache).
