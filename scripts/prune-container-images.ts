@@ -45,14 +45,22 @@
  * Usage:
  *   CLOUDFLARE_ACCOUNT_ID=… bun scripts/prune-container-images.ts             # dry run (default)
  *   CLOUDFLARE_ACCOUNT_ID=… bun scripts/prune-container-images.ts --keep 5 --yes
+ *   CLOUDFLARE_ACCOUNT_ID=… bun scripts/prune-container-images.ts --repo releases-discovery-staging-sandbox-staging
  *
- * Never touches any other repository (`sunny-render*`, the staging repo, …).
+ * `--repo` (default `releases-discovery-sandbox`) selects which Releases repo
+ * to prune. It only accepts repos in PRUNABLE_REPOS; when it isn't the default
+ * repo the script additionally requires that NO live container app references
+ * it (the staging repo is orphaned since #2261 — staging pulls from the prod
+ * repo), and still keeps that env's recent version-id tags for rollback.
+ * `sunny-render*` repos are never eligible.
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { computeTag, REGISTRY_PREFIX } from "./discovery-container-image.ts";
 
 export const IMAGE_REPO = "releases-discovery-sandbox";
+/** Repos this script may ever touch. Anything else (sunny-render*, …) is refused. */
+export const PRUNABLE_REPOS = [IMAGE_REPO, "releases-discovery-staging-sandbox-staging"] as const;
 const WRANGLER_CONFIG_REL = "workers/discovery/wrangler.jsonc";
 const WRANGLER_CONFIG = join(import.meta.dir, "../workers/discovery/wrangler.jsonc");
 
@@ -183,9 +191,28 @@ export function digestFromImageRef(image: string | undefined): string | null {
   return m ? m[1]! : null;
 }
 
-export function parseArgs(argv: string[]): { keep: number; yes: boolean } {
+/** Tag out of a `…/<repo>:<tag>` image reference (null for `@sha256:` digest refs). */
+export function tagFromImageRef(image: string | undefined): string | null {
+  return /\/[^/@:]+:([A-Za-z0-9_.-]+)$/.exec(image ?? "")?.[1] ?? null;
+}
+
+/** Repo name (`releases-discovery-sandbox`) out of a container app's configured image. */
+export function repoFromImageRef(image: string | undefined): string | null {
+  return /\/([^/@:]+)[@:][^/]*$/.exec(image ?? "")?.[1] ?? null;
+}
+
+/** Names of container apps whose configured image lives in `repo`. Pure. */
+export function appsReferencingRepo(
+  apps: Array<{ name: string; image?: string }>,
+  repo: string,
+): string[] {
+  return apps.filter((a) => repoFromImageRef(a.image) === repo).map((a) => a.name);
+}
+
+export function parseArgs(argv: string[]): { keep: number; yes: boolean; repo: string } {
   let keep = 5;
   let yes = false;
+  let repo: string = IMAGE_REPO;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--keep") {
@@ -193,11 +220,15 @@ export function parseArgs(argv: string[]): { keep: number; yes: boolean } {
       if (!Number.isFinite(keep) || keep < 0)
         throw new Error(`--keep must be a non-negative integer`);
     } else if (a === "--yes") yes = true;
-    else if (a === "--dry-run") {
+    else if (a === "--repo") {
+      repo = argv[++i] ?? "";
+      if (!(PRUNABLE_REPOS as readonly string[]).includes(repo))
+        throw new Error(`--repo must be one of ${PRUNABLE_REPOS.join(", ")}`);
+    } else if (a === "--dry-run") {
       /* default */
     } else throw new Error(`Unknown flag: ${a}`);
   }
-  return { keep, yes };
+  return { keep, yes, repo };
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +272,7 @@ async function registryDigest(
 }
 
 async function main(): Promise<void> {
-  const { keep, yes } = parseArgs(process.argv.slice(2));
+  const { keep, yes, repo } = parseArgs(process.argv.slice(2));
   if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
     console.error(
       "prune-container-images: set CLOUDFLARE_ACCOUNT_ID (the account is shared; pin it explicitly).",
@@ -316,6 +347,7 @@ async function main(): Promise<void> {
     username: string;
     password: string;
   }>(["containers", "registries", "credentials", "--pull"]);
+  const appImages: Array<{ name: string; image?: string }> = [];
   for (const env of perEnv) {
     const app = apps.find((a) => a.name === env.app);
     if (!app) {
@@ -329,10 +361,16 @@ async function main(): Promise<void> {
       "info",
       app.id,
     ]);
+    appImages.push({ name: env.app, image: info.configuration?.image });
     const liveDigest = digestFromImageRef(info.configuration?.image);
-    const repoOfApp = /\/([^/@:]+)[@:][^/]*$/.exec(info.configuration?.image ?? "")?.[1] ?? "";
+    const liveTag = tagFromImageRef(info.configuration?.image);
+    const repoOfApp = repoFromImageRef(info.configuration?.image) ?? "";
     let matchedTag: string | null = null;
-    if (liveDigest) {
+    if (liveTag && env.tags.includes(liveTag)) {
+      // Post-#2261 the app is configured by tag, so the proof is direct:
+      // the tag it serves from must itself be in the keep set.
+      matchedTag = liveTag;
+    } else if (liveDigest) {
       for (const candidate of env.tags) {
         const tagDigest = await registryDigest(creds, repoOfApp, candidate);
         if (tagDigest && tagDigest === liveDigest) {
@@ -341,21 +379,35 @@ async function main(): Promise<void> {
         }
       }
     }
-    if (!liveDigest || !matchedTag) {
+    if (!matchedTag) {
       console.error(
-        `prune-container-images: ${env.label} app image digest (${liveDigest ?? "?"}) does not match the registry digest of any tag in its keep set (${env.tags.join(", ")}). The keep-tag → live-image assumption no longer holds; refusing to delete anything.`,
+        `prune-container-images: ${env.label} app image (${liveDigest ?? liveTag ?? "?"}) does not match the registry digest of any tag in its keep set (${env.tags.join(", ")}). The keep-tag → live-image assumption no longer holds; refusing to delete anything.`,
       );
       process.exit(1);
     }
     console.log(`${env.label}: live image digest matches ${repoOfApp}:${matchedTag} ✓`);
   }
 
+  // 2b. A non-default repo may only be pruned when nothing serves from it.
+  if (repo !== IMAGE_REPO) {
+    const users = appsReferencingRepo(appImages, repo);
+    if (users.length > 0) {
+      console.error(
+        `prune-container-images: ${repo} is still referenced by live app(s) ${users.join(", ")} — refusing to prune it.`,
+      );
+      process.exit(1);
+    }
+    console.log(
+      `${repo}: no live container app references it ✓ (keeping recent version-id tags for rollback)`,
+    );
+  }
+
   // 3. Candidates from the only trustworthy listing.
   const listing = wranglerJson(["containers", "images", "list"]);
-  const entry = findRepoEntry(listing, IMAGE_REPO);
+  const entry = findRepoEntry(listing, repo);
   if (!entry) {
     console.error(
-      `prune-container-images: \`wrangler containers images list\` has no entry for ${IMAGE_REPO}; refusing to delete anything.`,
+      `prune-container-images: \`wrangler containers images list\` has no entry for ${repo}; refusing to delete anything.`,
     );
     process.exit(1);
   }
@@ -366,10 +418,10 @@ async function main(): Promise<void> {
   console.log(`\nkeep set (${keepSet.size}): ${[...keepSet].sort().join(", ")}`);
   if (missingKeep.length)
     console.log(
-      `(not in ${IMAGE_REPO} — staging tags live in their own repo): ${missingKeep.join(", ")}`,
+      `(keep-set tags not present in ${repo}, e.g. the other env's version-id tags): ${missingKeep.join(", ")}`,
     );
   console.log(
-    `\n${IMAGE_REPO}: ${plan.length} tags, ${plan.length - deletes.length} keep / ${deletes.length} delete`,
+    `\n${repo}: ${plan.length} tags, ${plan.length - deletes.length} keep / ${deletes.length} delete`,
   );
   for (const row of plan.filter((p) => p.action === "keep"))
     console.log(`  keep    ${row.tag}  ${row.reason}`);
@@ -383,7 +435,7 @@ async function main(): Promise<void> {
   }
   let done = 0;
   for (const row of deletes) {
-    const ref = `${IMAGE_REPO}:${row.tag}`;
+    const ref = `${repo}:${row.tag}`;
     try {
       wrangler(["containers", "images", "delete", ref, "--skip-confirmation"], { inherit: true });
       done++;

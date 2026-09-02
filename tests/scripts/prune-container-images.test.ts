@@ -7,6 +7,9 @@ import {
   findRepoEntry,
   keepTagsForEnv,
   parseArgs,
+  appsReferencingRepo,
+  repoFromImageRef,
+  tagFromImageRef,
   planPrune,
   resolveTagsFromGitHistory,
   tagForVersionId,
@@ -65,6 +68,12 @@ describe("prune-container-images", () => {
       digestFromImageRef("registry.cloudflare.com/acct/released-discovery-sandbox:b6bd9f6b"),
     ).toBeNull();
     expect(digestFromImageRef(undefined)).toBeNull();
+    expect(
+      tagFromImageRef("registry.cloudflare.com/acct/releases-discovery-sandbox:174e06b6ba6e"),
+    ).toBe("174e06b6ba6e");
+    expect(
+      tagFromImageRef(`registry.cloudflare.com/acct/releases-discovery-sandbox@${d}`),
+    ).toBeNull();
   });
 
   it("extracts pinned content-hash tags from wrangler.jsonc text", () => {
@@ -109,9 +118,43 @@ describe("prune-container-images", () => {
   });
 
   it("parses flags with a dry-run default", () => {
-    expect(parseArgs([])).toEqual({ keep: 5, yes: false });
-    expect(parseArgs(["--keep", "3", "--yes"])).toEqual({ keep: 3, yes: true });
+    expect(parseArgs([])).toEqual({ keep: 5, yes: false, repo: "releases-discovery-sandbox" });
+    expect(parseArgs(["--keep", "3", "--yes"])).toEqual({
+      keep: 3,
+      yes: true,
+      repo: "releases-discovery-sandbox",
+    });
+    expect(parseArgs(["--repo", "releases-discovery-staging-sandbox-staging"]).repo).toBe(
+      "releases-discovery-staging-sandbox-staging",
+    );
+    expect(() => parseArgs(["--repo", "sunny-render"])).toThrow();
+    expect(() => parseArgs(["--repo"])).toThrow();
     expect(() => parseArgs(["--keep", "-1"])).toThrow();
     expect(() => parseArgs(["--nope"])).toThrow();
+  });
+
+  it("finds live apps that serve from a repo, by tag or by digest", () => {
+    const apps = [
+      {
+        name: "prod",
+        image: "registry.cloudflare.com/acct/releases-discovery-sandbox:174e06b6ba6e",
+      },
+      {
+        name: "stg",
+        image: "registry.cloudflare.com/acct/releases-discovery-sandbox@sha256:" + "a".repeat(64),
+      },
+      {
+        name: "old",
+        image: "registry.cloudflare.com/acct/releases-discovery-staging-sandbox-staging:eb8970c5",
+      },
+    ];
+    expect(repoFromImageRef(apps[0]!.image)).toBe("releases-discovery-sandbox");
+    expect(appsReferencingRepo(apps, "releases-discovery-sandbox")).toEqual(["prod", "stg"]);
+    expect(appsReferencingRepo(apps, "releases-discovery-staging-sandbox-staging")).toEqual([
+      "old",
+    ]);
+    expect(
+      appsReferencingRepo(apps.slice(0, 2), "releases-discovery-staging-sandbox-staging"),
+    ).toEqual([]);
   });
 });
