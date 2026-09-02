@@ -46,6 +46,7 @@
     "db:pull": "./scripts/db-pull.sh",
     "db:backup": "./scripts/db-backup.sh",
     "containers:prune": "bun scripts/prune-container-images.ts",
+    "containers:image": "bun scripts/discovery-container-image.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",

@@ -2,26 +2,39 @@
  * Prune stale tags from the `releases-discovery-sandbox` managed-registry
  * repository (the discovery worker's `Sandbox` container image).
  *
- * Why: `workers/discovery/wrangler.jsonc` builds the image from a Dockerfile,
- * so every `wrangler deploy` pushes a fresh tag. Nothing removes old ones, and
- * Cloudflare caps managed-registry storage at 50 GB per ACCOUNT (a hard limit —
- * pushes fail account-wide past it). The account is shared with Sunny, so this
- * repo filling up breaks Sunny's deploys too.
+ * Why: before #2261, `workers/discovery/wrangler.jsonc` built the image from a
+ * Dockerfile, so every `wrangler deploy` pushed a fresh tag. Nothing removed
+ * old ones, and Cloudflare caps managed-registry storage at 50 GB per ACCOUNT
+ * (a hard limit — pushes fail account-wide past it). The account is shared
+ * with Sunny, so this repo filling up breaks Sunny's deploys too.
+ *
+ * #2261 pinned `containers[].image` to a content-hash tag
+ * (scripts/discovery-container-image.ts) so a deploy no longer pushes a new
+ * tag unless the image's real inputs changed. This script now runs during the
+ * transition: old images are still tagged with a Worker-version-id prefix,
+ * new ones with the content-hash tag pinned in wrangler.jsonc.
  *
  * Keep policy (see docs/architecture/deploy-coupling.md → "Container image
- * retention"): for each environment (prod, staging) keep the tag of the
- * currently deployed Worker version plus the previous `--keep` (default 5)
- * deployed versions, so `wrangler rollback` to any of them still works.
+ * retention"): the union of —
+ *   1. the content-hash tag currently pinned in `workers/discovery/wrangler.jsonc`
+ *      in the working tree (what a deploy right now would need), and
+ *   2. the pinned tag at each of the last `--keep` commits on `origin/main`
+ *      that touched that file (so `wrangler rollback` to a recent deploy still
+ *      resolves an image that's still in the registry), and
+ *   3. for the version-id era: the currently deployed Worker version's tag
+ *      plus the previous `--keep` deployed versions, per environment.
  * Everything else in the repo is deleted.
  *
- * How tags map to versions: wrangler tags a Dockerfile-built image with the
- * first 8 hex chars of the Worker VERSION id it deploys. `wrangler versions
- * view --json` / `deployments list --json` never expose the image reference, so
- * that prefix is the only link — this script derives the keep set from
- * `wrangler deployments list --json` version ids, then PROVES the mapping before
- * deleting anything: it resolves each live app's configured image digest
- * (`wrangler containers info`) and checks it equals the registry digest of the
- * kept "current" tag. Any mismatch aborts.
+ * How version-id tags map to versions: wrangler tagged a Dockerfile-built
+ * image with the first 8 hex chars of the Worker VERSION id it deployed.
+ * `wrangler versions view --json` / `deployments list --json` never expose the
+ * image reference, so that prefix was the only link for the version-id era —
+ * this script derives that half of the keep set from `wrangler deployments
+ * list --json` version ids, then PROVES the mapping before deleting anything:
+ * it resolves each live app's configured image digest (`wrangler containers
+ * info`) and checks it equals the registry digest of SOME tag in that env's
+ * keep set (the content-hash tag once redeployed post-#2261, or still the
+ * version-id tag until then). Any mismatch aborts.
  *
  * Trust boundary: `wrangler containers images list --json` is the ONLY
  * exists/doesn't-exist oracle. The registry's own `/v2/.../tags/list` is
@@ -37,8 +50,10 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { computeTag, REGISTRY_PREFIX } from "./discovery-container-image.ts";
 
 export const IMAGE_REPO = "releases-discovery-sandbox";
+const WRANGLER_CONFIG_REL = "workers/discovery/wrangler.jsonc";
 const WRANGLER_CONFIG = join(import.meta.dir, "../workers/discovery/wrangler.jsonc");
 
 /** Container apps whose configured image must map onto a kept tag. */
@@ -89,6 +104,53 @@ export function buildKeepSet(perEnvTags: string[][]): Set<string> {
   const keep = new Set<string>();
   for (const tags of perEnvTags) for (const t of tags) keep.add(t);
   return keep;
+}
+
+/**
+ * Extracts the pinned content-hash tag(s) for `repoPrefix` (e.g.
+ * `registry.cloudflare.com/<acct>/releases-discovery-sandbox`) out of a
+ * wrangler.jsonc file's text. Pure. Mirrors
+ * discovery-container-image.ts's own image-field regex.
+ */
+export function extractPinnedTags(wranglerJsoncText: string, repoPrefix: string): Set<string> {
+  const escaped = repoPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`${escaped}:([a-f0-9]+)`, "g");
+  const tags = new Set<string>();
+  for (const m of wranglerJsoncText.matchAll(re)) tags.add(m[1]!);
+  return tags;
+}
+
+/**
+ * Content-hash keep tags pinned at each of the last `n` commits on
+ * `origin/main` that touched `path` (Sunny's `resolveTagsFromGitHistory`,
+ * buildinternet/sunny#1771). `gitLog`/`gitShowAt` are injected so this is
+ * unit-testable without shelling out. Pure given those.
+ */
+export function resolveTagsFromGitHistory({
+  n,
+  repoPrefix,
+  path,
+  gitLog,
+  gitShowAt,
+}: {
+  n: number;
+  repoPrefix: string;
+  path: string;
+  gitLog: (n: number, path: string) => string[];
+  gitShowAt: (sha: string, path: string) => string;
+}): Set<string> {
+  const shas = gitLog(n, path);
+  const tags = new Set<string>();
+  for (const sha of shas) {
+    let content: string;
+    try {
+      content = gitShowAt(sha, path);
+    } catch {
+      continue;
+    }
+    for (const t of extractPinnedTags(content, repoPrefix)) tags.add(t);
+  }
+  return tags;
 }
 
 export type PlanRow = { tag: string; action: "keep" | "delete"; reason: string };
@@ -187,7 +249,35 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  // 1. Keep set from deployed Worker versions.
+  // 1a. Content-hash keep tags: the tag pinned in the current working tree
+  //     plus the tags pinned at the last `keep` commits on origin/main that
+  //     touched wrangler.jsonc (post-#2261 era; both envs share one repo/tag).
+  const currentPinnedTag = computeTag();
+  const gitHistoryTags = resolveTagsFromGitHistory({
+    n: keep,
+    repoPrefix: REGISTRY_PREFIX,
+    path: WRANGLER_CONFIG_REL,
+    gitLog: (n, path) =>
+      execFileSync("git", ["log", "-n", String(n), "--format=%H", "origin/main", "--", path], {
+        cwd: join(import.meta.dir, ".."),
+        encoding: "utf8",
+      })
+        .trim()
+        .split("\n")
+        .filter(Boolean),
+    gitShowAt: (sha, path) =>
+      execFileSync("git", ["show", `${sha}:${path}`], {
+        cwd: join(import.meta.dir, ".."),
+        encoding: "utf8",
+      }),
+  });
+  const contentHashTags = new Set([currentPinnedTag, ...gitHistoryTags]);
+  console.log(
+    `content-hash keep tags (${contentHashTags.size}): ${[...contentHashTags].sort().join(", ")}`,
+  );
+
+  // 1b. Keep set from deployed Worker versions (the version-id era, still
+  //     live for images pushed before #2261 redeploys land).
   const perEnv: Array<{ label: string; app: string; current: string | null; tags: string[] }> = [];
   for (const env of ENVIRONMENTS) {
     const deployments = wranglerJson([
@@ -204,14 +294,21 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
-    perEnv.push({ label: env.label, app: env.app, current, tags });
-    console.log(`${env.label}: current ${current}, keeping ${tags.join(", ")}`);
+    // Union with the content-hash tags: the digest proof below accepts a
+    // match against ANY tag in this per-env keep set, since the live app may
+    // now be pinned to the content-hash tag instead of a version-id tag.
+    const unioned = [...new Set([...tags, ...contentHashTags])];
+    perEnv.push({ label: env.label, app: env.app, current, tags: unioned });
+    console.log(`${env.label}: current ${current}, keeping ${unioned.join(", ")}`);
   }
-  const keepSet = buildKeepSet(perEnv.map((e) => e.tags));
+  const keepSet = buildKeepSet([...perEnv.map((e) => e.tags), [...contentHashTags]]);
 
-  // 2. Prove the version-id → tag mapping against each live app's digest.
-  //    Only prod's app points at IMAGE_REPO; staging's app points at its own
-  //    repo, so verify it there (same tag scheme) without ever pruning it.
+  // 2. Prove the keep-set → live-image mapping against each live app's
+  //    digest: it must equal the registry digest of SOME tag in that env's
+  //    keep set — the content-hash tag once redeployed post-#2261, or still
+  //    the version-id tag until then. Only prod's app points at IMAGE_REPO;
+  //    staging's app points at its own repo, so verify it there (same tag
+  //    scheme) without ever pruning it.
   const apps = wranglerJson<Array<{ id: string; name: string }>>(["containers", "list"]);
   const creds = wranglerJson<{
     registry_host: string;
@@ -234,14 +331,23 @@ async function main(): Promise<void> {
     ]);
     const liveDigest = digestFromImageRef(info.configuration?.image);
     const repoOfApp = /\/([^/@:]+)[@:][^/]*$/.exec(info.configuration?.image ?? "")?.[1] ?? "";
-    const tagDigest = await registryDigest(creds, repoOfApp, env.current!);
-    if (!liveDigest || !tagDigest || liveDigest !== tagDigest) {
+    let matchedTag: string | null = null;
+    if (liveDigest) {
+      for (const candidate of env.tags) {
+        const tagDigest = await registryDigest(creds, repoOfApp, candidate);
+        if (tagDigest && tagDigest === liveDigest) {
+          matchedTag = candidate;
+          break;
+        }
+      }
+    }
+    if (!liveDigest || !matchedTag) {
       console.error(
-        `prune-container-images: ${env.label} app image digest (${liveDigest ?? "?"}) does not match registry digest of tag ${repoOfApp}:${env.current} (${tagDigest ?? "?"}). The version-id → tag assumption no longer holds; refusing to delete anything.`,
+        `prune-container-images: ${env.label} app image digest (${liveDigest ?? "?"}) does not match the registry digest of any tag in its keep set (${env.tags.join(", ")}). The keep-tag → live-image assumption no longer holds; refusing to delete anything.`,
       );
       process.exit(1);
     }
-    console.log(`${env.label}: live image digest matches ${repoOfApp}:${env.current} ✓`);
+    console.log(`${env.label}: live image digest matches ${repoOfApp}:${matchedTag} ✓`);
   }
 
   // 3. Candidates from the only trustworthy listing.
