@@ -10,6 +10,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 
 **Fixed**
 - MCP clients can now complete OAuth authorization — resource-request validation was incorrectly blocking clients that hadn't pre-declared their target resource, and a column encoding bug was silently discarding scope grants on new OAuth client registrations.
+- MCP OAuth sessions now issue refresh tokens so authenticated clients stay connected past the one-hour access-token expiry; concurrent token refreshes from multiple tabs or agent processes no longer trigger a forced re-authorization.
 
 ## August 30, 2026
 
