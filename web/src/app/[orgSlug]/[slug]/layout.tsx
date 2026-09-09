@@ -48,6 +48,12 @@ export default async function OrgSlugLayout({
       );
     }
     if (err instanceof ApiNotFoundError) notFound();
+    // Any other error rethrows as a retryable 5xx — deliberately NOT notFound().
+    // This is an ISR-cached route: a 404 here caches and signals "deindex", so a
+    // transient API failure must stay a retry that self-heals on the next
+    // revalidation, never drop a real page from the index. (The deterministic
+    // prerender-freeze that once pinned this as a stuck built-in 500 was the
+    // #source-page-500 no-store bug, fixed at the fetch layer — not here.)
     throw err;
   }
 
