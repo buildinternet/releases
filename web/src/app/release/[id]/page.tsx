@@ -552,6 +552,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 anchorReleaseId={release.id}
                 scope="org"
                 heading={`More from ${release.org.name}`}
+                cache="dynamic"
               />
             </Suspense>
           )}
@@ -561,6 +562,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               scope="global"
               heading="From other products"
               excludeOrgSlug={release.org?.slug ?? null}
+              cache="dynamic"
             />
           </Suspense>
           {release.fetchedAt && (

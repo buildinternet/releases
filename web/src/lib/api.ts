@@ -375,6 +375,33 @@ export const adminApi = {
 // worker's own `cacheControl` + Cloudflare CDN already absorb repeat reads.
 const PER_ENTITY_CACHE_OPTS = { cache: "no-store" } as const;
 
+/**
+ * Static-generation-safe variant of {@link PER_ENTITY_CACHE_OPTS} for the ISR
+ * pages (source / product). A `no-store` fetch reached during a route's static
+ * generation is dynamic-server usage that aborts the prerender — Next then
+ * emits its built-in 500 and Vercel caches it, so the source pages 500 sitewide
+ * (#source-page-500). ISR consumers use a revalidate window instead. It matches
+ * the page's own `export const revalidate` (never lower: a route's regen cadence
+ * is the MIN of its literal and every fetch on it), and the entry count is
+ * bounded by source/product count — not the tens of thousands of release IDs the
+ * `no-store` note above guards against — so the write volume stays trivial.
+ */
+const PER_ENTITY_ISR_CACHE_OPTS = {
+  next: { revalidate: DEFAULT_REVALIDATE_SECONDS },
+} as const;
+
+/**
+ * How a per-entity related/coverage fetch caches, chosen by the calling route:
+ * `"dynamic"` (no-store) on the dynamic release page, `"isr"` on the statically
+ * generated source/product pages. Defaults to `"dynamic"` to preserve the
+ * historical no-store behavior for direct callers; the shared `RelatedRail`
+ * defaults itself to `"isr"` so a new ISR consumer can't regress into the 500.
+ */
+export type RelatedCacheMode = "isr" | "dynamic";
+
+const relatedCacheOpts = (mode: RelatedCacheMode): FetchCacheInit =>
+  mode === "isr" ? PER_ENTITY_ISR_CACHE_OPTS : PER_ENTITY_CACHE_OPTS;
+
 export interface LatestReleaseItem {
   id: string;
   version: string | null;
@@ -632,12 +659,13 @@ export const api = {
     scope: "org" | "global" = "global",
     limit = 8,
     excludeOrg?: string | null,
+    cacheMode: RelatedCacheMode = "dynamic",
   ) =>
     fetchApi<RelatedReleasesResponse>(
       `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}${
         excludeOrg ? `&excludeOrg=${encodeURIComponent(excludeOrg)}` : ""
       }`,
-      PER_ENTITY_CACHE_OPTS,
+      relatedCacheOpts(cacheMode),
     ),
   coverage: (releaseId: string) =>
     fetchApi<ReleaseCoverageResponse>(

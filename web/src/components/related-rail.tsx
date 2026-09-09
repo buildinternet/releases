@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { api, type RelatedReleaseItem } from "@/lib/api";
+import { unstable_rethrow } from "next/navigation";
+import { api, type RelatedCacheMode, type RelatedReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { clamp, stripMarkdown } from "@/lib/og-helpers";
 import { appRowInfoFromWire } from "@/lib/app-source";
@@ -16,6 +17,16 @@ interface RelatedRailProps {
    * avoid overlap with the org-scoped rail stacked above it. */
   excludeOrgSlug?: string | null;
   limit?: number;
+  /**
+   * Fetch-cache strategy, dictated by the host route. ISR pages (source /
+   * product) MUST use `"isr"`: a `no-store` fetch during static generation
+   * aborts the prerender and Next serves a cached built-in 500 (#source-page-500).
+   * The dynamic release page passes `"dynamic"` to keep per-release `no-store`
+   * (its anchor keys span tens of thousands of IDs — see the note on
+   * `PER_ENTITY_CACHE_OPTS`). Defaults to the static-safe `"isr"` so a new ISR
+   * consumer can't reintroduce the regression.
+   */
+  cache?: RelatedCacheMode;
 }
 
 /** Shared card chrome. */
@@ -43,12 +54,17 @@ export async function RelatedRail({
   heading,
   excludeOrgSlug = null,
   limit = 2,
+  cache = "isr",
 }: RelatedRailProps) {
   if (!anchorReleaseId) return null;
 
   const res = await api
-    .relatedReleases(anchorReleaseId, scope, limit, excludeOrgSlug)
+    .relatedReleases(anchorReleaseId, scope, limit, excludeOrgSlug, cache)
     .catch((err) => {
+      // Let Next's own control-flow signals (dynamic bail-out, notFound,
+      // redirect) propagate — swallowing them turns a graceful dynamic
+      // fallback into a hard prerender failure (the #source-page-500 pitfall).
+      unstable_rethrow(err);
       console.error(
         `[related-rail] releases fetch failed scope=${scope} anchor=${anchorReleaseId}:`,
         err instanceof Error ? err.message : err,
