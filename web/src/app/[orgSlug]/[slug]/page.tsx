@@ -92,6 +92,9 @@ export default async function OrgSlugPage({
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     if (err instanceof ApiNotFoundError) notFound();
+    // Retryable 5xx, deliberately not notFound — same policy as layout.tsx
+    // (#source-page-500): a cached 404 on this ISR route would risk deindexing a
+    // real page during a transient API failure, which a 5xx retry avoids.
     throw err;
   }
 
