@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { api, type ReleaseCoverageResponse, type ReleaseCoverageSibling } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { ReleaseThumb } from "./release-thumb";
@@ -18,6 +19,9 @@ export async function AlsoCoveredBy({ anchorReleaseId }: AlsoCoveredByProps) {
   try {
     coverage = await api.coverage(anchorReleaseId);
   } catch (err) {
+    // Propagate Next's control-flow signals rather than swallowing them (see
+    // related-rail.tsx / #source-page-500).
+    unstable_rethrow(err);
     console.error(
       `[also-covered-by] fetch failed anchor=${anchorReleaseId}:`,
       err instanceof Error ? err.message : err,
