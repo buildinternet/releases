@@ -28,20 +28,20 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
         openRouterApiKey: resolvingKey,
       }),
     );
 
     expect(deps.aiSdkModel).toBeDefined();
-    expect(deps.aiSdkModelLabel).toBe("deepseek/deepseek-v4-pro");
+    expect(deps.aiSdkModelLabel).toBe("deepseek/deepseek-v4.1-flash");
   });
 
   it("falls back to Anthropic AI SDK when openrouterEnabled is false", async () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: false,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
         openRouterApiKey: resolvingKey,
       }),
     );
@@ -67,7 +67,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
         openRouterApiKey: nullKey,
       }),
     );
@@ -80,7 +80,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
       }),
     );
 
@@ -125,13 +125,13 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
         openRouterApiKey: resolvingKey,
       }),
     );
 
     expect(deps.oneShotAiSdkModel).toBeDefined();
-    expect(deps.oneShotAiSdkModelLabel).toBe("deepseek/deepseek-v4-pro");
+    expect(deps.oneShotAiSdkModelLabel).toBe("deepseek/deepseek-v4.1-flash");
     expect(deps.oneShotAiSdkProvider).toBe("openrouter");
   });
 
@@ -139,7 +139,7 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: false,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
         openRouterApiKey: resolvingKey,
       }),
     );
@@ -168,7 +168,7 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     const deps = await buildWorkerExtractDeps(
       baseEnv({
         openrouterEnabled: true,
-        extractModel: "deepseek/deepseek-v4-pro",
+        extractModel: "deepseek/deepseek-v4.1-flash",
         openRouterApiKey: nullKey,
       }),
     );

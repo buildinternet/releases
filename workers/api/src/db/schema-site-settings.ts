@@ -7,7 +7,7 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
  * OSS CLI has no business with. Queried via explicit `.select().from(siteSettings)`
  * on a `createDb(...)` handle.
  *
- * One row per key; the only key today is `site_notice`. `updated_at` is the
+ * One row per key (`site_notice`, `ai_lane_models`, …). `updated_at` is the
  * last-write time in epoch ms (mode "timestamp_ms" → Date in JS).
  *
  * Paired migration: 20260611000000_add_site_settings.sql.

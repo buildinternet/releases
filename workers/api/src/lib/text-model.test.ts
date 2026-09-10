@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { createTestDb } from "../../../../tests/db-helper.js";
+import { putStoredAiLaneModels } from "../queries/site-settings.js";
+import { clearAiLaneModelCache } from "./ai-lane-models.js";
 import {
   resolveArticleExtractModel,
   resolveCollectionSummaryModel,
@@ -152,11 +155,29 @@ describe("resolveSummarizeModel — model var is the per-lane gate", () => {
   it("on the OpenRouter path, disables reasoning and excludes GMICloud (#1633)", async () => {
     const env = baseEnv({
       FLAGS: flagsBinding({ "openrouter-enabled": true }),
-      SUMMARIZE_MODEL: "~deepseek/deepseek-v4-flash-latest",
+      SUMMARIZE_MODEL: "deepseek/deepseek-v4.1-flash",
     });
     const body = await captureOpenRouterBody(resolveSummarizeModel, env);
     expect(body.reasoning).toEqual({ enabled: false });
     expect(body.provider).toEqual({ ignore: ["gmicloud"] });
+  });
+
+  it("uses a site_settings overlay over the wrangler SUMMARIZE_MODEL", async () => {
+    const db = createTestDb();
+    clearAiLaneModelCache();
+    try {
+      await putStoredAiLaneModels(db.db, { summarize: "openai/gpt-4o-mini" });
+      const env = baseEnv({
+        FLAGS: flagsBinding({ "openrouter-enabled": true }),
+        SUMMARIZE_MODEL: "deepseek/deepseek-v4.1-flash",
+        DB: db.db as unknown as D1Database,
+      });
+      const body = await captureOpenRouterBody(resolveSummarizeModel, env);
+      expect(body.model).toBe("openai/gpt-4o-mini");
+    } finally {
+      clearAiLaneModelCache();
+      db.cleanup?.();
+    }
   });
 });
 

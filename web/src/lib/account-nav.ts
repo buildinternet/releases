@@ -21,6 +21,7 @@ import {
   StatusIcon,
   KeyIcon,
   MailIcon,
+  ModelIcon,
 } from "@/components/account/icons";
 
 /** Reveal not-yet-wired panels in the sidebar. Flip to true once their backends land. */
@@ -194,6 +195,15 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         group: ADMIN_GROUP_LABEL,
         description: "Send a sample of every outbound email template to your inbox.",
         Icon: MailIcon,
+        ready: true,
+      },
+      {
+        key: "admin-models",
+        label: "Models",
+        href: "/admin/models",
+        group: ADMIN_GROUP_LABEL,
+        description: "Pick the OpenRouter model for each AI lane without a deploy.",
+        Icon: ModelIcon,
         ready: true,
       },
     ],

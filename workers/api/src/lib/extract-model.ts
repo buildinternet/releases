@@ -13,6 +13,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { ensureAgentTracing } from "./agent-tracing.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
+import { effectiveLaneModel } from "./ai-lane-models.js";
 
 export interface ExtractModelEnv extends AnthropicEnv {
   FLAGS?: FlagshipBinding;
@@ -21,6 +22,8 @@ export interface ExtractModelEnv extends AnthropicEnv {
   OPENROUTER_API_KEY?: SecretBinding;
   OPENROUTER_BASE_URL?: string;
   EXTRACT_MODEL?: string;
+  /** Optional; when set, operator overlays from site_settings win over wrangler vars. */
+  DB?: D1Database;
 }
 
 /**
@@ -57,7 +60,7 @@ export async function resolveExtractAiSdkModel(
   ]);
   return resolveToolLoopAiSdkModel({
     openrouterEnabled,
-    extractModel: env.EXTRACT_MODEL,
+    extractModel: await effectiveLaneModel(env, "extract"),
     openRouterApiKey,
     openRouterBaseURL: env.OPENROUTER_BASE_URL,
     anthropicApiKey: anthropicApiKey ?? undefined,

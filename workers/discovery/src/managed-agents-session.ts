@@ -36,6 +36,11 @@ import {
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { signingFetchFromRawKey } from "@releases/core-internal/web-bot-auth-sign";
+import {
+  AI_LANE_MODELS_KEY,
+  applyLaneOverride,
+  parseAiLaneModels,
+} from "@releases/core-internal/ai-lane-models";
 import { recordSessionSpend } from "@releases/lib/spend-cap";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -45,6 +50,24 @@ import { FLAGS, flag } from "@releases/lib/flags";
  * observability (`key-missing` / `sign-setup-failed` warns) so both call sites
  * behave consistently.
  */
+/** Overlay the operator extract-model override from site_settings; fail-open to the wrangler var. */
+async function effectiveExtractModel(env: Env): Promise<string | undefined> {
+  try {
+    const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = ?")
+      .bind(AI_LANE_MODELS_KEY)
+      .first<{ value: string }>();
+    const overrides = parseAiLaneModels(row?.value ?? null);
+    return applyLaneOverride(env.EXTRACT_MODEL, overrides.extract);
+  } catch (err) {
+    logEvent("warn", {
+      component: "managed-agents-session",
+      event: "extract-model-overlay-failed",
+      err: err instanceof Error ? err : String(err),
+    });
+    return env.EXTRACT_MODEL?.trim() || undefined;
+  }
+}
+
 async function buildDiscoverySignedFetch(env: Env): Promise<typeof fetch> {
   if (!(await flag(env.FLAGS, env.WEB_BOT_AUTH_ENABLED, FLAGS.webBotAuthEnabled))) return fetch;
   try {
@@ -508,7 +531,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   openrouterEnabled,
                   openRouterApiKey: this.env.OPENROUTER_API_KEY,
                   openRouterBaseURL: this.env.OPENROUTER_BASE_URL,
-                  extractModel: this.env.EXTRACT_MODEL,
+                  extractModel: await effectiveExtractModel(this.env),
                   signedFetch,
                 },
                 sourceIdentifier,

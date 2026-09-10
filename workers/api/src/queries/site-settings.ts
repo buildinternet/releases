@@ -4,6 +4,11 @@ import {
   type SiteNotice,
   type StoredSiteNotice,
 } from "@buildinternet/releases-core/site-notice";
+import {
+  AI_LANE_MODELS_KEY,
+  parseAiLaneModels,
+  type AiLaneModels,
+} from "@releases/core-internal/ai-lane-models";
 import type { AnyDb } from "../db.js";
 import { siteSettings } from "../db/schema-site-settings.js";
 
@@ -51,4 +56,32 @@ export async function putStoredSiteNotice(
 ): Promise<StoredSiteNotice> {
   const now = await setSetting(db, SITE_NOTICE_KEY, JSON.stringify(notice));
   return { ...notice, updatedAt: now.toISOString() };
+}
+
+export interface StoredAiLaneModels {
+  models: AiLaneModels;
+  updatedAt: string | null;
+}
+
+/** Read operator OpenRouter-model overrides, or `{ models: {} }` when unset. */
+export async function getStoredAiLaneModels(db: AnyDb): Promise<StoredAiLaneModels> {
+  const row = await db
+    .select()
+    .from(siteSettings)
+    .where(eq(siteSettings.key, AI_LANE_MODELS_KEY))
+    .get();
+  if (!row) return { models: {}, updatedAt: null };
+  return {
+    models: parseAiLaneModels(row.value),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** Persist the overlay map (only lanes with an override) and return it stamped. */
+export async function putStoredAiLaneModels(
+  db: AnyDb,
+  models: AiLaneModels,
+): Promise<StoredAiLaneModels> {
+  const now = await setSetting(db, AI_LANE_MODELS_KEY, JSON.stringify(models));
+  return { models, updatedAt: now.toISOString() };
 }
