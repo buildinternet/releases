@@ -48,6 +48,7 @@ import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { releaseSourceLocks } from "../lib/source-lock.js";
 import { notifyUpdateStatusHub } from "../lib/update-dispatch.js";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
+import { effectiveLaneModel } from "../lib/ai-lane-models.js";
 
 export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
   /**
@@ -353,7 +354,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
       openrouterEnabled,
       openRouterApiKey: env.OPENROUTER_API_KEY,
       openRouterBaseURL: env.OPENROUTER_BASE_URL,
-      extractModel: env.EXTRACT_MODEL,
+      extractModel: await effectiveLaneModel(env, "extract"),
       signedFetch,
       // Direct-D1 persistence (#1946 phase 4, task 6/8) — replaces the HTTP
       // self-call persister. `apiFetcher` above stays wired for the

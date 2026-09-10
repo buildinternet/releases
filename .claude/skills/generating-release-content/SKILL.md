@@ -35,7 +35,7 @@ Re-export from that file:
 - `buildReleaseBlock(input)` — build the user message body from a `SummarizeReleaseInput` (org slug, source name, product name, title, version, url, content)
 - `isEmptyContent(body)` — short-circuit boilerplate-only bodies; skip the model and write NULLs
 - `parseReleaseContent(text)` — pull `<title>`, `<title_short>`, `<summary>`, `<composition>` (plus `<breaking>`/`<migration>`, which this skill's write paths drop — see above) out of a response
-- `MODEL` (`claude-haiku-4-5` — Anthropic fallback / `--anthropic*` paths only), `MAX_OUTPUT_TOKENS` (420 — 280 pre-#1696 cap + buffer for the breaking/migration tags), `MAX_BODY_CHARS` (8000). Live summarize + the backfill script default to OpenRouter `~deepseek/deepseek-v4-flash-latest` (`SUMMARIZE_MODEL` / `RELEASE_CONTENT_MODEL`).
+- `MODEL` (`claude-haiku-4-5` — Anthropic fallback / `--anthropic*` paths only), `MAX_OUTPUT_TOKENS` (420 — 280 pre-#1696 cap + buffer for the breaking/migration tags), `MAX_BODY_CHARS` (8000). Live summarize + the backfill script default to OpenRouter `deepseek/deepseek-v4.1-flash` (`SUMMARIZE_MODEL` / `RELEASE_CONTENT_MODEL`).
 
 For experiments that change the prompt, edit `SYSTEM_PROMPT` in place on a branch and run this skill against a small org — that's exactly what the upstream module exists for.
 

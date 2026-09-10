@@ -4,7 +4,7 @@
  * `title_short`, and `summary` on `releases` rows that match a filter.
  *
  * Default provider matches production's cheap summarize lane: OpenRouter +
- * DeepSeek Flash (`~deepseek/deepseek-v4-flash-latest`, overridable via
+ * DeepSeek Flash (`deepseek/deepseek-v4.1-flash`, overridable via
  * `SUMMARIZE_MODEL` / `RELEASE_CONTENT_MODEL`). Anthropic Message Batches
  * (Haiku) remain available as an explicit opt-in for large discounted
  * backfills — OpenRouter has no Batches API equivalent.
@@ -92,8 +92,8 @@ function resolveProviderPath(): ProviderPath {
 const providerPath = resolveProviderPath();
 const useAnthropicBatch = providerPath === "anthropic-batch";
 
-/** Same rolling alias as workers/api wrangler.jsonc SUMMARIZE_MODEL. */
-const DEFAULT_OPENROUTER_MODEL = "~deepseek/deepseek-v4-flash-latest";
+/** Same model id as workers/api wrangler.jsonc SUMMARIZE_MODEL. */
+const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4.1-flash";
 const openRouterModel =
   process.env.RELEASE_CONTENT_MODEL?.trim() ||
   process.env.SUMMARIZE_MODEL?.trim() ||

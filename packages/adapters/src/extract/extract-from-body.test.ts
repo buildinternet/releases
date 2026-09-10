@@ -738,7 +738,7 @@ describe("extractFromBody — one-shot AI-SDK runtime failure (issue #2166)", ()
 
     const model = anthropicSpikeModel({
       apiKey: "sk-test",
-      model: "deepseek-v4-flash",
+      model: "deepseek-v4.1-flash",
       fetch: boomFetch,
     });
 
@@ -753,7 +753,7 @@ describe("extractFromBody — one-shot AI-SDK runtime failure (issue #2166)", ()
       },
       makeDeps(client, {
         oneShotAiSdkModel: model,
-        oneShotAiSdkModelLabel: "deepseek-v4-flash",
+        oneShotAiSdkModelLabel: "deepseek-v4.1-flash",
         oneShotAiSdkProvider: "openrouter",
       }),
     );

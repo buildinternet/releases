@@ -364,9 +364,11 @@ export type Env = {
     // resolveExtractAiSdkModel in the firecrawl-ingest / backfill workflows.
     EXTRACT_MODEL?: string;
     // OpenRouter model for the shared summarization lane (release summaries AND
-    // collection daily summaries); empty → stay on Anthropic Haiku. Read by
-    // resolveSummarizeModel + resolveCollectionSummaryModel via TextModelEnv.
+    // collection daily summaries); empty → stay on Anthropic Haiku. Wrangler
+    // default — operators can overlay at runtime via PUT /v1/ai/models.
     SUMMARIZE_MODEL?: string;
+    FEED_ENRICH_MODEL?: string;
+    MARKETING_CLASSIFIER_MODEL?: string;
     // How many recent ET days to back-fill if a summary row is missing (default 2).
     // Read by runCollectionSummaries.
     COLLECTION_SUMMARY_CATCHUP_DAYS?: string;

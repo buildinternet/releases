@@ -6,7 +6,7 @@
  * over the golden changelog fixtures, once per model lane, and grades each lane
  * against the fixtures' `.expected.json` with the shared field grader. The point
  * is a side-by-side, ground-truth quality number for the DeepSeek-vs-Anthropic
- * decision: is DeepSeek Pro (reasoning OFF) good enough to displace Sonnet on the
+ * decision: is DeepSeek V4.1 Flash (reasoning OFF) good enough to displace Sonnet on the
  * extraction lane before we flip `openrouter-enabled` + set EXTRACT_MODEL.
  *
  * Both lanes run through the SAME AI-SDK loop so the only variable is the model.
@@ -50,11 +50,11 @@ const LANES: Lane[] = [
     },
   },
   {
-    name: "deepseek-v4-pro (openrouter, reasoning off)",
+    name: "deepseek-v4.1-flash (openrouter, reasoning off)",
     model: () => {
       const key = process.env.OPENROUTER_API_KEY;
       return key
-        ? buildOpenRouterExtractModel({ apiKey: key, model: "deepseek/deepseek-v4-pro" })
+        ? buildOpenRouterExtractModel({ apiKey: key, model: "deepseek/deepseek-v4.1-flash" })
         : null;
     },
   },

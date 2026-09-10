@@ -37,6 +37,8 @@ import { estimateCost } from "@releases/lib/anthropic-pricing";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { ensureAgentTracing } from "./agent-tracing.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
+import { effectiveLaneModel } from "./ai-lane-models.js";
+import type { AiLane } from "@releases/core-internal/ai-lane-models";
 
 export interface TextModelEnv extends AnthropicEnv {
   /** "production" | "staging" — tags OpenRouter Broadcast traces by environment. */
@@ -46,6 +48,8 @@ export interface TextModelEnv extends AnthropicEnv {
   AGENT_TRACE_PAYLOADS_ENABLED?: string;
   OPENROUTER_API_KEY?: SecretBinding;
   OPENROUTER_BASE_URL?: string;
+  /** Optional; when set, operator overlays from site_settings win over wrangler vars. */
+  DB?: D1Database;
   MARKETING_CLASSIFIER_MODEL?: string;
   /** OpenRouter model for the summarization lanes (release summaries AND collection
    *  daily summaries — both are "summarize this content cheaply"); empty → stay on
@@ -122,6 +126,7 @@ function withLaneUsageLogging(model: TextModel, lane: string, env: TextModelEnv)
 async function resolveTextModel(
   env: TextModelEnv,
   opts: {
+    lane: AiLane;
     orModel: string | undefined;
     anthropicModel: string;
     generationName: string;
@@ -143,7 +148,7 @@ async function resolveTextModel(
 
   if (useOpenRouter) {
     const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
-    const model = opts.orModel?.trim();
+    const model = (await effectiveLaneModel(env, opts.lane)) ?? opts.orModel?.trim();
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
       return withLaneUsageLogging(
@@ -213,6 +218,7 @@ async function resolveTextModel(
 
 export function resolveMarketingModel(env: TextModelEnv): Promise<TextModel | null> {
   return resolveTextModel(env, {
+    lane: "marketing",
     orModel: env.MARKETING_CLASSIFIER_MODEL,
     anthropicModel: ANTHROPIC_MARKETING_MODEL,
     generationName: "marketing-classifier",
@@ -221,6 +227,7 @@ export function resolveMarketingModel(env: TextModelEnv): Promise<TextModel | nu
 
 export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | null> {
   return resolveTextModel(env, {
+    lane: "summarize",
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
     generationName: "summarize-release",
@@ -231,6 +238,7 @@ export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | nu
 
 export function resolveArticleExtractModel(env: TextModelEnv): Promise<TextModel | null> {
   return resolveTextModel(env, {
+    lane: "feed-enrich",
     orModel: env.FEED_ENRICH_MODEL,
     anthropicModel: ANTHROPIC_ARTICLE_MODEL,
     generationName: "feed-enrich",
@@ -243,6 +251,7 @@ export function resolveArticleExtractModel(env: TextModelEnv): Promise<TextModel
 // Only the generationName differs, to keep the two lanes separable in usage/cost.
 export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextModel | null> {
   return resolveTextModel(env, {
+    lane: "summarize",
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
     generationName: "collection-daily-summary",
@@ -258,6 +267,7 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
 // spend in usage logs.
 export function resolveCollectionWeeklyDigestModel(env: TextModelEnv): Promise<TextModel | null> {
   return resolveTextModel(env, {
+    lane: "summarize",
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
     generationName: "collection-weekly-digest",
@@ -348,7 +358,7 @@ export async function resolveOverviewModel(
 
   if (useOpenRouter) {
     const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
-    const model = env.SUMMARIZE_MODEL?.trim();
+    const model = (await effectiveLaneModel(env, "summarize")) ?? env.SUMMARIZE_MODEL?.trim();
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
       return {

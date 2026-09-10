@@ -27,7 +27,8 @@
     "./overview-eligibility": "./src/overview-eligibility.ts",
     "./overview-upsert": "./src/overview-upsert.ts",
     "./composition-metadata": "./src/composition-metadata.ts",
-    "./webhook-alert-format": "./src/webhook-alert-format.ts"
+    "./webhook-alert-format": "./src/webhook-alert-format.ts",
+    "./ai-lane-models": "./src/ai-lane-models.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",

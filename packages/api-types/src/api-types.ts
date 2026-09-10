@@ -15,6 +15,13 @@ import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-co
 import type { ApiScope } from "@buildinternet/releases-core/api-token";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import type {
+  AiLaneIdSchema,
+  AiLaneModelsPutSchema,
+  AiLaneStateSchema,
+  OpenRouterCatalogModelSchema,
+  AiLaneModelsResponseSchema,
+} from "./schemas/ai-models.js";
+import type {
   MediaItemSchema,
   PaginationSchema,
   StatsSchema,
@@ -280,6 +287,13 @@ export {
   NoticeSchema,
 } from "./schemas/shared.js";
 export { SiteNoticeSchema, SiteNoticeResponseSchema } from "./schemas/site-notice.js";
+export {
+  AiLaneIdSchema,
+  AiLaneModelsPutSchema,
+  AiLaneStateSchema,
+  OpenRouterCatalogModelSchema,
+  AiLaneModelsResponseSchema,
+} from "./schemas/ai-models.js";
 export {
   OrgListItemSchema,
   OrgListResponseSchema,
@@ -588,6 +602,12 @@ export type { ResolveResponse } from "./schemas/resolve.js";
 // ── Media ──
 
 export type MediaItem = z.infer<typeof MediaItemSchema>;
+
+export type AiLaneId = z.infer<typeof AiLaneIdSchema>;
+export type AiLaneModelsPut = z.infer<typeof AiLaneModelsPutSchema>;
+export type AiLaneState = z.infer<typeof AiLaneStateSchema>;
+export type OpenRouterCatalogModel = z.infer<typeof OpenRouterCatalogModelSchema>;
+export type AiLaneModelsResponse = z.infer<typeof AiLaneModelsResponseSchema>;
 
 // ── Stub tier (#1947) ──
 

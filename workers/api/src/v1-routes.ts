@@ -34,6 +34,7 @@ import playbook from "./routes/playbook.js";
 import { productRoutes } from "./routes/products.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { aiLaneRoutes } from "./routes/ai-lanes.js";
+import { aiModelRoutes } from "./routes/ai-models.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminSearchQueriesRoutes } from "./routes/admin-search-queries.js";
@@ -101,6 +102,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", playbook);
   v1.route("/", evaluateRoutes);
   v1.route("/", aiLaneRoutes);
+  v1.route("/", aiModelRoutes);
   v1.route("/", adminEmbedStatusRoutes);
   v1.route("/", adminCronRunsRoutes);
   v1.route("/", adminSearchQueriesRoutes);

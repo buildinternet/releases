@@ -46,12 +46,13 @@
     "RAW_SNAPSHOT_CAPTURE_ENABLED": "false",
     // OpenRouter extraction lane (issue #1536). Empty → the large-body tool-loop
     // stays on Anthropic regardless of the `openrouter-enabled` flag. Set to an
-    // OpenRouter model id (e.g. "deepseek/deepseek-v4-pro") to route extraction
+    // OpenRouter model id (e.g. "deepseek/deepseek-v4.1-flash") to route extraction
     // there. OPENROUTER_API_KEY is bound below; the resolver still fails open to
     // Anthropic unless the flag is on AND this var is non-empty.
-    // Set to deepseek-v4-pro after the extraction eval showed corpus-wide parity
-    // with Sonnet-4.6 (issue #1536); reasoning is disabled in the OpenRouter model.
-    "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
+    // Set to deepseek-v4.1-flash (vision-capable). Prior: deepseek-v4-pro after
+    // the extraction eval showed corpus-wide parity with Sonnet-4.6 (issue
+    // #1536); reasoning is disabled in the OpenRouter model.
+    "EXTRACT_MODEL": "deepseek/deepseek-v4.1-flash",
   },
   "containers": [
     {
@@ -163,7 +164,7 @@
         "RAW_SNAPSHOT_CAPTURE_ENABLED": "false",
         // OpenRouter extraction lane (issue #1536). Empty → stays on Anthropic
         // (OPENROUTER_API_KEY is bound below; flag + non-empty var still required).
-        "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
+        "EXTRACT_MODEL": "deepseek/deepseek-v4.1-flash",
       },
       "containers": [
         {

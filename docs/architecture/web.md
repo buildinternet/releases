@@ -235,7 +235,9 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 Operator tools live under `/admin/*` inside the account settings shell (`SettingsShell` + `AccountSettingsNav`) — an **Admin** sidebar section alongside Personal / Workspace. Nav items live in `web/src/lib/account-nav.ts` (same source as the rest of settings); the Admin group is only rendered when `useIsAdmin(devAdmin)` is true. Server gate is `isAdminViewer()` on `web/src/app/admin/layout.tsx` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. The account dropdown **Admin** link goes to `adminDefaultHref()` (first ready panel, currently Site notice). Bare `/admin` 308-redirects there so old bookmarks still land in the sidebar shell.
 
-Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`).
+Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`), **Models** (`/admin/models`).
+
+**Models** (`GET`/`PUT /v1/ai/models`) lets operators pick the OpenRouter model for each cheap-call lane (summarize, extract, feed-enrich, marketing classifier) from OpenRouter's live catalog. Overrides live in `site_settings` (`ai_lane_models`); wrangler vars remain the fallback when a lane has no override. The next AI call picks up a change (isolate cache ≤30s). Empty wrangler + no override still means Anthropic Haiku fail-open.
 
 **Test emails** lists every outbound template from `GET /v1/admin/emails/samples` and sends fabricated `[test]` previews through `POST /v1/admin/emails/test` (proxied via `/api/proxy/admin/emails/test`). Samples use static fixture data — auth templates go through `AUTH_EMAIL`, operator alerts through `SEND_EMAIL`. This is the fast path for checking footers, links, and deliverability after template edits.
 
