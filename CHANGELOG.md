@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 9, 2026
+
+**Fixed**
+- Source changelog pages — the `/org/source` routes such as `/prisma/prisma-changelog` — were returning 500 errors sitewide and flagging as server errors in search-engine crawls; they now load correctly.
+
 ## August 31, 2026
 
 **Added**
