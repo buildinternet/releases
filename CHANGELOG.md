@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 10, 2026
+
+**Added**
+- Admin hub gains a Models page (`/admin/models`) — operators can now pick the AI model per processing lane (summarize, extract, feed-enrich, marketing classifier) from OpenRouter's live catalog without a wrangler config edit; changes take effect on the next AI call with no redeploy.
+
 ## September 9, 2026
 
 **Fixed**
