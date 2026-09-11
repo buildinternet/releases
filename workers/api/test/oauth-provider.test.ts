@@ -99,6 +99,17 @@ describe("oauthValidAudiences", () => {
     expect(auds).toContain("https://mcp.releases.sh");
   });
 
+  it("expands both the advertised MCP host and the mcp.releases.sh alias", () => {
+    const auds = oauthValidAudiences({
+      BETTER_AUTH_URL: "https://api.releases.sh",
+      OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh, https://agents.releases.sh",
+    } as never);
+    expect(auds).toContain("https://agents.releases.sh");
+    expect(auds).toContain("https://agents.releases.sh/mcp");
+    expect(auds).toContain("https://mcp.releases.sh");
+    expect(auds).toContain("https://mcp.releases.sh/mcp");
+  });
+
   it("falls back to the api origin (both forms) when nothing is configured", () => {
     expect(oauthValidAudiences({} as never)).toEqual([
       "https://api.releases.sh",

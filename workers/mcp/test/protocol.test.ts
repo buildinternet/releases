@@ -190,6 +190,27 @@ describe("modern tools/call", () => {
   });
 });
 
+describe("advertised host alias", () => {
+  it("serves tools/list on agents.releases.sh the same as mcp.releases.sh", async () => {
+    const res = await worker.fetch(
+      new Request("https://agents.releases.sh/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-method": "tools/list",
+        },
+        body: JSON.stringify(modernRpc("tools/list")),
+      }),
+      stubEnv(),
+      stubCtx(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { result: { tools: Array<{ name: string }> } };
+    expect(body.result.tools.map((t) => t.name)).toContain("search");
+  });
+});
+
 describe("cache hints", () => {
   it("advertises a private, hour-long TTL on tools/list", async () => {
     const res = await worker.fetch(

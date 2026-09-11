@@ -23,6 +23,6 @@ describe("GET /llms.txt", () => {
     expect(body).toMatch(/^# /);
     expect(body).toContain("## When to use");
     expect(body).toContain("https://api.releases.sh/v1");
-    expect(body).toContain("https://mcp.releases.sh/mcp");
+    expect(body).toContain("https://agents.releases.sh/mcp");
   });
 });

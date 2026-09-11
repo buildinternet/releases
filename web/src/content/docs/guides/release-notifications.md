@@ -67,7 +67,7 @@ Subscriptions come in two scopes — one URL for everything you follow, or per-o
 An agent usually shouldn't sit on a push channel — it should check on demand. Add the MCP server and "what changed in my stack this week?" becomes a tool call:
 
 ```bash
-claude mcp add --transport http releases https://mcp.releases.sh/mcp
+claude mcp add --transport http releases https://agents.releases.sh/mcp
 ```
 
 For a live terminal view, the CLI can follow the stream directly: `releases tail -f` polls for new releases as they land. And a follows-scoped webhook works as an agent trigger too — new release in, agent run out.

@@ -9,7 +9,7 @@ provider ("Sign in with Releases").
 ## TL;DR
 
 - **Public reads:** no auth. Call the REST API (`https://api.releases.sh`) or the
-  MCP server (`https://mcp.releases.sh/mcp`) directly.
+  MCP server (`https://agents.releases.sh/mcp`) directly.
 - **Authenticated calls:** obtain an OAuth access token from the authorization
   server below and send it as `Authorization: Bearer <token>` to
   `https://api.releases.sh`.

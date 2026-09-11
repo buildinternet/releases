@@ -7,7 +7,7 @@ const BASE_URL = "https://releases.sh";
 const REST_API_URL = "https://api.releases.sh";
 const OPENAPI_URL = `${REST_API_URL}/v1/openapi.json`;
 const SCALAR_DOCS_URL = `${REST_API_URL}/v1/docs`;
-const MCP_URL = "https://mcp.releases.sh/mcp";
+const MCP_URL = "https://agents.releases.sh/mcp";
 // "Sign in with Releases" OAuth 2.0 / OIDC authorization server. The issuer is
 // the api host plus the `/api/auth` basePath; the discovery documents are served
 // at the api-host origin (and aliased from the root domain via next.config

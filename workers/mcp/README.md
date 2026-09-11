@@ -1,6 +1,6 @@
 # Releases MCP worker
 
-Remote MCP server at `mcp.releases.sh` — serves the AI tool surface (search, catalog, follows, whats-changed) with scope-enforced auth (scoped API tokens, user API keys, OAuth JWTs).
+Remote MCP server at `agents.releases.sh` (alias `mcp.releases.sh`) — serves the AI tool surface (search, catalog, follows, whats-changed) with scope-enforced auth (scoped API tokens, user API keys, OAuth JWTs).
 
 ## Layout
 

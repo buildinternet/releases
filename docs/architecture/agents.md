@@ -81,10 +81,10 @@ After each managed-agent session ends — both successful completions and termin
 
 Managed agents operate against two tool surfaces. They share the same tool-use protocol from the model's perspective but are executed completely differently — the MCP surface is a public Worker, the custom-tool surface runs inside the discovery DO. Contributors frequently conflate them.
 
-| Surface          | Declared in                                                | Executed by                           | Writes? |
-| ---------------- | ---------------------------------------------------------- | ------------------------------------- | ------- |
-| **MCP tools**    | `workers/mcp/src/mcp-agent.ts` (`createServer`)            | `mcp.releases.sh` — remote MCP server | No      |
-| **Custom tools** | `managed-agents/src/shared/agent-tools.ts` (`AGENT_TOOLS`) | Discovery DO (`ManagedAgentsSession`) | Yes     |
+| Surface          | Declared in                                                | Executed by                                                        | Writes? |
+| ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ | ------- |
+| **MCP tools**    | `workers/mcp/src/mcp-agent.ts` (`createServer`)            | `agents.releases.sh` (alias `mcp.releases.sh`) — remote MCP server | No      |
+| **Custom tools** | `managed-agents/src/shared/agent-tools.ts` (`AGENT_TOOLS`) | Discovery DO (`ManagedAgentsSession`)                              | Yes     |
 
 Custom tools are plain Anthropic tool definitions ([Managed Agents → Custom tools](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)) that aren't served by any worker. When the model emits an `agent.custom_tool_use` event, the DO intercepts it, dispatches to `createTypedExecutor`, and sends the result back via `user.custom_tool_result`. Every write the agent performs (`manage_source`, `manage_playbook`, `manage_org`, `manage_product`, etc.) is a custom tool — writes run inside the trust boundary using the shared admin API key, not through the public MCP server.
 
@@ -96,7 +96,7 @@ sequenceDiagram
     participant M as Claude (model)
     participant S as Anthropic session
     participant DO as Discovery DO
-    participant MCP as mcp.releases.sh
+    participant MCP as agents.releases.sh
     participant API as api.releases.sh
     participant D1
 
@@ -127,13 +127,13 @@ sequenceDiagram
 
 ### Why not put writes in MCP?
 
-A single write tool in MCP would expose destructive operations to every unauthenticated caller of `mcp.releases.sh`. Adding principal resolution + per-org scoping to the MCP server is real work that depends on a staging auth story (issue #455) and vault-credential → principal mapping. Folding writes into MCP is planned but not scheduled.
+A single write tool in MCP would expose destructive operations to every unauthenticated caller of `agents.releases.sh`. Adding principal resolution + per-org scoping to the MCP server is real work that depends on a staging auth story (issue #455) and vault-credential → principal mapping. Folding writes into MCP is planned but not scheduled.
 
 ### How the agent gets MCP access
 
 Each agent must register two things at create/update time for the MCP read surface to work:
 
-1. **`mcp_servers`** — `[{ name: "releases", type: "url", url: "https://mcp.releases.sh" }]` (or `mcp-staging.releases.sh` in staging). Names the server inside the agent definition.
+1. **`mcp_servers`** — `[{ name: "releases", type: "url", url: "https://agents.releases.sh/mcp" }]` (or `mcp-staging.releases.sh` in staging). Names the server inside the agent definition. `https://mcp.releases.sh/mcp` remains a working alias.
 2. **`mcp_toolset`** in `tools` — `{ type: "mcp_toolset", mcp_server_name: "releases", default_config: { enabled: true, permission_policy: { type: "always_allow" } } }`. Without this entry the platform never registers MCP tools with the model. Without `always_allow`, the platform's default `always_ask` policy resolves to deny in non-interactive sessions and every MCP call comes back as `Permission to use <tool> has been denied`.
 
 `scripts/sync-agent-skills.ts` builds both via `buildMcpServerDefinition(env)` and `buildMcpToolset()` from `managed-agents/src/shared/agent-tools.ts`. The vault attached to each session (`vault_ids: [...]`) carries the bearer credential the platform uses when calling out to the MCP server — the credential entry must be named to match `mcp_servers.name` (`"releases"`) so the platform pairs them up.
@@ -177,7 +177,7 @@ The monorepo's Claude Code assets live under `.claude/` and auto-load on a trust
 - `.claude/skills/` — the production + operator skills; canonical for BOTH managed agents and local Claude Code (see below). User-facing reader skills live in the OSS CLI repo instead.
 - `.claude/agents/` — local eval/grader subagents (`rubric-grader`, `overview-writer`). The production discovery/worker prompts live in `managed-discovery.ts` and the `managed-agents/src/shared/*-prompt.ts` builders, not here.
 - `.claude/commands/` — repo-local slash commands (e.g. `/discover-changelog`). The consumer-facing `/releases` lookup command is not here — it ships in the public `releases` plugin from the OSS CLI marketplace, so duplicating it in the monorepo only invited drift.
-- `.mcp.json` (repo root) — points Claude Code at `mcp.releases.sh`.
+- `.mcp.json` (repo root) — points Claude Code at `agents.releases.sh/mcp`.
 
 **Skill sources of truth — ownership by audience, zero shared files (#1090).** Every skill has exactly one home; nothing is mirrored:
 

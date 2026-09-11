@@ -64,7 +64,7 @@ A feed is the lowest-friction subscription, but not the only one — [How to get
 
 - **Webhooks** — sign in, follow the orgs you care about, and get a `release.created` POST to your endpoint in real time. See the [webhooks docs](/docs/api/webhooks).
 - **REST API** — poll `https://api.releases.sh/v1/releases/latest` with filters for org, source, or date. See the [REST API docs](/docs/api/rest).
-- **MCP for agents** — `claude mcp add --transport http releases https://mcp.releases.sh/mcp` gives an agent tools to check what changed on demand, no subscription at all.
+- **MCP for agents** — `claude mcp add --transport http releases https://agents.releases.sh/mcp` gives an agent tools to check what changed on demand, no subscription at all.
 
 ## FAQ
 
