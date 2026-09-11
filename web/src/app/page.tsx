@@ -340,10 +340,10 @@ export default async function HomePage() {
       {
         "@type": "WebSite",
         "@id": "https://releases.sh#website",
-        name: "Releases Index",
+        name: "Release Notes Index",
         url: "https://releases.sh",
         description:
-          "The latest product releases, indexed for agents. Releases Index is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
+          "The latest product releases, indexed for agents. Release Notes Index is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
         publisher: { "@id": "https://releases.sh#org" },
         potentialAction: {
           "@type": "SearchAction",
@@ -357,7 +357,7 @@ export default async function HomePage() {
       {
         "@type": "Organization",
         "@id": "https://releases.sh#org",
-        name: "Releases Index",
+        name: "Release Notes Index",
         url: "https://releases.sh",
         description:
           "A registry of release notes from across the web, indexed for agents and queryable from your terminal, code, or MCP client.",
@@ -378,11 +378,11 @@ export default async function HomePage() {
         <div className="relative z-10">
           <div className="pt-12 pb-8 text-center px-6">
             <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2 text-balance">
-              The latest product releases, indexed for agents
+              Release Notes Index
             </h1>
             <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6 text-pretty">
-              Releases Index is a registry of release notes from across the web, queryable from your
-              terminal, code, or MCP client.
+              The latest product releases, indexed for agents. A registry of release notes from
+              across the web, queryable from your terminal, code, or MCP client.
             </p>
             {/* Registry vitals as a mono, letter-spaced readout — an index
                 status line rather than marketing stats. Sources + releases

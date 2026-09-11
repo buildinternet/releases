@@ -1,7 +1,7 @@
 {
   "$schema": "https://releases.sh/schemas/releases.json",
   "version": 2,
-  "name": "Releases Index",
+  "name": "Release Notes Index",
   "description": "The changelog & release-notes registry for developers and AI agents.",
   "category": "developer-tools",
   "avatar": "https://media.releases.sh/orgs/releases-sh.png",

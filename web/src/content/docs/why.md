@@ -1,10 +1,10 @@
 ---
-title: "Why Releases Index"
+title: "Why Release Notes Index"
 description: "Releases Index is changelog infrastructure built for agents — the Context7-equivalent for what shipped. One registry across GitHub releases, CHANGELOG files, marketing blogs, RSS, and more."
 adminOnly: false
 ---
 
-# Why Releases Index
+# Why Release Notes Index
 
 Releases Index is a changelog index built for agents. Add the MCP server to Claude, ChatGPT, Cursor, or your own agent, and "what changed in X since Y" becomes one cheap tool call, as easy as fetching docs. Think of it as the [Context7](https://context7.com) of what shipped.
 

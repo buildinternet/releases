@@ -4,7 +4,7 @@ description: "Overview of Releases Index — a changelog index with a CLI, REST 
 adminOnly: false
 ---
 
-# Releases Index
+# Release Notes Index
 
 Changelog index for AI agents and developers.
 

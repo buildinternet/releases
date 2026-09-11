@@ -47,7 +47,8 @@ export function Header() {
           />
           <rect x="14" y="40" width="36" height="6" rx="1.5" fill="oklch(0.60 0.18 252)" />
         </svg>
-        Releases Index
+        <span className="sm:hidden">Releases Index</span>
+        <span className="hidden sm:inline">Release Notes Index</span>
         {isLocalDev && (
           <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-stone-950 bg-amber-400 rounded px-1.5 py-0.5 leading-none">
             dev
