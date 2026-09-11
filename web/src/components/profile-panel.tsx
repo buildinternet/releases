@@ -99,8 +99,8 @@ export function ProfilePanel() {
       aside={
         <Aside label="Profile">
           <p className="text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
-            Your name and avatar are how you appear in Releases — in workspaces you belong to and on
-            your own feed.
+            Your name and avatar are how you appear in Releases Index — in workspaces you belong to
+            and on your own feed.
           </p>
         </Aside>
       }

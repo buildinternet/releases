@@ -6,7 +6,7 @@ adminOnly: false
 
 # Privacy & Telemetry
 
-Releases collects anonymous usage data from the CLI and the local MCP stdio server so we can understand which commands and tools are actually used. This page documents exactly what is collected, how to see it, and how to turn it off.
+Releases Index collects anonymous usage data from the CLI and the local MCP stdio server so we can understand which commands and tools are actually used. This page documents exactly what is collected, how to see it, and how to turn it off.
 
 For the full privacy policy covering the web app, API request logs, third-party processors, and data retention, see [/privacy](/privacy).
 

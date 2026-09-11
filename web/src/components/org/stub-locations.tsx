@@ -42,8 +42,8 @@ export function StubLocations({
       <div className="rounded-[12px] border border-[var(--line)] bg-[var(--surface-2)] p-5">
         <h2 className="text-[15px] font-semibold text-[var(--fg)]">Not yet tracked</h2>
         <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
-          {orgName} isn&apos;t tracked on releases.sh yet. Its release information is published at
-          the {locations.length === 1 ? "location" : "locations"} below.
+          {orgName} isn&apos;t tracked on Releases Index yet. Its release information is published
+          at the {locations.length === 1 ? "location" : "locations"} below.
         </p>
 
         {locations.length > 0 ? (

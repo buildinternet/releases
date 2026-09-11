@@ -5,7 +5,7 @@ import { SubmitLanes } from "./submit-lanes";
 export const metadata: Metadata = {
   title: "Submit Your Product",
   description:
-    "Add your product to the releases.sh registry with a releases.json manifest or a release notes URL.",
+    "Add your product to the Releases Index registry with a releases.json manifest or a release notes URL.",
   alternates: { canonical: "/submit" },
   openGraph: { type: "website", url: "/submit" },
 };

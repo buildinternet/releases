@@ -7,7 +7,7 @@ import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Create an account",
-  description: "Create a releases.sh account.",
+  description: "Create a Releases Index account.",
   alternates: { canonical: "/signup" },
   robots: { index: false, follow: false },
 };

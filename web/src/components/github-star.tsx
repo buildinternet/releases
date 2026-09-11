@@ -39,7 +39,7 @@ export async function GitHubStar() {
       href={GITHUB_REPO_URL}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Star Releases on GitHub"
+      aria-label="Star Releases Index on GitHub"
       className="group inline-flex items-center gap-1.5 rounded-md border border-stone-300 dark:border-stone-700 px-2 py-1 text-stone-600 dark:text-stone-300 hover:border-stone-400 hover:text-stone-900 dark:hover:border-stone-500 dark:hover:text-stone-100 transition-colors"
     >
       <svg

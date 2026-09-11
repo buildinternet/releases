@@ -1,6 +1,6 @@
 ---
 title: "Turn Any Changelog Into an RSS Feed"
-description: "Get an Atom feed for any product's changelog — even ones that don't publish a feed. Append .atom to any Releases org, source, or collection page. Free, no account."
+description: "Get an Atom feed for any product's changelog — even ones that don't publish a feed. Append .atom to any Releases Index org, source, or collection page. Free, no account."
 adminOnly: false
 ---
 
@@ -21,9 +21,9 @@ For GitHub projects there's always one: `github.com/{owner}/{repo}/releases.atom
 
 If a feed turns up, spot-check that its entries are actually release content and not the company's whole blog — a site-wide `/feed.xml` full of marketing posts isn't a changelog feed. The [finding-a-changelog guide](/docs/guides/find-a-changelog) covers feed discovery and verification in more depth.
 
-## Step 2: no feed? Append `.atom` to a Releases page
+## Step 2: no feed? Append `.atom` to a Releases Index page
 
-Releases monitors changelogs across hundreds of developer tools and services — including scrape-only pages with no feed of their own — and serves every org, source, and collection as an Atom feed. Find the product on [releases.sh](/) and append `.atom` to the page URL. No account, no API key.
+The Index monitors changelogs across hundreds of developer tools and services — including scrape-only pages with no feed of their own — and serves every org, source, and collection as an Atom feed. Find the product on [releases.sh](/) and append `.atom` to the page URL. No account, no API key.
 
 **An organization** — everything a company ships, across all of its changelogs, GitHub repos, and blogs:
 
@@ -70,7 +70,7 @@ A feed is the lowest-friction subscription, but not the only one — [How to get
 
 ### Is this free?
 
-Yes. Feeds, like all public reads on Releases, need no account or API key.
+Yes. Feeds, like all public reads on the Index, need no account or API key.
 
 ### RSS or Atom — does it matter?
 

@@ -46,11 +46,11 @@ export async function generateMetadata({
     openGraph: {
       type: "website",
       url,
-      title: `${title} — releases.sh`,
+      title: `${title} — Releases Index`,
       description,
     },
     twitter: {
-      title: `${title} — releases.sh`,
+      title: `${title} — Releases Index`,
       description,
     },
     alternates: {

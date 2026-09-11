@@ -328,8 +328,8 @@ export function buildDigestJsonLd(
         url: opts.pageUrl,
         datePublished: digest.weekEndDate,
         dateModified: digest.generatedAt,
-        author: { "@type": "Organization", name: "Releases", url: SITE_URL },
-        publisher: { "@type": "Organization", name: "Releases", url: SITE_URL },
+        author: { "@type": "Organization", name: "Releases Index", url: SITE_URL },
+        publisher: { "@type": "Organization", name: "Releases Index", url: SITE_URL },
         about: { "@type": "CollectionPage", name: opts.collectionName, url: opts.collectionUrl },
         ...(digest.releaseUrls.length > 0
           ? { mentions: digest.releaseUrls.map((url) => ({ "@type": "TechArticle", url })) }

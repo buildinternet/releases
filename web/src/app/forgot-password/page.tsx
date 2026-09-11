@@ -6,7 +6,7 @@ import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Reset password",
-  description: "Reset your releases.sh account password.",
+  description: "Reset your Releases Index account password.",
   alternates: { canonical: "/forgot-password" },
   robots: { index: false, follow: false },
 };

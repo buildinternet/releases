@@ -55,10 +55,10 @@ const C = {
 const SANS = `system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
 const MONO = `ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace`;
 
-/** The brand line in every footer. Says what Releases is to a first-time recipient. */
-const BRAND_NAME = "Open source release notes registry";
+/** The brand line in every footer. Says what Releases Index is to a first-time recipient. */
+const BRAND_NAME = "Releases Index";
 const BRAND_URL = "https://releases.sh";
-const BRAND_LINE = `${BRAND_NAME} · releases.sh`;
+const BRAND_LINE = `${BRAND_NAME} · open source release notes registry`;
 
 /** Severity of the top rule + lane label: the lane reads before the subject does. */
 export type EmailTone = "accent" | "warn" | "crit";

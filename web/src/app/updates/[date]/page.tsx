@@ -39,23 +39,23 @@ export async function generateMetadata({
   params: Promise<{ date: string }>;
 }): Promise<Metadata> {
   const { date } = await params;
-  if (!DATE_RE.test(date)) return { title: "What's New · releases.sh" };
+  if (!DATE_RE.test(date)) return { title: "What's New · Releases Index" };
   try {
     const release = await findReleaseForDate(date);
-    if (!release) return { title: "What's New · releases.sh" };
+    if (!release) return { title: "What's New · Releases Index" };
     const heading = releaseHeading(release);
     return {
-      title: `${heading} · What's New · releases.sh`,
-      description: `What shipped on releases.sh on ${release.title}.`,
+      title: `${heading} · What's New · Releases Index`,
+      description: `What shipped on Releases Index on ${release.title}.`,
       alternates: { canonical: `/updates/${date}` },
       openGraph: {
-        title: `${heading} · releases.sh`,
+        title: `${heading} · Releases Index`,
         url: `/updates/${date}`,
         type: "article",
       },
     };
   } catch {
-    return { title: "What's New · releases.sh" };
+    return { title: "What's New · Releases Index" };
   }
 }
 
@@ -73,7 +73,7 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
     headline: heading,
     url: `https://releases.sh/updates/${date}`,
     ...(release.publishedAt ? { datePublished: release.publishedAt } : {}),
-    publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
+    publisher: { "@type": "Organization", name: "Releases Index", url: "https://releases.sh" },
   };
 
   return (

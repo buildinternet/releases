@@ -452,7 +452,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   return (
     <AuthCard>
       <AuthHeading
-        title={mode === "signup" ? "Create your account" : "Sign in to Releases"}
+        title={mode === "signup" ? "Create your account" : "Sign in to Releases Index"}
         subtitle={
           mode === "signup" ? (
             <>

@@ -1,10 +1,10 @@
 ---
-title: "releases.sh"
+title: "Release Notes Index"
 description: "An agent-friendly API for product changelogs."
 canonical: "https://releases.sh/"
 ---
 
-# releases.sh
+# Release Notes Index
 
 An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.
 

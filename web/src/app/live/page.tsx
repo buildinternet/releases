@@ -4,7 +4,7 @@ import { apiBaseUrl } from "@/lib/env";
 
 const TITLE = "Live releases";
 const DESCRIPTION =
-  "A live feed of product releases as they're fetched and indexed by releases.sh. Watch new changelog entries arrive in real time across every tracked source.";
+  "A live feed of product releases as they're fetched and indexed by Releases Index. Watch new changelog entries arrive in real time across every tracked source.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -12,12 +12,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/live" },
   openGraph: {
     type: "website",
-    title: `${TITLE} — releases.sh`,
+    title: `${TITLE} — Releases Index`,
     description: DESCRIPTION,
     url: "/live",
   },
   twitter: {
-    title: `${TITLE} — releases.sh`,
+    title: `${TITLE} — Releases Index`,
     description: DESCRIPTION,
   },
 };

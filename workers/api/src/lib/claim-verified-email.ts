@@ -56,11 +56,11 @@ export function formatClaimVerifiedEmail(input: {
   const { html, text } = renderEmail({
     lane: "Account · Ownership",
     title: `Ownership verified for ${input.domain}`,
-    preheader: `You proved control of ${input.domain} on Releases.`,
+    preheader: `You proved control of ${input.domain} on Releases Index.`,
     blocks: [
       {
         t: "p",
-        text: `You verified ownership of **${input.domain}** (${input.orgName}) on Releases via a ${how}.`,
+        text: `You verified ownership of **${input.domain}** (${input.orgName}) on Releases Index via a ${how}.`,
       },
       {
         t: "p",

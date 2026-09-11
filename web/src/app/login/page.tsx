@@ -7,7 +7,7 @@ import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to your releases.sh account.",
+  description: "Sign in to your Releases Index account.",
   alternates: { canonical: "/login" },
   robots: { index: false, follow: false },
 };

@@ -63,7 +63,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         label: "Profile",
         href: "/account/profile",
         group: "Personal",
-        description: "Your name, avatar, and how you appear in Releases.",
+        description: "Your name, avatar, and how you appear in Releases Index.",
         Icon: ProfileIcon,
         ready: true,
       },

@@ -1,9 +1,9 @@
-# auth.md — Releases Agent Authentication
+# auth.md — Releases Index Agent Authentication
 
-Releases is a changelog registry for AI agents and developers. **Most read
+Releases Index is a changelog registry for AI agents and developers. **Most read
 access is public and needs no authentication** — you can query the REST API or
 the MCP server anonymously. Authentication is only required for write and admin
-operations. When you do need a token, Releases is an OAuth 2.0 / OpenID Connect
+operations. When you do need a token, Releases Index is an OAuth 2.0 / OpenID Connect
 provider ("Sign in with Releases").
 
 ## TL;DR
@@ -43,7 +43,7 @@ user's role; most agents only need `read`.
 
 ## Client registration
 
-OAuth clients are provisioned by the Releases operators — **dynamic client
+OAuth clients are provisioned by the Releases Index operators — **dynamic client
 registration (RFC 7591) is intentionally disabled**. To register an agent or
 application, email <security@releases.sh> or open an issue at
 <https://github.com/buildinternet/releases>. Human users can also mint a

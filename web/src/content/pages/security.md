@@ -1,11 +1,11 @@
 ---
 title: "Security"
-description: "How to report security vulnerabilities in releases.sh."
+description: "How to report security vulnerabilities in Releases Index."
 ---
 
 # Security
 
-If you've found a security issue in the releases.sh web app, API, CLI, or MCP server, we want to hear from you. Please email [security@releases.sh](mailto:security@releases.sh) with details.
+If you've found a security issue in the Releases Index web app, API, CLI, or MCP server, we want to hear from you. Please email [security@releases.sh](mailto:security@releases.sh) with details.
 
 We do not offer a bug bounty or paid reward program, and we have no plans to do so.
 

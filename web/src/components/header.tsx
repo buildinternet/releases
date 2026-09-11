@@ -19,7 +19,7 @@ export function Header() {
     >
       <Link
         href="/"
-        className="font-pixel text-base sm:text-lg text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2"
+        className="font-pixel text-base sm:text-lg text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2 whitespace-nowrap"
       >
         <svg viewBox="0 0 64 64" aria-hidden="true" className="h-5 w-5 shrink-0">
           <rect
@@ -47,7 +47,8 @@ export function Header() {
           />
           <rect x="14" y="40" width="36" height="6" rx="1.5" fill="oklch(0.60 0.18 252)" />
         </svg>
-        releases.sh
+        <span className="sm:hidden">Releases Index</span>
+        <span className="hidden sm:inline">Release Notes Index</span>
         {isLocalDev && (
           <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-stone-950 bg-amber-400 rounded px-1.5 py-0.5 leading-none">
             dev

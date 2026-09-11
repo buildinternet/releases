@@ -1,6 +1,6 @@
 import { loadDoc, type Doc } from "@/lib/docs";
 
-export const SITE_NAME = "releases.sh";
+export const SITE_NAME = "Release Notes Index";
 export const SITE_TAGLINE = "The latest product releases, indexed for agents.";
 
 export type DocEntry = {

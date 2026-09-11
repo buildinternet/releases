@@ -1,6 +1,6 @@
 ---
 title: "Terms of Service"
-description: "Accounts, acceptable use, rate limits, and takedown policy for the releases.sh web app, API, and MCP server."
+description: "Accounts, acceptable use, rate limits, and takedown policy for the Releases Index web app, API, and MCP server."
 effectiveDate: "June 5, 2026"
 ---
 
@@ -8,11 +8,11 @@ effectiveDate: "June 5, 2026"
 
 _Effective June 5, 2026_
 
-These terms cover use of the releases.sh website, the public API, the remote MCP server, and the open-source CLI. By using any of these, you agree to the terms below. If you don't agree, please don't use the service.
+These terms cover use of Releases Index (the website at [releases.sh](https://releases.sh)), the public API, the remote MCP server, and the open-source CLI. By using any of these, you agree to the terms below. If you don't agree, please don't use the service.
 
 ## The service
 
-releases.sh is a public index of release notes, changelogs, and version updates pulled from third-party sources. It is provided free of charge on a best-effort basis. We may change, rate-limit, suspend, or discontinue any part of the service at any time.
+Releases Index is a public index of release notes, changelogs, and version updates pulled from third-party sources. It is provided free of charge on a best-effort basis. We may change, rate-limit, suspend, or discontinue any part of the service at any time.
 
 ## Accounts
 
@@ -30,7 +30,7 @@ When you use the service, you agree not to:
 - Circumvent, disable, or overload rate limits, authentication, or other protective measures.
 - Scrape the service in a way that degrades performance for other users. Use the API or MCP endpoints — they exist so you don't have to scrape.
 - Use the service to attack, probe, or reverse engineer third-party systems, or to distribute malware.
-- Republish or resell bulk exports of the index in a way that competes with the service, removes attribution to publishers, or misrepresents releases.sh as the origin of the content.
+- Republish or resell bulk exports of the index in a way that competes with the service, removes attribution to publishers, or misrepresents Releases Index as the origin of the content.
 - Use the service in violation of applicable law.
 
 We may block IPs, revoke API keys, or otherwise restrict access to protect the service or its users.
@@ -41,7 +41,7 @@ Unauthenticated endpoints are rate-limited per IP. Agents and integrations shoul
 
 ## Content and attribution
 
-The release notes, changelog entries, and product descriptions indexed by releases.sh are authored by the original publishers. We make no ownership claim over that content; copyright and other rights remain with the publishers. releases.sh surfaces the content for discovery and reference, typically with a link back to the source.
+The release notes, changelog entries, and product descriptions indexed by Releases Index are authored by the original publishers. We make no ownership claim over that content; copyright and other rights remain with the publishers. The Index surfaces the content for discovery and reference, typically with a link back to the source.
 
 The site's own structure — schema, summaries, evaluations, and code — is produced by [Build Internet](https://buildinternet.com). The CLI is open source under the license in its repository.
 
@@ -51,7 +51,7 @@ If you are a publisher or rights holder and want content removed from our index,
 
 ## Third-party content
 
-releases.sh links to and summarizes content hosted elsewhere. We don't control that content and make no warranty about its accuracy. Follow the source link before acting on anything time-sensitive, and check the original publisher's license before redistributing their content.
+Releases Index links to and summarizes content hosted elsewhere. We don't control that content and make no warranty about its accuracy. Follow the source link before acting on anything time-sensitive, and check the original publisher's license before redistributing their content.
 
 ## Disclaimer
 

@@ -41,7 +41,7 @@ export function titleIsBareVersion(title: string, version: string | null | undef
 /**
  * Clamp a page `<title>` to a length search engines won't truncate awkwardly.
  * Truncates on a word boundary (when one falls reasonably late) and appends an
- * ellipsis. The global `%s — releases.sh` template still appends the brand
+ * ellipsis. The global `%s — Releases Index` template still appends the brand
  * suffix afterward, so `max` bounds the meaningful portion (~60 chars).
  */
 export function clampTitle(value: string, max = 60): string {

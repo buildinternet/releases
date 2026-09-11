@@ -608,7 +608,8 @@ meWebhookHandlers.post(
               publishedAt: null,
               sourceName: "synthetic",
               sourceSlug: "synthetic",
-              summary: "This is a synthetic test event from your Releases webhook subscription.",
+              summary:
+                "This is a synthetic test event from your Releases Index webhook subscription.",
               titleGenerated: null,
               titleShort: null,
               media: [],

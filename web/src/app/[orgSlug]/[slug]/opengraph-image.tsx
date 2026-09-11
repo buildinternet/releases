@@ -10,7 +10,7 @@ import {
   resolveDisplayAvatarUrl,
 } from "@/lib/og";
 
-export const alt = "Releases on releases.sh";
+export const alt = "On Releases Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;

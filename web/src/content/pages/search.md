@@ -1,6 +1,6 @@
 ---
-title: "Search releases.sh"
-description: "How to search the releases.sh registry programmatically via WebMCP, MCP, CLI, and the REST API."
+title: "Search Releases Index"
+description: "How to search the Releases Index registry programmatically via WebMCP, MCP, CLI, and the REST API."
 ---
 
 # Search
@@ -9,7 +9,7 @@ The [/search](https://releases.sh/search) page is a browser form — fine for hu
 
 ## WebMCP (browser agents)
 
-When a user loads any releases.sh page, the site registers a `search` tool on `navigator.modelContext`. Browser-resident agents can call it without any authentication:
+When a user loads any Releases Index page, the site registers a `search` tool on `navigator.modelContext`. Browser-resident agents can call it without any authentication:
 
 ```js
 const result = await navigator.modelContext.callTool("search", {
