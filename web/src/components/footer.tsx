@@ -106,7 +106,7 @@ export function Footer() {
             href="/"
             className="font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
           >
-            releases.sh
+            Releases Index
           </Link>
           <p className="mt-2 max-w-[30ch] text-stone-500 dark:text-stone-400">
             A registry of release notes from across the web.

@@ -32,7 +32,7 @@ export interface DigestEmailContent {
 export type DigestEmailInput = DigestEmailContent & { to: string };
 
 const DEFAULT_FROM = "digests@releases.sh";
-const FROM_NAME = "Releases.sh";
+const FROM_NAME = "Releases Index";
 
 function bestTitle(r: ReleaseLatestItem): string {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Update";
@@ -304,10 +304,10 @@ export function buildDigestEmail(content: DigestEmailContent): {
   const who = subjectNames(orgNames);
   const dateLabel = referenceDate ? digestDateLabel(cadence, referenceDate) : "";
   const shortDate = referenceDate ? subjectDateLabel(cadence, referenceDate) : "";
-  const subject = [`Releases digest`, who, updates, shortDate]
+  const subject = [`Releases Index digest`, who, updates, shortDate]
     .filter(Boolean)
     .join(" · ")
-    .replace("Releases digest · ", "Releases digest — ");
+    .replace("Releases Index digest · ", "Releases Index digest — ");
 
   const orgSpan = groups.length > 1 ? ` across ${groups.length} orgs` : "";
 
@@ -352,7 +352,7 @@ export function buildDigestEmail(content: DigestEmailContent): {
     preheader: orgNames.length > 0 ? subjectNames(orgNames, 4) : undefined,
     blocks,
     footer: {
-      reason: `You received this ${cadence} digest because you follow releases on Releases and opted in to email updates.`,
+      reason: `You received this ${cadence} digest because you follow releases on Releases Index and opted in to email updates.`,
       links: [
         { label: "Manage digest preferences", href: manageUrl },
         { label: "Unsubscribe", href: unsubscribeUrl },

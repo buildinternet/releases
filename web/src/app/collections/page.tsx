@@ -8,7 +8,7 @@ import { getLatestDigest } from "./[slug]/digest/_lib/digest-data";
 
 const TITLE = "Collections";
 const DESCRIPTION =
-  "Curated playlists of organizations on releases.sh — group changelogs by theme to follow a market or topic in one place.";
+  "Curated playlists of organizations on Releases Index — group changelogs by theme to follow a market or topic in one place.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -16,12 +16,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/collections" },
   openGraph: {
     type: "website",
-    title: `${TITLE} — releases.sh`,
+    title: `${TITLE} — Releases Index`,
     description: DESCRIPTION,
     url: "/collections",
   },
   twitter: {
-    title: `${TITLE} — releases.sh`,
+    title: `${TITLE} — Releases Index`,
     description: DESCRIPTION,
   },
 };

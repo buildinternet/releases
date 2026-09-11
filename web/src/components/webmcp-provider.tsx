@@ -55,7 +55,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "search",
         title: "Search",
         description:
-          "Unified search across organizations, the catalog (products + standalone sources), and release content on releases.sh. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `entryType: 'product' | 'source'` discriminator to branch on entry shape. Pass `domain` to scope to one org by domain (input is normalized, so `https://vercel.com/` works the same as `vercel.com`).",
+          "Unified search across organizations, the catalog (products + standalone sources), and release content on Releases Index. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `entryType: 'product' | 'source'` discriminator to branch on entry shape. Pass `domain` to scope to one org by domain (input is normalized, so `https://vercel.com/` works the same as `vercel.com`).",
         inputSchema: {
           type: "object",
           properties: {
@@ -91,7 +91,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "lookup_domain",
         title: "Lookup by domain",
         description:
-          "Resolve a domain to the org or product that owns it on releases.sh. Input is normalized server-side (scheme, `www.`, path stripped, lowercased). Returns the matching org plus any products whose alias targets the domain. Pure resolution — unknown domains return a 404, no on-demand probing.",
+          "Resolve a domain to the org or product that owns it on Releases Index. Input is normalized server-side (scheme, `www.`, path stripped, lowercased). Returns the matching org plus any products whose alias targets the domain. Pure resolution — unknown domains return a 404, no on-demand probing.",
         inputSchema: {
           type: "object",
           properties: {
@@ -117,7 +117,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "list_organizations",
         title: "List organizations",
         description:
-          "List all organizations tracked in the releases.sh registry, with release counts and activity. Returns the canonical `{ items, pagination }` envelope so callers can ask for the next slice via `page`. Orgs with zero indexed releases are hidden by default (curator-stub noise); set `include_empty: true` to see them. The response carries `meta.emptyOrgCount` so a UI toggle can label itself.",
+          "List all organizations tracked in the Releases Index registry, with release counts and activity. Returns the canonical `{ items, pagination }` envelope so callers can ask for the next slice via `page`. Orgs with zero indexed releases are hidden by default (curator-stub noise); set `include_empty: true` to see them. The response carries `meta.emptyOrgCount` so a UI toggle can label itself.",
         inputSchema: {
           type: "object",
           properties: {

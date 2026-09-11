@@ -71,7 +71,7 @@ export type SendAuthEmailResult =
   | { sent: false; reason: "no_binding" | "error" };
 
 const DEFAULT_FROM = "noreply@releases.sh";
-const DEFAULT_FROM_NAME = "Releases.sh";
+const DEFAULT_FROM_NAME = "Releases Index";
 
 /**
  * Pull the first http(s) URL out of a rendered text body so the dev log can carry a
@@ -214,9 +214,9 @@ export function verifyEmailTemplate(opts: {
   const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
   const oneClick =
     opts.oneClickUrl === null ? undefined : (opts.oneClickUrl ?? verifyOneClickUrl(opts.url));
-  return account("Verify your email to finish setting up Releases", {
+  return account("Verify your email to finish setting up Releases Index", {
     lane: "Account · Verify",
-    title: "Welcome to Releases",
+    title: "Welcome to Releases Index",
     preheader: "Confirm your email address to finish setting up your account.",
     blocks: [
       { t: "p", text: "Confirm your email address to finish setting up your account." },
@@ -228,7 +228,7 @@ export function verifyEmailTemplate(opts: {
     ],
     footer: accountFooter(
       web,
-      "You received this because someone signed up for a Releases account with this email address.",
+      "You received this because someone signed up for a Releases Index account with this email address.",
     ),
     action: oneClick
       ? { kind: "confirm", name: "Verify email", postUrl: oneClick }
@@ -242,12 +242,12 @@ export function resetPasswordTemplate(opts: {
   webOrigin?: string;
 }): RenderedAuthEmail {
   const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
-  return account("Reset your Releases password — link expires in 1 hour", {
+  return account("Reset your Releases Index password — link expires in 1 hour", {
     lane: "Account · Password",
     title: "Reset your password",
     preheader: "Set a new password. The link is good for one hour.",
     blocks: [
-      { t: "p", text: "We received a request to reset the password on your Releases account." },
+      { t: "p", text: "We received a request to reset the password on your Releases Index account." },
       { t: "button", label: "Reset password", url: opts.url },
       {
         t: "fine",
@@ -256,7 +256,7 @@ export function resetPasswordTemplate(opts: {
     ],
     footer: accountFooter(
       web,
-      "You received this because a password reset was requested for your Releases account.",
+      "You received this because a password reset was requested for your Releases Index account.",
     ),
     action: { kind: "view", name: "Reset password", url: opts.url },
   });
@@ -277,14 +277,14 @@ export function changeEmailTemplate(opts: {
   webOrigin?: string;
 }): RenderedAuthEmail {
   const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
-  return account(`Confirm your new Releases email: ${opts.newEmail}`, {
+  return account(`Confirm your new Releases Index email: ${opts.newEmail}`, {
     lane: "Account · Email change",
     title: "Confirm your new email address",
     preheader: `Your account is set to move to ${opts.newEmail}.`,
     blocks: [
       {
         t: "p",
-        text: `Your Releases account is set to move to **${opts.newEmail}**. Confirming from this inbox completes the change.`,
+        text: `Your Releases Index account is set to move to **${opts.newEmail}**. Confirming from this inbox completes the change.`,
       },
       { t: "button", label: "Confirm new email", url: opts.url },
       {
@@ -294,7 +294,7 @@ export function changeEmailTemplate(opts: {
     ],
     footer: accountFooter(
       web,
-      "You received this because a change to your Releases account email was requested from your signed-in session.",
+      "You received this because a change to your Releases Index account email was requested from your signed-in session.",
     ),
     action: { kind: "view", name: "Confirm email", url: opts.url },
   });
@@ -307,20 +307,20 @@ export function invitationEmailTemplate(opts: {
   webOrigin?: string;
 }): RenderedAuthEmail {
   const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
-  return account(`You're invited to join ${opts.orgName} on Releases`, {
+  return account(`You're invited to join ${opts.orgName} on Releases Index`, {
     lane: "Account · Invitation",
-    title: `Join ${opts.orgName} on Releases`,
+    title: `Join ${opts.orgName} on Releases Index`,
     preheader: `You've been invited to the ${opts.orgName} workspace.`,
     blocks: [
       {
         t: "p",
-        text: `You've been invited to join the **${opts.orgName}** workspace on Releases.`,
+        text: `You've been invited to join the **${opts.orgName}** workspace on Releases Index.`,
       },
       { t: "button", label: "Accept the invitation", url: opts.url },
     ],
     footer: {
-      reason: "You received this because someone invited you to a workspace on Releases.",
-      links: [{ label: "Releases", href: web }],
+      reason: "You received this because someone invited you to a workspace on Releases Index.",
+      links: [{ label: "Releases Index", href: web }],
     },
     action: { kind: "view", name: "Accept invitation", url: opts.url },
   });
@@ -334,9 +334,9 @@ export function invitationEmailTemplate(opts: {
  */
 export function magicLinkTemplate(opts: { url: string; webOrigin?: string }): RenderedAuthEmail {
   const web = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
-  return account("Your Releases sign-in link — expires in 15 minutes", {
+  return account("Your Releases Index sign-in link — expires in 15 minutes", {
     lane: "Account · Sign in",
-    title: "Sign in to Releases",
+    title: "Sign in to Releases Index",
     preheader: "One-time sign-in link. No password needed.",
     blocks: [
       { t: "p", text: "Use the link below to sign in. No password needed." },
@@ -348,7 +348,7 @@ export function magicLinkTemplate(opts: { url: string; webOrigin?: string }): Re
     ],
     footer: {
       reason:
-        "You received this because someone requested a passwordless sign-in link for Releases.",
+        "You received this because someone requested a passwordless sign-in link for Releases Index.",
       links: [
         { label: "Sign in", href: web },
         { label: "Account settings", href: `${web}/account` },

@@ -61,7 +61,7 @@ export function AgentCopyButton({
 
   const copyPrompt = () =>
     flashCopy(
-      `Read the release tracker for ${orgName} on releases.sh: ${pageUrl()}\n\n` +
+      `Read the release tracker for ${orgName} on Releases Index: ${pageUrl()}\n\n` +
         `It aggregates ${orgName}'s releases from across the web into one timeline.${productClause} ` +
         `Review what shipped recently and flag anything relevant to my work, with links.`,
     );

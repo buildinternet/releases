@@ -95,7 +95,7 @@ releases --help
 
 ## MCP server
 
-To use Releases as an MCP tool server, the easiest path is the hosted remote server at `https://mcp.releases.sh/mcp`.
+To use Releases Index as an MCP tool server, the easiest path is the hosted remote server at `https://mcp.releases.sh/mcp`.
 
 <!-- slot:mcp-install-buttons -->
 

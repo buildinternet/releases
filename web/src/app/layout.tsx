@@ -40,15 +40,15 @@ const geistPixel = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "releases.sh - Product releases and changelogs, indexed for agents",
-    template: "%s — releases.sh",
+    default: "Releases Index - Product releases and changelogs, indexed for agents",
+    template: "%s — Releases Index",
   },
   description:
-    "The latest product releases, indexed for agents. Releases is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
+    "The latest product releases, indexed for agents. Releases Index is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
   metadataBase: new URL("https://releases.sh"),
   openGraph: {
     type: "website",
-    siteName: "releases.sh",
+    siteName: "Releases Index",
     locale: "en_US",
     // No `url` here on purpose: a hardcoded site-wide og:url leaks onto every
     // page that doesn't set its own, so the og:url disagrees with the page's

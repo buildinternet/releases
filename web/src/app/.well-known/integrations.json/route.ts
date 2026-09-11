@@ -54,7 +54,7 @@ const bearerTokenAuth = {
 const body = {
   version: 3,
   summary:
-    "Releases is an agent-friendly registry of product changelogs and release notes, queryable via a public REST API, a remote MCP server, and a CLI. Reads are public; an optional API token raises your rate-limit tier.",
+    "Releases Index is an agent-friendly registry of product changelogs and release notes, queryable via a public REST API, a remote MCP server, and a CLI. Reads are public; an optional API token raises your rate-limit tier.",
   credentials: {
     "releases-api-key": {
       type: "api_key",

@@ -1,12 +1,12 @@
 ---
 title: "Skills"
-description: "Install Releases skills — auto-triggering playbooks that teach Claude Code, Codex, Cursor, and OpenCode how to use the CLI and MCP tools."
+description: "Install Releases Index skills — auto-triggering playbooks that teach Claude Code, Codex, Cursor, and OpenCode how to use the CLI and MCP tools."
 adminOnly: false
 ---
 
 # Skills
 
-Skills are short, auto-triggering playbooks that teach an AI agent how to use Releases. When you ask a release-shaped question, your agent loads the matching skill and follows it.
+Skills are short, auto-triggering playbooks that teach an AI agent how to use Releases Index. When you ask a release-shaped question, your agent loads the matching skill and follows it.
 
 They work in Claude Code, Codex, Cursor, OpenCode, and any other agent that supports the [agent skills format](https://agentskills.io/home).
 

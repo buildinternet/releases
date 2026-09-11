@@ -123,7 +123,7 @@ export function formatRecommendationAckEmail(
     title: "Thanks for the submission",
     preheader: `We received your suggestion for ${host}.`,
     blocks: [
-      { t: "p", text: "Thanks for suggesting a changelog source for Releases." },
+      { t: "p", text: "Thanks for suggesting a changelog source for Releases Index." },
       {
         t: "p",
         text: "Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.",
@@ -136,7 +136,7 @@ export function formatRecommendationAckEmail(
       links: [{ label: "Submit another source", href: submitUrl }],
     },
   });
-  return { subject: `We got your Releases submission — ${host}`, text, html };
+  return { subject: `We got your Releases Index submission — ${host}`, text, html };
 }
 
 function webOrigin(env: RecommendationAckEnv): string {

@@ -195,7 +195,8 @@ export function OauthConsentForm() {
     >
       <ConnVisual node="lock" letter={appName} logo={safeLogoUri} />
       <CardTitle>
-        <span className="font-semibold">{appName}</span> wants to access your Releases account
+        <span className="font-semibold">{appName}</span> wants to access your Releases Index
+        account
       </CardTitle>
       {clientHost ? (
         <IdentityRow verified>

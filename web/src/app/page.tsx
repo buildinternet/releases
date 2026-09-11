@@ -340,10 +340,10 @@ export default async function HomePage() {
       {
         "@type": "WebSite",
         "@id": "https://releases.sh#website",
-        name: "releases.sh",
+        name: "Releases Index",
         url: "https://releases.sh",
         description:
-          "The latest product releases, indexed for agents. Releases is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
+          "The latest product releases, indexed for agents. Releases Index is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
         publisher: { "@id": "https://releases.sh#org" },
         potentialAction: {
           "@type": "SearchAction",
@@ -357,7 +357,7 @@ export default async function HomePage() {
       {
         "@type": "Organization",
         "@id": "https://releases.sh#org",
-        name: "releases.sh",
+        name: "Releases Index",
         url: "https://releases.sh",
         description:
           "A registry of release notes from across the web, indexed for agents and queryable from your terminal, code, or MCP client.",
@@ -381,7 +381,7 @@ export default async function HomePage() {
               The latest product releases, indexed for agents
             </h1>
             <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6 text-pretty">
-              Releases is a registry of release notes from across the web, queryable from your
+              Releases Index is a registry of release notes from across the web, queryable from your
               terminal, code, or MCP client.
             </p>
             {/* Registry vitals as a mono, letter-spaced readout — an index

@@ -1,6 +1,6 @@
 ---
 title: "Privacy Policy"
-description: "How releases.sh handles data collected from the web, API, accounts, CLI, and MCP server."
+description: "How Releases Index handles data collected from the web, API, accounts, CLI, and MCP server."
 effectiveDate: "June 5, 2026"
 ---
 
@@ -8,7 +8,7 @@ effectiveDate: "June 5, 2026"
 
 _Effective June 5, 2026_
 
-This page explains what data releases.sh collects when you use the web app, the public API, a releases.sh account, the [releases CLI](https://github.com/buildinternet/releases-cli), or the MCP server, and who we share it with. The project is run by [Build Internet](https://buildinternet.com).
+This page explains what data Releases Index collects when you use the web app, the public API, a Releases Index account, the [releases CLI](https://github.com/buildinternet/releases-cli), or the MCP server, and who we share it with. The project is run by [Build Internet](https://buildinternet.com). The service is hosted at [releases.sh](https://releases.sh).
 
 ## What we collect
 
@@ -38,7 +38,7 @@ The open-source CLI and the local MCP stdio server send anonymous usage events �
 
 ### Indexed content
 
-releases.sh aggregates publicly available release notes, changelogs, and feeds. We do not collect personal data from publishers beyond what they have published on their own public pages. If you publish a changelog and want it removed from our index, see [Takedowns](#takedowns-and-content-removal) below.
+Releases Index aggregates publicly available release notes, changelogs, and feeds. We do not collect personal data from publishers beyond what they have published on their own public pages. If you publish a changelog and want it removed from our index, see [Takedowns](#takedowns-and-content-removal) below.
 
 ## How we use data
 
@@ -53,7 +53,7 @@ We do not sell data. We do not use account data, request logs, or telemetry for 
 
 ## Service providers
 
-We use a small number of service providers to host and operate releases.sh. These providers receive request metadata as part of normal routing and logging.
+We use a small number of service providers to host and operate Releases Index. These providers receive request metadata as part of normal routing and logging.
 
 - **Cloudflare** — hosts the API and supporting infrastructure, stores the database, and sends account-related email.
 - **Vercel** — hosts the web frontend.

@@ -8,7 +8,7 @@ adminOnly: false
 
 Changelogs have no standard home. Teams publish in GitHub releases, `CHANGELOG.md` files, marketing blogs, documentation sites, in-app "what's new" panels, and vendor newsletters — and the interesting entries rarely live where you'd guess. This guide gives you a repeatable method for finding the best source for any product, whether you're a person hunting for release notes or an agent that needs structured data.
 
-The short version: guess the obvious URLs first, then look for a feed, then check GitHub, and only scrape a rendered page as a last resort. Or skip the hunt — [Releases](/) has already run this method across hundreds of products, and you can [query the result](#the-shortcut-query-an-index-that-already-did-this) for free.
+The short version: guess the obvious URLs first, then look for a feed, then check GitHub, and only scrape a rendered page as a last resort. Or skip the hunt — [Releases Index](/) has already run this method across hundreds of products, and you can [query the result](#the-shortcut-query-an-index-that-already-did-this) for free.
 
 ## The method, in priority order
 
@@ -63,7 +63,7 @@ A small but growing number of products declare their changelog location explicit
 
 ## The shortcut: query an index that already did this
 
-Releases runs this method — declarations, feed discovery, provider detection, GitHub, and monitored scraping for the holdouts — across hundreds of developer tools and services, then normalizes everything into one registry: org, product, title, date, summary, categories. Most reads are public, with no account or API key.
+Releases Index runs this method — declarations, feed discovery, provider detection, GitHub, and monitored scraping for the holdouts — across hundreds of developer tools and services, then normalizes everything into one registry: org, product, title, date, summary, categories. Most reads are public, with no account or API key.
 
 **On the web:** [search](/search) for the product, or browse the [catalog](/catalog). Every org page collects all of its sources — the GitHub releases and the marketing changelog side by side.
 
@@ -115,4 +115,4 @@ Many changelog platforms (Notion, GitBook, Intercom, and most custom-built pages
 
 ### The changelog page exists but is always behind the product's actual releases. Now what?
 
-Common with marketing-managed changelogs. Add the product's GitHub repo (step 3) as a second source — tags land at ship time even when the page lags. This is exactly why Releases tracks multiple sources per org.
+Common with marketing-managed changelogs. Add the product's GitHub repo (step 3) as a second source — tags land at ship time even when the page lags. This is exactly why the Index tracks multiple sources per org.

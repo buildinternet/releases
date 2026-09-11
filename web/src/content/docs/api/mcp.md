@@ -1,12 +1,12 @@
 ---
 title: "MCP Server"
-description: "Use Releases as an MCP tool server from Claude, Cursor, and other agents."
+description: "Use Releases Index as an MCP tool server from Claude, Cursor, and other agents."
 adminOnly: false
 ---
 
 # MCP Server
 
-Use Releases as an AI agent tool server via the Model Context Protocol.
+Use Releases Index as an AI agent tool server via the Model Context Protocol.
 
 ## Pair with agent skills
 

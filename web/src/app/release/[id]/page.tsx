@@ -162,7 +162,7 @@ export async function generateMetadata({
     const description = clamp(stripMarkdown(release.summary ?? release.content ?? ""), 160);
     return {
       // Clamp so the <title> doesn't run long enough for search engines to
-      // truncate it; the global `%s — releases.sh` template still adds the brand.
+      // truncate it; the global `%s — Releases Index` template still adds the brand.
       title: clampTitle(`${titleHeading} — ${release.source.name}`),
       description: description || `${heading} release notes for ${release.source.name}`,
       // Release pages are stubs of upstream content — every one is noindexed
@@ -352,8 +352,8 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
         // Releases authors this rendition (the enriched headline + the summary);
         // the underlying changelog is the external source's, expressed via
         // `sourceOrganization` + `isBasedOn`/`sameAs` below — not via `author`.
-        author: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
-        publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
+        author: { "@type": "Organization", name: "Releases Index", url: "https://releases.sh" },
+        publisher: { "@type": "Organization", name: "Releases Index", url: "https://releases.sh" },
         ...(release.org?.name || release.sourceName
           ? {
               sourceOrganization: {

@@ -1,14 +1,14 @@
 ---
 title: "Documentation"
-description: "Overview of Releases — a changelog index with a CLI, REST API, MCP server, and agent skills."
+description: "Overview of Releases Index — a changelog index with a CLI, REST API, MCP server, and agent skills."
 adminOnly: false
 ---
 
-# Releases
+# Releases Index
 
 Changelog index for AI agents and developers.
 
-Releases tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. You can query it four ways: a CLI, a REST API, an MCP server, and agent skills that trigger on their own.
+The Index tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. You can query it four ways: a CLI, a REST API, an MCP server, and agent skills that trigger on their own.
 
 For the motivations behind the project, see [Why](/docs/why).
 
@@ -22,7 +22,7 @@ New here? [Install the CLI](/docs/installation), [add the skills](/docs/skills) 
 
 ## Concepts
 
-Releases organizes data in a simple hierarchy:
+The Index organizes data in a simple hierarchy:
 
 - **Organizations** — companies or teams (e.g., Vercel, Cloudflare)
 - **Products** — optional grouping within an org (e.g., Vercel → Next.js, Turborepo)

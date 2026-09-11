@@ -274,7 +274,8 @@ function SlackSection({ webhooks: initialWebhooks }: { webhooks: UserWebhookList
 
   async function onRemove() {
     if (!slackHook || busy) return;
-    if (!window.confirm("Remove this Slack connection? Releases will stop posting to it.")) return;
+    if (!window.confirm("Remove this Slack connection? The Index will stop posting to it."))
+      return;
     setBusy(true);
     setError(null);
     setSuccess(null);

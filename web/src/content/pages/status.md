@@ -1,6 +1,6 @@
 ---
 title: "Status"
-description: "How to check the operational health of releases.sh."
+description: "How to check the operational health of Releases Index."
 ---
 
 # Status

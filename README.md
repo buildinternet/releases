@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/assets/readme-home.png" alt="releases.sh — the latest product releases, indexed for agents" width="760">
+<img src="docs/assets/readme-home.png" alt="Releases Index — the latest product releases, indexed for agents" width="760">
 
-<h1>Releases</h1>
+<h1>Releases Index</h1>
 
 **The latest product releases, indexed for agents.**
 
@@ -45,7 +45,7 @@ upgrade, after an incident, when a tool suddenly behaves differently. The answer
 is scattered across GitHub releases, RSS feeds, changelog pages, and blog posts
 in a hundred different formats.
 
-**Releases** collects those into one registry. It watches hundreds of sources
+**Releases Index** collects those into one registry. It watches hundreds of sources
 across the vendors developers actually depend on, and for every release stores
 the original content plus an AI-generated title, summary, and breaking-change
 classification. Each organization gets a maintained overview of what it shipped

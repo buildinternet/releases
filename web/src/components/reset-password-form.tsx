@@ -45,7 +45,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
     <AuthCard>
       <AuthHeading
         title="Set a new password"
-        subtitle="Choose a new password for your releases.sh account."
+        subtitle="Choose a new password for your Releases Index account."
       />
       <form onSubmit={onSubmit} className="space-y-5">
         <div>

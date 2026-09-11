@@ -69,15 +69,15 @@ export function formatUserAutoPauseEmail(input: {
 
   const { html, text } = renderEmail({
     lane: "Account · Webhooks",
-    title: "Your Releases webhook was paused",
+    title: "Your Releases Index webhook was paused",
     preheader: `We paused ${label} after repeated delivery failures.`,
     blocks,
     footer: {
       reason:
-        "You received this because a webhook subscription tied to your Releases account was auto-paused.",
+        "You received this because a webhook subscription tied to your Releases Index account was auto-paused.",
       links: [{ label: "Manage webhooks", href: input.accountUrl }],
     },
   });
 
-  return { subject: "Your Releases webhook was paused", text, html };
+  return { subject: "Your Releases Index webhook was paused", text, html };
 }

@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import { OG_CONTENT_TYPE, OG_SIZE, formatCount, renderOgFallback, renderOgImage } from "@/lib/og";
 
-export const alt = "Tag on releases.sh";
+export const alt = "Tag on Releases Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;

@@ -209,7 +209,7 @@ describe("buildDigestEmail", () => {
       // the digest is dated for the day whose news it actually carries.
       referenceDate: "2026-06-24T13:00:00.000Z",
     });
-    expect(subject).toBe("Releases digest — Acme · 1 update · Jun 23");
+    expect(subject).toBe("Releases Index digest — Acme · 1 update · Jun 23");
     // The HTML masthead mirrors the dated subject.
     expect(html).toContain("Jun 23, 2026");
     expect(html).not.toContain("Jun 24, 2026");
@@ -225,7 +225,7 @@ describe("buildDigestEmail", () => {
       unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
       referenceDate: "2026-06-24T13:00:00.000Z",
     });
-    expect(subject).toBe("Releases digest — Acme · 2 updates · week of Jun 17");
+    expect(subject).toBe("Releases Index digest — Acme · 2 updates · week of Jun 17");
   });
 
   it("omits the date when no referenceDate is supplied (backward compatible)", () => {
@@ -237,7 +237,7 @@ describe("buildDigestEmail", () => {
       manageUrl: "https://releases.sh/following",
       unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
     });
-    expect(subject).toBe("Releases digest — Acme · 1 update");
+    expect(subject).toBe("Releases Index digest — Acme · 1 update");
   });
 
   it("falls back to the source name when the source has no org", () => {

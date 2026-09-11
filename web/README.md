@@ -1,6 +1,6 @@
-# Releases web
+# Releases Index web
 
-The Next.js frontend for `releases.sh` — the public registry UI (org/product/source/release
+The Next.js frontend for Releases Index at `releases.sh` — the public registry UI (org/product/source/release
 pages, search, collections, overviews) plus the signed-in account surface (follows, feed,
 webhooks, API keys, workspaces). Talks to the API worker at `api.releases.sh` (REST + GraphQL).
 

@@ -17,7 +17,7 @@ import { UpdatesFeed } from "./updates-feed";
 // docs/superpowers/specs/2026-06-10-self-published-changelog-design.md).
 const ORG_SLUG = "releases-sh";
 const TITLE = "What's New";
-const DESCRIPTION = "Everything shipped on releases.sh — published through our own registry.";
+const DESCRIPTION = "Everything shipped on Releases Index — published through our own registry.";
 
 // The org release feed caps `?limit=` at 100 server-side (REST and GraphQL
 // alike); requesting more than that is a no-op clamp, not a bigger page. The
@@ -31,21 +31,21 @@ const FIRST_PAGE_LIMIT = 100;
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: `${TITLE} · releases.sh`,
+  title: `${TITLE} · Releases Index`,
   description: DESCRIPTION,
   alternates: {
     canonical: "/updates",
     types: {
-      "application/atom+xml": [{ url: `/${ORG_SLUG}.atom`, title: "releases.sh changelog" }],
+      "application/atom+xml": [{ url: `/${ORG_SLUG}.atom`, title: "Releases Index changelog" }],
     },
   },
   openGraph: {
-    title: `${TITLE} · releases.sh`,
+    title: `${TITLE} · Releases Index`,
     description: DESCRIPTION,
     url: "/updates",
     type: "website",
   },
-  twitter: { title: `${TITLE} · releases.sh`, description: DESCRIPTION },
+  twitter: { title: `${TITLE} · Releases Index`, description: DESCRIPTION },
 };
 
 export default async function UpdatesPage() {
@@ -75,7 +75,7 @@ export default async function UpdatesPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: `${TITLE} — releases.sh`,
+    name: `${TITLE} — Releases Index`,
     url: "https://releases.sh/updates",
     description: DESCRIPTION,
   };

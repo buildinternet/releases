@@ -6,7 +6,7 @@
 import { OG_CONTENT_TYPE, OG_SIZE } from "@/lib/og";
 import orgOgImage from "../opengraph-image";
 
-export const alt = "Organization on releases.sh";
+export const alt = "Organization on Releases Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;

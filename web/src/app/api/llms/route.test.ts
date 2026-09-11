@@ -20,7 +20,7 @@ describe("GET /llms.txt", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
     const body = await res.text();
-    expect(body).toContain("## When to use Releases");
+    expect(body).toContain("## When to use Releases Index");
     expect(body).toContain(
       "Research roadmap and product-development opportunities: survey what the rest of the ecosystem is shipping as input for deciding what to build next.",
     );

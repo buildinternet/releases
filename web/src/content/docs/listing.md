@@ -1,6 +1,6 @@
 ---
 title: "Listing your product — releases.json"
-description: "One small file that tells the Releases registry — and any agent — where you publish product updates. Point at your changelog, feed, or GitHub releases."
+description: "One small file that tells the Releases Index registry — and any agent — where you publish product updates. Point at your changelog, feed, or GitHub releases."
 adminOnly: false
 ---
 

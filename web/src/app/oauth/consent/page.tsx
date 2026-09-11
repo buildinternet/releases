@@ -7,7 +7,7 @@ import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Authorize application",
-  description: "Grant an application access to your Releases account.",
+  description: "Grant an application access to your Releases Index account.",
   alternates: { canonical: "/oauth/consent" },
   robots: { index: false, follow: false },
 };

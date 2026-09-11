@@ -6,7 +6,7 @@ description: Post new releases to a Slack channel whenever something you follow 
 # Send releases to Slack
 
 Get a Slack message every time an org or product you follow ships a release. There's no app
-to install. You paste a Slack **incoming webhook URL** and releases.sh posts to it.
+to install. You paste a Slack **incoming webhook URL** and Releases Index posts to it.
 
 ## 1. Create a Slack incoming webhook
 
@@ -14,7 +14,7 @@ In Slack, create an [incoming webhook](https://docs.slack.dev/messaging/sending-
 for the channel you want releases posted to. Slack gives you a URL that looks like
 `https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXX`.
 
-## 2. Connect it on releases.sh
+## 2. Connect it on Releases Index
 
 Open [Notifications](/account/notifications), find the **Slack** section, paste the webhook
 URL, and click **Create**. That's it. You'll get a Slack message for everything you follow.

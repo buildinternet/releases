@@ -6,7 +6,7 @@ adminOnly: false
 
 # REST API
 
-Query the Releases index over plain HTTP. This page covers the conventions that apply to every endpoint. The per-endpoint reference is generated from the OpenAPI spec.
+Query the Releases Index over plain HTTP. This page covers the conventions that apply to every endpoint. The per-endpoint reference is generated from the OpenAPI spec.
 
 - **Interactive reference:** [`api.releases.sh/v1/docs`](https://api.releases.sh/v1/docs) — full Scalar reference with request/response shapes, examples, and client snippets.
 - **OpenAPI 3.1 spec:** [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) — source of truth for request and response shapes.

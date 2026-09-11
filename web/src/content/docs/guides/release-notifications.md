@@ -8,7 +8,7 @@ adminOnly: false
 
 Checking changelogs by hand doesn't scale past two or three products. This guide covers every way to flip that around — the update comes to you: a Slack or Discord message when something ships, an email digest on your schedule, a feed in your reader, or a signed webhook into your own systems.
 
-The options form a ladder from zero-setup to fully programmable. Most of the Releases-powered ones share one primitive: [follow](/following) the orgs and products you care about (a free account), and every channel below delivers that same follow list.
+The options form a ladder from zero-setup to fully programmable. Most of the Index-powered ones share one primitive: [follow](/following) the orgs and products you care about (a free account), and every channel below delivers that same follow list.
 
 ## What the publisher already offers
 
@@ -21,7 +21,7 @@ Both are per-product and per-channel. Everything below gives you one subscriptio
 
 ## RSS: the quiet default
 
-If you already live in a feed reader, subscribe to feeds and you're done — no account needed. Every Releases org, source, and collection page serves Atom by appending `.atom` to its URL (`releases.sh/anthropic.atom`), including changelogs that publish no feed of their own. The [RSS guide](/docs/guides/changelog-rss-feed) covers this end to end.
+If you already live in a feed reader, subscribe to feeds and you're done — no account needed. Every Releases Index org, source, and collection page serves Atom by appending `.atom` to its URL (`releases.sh/anthropic.atom`), including changelogs that publish no feed of their own. The [RSS guide](/docs/guides/changelog-rss-feed) covers this end to end.
 
 If you'd rather have one feed than many: sign in, follow your orgs, and generate a **personal feed token** on [Notifications](/account/notifications) — a private Atom URL of everything you follow, updated as your follows change.
 
