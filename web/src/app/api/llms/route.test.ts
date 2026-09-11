@@ -15,14 +15,14 @@ const { GET } = await import("./route.js");
 if (process.cwd() !== originalCwd) process.chdir(originalCwd);
 
 describe("GET /llms.txt", () => {
-  it("serves the site map with a When to use section", async () => {
+  it("serves the site map with machine-readable endpoints", async () => {
     const res = GET();
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
     const body = await res.text();
-    expect(body).toContain("## When to use Releases Index");
-    expect(body).toContain(
-      "Research roadmap and product-development opportunities: survey what the rest of the ecosystem is shipping as input for deciding what to build next.",
-    );
+    expect(body).toMatch(/^# /);
+    expect(body).toContain("## When to use");
+    expect(body).toContain("https://api.releases.sh/v1");
+    expect(body).toContain("https://mcp.releases.sh/mcp");
   });
 });

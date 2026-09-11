@@ -3,9 +3,9 @@ import { renderEmail, subjectNames, type EmailDoc } from "./email-shell.js";
 
 const base: EmailDoc = {
   lane: "Account · Verify",
-  title: "Welcome to Releases Index",
+  title: "Verify your email",
   blocks: [{ t: "p", text: "Confirm your address." }],
-  footer: { reason: "You signed up for Releases Index." },
+  footer: { reason: "You asked to verify this address." },
 };
 
 describe("renderEmail", () => {
@@ -13,7 +13,7 @@ describe("renderEmail", () => {
     const { html, text } = renderEmail(base);
     expect(html).toStartWith("<!doctype html>");
     expect(html).toContain("max-width:600px");
-    expect(text).toContain("Welcome to Releases Index");
+    expect(text).toContain("Verify your email");
     expect(text).toContain("Confirm your address.");
   });
 
@@ -46,11 +46,11 @@ describe("renderEmail", () => {
       },
     });
     expect(html).toContain("You follow these orgs.");
-    expect(html).toContain("Releases Index");
+    expect(html).toContain('href="https://releases.sh"');
     expect(html).toContain("https://api.releases.test/u/1");
     expect(text).toContain("You follow these orgs.");
     expect(text).toContain("Unsubscribe: https://api.releases.test/u/1");
-    expect(text).toContain("Releases Index");
+    expect(text).toContain("https://releases.sh");
   });
 
   it("carries severity on the top rule", () => {
