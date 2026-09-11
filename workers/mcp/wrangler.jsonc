@@ -91,7 +91,12 @@
     },
   ],
   "services": [{ "binding": "API", "service": "releases-api" }],
-  "routes": [{ "pattern": "mcp.releases.sh", "custom_domain": true }],
+  // Dual host: agents.releases.sh is the advertised public URL;
+  // mcp.releases.sh stays bound so existing clients keep working.
+  "routes": [
+    { "pattern": "agents.releases.sh", "custom_domain": true },
+    { "pattern": "mcp.releases.sh", "custom_domain": true },
+  ],
   // Secrets are managed in Cloudflare's Secrets Store. VOYAGE_API_KEY is
   // required for semantic search — the embed path no-ops if it's missing.
   // RELEASED_API_KEY lets the lookup-fallback (`maybeLookup` in mcp-agent.ts)

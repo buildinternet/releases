@@ -212,9 +212,10 @@
     "WELL_KNOWN_MATERIALIZATION_ENABLED": "true",
     // Comma-separated audience URIs accepted in JWT access tokens issued by the
     // OAuth provider. The API worker origin (BETTER_AUTH_URL) is always included;
-    // this var adds remote resource servers (first consumer: the MCP worker).
+    // this var adds remote resource servers (the MCP worker on both the
+    // advertised agents.releases.sh host and the mcp.releases.sh alias).
     // See src/auth/index.ts `oauthValidAudiences()`.
-    "OAUTH_RESOURCE_AUDIENCES": "https://mcp.releases.sh",
+    "OAUTH_RESOURCE_AUDIENCES": "https://mcp.releases.sh, https://agents.releases.sh",
   },
   "d1_databases": [
     {

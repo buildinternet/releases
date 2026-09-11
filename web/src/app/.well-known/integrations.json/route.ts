@@ -60,7 +60,7 @@ const body = {
       type: "api_key",
       label: "Releases API key",
       setup:
-        "Optional. Search, browse, and MCP reads work with no credential; presenting a token raises your rate-limit tier (anonymous < signed-in account < machine token) and unlocks account-scoped actions. Sign in with `releases login` — it opens your browser (OAuth device authorization) and mints a personal, read-only key (`relu_…`). Already issued a token (e.g. a write/admin `relk_…` key during the closed beta)? Store it with `releases auth login --token <token>`. The token is sent to `https://api.releases.sh` (and `https://mcp.releases.sh`) as `Authorization: Bearer <token>`; `RELEASES_API_KEY` in the environment overrides the stored credential (handy for CI).",
+        "Optional. Search, browse, and MCP reads work with no credential; presenting a token raises your rate-limit tier (anonymous < signed-in account < machine token) and unlocks account-scoped actions. Sign in with `releases login` — it opens your browser (OAuth device authorization) and mints a personal, read-only key (`relu_…`). Already issued a token (e.g. a write/admin `relk_…` key during the closed beta)? Store it with `releases auth login --token <token>`. The token is sent to `https://api.releases.sh` (and `https://agents.releases.sh`) as `Authorization: Bearer <token>`; `RELEASES_API_KEY` in the environment overrides the stored credential (handy for CI).",
     },
   },
   surfaces: [
@@ -79,7 +79,7 @@ const body = {
       slug: "releases-mcp",
       name: "Releases MCP server",
       docs: "https://releases.sh/docs/api/mcp",
-      url: "https://mcp.releases.sh/mcp",
+      url: "https://agents.releases.sh/mcp",
       transports: ["streamable-http"],
       basis: declaredBasis,
       auth: bearerTokenAuth,

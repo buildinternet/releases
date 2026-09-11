@@ -63,14 +63,15 @@ harness that keep the registry fresh. The user-facing CLI ships separately from
 
 No account or API key needed for reads — all four surfaces are public.
 
-**MCP** — hosted at `mcp.releases.sh`, listed in the
+**MCP** — hosted at `agents.releases.sh/mcp` (`mcp.releases.sh/mcp` still
+works), listed in the
 [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp)
 as `sh.releases/mcp`:
 
 ```bash
-claude mcp add --transport http releases https://mcp.releases.sh/mcp   # Claude Code
-codex mcp add releases --url https://mcp.releases.sh/mcp               # Codex
-npx -y mcp-remote https://mcp.releases.sh/mcp                          # stdio bridge (VS Code, Zed, …)
+claude mcp add --transport http releases https://agents.releases.sh/mcp   # Claude Code
+codex mcp add releases --url https://agents.releases.sh/mcp               # Codex
+npx -y mcp-remote https://agents.releases.sh/mcp                          # stdio bridge (VS Code, Zed, …)
 ```
 
 **CLI** — one-off via npx, or `brew install buildinternet/tap/releases`:
@@ -141,7 +142,7 @@ personalized feeds, webhooks, and email digests.
 | Path                 | What                                                                                          |
 | -------------------- | --------------------------------------------------------------------------------------------- |
 | `workers/api/`       | Hono API on Cloudflare D1 — the authoritative data plane                                      |
-| `workers/mcp/`       | Remote MCP server at `mcp.releases.sh`                                                        |
+| `workers/mcp/`       | Remote MCP server at `agents.releases.sh` (alias `mcp.releases.sh`)                           |
 | `workers/discovery/` | Durable-Object agent-session orchestrator                                                     |
 | `workers/webhooks/`  | Signs + delivers `release.created` events (HMAC-SHA256, retry/DLQ) — [docs](docs/webhooks.md) |
 | `web/`               | Next.js frontend, deploys on Vercel                                                           |

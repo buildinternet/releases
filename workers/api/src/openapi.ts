@@ -24,7 +24,7 @@ export const hideInProduction = (opts: { c?: { env?: unknown } }) => {
 //   inference endpoint, so it would error or send queries to Scalar's hosted
 //   service we don't control.
 // - `mcp.disabled` removes the "Generate MCP" button; we ship our own remote
-//   MCP server at mcp.releases.sh and don't want a competing auto-generated
+//   MCP server at agents.releases.sh and don't want a competing auto-generated
 //   wrapper offered here.
 // - `hideClientButton` hides the in-sidebar global client switcher (the
 //   per-endpoint client tabs still render).

@@ -2,7 +2,7 @@
 
 import { CommandTabs } from "@/components/command-tabs";
 import { OpenInAgentMenu } from "@/components/open-in-agent-menu";
-import { resolveTarget } from "@/lib/agent-launch";
+import { MCP_REMOTE_URL, resolveTarget } from "@/lib/agent-launch";
 
 const tabs = [
   {
@@ -23,7 +23,7 @@ const tabs = [
   {
     id: "mcp",
     label: "MCP",
-    commands: ["https://mcp.releases.sh/mcp"],
+    commands: [MCP_REMOTE_URL],
   },
   {
     id: "skills",

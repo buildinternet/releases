@@ -7,11 +7,11 @@
     "url": "https://github.com/buildinternet/releases",
     "source": "github"
   },
-  "version": "0.15.0",
+  "version": "0.15.1",
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.releases.sh/mcp"
+      "url": "https://agents.releases.sh/mcp"
     }
   ]
 }

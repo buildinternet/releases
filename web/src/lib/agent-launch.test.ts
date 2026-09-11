@@ -31,10 +31,9 @@ describe("agent-launch", () => {
   });
 
   test("claude code + codex use the documented terminal commands", () => {
-    expect(CLAUDE_CODE_MCP_CMD).toBe(
-      "claude mcp add --transport http releases https://mcp.releases.sh/mcp",
-    );
-    expect(CODEX_MCP_CMD).toBe("codex mcp add releases --url https://mcp.releases.sh/mcp");
+    expect(MCP_REMOTE_URL).toMatch(/^https:\/\/agents\.releases\.sh\/mcp\/?$/);
+    expect(CLAUDE_CODE_MCP_CMD).toBe(`claude mcp add --transport http releases ${MCP_REMOTE_URL}`);
+    expect(CODEX_MCP_CMD).toBe(`codex mcp add releases --url ${MCP_REMOTE_URL}`);
   });
 
   test("registry covers exactly the four chosen agents in order", () => {

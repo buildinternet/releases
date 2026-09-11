@@ -16,7 +16,7 @@ One-line setup so your agent reaches for these tools on its own. See the [skills
 
 ## Remote server (recommended)
 
-Connect to the hosted MCP server at `https://mcp.releases.sh/mcp`. No installation or API keys required — all tools are read-only and public.
+Connect to the hosted MCP server at `https://agents.releases.sh/mcp`. No installation or API keys required — all tools are read-only and public. `https://mcp.releases.sh/mcp` continues to work as an alias.
 
 ## Setup instructions
 
@@ -25,7 +25,7 @@ Connect to the hosted MCP server at `https://mcp.releases.sh/mcp`. No installati
 The hosted MCP server supports Streamable HTTP at:
 
 ```text
-https://mcp.releases.sh/mcp
+https://agents.releases.sh/mcp
 ```
 
 Use that URL directly in clients with native remote MCP support. For clients that only support stdio MCP servers, use `mcp-remote` as a compatibility bridge.
@@ -39,13 +39,13 @@ Click to install in a supported editor. The deeplink opens the app and prompts y
 ### Claude Code
 
 ```bash
-claude mcp add --transport http releases https://mcp.releases.sh/mcp
+claude mcp add --transport http releases https://agents.releases.sh/mcp
 ```
 
 ### Codex
 
 ```bash
-codex mcp add releases --url https://mcp.releases.sh/mcp
+codex mcp add releases --url https://agents.releases.sh/mcp
 ```
 
 ### VS Code, Windsurf, Zed, and others
@@ -57,7 +57,7 @@ For clients without native remote MCP support, use `mcp-remote`:
   "mcpServers": {
     "releases": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://mcp.releases.sh/mcp"]
+      "args": ["-y", "mcp-remote", "https://agents.releases.sh/mcp"]
     }
   }
 }

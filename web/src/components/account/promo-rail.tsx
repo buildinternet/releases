@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { eyebrowClass } from "@releases/design-system";
 import { CopyIcon } from "@/components/copy-icon";
+import { CLAUDE_CODE_MCP_CMD } from "@/lib/agent-launch";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { McpIcon, TerminalIcon, ExternalLinkIcon } from "./icons";
 
@@ -20,7 +21,7 @@ const CARDS = [
     eyebrow: "For your agent",
     title: "releases MCP server",
     body: "Point Claude or Cursor at releases — it can query releases, sources, and your collections directly, no copy-paste.",
-    code: "claude mcp add --transport http releases https://mcp.releases.sh/mcp",
+    code: CLAUDE_CODE_MCP_CMD,
     linkLabel: "MCP docs",
     href: "/docs",
     tone: "accent" as const,

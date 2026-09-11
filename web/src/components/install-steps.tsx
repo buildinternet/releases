@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { CommandSyntax } from "@/components/command-syntax";
 import { CopyButton } from "@/components/ui/copy-button";
+import { MCP_REMOTE_URL } from "@/lib/agent-launch";
 
 const cliOptions = [
   { id: "npm", label: "npm", command: "npm install -g @buildinternet/releases" },
@@ -11,7 +12,6 @@ const cliOptions = [
 ] as const;
 type CliId = (typeof cliOptions)[number]["id"];
 
-const MCP_URL = "https://mcp.releases.sh/mcp";
 const SKILL_CMD = "npx skills add buildinternet/releases-cli";
 
 const HELP = {
@@ -79,7 +79,7 @@ export function InstallStepsInline() {
   const [top, setTop] = useState<TopId>("cli");
   const [cli, setCli] = useState<CliId>("npm");
   const cliCmd = cliOptions.find((c) => c.id === cli)!.command;
-  const cmd = top === "cli" ? cliCmd : top === "mcp" ? MCP_URL : SKILL_CMD;
+  const cmd = top === "cli" ? cliCmd : top === "mcp" ? MCP_REMOTE_URL : SKILL_CMD;
 
   return (
     <div className="text-left w-full max-w-[540px] mx-auto">
@@ -160,7 +160,7 @@ export function InstallStepsSidebar() {
 
       <section className="space-y-2">
         <StepHeading>Or connect via MCP</StepHeading>
-        <CodeBlock command={MCP_URL} />
+        <CodeBlock command={MCP_REMOTE_URL} />
         <StepHelp href={HELP.mcp.href}>{HELP.mcp.text}</StepHelp>
       </section>
 

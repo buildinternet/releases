@@ -6,7 +6,8 @@
  * Bun, and Node 16+; the stdio config is pure ASCII so `btoa` is safe here.
  */
 
-export const MCP_REMOTE_URL = "https://mcp.releases.sh/mcp";
+/** Canonical public MCP URL. `https://mcp.releases.sh/mcp` remains a working alias. */
+export const MCP_REMOTE_URL = "https://agents.releases.sh/mcp";
 
 /** stdio bridge config shared by the Cursor + VS Code one-click installers. */
 export const stdioConfig = {

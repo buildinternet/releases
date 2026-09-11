@@ -21,7 +21,7 @@ An agent-friendly API for product changelogs. A unified registry of product rele
 ## Get started
 
 - **CLI:** `brew install buildinternet/tap/releases`
-- **Remote MCP:** add `https://mcp.releases.sh` to your agent's MCP config
+- **Remote MCP:** add `https://agents.releases.sh/mcp` to your agent's MCP config
 - **REST API:** `curl https://api.releases.sh/v1/orgs`
 
 See [/docs](https://releases.sh/docs) for the full reference.

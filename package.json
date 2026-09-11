@@ -23,7 +23,7 @@
     "mcp:ui:typecheck": "cd workers/mcp/ui && bun run typecheck",
     "mcp:inspect:local": "npx @modelcontextprotocol/inspector npx mcp-remote https://mcp.releases.localhost/mcp",
     "mcp:inspect:staging": "sh -c 'test -n \"$STAGING_ACCESS_KEY\" || { echo \"Set STAGING_ACCESS_KEY in .env\" >&2; exit 1; }; npx @modelcontextprotocol/inspector npx mcp-remote https://mcp-staging.releases.sh/mcp --header \"X-Releases-Staging-Key: $STAGING_ACCESS_KEY\"'",
-    "mcp:inspect:prod": "npx @modelcontextprotocol/inspector npx mcp-remote https://mcp.releases.sh/mcp",
+    "mcp:inspect:prod": "npx @modelcontextprotocol/inspector npx mcp-remote https://agents.releases.sh/mcp",
     "deploy:api": "wrangler deploy --config workers/api/wrangler.jsonc",
     "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
     "deploy:mcp": "bun run mcp:ui:build && wrangler deploy --config workers/mcp/wrangler.jsonc",

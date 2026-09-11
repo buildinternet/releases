@@ -1,6 +1,6 @@
 # Generic MCP client interop (DCR + OAuth + sibling REST)
 
-Playbook for this stack: one Better Auth OAuth 2.1 authorization server, RFC 7591 dynamic client registration, RFC 8707 resource indicators, a hosted MCP resource server at `mcp.releases.sh`, and a separate REST resource server (`api.releases.sh`) that some MCP tools call by forwarding the caller's access token.
+Playbook for this stack: one Better Auth OAuth 2.1 authorization server, RFC 7591 dynamic client registration, RFC 8707 resource indicators, a hosted MCP resource server at `agents.releases.sh` (alias `mcp.releases.sh`), and a separate REST resource server (`api.releases.sh`) that some MCP tools call by forwarding the caller's access token.
 
 The four failures below are the order a generic client (we used [MCPJam](https://www.mcpjam.com/)) hits them: ingest, authorize `scope=`, authorize `resource=`, then a tool that HTTP-fetches the sibling API. All four apply here. `serverInfo.icons` is a fifth, cosmetic miss.
 
@@ -68,7 +68,7 @@ invalid_scope: The following scopes are invalid: extra, admin
 invalid_target: requested resource https://mcp.releases.sh/mcp is not configured
 ```
 
-**Why a generic client does it.** RFC 9728 protected-resource metadata on this worker advertises `resource` as the origin (`https://mcp.releases.sh`). Some clients copy that string into authorize `resource=` (RFC 8707). Others copy the transport URL (`https://mcp.releases.sh/mcp`, which is what `server.json` remotes and `npx mcp-remote` use). The AS had only listed the origin (plus a trailing-slash variant).
+**Why a generic client does it.** RFC 9728 protected-resource metadata on this worker advertises `resource` as the origin (`https://mcp.releases.sh`). Some clients copy that string into authorize `resource=` (RFC 8707). Others copy the transport URL (`https://agents.releases.sh/mcp` today, or the still-working `https://mcp.releases.sh/mcp` alias — both are what `server.json` remotes and `npx mcp-remote` have used). The AS had only listed the origin (plus a trailing-slash variant).
 
 **Rule.** Accept both the origin and the `/mcp` form for every MCP identifier the AS is willing to mint. The MCP resource server must accept both as JWT `aud`. Discovery can keep advertising the origin. Clients that pass `resource=origin` must keep working, and so must clients that pass `origin/mcp`.
 

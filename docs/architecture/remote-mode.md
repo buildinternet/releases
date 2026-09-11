@@ -149,7 +149,8 @@ grants `read`/`write`/`admin` on those surfaces.
 - **Issuer / audience.** Issuer = the AS origin (`BETTER_AUTH_URL`,
   `https://api.releases.sh` in prod). The API worker's own audience is that same
   origin; the MCP worker's audience is its origin (`https://mcp.releases.sh`,
-  already in `OAUTH_RESOURCE_AUDIENCES`), set via the MCP wrangler vars
+  already in `OAUTH_RESOURCE_AUDIENCES` alongside the advertised
+  `https://agents.releases.sh`), set via the MCP wrangler vars
   `OAUTH_JWT_ISSUER` / `OAUTH_JWT_AUDIENCE` (staging overrides both). Both
   resource servers also accept the MCP `/mcp` transport URL as `aud` (generic
   clients send either form). On Better Auth 1.7 the accepted set is the plugin's

@@ -86,7 +86,7 @@ releases tail --org vercel        # latest across an org
 **For agents:** add the hosted MCP server and "where is X's changelog, and what changed?" becomes one tool call:
 
 ```bash
-claude mcp add --transport http releases https://mcp.releases.sh/mcp
+claude mcp add --transport http releases https://agents.releases.sh/mcp
 ```
 
 Or install the [agent skills](/docs/skills) so Claude Code, Codex, Cursor, and OpenCode reach for the CLI on their own: `npx skills add buildinternet/releases-cli`.

@@ -95,20 +95,20 @@ releases --help
 
 ## MCP server
 
-To use Releases Index as an MCP tool server, the easiest path is the hosted remote server at `https://mcp.releases.sh/mcp`.
+To use Releases Index as an MCP tool server, the easiest path is the hosted remote server at `https://agents.releases.sh/mcp`.
 
 <!-- slot:mcp-install-buttons -->
 
 Codex:
 
 ```bash
-codex mcp add releases --url https://mcp.releases.sh/mcp
+codex mcp add releases --url https://agents.releases.sh/mcp
 ```
 
 Claude Code:
 
 ```bash
-claude mcp add --transport http releases https://mcp.releases.sh/mcp
+claude mcp add --transport http releases https://agents.releases.sh/mcp
 ```
 
 <!-- admin:start -->

@@ -117,6 +117,7 @@ async function handle(
       route: "/mcp",
       responseMode: "json",
       allowedOriginHostnames: [
+        "agents.releases.sh",
         "mcp.releases.sh",
         "mcp-staging.releases.sh",
         "mcp.releases.localhost",
