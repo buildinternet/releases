@@ -247,7 +247,10 @@ export function resetPasswordTemplate(opts: {
     title: "Reset your password",
     preheader: "Set a new password. The link is good for one hour.",
     blocks: [
-      { t: "p", text: "We received a request to reset the password on your Releases Index account." },
+      {
+        t: "p",
+        text: "We received a request to reset the password on your Releases Index account.",
+      },
       { t: "button", label: "Reset password", url: opts.url },
       {
         t: "fine",
