@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 11, 2026
+
+**Changed**
+- The product is now presented as "Release Notes Index" — new primary name on the homepage hero, header wordmark, OG metadata, and `llms.txt`; "Releases Index" is used in page titles, footer, and emails. Domain, API paths, and CLI binary are unchanged.
+- The MCP server's primary URL is now `https://agents.releases.sh/mcp` — docs, installer cards, `llms.txt`, and the MCP Registry all point here; `https://mcp.releases.sh/mcp` remains a working alias and existing tokens and client configs continue to work.
+
 ## September 10, 2026
 
 **Added**
