@@ -76,15 +76,15 @@ For a live terminal view, the CLI can follow the stream directly: `releases tail
 
 ## Which one should I use?
 
-| You want                              | Use                                                             |
-| ------------------------------------- | --------------------------------------------------------------- |
-| Updates in a feed reader              | `.atom` feeds, or a personal feed token for your follows        |
-| A message in a team Slack channel     | The Slack connection on [Notifications](/account/notifications) |
-| A message in a Discord channel        | Discord format on [Webhooks & API](/account/webhooks)           |
-| A message in Teams or another chat    | An RSS bot on a `.atom` URL, or a webhook + relay               |
-| One summary email a day or week       | The release digest                                              |
-| Events into your own code             | Signed webhooks (`/v1/me/webhooks`)                             |
-| An agent that checks on demand        | The MCP server or CLI                                           |
+| You want                           | Use                                                             |
+| ---------------------------------- | --------------------------------------------------------------- |
+| Updates in a feed reader           | `.atom` feeds, or a personal feed token for your follows        |
+| A message in a team Slack channel  | The Slack connection on [Notifications](/account/notifications) |
+| A message in a Discord channel     | Discord format on [Webhooks & API](/account/webhooks)           |
+| A message in Teams or another chat | An RSS bot on a `.atom` URL, or a webhook + relay               |
+| One summary email a day or week    | The release digest                                              |
+| Events into your own code          | Signed webhooks (`/v1/me/webhooks`)                             |
+| An agent that checks on demand     | The MCP server or CLI                                           |
 
 ## FAQ
 

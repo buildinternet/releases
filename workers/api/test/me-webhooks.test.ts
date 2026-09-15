@@ -18,7 +18,8 @@ const IDEMPOTENCY_KEY = "webhook-create-01";
 const TEST_IDEMPOTENCY_KEY = "webhook-test-idem-01";
 const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
 const SLACK_HOOK_URL = "https://hooks.slack.com/services/T012AB/B034CD/Xy7zSecret";
-const DISCORD_HOOK_URL = "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
+const DISCORD_HOOK_URL =
+  "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
 const queueMessages: unknown[] = [];
 
 let h: TestDatabase;

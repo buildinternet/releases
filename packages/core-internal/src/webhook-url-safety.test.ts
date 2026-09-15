@@ -69,7 +69,8 @@ describe("validateSlackWebhookUrl", () => {
   });
 });
 
-const DISCORD_HOOK = "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
+const DISCORD_HOOK =
+  "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
 
 describe("validateDiscordWebhookUrl", () => {
   test("accepts a discord.com webhook URL", () => {
@@ -84,19 +85,13 @@ describe("validateDiscordWebhookUrl", () => {
   });
   test("accepts canary and PTB hosts", () => {
     expect(
-      validateDiscordWebhookUrl(
-        "https://canary.discord.com/api/webhooks/1/token-._ok",
-      ),
+      validateDiscordWebhookUrl("https://canary.discord.com/api/webhooks/1/token-._ok"),
     ).toBeNull();
-    expect(
-      validateDiscordWebhookUrl("https://ptb.discord.com/api/webhooks/1/token"),
-    ).toBeNull();
+    expect(validateDiscordWebhookUrl("https://ptb.discord.com/api/webhooks/1/token")).toBeNull();
   });
   test("accepts a versioned API path and a trailing slash", () => {
     expect(
-      validateDiscordWebhookUrl(
-        "https://discord.com/api/v10/webhooks/123456789012345678/token/",
-      ),
+      validateDiscordWebhookUrl("https://discord.com/api/v10/webhooks/123456789012345678/token/"),
     ).toBeNull();
   });
   test("accepts query strings such as wait / thread_id", () => {
@@ -129,7 +124,9 @@ describe("validateFormatWebhookUrl", () => {
   });
   test("delegates slack and discord", () => {
     expect(validateFormatWebhookUrl("slack", DISCORD_HOOK)).not.toBeNull();
-    expect(validateFormatWebhookUrl("discord", "https://hooks.slack.com/services/T/B/X")).not.toBeNull();
+    expect(
+      validateFormatWebhookUrl("discord", "https://hooks.slack.com/services/T/B/X"),
+    ).not.toBeNull();
     expect(validateFormatWebhookUrl("discord", DISCORD_HOOK)).toBeNull();
   });
 });

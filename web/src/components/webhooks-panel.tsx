@@ -140,7 +140,7 @@ function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
                     {row.format}
                   </span>
                 ) : (
-                  (row.format?.trim() || "—")
+                  row.format?.trim() || "—"
                 )}
               </td>
               <td className={`py-1 pr-3 ${outcomeTone(row.outcome)}`}>{row.outcome ?? "—"}</td>

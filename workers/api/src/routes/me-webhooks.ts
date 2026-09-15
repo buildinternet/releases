@@ -388,7 +388,9 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
     if (effectiveFormat === null) {
       return respondError(
         c,
-        new ValidationError("format must be 'json', 'slack', or 'discord'", { code: "bad_request" }),
+        new ValidationError("format must be 'json', 'slack', or 'discord'", {
+          code: "bad_request",
+        }),
       );
     }
     const formatUrlError = validateFormatWebhookUrl(effectiveFormat, effectiveUrl);

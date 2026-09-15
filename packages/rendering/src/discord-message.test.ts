@@ -98,9 +98,7 @@ describe("formatDiscordMessage", () => {
   });
 
   test("uses product name when org is absent", () => {
-    const body = formatDiscordMessage(
-      release({ org: null, product: { name: "Next.js" } }),
-    );
+    const body = formatDiscordMessage(release({ org: null, product: { name: "Next.js" } }));
     expect(body.content).toBe("Next.js — Next.js 15.4.0");
     expect(body.embeds[0]!.author.name).toBe("Next.js");
   });

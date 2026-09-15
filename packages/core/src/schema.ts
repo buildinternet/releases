@@ -1316,7 +1316,9 @@ export function isWebhookFormat(value: unknown): value is WebhookFormat {
 }
 
 export function isUnsignedWebhookFormat(value: unknown): value is UnsignedWebhookFormat {
-  return typeof value === "string" && (UNSIGNED_WEBHOOK_FORMATS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" && (UNSIGNED_WEBHOOK_FORMATS as readonly string[]).includes(value)
+  );
 }
 
 /** Absent / empty → `json`. Unknown string → `null` so callers can 400. */
