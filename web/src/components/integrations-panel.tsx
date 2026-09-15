@@ -159,7 +159,9 @@ export function IntegrationsPanel() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">Uploads</div>
+              <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                Uploads
+              </div>
               <a
                 href={UPLOADS_HOME}
                 target="_blank"

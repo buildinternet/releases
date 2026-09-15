@@ -10,18 +10,22 @@ import {
   ensureFreshUploadsAccessToken,
   refreshStoredUploadsGrant,
 } from "../src/lib/uploads-oauth-tokens.js";
-import { resolveUploadsOAuthConfig } from "../src/lib/uploads-oauth.js";
+import {
+  resolveUploadsOAuthConfig,
+  uploadsWorkspaceFromAccessToken,
+} from "../src/lib/uploads-oauth.js";
 import type { Env } from "../src/index.js";
 
+function encodeJwtSegment(value: unknown): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function unsignedJwt(payload: Record<string, unknown>): string {
-  const encode = (value: unknown) => {
-    const json = JSON.stringify(value);
-    const bytes = new TextEncoder().encode(json);
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  };
-  return `${encode({ alg: "none", typ: "JWT" })}.${encode(payload)}.sig`;
+  return `${encodeJwtSegment({ alg: "none", typ: "JWT" })}.${encodeJwtSegment(payload)}.sig`;
 }
 
 let db: TestDb;
@@ -291,7 +295,7 @@ describe("uploads OAuth workspace routes", () => {
         provider: "uploads",
         field: "access_token",
       });
-      expect(access).toContain("acme");
+      expect(uploadsWorkspaceFromAccessToken(access)).toBe("acme");
 
       const status = await appAs("user_1").request(
         "/workspaces/ws_1/integrations/uploads",
@@ -491,7 +495,7 @@ describe("uploads OAuth workspace routes", () => {
         provider: "uploads",
         field: "access_token",
       });
-      expect(access).toContain("acme-rotated");
+      expect(uploadsWorkspaceFromAccessToken(access)).toBe("acme-rotated");
       const refresh = await decryptOAuthSecret(after!.refreshTokenEnc!, ENCRYPTION_KEY, {
         workspaceId: "ws_1",
         provider: "uploads",

@@ -12,15 +12,16 @@ import {
   uploadsWorkspaceFromAccessToken,
 } from "./uploads-oauth.js";
 
+function encodeJwtSegment(value: unknown): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function unsignedJwt(payload: Record<string, unknown>): string {
-  const encode = (value: unknown) => {
-    const json = JSON.stringify(value);
-    const bytes = new TextEncoder().encode(json);
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  };
-  return `${encode({ alg: "none", typ: "JWT" })}.${encode(payload)}.sig`;
+  return `${encodeJwtSegment({ alg: "none", typ: "JWT" })}.${encodeJwtSegment(payload)}.sig`;
 }
 
 const KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
@@ -196,9 +197,9 @@ describe("uploadsWorkspaceFromAccessToken", () => {
   });
 
   it("falls back to the first workspaces[] slug", () => {
-    expect(
-      uploadsWorkspaceFromAccessToken(unsignedJwt({ workspaces: ["alpha", "beta"] })),
-    ).toBe("alpha");
+    expect(uploadsWorkspaceFromAccessToken(unsignedJwt({ workspaces: ["alpha", "beta"] }))).toBe(
+      "alpha",
+    );
     expect(
       uploadsWorkspaceFromAccessToken(unsignedJwt({ workspaces: [{ slug: "from-object" }] })),
     ).toBe("from-object");
@@ -206,9 +207,7 @@ describe("uploadsWorkspaceFromAccessToken", () => {
 
   it("prefers workspace over workspaces[]", () => {
     expect(
-      uploadsWorkspaceFromAccessToken(
-        unsignedJwt({ workspace: "primary", workspaces: ["other"] }),
-      ),
+      uploadsWorkspaceFromAccessToken(unsignedJwt({ workspace: "primary", workspaces: ["other"] })),
     ).toBe("primary");
   });
 

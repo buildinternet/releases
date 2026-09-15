@@ -50,12 +50,12 @@ Same principal gate as `/v1/workspaces/*` and `/v1/me/*` (`requireFollowsPrincip
 Better Auth session or a user Bearer). Absent from `publicReadRoutes` /
 `adminRoutes` (not in the public OpenAPI coverage gate).
 
-| Method   | Path                                                       | Who                                  | Effect                                                      |
-| -------- | ---------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- |
+| Method   | Path                                                       | Who                                  | Effect                                                                      |
+| -------- | ---------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
 | `GET`    | `/v1/workspaces/:workspaceId/integrations/uploads`         | member+                              | `{ provider, connected, configured, connectedAt, scope, uploadsWorkspace }` |
-| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }` |
-| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                          |
-| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                    |
+| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }`                 |
+| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                                          |
+| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                                    |
 
 `configured: false` when the token-encryption key is missing — Connect is
 disabled; the rest of the site is unaffected. No feature flag. The client is

@@ -7,10 +7,7 @@
  */
 import { eq } from "drizzle-orm";
 import type { AnyDb } from "../db.js";
-import {
-  workspaceIntegrations,
-  type WorkspaceIntegration,
-} from "../db/schema-integrations.js";
+import { workspaceIntegrations, type WorkspaceIntegration } from "../db/schema-integrations.js";
 import { decryptOAuthSecret, encryptOAuthSecret } from "./oauth-token-crypto.js";
 import {
   UPLOADS_OAUTH_PROVIDER,
@@ -92,21 +89,14 @@ export async function persistUploadsTokenGrant(
         })
       : null;
   } else if (opts.tokens.refreshToken) {
-    patch.refreshTokenEnc = await encryptOAuthSecret(
-      opts.tokens.refreshToken,
-      opts.encryptionKey,
-      {
-        workspaceId: opts.workspaceId,
-        provider: UPLOADS_OAUTH_PROVIDER,
-        field: "refresh_token",
-      },
-    );
+    patch.refreshTokenEnc = await encryptOAuthSecret(opts.tokens.refreshToken, opts.encryptionKey, {
+      workspaceId: opts.workspaceId,
+      provider: UPLOADS_OAUTH_PROVIDER,
+      field: "refresh_token",
+    });
   }
 
-  await db
-    .update(workspaceIntegrations)
-    .set(patch)
-    .where(eq(workspaceIntegrations.id, opts.rowId));
+  await db.update(workspaceIntegrations).set(patch).where(eq(workspaceIntegrations.id, opts.rowId));
 
   return { uploadsWorkspace };
 }
