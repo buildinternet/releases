@@ -5,7 +5,7 @@ import {
   sources,
   webhookSubscriptions,
 } from "@buildinternet/releases-core/schema";
-import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
+import type { WebhookFormat, WebhookSubscription } from "@buildinternet/releases-core/schema";
 import {
   computeWebhookDeliveryHealth,
   type WebhookDeliveryHealth,
@@ -155,7 +155,7 @@ export interface UserWebhookListItem {
   productSlug: string | null;
   productName: string | null;
   releaseType: "feature" | "rollup" | null;
-  format: "json" | "slack";
+  format: WebhookFormat;
   lastSuccessAt: string | null;
   lastErrorAt: string | null;
   lastErrorMsg: string | null;

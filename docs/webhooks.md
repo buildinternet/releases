@@ -38,6 +38,14 @@ Body: a JSON `ReleaseEvent` (see [architecture/events.md](./architecture/events.
 
 Respond `2xx` within 10 seconds to ack. Anything else triggers retry (5xx) or terminal failure (4xx).
 
+Set `format` on the subscription to change the body:
+
+| `format`    | Body                                                                 | Signed? |
+| ----------- | -------------------------------------------------------------------- | ------- |
+| `json` (default) | Raw `ReleaseEvent` + `X-Releases-*` HMAC headers                     | Yes     |
+| `slack`     | Slack Block Kit card to a `hooks.slack.com` incoming webhook         | No — the URL is the secret |
+| `discord`   | Discord embed to a `discord.com/api/webhooks/{id}/{token}` endpoint  | No — the URL is the secret |
+
 ## Verifying signatures
 
 ### Node.js

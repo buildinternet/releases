@@ -1,6 +1,7 @@
 import { deriveSigningKey, signPayload } from "@releases/core-internal/webhook-sign";
 import type { DeliveryMessage } from "@releases/core-internal/webhook-delivery";
 import { assertPublicWebhookTarget } from "@releases/core-internal/webhook-url-safety";
+import { formatDiscordMessage } from "@releases/rendering/discord-message";
 import { formatSlackMessage } from "@releases/rendering/slack-message";
 import type { ErrorCode, Outcome } from "./ae.js";
 
@@ -51,6 +52,13 @@ export async function deliver(
     // Slack incoming webhooks take a Block Kit body and ignore/forbid our
     // signature headers — the URL is the secret, so we send unsigned.
     body = JSON.stringify(formatSlackMessage(message.event.release));
+    headers = {
+      "Content-Type": "application/json",
+      "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
+    };
+  } else if (message.format === "discord") {
+    // Discord incoming webhooks take an embed body. Same unsigned contract as Slack.
+    body = JSON.stringify(formatDiscordMessage(message.event.release));
     headers = {
       "Content-Type": "application/json",
       "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,

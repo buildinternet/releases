@@ -1303,9 +1303,27 @@ export type NewSourceChangelogChunk = typeof sourceChangelogChunks.$inferInsert;
 export const WEBHOOK_SCOPES = ["org", "follows"] as const;
 export type WebhookScope = (typeof WEBHOOK_SCOPES)[number];
 
-/** Output format for a webhook delivery. `json` = signed raw event; `slack` = Slack Block Kit. */
-export const WEBHOOK_FORMATS = ["json", "slack"] as const;
+/** Output format for a webhook delivery. `json` = signed raw event; chat formats are unsigned. */
+export const WEBHOOK_FORMATS = ["json", "slack", "discord"] as const;
 export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number];
+
+/** Chat formats POST an unsigned, platform-specific body; the URL is the secret. */
+export const UNSIGNED_WEBHOOK_FORMATS = ["slack", "discord"] as const;
+export type UnsignedWebhookFormat = (typeof UNSIGNED_WEBHOOK_FORMATS)[number];
+
+export function isWebhookFormat(value: unknown): value is WebhookFormat {
+  return typeof value === "string" && (WEBHOOK_FORMATS as readonly string[]).includes(value);
+}
+
+export function isUnsignedWebhookFormat(value: unknown): value is UnsignedWebhookFormat {
+  return typeof value === "string" && (UNSIGNED_WEBHOOK_FORMATS as readonly string[]).includes(value);
+}
+
+/** Absent / empty → `json`. Unknown string → `null` so callers can 400. */
+export function parseWebhookFormat(value: unknown): WebhookFormat | null {
+  if (value === undefined || value === null || value === "") return "json";
+  return isWebhookFormat(value) ? value : null;
+}
 
 export const webhookSubscriptions = sqliteTable(
   "webhook_subscriptions",
@@ -1325,7 +1343,7 @@ export const webhookSubscriptions = sqliteTable(
     releaseType: text("release_type", { enum: RELEASE_TYPES }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     description: text("description"),
-    /** Delivery output format. `json` = signed raw event (default); `slack` = Slack Block Kit, unsigned. */
+    /** Delivery output format. `json` = signed raw event (default); `slack`/`discord` = unsigned chat cards. */
     format: text("format", { enum: WEBHOOK_FORMATS }).notNull().default("json"),
     secretVersion: integer("secret_version").notNull().default(1),
     createdAt: text("created_at")

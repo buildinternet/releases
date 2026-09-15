@@ -16,7 +16,7 @@ import { WEBHOOK_FORMATS, type WebhookFormat } from "@buildinternet/releases-cor
 /** Matches `newWebhookSubscriptionId()` — `whk_` + nanoid(16) (`A-Za-z0-9_-`). */
 export const SUBSCRIPTION_ID_RE = /^whk_[A-Za-z0-9_-]+$/;
 
-import { validateWebhookUrl, validateSlackWebhookUrl } from "./url-safety.js";
+import { validateWebhookUrl, validateFormatWebhookUrl } from "./url-safety.js";
 
 export { validateWebhookUrl };
 
@@ -54,12 +54,12 @@ export function buildWebhookPatchUpdates(
   }
   if (body.format !== undefined) {
     if (!WEBHOOK_FORMATS.includes(body.format)) {
-      return { error: "format must be 'json' or 'slack'" };
+      return { error: "format must be 'json', 'slack', or 'discord'" };
     }
-    // When switching to slack with a URL in the same patch, enforce the Slack host.
-    if (body.format === "slack" && body.url !== undefined) {
-      const slackError = validateSlackWebhookUrl(body.url);
-      if (slackError) return { error: slackError };
+    // When switching format with a URL in the same patch, enforce the host/path gate.
+    if (body.url !== undefined) {
+      const formatUrlError = validateFormatWebhookUrl(body.format, body.url);
+      if (formatUrlError) return { error: formatUrlError };
     }
     updates.format = body.format;
   }

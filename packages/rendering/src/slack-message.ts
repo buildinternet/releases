@@ -2,7 +2,7 @@
  * Slack incoming-webhook message formatter. Pure + runtime-neutral so the
  * webhooks worker can render a release into Block Kit without importing
  * worker code. `SlackReleaseInput` is structurally satisfied by the worker's
- * `ReleaseEventPayload`. Discord later adds a sibling formatter + enum value.
+ * `ReleaseEventPayload`. Discord is the sibling formatter in `discord-message`.
  */
 
 export interface SlackReleaseInput {

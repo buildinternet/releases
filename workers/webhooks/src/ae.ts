@@ -16,7 +16,7 @@ export interface DeliveryAttempt {
   attempt: number;
   errorMessage: string | null;
   errorCode: ErrorCode | null;
-  /** Delivery format — "json" (signed raw event) or "slack" (Block Kit). Lets queries segment by webhook type. */
+  /** Delivery format — "json" (signed raw event) or a chat card (`slack` / `discord`). */
   format: string;
   /** Non-secret Slack workspace+app id (`T../B..`) for slack deliveries, else "". `COUNT(DISTINCT)` → unique Slack apps. */
   slackApp: string;

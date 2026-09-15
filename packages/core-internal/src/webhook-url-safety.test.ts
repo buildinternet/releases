@@ -3,6 +3,8 @@ import {
   assertPublicWebhookTarget,
   blockedWebhookHostname,
   isPrivateIpv4,
+  validateDiscordWebhookUrl,
+  validateFormatWebhookUrl,
   validateSlackWebhookUrl,
   validateWebhookUrl,
 } from "./webhook-url-safety.js";
@@ -64,6 +66,71 @@ describe("validateSlackWebhookUrl", () => {
   });
   test("rejects a lookalike host", () => {
     expect(validateSlackWebhookUrl("https://hooks.slack.com.evil.com/x")).not.toBeNull();
+  });
+});
+
+const DISCORD_HOOK = "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
+
+describe("validateDiscordWebhookUrl", () => {
+  test("accepts a discord.com webhook URL", () => {
+    expect(validateDiscordWebhookUrl(DISCORD_HOOK)).toBeNull();
+  });
+  test("accepts the legacy discordapp.com host", () => {
+    expect(
+      validateDiscordWebhookUrl(
+        "https://discordapp.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz",
+      ),
+    ).toBeNull();
+  });
+  test("accepts canary and PTB hosts", () => {
+    expect(
+      validateDiscordWebhookUrl(
+        "https://canary.discord.com/api/webhooks/1/token-._ok",
+      ),
+    ).toBeNull();
+    expect(
+      validateDiscordWebhookUrl("https://ptb.discord.com/api/webhooks/1/token"),
+    ).toBeNull();
+  });
+  test("accepts a versioned API path and a trailing slash", () => {
+    expect(
+      validateDiscordWebhookUrl(
+        "https://discord.com/api/v10/webhooks/123456789012345678/token/",
+      ),
+    ).toBeNull();
+  });
+  test("accepts query strings such as wait / thread_id", () => {
+    expect(validateDiscordWebhookUrl(`${DISCORD_HOOK}?wait=true`)).toBeNull();
+  });
+  test("rejects a non-Discord host", () => {
+    expect(validateDiscordWebhookUrl("https://example.com/api/webhooks/1/token")).toMatch(
+      /discord\.com/,
+    );
+  });
+  test("rejects a lookalike host", () => {
+    expect(
+      validateDiscordWebhookUrl("https://discord.com.evil.com/api/webhooks/1/token"),
+    ).not.toBeNull();
+  });
+  test("rejects a Discord URL that is not a webhook path", () => {
+    expect(validateDiscordWebhookUrl("https://discord.com/channels/1/2")).toMatch(
+      /\/api\/webhooks/,
+    );
+  });
+  test("rejects Slack-compat and GitHub-compat suffixes", () => {
+    expect(validateDiscordWebhookUrl(`${DISCORD_HOOK}/slack`)).toMatch(/\/api\/webhooks/);
+    expect(validateDiscordWebhookUrl(`${DISCORD_HOOK}/github`)).toMatch(/\/api\/webhooks/);
+  });
+});
+
+describe("validateFormatWebhookUrl", () => {
+  test("is a no-op for json", () => {
+    expect(validateFormatWebhookUrl("json", "https://example.com/hook")).toBeNull();
+  });
+  test("delegates slack and discord", () => {
+    expect(validateFormatWebhookUrl("slack", DISCORD_HOOK)).not.toBeNull();
+    expect(validateFormatWebhookUrl("discord", "https://hooks.slack.com/services/T/B/X")).not.toBeNull();
+    expect(validateFormatWebhookUrl("discord", DISCORD_HOOK)).toBeNull();
   });
 });
 

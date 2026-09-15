@@ -10,6 +10,8 @@ export {
   isPrivateIpv6,
   isPrivateOrReservedIp,
   resolveHostAddresses,
+  validateDiscordWebhookUrl,
+  validateFormatWebhookUrl,
   validateSlackWebhookUrl,
   validateWebhookUrl,
   type DnsLookup,

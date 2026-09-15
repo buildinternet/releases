@@ -16,6 +16,7 @@
     "./media-filter": "./src/media-filter.ts",
     "./video-embed": "./src/video-embed.ts",
     "./rewrite-links": "./src/rewrite-links.ts",
+    "./discord-message": "./src/discord-message.ts",
     "./slack-message": "./src/slack-message.ts"
   },
   "dependencies": {

@@ -38,12 +38,14 @@ Each release you follow arrives as a compact message: linked title, short summar
 
 ## Discord notifications
 
-There's no one-paste Discord equivalent yet, but two well-trodden paths get you there:
+Same two-step setup as Slack — no bot to install:
 
-- **An RSS-to-Discord bot.** Bots like [MonitoRSS](https://monitorss.xyz) post feed entries into a channel. Point one at any `.atom` URL — an org, a source, or your personal feed token — and you have changelog notifications in Discord with zero code.
-- **A webhook relay.** Create a [follows-scoped webhook](#webhooks-for-your-own-systems) and point it at a small relay (a Cloudflare Worker, or an automation platform like Zapier, Make, or Pipedream) that reformats the payload into a [Discord webhook](https://support.discord.com/hc/en-us/articles/228383668) message. More moving parts, full control over formatting and filtering.
+1. Create a [Discord incoming webhook](https://support.discord.com/hc/en-us/articles/228383668) for the channel.
+2. On [Webhooks & API](/account/webhooks), set **Format** to **Discord message**, paste the URL, and create.
 
-The same two patterns cover Microsoft Teams, Mattermost, and anything else with incoming webhooks or an RSS bot.
+Each release you follow arrives as a compact embed: linked title, short summary, org avatar, and date. There's a Send test button to confirm the wiring. Full details, including why the webhook URL must stay secret: [Send releases to Discord](/docs/integrations/discord).
+
+Microsoft Teams, Mattermost, and other chat tools still use an RSS bot on a `.atom` URL, or a [signed webhook](#webhooks-for-your-own-systems) plus a small relay.
 
 ## Email digest
 
@@ -78,7 +80,8 @@ For a live terminal view, the CLI can follow the stream directly: `releases tail
 | ------------------------------------- | --------------------------------------------------------------- |
 | Updates in a feed reader              | `.atom` feeds, or a personal feed token for your follows        |
 | A message in a team Slack channel     | The Slack connection on [Notifications](/account/notifications) |
-| A message in Discord (or Teams, etc.) | An RSS bot on a `.atom` URL, or a webhook + relay               |
+| A message in a Discord channel        | Discord format on [Webhooks & API](/account/webhooks)           |
+| A message in Teams or another chat    | An RSS bot on a `.atom` URL, or a webhook + relay               |
 | One summary email a day or week       | The release digest                                              |
 | Events into your own code             | Signed webhooks (`/v1/me/webhooks`)                             |
 | An agent that checks on demand        | The MCP server or CLI                                           |
@@ -87,7 +90,7 @@ For a live terminal view, the CLI can follow the stream directly: `releases tail
 
 ### How fast are the notifications?
 
-Push channels (Slack, webhooks) fire when a release is indexed, which follows the source's polling schedule — typically within a few hours of the publisher posting, often much sooner for active sources. RSS adds your reader's own refresh interval on top. The digest batches to its cadence by design.
+Push channels (Slack, Discord, webhooks) fire when a release is indexed, which follows the source's polling schedule — typically within a few hours of the publisher posting, often much sooner for active sources. RSS adds your reader's own refresh interval on top. The digest batches to its cadence by design.
 
 ### Can I cut the noise down?
 
@@ -95,7 +98,7 @@ Several dials: follow specific products instead of whole orgs, subscribe to a si
 
 ### Do I need an account?
 
-Only for the follow-based channels (Slack, digest, personal feed, webhooks). Public `.atom`, `.json`, and `.md` feeds and the MCP server's read tools work with no account at all.
+Only for the follow-based channels (Slack, Discord, digest, personal feed, webhooks). Public `.atom`, `.json`, and `.md` feeds and the MCP server's read tools work with no account at all.
 
 ### What if a product I want isn't indexed?
 

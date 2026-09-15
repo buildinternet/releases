@@ -6,6 +6,8 @@
  * Pure / runtime-neutral — no D1, no Workers-only APIs beyond `fetch` (injectable).
  */
 
+import type { WebhookFormat } from "@buildinternet/releases-core/schema";
+
 /** Cloudflare DNS-over-HTTPS JSON API (public resolver). */
 const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 
@@ -151,6 +153,44 @@ export function validateSlackWebhookUrl(url: string): string | null {
   if (!SLACK_WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase())) {
     return "Slack webhooks must point at a hooks.slack.com incoming webhook URL";
   }
+  return null;
+}
+
+/**
+ * Discord incoming-webhook hosts: stable + legacy discordapp.com, plus
+ * canary/PTB clients that mint webhooks on their own origin.
+ */
+const DISCORD_WEBHOOK_HOSTS = new Set([
+  "discord.com",
+  "discordapp.com",
+  "canary.discord.com",
+  "ptb.discord.com",
+]);
+
+/** `/api/webhooks/{id}/{token}` with optional API version; no `/slack` or `/github` suffix. */
+const DISCORD_WEBHOOK_PATH = /^\/api(?:\/v\d+)?\/webhooks\/\d+\/[A-Za-z0-9_.-]+\/?$/;
+
+/** Host + path allowlist for `format = discord` subscriptions. Returns an error message or null. */
+export function validateDiscordWebhookUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "url is invalid";
+  }
+  if (!DISCORD_WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase())) {
+    return "Discord webhooks must point at a discord.com incoming webhook URL";
+  }
+  if (!DISCORD_WEBHOOK_PATH.test(parsed.pathname)) {
+    return "Discord webhooks must use an /api/webhooks/{id}/{token} URL";
+  }
+  return null;
+}
+
+/** Format-specific host/path gate. `json` has no extra constraint. */
+export function validateFormatWebhookUrl(format: WebhookFormat, url: string): string | null {
+  if (format === "slack") return validateSlackWebhookUrl(url);
+  if (format === "discord") return validateDiscordWebhookUrl(url);
   return null;
 }
 
