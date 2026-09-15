@@ -3,17 +3,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { ApiSetupError } from "@/lib/api";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { domainHref } from "@/lib/source-display";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgAvatar } from "@/components/org-avatar";
 import { OrgTabs } from "@/components/org-tabs";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
+import { AddOrgWebhookLink } from "@/components/org/add-org-webhook-link";
 import { OrgInstallCommand } from "@/components/org/org-install-command";
 import { AgentCopyButton } from "@/components/org/agent-copy-button";
 import { OrgContextRail } from "@/components/org/org-context-rail";
 import { OrgContextRailGate } from "@/components/org-context-rail-gate";
-import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
-import { domainHref } from "@/lib/source-display";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
 
 /** Most recent release timestamp across all sources (drives the Releases "new" dot). */
@@ -113,6 +115,7 @@ export default async function OrgLayout({
           </div>
           <div className="flex shrink-0 items-center gap-2.5">
             {org.id && <FollowButton targetType="org" targetId={org.id} label={org.name} />}
+            {AUTH_CONFIGURED && <AddOrgWebhookLink orgSlug={org.slug} orgName={org.name} />}
           </div>
         </div>
 

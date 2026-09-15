@@ -24,6 +24,7 @@ import {
   type UserWebhookFormat,
   type WebhookDeliveryRow,
 } from "@/lib/webhooks";
+import { webhookCreateInitialState, type WebhookCreatePrefill } from "@/lib/webhook-create";
 
 const MAX_ORG_WEBHOOKS = 10;
 
@@ -161,19 +162,23 @@ function healthTone(health: UserWebhookListItem["deliveryHealth"]): string {
 
 export function WebhooksPanel({
   initialWebhooks = null,
+  createPrefill = null,
 }: {
   /** Optional bootstrap from GET /v1/me/settings/developer (skips mount fetch). */
   initialWebhooks?: UserWebhookListItem[] | null;
+  /** Org-page deep-link: start the create form on Org scope with the slug filled. */
+  createPrefill?: WebhookCreatePrefill | null;
 }) {
+  const prefill = webhookCreateInitialState(createPrefill);
   const [subs, setSubs] = useState<UserWebhookListItem[]>(initialWebhooks ?? []);
   const [loading, setLoading] = useState(initialWebhooks == null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [scope, setScope] = useState<UserWebhookScope>("follows");
+  const [scope, setScope] = useState<UserWebhookScope>(prefill.scope);
   const [url, setUrl] = useState("");
-  const [orgSlug, setOrgSlug] = useState("");
+  const [orgSlug, setOrgSlug] = useState(prefill.orgSlug);
   const [productSlug, setProductSlug] = useState("");
   const [sourceSlug, setSourceSlug] = useState("");
   const [releaseType, setReleaseType] = useState<"" | "feature" | "rollup">("");
@@ -426,6 +431,7 @@ export function WebhooksPanel({
       )}
 
       <form
+        id="add-webhook"
         onSubmit={onCreate}
         className="mt-4 space-y-3 border-t border-stone-200 pt-4 dark:border-stone-800"
       >
