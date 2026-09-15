@@ -229,7 +229,7 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 **Follows-scoped webhooks** (`POST /v1/me/webhooks { scope: "follows" }`) are the real-time outbound sibling to the feed and digest email — one HTTPS endpoint per account, delivery filtered by the same follow graph. See [docs/webhooks.md](../webhooks.md) and the web docs at `/docs/api/webhooks`.
 
-**Account webhooks UI** (`web/src/components/webhooks-panel.tsx` on `/account/notifications`, #1679) lists self-serve subscriptions with delivery health, supports create (follows or org scope), test/pause/resume, rotate signing key, and delete. Uses the browser client in `web/src/lib/webhooks.ts` (`credentials: "include"` against the API worker). Signing keys are shown once on create/rotate, matching the API contract.
+**Account webhooks UI** (`web/src/components/webhooks-panel.tsx` on `/account/webhooks`) lists self-serve subscriptions with delivery health, supports create (follows or org scope), test/pause/resume, rotate signing key, and delete. Uses the browser client in `web/src/lib/webhooks.ts` (`credentials: "include"` against the API worker). Signing keys are shown once on create/rotate, matching the API contract. Org pages deep-link here via `?scope=org&org=<slug>#add-webhook` (⋯ more menu next to Follow) so the create form opens already scoped to that org.
 
 **Workspace integrations** (`/account/integrations`) connect an Uploads account for the active workspace (owner/admin). The connected card shows the uploads workspace slug (JWT `workspace` claim). Callback is `/integrations/uploads/callback` on the web origin. See [uploads-oauth.md](uploads-oauth.md).
 

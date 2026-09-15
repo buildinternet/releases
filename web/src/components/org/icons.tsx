@@ -55,6 +55,16 @@ export function ChevronRightIcon({ className }: { className?: string }) {
   );
 }
 
+export function MoreIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" strokeWidth={1.8} {...stroke} className={className} aria-hidden="true">
+      <circle cx="5" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.35" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function GlobeIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" strokeWidth={1.5} {...stroke} className={className} aria-hidden="true">

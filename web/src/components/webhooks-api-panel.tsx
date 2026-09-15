@@ -8,6 +8,7 @@ import { ApiKeysPanel } from "@/components/api-keys-panel";
 import { WebhooksPanel } from "@/components/webhooks-panel";
 import { PanelGrid, ErrorText, secondaryButtonClass } from "@releases/design-system";
 import { PromoRail } from "@/components/account/promo-rail";
+import { webhookCreateLoginPath, type WebhookCreatePrefill } from "@/lib/webhook-create";
 
 /**
  * Webhooks & API — one-shot bootstrap from GET /v1/me/settings/developer.
@@ -15,8 +16,10 @@ import { PromoRail } from "@/components/account/promo-rail";
  */
 export function WebhooksApiPanel({
   initial = null,
+  createPrefill = null,
 }: {
   initial?: DeveloperSettingsResponse | null;
+  createPrefill?: WebhookCreatePrefill | null;
 }) {
   const { data, status, error, retry } = useSettingsBootstrap(
     initial,
@@ -32,7 +35,7 @@ export function WebhooksApiPanel({
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
-        <Link href="/login?redirect=/account/webhooks" className="underline">
+        <Link href={webhookCreateLoginPath(createPrefill)} className="underline">
           sign in
         </Link>{" "}
         to manage programmatic access.
@@ -63,7 +66,7 @@ export function WebhooksApiPanel({
           </section>
         )}
         <section>
-          <WebhooksPanel initialWebhooks={data.webhooks} />
+          <WebhooksPanel initialWebhooks={data.webhooks} createPrefill={createPrefill} />
         </section>
       </div>
     </PanelGrid>
