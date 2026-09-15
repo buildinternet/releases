@@ -33,9 +33,13 @@ RELEASES_GITHUB_WEBHOOK_SECRET=
 # uploads.sh OAuth client (workspace Integrations → Connect uploads).
 # Client id defaults to releases-sh in wrangler vars. Secret + a 32-byte
 # base64 IDEMPOTENCY_ENCRYPTION_KEY are required or connect returns 503.
-# Redirect URI is derived from the browser Origin (portless
-# https://releases.localhost/integrations/uploads/callback). Register that
-# URI on the uploads client; do not use localhost:8788 (that's MCP preview).
+# Redirect URI is derived from the browser Origin. Register these on the
+# uploads client (web path, same as prod):
+#   https://releases.sh/integrations/uploads/callback
+#   https://releases.localhost/integrations/uploads/callback   (dev:web)
+#   http://localhost:3000/integrations/uploads/callback        (preview:web)
+#   http://127.0.0.1:3000/integrations/uploads/callback
+# Do not register localhost:8788 — that's uploads-auth / MCP preview.
 # UPLOADS_OAUTH_CLIENT_ID=releases-sh
 # UPLOADS_OAUTH_CLIENT_SECRET=
 # IDEMPOTENCY_ENCRYPTION_KEY=

@@ -134,16 +134,32 @@ describe("uploads OAuth workspace routes", () => {
     expect(pending[0]?.codeVerifierEnc).not.toContain("verifier");
   });
 
-  it("uses a trusted localhost Origin as the redirect URI", async () => {
+  it.each([
+    ["http://localhost:3000", "http://localhost:3000/integrations/uploads/callback"],
+    ["http://127.0.0.1:3000", "http://127.0.0.1:3000/integrations/uploads/callback"],
+    ["https://releases.localhost", "https://releases.localhost/integrations/uploads/callback"],
+  ] as const)("uses trusted Origin %s as the redirect URI", async (origin, expected) => {
     db = createTestDb();
     seed();
     const res = await appAs("user_1").request(
       "/workspaces/ws_1/integrations/uploads/connect",
-      { method: "POST", headers: { Origin: "http://localhost:3000" } },
+      { method: "POST", headers: { Origin: origin } },
       env({ ENVIRONMENT: "development" }),
     );
     const body = (await res.json()) as { redirectUri: string };
-    expect(body.redirectUri).toBe("http://localhost:3000/integrations/uploads/callback");
+    expect(body.redirectUri).toBe(expected);
+  });
+
+  it("does not use MCP preview Origin :8788 as the redirect URI", async () => {
+    db = createTestDb();
+    seed();
+    const res = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads/connect",
+      { method: "POST", headers: { Origin: "http://localhost:8788" } },
+      env({ ENVIRONMENT: "development" }),
+    );
+    const body = (await res.json()) as { redirectUri: string };
+    expect(body.redirectUri).toBe("https://releases.sh/integrations/uploads/callback");
   });
 
   it("rejects callback with an unknown state", async () => {

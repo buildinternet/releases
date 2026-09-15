@@ -23,21 +23,23 @@ whether the workspace is connected.
 
 ## Redirect URIs
 
-The callback is a **web-origin** page (not the API worker). Prod matches the URI
-proposed for the `releases-sh` client. Local does **not** use
-`http://localhost:8788/…` — that port is the MCP preview worker in this repo.
+The callback is a **web-origin** page (not the API worker) at
+`/integrations/uploads/callback` — the same path in prod and local. Do **not**
+register `http://localhost:8788/…`: that port is uploads-auth / Releases MCP
+preview (`preview:mcp`), not web.
 
-| Environment    | Redirect URI                                               | Notes                                             |
-| -------------- | ---------------------------------------------------------- | ------------------------------------------------- |
-| Production     | `https://releases.sh/integrations/uploads/callback`        | Matches the proposed registration.                |
-| Local portless | `https://releases.localhost/integrations/uploads/callback` | Derived from the trusted browser `Origin`.        |
-| Local preview  | `http://localhost:3000/integrations/uploads/callback`      | Trusted only when `ENVIRONMENT !== "production"`. |
+| Environment        | Redirect URI                                               | Notes                                                                    |
+| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Production         | `https://releases.sh/integrations/uploads/callback`        | Web origin. Matches the proposed registration.                           |
+| Local portless     | `https://releases.localhost/integrations/uploads/callback` | `bun run dev:web`. Trusted as a releases-family Origin.                  |
+| Local preview      | `http://localhost:3000/integrations/uploads/callback`      | `preview:web`. Trusted only when `ENVIRONMENT !== "production"`.         |
+| Local preview (IP) | `http://127.0.0.1:3000/integrations/uploads/callback`      | Same preview lane; browsers may send this Origin instead of `localhost`. |
 
-Register every URI the client will actually redirect to. If a local or staging origin
-is missing from the uploads client, the authorize step fails at uploads.
+Register every URI in the table. If a local or staging origin is missing from
+the uploads client, the authorize step fails at uploads.
 
 Override: `UPLOADS_OAUTH_REDIRECT_URI` (full callback URL). Otherwise the start
-handler uses a trusted `Origin`, then `WEB_BASE_URL`.
+handler uses a trusted `Origin` (excluding `:8788`), then `WEB_BASE_URL`.
 
 ## API
 
@@ -95,6 +97,6 @@ Grant: `authorization_code` + PKCE (`S256`). Confidential client (secret on the
 token request). Scopes: start with `files:read`; this repo also requests
 `offline_access` so a refresh token is stored.
 
-Allow-list the redirect URIs in the table above. Drop
-`http://localhost:8788/integrations/uploads/callback` unless something else
-listens there.
+Allow-list the four redirect URIs in the table above. Do **not** register
+`http://localhost:8788/integrations/uploads/callback` — that port is MCP
+preview, not the web callback.

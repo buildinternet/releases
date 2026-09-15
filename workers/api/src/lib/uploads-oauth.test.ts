@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   DEFAULT_UPLOADS_OAUTH,
+  UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS,
   buildUploadsAuthorizeUrl,
   exchangeAuthorizationCode,
   resolveUploadsOAuthConfig,
@@ -31,12 +32,38 @@ describe("uploads-oauth config", () => {
   });
 
   it("prefers a trusted request Origin for the redirect URI", () => {
-    expect(uploadsOAuthRedirectUri({ ENVIRONMENT: "development" }, "http://localhost:3000")).toBe(
+    const local = { ENVIRONMENT: "development" };
+    expect(uploadsOAuthRedirectUri(local, "http://localhost:3000")).toBe(
       "http://localhost:3000/integrations/uploads/callback",
+    );
+    expect(uploadsOAuthRedirectUri(local, "http://127.0.0.1:3000")).toBe(
+      "http://127.0.0.1:3000/integrations/uploads/callback",
+    );
+    expect(uploadsOAuthRedirectUri(local, "https://releases.localhost")).toBe(
+      "https://releases.localhost/integrations/uploads/callback",
     );
     expect(
       uploadsOAuthRedirectUri({ WEB_BASE_URL: "https://releases.sh" }, "https://evil.example"),
     ).toBe("https://releases.sh/integrations/uploads/callback");
+  });
+
+  it("does not use MCP preview :8788 as a redirect origin", () => {
+    const env = { ENVIRONMENT: "development", WEB_BASE_URL: "https://releases.sh" };
+    expect(uploadsOAuthRedirectUri(env, "http://localhost:8788")).toBe(
+      "https://releases.sh/integrations/uploads/callback",
+    );
+    expect(uploadsOAuthRedirectUri(env, "http://127.0.0.1:8788")).toBe(
+      "https://releases.sh/integrations/uploads/callback",
+    );
+  });
+
+  it("lists the four registered web-origin callbacks", () => {
+    expect([...UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS]).toEqual([
+      "https://releases.sh/integrations/uploads/callback",
+      "http://localhost:3000/integrations/uploads/callback",
+      "http://127.0.0.1:3000/integrations/uploads/callback",
+      "https://releases.localhost/integrations/uploads/callback",
+    ]);
   });
 
   it("honors an explicit redirect override", () => {

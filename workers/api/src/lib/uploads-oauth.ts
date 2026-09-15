@@ -15,6 +15,20 @@ export const UPLOADS_OAUTH_CALLBACK_PATH = "/integrations/uploads/callback";
 export const UPLOADS_OAUTH_PROVIDER = "uploads" as const;
 export const UPLOADS_OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Callbacks the `releases-sh` client must allow-list. Web origin only —
+ * never `localhost:8788` (that's uploads-auth / Releases MCP preview).
+ */
+export const UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS = [
+  "https://releases.sh/integrations/uploads/callback",
+  "http://localhost:3000/integrations/uploads/callback",
+  "http://127.0.0.1:3000/integrations/uploads/callback",
+  "https://releases.localhost/integrations/uploads/callback",
+] as const;
+
+/** MCP preview (`preview:mcp`) — trusted for CORS, never an uploads redirect. */
+const MCP_PREVIEW_PORTS = new Set(["8788"]);
+
 export const DEFAULT_UPLOADS_OAUTH = {
   clientId: "releases-sh",
   authorizeUrl: "https://uploads.sh/api/auth/oauth2/authorize",
@@ -96,7 +110,9 @@ export async function uploadsOAuthConfigured(env: UploadsOAuthEnv): Promise<bool
  * Order: explicit `UPLOADS_OAUTH_REDIRECT_URI` → trusted request Origin →
  * `WEB_BASE_URL` (prod fallback `https://releases.sh`). Origin-first keeps
  * local portless (`https://releases.localhost`) and preview
- * (`http://localhost:3000`) working without a wrangler override.
+ * (`http://localhost:3000`, `http://127.0.0.1:3000`) working without a
+ * wrangler override. MCP preview (`:8788`) is trusted for CORS but is not
+ * a web callback — it falls through to `WEB_BASE_URL`.
  */
 export function uploadsOAuthRedirectUri(
   env: UploadsOAuthEnv,
@@ -104,10 +120,19 @@ export function uploadsOAuthRedirectUri(
 ): string {
   const override = env.UPLOADS_OAUTH_REDIRECT_URI?.trim();
   if (override) return override.replace(/\/+$/, "");
-  if (requestOrigin && isTrustedCorsOrigin(requestOrigin, env)) {
+  if (requestOrigin && isUploadsOAuthRedirectOrigin(requestOrigin, env)) {
     return `${requestOrigin.replace(/\/+$/, "")}${UPLOADS_OAUTH_CALLBACK_PATH}`;
   }
   return `${releaseWebBase(env)}${UPLOADS_OAUTH_CALLBACK_PATH}`;
+}
+
+function isUploadsOAuthRedirectOrigin(origin: string, env: UploadsOAuthEnv): boolean {
+  if (!isTrustedCorsOrigin(origin, env)) return false;
+  try {
+    return !MCP_PREVIEW_PORTS.has(new URL(origin).port);
+  } catch {
+    return false;
+  }
 }
 
 export function buildUploadsAuthorizeUrl(opts: {
