@@ -71,15 +71,15 @@ never lands in D1. Table: `workspace_integrations` (`schema-integrations.ts`).
 
 ## Env
 
-| Name                          | Kind          | Default / required                               |
-| ----------------------------- | ------------- | ------------------------------------------------ |
-| `UPLOADS_OAUTH_CLIENT_ID`     | var           | `releases-sh`                                    |
-| `UPLOADS_OAUTH_AUTHORIZE_URL` | var           | `https://uploads.sh/api/auth/oauth2/authorize`   |
-| `UPLOADS_OAUTH_TOKEN_URL`     | var           | `https://auth.uploads.sh/api/auth/oauth2/token`  |
-| `UPLOADS_OAUTH_REVOKE_URL`    | var           | `https://auth.uploads.sh/api/auth/oauth2/revoke` |
-| `UPLOADS_OAUTH_SCOPES`        | var           | `files:read offline_access`                      |
-| `UPLOADS_OAUTH_REDIRECT_URI`  | var           | unset — derive (see above)                       |
-| `IDEMPOTENCY_ENCRYPTION_KEY`  | secret        | **required** for connect (token encryption)      |
+| Name                          | Kind   | Default / required                               |
+| ----------------------------- | ------ | ------------------------------------------------ |
+| `UPLOADS_OAUTH_CLIENT_ID`     | var    | `releases-sh`                                    |
+| `UPLOADS_OAUTH_AUTHORIZE_URL` | var    | `https://uploads.sh/api/auth/oauth2/authorize`   |
+| `UPLOADS_OAUTH_TOKEN_URL`     | var    | `https://auth.uploads.sh/api/auth/oauth2/token`  |
+| `UPLOADS_OAUTH_REVOKE_URL`    | var    | `https://auth.uploads.sh/api/auth/oauth2/revoke` |
+| `UPLOADS_OAUTH_SCOPES`        | var    | `files:read offline_access`                      |
+| `UPLOADS_OAUTH_REDIRECT_URI`  | var    | unset — derive (see above)                       |
+| `IDEMPOTENCY_ENCRYPTION_KEY`  | secret | **required** for connect (token encryption)      |
 
 Discovery (for operators): `https://uploads.sh/.well-known/oauth-authorization-server`.
 Authorize is on `uploads.sh` (cookie origin — do not send the browser to
