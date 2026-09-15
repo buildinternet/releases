@@ -20,7 +20,11 @@ import {
   formatClaimVerifiedEmail,
   formatClaimVerifiedOperatorEmail,
 } from "./claim-verified-email.js";
-import { formatRecommendationAckEmail, formatRecommendationEmail } from "./recommendation-email.js";
+import {
+  formatRecommendationAckEmail,
+  formatRecommendationAddedEmail,
+  formatRecommendationEmail,
+} from "./recommendation-email.js";
 import { buildNoResultsAlert } from "./search-no-results.js";
 import { formatCronCrashAlert } from "./send-alert.js";
 import {
@@ -43,6 +47,7 @@ export type EmailSampleId =
   | "digest.daily"
   | "digest.weekly"
   | "recommendation.ack"
+  | "recommendation.added"
   | "listing.claim-verified"
   | "operator.claim-verified"
   | "operator.recommendation"
@@ -103,6 +108,12 @@ export const EMAIL_SAMPLE_CATALOG: EmailSampleMeta[] = [
     id: "recommendation.ack",
     label: "Submission thank-you",
     description: "Acknowledgment after /submit with a contact email",
+    channel: "auth",
+  },
+  {
+    id: "recommendation.added",
+    label: "Submission added",
+    description: "Opt-in follow-up when an operator marks a submitted source as added",
     channel: "auth",
   },
   {
@@ -246,6 +257,7 @@ const SAMPLE_RECOMMENDATION: Recommendation = {
   archived: false,
   surface: "web",
   userAgent: "Releases admin email test",
+  addedNotifiedAt: null,
 };
 
 const SAMPLE_SUBSCRIPTION: SubscriptionLabel = {
@@ -351,6 +363,17 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
     }
     case "recommendation.ack":
       return formatRecommendationAckEmail(SAMPLE_RECOMMENDATION, web);
+    case "recommendation.added":
+      return formatRecommendationAddedEmail(
+        SAMPLE_RECOMMENDATION,
+        {
+          orgName: "Example Co",
+          orgSlug: "example",
+          sourceName: "Example Changelog",
+          sourceSlug: "changelog",
+        },
+        web,
+      );
     case "listing.claim-verified":
       return formatClaimVerifiedEmail({
         domain: "example.com",

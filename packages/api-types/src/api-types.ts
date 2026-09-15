@@ -211,6 +211,10 @@ import type {
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
 import type {
+  RecommendationNotifyAddedBodySchema,
+  RecommendationNotifyAddedResultSchema,
+} from "./schemas/recommendations.js";
+import type {
   SitemapSourceSchema,
   SitemapPayloadSchema,
   SitemapReleaseSchema,
@@ -535,6 +539,10 @@ export {
   FeedbackUpdateBodySchema,
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
+export {
+  RecommendationNotifyAddedBodySchema,
+  RecommendationNotifyAddedResultSchema,
+} from "./schemas/recommendations.js";
 export {
   SitemapSourceSchema,
   SitemapPayloadSchema,
@@ -1724,6 +1732,10 @@ export type FeedbackItem = z.infer<typeof FeedbackItemSchema>;
 export type FeedbackListResponse = z.infer<typeof FeedbackListResponseSchema>;
 export type FeedbackUpdateBody = z.infer<typeof FeedbackUpdateBodySchema>;
 export type FeedbackDeleteResponse = z.infer<typeof FeedbackDeleteResponseSchema>;
+
+// ── Recommendations ──
+export type RecommendationNotifyAddedBody = z.infer<typeof RecommendationNotifyAddedBodySchema>;
+export type RecommendationNotifyAddedResult = z.infer<typeof RecommendationNotifyAddedResultSchema>;
 
 // ── Fetch log ──
 

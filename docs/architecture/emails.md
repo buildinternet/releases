@@ -10,7 +10,7 @@ order. No sender hand-rolls markup.
 
 | Lane     | Messages                                                                                                                                                                                           | Tone                                     |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, ownership claim verified                                                                                   | accent                                   |
+| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, submission added, ownership claim verified                                                                 | accent                                   |
 | Reader   | daily + weekly follow digest                                                                                                                                                                       | accent                                   |
 | Operator | cron report, staleness digest, recommendation, ownership claim verified, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
 
@@ -74,7 +74,8 @@ A healthy cron run names nobody — there is no affected entity and the counts a
 the whole story. Operator subjects keep their `[alert]` / `[feedback]` prefixes
 (operators filter on them) and carry no dates; the inbox timestamp already does.
 Account mail carries the fact the reader needs instead: the new address on an
-email change, the expiry when it is short, the domain they submitted.
+email change, the expiry when it is short, the domain they submitted, the
+org/source that was added.
 
 ## Gmail annotations
 
@@ -113,6 +114,13 @@ markup ships correct and dormant.
 `EMAIL_SAMPLE_CATALOG` (`workers/api/src/lib/email-samples.ts`). Adding a
 message means adding a sample there; the catalog is what makes the whole surface
 reviewable in one place.
+
+The `/submit` thank-you (`recommendation.ack`) fires automatically when a
+submitter leaves a contact address. The follow-up that their source was added
+(`recommendation.added`) is **opt-in**: operators send it via
+`POST /v1/admin/recommendations/:id/notify-added` (CLI:
+`releases admin recommendations notify-added <rec_id> --org <slug>`). Triage,
+close, and archive never send it.
 
 The two webhook alerts are rendered by their real formatters, which live in
 `@releases/core-internal/webhook-alert-format` precisely so both the webhooks

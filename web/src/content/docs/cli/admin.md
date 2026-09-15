@@ -248,3 +248,21 @@ releases admin feedback list --json                # Raw envelope: { items, next
 ```
 
 Each entry carries the message, optional contact, type, status, and submission time. Pagination is cursor-based: pass the `nextCursor` from a `--json` response back as `--cursor` to walk older pages.
+
+## Recommendations
+
+Review source URLs submitted via `releases submit` or [releases.sh/submit](https://releases.sh/submit). Newest first.
+
+```bash
+releases admin recommendations list
+releases admin recommendations list --status new --type source
+releases admin recommendations triage <id> --status closed   # new | triaged | closed
+releases admin recommendations archive <id>
+releases admin recommendations archive <id> --undo
+releases admin recommendations delete <id>                   # permanent — confirm or --yes
+releases admin recommendations notify-added <id> --org acme [--source changelog]
+```
+
+`notify-added` is opt-in: it emails the submitter’s contact address that their suggestion is now on the registry, and links the live org (or org/source) page. It does **not** run when you triage, close, or archive. A second call is a no-op (`already_notified`). Skip it when there is no contact email.
+
+API equivalent: `POST /v1/admin/recommendations/:id/notify-added` with `{ "orgSlug": "acme", "sourceSlug": "changelog" }`.

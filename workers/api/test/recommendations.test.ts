@@ -348,6 +348,44 @@ describe("PATCH /v1/recommendations/:id", () => {
     const [row] = await db.select().from(recommendations);
     expect(row!.status).toBe("triaged");
     expect(row!.archived).toBe(true);
+    expect(row!.addedNotifiedAt).toBeNull();
+  });
+
+  it("does not send an added-notification on close or archive", async () => {
+    const { db, fetch } = await makeApp();
+    await db.insert(recommendations).values({
+      id: "rec_seed",
+      createdAt: 1000,
+      type: "source",
+      url: "https://example.com/releases",
+      contactEmail: "user@example.com",
+      status: "new",
+      archived: false,
+      surface: "web",
+    });
+
+    const closed = await fetch(
+      new Request("http://x/v1/recommendations/rec_seed", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "closed" }),
+      }),
+    );
+    expect(closed.status).toBe(200);
+
+    const archived = await fetch(
+      new Request("http://x/v1/recommendations/rec_seed", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      }),
+    );
+    expect(archived.status).toBe(200);
+
+    const [row] = await db.select().from(recommendations);
+    expect(row!.status).toBe("closed");
+    expect(row!.archived).toBe(true);
+    expect(row!.addedNotifiedAt).toBeNull();
   });
 });
 

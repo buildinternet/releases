@@ -1,16 +1,37 @@
 /**
- * Admin-only read-back for recommendations. Gated by authMiddleware via
+ * Admin-only read-back for recommendations, plus the opt-in
+ * "your source was added" notify. Gated by authMiddleware via
  * the "admin/recommendations" entry in route-namespaces.ts.
+ *
+ * CLI: `releases admin recommendations notify-added <rec_id> --org <slug> [--source <slug>]`
  */
 import { Hono } from "hono";
+import { describeRoute, resolver } from "hono-openapi";
 import { and, desc, eq, lt, or, type SQL } from "drizzle-orm";
 import {
+  RecommendationNotifyAddedBodySchema,
+  RecommendationNotifyAddedResultSchema,
+} from "@buildinternet/releases-api-types";
+import {
+  organizations,
   recommendations,
   RECOMMENDATION_STATUSES,
   RECOMMENDATION_TYPES,
 } from "@buildinternet/releases-core/schema";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
+import {
+  NotFoundError,
+  RateLimitedError,
+  ServiceUnavailableError,
+  ValidationError,
+} from "@releases/lib/releases-error";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { errorResponse } from "../lib/openapi-error.js";
+import { recommendationRegistryUrl, sendRecommendationAdded } from "../lib/recommendation-email.js";
+import { validateJson } from "../lib/validate.js";
+import { findSourceForOrgSlug, orgWhere } from "../utils.js";
 
 export const adminRecommendationRoutes = new Hono<Env>();
 
@@ -81,3 +102,121 @@ adminRecommendationRoutes.get("/admin/recommendations", async (c) => {
 
   return c.json({ items, nextCursor });
 });
+
+function webOrigin(env: Env["Bindings"]): string {
+  const raw = releaseWebBase(env);
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "https://releases.sh";
+  }
+}
+
+const ADDED_RATE_LIMIT_WINDOW_SECONDS = 3600;
+
+adminRecommendationRoutes.post(
+  "/admin/recommendations/:id/notify-added",
+  describeRoute({
+    tags: ["Recommendations"],
+    summary: "Email the submitter that their source was added",
+    description:
+      "Opt-in operator action. Sends a “your submission was added” email to the recommendation’s contact address, naming the onboarded org/source and linking its live releases.sh URL. Does not run on triage, close, or archive. Idempotent: a second call returns `sent: false, reason: already_notified` and does not email again. CLI: `releases admin recommendations notify-added <rec_id> --org <slug> [--source <slug>]`.",
+    responses: {
+      200: {
+        description: "Sent, or already notified (idempotent replay).",
+        content: {
+          "application/json": { schema: resolver(RecommendationNotifyAddedResultSchema) },
+        },
+      },
+      400: errorResponse("No contact email, or missing orgSlug"),
+      404: errorResponse("Recommendation, organization, or source not found"),
+      429: errorResponse("Hourly submitter-email budget exhausted"),
+      503: errorResponse("Transactional email is not configured"),
+    },
+  }),
+  validateJson(RecommendationNotifyAddedBodySchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const { orgSlug, sourceSlug } = c.req.valid("json");
+    const db = getDb(c);
+
+    const [row] = await db
+      .select()
+      .from(recommendations)
+      .where(eq(recommendations.id, id))
+      .limit(1);
+    if (!row) return respondError(c, new NotFoundError("Recommendation not found"));
+    if (!row.contactEmail) {
+      return respondError(
+        c,
+        new ValidationError("This recommendation has no contact email.", { code: "bad_request" }),
+      );
+    }
+
+    if (row.addedNotifiedAt != null) {
+      return c.json({
+        ok: true as const,
+        sent: false,
+        reason: "already_notified" as const,
+        notifiedAt: row.addedNotifiedAt,
+        contactEmail: row.contactEmail,
+      });
+    }
+
+    const [org] = await db
+      .select({ name: organizations.name, slug: organizations.slug })
+      .from(organizations)
+      .where(orgWhere(orgSlug))
+      .limit(1);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
+
+    let sourceName: string | undefined;
+    let resolvedSourceSlug: string | undefined;
+    if (sourceSlug) {
+      const source = await findSourceForOrgSlug(db, org.slug, sourceSlug);
+      if (!source) return respondError(c, new NotFoundError("Source not found"));
+      sourceName = source.name;
+      resolvedSourceSlug = source.slug;
+    }
+
+    const listing = {
+      orgName: org.name,
+      orgSlug: org.slug,
+      sourceName,
+      sourceSlug: resolvedSourceSlug,
+    };
+    const origin = webOrigin(c.env);
+    const registryUrl = recommendationRegistryUrl(origin, listing);
+
+    const result = await sendRecommendationAdded(c.env, row, listing);
+    if (!result.sent) {
+      if (result.reason === "rate_capped") {
+        c.header("Retry-After", String(ADDED_RATE_LIMIT_WINDOW_SECONDS));
+        return respondError(
+          c,
+          new RateLimitedError("Too many added-notification emails this hour. Retry later."),
+        );
+      }
+      if (result.reason === "no_binding") {
+        return respondError(
+          c,
+          new ServiceUnavailableError("Transactional email is not configured."),
+        );
+      }
+      return respondError(c, new ServiceUnavailableError("Could not send the added notification."));
+    }
+
+    await db
+      .update(recommendations)
+      .set({ addedNotifiedAt: result.notifiedAt })
+      .where(eq(recommendations.id, id));
+
+    return c.json({
+      ok: true as const,
+      sent: true,
+      notifiedAt: result.notifiedAt,
+      registryUrl,
+      contactEmail: row.contactEmail,
+    });
+  },
+);
