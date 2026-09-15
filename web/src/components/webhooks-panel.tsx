@@ -12,6 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  WebhookFormatIcon,
+  isUnsignedWebhookFormat,
+  webhookFormatLabel,
+  webhookFormatPickerLabel,
+} from "@/components/webhook-format-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import {
   createWebhook,
@@ -127,7 +133,16 @@ function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
               className="border-t border-stone-100 dark:border-stone-800"
             >
               <td className="py-1 pr-3 whitespace-nowrap">{row.timestamp ?? "—"}</td>
-              <td className="py-1 pr-3">{row.format?.trim() || "—"}</td>
+              <td className="py-1 pr-3">
+                {row.format === "json" || row.format === "slack" || row.format === "discord" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <WebhookFormatIcon format={row.format} className="size-3 shrink-0" />
+                    {row.format}
+                  </span>
+                ) : (
+                  row.format?.trim() || "—"
+                )}
+              </td>
               <td className={`py-1 pr-3 ${outcomeTone(row.outcome)}`}>{row.outcome ?? "—"}</td>
               <td className="py-1 pr-3">{row.http_status ?? "—"}</td>
               <td className="py-1 pr-3">{row.latency_ms != null ? `${row.latency_ms}ms` : "—"}</td>
@@ -235,6 +250,8 @@ export function WebhooksPanel({
       if (created.signingKey) {
         setRevealedKey(created.signingKey);
         setSuccess("Webhook created. Copy the signing key before dismissing.");
+      } else if (format === "discord") {
+        setSuccess("Discord webhook created.");
       } else {
         setSuccess("Slack webhook created.");
       }
@@ -378,11 +395,11 @@ export function WebhooksPanel({
                   >
                     {sub.enabled ? "Pause" : "Resume"}
                   </button>
-                  {sub.format === "slack" ? (
-                    <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-stone-800 dark:text-stone-300">
-                      Slack
-                    </span>
-                  ) : (
+                  <span className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                    <WebhookFormatIcon format={sub.format} className="size-3.5 shrink-0" />
+                    {webhookFormatLabel(sub.format)}
+                  </span>
+                  {!isUnsignedWebhookFormat(sub.format) && (
                     <button
                       type="button"
                       disabled={busy}
@@ -559,19 +576,31 @@ export function WebhooksPanel({
           <Select
             value={format}
             onValueChange={(v) => {
-              if (v === "json" || v === "slack") setFormat(v);
+              if (v === "json" || v === "slack" || v === "discord") setFormat(v);
             }}
             items={[
-              { value: "json", label: "JSON (signed payload)" },
-              { value: "slack", label: "Slack message" },
+              { value: "json", label: webhookFormatPickerLabel("json") },
+              { value: "slack", label: webhookFormatPickerLabel("slack") },
+              { value: "discord", label: webhookFormatPickerLabel("discord") },
             ]}
           >
             <SelectTrigger id="webhook-format" className="mt-1 h-10 w-full">
+              <WebhookFormatIcon format={format} />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="json">JSON (signed payload)</SelectItem>
-              <SelectItem value="slack">Slack message</SelectItem>
+              <SelectItem value="json">
+                <WebhookFormatIcon format="json" />
+                {webhookFormatPickerLabel("json")}
+              </SelectItem>
+              <SelectItem value="slack">
+                <WebhookFormatIcon format="slack" />
+                {webhookFormatPickerLabel("slack")}
+              </SelectItem>
+              <SelectItem value="discord">
+                <WebhookFormatIcon format="discord" />
+                {webhookFormatPickerLabel("discord")}
+              </SelectItem>
             </SelectContent>
           </Select>
           {format === "slack" && (
@@ -579,6 +608,15 @@ export function WebhooksPanel({
               Posts a formatted message to a Slack incoming webhook URL (hooks.slack.com). No
               signature is sent.{" "}
               <Link href="/docs/integrations/slack" className="underline underline-offset-2">
+                Setup guide
+              </Link>
+            </p>
+          )}
+          {format === "discord" && (
+            <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+              Posts a formatted embed to a Discord incoming webhook URL (discord.com/api/webhooks).
+              No signature is sent.{" "}
+              <Link href="/docs/integrations/discord" className="underline underline-offset-2">
                 Setup guide
               </Link>
             </p>
@@ -598,7 +636,13 @@ export function WebhooksPanel({
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://your.app/releases"
+            placeholder={
+              format === "slack"
+                ? "https://hooks.slack.com/services/…"
+                : format === "discord"
+                  ? "https://discord.com/api/webhooks/…"
+                  : "https://your.app/releases"
+            }
             className={`${inputClass} mt-1`}
             required
           />

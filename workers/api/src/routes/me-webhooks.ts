@@ -17,13 +17,18 @@ import {
   requireMasterKey,
   signingKeyFor,
 } from "../webhooks/shared.js";
-import { assertPublicWebhookTarget, validateSlackWebhookUrl } from "../webhooks/url-safety.js";
+import { assertPublicWebhookTarget, validateFormatWebhookUrl } from "../webhooks/url-safety.js";
 import {
   checkWebhookTestRateLimit,
   WEBHOOK_TEST_RATE_WINDOW_SECONDS,
   webhookTestRateLimitMessage,
 } from "../webhooks/test-rate-limit.js";
-import type { WebhookSubscription, WebhookFormat } from "@buildinternet/releases-core/schema";
+import {
+  isUnsignedWebhookFormat,
+  parseWebhookFormat,
+  type WebhookSubscription,
+  type WebhookFormat,
+} from "@buildinternet/releases-core/schema";
 import {
   countUserOrgWebhookSubscriptions,
   getUserFollowsWebhookSubscription,
@@ -159,12 +164,18 @@ meWebhookHandlers.post(
         if (urlError)
           return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
 
-        const format: WebhookFormat = body.format === "slack" ? "slack" : "json";
-        if (format === "slack") {
-          const slackError = validateSlackWebhookUrl(url);
-          if (slackError)
-            return respondError(c, new ValidationError(slackError, { code: "bad_request" }));
+        const format = parseWebhookFormat(body.format);
+        if (format === null) {
+          return respondError(
+            c,
+            new ValidationError("format must be 'json', 'slack', or 'discord'", {
+              code: "bad_request",
+            }),
+          );
         }
+        const formatUrlError = validateFormatWebhookUrl(format, url);
+        if (formatUrlError)
+          return respondError(c, new ValidationError(formatUrlError, { code: "bad_request" }));
 
         const scope = body.scope === "follows" ? "follows" : "org";
         const db = getDb(c);
@@ -305,10 +316,9 @@ meWebhookHandlers.post(
           description: input.description,
           userId: session.user.id,
         });
-        const signingKey =
-          input.format === "slack"
-            ? undefined
-            : await signingKeyFor(input.masterKey, sub.id, sub.secretVersion);
+        const signingKey = isUnsignedWebhookFormat(input.format)
+          ? undefined
+          : await signingKeyFor(input.masterKey, sub.id, sub.secretVersion);
         return c.json(
           {
             ...jsonSubscription(sub),
@@ -372,11 +382,20 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
   if (!owned) return respondError(c, new NotFoundError());
 
-  if (body.format === "slack" || owned.format === "slack") {
+  {
+    const effectiveFormat = parseWebhookFormat(body.format ?? owned.format);
     const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
-    const slackError = validateSlackWebhookUrl(effectiveUrl);
-    if (slackError)
-      return respondError(c, new ValidationError(slackError, { code: "bad_request" }));
+    if (effectiveFormat === null) {
+      return respondError(
+        c,
+        new ValidationError("format must be 'json', 'slack', or 'discord'", {
+          code: "bad_request",
+        }),
+      );
+    }
+    const formatUrlError = validateFormatWebhookUrl(effectiveFormat, effectiveUrl);
+    if (formatUrlError)
+      return respondError(c, new ValidationError(formatUrlError, { code: "bad_request" }));
   }
 
   if (body.releaseType !== undefined) {

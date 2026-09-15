@@ -18,6 +18,8 @@ const IDEMPOTENCY_KEY = "webhook-create-01";
 const TEST_IDEMPOTENCY_KEY = "webhook-test-idem-01";
 const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
 const SLACK_HOOK_URL = "https://hooks.slack.com/services/T012AB/B034CD/Xy7zSecret";
+const DISCORD_HOOK_URL =
+  "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
 const queueMessages: unknown[] = [];
 
 let h: TestDatabase;
@@ -528,6 +530,126 @@ describe("/v1/me/webhooks", () => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: "https://hooks.slack-gov.com/services/T1/B2/secret" }),
+      },
+      env,
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("POST format discord with a non-Discord host → 400", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL, format: "discord" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST format discord → 201 with format discord and no signingKey", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: DISCORD_HOOK_URL, format: "discord" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { format: string; signingKey?: string };
+    expect(body.format).toBe("discord");
+    expect(body.signingKey).toBeUndefined();
+  });
+
+  it("POST unknown format → 400", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL, format: "teams" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("PATCH format discord re-validates the Discord host", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const bad = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "discord" }),
+      },
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const ok = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "discord", url: DISCORD_HOOK_URL }),
+      },
+      env,
+    );
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { format: string }).format).toBe("discord");
+  });
+
+  it("PATCH url on an existing discord subscription re-validates the host", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: DISCORD_HOOK_URL, format: "discord" }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const bad = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const ok = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://discordapp.com/api/webhooks/987654321098765432/otherToken",
+        }),
       },
       env,
     );

@@ -1167,7 +1167,7 @@ export type UserWebhookScope = "org" | "follows";
 export type UserWebhookReleaseTypeFilter = "feature" | "rollup";
 
 /** Webhook delivery output format. */
-export type UserWebhookFormat = "json" | "slack";
+export type UserWebhookFormat = "json" | "slack" | "discord";
 
 /** A user-owned webhook subscription row (no signing secret). */
 export interface UserWebhookSubscription {
@@ -1214,7 +1214,7 @@ export interface UserWebhookListResponse {
   subscriptions: UserWebhookListItem[];
 }
 
-/** POST /v1/me/webhooks response — signing key shown once at creation (omitted for slack format). */
+/** POST /v1/me/webhooks response — signing key shown once at creation (omitted for slack/discord). */
 export interface CreateUserWebhookResponse
   extends UserWebhookSubscription, UserWebhookDeliveryHealth {
   orgSlug: string | null;
@@ -1241,7 +1241,7 @@ export interface WebhookDeliveryRow {
   error_message?: string | null;
   error_code?: string | null;
   outcome?: string;
-  /** Delivery format — "json" (signed raw event) or "slack" (Block Kit). Empty on pre-format rows. */
+  /** Delivery format — "json" (signed raw event) or a chat card (`slack` / `discord`). Empty on pre-format rows. */
   format?: UserWebhookFormat | "";
   http_status?: number;
   latency_ms?: number;

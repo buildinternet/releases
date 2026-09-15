@@ -126,3 +126,22 @@ to post a sample card.
 
 The host must be `hooks.slack.com` (standard and Enterprise Grid) or
 `hooks.slack-gov.com` (GovSlack); other hosts are rejected at creation.
+
+## Discord delivery
+
+New to this? The [Send releases to Discord](/docs/integrations/discord) guide walks through it
+step by step. The reference below covers the API/CLI details.
+
+Set `format: "discord"` (or `--format discord` on the CLI) and point the subscription
+at a [Discord incoming webhook](https://support.discord.com/hc/en-us/articles/228383668)
+URL (`https://discord.com/api/webhooks/...`). Each release is posted as a compact
+Discord embed — a linked title, a short summary, and the organization's avatar and date.
+
+Discord webhooks are **unsigned**: the URL itself is the secret, so no signing key is
+issued and no `X-Releases-*` signature headers are sent. There is nothing to
+verify on the Discord side. Use the **Send test** button (or `releases webhook test <id>`)
+to post a sample embed.
+
+The host must be `discord.com` (or `discordapp.com`, `canary.discord.com`,
+`ptb.discord.com`) and the path must be `/api/webhooks/{id}/{token}`; other hosts
+and the Slack-compat `/slack` suffix are rejected at creation.
