@@ -13,17 +13,16 @@ import type { Env } from "../index.js";
 import { PatchWorkspaceProfileBodySchema } from "@buildinternet/releases-api-types";
 import { requireFollowsPrincipal } from "../middleware/auth.js";
 import { respondError } from "../lib/error-response.js";
+import { requireWorkspaceManager, workspaceGateError } from "../lib/workspace-access.js";
+import { workspaceIntegrationHandlers } from "./workspace-integrations.js";
 import {
-  type ReleasesError,
   ValidationError,
   UnauthorizedError,
-  ForbiddenError,
   NotFoundError,
   ServiceUnavailableError,
 } from "@releases/lib/releases-error";
 
 const MAX_MULTIPART_BYTES = 8 * 1024 * 1024;
-const MANAGER_ROLES = new Set(["owner", "admin"]);
 
 async function readAvatarFile(c: {
   req: { formData: () => Promise<FormData> };
@@ -48,28 +47,6 @@ async function readAvatarFile(c: {
     .trim()
     .toLowerCase();
   return { buf: await entry.arrayBuffer(), contentType };
-}
-
-async function requireWorkspaceManager(
-  db: ReturnType<typeof createDb>,
-  userId: string,
-  workspaceId: string,
-): Promise<{ ok: true } | { ok: false; status: 403 | 404 }> {
-  const [row] = await db
-    .select({ role: authMember.role })
-    .from(authMember)
-    .innerJoin(authOrganization, eq(authMember.organizationId, authOrganization.id))
-    .where(and(eq(authMember.organizationId, workspaceId), eq(authMember.userId, userId)))
-    .limit(1);
-  if (!row) return { ok: false, status: 404 };
-  if (!row.role || !MANAGER_ROLES.has(row.role)) return { ok: false, status: 403 };
-  return { ok: true };
-}
-
-function gateResponse(gate: { ok: false; status: 403 | 404 }): ReleasesError {
-  return gate.status === 403
-    ? new ForbiddenError("Owner or admin required")
-    : new NotFoundError("Workspace not found");
 }
 
 export const workspaceProfileHandlers = new Hono<Env>();
@@ -106,7 +83,7 @@ workspaceProfileHandlers.patch(
     const db = createDb(c.env.DB);
 
     const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
-    if (!gate.ok) return respondError(c, gateResponse(gate));
+    if (!gate.ok) return respondError(c, workspaceGateError(gate));
 
     const [org] = await db
       .select({ metadata: authOrganization.metadata, logo: authOrganization.logo })
@@ -146,7 +123,7 @@ workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
   const workspaceId = c.req.param("workspaceId");
   const db = createDb(c.env.DB);
   const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
-  if (!gate.ok) return respondError(c, gateResponse(gate));
+  if (!gate.ok) return respondError(c, workspaceGateError(gate));
 
   const file = await readAvatarFile(c);
   if ("error" in file) {
@@ -183,7 +160,9 @@ workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
   });
 });
 
-/** Session-or-Bearer principal gate, then workspace profile/avatar handlers. */
+/** Session-or-Bearer principal gate, then workspace profile/avatar + integrations. */
 export const workspaceRoutes = new Hono<Env>();
 workspaceRoutes.use("/workspaces/*", requireFollowsPrincipal);
+workspaceRoutes.use("/integrations/*", requireFollowsPrincipal);
 workspaceRoutes.route("/", workspaceProfileHandlers);
+workspaceRoutes.route("/", workspaceIntegrationHandlers);

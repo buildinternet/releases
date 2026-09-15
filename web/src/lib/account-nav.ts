@@ -135,7 +135,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         group: "Workspace",
         description: "Connect the tools your team already works in.",
         Icon: IntegrationsIcon,
-        ready: false,
+        ready: true,
       },
       {
         key: "webhooks",

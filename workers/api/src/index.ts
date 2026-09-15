@@ -436,6 +436,18 @@ export type Env = {
     GOOGLE_CLIENT_SECRET?: SecretBinding | string;
     GITHUB_CLIENT_ID?: SecretBinding | string;
     GITHUB_CLIENT_SECRET?: SecretBinding | string;
+    /**
+     * uploads.sh OAuth *client* (Releases Index connecting a workspace to
+     * uploads). Public client id `releases-sh` is hardcoded (no secret).
+     * Endpoint/scope vars are optional overrides. Connect needs
+     * IDEMPOTENCY_ENCRYPTION_KEY (already in secrets_store_secrets).
+     */
+    UPLOADS_OAUTH_CLIENT_ID?: SecretBinding | string;
+    UPLOADS_OAUTH_AUTHORIZE_URL?: string;
+    UPLOADS_OAUTH_TOKEN_URL?: string;
+    UPLOADS_OAUTH_REVOKE_URL?: string;
+    UPLOADS_OAUTH_SCOPES?: string;
+    UPLOADS_OAUTH_REDIRECT_URI?: string;
     // Stripe (`@better-auth/stripe`) — GATED on BOTH resolving (same seam as the
     // social pairs): present → a Stripe Customer is created on sign-up and linked
     // via user.stripeCustomerId; absent either → the plugin is omitted (no Stripe

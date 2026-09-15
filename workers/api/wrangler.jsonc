@@ -178,6 +178,14 @@
     // Public web origin — target for the ingest-time ISR revalidate ping and
     // the base for canonical URLs in email/OAuth links.
     "WEB_BASE_URL": "https://releases.sh",
+    // uploads.sh OAuth client (workspace connect). Public PKCE client id
+    // `releases-sh` is hardcoded in DEFAULT_UPLOADS_OAUTH — no secret, no
+    // dashboard var. Endpoints match
+    // https://uploads.sh/.well-known/oauth-authorization-server.
+    "UPLOADS_OAUTH_AUTHORIZE_URL": "https://uploads.sh/api/auth/oauth2/authorize",
+    "UPLOADS_OAUTH_TOKEN_URL": "https://auth.uploads.sh/api/auth/oauth2/token",
+    "UPLOADS_OAUTH_REVOKE_URL": "https://auth.uploads.sh/api/auth/oauth2/revoke",
+    "UPLOADS_OAUTH_SCOPES": "files:read offline_access",
     // Better Auth public base URL — THIS worker (where /api/auth/* is served),
     // not the web origin. Drives OAuth callback + cross-subdomain cookie domain
     // (.releases.sh). Local dev sets https://api.releases.localhost via .dev.vars.
@@ -799,6 +807,10 @@
         // staging: WEB_SERVICE_KEY is deliberately unbound, so notifyWebRevalidate
         // short-circuits at `no_secret_binding` and prod web is never touched.
         "WEB_BASE_URL": "https://releases.sh",
+        "UPLOADS_OAUTH_AUTHORIZE_URL": "https://uploads.sh/api/auth/oauth2/authorize",
+        "UPLOADS_OAUTH_TOKEN_URL": "https://auth.uploads.sh/api/auth/oauth2/token",
+        "UPLOADS_OAUTH_REVOKE_URL": "https://auth.uploads.sh/api/auth/oauth2/revoke",
+        "UPLOADS_OAUTH_SCOPES": "files:read offline_access",
         // Feed content enrichment (#feed-enrich): ON in staging so this is the
         // validation surface before prod flips on. No cron fires here
         // (CRON_ENABLED=false), so the forward poll-fetch path never auto-runs;
