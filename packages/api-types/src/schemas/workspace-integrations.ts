@@ -3,7 +3,7 @@ import { z } from "zod";
 export const UploadsIntegrationStatusSchema = z.object({
   provider: z.literal("uploads"),
   connected: z.boolean(),
-  /** False when client secret or token-encryption key is missing. */
+  /** False when the token-encryption key is missing. */
   configured: z.boolean(),
   connectedAt: z.string().nullable(),
   scope: z.string().nullable(),

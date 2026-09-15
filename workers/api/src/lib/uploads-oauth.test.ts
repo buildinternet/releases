@@ -4,31 +4,31 @@ import {
   UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS,
   buildUploadsAuthorizeUrl,
   exchangeAuthorizationCode,
+  refreshUploadsAccessToken,
   resolveUploadsOAuthConfig,
+  revokeUploadsToken,
   uploadsOAuthRedirectUri,
 } from "./uploads-oauth.js";
 
 const KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 
 describe("uploads-oauth config", () => {
-  it("is unconfigured without a client secret or encryption key", async () => {
+  it("is unconfigured without an encryption key", async () => {
     expect(await resolveUploadsOAuthConfig({})).toBeNull();
-    expect(await resolveUploadsOAuthConfig({ UPLOADS_OAUTH_CLIENT_SECRET: "s" })).toBeNull();
-    expect(await resolveUploadsOAuthConfig({ IDEMPOTENCY_ENCRYPTION_KEY: KEY })).toBeNull();
   });
 
-  it("defaults client id and discovery endpoints when secret + key resolve", async () => {
+  it("defaults public client id and discovery endpoints when the encryption key resolves", async () => {
     const cfg = await resolveUploadsOAuthConfig({
-      UPLOADS_OAUTH_CLIENT_SECRET: "s3cret",
       IDEMPOTENCY_ENCRYPTION_KEY: KEY,
     });
     expect(cfg).toMatchObject({
-      clientId: DEFAULT_UPLOADS_OAUTH.clientId,
+      clientId: "releases-sh",
       authorizeUrl: DEFAULT_UPLOADS_OAUTH.authorizeUrl,
       tokenUrl: DEFAULT_UPLOADS_OAUTH.tokenUrl,
       revokeUrl: DEFAULT_UPLOADS_OAUTH.revokeUrl,
-      scopes: DEFAULT_UPLOADS_OAUTH.scopes,
+      scopes: "files:read offline_access",
     });
+    expect(cfg).not.toHaveProperty("clientSecret");
   });
 
   it("prefers a trusted request Origin for the redirect URI", () => {
@@ -90,21 +90,33 @@ describe("uploads-oauth config", () => {
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("scope")).toBe("files:read offline_access");
+    expect(url.searchParams.get("client_id")).toBe("releases-sh");
   });
 
-  it("exchanges an authorization code against the token endpoint", async () => {
+  const publicCfg = {
+    clientId: "releases-sh",
+    authorizeUrl: DEFAULT_UPLOADS_OAUTH.authorizeUrl,
+    tokenUrl: DEFAULT_UPLOADS_OAUTH.tokenUrl,
+    revokeUrl: DEFAULT_UPLOADS_OAUTH.revokeUrl,
+    scopes: DEFAULT_UPLOADS_OAUTH.scopes,
+    encryptionKey: KEY,
+  };
+
+  it("exchanges an authorization code against the token endpoint without a client secret", async () => {
     const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe(DEFAULT_UPLOADS_OAUTH.tokenUrl);
       expect(init?.method).toBe("POST");
       const body = new URLSearchParams(String(init?.body));
       expect(body.get("grant_type")).toBe("authorization_code");
+      expect(body.get("client_id")).toBe("releases-sh");
+      expect(body.get("client_secret")).toBeNull();
       expect(body.get("code_verifier")).toBe("ver");
       return new Response(
         JSON.stringify({
           access_token: "at",
           refresh_token: "rt",
           token_type: "Bearer",
-          scope: "files:read",
+          scope: "files:read offline_access",
           expires_in: 3600,
         }),
         { status: 200 },
@@ -112,15 +124,7 @@ describe("uploads-oauth config", () => {
     }) as typeof fetch;
 
     const tokens = await exchangeAuthorizationCode(
-      {
-        clientId: "releases-sh",
-        clientSecret: "s",
-        authorizeUrl: DEFAULT_UPLOADS_OAUTH.authorizeUrl,
-        tokenUrl: DEFAULT_UPLOADS_OAUTH.tokenUrl,
-        revokeUrl: DEFAULT_UPLOADS_OAUTH.revokeUrl,
-        scopes: DEFAULT_UPLOADS_OAUTH.scopes,
-        encryptionKey: KEY,
-      },
+      publicCfg,
       {
         code: "c",
         codeVerifier: "ver",
@@ -131,5 +135,44 @@ describe("uploads-oauth config", () => {
     expect(tokens.accessToken).toBe("at");
     expect(tokens.refreshToken).toBe("rt");
     expect(tokens.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it("refreshes via the refresh_token grant without a client secret", async () => {
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(DEFAULT_UPLOADS_OAUTH.tokenUrl);
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("grant_type")).toBe("refresh_token");
+      expect(body.get("refresh_token")).toBe("rt");
+      expect(body.get("client_id")).toBe("releases-sh");
+      expect(body.get("client_secret")).toBeNull();
+      return new Response(
+        JSON.stringify({
+          access_token: "at2",
+          refresh_token: "rt2",
+          token_type: "Bearer",
+          scope: "files:read offline_access",
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const tokens = await refreshUploadsAccessToken(publicCfg, "rt", fetchImpl);
+    expect(tokens.accessToken).toBe("at2");
+    expect(tokens.refreshToken).toBe("rt2");
+  });
+
+  it("revokes without a client secret", async () => {
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(DEFAULT_UPLOADS_OAUTH.revokeUrl);
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("token")).toBe("rt");
+      expect(body.get("token_type_hint")).toBe("refresh_token");
+      expect(body.get("client_id")).toBe("releases-sh");
+      expect(body.get("client_secret")).toBeNull();
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+
+    await revokeUploadsToken(publicCfg, "rt", "refresh_token", fetchImpl);
   });
 });

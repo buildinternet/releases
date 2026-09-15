@@ -178,9 +178,8 @@
     // Public web origin — target for the ingest-time ISR revalidate ping and
     // the base for canonical URLs in email/OAuth links.
     "WEB_BASE_URL": "https://releases.sh",
-    // uploads.sh OAuth client (workspace connect). Client id is public; secret
-    // is UPLOADS_OAUTH_CLIENT_SECRET (SecretBinding or .dev.vars — not listed
-    // in secrets_store_secrets until the store value exists). Endpoints match
+    // uploads.sh OAuth client (workspace connect). Public PKCE client
+    // `releases-sh` — no secret. Endpoints match
     // https://uploads.sh/.well-known/oauth-authorization-server.
     "UPLOADS_OAUTH_CLIENT_ID": "releases-sh",
     "UPLOADS_OAUTH_AUTHORIZE_URL": "https://uploads.sh/api/auth/oauth2/authorize",

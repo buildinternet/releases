@@ -17,7 +17,6 @@ function env(overrides: Record<string, unknown> = {}) {
     ENVIRONMENT: "test",
     WEB_BASE_URL: "https://releases.sh",
     UPLOADS_OAUTH_CLIENT_ID: "releases-sh",
-    UPLOADS_OAUTH_CLIENT_SECRET: "client-secret",
     IDEMPOTENCY_ENCRYPTION_KEY: ENCRYPTION_KEY,
     DB: db,
     ...overrides,
@@ -95,7 +94,7 @@ describe("uploads OAuth workspace routes", () => {
     const res = await appAs("user_1").request(
       "/workspaces/ws_1/integrations/uploads/connect",
       { method: "POST" },
-      env({ UPLOADS_OAUTH_CLIENT_SECRET: undefined, IDEMPOTENCY_ENCRYPTION_KEY: undefined }),
+      env({ IDEMPOTENCY_ENCRYPTION_KEY: undefined }),
     );
     expect(res.status).toBe(503);
   });
@@ -125,6 +124,8 @@ describe("uploads OAuth workspace routes", () => {
     const url = new URL(body.authorizeUrl);
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("client_id")).toBe("releases-sh");
+    expect(url.searchParams.get("scope")).toBe("files:read offline_access");
+    expect(url.origin + url.pathname).toBe("https://uploads.sh/api/auth/oauth2/authorize");
     expect(url.searchParams.get("state")).toBeTruthy();
 
     const pending = await db.select().from(workspaceIntegrations);
@@ -217,9 +218,12 @@ describe("uploads OAuth workspace routes", () => {
 
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toContain("/oauth2/token");
+      expect(String(input)).toBe("https://auth.uploads.sh/api/auth/oauth2/token");
       const body = new URLSearchParams(String(init?.body));
+      expect(body.get("grant_type")).toBe("authorization_code");
       expect(body.get("code")).toBe("auth-code");
+      expect(body.get("client_id")).toBe("releases-sh");
+      expect(body.get("client_secret")).toBeNull();
       expect(body.get("code_verifier")).toBeTruthy();
       return new Response(
         JSON.stringify({
@@ -312,7 +316,9 @@ describe("uploads OAuth workspace routes", () => {
         env(),
       );
       expect(del.status).toBe(200);
-      expect(revokeCalls.some((u) => u.includes("/oauth2/revoke"))).toBe(true);
+      expect(revokeCalls.some((u) => u === "https://auth.uploads.sh/api/auth/oauth2/revoke")).toBe(
+        true,
+      );
       const rows = await db.select().from(workspaceIntegrations);
       expect(rows).toHaveLength(0);
     } finally {

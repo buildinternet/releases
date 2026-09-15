@@ -438,13 +438,10 @@ export type Env = {
     GITHUB_CLIENT_SECRET?: SecretBinding | string;
     /**
      * uploads.sh OAuth *client* (Releases Index connecting a workspace to
-     * uploads). Client id defaults to `releases-sh`. Secret +
+     * uploads). Public PKCE client id defaults to `releases-sh` (no secret).
      * IDEMPOTENCY_ENCRYPTION_KEY must resolve or connect returns 503.
-     * Not bound in secrets_store_secrets until the store values exist
-     * (a missing Secrets Store binding fails deploy). Local: .dev.vars.
      */
     UPLOADS_OAUTH_CLIENT_ID?: SecretBinding | string;
-    UPLOADS_OAUTH_CLIENT_SECRET?: SecretBinding | string;
     UPLOADS_OAUTH_AUTHORIZE_URL?: string;
     UPLOADS_OAUTH_TOKEN_URL?: string;
     UPLOADS_OAUTH_REVOKE_URL?: string;

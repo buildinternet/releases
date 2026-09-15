@@ -80,8 +80,6 @@ Values live in the dashboard, never in git. Forks provision their own store and 
 
 `RELEASED_API_KEY`, `RELEASES_API_KEY`, `RELEASES_PROXY_KEY`, `IDEMPOTENCY_ENCRYPTION_KEY`, `GITHUB_TOKEN`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VOYAGER_API_KEY`, `ANTHROPIC_API_KEY`, `AI_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `WEBHOOK_HMAC_MASTER`, `WEB_SERVICE_KEY` (prod only — see below), `WEB_BOT_AUTH_PRIVATE_KEY`, `FIRECRAWL_API_KEY`, `FIRECRAWL_WEBHOOK_SECRET`, `RELEASES_GITHUB_WEBHOOK_SECRET`, `STAGING_ACCESS_KEY` (staging only).
 
-Optional, not yet in `secrets_store_secrets` (bind only after the store value exists — a missing Secrets Store binding fails deploy): `UPLOADS_OAUTH_CLIENT_SECRET` for the workspace uploads.sh OAuth client. Local: `workers/api/.dev.vars`. See [uploads-oauth.md](uploads-oauth.md).
-
 Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api + discovery; unset → direct Anthropic. Local dev: `workers/*/.dev.vars.example`.
 
 ### URL vars and email

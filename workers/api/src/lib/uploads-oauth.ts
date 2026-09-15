@@ -3,8 +3,8 @@
  *
  * Discovery (live): https://uploads.sh/.well-known/oauth-authorization-server
  * Authorize is on uploads.sh; token + revoke stay on auth.uploads.sh.
- * Defaults match that document so a missing override still talks to the
- * registered `releases-sh` client. Gated on client id + secret resolving —
+ * Defaults match the official `releases-sh` public PKCE client (no secret;
+ * `token_endpoint_auth_method: none`). Gated on the encryption key resolving —
  * absence is the off switch (no feature flag).
  */
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
@@ -41,7 +41,6 @@ type SecretLike = SecretBinding | string | undefined;
 
 export interface UploadsOAuthEnv {
   UPLOADS_OAUTH_CLIENT_ID?: SecretLike;
-  UPLOADS_OAUTH_CLIENT_SECRET?: SecretLike;
   UPLOADS_OAUTH_AUTHORIZE_URL?: string;
   UPLOADS_OAUTH_TOKEN_URL?: string;
   UPLOADS_OAUTH_REVOKE_URL?: string;
@@ -55,7 +54,6 @@ export interface UploadsOAuthEnv {
 
 export interface UploadsOAuthConfig {
   clientId: string;
-  clientSecret: string;
   authorizeUrl: string;
   tokenUrl: string;
   revokeUrl: string;
@@ -81,16 +79,13 @@ async function resolveSecretLike(value: SecretLike): Promise<string | null> {
 export async function resolveUploadsOAuthConfig(
   env: UploadsOAuthEnv,
 ): Promise<UploadsOAuthConfig | null> {
-  const [clientId, clientSecret, encryptionKey] = await Promise.all([
+  const [clientId, encryptionKey] = await Promise.all([
     resolveSecretLike(env.UPLOADS_OAUTH_CLIENT_ID),
-    resolveSecretLike(env.UPLOADS_OAUTH_CLIENT_SECRET),
     resolveSecretLike(env.IDEMPOTENCY_ENCRYPTION_KEY),
   ]);
-  const resolvedClientId = clientId ?? DEFAULT_UPLOADS_OAUTH.clientId;
-  if (!clientSecret || !encryptionKey) return null;
+  if (!encryptionKey) return null;
   return {
-    clientId: resolvedClientId,
-    clientSecret,
+    clientId: clientId ?? DEFAULT_UPLOADS_OAUTH.clientId,
     authorizeUrl: env.UPLOADS_OAUTH_AUTHORIZE_URL?.trim() || DEFAULT_UPLOADS_OAUTH.authorizeUrl,
     tokenUrl: env.UPLOADS_OAUTH_TOKEN_URL?.trim() || DEFAULT_UPLOADS_OAUTH.tokenUrl,
     revokeUrl: env.UPLOADS_OAUTH_REVOKE_URL?.trim() || DEFAULT_UPLOADS_OAUTH.revokeUrl,
@@ -99,7 +94,7 @@ export async function resolveUploadsOAuthConfig(
   };
 }
 
-/** True when client secret + encryption key are both resolvable (connect can run). */
+/** True when the encryption key is resolvable (connect can run). */
 export async function uploadsOAuthConfigured(env: UploadsOAuthEnv): Promise<boolean> {
   return (await resolveUploadsOAuthConfig(env)) != null;
 }
@@ -166,32 +161,27 @@ function formBody(params: Record<string, string>): string {
   return new URLSearchParams(params).toString();
 }
 
-export async function exchangeAuthorizationCode(
+type TokenJson = {
+  access_token?: unknown;
+  refresh_token?: unknown;
+  token_type?: unknown;
+  scope?: unknown;
+  expires_in?: unknown;
+  error?: unknown;
+  error_description?: unknown;
+};
+
+async function postToken(
   cfg: UploadsOAuthConfig,
-  params: { code: string; codeVerifier: string; redirectUri: string },
-  fetchImpl: typeof fetch = fetch,
+  params: Record<string, string>,
+  fetchImpl: typeof fetch,
 ): Promise<UploadsTokenResponse> {
   const res = await fetchImpl(cfg.tokenUrl, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-    body: formBody({
-      grant_type: "authorization_code",
-      code: params.code,
-      redirect_uri: params.redirectUri,
-      client_id: cfg.clientId,
-      client_secret: cfg.clientSecret,
-      code_verifier: params.codeVerifier,
-    }),
+    body: formBody(params),
   });
-  const body = (await res.json().catch(() => null)) as {
-    access_token?: unknown;
-    refresh_token?: unknown;
-    token_type?: unknown;
-    scope?: unknown;
-    expires_in?: unknown;
-    error?: unknown;
-    error_description?: unknown;
-  } | null;
+  const body = (await res.json().catch(() => null)) as TokenJson | null;
   if (!res.ok || !body || typeof body.access_token !== "string" || !body.access_token) {
     const detail =
       (typeof body?.error_description === "string" && body.error_description) ||
@@ -209,6 +199,41 @@ export async function exchangeAuthorizationCode(
   };
 }
 
+export async function exchangeAuthorizationCode(
+  cfg: UploadsOAuthConfig,
+  params: { code: string; codeVerifier: string; redirectUri: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<UploadsTokenResponse> {
+  return postToken(
+    cfg,
+    {
+      grant_type: "authorization_code",
+      code: params.code,
+      redirect_uri: params.redirectUri,
+      client_id: cfg.clientId,
+      code_verifier: params.codeVerifier,
+    },
+    fetchImpl,
+  );
+}
+
+/** Refresh grant. The AS only mints a refresh token when `offline_access` was on authorize. */
+export async function refreshUploadsAccessToken(
+  cfg: UploadsOAuthConfig,
+  refreshToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<UploadsTokenResponse> {
+  return postToken(
+    cfg,
+    {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: cfg.clientId,
+    },
+    fetchImpl,
+  );
+}
+
 /** RFC 7009 revoke — fail-open. Local disconnect still proceeds if this throws. */
 export async function revokeUploadsToken(
   cfg: UploadsOAuthConfig,
@@ -223,7 +248,6 @@ export async function revokeUploadsToken(
       token,
       token_type_hint: tokenTypeHint,
       client_id: cfg.clientId,
-      client_secret: cfg.clientSecret,
     }),
   });
   if (!res.ok && res.status !== 200) {

@@ -54,8 +54,9 @@ Better Auth session or a user Bearer). Absent from `publicReadRoutes` /
 | `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                          |
 | `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                    |
 
-`configured: false` when the client secret or the encryption key is missing —
-Connect is disabled; the rest of the site is unaffected. No feature flag.
+`configured: false` when the token-encryption key is missing — Connect is
+disabled; the rest of the site is unaffected. No feature flag. The client is
+public PKCE (`releases-sh`); there is no client secret.
 
 Pending state expires after 10 minutes. Re-clicking Connect replaces the pending
 PKCE fields without dropping an already-connected token until the new callback
@@ -70,32 +71,32 @@ never lands in D1. Table: `workspace_integrations` (`schema-integrations.ts`).
 
 ## Env
 
-| Name                          | Kind                  | Default / required                               |
-| ----------------------------- | --------------------- | ------------------------------------------------ |
-| `UPLOADS_OAUTH_CLIENT_ID`     | var or secret         | `releases-sh`                                    |
-| `UPLOADS_OAUTH_CLIENT_SECRET` | secret or `.dev.vars` | **required** for connect                         |
-| `UPLOADS_OAUTH_AUTHORIZE_URL` | var                   | `https://uploads.sh/api/auth/oauth2/authorize`   |
-| `UPLOADS_OAUTH_TOKEN_URL`     | var                   | `https://auth.uploads.sh/api/auth/oauth2/token`  |
-| `UPLOADS_OAUTH_REVOKE_URL`    | var                   | `https://auth.uploads.sh/api/auth/oauth2/revoke` |
-| `UPLOADS_OAUTH_SCOPES`        | var                   | `files:read offline_access`                      |
-| `UPLOADS_OAUTH_REDIRECT_URI`  | var                   | unset — derive (see above)                       |
-| `IDEMPOTENCY_ENCRYPTION_KEY`  | secret                | **required** for connect (token encryption)      |
+| Name                          | Kind          | Default / required                               |
+| ----------------------------- | ------------- | ------------------------------------------------ |
+| `UPLOADS_OAUTH_CLIENT_ID`     | var           | `releases-sh`                                    |
+| `UPLOADS_OAUTH_AUTHORIZE_URL` | var           | `https://uploads.sh/api/auth/oauth2/authorize`   |
+| `UPLOADS_OAUTH_TOKEN_URL`     | var           | `https://auth.uploads.sh/api/auth/oauth2/token`  |
+| `UPLOADS_OAUTH_REVOKE_URL`    | var           | `https://auth.uploads.sh/api/auth/oauth2/revoke` |
+| `UPLOADS_OAUTH_SCOPES`        | var           | `files:read offline_access`                      |
+| `UPLOADS_OAUTH_REDIRECT_URI`  | var           | unset — derive (see above)                       |
+| `IDEMPOTENCY_ENCRYPTION_KEY`  | secret        | **required** for connect (token encryption)      |
 
 Discovery (for operators): `https://uploads.sh/.well-known/oauth-authorization-server`.
-Authorize is on `uploads.sh`; token and revoke stay on `auth.uploads.sh`. The
-`auth.uploads.sh` origin is a deprecated alias for discovery; new clients should
-mint against `uploads.sh` as uploads documents.
-
-`UPLOADS_OAUTH_CLIENT_SECRET` is **not** listed in `secrets_store_secrets` until
-the store value exists — a missing Secrets Store binding fails deploy. Set it in
-`.dev.vars` for local, then add the Secrets Store binding when the client secret
-is provisioned.
+Authorize is on `uploads.sh` (cookie origin — do not send the browser to
+`auth.uploads.sh` for authorize). Token and revoke stay on `auth.uploads.sh` so
+the form POST does not hit the web origin's CSRF guard.
 
 ## Partner client (`releases-sh`)
 
-Grant: `authorization_code` + PKCE (`S256`). Confidential client (secret on the
-token request). Scopes: start with `files:read`; this repo also requests
-`offline_access` so a refresh token is stored.
+Public PKCE client (`token_endpoint_auth_method: none`). No client secret — token
+and revoke send `client_id` only. Grant types: `authorization_code` + PKCE
+(`S256`) and `refresh_token`. Authorize requests both `files:read` and
+`offline_access` (space-separated). The uploads AS only mints a refresh token
+when `offline_access` is on the grant.
+
+The prod D1 client row is seeded by
+[uploads#984](https://github.com/buildinternet/uploads/pull/984). Live connect
+waits on that PR merging and the auth D1 migration deploying.
 
 Allow-list the four redirect URIs in the table above. Do **not** register
 `http://localhost:8788/integrations/uploads/callback` — that port is MCP
