@@ -1,6 +1,9 @@
 /**
  * Operator notification + submitter acknowledgment for recommendation
- * submissions. Both paths are best-effort and must never fail the POST.
+ * submissions, plus the opt-in "your source was added" follow-up.
+ * Submit/ack/notify are best-effort and must never fail the POST.
+ * The added follow-up is operator-triggered only — never fired by
+ * triage / close / archive.
  */
 import { logEvent } from "@releases/lib/log-event";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
@@ -11,6 +14,7 @@ import { sendEmail, type EmailEnv } from "./email.js";
 
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;
 const DEFAULT_ACK_MAX_PER_HOUR = 20;
+const DEFAULT_ADDED_MAX_PER_HOUR = 20;
 const HOUR_MS = 3_600_000;
 
 type AtomicCounterStore = Pick<D1Database, "prepare">;
@@ -61,6 +65,13 @@ export async function withinRecommendationAckBudget(
   return withinHourlyNotificationBudget(counter, "recommendation:ack", max);
 }
 
+export async function withinRecommendationAddedBudget(
+  counter: AtomicCounterStore | undefined,
+  max: number,
+): Promise<boolean> {
+  return withinHourlyNotificationBudget(counter, "recommendation:added", max);
+}
+
 function truncate(s: string, max: number): string {
   const oneLine = s.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
@@ -101,8 +112,25 @@ export function formatRecommendationEmail(row: Recommendation): {
 export type RecommendationAckEnv = AuthEmailEnv & {
   DB?: AtomicCounterStore;
   RECOMMENDATION_ACK_MAX_PER_HOUR?: string;
+  RECOMMENDATION_ADDED_MAX_PER_HOUR?: string;
   WEB_BASE_URL?: string;
 };
+
+/** Live registry listing named in the opt-in "source added" email. */
+export type RecommendationAddedListing = {
+  orgName: string;
+  orgSlug: string;
+  sourceName?: string;
+  sourceSlug?: string;
+};
+
+export type SendRecommendationAddedResult =
+  | { sent: true; notifiedAt: number }
+  | {
+      sent: false;
+      reason: "no_contact_email" | "already_notified" | "rate_capped" | "no_binding" | "error";
+      notifiedAt?: number;
+    };
 
 /** Thank-you email sent to the submitter when they provide a contact address. */
 export function formatRecommendationAckEmail(
@@ -219,5 +247,122 @@ export async function notifyRecommendation(
     }
   } catch (err) {
     logEvent("warn", { component: "recommendations", event: "notify-error", id: row.id, err });
+  }
+}
+
+export function recommendationRegistryUrl(
+  origin: string,
+  listing: RecommendationAddedListing,
+): string {
+  return listing.sourceSlug
+    ? `${origin}/${listing.orgSlug}/${listing.sourceSlug}`
+    : `${origin}/${listing.orgSlug}`;
+}
+
+function listingLabel(listing: RecommendationAddedListing): string {
+  return listing.sourceName ? `${listing.orgName} — ${listing.sourceName}` : listing.orgName;
+}
+
+/** Opt-in follow-up: the submitter's suggestion is now on the registry. */
+export function formatRecommendationAddedEmail(
+  row: Recommendation,
+  listing: RecommendationAddedListing,
+  origin: string,
+): { subject: string; text: string; html: string } {
+  const registryUrl = recommendationRegistryUrl(origin, listing);
+  const name = listingLabel(listing);
+  const buttonLabel = listing.sourceSlug ? "View source" : "View organization";
+  const what =
+    listing.sourceName != null
+      ? `**${listing.sourceName}** from **${listing.orgName}**`
+      : `**${listing.orgName}**`;
+  const { html, text } = renderEmail({
+    lane: "Account · Submission",
+    title: "Your submission was added",
+    preheader: `${name} is now listed on Releases Index.`,
+    blocks: [
+      {
+        t: "p",
+        text: `The changelog source you suggested is now listed on Releases Index as ${what}.`,
+      },
+      { t: "button", label: buttonLabel, url: registryUrl },
+      { t: "fine", text: `Reference: ${row.id}` },
+    ],
+    footer: {
+      reason:
+        "You received this because you submitted a changelog URL at releases.sh/submit and provided this email address.",
+      links: [{ label: buttonLabel, href: registryUrl }],
+    },
+    action: { kind: "view", name: buttonLabel, url: registryUrl },
+  });
+  return { subject: `Your submission is on Releases Index — ${name}`, text, html };
+}
+
+/**
+ * Send the opt-in "source added" email. Does not stamp `addedNotifiedAt` —
+ * the caller writes that after a successful send. Never throws.
+ */
+export async function sendRecommendationAdded(
+  env: RecommendationAckEnv,
+  row: Recommendation,
+  listing: RecommendationAddedListing,
+): Promise<SendRecommendationAddedResult> {
+  if (!row.contactEmail) {
+    logEvent("info", {
+      component: "recommendations",
+      event: "added-skipped",
+      reason: "no_contact_email",
+      id: row.id,
+    });
+    return { sent: false, reason: "no_contact_email" };
+  }
+  if (row.addedNotifiedAt != null) {
+    logEvent("info", {
+      component: "recommendations",
+      event: "added-skipped",
+      reason: "already_notified",
+      id: row.id,
+      notifiedAt: row.addedNotifiedAt,
+    });
+    return { sent: false, reason: "already_notified", notifiedAt: row.addedNotifiedAt };
+  }
+
+  try {
+    const max =
+      parseInt(
+        env.RECOMMENDATION_ADDED_MAX_PER_HOUR ?? env.RECOMMENDATION_ACK_MAX_PER_HOUR ?? "",
+        10,
+      ) || DEFAULT_ADDED_MAX_PER_HOUR;
+    if (!(await withinRecommendationAddedBudget(env.DB, max))) {
+      logEvent("warn", {
+        component: "recommendations",
+        event: "added-rate-capped",
+        id: row.id,
+        maxPerHour: max,
+      });
+      return { sent: false, reason: "rate_capped" };
+    }
+
+    const rendered = formatRecommendationAddedEmail(row, listing, webOrigin(env));
+    const result = await sendAuthEmail(env, {
+      to: row.contactEmail,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+    });
+    if (!result.sent) {
+      logEvent("info", {
+        component: "recommendations",
+        event: "added-skipped",
+        reason: result.reason,
+        id: row.id,
+      });
+      return { sent: false, reason: result.reason === "no_binding" ? "no_binding" : "error" };
+    }
+    logEvent("info", { component: "recommendations", event: "added-sent", id: row.id });
+    return { sent: true, notifiedAt: Date.now() };
+  } catch (err) {
+    logEvent("warn", { component: "recommendations", event: "added-error", id: row.id, err });
+    return { sent: false, reason: "error" };
   }
 }

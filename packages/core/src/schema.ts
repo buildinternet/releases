@@ -956,6 +956,10 @@ export const recommendations = sqliteTable(
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     surface: text("surface").notNull().default("web"),
     userAgent: text("user_agent"),
+    // Epoch ms when an operator sent the opt-in "your source was added"
+    // email. NULL = never sent. Stamped only by the explicit notify-added
+    // path — triage/close/archive never write this.
+    addedNotifiedAt: integer("added_notified_at"),
   },
   (table) => [
     index("idx_recommendations_created").on(table.createdAt),

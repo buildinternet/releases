@@ -151,6 +151,7 @@ recommendationRoutes.post(
           ...input,
           status: "new",
           archived: false,
+          addedNotifiedAt: null,
         };
         await getDb(c).insert(recommendations).values(row);
         c.executionCtx.waitUntil(notifyRecommendation(c.env, row));

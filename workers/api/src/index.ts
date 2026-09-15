@@ -281,6 +281,9 @@ export type Env = {
     RECOMMENDATIONS_DISABLED?: string;
     // Max recommendation notification emails per rolling hour (default 20).
     RECOMMENDATION_NOTIFY_MAX_PER_HOUR?: string;
+    // Max submitter ack / "source added" emails per rolling hour (default 20).
+    RECOMMENDATION_ACK_MAX_PER_HOUR?: string;
+    RECOMMENDATION_ADDED_MAX_PER_HOUR?: string;
     ADMIN_BASE_URL?: string;
     // Optional KV namespace for Tier-1 alert dedup (1h TTL per subject).
     // Reuses an existing KV binding — no new resource needed.
