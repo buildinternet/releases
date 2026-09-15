@@ -178,10 +178,10 @@
     // Public web origin — target for the ingest-time ISR revalidate ping and
     // the base for canonical URLs in email/OAuth links.
     "WEB_BASE_URL": "https://releases.sh",
-    // uploads.sh OAuth client (workspace connect). Public PKCE client
-    // `releases-sh` — no secret. Endpoints match
+    // uploads.sh OAuth client (workspace connect). Public PKCE client id
+    // `releases-sh` is hardcoded in DEFAULT_UPLOADS_OAUTH — no secret, no
+    // dashboard var. Endpoints match
     // https://uploads.sh/.well-known/oauth-authorization-server.
-    "UPLOADS_OAUTH_CLIENT_ID": "releases-sh",
     "UPLOADS_OAUTH_AUTHORIZE_URL": "https://uploads.sh/api/auth/oauth2/authorize",
     "UPLOADS_OAUTH_TOKEN_URL": "https://auth.uploads.sh/api/auth/oauth2/token",
     "UPLOADS_OAUTH_REVOKE_URL": "https://auth.uploads.sh/api/auth/oauth2/revoke",
@@ -807,7 +807,6 @@
         // staging: WEB_SERVICE_KEY is deliberately unbound, so notifyWebRevalidate
         // short-circuits at `no_secret_binding` and prod web is never touched.
         "WEB_BASE_URL": "https://releases.sh",
-        "UPLOADS_OAUTH_CLIENT_ID": "releases-sh",
         "UPLOADS_OAUTH_AUTHORIZE_URL": "https://uploads.sh/api/auth/oauth2/authorize",
         "UPLOADS_OAUTH_TOKEN_URL": "https://auth.uploads.sh/api/auth/oauth2/token",
         "UPLOADS_OAUTH_REVOKE_URL": "https://auth.uploads.sh/api/auth/oauth2/revoke",

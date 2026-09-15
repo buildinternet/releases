@@ -438,8 +438,9 @@ export type Env = {
     GITHUB_CLIENT_SECRET?: SecretBinding | string;
     /**
      * uploads.sh OAuth *client* (Releases Index connecting a workspace to
-     * uploads). Public PKCE client id defaults to `releases-sh` (no secret).
-     * IDEMPOTENCY_ENCRYPTION_KEY must resolve or connect returns 503.
+     * uploads). Public client id `releases-sh` is hardcoded (no secret).
+     * Endpoint/scope vars are optional overrides. Connect needs
+     * IDEMPOTENCY_ENCRYPTION_KEY (already in secrets_store_secrets).
      */
     UPLOADS_OAUTH_CLIENT_ID?: SecretBinding | string;
     UPLOADS_OAUTH_AUTHORIZE_URL?: string;

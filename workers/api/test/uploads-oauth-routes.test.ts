@@ -16,7 +16,6 @@ function env(overrides: Record<string, unknown> = {}) {
   return {
     ENVIRONMENT: "test",
     WEB_BASE_URL: "https://releases.sh",
-    UPLOADS_OAUTH_CLIENT_ID: "releases-sh",
     IDEMPOTENCY_ENCRYPTION_KEY: ENCRYPTION_KEY,
     DB: db,
     ...overrides,

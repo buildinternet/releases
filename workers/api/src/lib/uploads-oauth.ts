@@ -3,9 +3,9 @@
  *
  * Discovery (live): https://uploads.sh/.well-known/oauth-authorization-server
  * Authorize is on uploads.sh; token + revoke stay on auth.uploads.sh.
- * Defaults match the official `releases-sh` public PKCE client (no secret;
- * `token_endpoint_auth_method: none`). Gated on the encryption key resolving —
- * absence is the off switch (no feature flag).
+ * Official public PKCE client `releases-sh` is hardcoded (no secret;
+ * `token_endpoint_auth_method: none`). Seeded in prod uploads D1 (uploads#984).
+ * Gated on the encryption key resolving — absence is the off switch (no flag).
  */
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { isTrustedCorsOrigin } from "../auth/index.js";
