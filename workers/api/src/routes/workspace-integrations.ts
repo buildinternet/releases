@@ -14,6 +14,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { workspaceIntegrations } from "../db/schema-integrations.js";
 import { encryptOAuthSecret, decryptOAuthSecret } from "../lib/oauth-token-crypto.js";
+import { persistUploadsTokenGrant } from "../lib/uploads-oauth-tokens.js";
 import { codeChallengeS256, generateCodeVerifier, generateOAuthState } from "../lib/pkce.js";
 import {
   UPLOADS_OAUTH_PENDING_TTL_MS,
@@ -44,6 +45,7 @@ function projectStatus(
         status: string;
         scope: string | null;
         connectedAt: number | null;
+        providerWorkspace?: string | null;
       }
     | undefined,
   configured: boolean,
@@ -56,6 +58,7 @@ function projectStatus(
     connectedAt:
       connected && row?.connectedAt != null ? new Date(row.connectedAt).toISOString() : null,
     scope: connected ? (row?.scope ?? null) : null,
+    uploadsWorkspace: connected ? (row?.providerWorkspace ?? null) : null,
   };
 }
 
@@ -74,6 +77,7 @@ workspaceIntegrationHandlers.get("/workspaces/:workspaceId/integrations/uploads"
       status: workspaceIntegrations.status,
       scope: workspaceIntegrations.scope,
       connectedAt: workspaceIntegrations.connectedAt,
+      providerWorkspace: workspaceIntegrations.providerWorkspace,
     })
     .from(workspaceIntegrations)
     .where(
@@ -315,42 +319,21 @@ workspaceIntegrationHandlers.post(
       );
     }
 
-    const accessTokenEnc = await encryptOAuthSecret(tokens.accessToken, cfg.encryptionKey, {
-      workspaceId: row.workspaceId,
-      provider: UPLOADS_OAUTH_PROVIDER,
-      field: "access_token",
-    });
-    const refreshTokenEnc = tokens.refreshToken
-      ? await encryptOAuthSecret(tokens.refreshToken, cfg.encryptionKey, {
-          workspaceId: row.workspaceId,
-          provider: UPLOADS_OAUTH_PROVIDER,
-          field: "refresh_token",
-        })
-      : null;
     const now = Date.now();
-
-    await db
-      .update(workspaceIntegrations)
-      .set({
-        status: "connected",
-        oauthState: null,
-        codeVerifierEnc: null,
-        redirectUri: null,
-        pendingExpiresAt: null,
-        accessTokenEnc,
-        refreshTokenEnc,
-        tokenType: tokens.tokenType,
-        scope: tokens.scope,
-        accessTokenExpiresAt: tokens.expiresAt,
-        connectedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(workspaceIntegrations.id, row.id));
+    const { uploadsWorkspace } = await persistUploadsTokenGrant(db, {
+      rowId: row.id,
+      workspaceId: row.workspaceId,
+      tokens,
+      encryptionKey: cfg.encryptionKey,
+      mode: "connect",
+      now,
+    });
 
     logEvent("info", {
       component: "uploads-oauth",
       event: "connected",
       workspaceId: row.workspaceId,
+      uploadsWorkspace,
     });
 
     return c.json({
@@ -359,6 +342,7 @@ workspaceIntegrationHandlers.post(
       configured: true,
       connectedAt: new Date(now).toISOString(),
       scope: tokens.scope,
+      uploadsWorkspace,
       workspaceId: row.workspaceId,
     });
   },

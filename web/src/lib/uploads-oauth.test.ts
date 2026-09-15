@@ -37,6 +37,7 @@ describe("uploads-oauth client", () => {
       configured: true,
       connectedAt: null,
       scope: null,
+      uploadsWorkspace: null,
     });
     const status = await fetchUploadsIntegration("ws_1");
     expect(calls[0]!.url).toBe("https://api.test/v1/workspaces/ws_1/integrations/uploads");
@@ -61,12 +62,14 @@ describe("uploads-oauth client", () => {
       configured: true,
       connectedAt: "2026-09-15T00:00:00.000Z",
       scope: "files:read",
+      uploadsWorkspace: "acme",
       workspaceId: "ws_1",
     });
     const res = await completeUploadsCallback("code", "state");
     expect(calls[0]!.url).toBe("https://api.test/v1/integrations/uploads/callback");
     expect(JSON.parse(calls[0]!.init?.body as string)).toEqual({ code: "code", state: "state" });
     expect(res.connected).toBe(true);
+    expect(res.uploadsWorkspace).toBe("acme");
   });
 
   it("DELETEs to disconnect", async () => {

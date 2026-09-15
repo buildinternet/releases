@@ -9,7 +9,8 @@ import { authOrganization } from "./schema-auth.js";
  * before insert (see `lib/oauth-token-crypto.ts`); this table never stores
  * plaintext access/refresh tokens or the PKCE verifier.
  *
- * Paired migration: 20260915183000_add_workspace_integrations.sql.
+ * Paired migrations: 20260915183000_add_workspace_integrations.sql,
+ * 20260915193000_add_workspace_integrations_provider_workspace.sql.
  */
 export const WORKSPACE_INTEGRATION_PROVIDERS = ["uploads"] as const;
 export type WorkspaceIntegrationProvider = (typeof WORKSPACE_INTEGRATION_PROVIDERS)[number];
@@ -35,6 +36,8 @@ export const workspaceIntegrations = sqliteTable(
     tokenType: text("token_type"),
     scope: text("scope"),
     accessTokenExpiresAt: integer("access_token_expires_at"),
+    /** Remote provider workspace slug (uploads.sh JWT `workspace` claim). */
+    providerWorkspace: text("provider_workspace"),
     connectedAt: integer("connected_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

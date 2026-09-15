@@ -231,7 +231,7 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 **Account webhooks UI** (`web/src/components/webhooks-panel.tsx` on `/account/notifications`, #1679) lists self-serve subscriptions with delivery health, supports create (follows or org scope), test/pause/resume, rotate signing key, and delete. Uses the browser client in `web/src/lib/webhooks.ts` (`credentials: "include"` against the API worker). Signing keys are shown once on create/rotate, matching the API contract.
 
-**Workspace integrations** (`/account/integrations`) connect an uploads.sh account for the active workspace (owner/admin). Callback is `/integrations/uploads/callback` on the web origin. See [uploads-oauth.md](uploads-oauth.md).
+**Workspace integrations** (`/account/integrations`) connect an Uploads account for the active workspace (owner/admin). The connected card shows the uploads workspace slug (JWT `workspace` claim). Callback is `/integrations/uploads/callback` on the web origin. See [uploads-oauth.md](uploads-oauth.md).
 
 ## Admin hub
 

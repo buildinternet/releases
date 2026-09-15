@@ -52,7 +52,7 @@ export function UploadsOAuthCallback() {
 
   return (
     <main className="mx-auto flex min-h-[40vh] max-w-lg flex-col justify-center px-6 py-16">
-      <p className="text-sm text-stone-600 dark:text-stone-300">Connecting uploads.sh…</p>
+      <p className="text-sm text-stone-600 dark:text-stone-300">Connecting Uploads…</p>
     </main>
   );
 }

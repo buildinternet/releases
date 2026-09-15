@@ -7,6 +7,8 @@ export const UploadsIntegrationStatusSchema = z.object({
   configured: z.boolean(),
   connectedAt: z.string().nullable(),
   scope: z.string().nullable(),
+  /** uploads.sh workspace slug from the access-token JWT (`workspace`, else `workspaces[]`). */
+  uploadsWorkspace: z.string().nullable(),
 });
 
 export const UploadsOAuthConnectResponseSchema = z.object({
