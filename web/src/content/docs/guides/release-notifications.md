@@ -60,7 +60,7 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
   -d '{"scope":"follows","url":"https://hooks.example.com/my-follows"}'
 ```
 
-Subscriptions come in two scopes — one URL for everything you follow, or per-org with filters (`sourceSlug`, `productSlug`, `releaseType`) — with HMAC signatures, retries, delivery logs, and a test endpoint. The fastest path for one org is **Add webhook** on that organization's page, which opens [Webhooks & API](/account/webhooks) already scoped to it. See the [webhooks docs](/docs/api/webhooks) for the contract.
+Subscriptions come in two scopes — one URL for everything you follow, or per-org with filters (`sourceSlug`, `productSlug`, `releaseType`) — with HMAC signatures, retries, delivery logs, and a test endpoint. The fastest path for one org is **Add webhook** in that organization's ⋯ menu, which opens [Webhooks & API](/account/webhooks) already scoped to it. See the [webhooks docs](/docs/api/webhooks) for the contract.
 
 ## For agents
 
