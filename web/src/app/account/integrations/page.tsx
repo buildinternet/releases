@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { SettingsSection } from "@releases/design-system";
 import { IntegrationsPanel } from "@/components/integrations-panel";
-import { navItem, SHOW_WIP_PANELS } from "@/lib/account-nav";
+import { navItem } from "@/lib/account-nav";
 
 const item = navItem("integrations");
 
@@ -14,10 +14,11 @@ export const metadata: Metadata = {
 };
 
 export default function AccountIntegrationsPage() {
-  if (!SHOW_WIP_PANELS) notFound();
   return (
     <SettingsSection group={item.group} title={item.label} description={item.description}>
-      <IntegrationsPanel />
+      <Suspense fallback={<p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>}>
+        <IntegrationsPanel />
+      </Suspense>
     </SettingsSection>
   );
 }

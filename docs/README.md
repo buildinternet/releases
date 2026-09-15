@@ -73,6 +73,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 - **[mcp.md](architecture/mcp.md)** — the hosted MCP server: the tool/resource/prompt catalog, auth and scope enforcement, App UIs, and the MCP Registry listing.
 - **[mcp-cimd-interop.md](architecture/mcp-cimd-interop.md)** — generic MCP client OAuth (MCPJam-class): DCR extra `grant_types`, kitchen-sink `scope=`, origin vs `/mcp` resource, forwarded Bearer `aud` on REST.
 - **[workspaces.md](architecture/workspaces.md)** — user-tenancy Workspaces. Not the registry `organizations` — the doc opens with exactly that warning.
+- **[uploads-oauth.md](architecture/uploads-oauth.md)** — Releases Index as an uploads.sh OAuth client: workspace connect/disconnect, redirect URIs, env.
 - **[consumption-telemetry.md](architecture/consumption-telemetry.md)** — the demand gauge for programmatic (MCP/API) consumption.
 
 ### Everything else

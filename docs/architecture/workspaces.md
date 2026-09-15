@@ -25,6 +25,8 @@ personal workspace; they can create more.
   toggle member⇄admin, remove, leave) and **invitations** (invite by email, cancel,
   resend). The `/accept-invitation/[id]` page handles the emailed invite link
   (sign-in prompt, email-mismatch, invalid, and accept/decline).
+- Workspace **Integrations** (`/account/integrations`): connect an uploads.sh account
+  via OAuth (owner/admin). See [uploads-oauth.md](uploads-oauth.md).
 
 ## Personal-workspace provisioning (lazy)
 

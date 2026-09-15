@@ -231,6 +231,8 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 **Account webhooks UI** (`web/src/components/webhooks-panel.tsx` on `/account/notifications`, #1679) lists self-serve subscriptions with delivery health, supports create (follows or org scope), test/pause/resume, rotate signing key, and delete. Uses the browser client in `web/src/lib/webhooks.ts` (`credentials: "include"` against the API worker). Signing keys are shown once on create/rotate, matching the API contract.
 
+**Workspace integrations** (`/account/integrations`) connect an uploads.sh account for the active workspace (owner/admin). Callback is `/integrations/uploads/callback` on the web origin. See [uploads-oauth.md](uploads-oauth.md).
+
 ## Admin hub
 
 Operator tools live under `/admin/*` inside the account settings shell (`SettingsShell` + `AccountSettingsNav`) — an **Admin** sidebar section alongside Personal / Workspace. Nav items live in `web/src/lib/account-nav.ts` (same source as the rest of settings); the Admin group is only rendered when `useIsAdmin(devAdmin)` is true. Server gate is `isAdminViewer()` on `web/src/app/admin/layout.tsx` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. The account dropdown **Admin** link goes to `adminDefaultHref()` (first ready panel, currently Site notice). Bare `/admin` 308-redirects there so old bookmarks still land in the sidebar shell.

@@ -1,0 +1,100 @@
+# uploads.sh OAuth client (workspace connect)
+
+Releases Index is an OAuth **client** of [uploads.sh](https://uploads.sh). A workspace
+owner or admin can connect (and disconnect) an uploads account so later features can
+read files from that grant. This doc is the connect plumbing only — screenshot proxy
+and agent access are follow-ups and are not implemented here.
+
+## How to connect
+
+1. Sign in on Releases Index.
+2. Open **Account → Integrations** (`/account/integrations`). The active workspace is
+   the one in the workspace switcher.
+3. Click **Connect uploads**. The browser is sent to uploads.sh (authorization code +
+   PKCE `S256`, scopes `files:read offline_access`).
+4. Approve the grant on uploads (pick the uploads workspace if the account has several).
+5. uploads redirects to the callback below; Releases Index exchanges the code and stores
+   tokens for that workspace.
+6. **Disconnect** on the same page removes the local row and best-effort revokes the
+   refresh token. Users can also revoke under **Connected apps** on uploads.sh.
+
+Connect and disconnect require workspace `owner` or `admin`. Any member can see
+whether the workspace is connected.
+
+## Redirect URIs
+
+The callback is a **web-origin** page (not the API worker). Prod matches the URI
+proposed for the `releases-sh` client. Local does **not** use
+`http://localhost:8788/…` — that port is the MCP preview worker in this repo.
+
+| Environment    | Redirect URI                                               | Notes                                             |
+| -------------- | ---------------------------------------------------------- | ------------------------------------------------- |
+| Production     | `https://releases.sh/integrations/uploads/callback`        | Matches the proposed registration.                |
+| Local portless | `https://releases.localhost/integrations/uploads/callback` | Derived from the trusted browser `Origin`.        |
+| Local preview  | `http://localhost:3000/integrations/uploads/callback`      | Trusted only when `ENVIRONMENT !== "production"`. |
+
+Register every URI the client will actually redirect to. If a local or staging origin
+is missing from the uploads client, the authorize step fails at uploads.
+
+Override: `UPLOADS_OAUTH_REDIRECT_URI` (full callback URL). Otherwise the start
+handler uses a trusted `Origin`, then `WEB_BASE_URL`.
+
+## API
+
+Same principal gate as `/v1/workspaces/*` and `/v1/me/*` (`requireFollowsPrincipal`:
+Better Auth session or a user Bearer). Absent from `publicReadRoutes` /
+`adminRoutes` (not in the public OpenAPI coverage gate).
+
+| Method   | Path                                                       | Who                                  | Effect                                                      |
+| -------- | ---------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- |
+| `GET`    | `/v1/workspaces/:workspaceId/integrations/uploads`         | member+                              | `{ provider, connected, configured, connectedAt, scope }`   |
+| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }` |
+| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                          |
+| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                    |
+
+`configured: false` when the client secret or the encryption key is missing —
+Connect is disabled; the rest of the site is unaffected. No feature flag.
+
+Pending state expires after 10 minutes. Re-clicking Connect replaces the pending
+PKCE fields without dropping an already-connected token until the new callback
+succeeds.
+
+## Tokens at rest
+
+Access and refresh tokens (and the PKCE verifier while pending) are AES-256-GCM
+encrypted with `IDEMPOTENCY_ENCRYPTION_KEY` (32-byte base64 — the existing
+encrypted-at-rest key). AAD binds workspace id + provider + field. Plaintext
+never lands in D1. Table: `workspace_integrations` (`schema-integrations.ts`).
+
+## Env
+
+| Name                          | Kind                  | Default / required                               |
+| ----------------------------- | --------------------- | ------------------------------------------------ |
+| `UPLOADS_OAUTH_CLIENT_ID`     | var or secret         | `releases-sh`                                    |
+| `UPLOADS_OAUTH_CLIENT_SECRET` | secret or `.dev.vars` | **required** for connect                         |
+| `UPLOADS_OAUTH_AUTHORIZE_URL` | var                   | `https://uploads.sh/api/auth/oauth2/authorize`   |
+| `UPLOADS_OAUTH_TOKEN_URL`     | var                   | `https://auth.uploads.sh/api/auth/oauth2/token`  |
+| `UPLOADS_OAUTH_REVOKE_URL`    | var                   | `https://auth.uploads.sh/api/auth/oauth2/revoke` |
+| `UPLOADS_OAUTH_SCOPES`        | var                   | `files:read offline_access`                      |
+| `UPLOADS_OAUTH_REDIRECT_URI`  | var                   | unset — derive (see above)                       |
+| `IDEMPOTENCY_ENCRYPTION_KEY`  | secret                | **required** for connect (token encryption)      |
+
+Discovery (for operators): `https://uploads.sh/.well-known/oauth-authorization-server`.
+Authorize is on `uploads.sh`; token and revoke stay on `auth.uploads.sh`. The
+`auth.uploads.sh` origin is a deprecated alias for discovery; new clients should
+mint against `uploads.sh` as uploads documents.
+
+`UPLOADS_OAUTH_CLIENT_SECRET` is **not** listed in `secrets_store_secrets` until
+the store value exists — a missing Secrets Store binding fails deploy. Set it in
+`.dev.vars` for local, then add the Secrets Store binding when the client secret
+is provisioned.
+
+## Partner client (`releases-sh`)
+
+Grant: `authorization_code` + PKCE (`S256`). Confidential client (secret on the
+token request). Scopes: start with `files:read`; this repo also requests
+`offline_access` so a refresh token is stored.
+
+Allow-list the redirect URIs in the table above. Drop
+`http://localhost:8788/integrations/uploads/callback` unless something else
+listens there.

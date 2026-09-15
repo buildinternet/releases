@@ -1,0 +1,108 @@
+import { describe, expect, it } from "bun:test";
+import {
+  DEFAULT_UPLOADS_OAUTH,
+  buildUploadsAuthorizeUrl,
+  exchangeAuthorizationCode,
+  resolveUploadsOAuthConfig,
+  uploadsOAuthRedirectUri,
+} from "./uploads-oauth.js";
+
+const KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+
+describe("uploads-oauth config", () => {
+  it("is unconfigured without a client secret or encryption key", async () => {
+    expect(await resolveUploadsOAuthConfig({})).toBeNull();
+    expect(await resolveUploadsOAuthConfig({ UPLOADS_OAUTH_CLIENT_SECRET: "s" })).toBeNull();
+    expect(await resolveUploadsOAuthConfig({ IDEMPOTENCY_ENCRYPTION_KEY: KEY })).toBeNull();
+  });
+
+  it("defaults client id and discovery endpoints when secret + key resolve", async () => {
+    const cfg = await resolveUploadsOAuthConfig({
+      UPLOADS_OAUTH_CLIENT_SECRET: "s3cret",
+      IDEMPOTENCY_ENCRYPTION_KEY: KEY,
+    });
+    expect(cfg).toMatchObject({
+      clientId: DEFAULT_UPLOADS_OAUTH.clientId,
+      authorizeUrl: DEFAULT_UPLOADS_OAUTH.authorizeUrl,
+      tokenUrl: DEFAULT_UPLOADS_OAUTH.tokenUrl,
+      revokeUrl: DEFAULT_UPLOADS_OAUTH.revokeUrl,
+      scopes: DEFAULT_UPLOADS_OAUTH.scopes,
+    });
+  });
+
+  it("prefers a trusted request Origin for the redirect URI", () => {
+    expect(uploadsOAuthRedirectUri({ ENVIRONMENT: "development" }, "http://localhost:3000")).toBe(
+      "http://localhost:3000/integrations/uploads/callback",
+    );
+    expect(
+      uploadsOAuthRedirectUri({ WEB_BASE_URL: "https://releases.sh" }, "https://evil.example"),
+    ).toBe("https://releases.sh/integrations/uploads/callback");
+  });
+
+  it("honors an explicit redirect override", () => {
+    expect(
+      uploadsOAuthRedirectUri(
+        { UPLOADS_OAUTH_REDIRECT_URI: "https://releases.localhost/integrations/uploads/callback" },
+        "https://releases.sh",
+      ),
+    ).toBe("https://releases.localhost/integrations/uploads/callback");
+  });
+
+  it("builds an authorize URL with PKCE S256", () => {
+    const url = new URL(
+      buildUploadsAuthorizeUrl({
+        authorizeUrl: DEFAULT_UPLOADS_OAUTH.authorizeUrl,
+        clientId: "releases-sh",
+        redirectUri: "https://releases.sh/integrations/uploads/callback",
+        scopes: "files:read offline_access",
+        state: "st",
+        codeChallenge: "ch",
+      }),
+    );
+    expect(url.origin + url.pathname).toBe("https://uploads.sh/api/auth/oauth2/authorize");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("scope")).toBe("files:read offline_access");
+  });
+
+  it("exchanges an authorization code against the token endpoint", async () => {
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(DEFAULT_UPLOADS_OAUTH.tokenUrl);
+      expect(init?.method).toBe("POST");
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("grant_type")).toBe("authorization_code");
+      expect(body.get("code_verifier")).toBe("ver");
+      return new Response(
+        JSON.stringify({
+          access_token: "at",
+          refresh_token: "rt",
+          token_type: "Bearer",
+          scope: "files:read",
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const tokens = await exchangeAuthorizationCode(
+      {
+        clientId: "releases-sh",
+        clientSecret: "s",
+        authorizeUrl: DEFAULT_UPLOADS_OAUTH.authorizeUrl,
+        tokenUrl: DEFAULT_UPLOADS_OAUTH.tokenUrl,
+        revokeUrl: DEFAULT_UPLOADS_OAUTH.revokeUrl,
+        scopes: DEFAULT_UPLOADS_OAUTH.scopes,
+        encryptionKey: KEY,
+      },
+      {
+        code: "c",
+        codeVerifier: "ver",
+        redirectUri: "https://releases.sh/integrations/uploads/callback",
+      },
+      fetchImpl,
+    );
+    expect(tokens.accessToken).toBe("at");
+    expect(tokens.refreshToken).toBe("rt");
+    expect(tokens.expiresAt).toBeGreaterThan(Date.now());
+  });
+});

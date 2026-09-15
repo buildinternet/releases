@@ -29,3 +29,13 @@ RELEASES_GITHUB_WEBHOOK_SECRET=
 # Optional: skip D1-backed auth rate limiting during local sign-in testing
 # (defaults OFF so deployed prod stays protected).
 # AUTH_RATE_LIMIT_DISABLED=true
+
+# uploads.sh OAuth client (workspace Integrations → Connect uploads).
+# Client id defaults to releases-sh in wrangler vars. Secret + a 32-byte
+# base64 IDEMPOTENCY_ENCRYPTION_KEY are required or connect returns 503.
+# Redirect URI is derived from the browser Origin (portless
+# https://releases.localhost/integrations/uploads/callback). Register that
+# URI on the uploads client; do not use localhost:8788 (that's MCP preview).
+# UPLOADS_OAUTH_CLIENT_ID=releases-sh
+# UPLOADS_OAUTH_CLIENT_SECRET=
+# IDEMPOTENCY_ENCRYPTION_KEY=

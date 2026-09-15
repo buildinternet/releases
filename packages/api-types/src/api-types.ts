@@ -75,6 +75,12 @@ import type {
   WorkspaceProfileResponseSchema,
 } from "./schemas/account-profile.js";
 import type {
+  UploadsIntegrationStatusSchema,
+  UploadsOAuthConnectResponseSchema,
+  UploadsOAuthCallbackBodySchema,
+  UploadsOAuthCallbackResponseSchema,
+} from "./schemas/workspace-integrations.js";
+import type {
   SourceListItemSchema,
   SourceWithOrgSchema,
   SourceListResponseSchema,
@@ -338,6 +344,12 @@ export {
   PatchWorkspaceProfileBodySchema,
   WorkspaceProfileResponseSchema,
 } from "./schemas/account-profile.js";
+export {
+  UploadsIntegrationStatusSchema,
+  UploadsOAuthConnectResponseSchema,
+  UploadsOAuthCallbackBodySchema,
+  UploadsOAuthCallbackResponseSchema,
+} from "./schemas/workspace-integrations.js";
 export {
   CreateStubOrgBodySchema,
   StubFromDomainBodySchema,
@@ -705,6 +717,10 @@ export type UploadAvatarResponse = z.infer<typeof UploadAvatarResponseSchema>;
 export type WorkspaceProfileFields = z.infer<typeof WorkspaceProfileFieldsSchema>;
 export type PatchWorkspaceProfileBody = z.infer<typeof PatchWorkspaceProfileBodySchema>;
 export type WorkspaceProfileResponse = z.infer<typeof WorkspaceProfileResponseSchema>;
+export type UploadsIntegrationStatus = z.infer<typeof UploadsIntegrationStatusSchema>;
+export type UploadsOAuthConnectResponse = z.infer<typeof UploadsOAuthConnectResponseSchema>;
+export type UploadsOAuthCallbackBody = z.infer<typeof UploadsOAuthCallbackBodySchema>;
+export type UploadsOAuthCallbackResponse = z.infer<typeof UploadsOAuthCallbackResponseSchema>;
 export type OrgDetail = z.infer<typeof OrgDetailSchema>;
 
 export type OrgCatalogItem = z.infer<typeof OrgCatalogItemSchema>;

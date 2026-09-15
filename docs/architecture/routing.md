@@ -50,6 +50,15 @@ and are refused (401); a presented-but-unresolvable Bearer credential gets a 401
 - `GET /v1/me/settings/developer` — one-shot bootstrap for `/account/webhooks` (Webhooks & API): `{ webhooks, apiKeys }` where `apiKeys` is `null` when `user-api-keys-enabled` is off (UI hides the keys section). Writes stay on `/me/webhooks` and `/api-keys`.
 - `/v1/me/webhooks` — self-serve outbound webhook subscriptions (`GET/POST`, per-id `GET/PATCH/DELETE`, `rotate-secret`, `test`, `deliveries`). Default `scope: "org"` (requires `orgId`/`orgSlug`, optional source filter, max 10). `scope: "follows"` delivers releases matching the caller's `user_follows` graph (max 1, separate from the org cap). Same principal gate as follows. Subscriber contract: [docs/webhooks.md](../webhooks.md).
 
+Workspace profile, avatar, and integrations sit on the same principal gate
+(`requireFollowsPrincipal` on `/v1/workspaces/*` and `/v1/integrations/*`):
+
+- `GET`/`PATCH /v1/workspaces/:workspaceId/profile` and `POST …/avatar` — workspace
+  display fields and logo (owner/admin for writes).
+- `GET`/`POST`/`DELETE /v1/workspaces/:workspaceId/integrations/uploads` plus
+  `POST /v1/integrations/uploads/callback` — uploads.sh OAuth connect (owner/admin
+  for start/callback/disconnect). See [uploads-oauth.md](uploads-oauth.md).
+
 ## Entity resolution: IDs over slugs
 
 Entity resolution prefers IDs over slugs; IDs are immutable, so prefer them in new clients.
