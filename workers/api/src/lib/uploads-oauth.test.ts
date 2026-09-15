@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { accessTokenNeedsRefresh } from "./uploads-oauth-tokens.js";
 import {
   DEFAULT_UPLOADS_OAUTH,
   UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS,
@@ -8,7 +9,20 @@ import {
   resolveUploadsOAuthConfig,
   revokeUploadsToken,
   uploadsOAuthRedirectUri,
+  uploadsWorkspaceFromAccessToken,
 } from "./uploads-oauth.js";
+
+function encodeJwtSegment(value: unknown): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function unsignedJwt(payload: Record<string, unknown>): string {
+  return `${encodeJwtSegment({ alg: "none", typ: "JWT" })}.${encodeJwtSegment(payload)}.sig`;
+}
 
 const KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 
@@ -174,5 +188,45 @@ describe("uploads-oauth config", () => {
     }) as typeof fetch;
 
     await revokeUploadsToken(publicCfg, "rt", "refresh_token", fetchImpl);
+  });
+});
+
+describe("uploadsWorkspaceFromAccessToken", () => {
+  it("reads the primary workspace claim", () => {
+    expect(uploadsWorkspaceFromAccessToken(unsignedJwt({ workspace: "acme" }))).toBe("acme");
+  });
+
+  it("falls back to the first workspaces[] slug", () => {
+    expect(uploadsWorkspaceFromAccessToken(unsignedJwt({ workspaces: ["alpha", "beta"] }))).toBe(
+      "alpha",
+    );
+    expect(
+      uploadsWorkspaceFromAccessToken(unsignedJwt({ workspaces: [{ slug: "from-object" }] })),
+    ).toBe("from-object");
+  });
+
+  it("prefers workspace over workspaces[]", () => {
+    expect(
+      uploadsWorkspaceFromAccessToken(unsignedJwt({ workspace: "primary", workspaces: ["other"] })),
+    ).toBe("primary");
+  });
+
+  it("returns null for opaque or claimless tokens", () => {
+    expect(uploadsWorkspaceFromAccessToken("not-a-jwt")).toBeNull();
+    expect(uploadsWorkspaceFromAccessToken(unsignedJwt({ sub: "user_1" }))).toBeNull();
+    expect(uploadsWorkspaceFromAccessToken(unsignedJwt({ workspace: "  " }))).toBeNull();
+  });
+});
+
+describe("accessTokenNeedsRefresh", () => {
+  it("is false when expiry is unknown or comfortably in the future", () => {
+    expect(accessTokenNeedsRefresh(null)).toBe(false);
+    expect(accessTokenNeedsRefresh(Date.now() + 10 * 60_000)).toBe(false);
+  });
+
+  it("is true at or inside the 60s skew window", () => {
+    const now = 1_000_000;
+    expect(accessTokenNeedsRefresh(now + 60_000, now)).toBe(true);
+    expect(accessTokenNeedsRefresh(now - 1, now)).toBe(true);
   });
 });

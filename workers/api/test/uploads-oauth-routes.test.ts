@@ -6,7 +6,27 @@ import { user, authOrganization, authMember } from "../src/db/schema-auth.js";
 import { workspaceIntegrations } from "../src/db/schema-integrations.js";
 import { workspaceIntegrationHandlers } from "../src/routes/workspace-integrations.js";
 import { decryptOAuthSecret } from "../src/lib/oauth-token-crypto.js";
+import {
+  ensureFreshUploadsAccessToken,
+  refreshStoredUploadsGrant,
+} from "../src/lib/uploads-oauth-tokens.js";
+import {
+  resolveUploadsOAuthConfig,
+  uploadsWorkspaceFromAccessToken,
+} from "../src/lib/uploads-oauth.js";
 import type { Env } from "../src/index.js";
+
+function encodeJwtSegment(value: unknown): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function unsignedJwt(payload: Record<string, unknown>): string {
+  return `${encodeJwtSegment({ alg: "none", typ: "JWT" })}.${encodeJwtSegment(payload)}.sig`;
+}
 
 let db: TestDb;
 
@@ -82,9 +102,14 @@ describe("uploads OAuth workspace routes", () => {
       env(),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { connected: boolean; configured: boolean };
+    const body = (await res.json()) as {
+      connected: boolean;
+      configured: boolean;
+      uploadsWorkspace: string | null;
+    };
     expect(body.connected).toBe(false);
     expect(body.configured).toBe(true);
+    expect(body.uploadsWorkspace).toBeNull();
   });
 
   it("refuses connect when OAuth is not configured", async () => {
@@ -224,9 +249,10 @@ describe("uploads OAuth workspace routes", () => {
       expect(body.get("client_id")).toBe("releases-sh");
       expect(body.get("client_secret")).toBeNull();
       expect(body.get("code_verifier")).toBeTruthy();
+      const accessJwt = unsignedJwt({ workspace: "acme" });
       return new Response(
         JSON.stringify({
-          access_token: "access-plain",
+          access_token: accessJwt,
           refresh_token: "refresh-plain",
           token_type: "Bearer",
           scope: "files:read offline_access",
@@ -246,23 +272,38 @@ describe("uploads OAuth workspace routes", () => {
         env(),
       );
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { connected: boolean; workspaceId: string; scope: string };
+      const body = (await res.json()) as {
+        connected: boolean;
+        workspaceId: string;
+        scope: string;
+        uploadsWorkspace: string | null;
+      };
       expect(body.connected).toBe(true);
       expect(body.workspaceId).toBe("ws_1");
       expect(body.scope).toContain("files:read");
+      expect(body.uploadsWorkspace).toBe("acme");
 
       const connected = await db.select().from(workspaceIntegrations);
       const row = connected[0];
       expect(row?.status).toBe("connected");
       expect(row?.oauthState).toBeNull();
       expect(row?.accessTokenEnc).toBeTruthy();
-      expect(row?.accessTokenEnc).not.toContain("access-plain");
+      expect(row?.providerWorkspace).toBe("acme");
+      expect(row?.accessTokenEnc).not.toContain("acme");
       const access = await decryptOAuthSecret(row!.accessTokenEnc!, ENCRYPTION_KEY, {
         workspaceId: "ws_1",
         provider: "uploads",
         field: "access_token",
       });
-      expect(access).toBe("access-plain");
+      expect(uploadsWorkspaceFromAccessToken(access)).toBe("acme");
+
+      const status = await appAs("user_1").request(
+        "/workspaces/ws_1/integrations/uploads",
+        { method: "GET" },
+        env(),
+      );
+      expect(status.status).toBe(200);
+      expect(((await status.json()) as { uploadsWorkspace: string }).uploadsWorkspace).toBe("acme");
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -280,21 +321,21 @@ describe("uploads OAuth workspace routes", () => {
     const state = new URL(authorizeUrl).searchParams.get("state")!;
 
     const realFetch = globalThis.fetch;
-    const revokeCalls: string[] = [];
+    const revokeCalls: Array<{ url: string; body: URLSearchParams }> = [];
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/oauth2/token")) {
         return new Response(
           JSON.stringify({
-            access_token: "access-plain",
+            access_token: unsignedJwt({ workspace: "acme" }),
             refresh_token: "refresh-plain",
             token_type: "Bearer",
-            scope: "files:read",
+            scope: "files:read offline_access",
             expires_in: 3600,
           }),
         );
       }
-      revokeCalls.push(url);
+      revokeCalls.push({ url, body: new URLSearchParams(String(init?.body)) });
       expect(init?.method).toBe("POST");
       return new Response(null, { status: 200 });
     }) as typeof fetch;
@@ -315,11 +356,156 @@ describe("uploads OAuth workspace routes", () => {
         env(),
       );
       expect(del.status).toBe(200);
-      expect(revokeCalls.some((u) => u === "https://auth.uploads.sh/api/auth/oauth2/revoke")).toBe(
-        true,
-      );
+      const revoked = (await del.json()) as {
+        connected: boolean;
+        uploadsWorkspace: string | null;
+      };
+      expect(revoked.connected).toBe(false);
+      expect(revoked.uploadsWorkspace).toBeNull();
+      expect(revokeCalls).toHaveLength(1);
+      expect(revokeCalls[0]!.url).toBe("https://auth.uploads.sh/api/auth/oauth2/revoke");
+      expect(revokeCalls[0]!.body.get("token")).toBe("refresh-plain");
+      expect(revokeCalls[0]!.body.get("token_type_hint")).toBe("refresh_token");
+      expect(revokeCalls[0]!.body.get("client_id")).toBe("releases-sh");
+      expect(revokeCalls[0]!.body.get("client_secret")).toBeNull();
       const rows = await db.select().from(workspaceIntegrations);
       expect(rows).toHaveLength(0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("clears local tokens when remote revoke fails", async () => {
+    db = createTestDb();
+    seed();
+    const start = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads/connect",
+      { method: "POST", headers: { Origin: "https://releases.sh" } },
+      env(),
+    );
+    const { authorizeUrl } = (await start.json()) as { authorizeUrl: string };
+    const state = new URL(authorizeUrl).searchParams.get("state")!;
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/oauth2/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: unsignedJwt({ workspace: "acme" }),
+            refresh_token: "refresh-plain",
+            token_type: "Bearer",
+            scope: "files:read offline_access",
+            expires_in: 3600,
+          }),
+        );
+      }
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+
+    try {
+      await appAs("user_1").request(
+        "/integrations/uploads/callback",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code: "auth-code", state }),
+        },
+        env(),
+      );
+      const del = await appAs("user_1").request(
+        "/workspaces/ws_1/integrations/uploads",
+        { method: "DELETE" },
+        env(),
+      );
+      expect(del.status).toBe(200);
+      expect(await db.select().from(workspaceIntegrations)).toHaveLength(0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("refreshes via refresh_token and persists the rotated grant", async () => {
+    db = createTestDb();
+    seed();
+    const start = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads/connect",
+      { method: "POST", headers: { Origin: "https://releases.sh" } },
+      env(),
+    );
+    const { authorizeUrl } = (await start.json()) as { authorizeUrl: string };
+    const state = new URL(authorizeUrl).searchParams.get("state")!;
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!url.includes("/oauth2/token")) {
+        return new Response("unexpected", { status: 500 });
+      }
+      const body = new URLSearchParams(String(init?.body));
+      if (body.get("grant_type") === "authorization_code") {
+        return new Response(
+          JSON.stringify({
+            access_token: unsignedJwt({ workspace: "acme" }),
+            refresh_token: "refresh-plain",
+            token_type: "Bearer",
+            scope: "files:read offline_access",
+            expires_in: 1,
+          }),
+        );
+      }
+      expect(body.get("grant_type")).toBe("refresh_token");
+      expect(body.get("refresh_token")).toBe("refresh-plain");
+      expect(body.get("client_id")).toBe("releases-sh");
+      expect(body.get("client_secret")).toBeNull();
+      return new Response(
+        JSON.stringify({
+          access_token: unsignedJwt({ workspace: "acme-rotated" }),
+          refresh_token: "refresh-rotated",
+          token_type: "Bearer",
+          scope: "files:read offline_access",
+          expires_in: 3600,
+        }),
+      );
+    }) as typeof fetch;
+
+    try {
+      await appAs("user_1").request(
+        "/integrations/uploads/callback",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code: "auth-code", state }),
+        },
+        env(),
+      );
+      const [row] = await db.select().from(workspaceIntegrations);
+      expect(row).toBeTruthy();
+      const cfg = await resolveUploadsOAuthConfig(env());
+      expect(cfg).toBeTruthy();
+
+      const refreshed = await refreshStoredUploadsGrant(db, row!, cfg!);
+      expect(refreshed.uploadsWorkspace).toBe("acme-rotated");
+      expect(refreshed.tokens.refreshToken).toBe("refresh-rotated");
+
+      const [after] = await db.select().from(workspaceIntegrations);
+      expect(after?.providerWorkspace).toBe("acme-rotated");
+      const access = await decryptOAuthSecret(after!.accessTokenEnc!, ENCRYPTION_KEY, {
+        workspaceId: "ws_1",
+        provider: "uploads",
+        field: "access_token",
+      });
+      expect(uploadsWorkspaceFromAccessToken(access)).toBe("acme-rotated");
+      const refresh = await decryptOAuthSecret(after!.refreshTokenEnc!, ENCRYPTION_KEY, {
+        workspaceId: "ws_1",
+        provider: "uploads",
+        field: "refresh_token",
+      });
+      expect(refresh).toBe("refresh-rotated");
+
+      const fresh = await ensureFreshUploadsAccessToken(db, after!, cfg!);
+      expect(fresh.accessToken).toBe(access);
+      expect(fresh.uploadsWorkspace).toBe("acme-rotated");
     } finally {
       globalThis.fetch = realFetch;
     }

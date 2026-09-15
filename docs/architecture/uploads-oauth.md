@@ -10,13 +10,15 @@ and agent access are follow-ups and are not implemented here.
 1. Sign in on Releases Index.
 2. Open **Account → Integrations** (`/account/integrations`). The active workspace is
    the one in the workspace switcher.
-3. Click **Connect uploads**. The browser is sent to uploads.sh (authorization code +
+3. Click **Connect Uploads**. The browser is sent to uploads.sh (authorization code +
    PKCE `S256`, scopes `files:read offline_access`).
-4. Approve the grant on uploads (pick the uploads workspace if the account has several).
-5. uploads redirects to the callback below; Releases Index exchanges the code and stores
-   tokens for that workspace.
+4. Approve the grant on Uploads (pick the uploads workspace if the account has several).
+5. Uploads redirects to the callback below; Releases Index exchanges the code, decodes
+   the access-token JWT `workspace` claim (else the first `workspaces[]` slug), and
+   stores tokens plus that slug for the Index workspace.
 6. **Disconnect** on the same page removes the local row and best-effort revokes the
-   refresh token. Users can also revoke under **Connected apps** on uploads.sh.
+   refresh token at `https://auth.uploads.sh/api/auth/oauth2/revoke`. Users can also
+   revoke under **Connected apps** on Uploads.
 
 Connect and disconnect require workspace `owner` or `admin`. Any member can see
 whether the workspace is connected.
@@ -48,12 +50,12 @@ Same principal gate as `/v1/workspaces/*` and `/v1/me/*` (`requireFollowsPrincip
 Better Auth session or a user Bearer). Absent from `publicReadRoutes` /
 `adminRoutes` (not in the public OpenAPI coverage gate).
 
-| Method   | Path                                                       | Who                                  | Effect                                                      |
-| -------- | ---------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- |
-| `GET`    | `/v1/workspaces/:workspaceId/integrations/uploads`         | member+                              | `{ provider, connected, configured, connectedAt, scope }`   |
-| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }` |
-| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                          |
-| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                    |
+| Method   | Path                                                       | Who                                  | Effect                                                                      |
+| -------- | ---------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
+| `GET`    | `/v1/workspaces/:workspaceId/integrations/uploads`         | member+                              | `{ provider, connected, configured, connectedAt, scope, uploadsWorkspace }` |
+| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }`                 |
+| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                                          |
+| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                                    |
 
 `configured: false` when the token-encryption key is missing — Connect is
 disabled; the rest of the site is unaffected. No feature flag. The client is
@@ -69,6 +71,15 @@ Access and refresh tokens (and the PKCE verifier while pending) are AES-256-GCM
 encrypted with `IDEMPOTENCY_ENCRYPTION_KEY` (32-byte base64 — the existing
 encrypted-at-rest key). AAD binds workspace id + provider + field. Plaintext
 never lands in D1. Table: `workspace_integrations` (`schema-integrations.ts`).
+The connected uploads workspace slug is stored in `provider_workspace` (wire:
+`uploadsWorkspace`) after the token exchange — decoded from the access-token JWT,
+no extra Uploads API call.
+
+The `refresh_token` grant (`offline_access` on authorize) is implemented by
+`refreshUploadsAccessToken` / `ensureFreshUploadsAccessToken`. File-read follow-ups
+should call `ensureFreshUploadsAccessToken` so an expired access token is rotated
+and persisted (a new refresh token from the AS replaces the stored one; an omitted
+refresh token keeps the existing row).
 
 ## Operator setup
 

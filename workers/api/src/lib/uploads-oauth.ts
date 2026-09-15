@@ -157,6 +157,51 @@ export interface UploadsTokenResponse {
   expiresAt: number | null;
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const segment = token.split(".")[1];
+  if (!segment) return null;
+  try {
+    let b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+    b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function slugFromUnknown(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (value != null && typeof value === "object" && "slug" in value) {
+    return slugFromUnknown((value as { slug: unknown }).slug);
+  }
+  return null;
+}
+
+/**
+ * uploads.sh access tokens are JWTs. The primary workspace slug is `workspace`;
+ * some grants also carry `workspaces[]` (strings or `{ slug }`). Decode only —
+ * no extra API call, no signature check (we just received this from the token
+ * endpoint).
+ */
+export function uploadsWorkspaceFromAccessToken(accessToken: string): string | null {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload) return null;
+  const primary = slugFromUnknown(payload.workspace);
+  if (primary) return primary;
+  if (!Array.isArray(payload.workspaces)) return null;
+  for (const item of payload.workspaces) {
+    const slug = slugFromUnknown(item);
+    if (slug) return slug;
+  }
+  return null;
+}
+
 function formBody(params: Record<string, string>): string {
   return new URLSearchParams(params).toString();
 }
