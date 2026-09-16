@@ -29,40 +29,13 @@ const SearchContext = createContext<SearchContextValue | null>(null);
 /**
  * Access the shared search state. Returns `null` outside a {@link SearchProvider}
  * (e.g. the header bar on a non-search page), which the search box reads as
- * "launcher mode" — see `search-bar.tsx`.
+ * "launcher mode" — typeahead, no navigation until Enter or a result click.
  */
 export function useSearch(): SearchContextValue | null {
   return useContext(SearchContext);
 }
 
 const DEBOUNCE_MS = 200;
-
-/**
- * Cross-navigation handoff for the header search box. When the user starts
- * typing in the header on a non-search page we stash the in-progress text here
- * and route to `/search`. A module-level variable (not React state) survives
- * the client-side route change AND the unmount of the source input, so the
- * provider can pick up the latest text on mount — no characters are lost in the
- * handoff, and we never have to block the navigation on a server search fetch.
- *
- * Only ever written from a browser event handler, so on the server it stays
- * `null` and can't leak across SSR requests. Peek and clear are split so the
- * value can be read in a `useState` initializer (which React may invoke twice
- * under Strict Mode) without being consumed before the mount effect.
- */
-let pendingQuery: string | null = null;
-
-export function setPendingQuery(value: string): void {
-  pendingQuery = value;
-}
-
-function peekPendingQuery(): string | null {
-  return pendingQuery;
-}
-
-function clearPendingQuery(): void {
-  pendingQuery = null;
-}
 
 function syncUrl(value: string, range: SearchRangeKey): void {
   const trimmed = value.trim();
@@ -95,9 +68,7 @@ export function SearchProvider({
   initialRange: SearchRangeKey;
   children: React.ReactNode;
 }) {
-  // Seed from the cross-page handoff when present (header launcher → /search),
-  // otherwise from the server-provided query (deep link / hard load).
-  const [query, setQueryState] = useState(() => peekPendingQuery() ?? initialQuery);
+  const [query, setQueryState] = useState(initialQuery);
   const [results, setResults] = useState<UnifiedSearchResponse | null>(initialResults);
   const [range, setRangeState] = useState<SearchRangeKey>(initialRange);
   const debouncedQuery = useDebounced(query, DEBOUNCE_MS);
@@ -139,14 +110,12 @@ export function SearchProvider({
 
   // React to the (debounced) query: refresh results and sync the URL. The first
   // run is the mount seed — when the server already rendered results for the
-  // initial query (deep link / hard load) we skip the fetch and the redundant
-  // URL write; the handoff and empty cases fall through to fetch + sync.
+  // initial query (deep link / hard load / Enter from the header typeahead) we
+  // skip the fetch and the redundant URL write; empty cases fall through.
   useEffect(() => {
     if (!seededRef.current) {
       seededRef.current = true;
-      const wasHandoff = peekPendingQuery() !== null;
-      clearPendingQuery();
-      if (initialResults !== null && !wasHandoff) return;
+      if (initialResults !== null) return;
     }
     runSearch(debouncedQuery, rangeSince(range));
     syncUrl(debouncedQuery, range);

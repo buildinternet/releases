@@ -1,10 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FilterMenuRadio, FilterMenuSection, FiltersPopover } from "@/components/filters-popover";
 import { DEFAULT_RANGE, SEARCH_RANGES } from "@/lib/search-range";
-import { setPendingQuery, useSearch } from "./search-provider";
+import {
+  launcherAction,
+  moveHighlight,
+  resultsMatchQuery,
+  typeaheadItems,
+  type TypeaheadItem,
+} from "@/lib/search-typeahead";
+import { SearchTypeahead, TYPEAHEAD_LISTBOX_ID, useTypeaheadSearch } from "./search-typeahead";
+import { useSearch } from "./search-provider";
 
 const MOBILE_QUERY = "(max-width: 640px)";
 
@@ -22,19 +30,26 @@ export function SearchBar({
 }) {
   const search = useSearch();
   const router = useRouter();
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const [isMac, setIsMac] = useState(false);
 
-  // Launcher mode (no provider — e.g. the header on a non-search page): hold the
-  // text locally so the box shows everything typed, stash it for the handoff,
-  // and route to /search on the first keystroke. The provider then adopts the
-  // latest stashed text on mount, so nothing is lost across the navigation.
+  // Launcher mode (no provider — the header on a non-search page): the input
+  // owns the query locally and shows a typeahead. Navigation happens only on
+  // Enter or a result click — never on a keystroke.
   const [launchValue, setLaunchValue] = useState("");
-  const navigatedRef = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState<number | null>(null);
 
   const value = search ? search.query : launchValue;
   const showFilters = withFilters && search != null;
   const filterActive = showFilters && search.range !== DEFAULT_RANGE;
+  const launcher = search == null;
+  const typeaheadResults = useTypeaheadSearch(launchValue, launcher && open);
+  const matchedResults = resultsMatchQuery(typeaheadResults, launchValue) ? typeaheadResults : null;
+  const items = launcher ? typeaheadItems(matchedResults, launchValue) : [];
+  const listOpen = launcher && open && items.length > 0;
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -58,17 +73,46 @@ export function SearchBar({
     }
   }, [autoFocus]);
 
+  // Close the dropdown after a client navigation (result click / Enter) so a
+  // leftover query in the still-mounted header box doesn't keep the list open.
+  useEffect(() => {
+    setOpen(false);
+    setHighlight(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!listOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setHighlight(null);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [listOpen]);
+
+  function go(href: string) {
+    setOpen(false);
+    setHighlight(null);
+    router.push(href);
+  }
+
   function handleChange(next: string) {
     if (search) {
       search.setQuery(next);
       return;
     }
-    setLaunchValue(next);
-    setPendingQuery(next);
-    if (!navigatedRef.current) {
-      navigatedRef.current = true;
-      router.push("/search");
+    const result = launcherAction({ type: "change", query: next });
+    // `!== false` (not truthiness): a string href is a valid `navigate` even
+    // when empty, so `if (result.navigate)` does not narrow the union.
+    if (result.navigate !== false) {
+      go(result.navigate);
+      return;
     }
+    setLaunchValue(result.query);
+    setOpen(result.query.trim().length > 0);
+    setHighlight(null);
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -77,23 +121,59 @@ export function SearchBar({
       // Already live on the search page — Enter just keeps the current results.
       return;
     }
-    setPendingQuery(launchValue);
-    router.push("/search");
+    const result = launcherAction({
+      type: "submit",
+      query: launchValue,
+      highlight,
+      items,
+    });
+    if (result.navigate !== false) go(result.navigate);
+  }
+
+  function handleSelect(item: TypeaheadItem) {
+    const result = launcherAction({ type: "select", item });
+    if (result.navigate !== false) go(result.navigate);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!launcher || !open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => moveHighlight(h, 1, items.length));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => moveHighlight(h, -1, items.length));
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      setHighlight(null);
+    }
   }
 
   const placeholder = sourceCount
     ? `Search ${sourceCount.toLocaleString()} sources — "react", "vercel cli", "postgres 16"...`
     : `Search products and releases...`;
 
+  const activeOptionId =
+    listOpen && highlight != null ? `${TYPEAHEAD_LISTBOX_ID}-${highlight}` : undefined;
+
   const input = (
     <input
       ref={inputRef}
       name="q"
       type="search"
-      role="searchbox"
+      role={launcher ? "combobox" : "searchbox"}
       aria-label="Search products and releases"
+      aria-autocomplete={launcher ? "list" : undefined}
+      aria-expanded={launcher ? listOpen : undefined}
+      aria-controls={launcher ? TYPEAHEAD_LISTBOX_ID : undefined}
+      aria-activedescendant={activeOptionId}
       value={value}
       onChange={(e) => handleChange(e.target.value)}
+      onFocus={() => {
+        if (launcher && launchValue.trim()) setOpen(true);
+      }}
+      onKeyDown={handleKeyDown}
       placeholder={placeholder}
       autoComplete="off"
       spellCheck={false}
@@ -133,7 +213,7 @@ export function SearchBar({
           </FiltersPopover>
         </div>
       ) : (
-        <div className="relative">
+        <div ref={rootRef} className="relative">
           <SearchGlyph />
           {input}
           <kbd
@@ -142,6 +222,15 @@ export function SearchBar({
           >
             {isMac ? "⌘" : "Ctrl"}K
           </kbd>
+          {listOpen && (
+            <SearchTypeahead
+              items={items}
+              highlight={highlight}
+              query={launchValue}
+              onHighlight={setHighlight}
+              onSelect={handleSelect}
+            />
+          )}
         </div>
       )}
     </form>

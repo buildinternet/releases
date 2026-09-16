@@ -1,24 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export function SearchTrigger({ className }: { className?: string }) {
-  const [isMac, setIsMac] = useState(false);
+function focusSearchInput() {
+  document.querySelector<HTMLInputElement>('input[name="q"]')?.focus();
+}
 
-  useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    const ua = navigator as Navigator & { userAgentData?: { platform?: string } };
-    const platform = ua.userAgentData?.platform ?? navigator.platform;
-    setIsMac(/mac|iphone|ipad|ipod/i.test(platform));
-  }, []);
-
+function TriggerChrome({ isMac }: { isMac: boolean }) {
   return (
-    <Link
-      href="/search"
-      aria-label="Search"
-      className={`group items-center gap-2 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 hover:border-stone-400 dark:hover:border-stone-500 px-2.5 h-9 text-sm text-stone-500 dark:text-stone-400 transition-colors ${className ?? ""}`}
-    >
+    <>
       <svg
         viewBox="0 0 24 24"
         aria-hidden="true"
@@ -35,10 +27,43 @@ export function SearchTrigger({ className }: { className?: string }) {
       <span>Search</span>
       <kbd
         aria-hidden="true"
-        className="inline-flex items-center gap-0.5 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 px-1.5 h-5 text-[11px] font-medium text-stone-500 dark:text-stone-400 font-sans"
+        className="inline-flex h-5 items-center gap-0.5 rounded border border-stone-200 bg-stone-50 px-1.5 font-sans text-[11px] font-medium text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
       >
         {isMac ? "⌘" : "Ctrl"}K
       </kbd>
+    </>
+  );
+}
+
+const triggerClass =
+  "group items-center gap-2 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 hover:border-stone-400 dark:hover:border-stone-500 px-2.5 h-9 text-sm text-stone-500 dark:text-stone-400 transition-colors";
+
+export function SearchTrigger({ className }: { className?: string }) {
+  const pathname = usePathname();
+  const [isMac, setIsMac] = useState(false);
+  const onSearchPage = pathname === "/search";
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ua = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const platform = ua.userAgentData?.platform ?? navigator.platform;
+    setIsMac(/mac|iphone|ipad|ipod/i.test(platform));
+  }, []);
+
+  const classes = `${triggerClass} ${className ?? ""}`;
+
+  // Already on /search: focus the page box instead of stacking a second input.
+  if (onSearchPage) {
+    return (
+      <button type="button" aria-label="Search" onClick={focusSearchInput} className={classes}>
+        <TriggerChrome isMac={isMac} />
+      </button>
+    );
+  }
+
+  return (
+    <Link href="/search" aria-label="Search" className={classes}>
+      <TriggerChrome isMac={isMac} />
     </Link>
   );
 }
