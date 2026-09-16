@@ -104,8 +104,10 @@ export function SearchBar({
       return;
     }
     const result = launcherAction({ type: "change", query: next });
-    if (result.kind === "go") {
-      go(result.href);
+    // `!== false` (not truthiness): a string href is a valid `navigate` even
+    // when empty, so `if (result.navigate)` does not narrow the union.
+    if (result.navigate !== false) {
+      go(result.navigate);
       return;
     }
     setLaunchValue(result.query);
@@ -125,12 +127,12 @@ export function SearchBar({
       highlight,
       items,
     });
-    if (result.kind === "go") go(result.href);
+    if (result.navigate !== false) go(result.navigate);
   }
 
   function handleSelect(item: TypeaheadItem) {
     const result = launcherAction({ type: "select", item });
-    if (result.kind === "go") go(result.href);
+    if (result.navigate !== false) go(result.navigate);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

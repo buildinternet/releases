@@ -17,7 +17,7 @@ export type LauncherAction =
   | { type: "submit"; query: string; highlight: number | null; items: TypeaheadItem[] }
   | { type: "select"; item: TypeaheadItem };
 
-export type LauncherResult = { kind: "compose"; query: string } | { kind: "go"; href: string };
+export type LauncherResult = { navigate: false; query: string } | { navigate: string };
 
 export type TypeaheadKind = "search" | "org" | "product" | "collection" | "release";
 
@@ -44,13 +44,13 @@ export function searchPageHref(query: string): string {
 
 export function launcherAction(action: LauncherAction): LauncherResult {
   if (action.type === "change") {
-    return { kind: "compose", query: action.query };
+    return { navigate: false, query: action.query };
   }
   if (action.type === "select") {
-    return { kind: "go", href: action.item.href };
+    return { navigate: action.item.href };
   }
   const hit = action.highlight != null ? action.items[action.highlight] : undefined;
-  return { kind: "go", href: hit?.href ?? searchPageHref(action.query) };
+  return { navigate: hit?.href ?? searchPageHref(action.query) };
 }
 
 /**
