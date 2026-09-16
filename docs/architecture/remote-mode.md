@@ -102,10 +102,14 @@ root-key-gated admin surface (for first-party / `trusted` `skip_consent` clients
 and — now that agent-run MCP clients need to self-register — via **RFC 7591
 dynamic client registration** at the public `/oauth2/register` endpoint
 (`allowDynamicClientRegistration: true`). DCR clients are always untrusted (they
-hit the consent page), PKCE-required, and their tokens are role-clamped at
-issuance, so DCR grants no scope a user's role doesn't already allow. The endpoint
-is rate-limited to 5 registrations/min/IP (explicit in `auth/index.ts`, enforced
-in deployed prod). The admin route remains the second sanctioned exception to the
+hit the consent page), forced public/PKCE (`token_endpoint_auth_method: "none"`,
+no `client_secret`), and stored with a fixed capability ceiling of identity
+scopes + `read` (`DCR_SCOPES` in `auth/entitlement.ts`) — never `write` or
+`admin`, never `skip_consent`. Discovery still lists the full ladder on
+`scopes_supported` for first-party clients; DCR does not inherit that list.
+Role-clamp at issuance is a second layer. The endpoint is rate-limited to
+5 registrations/min/IP (explicit in `auth/index.ts`, enforced in deployed prod).
+The admin route remains the second sanctioned exception to the
 "no new `/v1/admin/*` CRUD" rule (alongside role provisioning).
 
 - `POST /v1/admin/oauth/clients` — create a client. Body: `redirectUris`

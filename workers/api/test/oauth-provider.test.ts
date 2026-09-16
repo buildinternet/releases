@@ -16,7 +16,9 @@ import {
   oauthConsent,
   jwks,
 } from "../src/db/schema-auth.js";
+import { DCR_SCOPES } from "../src/auth/entitlement.js";
 import { oauthValidAudiences, createAuth } from "../src/auth/index.js";
+import { registrationScopesIncludePrivileged } from "../src/auth/oauth-dcr.js";
 
 // createTestDb() applies every migration, so a missing table or column throws here.
 describe("oauth provider schema", () => {
@@ -188,8 +190,23 @@ describe("oauth provider wiring", () => {
       }),
     );
     expect(regRes.ok).toBe(true);
+    const body = (await regRes.json()) as {
+      client_id?: string;
+      client_secret?: string;
+      scope?: string;
+      token_endpoint_auth_method?: string;
+    };
+    expect(body.client_secret).toBeUndefined();
+    expect(body.token_endpoint_auth_method).toBe("none");
+    expect(registrationScopesIncludePrivileged(body.scope)).toBe(false);
     const registered = await db.select().from(oauthClient);
     expect(registered).toHaveLength(1);
+    expect(registered[0]?.skipConsent ?? false).toBe(false);
+    expect(registered[0]?.tokenEndpointAuthMethod).toBe("none");
+    expect(registrationScopesIncludePrivileged(registered[0]?.scopes)).toBe(false);
+    expect(registered[0]?.scopes).toEqual(expect.arrayContaining([...DCR_SCOPES]));
+    expect(registered[0]?.scopes).not.toContain("admin");
+    expect(registered[0]?.scopes).not.toContain("write");
   });
 
   it("tolerates extra DCR grant_types (device_code) rather than invalid_client_metadata", async () => {
@@ -304,6 +321,106 @@ describe("oauth provider wiring", () => {
     expect(res.ok).toBe(true);
     const registered = await db.select().from(oauthClient);
     expect(registered).toHaveLength(1);
+  });
+
+  // DCR must not inherit discovery's full scope list or mint a confidential
+  // admin-capable client. The researcher report was: POST /oauth2/register
+  // without Authorization → 201 with scopes including admin + a client_secret.
+  it("does not grant admin/write or a client_secret when DCR asks for them", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const res = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "probe-alpha",
+          redirect_uris: ["https://attacker.example.com/cb"],
+          token_endpoint_auth_method: "client_secret_basic",
+          skip_consent: true,
+          scope: "openid profile email offline_access read write admin",
+          grant_types: ["authorization_code", "refresh_token", "client_credentials"],
+        }),
+      }),
+    );
+    expect(res.ok).toBe(true);
+    const body = (await res.json()) as {
+      client_secret?: string;
+      scope?: string;
+      token_endpoint_auth_method?: string;
+    };
+    expect(body.client_secret).toBeUndefined();
+    expect(body.token_endpoint_auth_method).toBe("none");
+    expect(registrationScopesIncludePrivileged(body.scope)).toBe(false);
+
+    const [row] = await db.select().from(oauthClient);
+    expect(row).toBeDefined();
+    expect(row?.skipConsent ?? false).toBe(false);
+    expect(row?.tokenEndpointAuthMethod).toBe("none");
+    expect(row?.scopes).not.toContain("admin");
+    expect(row?.scopes).not.toContain("write");
+    expect(row?.grantTypes ?? []).not.toContain("client_credentials");
+  });
+
+  it("cannot elevate a DCR client to admin at authorize", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const redirectUri = "https://app.example.com/callback";
+    const regRes = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "MCP Inspector",
+          redirect_uris: [redirectUri],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    const { client_id: clientId } = (await regRes.json()) as { client_id: string };
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: "openid profile email offline_access read write admin",
+      state: "xyz",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      code_challenge_method: "S256",
+    });
+    const res = await auth.handler(
+      new Request(`https://api.releases.localhost/api/auth/oauth2/authorize?${params}`, {
+        redirect: "manual",
+      }),
+    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).not.toContain("error=");
+    const scopes = [...location.matchAll(/scope(?:=|%3D)([^&]*)/g)].map((m) =>
+      decodeURIComponent(decodeURIComponent(m[1] ?? "")),
+    );
+    expect(scopes.length).toBeGreaterThan(0);
+    for (const scope of scopes) {
+      expect(scope).not.toMatch(/\badmin\b/);
+      expect(scope).not.toMatch(/\bwrite\b/);
+    }
+  });
+
+  it("wires DCR default/allowed scopes to the identity+read allowlist", async () => {
+    const auth = await createAuth(baseEnv, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    const provider = (auth.options.plugins ?? []).find((p: { id: string }) =>
+      /oauth/i.test(p.id),
+    ) as {
+      options?: {
+        clientRegistrationDefaultScopes?: string[];
+        clientRegistrationAllowedScopes?: string[];
+        scopes?: string[];
+      };
+    };
+    expect(provider?.options?.scopes).toEqual(expect.arrayContaining(["read", "write", "admin"]));
+    expect(provider?.options?.clientRegistrationDefaultScopes).toEqual([...DCR_SCOPES]);
+    expect(provider?.options?.clientRegistrationAllowedScopes).toEqual([...DCR_SCOPES]);
   });
 
   // Security guard: now that DCR is public + unauthenticated, the register

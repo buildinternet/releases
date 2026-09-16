@@ -21,6 +21,7 @@ describe("applyOAuthClientInterop", () => {
         body: {
           client_name: "MCPJam",
           grant_types: ["authorization_code", "refresh_token"],
+          token_endpoint_auth_method: "none",
         },
       },
     });
@@ -45,12 +46,13 @@ describe("applyOAuthClientInterop", () => {
           grant_types: ["authorization_code", "refresh_token"],
           redirect_uris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
           application_type: "native",
+          token_endpoint_auth_method: "none",
         },
       },
     });
   });
 
-  it("returns void for a register body needing neither rewrite", async () => {
+  it("returns void for an already-public MCP register body", async () => {
     const out = await applyOAuthClientInterop(
       {
         path: "/oauth2/register",
@@ -59,11 +61,33 @@ describe("applyOAuthClientInterop", () => {
           grant_types: ["authorization_code", "refresh_token"],
           redirect_uris: ["https://app.example.com/callback"],
           application_type: "web",
+          token_endpoint_auth_method: "none",
         },
       },
       async () => OAUTH_SCOPES,
     );
     expect(out).toBeUndefined();
+  });
+
+  it("strips admin/write and skip_consent from a hostile DCR body", async () => {
+    const out = await applyOAuthClientInterop(
+      {
+        path: "/oauth2/register",
+        body: {
+          client_name: "probe-alpha",
+          redirect_uris: ["https://attacker.example.com/cb"],
+          token_endpoint_auth_method: "client_secret_post",
+          skip_consent: true,
+          scope: "openid read write admin",
+        },
+      },
+      async () => OAUTH_SCOPES,
+    );
+    expect(out?.context.body).toMatchObject({
+      token_endpoint_auth_method: "none",
+      scope: "openid read",
+    });
+    expect(out?.context.body).not.toHaveProperty("skip_consent");
   });
 
   it("downscopes kitchen-sink authorize scope= to the registered list", async () => {

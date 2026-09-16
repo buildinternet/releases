@@ -16,7 +16,9 @@
  * Also unions `offline_access` into the grant for clients registered with it —
  * without it the plugin never issues a refresh token (see {@link OFFLINE_ACCESS}).
  *
- * Known ids stay in lockstep with {@link OAUTH_SCOPES}.
+ * Known ids stay in lockstep with {@link OAUTH_SCOPES}. A missing client row
+ * falls back to {@link DCR_SCOPES} (not the full advertised list) so a
+ * rewrite never elevates to `write`/`admin`.
  */
 
 import { entitledScopes, OAUTH_SCOPES } from "./entitlement.js";

@@ -16,10 +16,21 @@ export const IDENTITY_SCOPES = ["openid", "profile", "email", "offline_access"] 
 export const API_SCOPES = ["read", "write", "admin"] as const;
 
 /**
- * Full AS `scopes` list. DCR default (plugin default = `scopes`) and the
- * fallback when an `oauth_client` row is missing on first-use rewrite.
+ * Full AS `scopes` list — advertised on discovery (`scopes_supported`) so
+ * first-party / admin-provisioned clients can request the whole ladder.
+ * Open DCR does **not** inherit this list; see {@link DCR_SCOPES}.
  */
 export const OAUTH_SCOPES = [...IDENTITY_SCOPES, ...API_SCOPES] as const;
+
+/**
+ * Capability ceiling for RFC 7591 dynamic registration. Identity scopes plus
+ * `read` — enough for MCP Inspector / Claude / Cursor / opencode (catalog
+ * reads + follows as a user principal). `write` and `admin` are first-party
+ * only: `write` materializes catalog sources (`POST /v1/lookups`) and edits
+ * registry rows; `admin` is the operator ladder. Role-clamp is a second
+ * layer, not a substitute for this client ceiling.
+ */
+export const DCR_SCOPES = [...IDENTITY_SCOPES, "read"] as const;
 
 /** API scope ladder per role. Cumulative (read ⊂ write ⊂ admin). */
 export const ROLE_LADDER: Readonly<Record<string, readonly string[]>> = {

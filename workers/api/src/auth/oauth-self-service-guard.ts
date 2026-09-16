@@ -5,7 +5,10 @@
  * fail-closed / first-party-only by routing all provisioning through the
  * root-key admin route. Read/public endpoints (public-client(-prelogin),
  * get-client(s)) are intentionally NOT guarded — the consent flow reads them.
- * Register on the four write paths in index.ts BEFORE the /api/auth/* handler.
+ * RFC 7592 client-configuration (PUT/DELETE `/oauth2/register/:id`) is not
+ * mounted by `@better-auth/oauth-provider` 1.7; if it appears, add those
+ * paths here. Register on the four write paths in index.ts BEFORE the
+ * `/api/auth/*` handler.
  */
 import type { MiddlewareHandler } from "hono";
 import { ForbiddenError } from "@releases/lib/releases-error";
