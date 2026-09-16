@@ -71,6 +71,10 @@ Why it needs auth at all: `revalidatePath` marks entries stale and regeneration 
 
 > **The trap this replaced.** A route's regeneration period is the MIN of its `export const revalidate` and every fetch revalidate in its render tree, **layouts included**. A `next: { revalidate: 60 }` on the site-notice fetch — reached from the root layout — capped every route in the app at 60s for three weeks, silently overriding #2004's 900s bump; a second instance (`revalidate: 3600` on the header's GitHub star count) capped it at an hour. Nothing breaks at runtime; the only symptom is the Vercel ISR-write line item, which reached ~49% of the bill. `web/src/lib/isr.test.ts` walks the import graph from `app/layout.tsx` and fails if anything reachable from it caches below the floor.
 
+## Header search
+
+The lg+ header field is a GitHub-style typeahead: typing stays on the current page and opens a results dropdown (`GET /api/search`). Enter (or the leading "Search all results" row) goes to `/search?q=`; a highlighted/clicked hit goes to that entity. The previous first-keystroke `router.push("/search")` remounted a second input mid-composition (header box and page box out of sync). On `/search` the header field is replaced by the compact Search trigger so only the page box is editable; ⌘K focuses whichever `input[name="q"]` is mounted. Helpers + the no-navigate-on-keystroke contract: `web/src/lib/search-typeahead.ts`.
+
 ## On-demand lookup field in search responses
 
 `GET /v1/search` (lexical + hybrid) and the MCP `search` tool include a `lookup` field when the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-DB search returned zero hits (no orgs, no catalog entries, no release/changelog-chunk hits). When either condition fails, the route skips the lookup call and `lookup` is `null`. Shape:

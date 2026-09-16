@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
-import { SearchBar } from "./search-bar";
-import { SearchTrigger } from "./search-trigger";
+import { HeaderSearch } from "./header-search";
 import { AccountNav } from "./account-nav";
 import { GitHubStar } from "./github-star";
 import { visibleNavItems } from "./nav-items";
@@ -56,8 +55,7 @@ export function Header() {
         )}
       </Link>
       <div className="flex min-w-0 flex-1 justify-center">
-        <SearchBar className="hidden lg:block w-full max-w-[420px]" autoFocus={false} />
-        <SearchTrigger className="hidden sm:flex lg:hidden w-fit" />
+        <HeaderSearch />
       </div>
       <MobileNav devAdmin={devAdmin} />
       {/* The full link row + star + toggle + account only fits alongside a
