@@ -28,8 +28,8 @@ const SearchContext = createContext<SearchContextValue | null>(null);
 
 /**
  * Access the shared search state. Returns `null` outside a {@link SearchProvider}
- * (e.g. the header bar on a non-search page), which the search box reads as
- * "launcher mode" — typeahead, no navigation until Enter or a result click.
+ * (e.g. the header on a non-search page). The header mounts HeaderTypeahead
+ * there; SearchBar on `/search` is the only consumer of this hook.
  */
 export function useSearch(): SearchContextValue | null {
   return useContext(SearchContext);

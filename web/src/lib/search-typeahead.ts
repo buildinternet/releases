@@ -17,9 +17,9 @@ export type LauncherAction =
   | { type: "submit"; query: string; highlight: number | null; items: TypeaheadItem[] }
   | { type: "select"; item: TypeaheadItem };
 
-export type LauncherResult = { navigate: false; query: string } | { navigate: string };
+export type LauncherResult = { kind: "compose"; query: string } | { kind: "go"; href: string };
 
-export type TypeaheadKind = "search" | "org" | "product" | "collection" | "release";
+export type TypeaheadKind = "search" | "org" | "product" | "source" | "collection" | "release";
 
 export type TypeaheadItem = {
   id: string;
@@ -28,6 +28,16 @@ export type TypeaheadItem = {
   secondary?: string;
   kind: TypeaheadKind;
 };
+
+export const KIND_LABEL: Record<Exclude<TypeaheadKind, "search">, string> = {
+  org: "Org",
+  product: "Product",
+  source: "Source",
+  collection: "Collection",
+  release: "Release",
+};
+
+export type TypeaheadStatus = "idle" | "loading" | "empty" | "results";
 
 /** Caps keep the dropdown short — the search page is the full result set. */
 export const TYPEAHEAD_CAPS = {
@@ -44,13 +54,13 @@ export function searchPageHref(query: string): string {
 
 export function launcherAction(action: LauncherAction): LauncherResult {
   if (action.type === "change") {
-    return { navigate: false, query: action.query };
+    return { kind: "compose", query: action.query };
   }
   if (action.type === "select") {
-    return { navigate: action.item.href };
+    return { kind: "go", href: action.item.href };
   }
   const hit = action.highlight != null ? action.items[action.highlight] : undefined;
-  return { navigate: hit?.href ?? searchPageHref(action.query) };
+  return { kind: "go", href: hit?.href ?? searchPageHref(action.query) };
 }
 
 /**
@@ -76,6 +86,24 @@ export function resultsMatchQuery(results: UnifiedSearchResponse | null, query: 
   const rq = results.query.trim().toLowerCase();
   if (!q || !rq) return false;
   return q === rq || q.startsWith(rq);
+}
+
+/**
+ * Dropdown chrome under the leading "Search all results" row. Entity hits
+ * win over an in-flight refetch so prefix previews stay quiet.
+ */
+export function typeaheadStatus({
+  query,
+  loading,
+  items,
+}: {
+  query: string;
+  loading: boolean;
+  items: TypeaheadItem[];
+}): TypeaheadStatus {
+  if (!query.trim()) return "idle";
+  if (items.some((item) => item.kind !== "search")) return "results";
+  return loading ? "loading" : "empty";
 }
 
 export function typeaheadItems(
@@ -120,8 +148,9 @@ function orgItem(org: SearchOrgHit): TypeaheadItem {
 }
 
 function catalogItem(hit: SearchCatalogHit): TypeaheadItem {
+  const isSource = hit.entryType === "source";
   const href =
-    hit.entryType === "source" && hit.sourceSlug
+    isSource && hit.sourceSlug
       ? sourcePath(hit.orgSlug, hit.sourceSlug)
       : productPath(hit.orgSlug, hit.slug);
   return {
@@ -129,7 +158,7 @@ function catalogItem(hit: SearchCatalogHit): TypeaheadItem {
     href,
     label: hit.name,
     secondary: hit.orgName ?? undefined,
-    kind: "product",
+    kind: isSource ? "source" : "product",
   };
 }
 

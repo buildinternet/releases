@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { SearchBar } from "./search-bar";
+import { HeaderTypeahead } from "./header-typeahead";
 import { SearchTrigger } from "./search-trigger";
 
 /**
@@ -20,7 +20,7 @@ export function HeaderSearch() {
 
   return (
     <>
-      <SearchBar className="hidden lg:block w-full max-w-[420px]" autoFocus={false} />
+      <HeaderTypeahead className="hidden lg:block w-full max-w-[420px]" />
       <SearchTrigger className="hidden sm:flex lg:hidden w-fit" />
     </>
   );
