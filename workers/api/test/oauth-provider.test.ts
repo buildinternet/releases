@@ -337,7 +337,6 @@ describe("oauth provider wiring", () => {
           client_name: "probe-alpha",
           redirect_uris: ["https://attacker.example.com/cb"],
           token_endpoint_auth_method: "client_secret_basic",
-          skip_consent: true,
           scope: "openid profile email offline_access read write admin",
           grant_types: ["authorization_code", "refresh_token", "client_credentials"],
         }),
@@ -360,6 +359,32 @@ describe("oauth provider wiring", () => {
     expect(row?.scopes).not.toContain("admin");
     expect(row?.scopes).not.toContain("write");
     expect(row?.grantTypes ?? []).not.toContain("client_credentials");
+  });
+
+  it("does not persist skip_consent from a DCR body", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const res = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "probe-trusted",
+          redirect_uris: ["https://attacker.example.com/cb"],
+          token_endpoint_auth_method: "none",
+          skip_consent: true,
+        }),
+      }),
+    );
+    // Plugin schema rejects skip_consent (ZodNever) or we strip it — either
+    // way no trusted DCR row is stored.
+    const rows = await db.select().from(oauthClient);
+    if (res.ok) {
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.skipConsent ?? false).toBe(false);
+    } else {
+      expect(rows).toHaveLength(0);
+    }
   });
 
   it("cannot elevate a DCR client to admin at authorize", async () => {

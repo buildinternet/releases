@@ -126,7 +126,7 @@ describe("dcrClientRowPatch / registration result clamp", () => {
       token_endpoint_auth_method: "client_secret_basic",
     };
     expect(clampDcrRegistrationResult(returned)).toBe("abc");
-    expect(returned.scope).toBe(DCR_SCOPES.join(" "));
+    expect(returned.scope).toBe("openid read");
     expect(returned.token_endpoint_auth_method).toBe("none");
     expect("client_secret" in returned).toBe(false);
     expect("client_secret_expires_at" in returned).toBe(false);
