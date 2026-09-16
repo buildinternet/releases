@@ -7,6 +7,7 @@ import {
   FilterMenuSeparator,
   FiltersPopover,
 } from "@/components/filters-popover";
+import { SEARCH_NATIVE_CANCEL_HIDDEN, SearchClearButton } from "./search-clear-button";
 
 interface ReleaseFilterInputProps {
   /** Live filter text (controlled). */
@@ -56,14 +57,22 @@ export function ReleaseFilterInput({
   return (
     <div className={className}>
       <div className="flex items-stretch rounded-md border border-stone-200 bg-white transition-colors focus-within:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:focus-within:border-stone-600">
-        <input
-          type="search"
-          value={value}
-          onChange={(e) => onValueChange(e.target.value)}
-          placeholder={placeholder}
-          aria-label="Filter releases"
-          className="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-[12px] text-stone-700 placeholder:text-stone-400 focus:outline-none dark:text-stone-200 dark:placeholder:text-stone-500"
-        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            type="search"
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            placeholder={placeholder}
+            aria-label="Filter releases"
+            className={`min-w-0 w-full rounded-md bg-transparent py-1 pl-2 pr-7 text-[12px] text-stone-700 placeholder:text-stone-400 focus:outline-none dark:text-stone-200 dark:placeholder:text-stone-500 ${SEARCH_NATIVE_CANCEL_HIDDEN}`}
+          />
+          {value.length > 0 && (
+            <SearchClearButton
+              onClear={() => onValueChange("")}
+              className="right-0.5 rounded p-0.5 [&_svg]:h-3.5 [&_svg]:w-3.5"
+            />
+          )}
+        </div>
         <FiltersPopover
           active={hasActiveFilter}
           triggerClassName="border-l border-stone-200 px-2 dark:border-stone-700"

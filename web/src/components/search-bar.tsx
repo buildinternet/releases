@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FilterMenuRadio, FilterMenuSection, FiltersPopover } from "@/components/filters-popover";
 import { DEFAULT_RANGE, SEARCH_RANGES } from "@/lib/search-range";
+import { SEARCH_NATIVE_CANCEL_HIDDEN, SearchClearButton } from "./search-clear-button";
 import { useSearch } from "./search-provider";
 
 const MOBILE_QUERY = "(max-width: 640px)";
@@ -53,6 +54,11 @@ export function SearchBar({
     search?.setQuery(next);
   }
 
+  function handleClear() {
+    handleChange("");
+    inputRef.current?.focus();
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     // Already live on the search page — Enter just keeps the current results.
@@ -76,8 +82,8 @@ export function SearchBar({
       spellCheck={false}
       className={
         showFilters
-          ? "min-w-0 flex-1 truncate bg-transparent py-2.5 pl-9 pr-2 text-sm text-stone-900 placeholder:text-stone-400 outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
-          : "w-full truncate rounded-lg border border-stone-300 bg-white py-2.5 pl-9 pr-14 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition-colors focus:border-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-stone-500"
+          ? `min-w-0 flex-1 truncate bg-transparent py-2.5 pl-9 pr-9 text-sm text-stone-900 placeholder:text-stone-400 outline-none dark:text-stone-100 dark:placeholder:text-stone-500 ${SEARCH_NATIVE_CANCEL_HIDDEN}`
+          : `w-full truncate rounded-lg border border-stone-300 bg-white py-2.5 pl-9 pr-14 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition-colors focus:border-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-stone-500 ${SEARCH_NATIVE_CANCEL_HIDDEN}`
       }
     />
   );
@@ -89,6 +95,7 @@ export function SearchBar({
           <div className="relative min-w-0 flex-1">
             <SearchGlyph />
             {input}
+            {value.length > 0 && <SearchClearButton onClear={handleClear} />}
           </div>
           <FiltersPopover
             active={filterActive}
@@ -113,12 +120,16 @@ export function SearchBar({
         <div className="relative">
           <SearchGlyph />
           {input}
-          <kbd
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 right-2.5 hidden h-5 -translate-y-1/2 items-center gap-0.5 rounded border border-stone-200 bg-stone-50 px-1.5 font-sans text-[11px] font-medium text-stone-500 sm:inline-flex dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
-          >
-            {isMac ? "⌘" : "Ctrl"}K
-          </kbd>
+          {value.length > 0 ? (
+            <SearchClearButton onClear={handleClear} />
+          ) : (
+            <kbd
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-2.5 hidden h-5 -translate-y-1/2 items-center gap-0.5 rounded border border-stone-200 bg-stone-50 px-1.5 font-sans text-[11px] font-medium text-stone-500 sm:inline-flex dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
+            >
+              {isMac ? "⌘" : "Ctrl"}K
+            </kbd>
+          )}
         </div>
       )}
     </form>
