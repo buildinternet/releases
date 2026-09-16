@@ -9,6 +9,7 @@ import {
   typeaheadItems,
   type TypeaheadItem,
 } from "@/lib/search-typeahead";
+import { SEARCH_NATIVE_CANCEL_HIDDEN, SearchClearButton } from "./search-clear-button";
 import { SearchTypeahead, TYPEAHEAD_LISTBOX_ID, useTypeaheadSearch } from "./search-typeahead";
 
 /**
@@ -131,14 +132,23 @@ export function HeaderTypeahead({ className }: { className?: string }) {
           placeholder="Search products and releases..."
           autoComplete="off"
           spellCheck={false}
-          className="w-full truncate rounded-lg border border-stone-300 bg-white py-2.5 pl-9 pr-14 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition-colors focus:border-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-stone-500"
+          className={`w-full truncate rounded-lg border border-stone-300 bg-white py-2.5 pl-9 pr-14 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition-colors focus:border-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-stone-500 ${SEARCH_NATIVE_CANCEL_HIDDEN}`}
         />
-        <kbd
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 right-2.5 hidden h-5 -translate-y-1/2 items-center gap-0.5 rounded border border-stone-200 bg-stone-50 px-1.5 font-sans text-[11px] font-medium text-stone-500 sm:inline-flex dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
-        >
-          {isMac ? "⌘" : "Ctrl"}K
-        </kbd>
+        {query.length > 0 ? (
+          <SearchClearButton
+            onClear={() => {
+              handleChange("");
+              inputRef.current?.focus();
+            }}
+          />
+        ) : (
+          <kbd
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 right-2.5 hidden h-5 -translate-y-1/2 items-center gap-0.5 rounded border border-stone-200 bg-stone-50 px-1.5 font-sans text-[11px] font-medium text-stone-500 sm:inline-flex dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
+          >
+            {isMac ? "⌘" : "Ctrl"}K
+          </kbd>
+        )}
         {listOpen && (
           <SearchTypeahead
             items={items}
