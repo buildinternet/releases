@@ -7,6 +7,7 @@ import { DEFAULT_RANGE, SEARCH_RANGES } from "@/lib/search-range";
 import {
   launcherAction,
   moveHighlight,
+  resultsMatchQuery,
   typeaheadItems,
   type TypeaheadItem,
 } from "@/lib/search-typeahead";
@@ -46,7 +47,8 @@ export function SearchBar({
   const filterActive = showFilters && search.range !== DEFAULT_RANGE;
   const launcher = search == null;
   const typeaheadResults = useTypeaheadSearch(launchValue, launcher && open);
-  const items = launcher ? typeaheadItems(typeaheadResults, launchValue) : [];
+  const matchedResults = resultsMatchQuery(typeaheadResults, launchValue) ? typeaheadResults : null;
+  const items = launcher ? typeaheadItems(matchedResults, launchValue) : [];
   const listOpen = launcher && open && items.length > 0;
 
   useEffect(() => {

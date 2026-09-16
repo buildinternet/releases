@@ -3,6 +3,7 @@ import type { UnifiedSearchResponse } from "./api.ts";
 import {
   launcherAction,
   moveHighlight,
+  resultsMatchQuery,
   searchPageHref,
   typeaheadItems,
   type TypeaheadItem,
@@ -87,6 +88,21 @@ describe("moveHighlight", () => {
   it("moves within the list", () => {
     expect(moveHighlight(0, 1, 3)).toBe(1);
     expect(moveHighlight(1, -1, 3)).toBe(0);
+  });
+});
+
+describe("resultsMatchQuery", () => {
+  it("rejects hits from a previous unrelated query", () => {
+    expect(resultsMatchQuery(results({ query: "api" }), "meet")).toBe(false);
+  });
+
+  it("keeps prefix hits while the user is still typing", () => {
+    expect(resultsMatchQuery(results({ query: "me" }), "meet")).toBe(true);
+    expect(resultsMatchQuery(results({ query: "meet" }), "meet")).toBe(true);
+  });
+
+  it("rejects hits for a longer query after a backspace", () => {
+    expect(resultsMatchQuery(results({ query: "meet" }), "me")).toBe(false);
   });
 });
 

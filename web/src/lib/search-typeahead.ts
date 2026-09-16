@@ -65,6 +65,19 @@ export function moveHighlight(current: number | null, dir: 1 | -1, count: number
   return next;
 }
 
+/**
+ * Drop hits that belong to a previous query (e.g. leftover "api" rows after
+ * the box now says "meet"). Prefix matches stay so in-flight "me" results
+ * can still preview while the user finishes "meet".
+ */
+export function resultsMatchQuery(results: UnifiedSearchResponse | null, query: string): boolean {
+  if (!results) return false;
+  const q = query.trim().toLowerCase();
+  const rq = results.query.trim().toLowerCase();
+  if (!q || !rq) return false;
+  return q === rq || q.startsWith(rq);
+}
+
 export function typeaheadItems(
   results: UnifiedSearchResponse | null,
   query: string,
