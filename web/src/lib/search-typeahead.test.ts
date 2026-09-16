@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import type { UnifiedSearchResponse } from "./api.ts";
 import {
+  KIND_LABEL,
   launcherAction,
   moveHighlight,
   resultsMatchQuery,
   searchPageHref,
   typeaheadItems,
+  typeaheadStatus,
   type TypeaheadItem,
 } from "./search-typeahead.ts";
 
@@ -27,18 +29,25 @@ const meetOrg: TypeaheadItem = {
   kind: "org",
 };
 
+const searchAll: TypeaheadItem = {
+  id: "search-all",
+  href: "/search?q=meet",
+  label: "Search all results for “meet”",
+  kind: "search",
+};
+
 describe("launcherAction — header search never navigates on keystroke", () => {
   it("keeps composing on every query change, including the first character", () => {
     expect(launcherAction({ type: "change", query: "m" })).toEqual({
-      navigate: false,
+      kind: "compose",
       query: "m",
     });
     expect(launcherAction({ type: "change", query: "me" })).toEqual({
-      navigate: false,
+      kind: "compose",
       query: "me",
     });
     expect(launcherAction({ type: "change", query: "meet" })).toEqual({
-      navigate: false,
+      kind: "compose",
       query: "meet",
     });
   });
@@ -46,23 +55,26 @@ describe("launcherAction — header search never navigates on keystroke", () => 
   it("opens the search page on Enter when no hit is highlighted", () => {
     expect(
       launcherAction({ type: "submit", query: "meet", highlight: null, items: [meetOrg] }),
-    ).toEqual({ navigate: "/search?q=meet" });
+    ).toEqual({ kind: "go", href: "/search?q=meet" });
   });
 
   it("opens the highlighted hit on Enter", () => {
     expect(
       launcherAction({ type: "submit", query: "meet", highlight: 0, items: [meetOrg] }),
-    ).toEqual({ navigate: "/google" });
+    ).toEqual({ kind: "go", href: "/google" });
   });
 
   it("opens a clicked hit", () => {
-    expect(launcherAction({ type: "select", item: meetOrg })).toEqual({ navigate: "/google" });
+    expect(launcherAction({ type: "select", item: meetOrg })).toEqual({
+      kind: "go",
+      href: "/google",
+    });
   });
 
   it("falls back to the search page when the highlight is out of range", () => {
     expect(
       launcherAction({ type: "submit", query: "meet", highlight: 3, items: [meetOrg] }),
-    ).toEqual({ navigate: "/search?q=meet" });
+    ).toEqual({ kind: "go", href: "/search?q=meet" });
   });
 });
 
@@ -106,17 +118,36 @@ describe("resultsMatchQuery", () => {
   });
 });
 
+describe("typeaheadStatus", () => {
+  it("is idle for an empty query", () => {
+    expect(typeaheadStatus({ query: "  ", loading: false, items: [] })).toBe("idle");
+  });
+
+  it("is loading when the fetch is in flight and there are no entity hits", () => {
+    expect(typeaheadStatus({ query: "meet", loading: true, items: [searchAll] })).toBe("loading");
+  });
+
+  it("is empty when the fetch finished with only the search-all row", () => {
+    expect(typeaheadStatus({ query: "meet", loading: false, items: [searchAll] })).toBe("empty");
+  });
+
+  it("is results when there is an entity hit", () => {
+    expect(typeaheadStatus({ query: "meet", loading: false, items: [searchAll, meetOrg] })).toBe(
+      "results",
+    );
+  });
+
+  it("prefers results over loading when prefix hits are already showing", () => {
+    expect(typeaheadStatus({ query: "meet", loading: true, items: [searchAll, meetOrg] })).toBe(
+      "results",
+    );
+  });
+});
+
 describe("typeaheadItems", () => {
   it("leads with a Search-all row so Enter defaults to the search page", () => {
     const items = typeaheadItems(null, "meet");
-    expect(items).toEqual([
-      {
-        id: "search-all",
-        href: "/search?q=meet",
-        label: "Search all results for “meet”",
-        kind: "search",
-      },
-    ]);
+    expect(items).toEqual([searchAll]);
   });
 
   it("returns no rows for an empty query", () => {
@@ -191,5 +222,35 @@ describe("typeaheadItems", () => {
       secondary: "Developer Release Notes",
       kind: "release",
     });
+  });
+
+  it("labels catalog sources as source, not product", () => {
+    const items = typeaheadItems(
+      results({
+        query: "notes",
+        catalog: [
+          {
+            slug: "notes",
+            name: "Developer Notes",
+            orgSlug: "google",
+            orgName: "Google",
+            category: null,
+            entryType: "source",
+            sourceSlug: "notes",
+          },
+        ],
+      }),
+      "notes",
+    );
+
+    expect(items).toContainEqual({
+      id: "source:google:notes",
+      href: "/google/notes",
+      label: "Developer Notes",
+      secondary: "Google",
+      kind: "source",
+    });
+    expect(KIND_LABEL.source).toBe("Source");
+    expect(KIND_LABEL.product).toBe("Product");
   });
 });

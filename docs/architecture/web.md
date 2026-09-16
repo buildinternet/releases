@@ -73,7 +73,7 @@ Why it needs auth at all: `revalidatePath` marks entries stale and regeneration 
 
 ## Header search
 
-The lg+ header field is a GitHub-style typeahead: typing stays on the current page and opens a results dropdown (`GET /api/search`). Enter (or the leading "Search all results" row) goes to `/search?q=`; a highlighted/clicked hit goes to that entity. The previous first-keystroke `router.push("/search")` remounted a second input mid-composition (header box and page box out of sync). On `/search` the header field is replaced by the compact Search trigger so only the page box is editable; ⌘K focuses whichever `input[name="q"]` is mounted. Helpers + the no-navigate-on-keystroke contract: `web/src/lib/search-typeahead.ts`.
+The lg+ header field is a GitHub-style typeahead (`HeaderTypeahead`): typing stays on the current page and opens a results dropdown (`GET /api/search`). Enter (or the leading "Search all results" row) goes to `/search?q=`; a highlighted/clicked hit goes to that entity. The dropdown shows a quiet loading / empty row while the request is in flight or returns no entity hits; catalog sources are labeled Source, not Product. The previous first-keystroke `router.push("/search")` remounted a second input mid-composition (header box and page box out of sync). On `/search` the header field is replaced by the compact Search trigger so only the page `SearchBar` is editable; ⌘K focuses whichever `input[name="q"]` is mounted. Helpers + the no-navigate-on-keystroke contract: `web/src/lib/search-typeahead.ts`.
 
 ## On-demand lookup field in search responses
 
