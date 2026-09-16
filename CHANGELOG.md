@@ -3,6 +3,17 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 15, 2026
+
+**Added**
+- Discord webhook format — add a Discord incoming webhook URL as the delivery target and receive `release.created` events as native Discord embeds (linked title, truncated summary, org avatar, timestamp); available alongside Slack and signed JSON in the webhook create form; no relay needed.
+- Uploads.sh workspace connect — workspace owners and admins can link an uploads.sh account under Account → Integrations; the connected workspace is displayed after authorization and Disconnect revokes the grant.
+- Org-page webhook shortcut — a new Add webhook action in the ⋯ overflow menu on org pages opens the webhook form with that org prefilled, including when redirected through sign-in.
+- Recommendation notify-added — operators can send a one-time confirmation email to a submitter after their source goes live via the admin recommendations API; requires a contact address on the recommendation and is idempotent.
+
+**Fixed**
+- Header search now opens a typeahead in place on every page instead of navigating away on the first keystroke — results include orgs, products, and sources with a loading indicator while fetching and a "no results" state when the query returns no matches; Enter or clicking a result navigates.
+
 ## September 11, 2026
 
 **Changed**
