@@ -37,6 +37,20 @@ describe("restrictOAuthQueryScopes", () => {
     });
   });
 
+  it("cannot elevate a DCR-capped client to admin or write at authorize", () => {
+    expect(
+      restrictOAuthQueryScopes({ scope: "openid read write admin extra" }, [
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+        "read",
+      ]),
+    ).toEqual({
+      scope: "openid read offline_access",
+    });
+  });
+
   it("does not strip admin at authorize (no role): a later admin login can grant it", () => {
     expect(restrictOAuthQueryScopes({ scope: "read write admin" }, SELF_REGISTERED)).toEqual({
       scope: "read write admin offline_access",

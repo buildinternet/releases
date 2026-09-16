@@ -1,7 +1,7 @@
 /**
  * Combined `hooks.before` rewrite for generic MCP client OAuth:
  * DCR extra `grant_types`, DCR `application_type` defaulting/coercion,
- * kitchen-sink authorize/consent `scope=`.
+ * DCR public-PKCE + scope ceiling, kitchen-sink authorize/consent `scope=`.
  *
  * Authorization-code blob rewrite lives on `databaseHooks.verification.create`
  * (the value is not on the token-endpoint body). See auth/index.ts.
@@ -11,6 +11,7 @@ import {
   coerceExplicitWebToNativeForPrivateUseScheme,
   defaultRegistrationApplicationType,
 } from "./oauth-application-type.js";
+import { sanitizeDcrRegistrationBody } from "./oauth-dcr.js";
 import { rewriteClientMetadataGrantTypes } from "./oauth-grant-types.js";
 import {
   oauthClientIdFromConsentBody,
@@ -40,7 +41,10 @@ export async function applyOAuthClientInterop(
     const applicationTypeRewritten =
       defaultRegistrationApplicationType(base) ??
       coerceExplicitWebToNativeForPrivateUseScheme(base);
-    const next = applicationTypeRewritten ?? (grantTypesRewritten ? base : undefined);
+    const afterAppType = applicationTypeRewritten ?? base;
+    const sanitized = sanitizeDcrRegistrationBody(afterAppType);
+    const next =
+      sanitized ?? (applicationTypeRewritten || grantTypesRewritten ? afterAppType : undefined);
     if (next) return { context: { body: next } };
     return;
   }

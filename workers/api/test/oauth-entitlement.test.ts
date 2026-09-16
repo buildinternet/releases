@@ -6,6 +6,7 @@ import { jwt } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   IDENTITY_SCOPES,
+  DCR_SCOPES,
   entitledScopes,
   assertScopesEntitled,
   oauthAccessTokenClaims,
@@ -49,6 +50,14 @@ describe("entitledScopes", () => {
   });
   it("an unknown role inside a multi-role string degrades to read-only for that token", () => {
     expect(entitledScopes("user,wizard")).toEqual([...IDENTITY_SCOPES, "read"]);
+  });
+});
+
+describe("DCR_SCOPES", () => {
+  it("is identity + read and never includes write or admin", () => {
+    expect(DCR_SCOPES).toEqual([...IDENTITY_SCOPES, "read"]);
+    expect(DCR_SCOPES).not.toContain("write");
+    expect(DCR_SCOPES).not.toContain("admin");
   });
 });
 

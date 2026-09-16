@@ -32,9 +32,11 @@ import {
   oauthAccessTokenClaims,
   consentScopeViolation,
   jwtSessionPayload,
+  DCR_SCOPES,
   OAUTH_SCOPES,
 } from "./entitlement.js";
 import { applyOAuthClientInterop } from "./oauth-client-interop.js";
+import { clampDcrRegistrationResult, dcrClientRowPatch } from "./oauth-dcr.js";
 import {
   oauthClientIdFromAuthorizationCode,
   oauthUserIdFromAuthorizationCode,
@@ -450,6 +452,30 @@ export function buildStripePlugin(
 export function resolveLastLoginMethodOverride(path: string | null | undefined): string | null {
   if (path === "/one-tap/callback") return "google";
   return null;
+}
+
+/**
+ * After a successful `/oauth2/register`, persist the DCR ceiling on the new
+ * row and rewrite the 201 JSON so it cannot advertise `admin`/`write` or a
+ * `client_secret`. Best-effort: a missing client_id or a thrown update must
+ * not fail the registration response (the before-hook + plugin options are
+ * the primary gate).
+ */
+async function clampRegisteredDcrClient(db: AnyDb, returned: unknown): Promise<void> {
+  const clientId = clampDcrRegistrationResult(returned);
+  if (!clientId) return;
+  const record = returned as { scope?: unknown; scopes?: unknown };
+  const patch = dcrClientRowPatch(record.scope ?? record.scopes);
+  try {
+    await db.update(oauthClient).set(patch).where(eq(oauthClient.clientId, clientId));
+  } catch (err) {
+    logEvent("warn", {
+      component: "auth",
+      event: "dcr-row-clamp-failed",
+      message: "DCR client row clamp failed after register",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /** Operator-configured extra trusted origins (`BETTER_AUTH_TRUSTED_ORIGINS`, comma-separated). */
@@ -1125,17 +1151,20 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
   // never reaches these hooks. See audit.ts and #1427.
   const audit: AuthAuditEmitter = deps.audit ?? makeAuthAudit(env);
 
-  /** Registered `oauth_client.scopes`, or {@link OAUTH_SCOPES} when the row is missing. */
+  /**
+   * Registered `oauth_client.scopes`. Missing / empty row → {@link DCR_SCOPES}
+   * (not the advertised AS list) so a rewrite cannot elevate to write/admin.
+   */
   async function registeredScopesForClientId(
     clientId: string | undefined,
   ): Promise<readonly string[]> {
-    if (!clientId) return OAUTH_SCOPES;
+    if (!clientId) return DCR_SCOPES;
     const [row] = await db
       .select({ scopes: oauthClient.scopes })
       .from(oauthClient)
       .where(eq(oauthClient.clientId, clientId))
       .limit(1);
-    return row?.scopes && row.scopes.length > 0 ? row.scopes : OAUTH_SCOPES;
+    return row?.scopes && row.scopes.length > 0 ? row.scopes : DCR_SCOPES;
   }
 
   // Fire-and-forget an email send: hand the REAL send promise to the request's
@@ -1280,10 +1309,10 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     // and serves discovery metadata. Consent UI, per-user scope entitlement, and
     // resource-server JWT verification have all shipped, and dynamic client
     // registration (RFC 7591) is now ON so agent-run MCP clients can self-register
-    // without an admin pre-provisioning each one. No feature flag — every issued
-    // token is role-clamped at issuance (customAccessTokenClaims below) and DCR
-    // clients are untrusted (consent required) + PKCE-required, so turning it on
-    // grants no scope a user's role doesn't already allow.
+    // without an admin pre-provisioning each one. No feature flag. DCR is
+    // untrusted (consent required), forced public/PKCE, and capped at
+    // DCR_SCOPES (identity + read — never write/admin). Role-clamp at issuance
+    // (customAccessTokenClaims) is a second layer, not the client ceiling.
     // The jwt() plugin signs the OAuth provider's access tokens AND exposes
     // GET /api/auth/token — the first-party "session → JWT" path the web admin
     // actions use. Config here pins that /token JWT to what the resource-server
@@ -1321,6 +1350,17 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       loginPage: `${releaseWebBase(env)}/login`,
       consentPage: `${releaseWebBase(env)}/oauth/consent`, // page built in sub-project 3; path provisional
       scopes: [...OAUTH_SCOPES],
+      // DCR capability ceiling. Discovery still lists the full `scopes` list
+      // (admin included) for first-party clients; these two options are the
+      // plugin-native operator policy so a DCR/CIMD document cannot persist
+      // write/admin or inherit `scopes_supported`. Both lists are the same
+      // tight allowlist — the effective set is their union, and omitting
+      // `Allowed` would fall back to `scopes` (the bug this patch closes).
+      clientRegistrationDefaultScopes: [...DCR_SCOPES],
+      clientRegistrationAllowedScopes: [...DCR_SCOPES],
+      // Public DCR clients always require PKCE; keep the confidential-DCR
+      // default on too so a plugin regression cannot opt a DCR row out.
+      clientRegistrationRequirePKCE: true,
       // Better Auth 1.7 replaced the flat `validAudiences` list with the
       // persisted `resources` model: each identifier becomes an `oauth_resource`
       // row (seeded at boot, `resourceSeedMode` defaults to the safe
@@ -1357,10 +1397,9 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       // RFC 7591 dynamic client registration. ON so off-the-shelf MCP clients
       // (Claude Desktop, MCP Inspector, agent runtimes) self-register a client_id
       // via the public /oauth2/register endpoint instead of an admin minting one.
-      // Safe because DCR clients are untrusted (always hit the consent page), PKCE
-      // is required for them, and every token they obtain is role-clamped by
-      // customAccessTokenClaims below. FOLLOW-UP: a reaper for stale/unused
-      // oauth_application rows (each registration is a row on a public endpoint).
+      // Safety is the DCR_SCOPES ceiling + forced public/PKCE + consent (not
+      // role-clamp alone). FOLLOW-UP: a reaper for stale/unused oauth_client
+      // rows (each registration is a row on a public endpoint).
       allowDynamicClientRegistration: true,
       // Allow registration WITHOUT a prior session. Off-the-shelf MCP clients hit
       // /oauth2/register BEFORE any user login, so DCR is inert for them without
@@ -1757,6 +1796,10 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       // `email` is the canonical lookup key; the original-cased value comes from
       // re-reading the (already-verified) token's `email` claim.
       after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === "/oauth2/register") {
+          await clampRegisteredDcrClient(db, ctx.context.returned);
+          return;
+        }
         if (ctx.path !== "/one-tap/callback") return;
         const returned = ctx.context.returned as { user?: { email?: unknown } } | undefined;
         const email = returned?.user?.email;
