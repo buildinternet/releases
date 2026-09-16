@@ -104,8 +104,8 @@ export function SearchBar({
       return;
     }
     const result = launcherAction({ type: "change", query: next });
-    if (result.navigate) {
-      go(result.navigate);
+    if (result.kind === "go") {
+      go(result.href);
       return;
     }
     setLaunchValue(result.query);
@@ -125,12 +125,12 @@ export function SearchBar({
       highlight,
       items,
     });
-    if (result.navigate) go(result.navigate);
+    if (result.kind === "go") go(result.href);
   }
 
   function handleSelect(item: TypeaheadItem) {
     const result = launcherAction({ type: "select", item });
-    if (result.navigate) go(result.navigate);
+    if (result.kind === "go") go(result.href);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

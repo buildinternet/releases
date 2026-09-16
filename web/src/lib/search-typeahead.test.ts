@@ -30,15 +30,15 @@ const meetOrg: TypeaheadItem = {
 describe("launcherAction — header search never navigates on keystroke", () => {
   it("keeps composing on every query change, including the first character", () => {
     expect(launcherAction({ type: "change", query: "m" })).toEqual({
-      navigate: false,
+      kind: "compose",
       query: "m",
     });
     expect(launcherAction({ type: "change", query: "me" })).toEqual({
-      navigate: false,
+      kind: "compose",
       query: "me",
     });
     expect(launcherAction({ type: "change", query: "meet" })).toEqual({
-      navigate: false,
+      kind: "compose",
       query: "meet",
     });
   });
@@ -46,23 +46,26 @@ describe("launcherAction — header search never navigates on keystroke", () => 
   it("opens the search page on Enter when no hit is highlighted", () => {
     expect(
       launcherAction({ type: "submit", query: "meet", highlight: null, items: [meetOrg] }),
-    ).toEqual({ navigate: "/search?q=meet" });
+    ).toEqual({ kind: "go", href: "/search?q=meet" });
   });
 
   it("opens the highlighted hit on Enter", () => {
     expect(
       launcherAction({ type: "submit", query: "meet", highlight: 0, items: [meetOrg] }),
-    ).toEqual({ navigate: "/google" });
+    ).toEqual({ kind: "go", href: "/google" });
   });
 
   it("opens a clicked hit", () => {
-    expect(launcherAction({ type: "select", item: meetOrg })).toEqual({ navigate: "/google" });
+    expect(launcherAction({ type: "select", item: meetOrg })).toEqual({
+      kind: "go",
+      href: "/google",
+    });
   });
 
   it("falls back to the search page when the highlight is out of range", () => {
     expect(
       launcherAction({ type: "submit", query: "meet", highlight: 3, items: [meetOrg] }),
-    ).toEqual({ navigate: "/search?q=meet" });
+    ).toEqual({ kind: "go", href: "/search?q=meet" });
   });
 });
 
