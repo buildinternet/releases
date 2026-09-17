@@ -17,7 +17,6 @@ import {
   AuthCard,
   AuthError,
   AuthHeading,
-  Code,
   authInputClass,
   authLabelClass,
   outlineButtonClass,
@@ -453,18 +452,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     <AuthCard>
       <AuthHeading
         title={mode === "signup" ? "Create your account" : "Sign in to Releases Index"}
-        subtitle={
-          mode === "signup" ? (
-            <>
-              Follow the products and orgs you care about — separate from the <Code>relk_</Code>{" "}
-              tokens used by the CLI and MCP.
-            </>
-          ) : (
-            <>
-              Separate from the <Code>relk_</Code> API tokens used by the CLI and MCP.
-            </>
-          )
-        }
+        subtitle={mode === "signup" ? "Follow the products and orgs you care about." : undefined}
       />
       <div className="space-y-5">
         {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
