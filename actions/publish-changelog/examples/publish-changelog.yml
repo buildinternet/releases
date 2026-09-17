@@ -1,0 +1,35 @@
+# Copy this file into your repo's .github/workflows/.
+# Replace `source` and `RELEASES_API_TOKEN` with your source id and write token.
+# This repo's dogfood workflow is `.github/workflows/changelog-publish.yml` — that
+# is not the template (it pins a real source id and our updates URL).
+name: Publish changelog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - CHANGELOG.md
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Pin a tag or SHA in your repo instead of @main once you have a preferred ref.
+      - uses: buildinternet/releases/actions/publish-changelog@main
+        with:
+          source: src_…
+          api-token: ${{ secrets.RELEASES_API_TOKEN }}
+          # Org + slug form (instead of a typed src_… id):
+          # org: acme
+          # source: changelog
+          # Human permalinks instead of the default GitHub blob URL:
+          # url-template: https://example.com/changelog/{date}

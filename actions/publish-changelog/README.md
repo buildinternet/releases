@@ -8,6 +8,8 @@ Docs: [Publish from GitHub Actions](https://releases.sh/docs/integrations/github
 
 ## Example
 
+A committed copy-paste workflow lives in [`examples/publish-changelog.yml`](./examples/publish-changelog.yml). Copy that into your repo's `.github/workflows/` and replace the source id and secret. This repo's dogfood `.github/workflows/changelog-publish.yml` is not the template.
+
 ```yaml
 name: Publish changelog
 

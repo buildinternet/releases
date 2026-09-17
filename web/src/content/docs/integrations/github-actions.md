@@ -21,6 +21,8 @@ You need the source the Action should write to — preferably the typed id (`src
 
 ## 3. Add the workflow
 
+Copy the committed example at [`actions/publish-changelog/examples/publish-changelog.yml`](https://github.com/buildinternet/releases/blob/main/actions/publish-changelog/examples/publish-changelog.yml) into your repo's `.github/workflows/`. Replace the `source` id and `RELEASES_API_TOKEN` secret. Do not copy this repo's dogfood `.github/workflows/changelog-publish.yml` — that file pins our source and updates URL.
+
 Checkout with full history so the Action can diff against the previous commit, then call the Action:
 
 ```yaml
