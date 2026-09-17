@@ -46,7 +46,20 @@ import { buildOrgManifest } from "../lib/well-known/export-manifest.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
-import { eq, count, max, min, and, sql, inArray, gte, desc, isNotNull, isNull } from "drizzle-orm";
+import {
+  eq,
+  count,
+  max,
+  min,
+  and,
+  or,
+  sql,
+  inArray,
+  gte,
+  desc,
+  isNotNull,
+  isNull,
+} from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   organizations,
@@ -124,6 +137,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
+import { seedSourceActors } from "../lib/source-actor-schedule.js";
 import { respondError } from "../lib/error-response.js";
 import {
   NotFoundError,
@@ -1289,6 +1303,28 @@ orgRoutes.patch(
       body.domain !== undefined;
     if (semanticChanged) {
       c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
+    }
+
+    // Org-level fetch pause clears every source's actor alarm (`noReschedule`).
+    // Unpausing must re-seed those alarms — the hourly due-query will not
+    // pick them up until each source is next due (#2286).
+    if (body.fetchPaused === false && org.fetchPaused === true && c.env.SOURCE_ACTOR) {
+      const actor = c.env.SOURCE_ACTOR;
+      c.executionCtx.waitUntil(
+        (async () => {
+          const rows = await db
+            .select({ id: sources.id, orgId: sources.orgId })
+            .from(sources)
+            .where(
+              and(
+                eq(sources.orgId, org.id),
+                isNull(sources.deletedAt),
+                or(eq(sources.fetchPriority, "normal"), eq(sources.fetchPriority, "low")),
+              ),
+            );
+          if (rows.length > 0) await seedSourceActors(actor, rows, { force: true });
+        })().catch(() => undefined),
+      );
     }
 
     return c.json(updated);

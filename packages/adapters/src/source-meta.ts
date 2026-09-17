@@ -350,10 +350,10 @@ export interface SourceMetadata {
 
   /**
    * Write-through observability mirror written by the SourceActor DO on each
-   * alarm tick. Absent on sources not managed by the actor, or after the actor
-   * has handed the source back to the cron (`managed: false`). Used by the dev
-   * fetch-plan panel to show actor-managed sources and their exact next alarm.
-   * Never used for routing or scheduling — purely observational.
+   * alarm tick and whenever `ensureScheduled` / `onSourceChanged` arms one.
+   * Absent on sources not managed by the actor, or after the actor has handed
+   * the source back (`managed: false`). Used by the fetch-plan panel and the
+   * unmanaged-actor health/sweep (#2286). Never used for fetch routing.
    */
   sourceActor?: {
     /** ISO timestamp of the actor's next scheduled alarm; null while idle. */

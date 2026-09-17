@@ -151,6 +151,7 @@ import {
 import { ingestReleaseBatch, runBatchIngestEffects } from "../lib/release-batch-ingest.js";
 import { logEvent } from "@releases/lib/log-event";
 import { withDoRetry } from "@releases/lib/do-retry";
+import { ensureSourceActorScheduled } from "../lib/source-actor-schedule.js";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
@@ -750,6 +751,17 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
       }),
       headers: { "Content-Type": "application/json" },
     }),
+  );
+
+  // Admin fetch used to leave a dead SourceActor untouched (#2286): fetchOne
+  // stamps lastPolledAt, so the hourly due-query will not re-seed for a full
+  // tier interval. Force-arm so managed becomes true with a scheduled next
+  // alarm even when the source was just polled.
+  c.executionCtx.waitUntil(
+    ensureSourceActorScheduled(c.env.SOURCE_ACTOR, src.id, {
+      force: true,
+      via: "source-fetch",
+    }).then(() => undefined),
   );
 
   return c.json(responsePayload);

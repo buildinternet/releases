@@ -59,6 +59,7 @@ interface Harness {
   actor: any;
   store: Map<string, unknown>;
   alarmAt: () => number | null;
+  setAlarmAt: (t: number) => void;
   created: Array<{ id: string; params: unknown }>;
 }
 
@@ -122,6 +123,9 @@ function mkActor(
     actor,
     store,
     alarmAt: () => alarm,
+    setAlarmAt: (t: number) => {
+      alarm = t;
+    },
     created,
   };
 }
@@ -347,6 +351,48 @@ describe("SourceActor.ensureScheduled", () => {
     await h.actor.ensureScheduled("src_seed");
     expect(h.alarmAt()).toBe(first); // unchanged — no-op when an alarm is pending
   });
+
+  it("writes the D1 mirror as managed with a nextAlarmAt", async () => {
+    const db = mkDb();
+    seedSource(db, "src_mirror");
+    const h = mkActor(db);
+
+    await h.actor.ensureScheduled("src_mirror");
+    const mirror = await metaSourceActor(db, "src_mirror");
+    expect(mirror?.managed).toBe(true);
+    expect(typeof mirror?.nextAlarmAt).toBe("string");
+  });
+
+  it("re-seeds a leftover past alarm instead of no-opping (#2286)", async () => {
+    const db = mkDb();
+    seedSource(db, "src_stale");
+    const h = mkActor(db);
+    await h.actor.ensureScheduled("src_stale");
+    // Simulate a scheduler-dropped timer: getAlarm still returns a past time.
+    const past = Date.now() - 10 * 60 * 1000;
+    h.setAlarmAt(past);
+    expect(h.alarmAt()).toBe(past);
+
+    const result = await h.actor.ensureScheduled("src_stale");
+    expect(result.seeded).toBe(true);
+    expect(h.alarmAt()!).toBeGreaterThan(Date.now() - 1000);
+    const mirror = await metaSourceActor(db, "src_stale");
+    expect(mirror?.managed).toBe(true);
+  });
+
+  it("force:true pulls a pending future alarm in", async () => {
+    const db = mkDb();
+    seedSource(db, "src_force");
+    const h = mkActor(db);
+    await h.actor.ensureScheduled("src_force");
+    const far = Date.now() + 4 * HOUR;
+    h.setAlarmAt(far);
+
+    const result = await h.actor.ensureScheduled("src_force", { force: true });
+    expect(result.seeded).toBe(true);
+    expect(h.alarmAt()!).toBeLessThan(far);
+    expect(h.alarmAt()!).toBeGreaterThan(Date.now() - 1000);
+  });
 });
 
 describe("SourceActor.onSourceChanged", () => {
@@ -360,6 +406,9 @@ describe("SourceActor.onSourceChanged", () => {
     await h.actor.onSourceChanged("src_changed");
     expect(h.store.get("sourceId")).toBe("src_changed");
     expect(h.alarmAt()).not.toBeNull();
+    const mirror = await metaSourceActor(db, "src_changed");
+    expect(mirror?.managed).toBe(true);
+    expect(typeof mirror?.nextAlarmAt).toBe("string");
   });
 });
 

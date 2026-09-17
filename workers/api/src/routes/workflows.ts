@@ -127,6 +127,8 @@ import {
   InternalError,
 } from "@releases/lib/releases-error";
 import { startDeterministicUpdate } from "../lib/update-dispatch.js";
+import { seedSourceActors } from "../lib/source-actor-schedule.js";
+import { queryUnmanagedActiveSources } from "../queries/unmanaged-source-actors.js";
 import type { MediaBackfillKind } from "../workflows/media-backfill.js";
 import type { Context } from "hono";
 
@@ -1365,10 +1367,143 @@ workflowsRoutes.post("/workflows/update", async (c) => {
     }
   }
 
+  // CLI `admin source fetch` lands here. Re-arm each resolved source so a
+  // successful update does not leave a dead SourceActor unmanaged (#2286).
+  if (c.env.SOURCE_ACTOR && Array.isArray(identifiers)) {
+    const actor = c.env.SOURCE_ACTOR;
+    const work = (async () => {
+      const rows: Array<{ id: string }> = [];
+      for (const ident of identifiers) {
+        if (typeof ident !== "string" || ident.length === 0) continue;
+        if (isSourceId(ident)) {
+          rows.push({ id: ident });
+          continue;
+        }
+        const db = createDb(c.env.DB);
+        const [row] = await db
+          .select({ id: sources.id })
+          .from(sources)
+          .where(sourceMatchByIdOrSlug(ident))
+          .limit(1);
+        if (row) rows.push({ id: row.id });
+      }
+      if (rows.length > 0) await seedSourceActors(actor, rows, { force: true });
+    })().catch(() => undefined);
+    if (typeof c.executionCtx?.waitUntil === "function") {
+      c.executionCtx.waitUntil(work);
+    }
+  }
+
   return c.json(
     { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
     202,
   );
+});
+
+// ── POST /workflows/rearm-source-actors ──────────────────────────────────────
+//
+// Operator path to re-arm SourceActor alarms (#2286). A source that hit
+// `noReschedule` (or whose DO alarm was dropped) shows `managed: false` /
+// `nextAlarmAt: null` and stops polling. This route force-seeds one typed
+// source, or sweeps every active source that should still be polling.
+//
+// Body: { sourceId?, all?, dryRun?, limit? }
+// `dryRun` defaults to true for the fleet sweep (no sourceId / all:true);
+// a single typed sourceId arms immediately unless dryRun is explicit.
+
+interface RearmSourceActorsBody {
+  sourceId?: string;
+  all?: boolean;
+  dryRun?: boolean;
+  limit?: number;
+}
+
+const REARM_SWEEP_DEFAULT_LIMIT = 500;
+const REARM_SWEEP_MAX_LIMIT = 2000;
+
+workflowsRoutes.post("/workflows/rearm-source-actors", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await parseJsonBody<RearmSourceActorsBody>(c);
+
+  const sourceId = body.sourceId?.trim();
+  if (!sourceId && body.all !== true) {
+    return respondError(
+      c,
+      new ValidationError("Provide a typed `sourceId` (src_…) or `all: true`", {
+        code: "bad_request",
+      }),
+    );
+  }
+  if (sourceId && !isSourceId(sourceId)) {
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+        { code: "bare_slug_rejected" },
+      ),
+    );
+  }
+  if (!c.env.SOURCE_ACTOR) {
+    return respondError(c, new ServiceUnavailableError("SOURCE_ACTOR binding not configured"));
+  }
+
+  const rawLimit = Number(body.limit ?? REARM_SWEEP_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), REARM_SWEEP_MAX_LIMIT)
+    : REARM_SWEEP_DEFAULT_LIMIT;
+
+  let candidates: Array<{ id: string; slug: string; orgId: string | null; type: string }>;
+  if (sourceId) {
+    const [src] = await db
+      .select({
+        id: sources.id,
+        slug: sources.slug,
+        orgId: sources.orgId,
+        type: sources.type,
+      })
+      .from(sources)
+      .where(eq(sources.id, sourceId))
+      .limit(1);
+    if (!src) return respondError(c, new NotFoundError("Source not found"));
+    candidates = [src];
+  } else {
+    const rows = await queryUnmanagedActiveSources(db, new Date(), { limit });
+    candidates = rows.map((s) => ({ id: s.id, slug: s.slug, orgId: s.orgId, type: s.type }));
+  }
+
+  // Single-source re-arm is the explicit wake; fleet sweep defaults to dry-run.
+  const dryRun = sourceId ? body.dryRun === true : body.dryRun !== false;
+
+  let armed = 0;
+  let failed = 0;
+  if (!dryRun) {
+    const result = await seedSourceActors(c.env.SOURCE_ACTOR, candidates, { force: true });
+    armed = result.seeded;
+    failed = result.errors;
+  }
+
+  logEvent("info", {
+    component: "source-actor",
+    event: "rearm-source-actors",
+    dryRun,
+    requested: candidates.length,
+    armed,
+    failed,
+    sourceId: sourceId ?? null,
+  });
+
+  return c.json({
+    dryRun,
+    requested: candidates.length,
+    armed,
+    failed,
+    items: candidates.map((s) => ({
+      sourceId: s.id,
+      sourceSlug: s.slug,
+      type: s.type,
+      reason: sourceId ? ("requested" as const) : ("unmanaged" as const),
+    })),
+  });
 });
 
 // ── POST /workflows/enrich-feed-content ──────────────────────────────────────

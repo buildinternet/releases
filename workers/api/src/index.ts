@@ -36,6 +36,8 @@ import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namesp
 import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
+import { queryUnmanagedActiveSources } from "./queries/unmanaged-source-actors.js";
+import { seedSourceActors } from "./lib/source-actor-schedule.js";
 import { buildFetchOneEnv } from "./workflows/_fetch-env.js";
 import { createDb } from "./db.js";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
@@ -57,7 +59,6 @@ import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/send-alert
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { withDoRetry } from "@releases/lib/do-retry";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { NotFoundError } from "@releases/lib/releases-error";
 
@@ -1365,16 +1366,12 @@ function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): 
     });
 }
 
-// Bounded concurrency for seeding SourceActor alarms from the cron heartbeat —
-// polite on the DO control plane; the per-source work runs in its own object.
-const SOURCE_ACTOR_ENSURE_CONCURRENCY = 20;
-
 /**
- * Re-seed heartbeat for the per-source SourceActor DOs (#1776). Queries due
- * sources and, for each, calls `ensureScheduled` — an idempotent no-op when the
- * actor already has a pending alarm, and a re-seed for one whose alarm was
- * cleared (paused / org-paused / firecrawl via `noReschedule`). The actor's own
- * alarm re-reads D1 and runs the ingest workflow; the cron never fetches here.
+ * Re-seed heartbeat for the per-source SourceActor DOs (#1776 / #2286).
+ * Unions currently-due sources with active sources whose D1 mirror says the
+ * actor is unmanaged / has no live `nextAlarmAt`, then calls `ensureScheduled`
+ * on each. The actor's own alarm re-reads D1 and runs the ingest workflow;
+ * the cron never fetches here.
  */
 async function fanOutPollAndFetch(env: Env["Bindings"]): Promise<void> {
   const db = createDb(env.DB);
@@ -1402,18 +1399,33 @@ async function fanOutPollAndFetch(env: Env["Bindings"]): Promise<void> {
   const dispatchErrorDetail: Array<{ orgSlug: string; error: string }> = [];
 
   try {
-    const dueAll = await queryDueSources(db, new Date(), { changeDetectEnabled: true });
-    candidates = dueAll.length;
-    if (dueAll.length === 0) {
+    const now = new Date();
+    const [dueAll, unmanaged] = await Promise.all([
+      queryDueSources(db, now, { changeDetectEnabled: true }),
+      queryUnmanagedActiveSources(db, now),
+    ]);
+    if (unmanaged.length > 0) {
+      logEvent("warn", {
+        component: "poll-fetch-cron",
+        event: "unmanaged-source-actors",
+        count: unmanaged.length,
+      });
+    }
+    const byId = new Map<string, (typeof dueAll)[number]>();
+    for (const s of dueAll) byId.set(s.id, s);
+    for (const s of unmanaged) byId.set(s.id, s);
+    const toSeed = [...byId.values()];
+    candidates = toSeed.length;
+    if (toSeed.length === 0) {
       logEvent("info", { component: "poll-fetch-cron", event: "no-due-sources" });
       return;
     }
 
     // SourceActor heartbeat (#1776): every source self-schedules via its own DO
-    // alarm; this cron just (re-)seeds a due source's alarm when it has none
-    // pending (idempotent). A source that hit `noReschedule` (paused / org-paused
-    // / firecrawl) deleted its alarm, so the heartbeat is what re-seeds it once it
-    // is due again. Binding absent ⇒ nothing to drive (no cron-driven fallback).
+    // alarm; this cron (re-)seeds a due or unmanaged source's alarm when it has
+    // none pending (idempotent). A source that hit `noReschedule` (paused /
+    // org-paused / firecrawl) deleted its alarm — unmanaged recovery plus the
+    // due query is what re-seeds it. Binding absent ⇒ nothing to drive.
     if (!env.SOURCE_ACTOR) {
       logEvent("warn", {
         component: "poll-fetch-cron",
@@ -1422,40 +1434,17 @@ async function fanOutPollAndFetch(env: Env["Bindings"]): Promise<void> {
       });
       return;
     }
-    const actor = env.SOURCE_ACTOR;
     logEvent("info", {
       component: "poll-fetch-cron",
       event: "source-actor-heartbeat",
       due: dueAll.length,
+      unmanaged: unmanaged.length,
+      toSeed: toSeed.length,
     });
-    // Idempotent bootstrap/heartbeat: seed each due source's actor if it has no
-    // pending alarm. Bounded concurrency to stay polite on the DO control plane;
-    // failures are per-source and non-fatal (the next hourly cron retries).
-    for (let i = 0; i < dueAll.length; i += SOURCE_ACTOR_ENSURE_CONCURRENCY) {
-      const batch = dueAll.slice(i, i + SOURCE_ACTOR_ENSURE_CONCURRENCY);
-      // oxlint-disable-next-line no-await-in-loop -- bounded waves; each wave runs in parallel
-      await Promise.all(
-        batch.map((s) =>
-          withDoRetry(() => actor.getByName(s.id).ensureScheduled(s.id))
-            .then(() => {
-              seeded += 1;
-            })
-            .catch((err: unknown) => {
-              ensureErrors += 1;
-              dispatchErrorDetail.push({
-                orgSlug: s.orgId ?? "unknown",
-                error: `ensure ${s.id}: ${err instanceof Error ? err.message : String(err)}`,
-              });
-              logEvent("warn", {
-                component: "poll-fetch-cron",
-                event: "source-actor-ensure-failed",
-                sourceId: s.id,
-                err: err instanceof Error ? err.message : String(err),
-              });
-            }),
-        ),
-      );
-    }
+    const result = await seedSourceActors(env.SOURCE_ACTOR, toSeed);
+    seeded = result.seeded;
+    ensureErrors = result.errors;
+    dispatchErrorDetail.push(...result.errorDetail);
   } catch (err) {
     // queryDueSources or other pre-loop work threw before any dispatch could
     // happen. Stash so the `finally` finalizes with `dispatch_failed` instead
