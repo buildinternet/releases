@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "include": ["managed-agents/src"]
+  "include": ["managed-agents/src", "actions/**/*.ts"]
 }

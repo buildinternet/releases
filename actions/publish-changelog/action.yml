@@ -1,0 +1,81 @@
+name: Publish changelog to Releases Index
+description: >
+  Parse changed changelog markdown on push and upsert releases into a Releases
+  Index source via POST /v1/sources/…/releases/batch (upsert-content).
+author: Releases Index
+branding:
+  icon: upload-cloud
+  color: yellow
+
+inputs:
+  source:
+    description: Target source — a typed `src_…` id, or a source slug (pass `org` too).
+    required: true
+  org:
+    description: Organization slug. Required when `source` is a slug rather than `src_…`.
+    required: false
+  api-token:
+    description: Write-scoped Releases API token (`relk_…`). User `relu_` keys are read-only and will be rejected.
+    required: true
+  api-url:
+    description: Releases API base URL.
+    required: false
+    default: https://api.releases.sh
+  changelog-path:
+    description: Changelog file to parse, relative to the working directory.
+    required: false
+    default: CHANGELOG.md
+  working-directory:
+    description: Repository subdirectory that contains the changelog (monorepos).
+    required: false
+    default: ""
+  before-sha:
+    description: Git SHA of the commit before this push. Defaults to `github.event.before`.
+    required: false
+    default: ${{ github.event.before }}
+  url-template:
+    description: >
+      URL written on each release. Placeholders: `{key}` (version or YYYY-MM-DD),
+      `{version}`, `{date}`, `{path}`. Headings that already carry a link keep that
+      URL. Default is the GitHub blob URL for this file plus `#{key}`.
+    required: false
+    default: ""
+  generate-content:
+    description: >
+      After a successful batch, fill (new) or regenerate (edited) AI titles/summaries
+      via POST /v1/workflows/generate-content. Requires a `src_…` id and admin-capable
+      token; a write-only token skips this step (batch already queues the fill).
+    required: false
+    default: "true"
+
+outputs:
+  added:
+    description: Number of newly added changelog sections published.
+    value: ${{ steps.publish.outputs.added }}
+  modified:
+    description: Number of edited changelog sections published.
+    value: ${{ steps.publish.outputs.modified }}
+  inserted:
+    description: inserted count returned by the batch upsert (0 on an identical re-run).
+    value: ${{ steps.publish.outputs.inserted }}
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: "1.4.0"
+
+    - id: publish
+      shell: bash
+      env:
+        RELEASES_API_TOKEN: ${{ inputs.api-token }}
+        RELEASES_API_URL: ${{ inputs.api-url }}
+        RELEASES_SOURCE: ${{ inputs.source }}
+        RELEASES_ORG: ${{ inputs.org }}
+        CHANGELOG_PATH: ${{ inputs.changelog-path }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        BEFORE_SHA: ${{ inputs.before-sha }}
+        URL_TEMPLATE: ${{ inputs.url-template }}
+        GENERATE_CONTENT: ${{ inputs.generate-content }}
+      run: bun "${{ github.action_path }}/src/publish.ts"
