@@ -10,6 +10,8 @@ adminOnly: false
 
 When the file is live, [check and activate on the submit page](/submit).
 
+If the notes themselves live in git, you can also [publish from GitHub Actions](/docs/integrations/github-actions) so a push upserts releases without waiting on scrape polling.
+
 ## Fast track: let an agent write it
 
 Install the skill, paste the prompt (swap in your website), publish the file it produces at `/.well-known/releases.json`, then activate:

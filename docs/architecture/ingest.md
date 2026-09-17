@@ -59,6 +59,10 @@ Operator backfill of already-stored thin rows: `POST /v1/workflows/enrich-feed-c
 
 Render escalation needs `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` bound on the API worker (reused from the discovery worker's Secrets Store); absent them, enrichment degrades to the cheap path. Spec: `docs/superpowers/specs/2026-05-21-feed-content-enrichment-design.md`.
 
+## GitHub Action ingest
+
+`actions/publish-changelog` is a reusable composite Action that diffs a changelog on push and POSTs the changed `##` sections to the existing `POST /v1/sources/:id/releases/batch` (`mode: "upsert-content"`). No dedicated ingest route: auth is the same write-scoped Bearer gate as every other batch write, and batch already runs generate-content / embed / events. Product docs: [Publish from GitHub Actions](../../web/src/content/docs/integrations/github-actions.md). Parent: #2290 (GitHub App is phase 2).
+
 ## Related
 
 - [remote-mode.md](remote-mode.md) — cron polling, poll-and-fetch / scrape-agent Workflows, retier, smear/jitter.

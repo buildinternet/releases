@@ -18,7 +18,7 @@ New here? [Install the CLI](/docs/installation), [add the skills](/docs/skills) 
 
 - **Browse and search** — find releases across organizations and sources by keyword, category, or date
 - **Track changes** — follow the latest releases from GitHub repos, RSS feeds, and changelog pages
-- **Integrate** — query the [REST API](/docs/api/rest) directly, plug the [MCP server](/docs/api/mcp) into your agent, or install the [skills](/docs/skills) so Claude Code, Codex, Cursor, and OpenCode know how to use it
+- **Integrate** — query the [REST API](/docs/api/rest) directly, plug the [MCP server](/docs/api/mcp) into your agent, install the [skills](/docs/skills) so Claude Code, Codex, Cursor, and OpenCode know how to use it, or [publish changelog files from GitHub Actions](/docs/integrations/github-actions)
 
 ## Concepts
 

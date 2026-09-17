@@ -13,9 +13,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  BUN_VERSION: "1.4.0"
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -26,12 +23,8 @@ jobs:
           fetch-depth: 0 # need the `before` commit for `git show <before>:CHANGELOG.md`
           persist-credentials: false
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: ./actions/publish-changelog
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Publish changed sections
-        env:
-          RELEASES_API_KEY: ${{ secrets.RELEASES_API_KEY }}
-          BEFORE_SHA: ${{ github.event.before }}
-        run: bun scripts/changelog/publish.ts
+          source: src_LNrMz-rrFa2OD27mBUfaT
+          api-token: ${{ secrets.RELEASES_API_KEY }}
+          url-template: https://releases.sh/updates/{date}
