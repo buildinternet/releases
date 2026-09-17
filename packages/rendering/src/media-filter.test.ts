@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { isJunkMediaUrl, filterJunkMedia } from "./media-filter.js";
+import {
+  isJunkMediaUrl,
+  filterJunkMedia,
+  hasTinyForcedDimensions,
+  parseForcedMediaDimensions,
+} from "./media-filter.js";
 
 describe("isJunkMediaUrl", () => {
   test("flags avatar crop markers (c_fill,w_NN)", () => {
@@ -33,6 +38,21 @@ describe("isJunkMediaUrl", () => {
     expect(isJunkMediaUrl("https://img.shields.io/badge/build-passing-green.svg")).toBe(true);
   });
 
+  test("flags Vercel Cloudinary 32×32 author headshot transforms", () => {
+    const urls = [
+      "https://assets.vercel.com/image/upload/f_auto,c_fill,w_32,h_32,q_75/contentful/image/e5382hct74si/6qvpRjZDpvV0JLU8mXx2v4/53962a54ad214cde165e18813940354e/806FE12B-9B25-4A8F-AB72-0853E48B1734_1_105_c_2__1_.jpg",
+      "https://assets.vercel.com/image/upload/f_auto,c_fill,w_32,h_32,q_75/contentful/image/e5382hct74si/6kCjf7r5GljxZ3st8gvxkb/07d0d7088c6a37bd9921a2e68ab64725/rich-haines-128.jpg",
+    ];
+    for (const url of urls) {
+      expect(isJunkMediaUrl(url)).toBe(true);
+      expect(hasTinyForcedDimensions(url)).toBe(true);
+    }
+  });
+
+  test("flags imgix-style tiny w/h query thumbs", () => {
+    expect(isJunkMediaUrl("https://cdn.example.com/photo.jpg?w=64&h=64&fit=crop")).toBe(true);
+  });
+
   test("passes a real screenshot URL", () => {
     expect(isJunkMediaUrl("https://cdn.example.com/blog/release-hero.png")).toBe(false);
   });
@@ -41,10 +61,40 @@ describe("isJunkMediaUrl", () => {
     expect(isJunkMediaUrl("https://cdn.example.com/assets/architecture-diagram.svg")).toBe(false);
   });
 
+  test("passes a large Cloudinary hero crop (not tiny)", () => {
+    expect(
+      isJunkMediaUrl(
+        "https://assets.vercel.com/image/upload/f_auto,c_fill,w_1200,h_630,q_75/contentful/image/hero.png",
+      ),
+    ).toBe(false);
+  });
+
+  test("passes a product icon path that is not a tiny transform", () => {
+    // classify-media-relevance deliberately does not hard-drop `/icons/` paths.
+    expect(isJunkMediaUrl("https://cdn.example.com/icons/new-icon-set-hero.png")).toBe(false);
+  });
+
   test("returns false for null/undefined/empty", () => {
     expect(isJunkMediaUrl(null)).toBe(false);
     expect(isJunkMediaUrl(undefined)).toBe(false);
     expect(isJunkMediaUrl("")).toBe(false);
+  });
+});
+
+describe("parseForcedMediaDimensions", () => {
+  test("reads Cloudinary w_/h_ path segments", () => {
+    expect(
+      parseForcedMediaDimensions(
+        "https://assets.vercel.com/image/upload/f_auto,c_fill,w_32,h_32,q_75/x.jpg",
+      ),
+    ).toEqual({ width: 32, height: 32 });
+  });
+
+  test("reads query width/height", () => {
+    expect(parseForcedMediaDimensions("https://cdn.example.com/a.jpg?width=96&height=96")).toEqual({
+      width: 96,
+      height: 96,
+    });
   });
 });
 
@@ -55,6 +105,10 @@ describe("filterJunkMedia", () => {
       { type: "image" as const, url: "https://example.com/favicon.ico" },
       { type: "image" as const, url: "https://cdn.example.com/screenshot.jpg", alt: "Shot" },
       { type: "image" as const, url: "data:image/gif;base64,R0lGODlhAQ" },
+      {
+        type: "image" as const,
+        url: "https://assets.vercel.com/image/upload/f_auto,c_fill,w_32,h_32,q_75/contentful/image/rich-haines-128.jpg",
+      },
     ];
 
     expect(filterJunkMedia(input)).toEqual([
