@@ -117,17 +117,33 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
-   * Idempotent bootstrap + heartbeat called by the poll cron for actor-managed
-   * due sources. Persists the source identity and seeds the first alarm if none
-   * is pending; once scheduled this is a cheap no-op (the alarm self-perpetuates).
-   * All due/backoff logic lives in `alarm()`, which re-reads D1 — so the seed
-   * alarm only needs to fire "soon" (jittered to spread the cohort-enable herd).
+   * Idempotent bootstrap + heartbeat. Persists the source identity and seeds
+   * the first alarm if none is pending (or the stored time is already past —
+   * a leftover `getAlarm()` that the scheduler dropped would otherwise no-op
+   * forever; see #2286). All due/backoff logic lives in `alarm()`, which
+   * re-reads D1 — so the seed alarm only needs to fire "soon" (jittered).
+   * Writes the D1 observability mirror immediately so admin `source get`
+   * shows `managed: true` without waiting for the first tick.
    */
-  async ensureScheduled(sourceId: string): Promise<void> {
+  async ensureScheduled(
+    sourceId: string,
+    opts: { force?: boolean } = {},
+  ): Promise<{ seeded: boolean; nextAlarmAt: number }> {
     await this.ctx.storage.put(SOURCE_ID_KEY, sourceId);
     const existing = await this.ctx.storage.getAlarm();
-    if (existing != null) return;
-    await this.ctx.storage.setAlarm(Date.now() + seedJitterMs(sourceId));
+    const now = Date.now();
+    // A timestamp already in the past (beyond 60s slack) is a dead timer —
+    // Cloudflare should have fired it. Treat it as missing so the heartbeat
+    // can recover instead of no-opping on the stale value.
+    const stale = existing != null && existing <= now - 60_000;
+    if (existing != null && !stale && !opts.force) {
+      await this.mirrorToD1(sourceId, existing, true);
+      return { seeded: false, nextAlarmAt: existing };
+    }
+    const next = now + seedJitterMs(sourceId);
+    await this.ctx.storage.setAlarm(next);
+    await this.mirrorToD1(sourceId, next, true);
+    return { seeded: true, nextAlarmAt: next };
   }
 
   /**
@@ -144,7 +160,9 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       event: "source-changed-reparent-stub",
       sourceId,
     });
-    await this.ctx.storage.setAlarm(Date.now() + seedJitterMs(sourceId));
+    const next = Date.now() + seedJitterMs(sourceId);
+    await this.ctx.storage.setAlarm(next);
+    await this.mirrorToD1(sourceId, next, true);
   }
 
   /** Observability/test accessor for the persisted coordination state. */

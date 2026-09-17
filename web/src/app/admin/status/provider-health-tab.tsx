@@ -38,7 +38,8 @@ export function ProviderHealthBanner({
       </div>
     );
   }
-  if (!data || data.meta.overdueSources === 0) return null;
+  const unmanagedActors = data?.meta.unmanagedActors ?? 0;
+  if (!data || (data.meta.overdueSources === 0 && unmanagedActors === 0)) return null;
 
   const { overdueSources, overdueOrgs, overdueThresholdDays } = data.meta;
   // Two or more orgs affected at once is the systemic tell from the outage
@@ -61,9 +62,25 @@ export function ProviderHealthBanner({
         role="img"
       />
       <span className="flex-1">
-        <span className="font-medium">{overdueSources}</span> {label} — last successful check frozen
-        past {overdueThresholdDays}d, across <span className="font-medium">{overdueOrgs}</span> org
-        {overdueOrgs === 1 ? "" : "s"}.
+        {overdueSources > 0 ? (
+          <>
+            <span className="font-medium">{overdueSources}</span> {label} — last successful check
+            frozen past {overdueThresholdDays}d, across{" "}
+            <span className="font-medium">{overdueOrgs}</span> org
+            {overdueOrgs === 1 ? "" : "s"}.
+          </>
+        ) : (
+          <>
+            <span className="font-medium">{unmanagedActors}</span> active source
+            {unmanagedActors === 1 ? "" : "s"} have no live SourceActor alarm.
+          </>
+        )}
+        {overdueSources > 0 && unmanagedActors > 0 ? (
+          <>
+            {" "}
+            <span className="font-medium">{unmanagedActors}</span> also have no live poll alarm.
+          </>
+        ) : null}
       </span>
       <button type="button" onClick={onOpenHealth} className="shrink-0 font-medium hover:underline">
         View
@@ -122,6 +139,11 @@ export function ProviderHealthTab({ state }: { state: ProviderHealthState }): Re
           label="Orgs affected"
           value={`${meta.overdueOrgs} / ${meta.totalOrgs}`}
           tone={meta.overdueOrgs >= 2 ? "danger" : meta.overdueOrgs > 0 ? "warn" : "ok"}
+        />
+        <SummaryStat
+          label="Unmanaged actors"
+          value={meta.unmanagedActors ?? 0}
+          tone={(meta.unmanagedActors ?? 0) > 0 ? "warn" : "ok"}
         />
       </div>
 

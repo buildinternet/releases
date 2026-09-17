@@ -182,4 +182,33 @@ describe("getProviderHealth", () => {
 
     expect(result.items.map((i) => i.sourceSlug)).toEqual(["worst", "worse"]);
   });
+
+  it("counts unmanaged SourceActors independently of overdue last_fetched_at", async () => {
+    const { db } = createTestDb();
+    await addOrg(db, "org_a", "acme");
+    await addSource(db, "src_fresh", "org_a", "fresh", { lastFetchedAt: daysAgo(0) });
+    await db.insert(sources).values({
+      id: "src_dead",
+      orgId: "org_a",
+      slug: "dead",
+      name: "dead",
+      url: "https://dead.test/changelog",
+      type: "scrape",
+      fetchPriority: "normal",
+      lastFetchedAt: daysAgo(0),
+      createdAt: daysAgo(365),
+      metadata: JSON.stringify({
+        sourceActor: {
+          managed: false,
+          nextAlarmAt: null,
+          lastAlarmAt: daysAgo(30),
+        },
+      }),
+    });
+
+    const result = await getProviderHealth(db as unknown as D1Db);
+    expect(result.overdueSources).toBe(0);
+    // src_fresh has no sourceActor mirror; src_dead is explicitly unmanaged.
+    expect(result.unmanagedActors).toBe(2);
+  });
 });

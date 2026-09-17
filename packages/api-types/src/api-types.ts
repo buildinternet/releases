@@ -913,6 +913,12 @@ export interface ProviderHealthResponse extends ListResponse<ProviderHealthSourc
     overdueOrgs: number;
     /** Distinct orgs represented among active sources. */
     totalOrgs: number;
+    /**
+     * Active sources that should still be polling but whose SourceActor mirror
+     * is unmanaged / missing `nextAlarmAt` (#2286). Independent of overdue
+     * last-check — a freshly fetched source can still have a dead alarm.
+     */
+    unmanagedActors: number;
   };
 }
 

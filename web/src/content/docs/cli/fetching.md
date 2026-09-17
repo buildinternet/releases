@@ -19,6 +19,8 @@ releases admin source fetch --source next-js  # flag form of the same thing
 
 A bare `releases admin source fetch` with no identifier or filter is blocked to prevent accidental bulk work. Pass a source or one of the filters below.
 
+A successful fetch also re-arms that source's SourceActor poll alarm, so `sourceActor.managed` becomes `true` with a scheduled `nextAlarmAt`. To re-arm without fetching, or to sweep every unmanaged active source, `POST /v1/workflows/rearm-source-actors` (admin Bearer): `{ "sourceId": "src_…" }` for one source, or `{ "all": true }` for a dry-run list of unmanaged actors (`dryRun: false` to arm them). `GET /v1/admin/sources/health` reports `meta.unmanagedActors`.
+
 ## Targeted batch modes
 
 Rather than fetching everything, target sources by state. These respect backoff timers and change detection:

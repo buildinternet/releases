@@ -18,6 +18,7 @@ import { errorResponse } from "../lib/openapi-error.js";
 import { syncFirecrawlMonitor } from "../lib/firecrawl-sync.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
+import { ensureSourceActorScheduled } from "../lib/source-actor-schedule.js";
 import {
   NotFoundError,
   UnauthorizedError,
@@ -174,6 +175,20 @@ firecrawlRoutes.post(
       enabled: finalMeta.firecrawl?.enabled ?? false,
       monitorId: finalMeta.firecrawl?.monitorId ?? null,
     });
+
+    // Firecrawl-owned sources hit `noReschedule` (no local cadence). Disabling
+    // the monitor must re-arm the SourceActor or the source stays unmanaged
+    // until something else seeds it (#2286).
+    const wasEnabled = Boolean(meta.firecrawl?.enabled);
+    const nowEnabled = Boolean(finalMeta.firecrawl?.enabled);
+    if (wasEnabled && !nowEnabled) {
+      c.executionCtx.waitUntil(
+        ensureSourceActorScheduled(env.SOURCE_ACTOR, source.id, {
+          force: true,
+          via: "firecrawl-disable",
+        }).then(() => undefined),
+      );
+    }
 
     return c.json(finalMeta);
   },

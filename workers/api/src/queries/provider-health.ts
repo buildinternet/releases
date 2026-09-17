@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { D1Db } from "../db.js";
 import type { ProviderHealthSource } from "@buildinternet/releases-api-types";
+import { countUnmanagedActiveSources } from "./unmanaged-source-actors.js";
 
 /** A source is "overdue" once its last successful check is older than this many days. */
 export const PROVIDER_HEALTH_OVERDUE_DAYS = 3;
@@ -22,6 +23,7 @@ export interface ProviderHealthResult {
   overdueSources: number;
   overdueOrgs: number;
   totalOrgs: number;
+  unmanagedActors: number;
 }
 
 interface ProviderHealthSqlRow {
@@ -130,7 +132,11 @@ export async function getProviderHealth(
     FROM active_sources
   `);
 
-  const [rows, [metaRow]] = await Promise.all([rowsPromise, metaPromise]);
+  const [rows, [metaRow], unmanagedActors] = await Promise.all([
+    rowsPromise,
+    metaPromise,
+    countUnmanagedActiveSources(db),
+  ]);
 
   const items: ProviderHealthSource[] = rows.map((r) => ({
     sourceId: r.source_id,
@@ -155,5 +161,6 @@ export async function getProviderHealth(
     overdueSources: Number(metaRow?.overdue_sources) || 0,
     overdueOrgs: Number(metaRow?.overdue_orgs) || 0,
     totalOrgs: Number(metaRow?.total_orgs) || 0,
+    unmanagedActors,
   };
 }

@@ -246,6 +246,7 @@ adminSourcesRoutes.get("/admin/sources/health", async (c) => {
       overdueSources: result.overdueSources,
       overdueOrgs: result.overdueOrgs,
       totalOrgs: result.totalOrgs,
+      unmanagedActors: result.unmanagedActors,
     },
   };
   return c.json(response);

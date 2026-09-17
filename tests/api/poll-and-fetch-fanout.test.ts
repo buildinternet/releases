@@ -80,13 +80,22 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
   // bounded waves.
   async function heartbeatReplica(actor: ReturnType<typeof mkFakeActorNamespace> | null) {
     const { queryDueSources } = await import("../../workers/api/src/cron/poll-fetch");
+    const { queryUnmanagedActiveSources } =
+      await import("../../workers/api/src/queries/unmanaged-source-actors");
+    const now = new Date();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dueAll = await queryDueSources(db as any, new Date(), { changeDetectEnabled: true });
-    if (dueAll.length === 0) return;
+    const dueAll = await queryDueSources(db as any, now, { changeDetectEnabled: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unmanaged = await queryUnmanagedActiveSources(db as any, now);
+    const byId = new Map<string, (typeof dueAll)[number]>();
+    for (const s of dueAll) byId.set(s.id, s);
+    for (const s of unmanaged) byId.set(s.id, s);
+    const toSeed = [...byId.values()];
+    if (toSeed.length === 0) return;
     if (!actor) return; // binding absent → nothing to drive
     const { withDoRetry } = await import("@releases/lib/do-retry");
-    for (let i = 0; i < dueAll.length; i += ENSURE_CONCURRENCY) {
-      const batch = dueAll.slice(i, i + ENSURE_CONCURRENCY);
+    for (let i = 0; i < toSeed.length; i += ENSURE_CONCURRENCY) {
+      const batch = toSeed.slice(i, i + ENSURE_CONCURRENCY);
       actor.maxWave.value = Math.max(actor.maxWave.value, batch.length);
       // oxlint-disable-next-line no-await-in-loop -- mirrors the prod heartbeat's bounded waves
       await Promise.all(
@@ -124,5 +133,31 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
     const actor = mkFakeActorNamespace();
     await heartbeatReplica(actor);
     expect(actor.ensured).toHaveLength(0);
+  });
+
+  it("still seeds an unmanaged source that is not yet due (#2286)", async () => {
+    await db.insert(organizations).values({
+      id: "org_u",
+      slug: "unmanaged",
+      name: "Unmanaged",
+      createdAt: new Date().toISOString(),
+    });
+    await db.insert(sources).values({
+      id: "src_unmanaged",
+      orgId: "org_u",
+      type: "scrape",
+      slug: "unmanaged",
+      name: "Unmanaged",
+      url: "https://example.com/u",
+      fetchPriority: "normal",
+      lastPolledAt: new Date().toISOString(),
+      metadata: JSON.stringify({
+        sourceActor: { managed: false, nextAlarmAt: null, lastAlarmAt: "2026-07-01T00:00:00.000Z" },
+      }),
+      createdAt: new Date().toISOString(),
+    });
+    const actor = mkFakeActorNamespace();
+    await heartbeatReplica(actor);
+    expect(actor.ensured).toContain("src_unmanaged");
   });
 });
