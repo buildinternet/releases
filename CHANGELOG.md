@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 16, 2026
+
+**Fixed**
+- Dynamic Client Registration is now capped at read-only — OAuth clients that self-register (MCP tools, agent frameworks) receive at most identity and read scopes and are issued a public PKCE client with no client secret; write and admin access remain available only to operator-provisioned first-party clients.
+
 ## September 15, 2026
 
 **Added**
@@ -13,6 +18,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 
 **Fixed**
 - Header search now opens a typeahead in place on every page instead of navigating away on the first keystroke — results include orgs, products, and sources with a loading indicator while fetching and a "no results" state when the query returns no matches; Enter or clicking a result navigates.
+- Search boxes now show an explicit clear control on the right edge — replaces the browser's native type="search" cancel button, which left a visible gap after typed text in Chromium and WebKit.
 
 ## September 11, 2026
 
