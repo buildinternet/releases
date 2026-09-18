@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 17, 2026
+
+**Added**
+- GitHub Action for publishing changelogs — a new `publish-changelog` Action diffs a changelog file on each push, maps changed sections onto upserted releases, and posts them to your Releases Index source; re-running the same commit is a no-op, and URL templates support heading permalink, date, version, and key formats.
+
+**Fixed**
+- Release cards no longer show pixelated avatar crops as inline media — the media filter now rejects CDN transform thumbnails where both resolved dimensions are ≤128 px (Cloudinary path transforms and imgix/Vercel query params), so only full-resolution editorial images appear.
+- Sources that silently stopped polling now self-heal — a successful manual fetch or re-enable re-arms the actor, and the hourly heartbeat folds unmanaged active sources into its pass so dead alarms recover within one tick rather than waiting out a full polling window.
+
 ## September 16, 2026
 
 **Fixed**
