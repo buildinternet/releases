@@ -1,5 +1,11 @@
 # @buildinternet/releases-api-types
 
+## 0.52.0
+
+### Minor Changes
+
+- d2846fe: Add `unmanagedActors` to `ProviderHealthResponse.meta` so admin health can show active sources whose SourceActor alarm is missing.
+
 ## 0.51.0
 
 ### Minor Changes
