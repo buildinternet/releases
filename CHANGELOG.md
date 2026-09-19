@@ -11,6 +11,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 **Fixed**
 - Release cards no longer show pixelated avatar crops as inline media — the media filter now rejects CDN transform thumbnails where both resolved dimensions are ≤128 px (Cloudinary path transforms and imgix/Vercel query params), so only full-resolution editorial images appear.
 - Sources that silently stopped polling now self-heal — a successful manual fetch or re-enable re-arms the actor, and the hourly heartbeat folds unmanaged active sources into its pass so dead alarms recover within one tick rather than waiting out a full polling window.
+- Sign-in and create-account headings no longer surface a technical aside about API tokens — copy is simplified to focus on the product value.
 
 ## September 16, 2026
 
