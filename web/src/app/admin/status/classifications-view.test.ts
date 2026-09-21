@@ -3,6 +3,7 @@ import { releasePath } from "@buildinternet/releases-core/release-slug";
 import {
   CLASSIFICATIONS_EMPTY_COPY,
   CLASSIFICATIONS_ERROR_COPY,
+  classificationFailureNote,
   DEFAULT_CLASSIFICATION_ORIGIN,
   classificationRecentUrl,
   classificationSummaryUrl,
@@ -112,6 +113,32 @@ it("uses the empty and error copy shown on the tab", () => {
   expect(CLASSIFICATIONS_ERROR_COPY).toBe(
     "Classifications failed to load. The rest of Status is unaffected.",
   );
+});
+
+it("names the failed Analytics Engine statement without echoing its body", () => {
+  expect(
+    classificationFailureNote({
+      error: {
+        code: "ae_query_failed",
+        type: "upstream",
+        message: "Upstream service error",
+        details: { query: "totals", status: 400 },
+      },
+    }),
+  ).toBe("Analytics Engine rejected the totals query (400).");
+  expect(
+    classificationFailureNote({
+      error: {
+        code: "ae_query_failed",
+        details: { query: "totals", status: 400, detail: "syntax error near secret" },
+      },
+    }),
+  ).toBe("Analytics Engine rejected the totals query (400).");
+  expect(
+    classificationFailureNote({
+      error: { code: "ae_query_failed", details: { query: "drop table" } },
+    }),
+  ).toBeNull();
 });
 
 it("falls back to failureCategory when the reason is empty", () => {

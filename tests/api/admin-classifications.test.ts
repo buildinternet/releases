@@ -125,9 +125,19 @@ describe("GET /admin/classifications/summary", () => {
     });
     const first = await request(path);
     expect(first.status).toBe(502);
-    const body = (await first.json()) as { error: { code: string; type: string } };
+    const body = (await first.json()) as {
+      error: {
+        code: string;
+        type: string;
+        message: string;
+        details?: { query?: string; status?: number };
+      };
+    };
     expect(body.error.code).toBe("ae_query_failed");
     expect(body.error.type).toBe("upstream");
+    expect(body.error.message).toBe("Upstream service error");
+    expect(body.error.details).toEqual({ query: "totals", status: 500 });
+    expect(JSON.stringify(body)).not.toContain("nope");
     const second = await request(path);
     expect(second.status).toBe(502);
     expect(calls).toBeGreaterThan(1);
@@ -206,7 +216,7 @@ describe("GET /admin/classifications/summary", () => {
     expect(calls).toHaveLength(6);
     const sql = calls.map((call) => call.sql).join("\n");
     expect(sql).toContain("SUM(_sample_interval)");
-    expect(sql).toContain("SUM(if(double4 >= 0, _sample_interval * double4, 0))");
+    expect(sql).toContain("SUM(if(double4 >= 0, _sample_interval * double4, 0.0))");
     expect(sql).toContain("blob3 = 'ingest'");
     expect(sql).toContain("blob1 = '1'");
     expect(sql).toContain("blob4 = 'marketing'");

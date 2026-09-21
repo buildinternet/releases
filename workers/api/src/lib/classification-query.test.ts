@@ -42,7 +42,9 @@ describe("classification SQL", () => {
   it("weights aggregates by _sample_interval and drops the -1 cost sentinel", () => {
     const sql = summarySql();
     expect(sql).toContain("SUM(_sample_interval)");
-    expect(sql).toContain("SUM(if(double4 >= 0, _sample_interval * double4, 0))");
+    expect(sql).toContain("SUM(if(double4 >= 0, _sample_interval * double4, 0.0))");
+    expect(sql).toContain("GROUP BY t, blob10 ORDER BY t");
+    expect(sql).toContain("ORDER BY samples DESC");
     expect(sql).not.toContain("SUM(double4)");
     expect(sql).not.toContain("COUNT(");
   });
@@ -54,9 +56,9 @@ describe("classification SQL", () => {
     for (const condition of conditions) {
       expect(condition.includes("double1")).not.toBe(condition.includes("double2"));
     }
-    expect(histogram).toContain("double1 >= 0.8 AND double1 < 0.9");
-    expect(histogram).toContain("double2 >= 0.8 AND double2 < 0.9");
-    expect(histogram).toContain("double1 >= 0.9 AND double1 <= 1.0");
+    expect(histogram).toContain("(double1 >= 0.8) AND (double1 < 0.9)");
+    expect(histogram).toContain("(double2 >= 0.8) AND (double2 < 0.9)");
+    expect(histogram).toContain("(double1 >= 0.9) AND (double1 <= 1.0)");
     expect(histogram).toContain("SUM(if(double1 < 0, _sample_interval, 0)) AS selected_missing");
     expect(histogram).toContain("SUM(if(double2 < 0, _sample_interval, 0)) AS confidence_missing");
   });

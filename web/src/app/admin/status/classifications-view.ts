@@ -42,6 +42,36 @@ export const CLASSIFICATIONS_EMPTY_COPY = "No classifications in this range.";
 export const CLASSIFICATIONS_ERROR_COPY =
   "Classifications failed to load. The rest of Status is unaffected.";
 
+const AE_QUERY_NAMES = new Set([
+  "totals",
+  "series",
+  "choices",
+  "choiceSeries",
+  "models",
+  "histogram",
+  "recent",
+]);
+
+/**
+ * Operator note from an `ae_query_failed` envelope. Only the statement name
+ * and HTTP status are shown. The Analytics Engine body is not in `details`.
+ */
+export function classificationFailureNote(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const error = (body as { error?: unknown }).error;
+  if (!error || typeof error !== "object") return null;
+  const record = error as { code?: unknown; details?: unknown };
+  if (record.code !== "ae_query_failed" || !record.details || typeof record.details !== "object") {
+    return null;
+  }
+  const details = record.details as { query?: unknown; status?: unknown };
+  if (typeof details.query !== "string" || !AE_QUERY_NAMES.has(details.query)) return null;
+  if (typeof details.status === "number" && Number.isInteger(details.status)) {
+    return `Analytics Engine rejected the ${details.query} query (${details.status}).`;
+  }
+  return `Analytics Engine rejected the ${details.query} query.`;
+}
+
 export const CLASSIFICATIONS_LOADING_COPY = "Loading classifications…";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
