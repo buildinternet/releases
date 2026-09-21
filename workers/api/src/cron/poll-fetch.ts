@@ -1251,8 +1251,8 @@ async function classifyMarketingForReleases(
   let costUsd = 0;
   const startedAt = Date.now();
 
-  // Provider/model decided here (Anthropic Haiku via gateway, or a cheap
-  // OpenRouter model when `openrouter-enabled` is on + a model is configured).
+  // Provider/protocol decided here: JEV Decisions or a configured text model
+  // when OpenRouter is enabled; Anthropic Haiku is the configuration fallback.
   // Fail-open: null means no usable provider — skip rather than block insert.
   const model = await resolveMarketingModel(env);
   if (!model) {

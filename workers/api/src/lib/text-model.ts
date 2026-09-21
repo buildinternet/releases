@@ -16,19 +16,28 @@
  * caller's per-item try/catch (poll-fetch), which inserts the item visibly.
  */
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
+import { aisdkDecisionModel } from "@releases/ai-internal/aisdk-decision-model";
+import { MARKETING_DECISION_MODEL } from "@releases/core-internal/ai-lane-models";
 import {
   withUsageLogging,
   type TextModel,
   type TextModelUsage,
 } from "@releases/ai-internal/text-model";
 import type { OverviewCallUsage } from "@releases/ai-internal/overview-content";
-import { buildLaneAnthropicModel, buildLaneOpenRouterModel } from "@releases/adapters/lane-model";
+import {
+  buildLaneAnthropicModel,
+  buildLaneOpenRouterModel,
+  buildLaneOpenRouterDecisionModel,
+} from "@releases/adapters/lane-model";
 import type { LanguageModel } from "ai";
 import type {
   OpenRouterProviderPrefs,
   OpenRouterReasoning,
 } from "@releases/ai-internal/openrouter-client";
-import { MODEL as ANTHROPIC_MARKETING_MODEL } from "@releases/ai-internal/marketing-classifier";
+import {
+  MODEL as ANTHROPIC_MARKETING_MODEL,
+  type MarketingModel,
+} from "@releases/ai-internal/marketing-classifier";
 import { MODEL as ANTHROPIC_SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import { MODEL as ANTHROPIC_ARTICLE_MODEL } from "@releases/ai-internal/article-extract";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
@@ -141,10 +150,12 @@ async function resolveTextModel(
      */
     timeoutMs?: number;
   },
+  skipOpenRouter = false,
 ): Promise<TextModel | null> {
   // Register Cloudflare Agents AI-SDK telemetry (payload flag re-read each call).
   await ensureAgentTracing(env);
-  const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
+  const useOpenRouter =
+    !skipOpenRouter && (await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled));
 
   if (useOpenRouter) {
     const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
@@ -216,13 +227,74 @@ async function resolveTextModel(
   );
 }
 
-export function resolveMarketingModel(env: TextModelEnv): Promise<TextModel | null> {
-  return resolveTextModel(env, {
-    lane: "marketing",
-    orModel: env.MARKETING_CLASSIFIER_MODEL,
-    anthropicModel: ANTHROPIC_MARKETING_MODEL,
-    generationName: "marketing-classifier",
-  });
+export async function resolveMarketingModel(env: TextModelEnv): Promise<MarketingModel | null> {
+  const enabled = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
+  const selected = enabled ? await effectiveLaneModel(env, "marketing") : undefined;
+  if (selected === MARKETING_DECISION_MODEL) {
+    const key = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
+    if (key) {
+      try {
+        const decision = aisdkDecisionModel(
+          buildLaneOpenRouterDecisionModel({
+            apiKey: key,
+            model: selected,
+            baseURL: env.OPENROUTER_BASE_URL?.trim() || undefined,
+            referer: "https://releases.sh",
+            title: APP_TITLE,
+            sessionId: "marketing-classifier",
+            trace: { generationName: "marketing-classifier", environment: env.ENVIRONMENT },
+          }),
+          `openrouter:${selected}`,
+        );
+        return {
+          id: decision.id,
+          async decide(request) {
+            const result = await decision.decide(request);
+            logEvent("info", {
+              component: "ai",
+              event: "ai_usage",
+              provider: "openrouter",
+              model: selected,
+              lane: "marketing-classifier",
+              environment: env.ENVIRONMENT,
+              input: result.usage.inputTokens ?? 0,
+              output: result.usage.outputTokens ?? 0,
+              cacheCreate: 0,
+              cacheRead: 0,
+              promptTokens: result.usage.inputTokens ?? 0,
+              cacheHitRate: 0,
+              costUsd: result.usage.costUsd,
+            });
+            return result;
+          },
+        };
+      } catch (err) {
+        logEvent("warn", {
+          component: "text-model",
+          event: "openrouter-misconfigured",
+          lane: "marketing-classifier",
+          err,
+        });
+      }
+    } else {
+      logEvent("warn", {
+        component: "text-model",
+        event: "openrouter-misconfigured",
+        lane: "marketing-classifier",
+        reason: "OPENROUTER_API_KEY unresolved",
+      });
+    }
+  }
+  return resolveTextModel(
+    env,
+    {
+      lane: "marketing",
+      orModel: env.MARKETING_CLASSIFIER_MODEL,
+      anthropicModel: ANTHROPIC_MARKETING_MODEL,
+      generationName: "marketing-classifier",
+    },
+    !enabled || selected === MARKETING_DECISION_MODEL,
+  );
 }
 
 export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | null> {

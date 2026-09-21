@@ -20,6 +20,7 @@ export interface AisdkDecisionEvaluateRequest<OPTION extends string> {
   state: string;
   questions: { decision: AisdkDecisionQuestion<OPTION> };
   maxRetries: number;
+  abortSignal: AbortSignal;
 }
 
 export interface AisdkDecisionEvaluateResult<OPTION extends string> {
@@ -66,8 +67,9 @@ const defaultEvaluate: AisdkDecisionEvaluate = async <OPTION extends string>({
   state,
   questions,
   maxRetries,
+  abortSignal,
 }: AisdkDecisionEvaluateRequest<OPTION>) => {
-  const result = await experimental_evaluate({ model, state, questions, maxRetries });
+  const result = await experimental_evaluate({ model, state, questions, maxRetries, abortSignal });
   const answer = result.answers.decision;
   if (answer.type !== "choice") {
     throw new TypeError("Decision model returned a non-choice answer.");
@@ -89,6 +91,8 @@ const defaultEvaluate: AisdkDecisionEvaluate = async <OPTION extends string>({
 
 export interface AisdkDecisionModelOpts {
   evaluate?: AisdkDecisionEvaluate;
+  /** Bound one-shot decisions like text completions (30 seconds by default). */
+  timeoutMs?: number;
 }
 
 /** Wrap a ready AI SDK evaluation model as a typed-choice `DecisionModel`. */
@@ -109,6 +113,7 @@ export function aisdkDecisionModel(
         questions: { decision: { type: "choice", ...request.question } },
         // Callers own retry/fail-open policy; avoid retrying a paid decision internally.
         maxRetries: 0,
+        abortSignal: AbortSignal.timeout(opts?.timeoutMs ?? 30_000),
       });
       const answer = result.answers.decision;
       const metadata = providerMetadata(result.providerMetadata);

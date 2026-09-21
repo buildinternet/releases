@@ -101,6 +101,22 @@ describe("GET /ai/models", () => {
 });
 
 describe("PUT /ai/models", () => {
+  for (const lane of ["marketing", "summarize", "extract", "feed-enrich"]) {
+    it(`allows the decision model only for marketing: ${lane}`, async () => {
+      const { a, env } = app();
+      const res = await a.request(
+        `${BASE}/ai/models`,
+        {
+          method: "PUT",
+          headers: { ...auth, "content-type": "application/json" },
+          body: JSON.stringify({ models: { [lane]: "typesafe/jev-1.13" } }),
+        },
+        env,
+      );
+      expect(res.status).toBe(lane === "marketing" ? 200 : 400);
+    });
+  }
+
   it("sets and clears an override", async () => {
     const { a, env } = app();
     const set = await a.request(

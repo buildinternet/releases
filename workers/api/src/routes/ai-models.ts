@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import { AiLaneModelsPutSchema } from "@buildinternet/releases-api-types";
 import {
   AI_LANES,
+  MARKETING_DECISION_MODEL,
   parseOpenRouterModelId,
   type AiLaneModels,
 } from "@releases/core-internal/ai-lane-models";
@@ -83,6 +84,9 @@ aiModelRoutes.put(
         );
       }
       next[lane] = id;
+      if (id === MARKETING_DECISION_MODEL && lane !== "marketing") {
+        return respondError(c, new ValidationError("JEV is supported only by the marketing lane"));
+      }
     }
 
     const stored = await putStoredAiLaneModels(db, next);

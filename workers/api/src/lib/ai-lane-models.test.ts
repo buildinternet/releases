@@ -49,6 +49,12 @@ describe("effectiveLaneModel", () => {
 });
 
 describe("fetchOpenRouterCatalog", () => {
+  it("retains JEV when a successful response contains no valid catalog", async () => {
+    globalThis.fetch = (async () => Response.json({})) as unknown as typeof fetch;
+    const result = await fetchOpenRouterCatalog({});
+    expect(result.catalog.map((m) => m.id)).toEqual(["typesafe/jev-1.13"]);
+  });
+
   it("maps catalog rows and flags vision", async () => {
     globalThis.fetch = (async () =>
       new Response(
@@ -71,9 +77,20 @@ describe("fetchOpenRouterCatalog", () => {
       OPENROUTER_API_KEY: { get: async () => "or-key" },
     });
     expect(catalogError).toBeNull();
-    expect(catalog).toHaveLength(1);
+    expect(catalog).toHaveLength(2);
     expect(catalog[0]?.id).toBe("deepseek/deepseek-v4.1-flash");
     expect(catalog[0]?.vision).toBe(true);
     expect(catalog[0]?.promptPricePerMillion).toBeCloseTo(0.14);
+    expect(catalog.find((m) => m.id === "typesafe/jev-1.13")).toMatchObject({
+      name: "Typesafe: JEV 1.13 (decision)",
+      promptPricePerMillion: null,
+    });
+  });
+  it("keeps the decision model selectable when the text catalog fails", async () => {
+    globalThis.fetch = (async () =>
+      new Response("unavailable", { status: 503 })) as unknown as typeof fetch;
+    const result = await fetchOpenRouterCatalog({});
+    expect(result.catalog.some((m) => m.id === "typesafe/jev-1.13")).toBe(true);
+    expect(result.catalogError).toBeTruthy();
   });
 });

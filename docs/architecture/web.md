@@ -245,6 +245,8 @@ Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **
 
 **Models** (`GET`/`PUT /v1/ai/models`) lets operators pick the OpenRouter model for each cheap-call lane (summarize, extract, feed-enrich, marketing classifier) from OpenRouter's live catalog. Overrides live in `site_settings` (`ai_lane_models`); wrangler vars remain the fallback when a lane has no override. The next AI call picks up a change (isolate cache ≤30s). Empty wrangler + no override still means Anthropic Haiku fail-open.
 
+The catalog supplements the text-only OpenRouter response with `typesafe/jev-1.13` (JEV decisions), including when the remote catalog is unavailable. Its pricing/context remain unknown instead of inferred from text models. The picker offers JEV only for marketing, and the write route rejects it for text-only lanes. Marketing defaults to JEV in production/staging; a stored override still wins. Choosing a text model restores the existing text classifier, while the shared `openrouter-enabled` switch controls the Anthropic fallback.
+
 **Test emails** lists every outbound template from `GET /v1/admin/emails/samples` and sends fabricated `[test]` previews through `POST /v1/admin/emails/test` (proxied via `/api/proxy/admin/emails/test`). Samples use static fixture data — auth templates go through `AUTH_EMAIL`, operator alerts through `SEND_EMAIL`. This is the fast path for checking footers, links, and deliverability after template edits.
 
 **Live digest test** is separate: `POST /v1/admin/digest/test` (root-key or admin JWT) sends a real follow digest for one user with live watermark/lookback rules. Use it when validating digest content against actual follows; use `/admin/emails` when previewing the render with fixture releases.

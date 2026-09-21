@@ -6,6 +6,24 @@ import {
 } from "./aisdk-decision-model";
 
 describe("aisdkDecisionModel", () => {
+  it("bounds a stalled decision call by the configured deadline", async () => {
+    const evaluate: AisdkDecisionEvaluate = async (request) => {
+      expect(request.abortSignal).toBeInstanceOf(AbortSignal);
+      return await new Promise((_resolve, reject) => {
+        request.abortSignal.addEventListener("abort", () => reject(request.abortSignal.reason), {
+          once: true,
+        });
+      });
+    };
+    const model = aisdkDecisionModel({} as never, "test", { evaluate, timeoutMs: 5 });
+    await expect(
+      model.decide({
+        state: "test",
+        question: { instructions: "Choose", criteria: { safe: "Keep" } },
+      }),
+    ).rejects.toThrow(/timed out/i);
+  });
+
   it("returns a typed choice with probabilities and OpenRouter decision metadata", async () => {
     let request: unknown;
     const evaluate: AisdkDecisionEvaluate = async <OPTION extends string>(
@@ -64,6 +82,7 @@ describe("aisdkDecisionModel", () => {
         },
       },
       maxRetries: 0,
+      abortSignal: expect.any(AbortSignal),
     });
   });
 

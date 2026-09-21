@@ -104,7 +104,7 @@
     // when the `openrouter-enabled` flag is on; otherwise the classifier stays on
     // Anthropic Haiku. OpenRouter is called directly (not fronted by the CF AI
     // Gateway — no double-hop, per docs/architecture/ai-gateway.md Layer 1).
-    "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
+    "MARKETING_CLASSIFIER_MODEL": "typesafe/jev-1.13",
     // OpenRouter cheap-call model for the *live* poll-fetch summarizer AND the
     // nightly collection-daily-summary cron (both consume SUMMARIZE_MODEL).
     // Consulted only when `openrouter-enabled` is on; empty → both stay on
@@ -777,7 +777,7 @@
         // not a var — see the prod vars block note + docs/architecture/ai-gateway.md.
         // OpenRouter cheap-call model (marketing classifier); gated by the
         // `openrouter-enabled` flag. Mirrors prod.
-        "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
+        "MARKETING_CLASSIFIER_MODEL": "typesafe/jev-1.13",
         // OpenRouter cheap-call model for the live summarizer + collection daily
         // summaries; gated by the `openrouter-enabled` flag. deepseek-v4.1-flash
         // (vision-capable) per the #1633 bench (reasoning disabled + GMICloud
