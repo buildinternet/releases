@@ -260,7 +260,7 @@ function histogramColumns(
     const end = ((i + 1) / 10).toFixed(1);
     const upper = i === 9 ? `${column} <= 1.0` : `${column} < ${end}`;
     parts.push(
-      `SUM(if(${column} >= ${start} AND ${upper}, _sample_interval, 0)) AS ${prefix}_${i}`,
+      `SUM(if((${column} >= ${start}) AND (${upper}), _sample_interval, 0)) AS ${prefix}_${i}`,
     );
   }
   parts.push(`SUM(if(${column} < 0, _sample_interval, 0)) AS ${prefix}_missing`);
@@ -401,24 +401,25 @@ export function buildSummaryStatements(
   const where = whereClause(query);
   const interval = intervalSql(query.bucket);
   const bucketExpr = `toStartOfInterval(timestamp, ${interval})`;
+  // `if` requires one type. `_sample_interval * double4` is a float, so the
+  // empty branch is `0.0`. Group and order time buckets by alias.
+  const cost = "SUM(if(double4 >= 0, _sample_interval * double4, 0.0))";
   return {
     totals:
-      `SELECT blob10 AS disposition, SUM(_sample_interval) AS samples, ` +
-      `SUM(if(double4 >= 0, _sample_interval * double4, 0)) AS cost_usd ` +
+      `SELECT blob10 AS disposition, SUM(_sample_interval) AS samples, ${cost} AS cost_usd ` +
       `FROM ${from} WHERE ${where} GROUP BY blob10 LIMIT 20`,
     series:
       `SELECT ${bucketExpr} AS t, blob10 AS disposition, SUM(_sample_interval) AS samples ` +
-      `FROM ${from} WHERE ${where} GROUP BY ${bucketExpr}, blob10 ORDER BY ${bucketExpr} LIMIT 10000`,
+      `FROM ${from} WHERE ${where} GROUP BY t, blob10 ORDER BY t LIMIT 10000`,
     choices:
       `SELECT blob9 AS choice, SUM(_sample_interval) AS samples ` +
-      `FROM ${from} WHERE ${where} GROUP BY blob9 ORDER BY SUM(_sample_interval) DESC LIMIT 100`,
+      `FROM ${from} WHERE ${where} GROUP BY blob9 ORDER BY samples DESC LIMIT 100`,
     choiceSeries:
       `SELECT ${bucketExpr} AS t, blob9 AS choice, SUM(_sample_interval) AS samples ` +
-      `FROM ${from} WHERE ${where} GROUP BY ${bucketExpr}, blob9 ORDER BY ${bucketExpr} LIMIT 25000`,
+      `FROM ${from} WHERE ${where} GROUP BY t, blob9 ORDER BY t LIMIT 25000`,
     models:
-      `SELECT blob7 AS provider, blob8 AS model, SUM(_sample_interval) AS samples, ` +
-      `SUM(if(double4 >= 0, _sample_interval * double4, 0)) AS cost_usd ` +
-      `FROM ${from} WHERE ${where} GROUP BY blob7, blob8 ORDER BY SUM(_sample_interval) DESC LIMIT 200`,
+      `SELECT blob7 AS provider, blob8 AS model, SUM(_sample_interval) AS samples, ${cost} AS cost_usd ` +
+      `FROM ${from} WHERE ${where} GROUP BY blob7, blob8 ORDER BY samples DESC LIMIT 200`,
     histogram:
       `SELECT ${histogramColumns("double1", "selected")}, ${histogramColumns("double2", "confidence")} ` +
       `FROM ${from} WHERE ${where}`,
@@ -696,6 +697,7 @@ async function queryAe(
   creds: { apiToken: string; accountId: string },
   sql: string,
   fetchImpl: typeof fetch,
+  queryName: string,
 ): Promise<AeRow[] | UpstreamError> {
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(creds.accountId)}/analytics_engine/sql`;
   let res: Response;
@@ -706,15 +708,21 @@ async function queryAe(
       body: sql,
     });
   } catch {
-    logEvent("warn", { component: "classification-analytics", event: "ae-query-failed" });
-    return new UpstreamError("AE query failed", { code: "ae_query_failed" });
-  }
-  if (!res.ok) {
-    await res.arrayBuffer().catch(() => undefined);
     logEvent("warn", {
       component: "classification-analytics",
       event: "ae-query-failed",
+      query: queryName,
+    });
+    return new UpstreamError("AE query failed", { code: "ae_query_failed" });
+  }
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 180);
+    logEvent("warn", {
+      component: "classification-analytics",
+      event: "ae-query-failed",
+      query: queryName,
       status: res.status,
+      detail,
     });
     return new UpstreamError(`AE query returned ${res.status}`, { code: "ae_query_failed" });
   }
@@ -753,7 +761,9 @@ export async function fetchClassificationSummary(
   const dataset = classificationDatasetName(env.ENVIRONMENT);
   const statements = buildSummaryStatements(query, dataset);
   const keys = ["totals", "series", "choices", "choiceSeries", "models", "histogram"] as const;
-  const results = await Promise.all(keys.map((key) => queryAe(creds, statements[key], fetchImpl)));
+  const results = await Promise.all(
+    keys.map((key) => queryAe(creds, statements[key], fetchImpl, key)),
+  );
   const failed = results.find((result) => result instanceof ReleasesError);
   if (failed instanceof ReleasesError) return failed;
   const rows = Object.fromEntries(keys.map((key, i) => [key, results[i]])) as Record<
@@ -834,7 +844,7 @@ export async function fetchClassificationRecent(
   if (creds instanceof ReleasesError) return creds;
   if (query.skipQuery) return { items: [], nextCursor: null };
   const dataset = classificationDatasetName(env.ENVIRONMENT);
-  const rows = await queryAe(creds, buildRecentStatement(query, dataset), fetchImpl);
+  const rows = await queryAe(creds, buildRecentStatement(query, dataset), fetchImpl, "recent");
   if (rows instanceof ReleasesError) return rows;
   // Shape once without display fields so the lookup list is the page, not the extra cursor row.
   const unhydrated = shapeClassificationRecent(

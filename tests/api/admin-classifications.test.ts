@@ -206,7 +206,7 @@ describe("GET /admin/classifications/summary", () => {
     expect(calls).toHaveLength(6);
     const sql = calls.map((call) => call.sql).join("\n");
     expect(sql).toContain("SUM(_sample_interval)");
-    expect(sql).toContain("SUM(if(double4 >= 0, _sample_interval * double4, 0))");
+    expect(sql).toContain("SUM(if(double4 >= 0, _sample_interval * double4, 0.0))");
     expect(sql).toContain("blob3 = 'ingest'");
     expect(sql).toContain("blob1 = '1'");
     expect(sql).toContain("blob4 = 'marketing'");
