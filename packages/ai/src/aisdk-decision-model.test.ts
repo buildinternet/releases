@@ -103,4 +103,43 @@ describe("aisdkDecisionModel", () => {
 
     expect(result).toEqual({ choice: "product", usage: {} });
   });
+
+  for (const [label, providerMetadata, message] of [
+    [
+      "non-numeric confidence",
+      { openrouter: { answers: { decision: { confidence: "high" } } } },
+      "invalid confidence",
+    ],
+    [
+      "nonfinite confidence",
+      { openrouter: { answers: { decision: { confidence: Number.NaN } } } },
+      "invalid confidence",
+    ],
+    ["non-numeric cost", { openrouter: { usage: { cost: "free" } } }, "invalid cost"],
+    [
+      "nonfinite cost",
+      { openrouter: { usage: { cost: Number.POSITIVE_INFINITY } } },
+      "invalid cost",
+    ],
+    ["negative cost", { openrouter: { usage: { cost: -0.01 } } }, "invalid cost"],
+  ] as const) {
+    it(`rejects ${label} metadata`, async () => {
+      const evaluate: AisdkDecisionEvaluate = async <OPTION extends string>() => ({
+        answers: { decision: { type: "choice", choice: "product" as OPTION } },
+        usage: {},
+        providerMetadata,
+      });
+      const model = aisdkDecisionModel({} as never, "openrouter:typesafe/jev-1.13", { evaluate });
+
+      await expect(
+        model.decide({
+          state: "A release note.",
+          question: {
+            instructions: "Classify this item.",
+            criteria: { product: "A real product update." },
+          },
+        }),
+      ).rejects.toThrow(message);
+    });
+  }
 });

@@ -208,7 +208,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
       );
       expect(urls).toEqual(["https://openrouter.ai/api/alpha/decisions"]);
       const row = await testDatabase.db.query.releases.findFirst({
-        where: (r, { eq }) => eq(r.id, "rel_1"),
+        where: (r, { eq: equals }) => equals(r.id, "rel_1"),
       });
       expect(row?.suppressed).toBe(expected);
       expect(row?.suppressedReason).toBe(expected ? "marketing_classifier:case_study" : null);
@@ -269,7 +269,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.usage.input).toBe(10);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.suppressed).toBeFalsy();
   });
@@ -285,7 +285,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.result).not.toHaveProperty("decision");
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.suppressed).toBe(true);
     expect(row?.suppressedReason).toBe("marketing_classifier:case_study");
@@ -321,7 +321,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.result.importance).toBe(3);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.titleGenerated).toBeNull();
     expect(row?.summary).toBeNull();
@@ -338,7 +338,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.applied).toBe(true);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.titleGenerated).toBe("Acme v2.0 speeds up queries");
     expect(row?.titleShort).toBe("Faster queries in v2.0");
@@ -361,7 +361,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.result.content).toBe("Cleaned up article body.");
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.content).toBe("Acme v2.0 ships a faster query planner and fixes several bugs.");
   });
@@ -375,7 +375,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.applied).toBe(true);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.content).toBe("Cleaned up article body.");
   });

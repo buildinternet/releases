@@ -56,9 +56,21 @@ function providerMetadata(metadata: unknown): { confidence?: number; costUsd?: n
   const usage = asRecord(openrouter?.usage);
   const confidence = answer?.confidence;
   const costUsd = usage?.cost;
+  if (
+    confidence !== undefined &&
+    (typeof confidence !== "number" || !Number.isFinite(confidence))
+  ) {
+    throw new TypeError("Decision metadata returned invalid confidence.");
+  }
+  if (
+    costUsd !== undefined &&
+    (typeof costUsd !== "number" || !Number.isFinite(costUsd) || costUsd < 0)
+  ) {
+    throw new TypeError("Decision metadata returned invalid cost.");
+  }
   return {
-    ...(typeof confidence === "number" ? { confidence } : {}),
-    ...(typeof costUsd === "number" ? { costUsd } : {}),
+    ...(confidence !== undefined ? { confidence } : {}),
+    ...(costUsd !== undefined ? { costUsd } : {}),
   };
 }
 
