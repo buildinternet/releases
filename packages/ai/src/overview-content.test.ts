@@ -134,15 +134,24 @@ test("generateOverview salvages a complete body from genuinely truncated JSON, d
       warnings: [],
     }),
   });
+  let usage: import("./overview-content").OverviewCallUsage | undefined;
   const { body, citations, truncated } = await generateOverview(
     model as unknown as LanguageModel,
     input,
+    { onUsage: (record) => (usage = record) },
   );
   expect(truncated).toBe(true);
   expect(body).toBe("Shipped a streaming API and faster cold starts.");
   expect(body).not.toContain('"url"');
   // Only the citation that fully serialized before the cut (a known source) is kept.
   expect(citations).toEqual([{ sourceUrl: "https://acme.dev/releases/v2", title: "v2.0" }]);
+  expect(usage).toEqual({
+    inputTokens: 10,
+    outputTokens: 20,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    finishReason: "length",
+  });
 });
 
 test("generateOverview discards a body cut off mid-content (never reached the citations key)", async () => {

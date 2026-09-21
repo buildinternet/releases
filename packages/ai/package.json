@@ -20,6 +20,8 @@
     "./overview-citations": "./src/overview-citations.ts",
     "./text-model": "./src/text-model.ts",
     "./aisdk-text-model": "./src/aisdk-text-model.ts",
+    "./decision-model": "./src/decision-model.ts",
+    "./aisdk-decision-model": "./src/aisdk-decision-model.ts",
     "./agent-telemetry": "./src/agent-telemetry.ts"
   },
   "dependencies": {

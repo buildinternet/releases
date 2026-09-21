@@ -9,7 +9,13 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import { generateText, Output, parsePartialJson, type LanguageModel } from "ai";
+import {
+  generateText,
+  NoObjectGeneratedError,
+  Output,
+  parsePartialJson,
+  type LanguageModel,
+} from "ai";
 import { z } from "zod";
 import { agentTelemetry } from "./agent-telemetry";
 import {
@@ -402,43 +408,62 @@ export async function generateOverview(
   const generate = async (
     prompt: string,
   ): Promise<{ body: string; citations: RawOverviewCitation[]; truncated: boolean }> => {
-    const res = await generateText({
-      model,
-      instructions: SYSTEM_PROMPT,
-      prompt,
-      maxOutputTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
-      output: Output.object({ schema: OVERVIEW_OUTPUT_SCHEMA }),
-      // The AI SDK retries internally by default; disable it so the caller's
-      // `generateOverviewWithRetry` stays the single retry authority (one extra
-      // attempt on transient errors), preserving the lane's billed-call budget.
-      maxRetries: 0,
-      ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
-      ...agentTelemetry({ functionId: "org-overview", conversationId: opts?.conversationId }),
-    });
-    opts?.onUsage?.({
-      inputTokens: res.usage.inputTokens ?? 0,
-      outputTokens: res.usage.outputTokens ?? 0,
-      cacheReadTokens: res.usage.inputTokenDetails?.cacheReadTokens ?? 0,
-      cacheWriteTokens: res.usage.inputTokenDetails?.cacheWriteTokens ?? 0,
-      finishReason: res.finishReason,
-      costUsd: providerCostUsd(res.finalStep?.providerMetadata),
-    });
-    // The AI SDK only parses `.output` on a "stop" finish; on any other finish
-    // (notably "length" truncation) reading `.output` throws NoOutputGeneratedError.
-    // Salvage the partial JSON instead: a complete body plus the citations that
-    // fully serialized before the cut survive; the incomplete tail is dropped.
-    const salvaged = res.finishReason !== "stop";
-    const raw: unknown = salvaged ? (await parsePartialJson(res.text)).value : res.output;
-    // On a salvaged (cut-off) response the body is only trustworthy if serialization
-    // reached the `citations` key — which follows `body` in the schema, so its
-    // presence proves the body string closed. If it didn't, the body itself was cut
-    // mid-content: discard it (empty body → the caller skips the org) rather than
-    // persist a fragment. The 4000-token cap vs. the 300-word body limit makes a
-    // mid-body cut near-impossible in practice; this keeps the salvage provably correct.
-    const bodyComplete = !salvaged || (!!raw && typeof raw === "object" && "citations" in raw);
-    const truncated = res.finishReason === "length";
-    if (!bodyComplete) return { body: "", citations: [], truncated };
-    return { ...coerceOverviewObject(raw), truncated };
+    try {
+      const res = await generateText({
+        model,
+        instructions: SYSTEM_PROMPT,
+        prompt,
+        maxOutputTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
+        output: Output.object({ schema: OVERVIEW_OUTPUT_SCHEMA }),
+        // The AI SDK retries internally by default; disable it so the caller's
+        // `generateOverviewWithRetry` stays the single retry authority (one extra
+        // attempt on transient errors), preserving the lane's billed-call budget.
+        maxRetries: 0,
+        ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+        ...agentTelemetry({ functionId: "org-overview", conversationId: opts?.conversationId }),
+      });
+      opts?.onUsage?.({
+        inputTokens: res.usage.inputTokens ?? 0,
+        outputTokens: res.usage.outputTokens ?? 0,
+        cacheReadTokens: res.usage.inputTokenDetails?.cacheReadTokens ?? 0,
+        cacheWriteTokens: res.usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+        finishReason: res.finishReason,
+        costUsd: providerCostUsd(res.finalStep?.providerMetadata),
+      });
+      // The AI SDK only parses `.output` on a "stop" finish; on any other finish
+      // (notably "length" truncation) reading `.output` throws NoOutputGeneratedError.
+      // Salvage the partial JSON instead: a complete body plus the citations that
+      // fully serialized before the cut survive; the incomplete tail is dropped.
+      const salvaged = res.finishReason !== "stop";
+      const raw: unknown = salvaged ? (await parsePartialJson(res.text)).value : res.output;
+      // On a salvaged (cut-off) response the body is only trustworthy if serialization
+      // reached the `citations` key — which follows `body` in the schema, so its
+      // presence proves the body string closed. If it didn't, the body itself was cut
+      // mid-content: discard it (empty body → the caller skips the org) rather than
+      // persist a fragment. The 4000-token cap vs. the 300-word body limit makes a
+      // mid-body cut near-impossible in practice; this keeps the salvage provably correct.
+      const bodyComplete = !salvaged || (!!raw && typeof raw === "object" && "citations" in raw);
+      const truncated = res.finishReason === "length";
+      if (!bodyComplete) return { body: "", citations: [], truncated };
+      return { ...coerceOverviewObject(raw), truncated };
+    } catch (error) {
+      // AI SDK 7.0.103+ parses structured output before returning a result, so a
+      // length-capped JSON response arrives here instead of as `res.text`.
+      if (!NoObjectGeneratedError.isInstance(error) || error.finishReason !== "length") {
+        throw error;
+      }
+      opts?.onUsage?.({
+        inputTokens: error.usage?.inputTokens ?? 0,
+        outputTokens: error.usage?.outputTokens ?? 0,
+        cacheReadTokens: error.usage?.inputTokenDetails?.cacheReadTokens ?? 0,
+        cacheWriteTokens: error.usage?.inputTokenDetails?.cacheWriteTokens ?? 0,
+        finishReason: error.finishReason,
+      });
+      const raw = (await parsePartialJson(error.text)).value;
+      const bodyComplete = !!raw && typeof raw === "object" && "citations" in raw;
+      if (!bodyComplete) return { body: "", citations: [], truncated: true };
+      return { ...coerceOverviewObject(raw), truncated: true };
+    }
   };
 
   const first = await generate(user);
