@@ -408,6 +408,7 @@ export async function generateOverview(
   const generate = async (
     prompt: string,
   ): Promise<{ body: string; citations: RawOverviewCitation[]; truncated: boolean }> => {
+    let finalProviderMetadata: Record<string, unknown> | undefined;
     try {
       const res = await generateText({
         model,
@@ -421,6 +422,9 @@ export async function generateOverview(
         maxRetries: 0,
         ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
         ...agentTelemetry({ functionId: "org-overview", conversationId: opts?.conversationId }),
+        onEnd: ({ providerMetadata }) => {
+          finalProviderMetadata = providerMetadata;
+        },
       });
       opts?.onUsage?.({
         inputTokens: res.usage.inputTokens ?? 0,
@@ -428,7 +432,7 @@ export async function generateOverview(
         cacheReadTokens: res.usage.inputTokenDetails?.cacheReadTokens ?? 0,
         cacheWriteTokens: res.usage.inputTokenDetails?.cacheWriteTokens ?? 0,
         finishReason: res.finishReason,
-        costUsd: providerCostUsd(res.finalStep?.providerMetadata),
+        costUsd: providerCostUsd(finalProviderMetadata ?? res.finalStep?.providerMetadata),
       });
       // The AI SDK only parses `.output` on a "stop" finish; on any other finish
       // (notably "length" truncation) reading `.output` throws NoOutputGeneratedError.
@@ -458,6 +462,7 @@ export async function generateOverview(
         cacheReadTokens: error.usage?.inputTokenDetails?.cacheReadTokens ?? 0,
         cacheWriteTokens: error.usage?.inputTokenDetails?.cacheWriteTokens ?? 0,
         finishReason: error.finishReason,
+        costUsd: providerCostUsd(finalProviderMetadata),
       });
       const raw = (await parsePartialJson(error.text)).value;
       const bodyComplete = !!raw && typeof raw === "object" && "citations" in raw;

@@ -131,27 +131,31 @@ test("generateOverview salvages a complete body from genuinely truncated JSON, d
         inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
         outputTokens: { total: 20, text: 20, reasoning: 0 },
       },
+      providerMetadata: { openrouter: { usage: { cost: 0.123 } } },
       warnings: [],
     }),
   });
-  let usage: import("./overview-content").OverviewCallUsage | undefined;
+  const usage: import("./overview-content").OverviewCallUsage[] = [];
   const { body, citations, truncated } = await generateOverview(
     model as unknown as LanguageModel,
     input,
-    { onUsage: (record) => (usage = record) },
+    { onUsage: (record) => usage.push(record) },
   );
   expect(truncated).toBe(true);
   expect(body).toBe("Shipped a streaming API and faster cold starts.");
   expect(body).not.toContain('"url"');
   // Only the citation that fully serialized before the cut (a known source) is kept.
   expect(citations).toEqual([{ sourceUrl: "https://acme.dev/releases/v2", title: "v2.0" }]);
-  expect(usage).toEqual({
-    inputTokens: 10,
-    outputTokens: 20,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    finishReason: "length",
-  });
+  expect(usage).toEqual([
+    {
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      finishReason: "length",
+      costUsd: 0.123,
+    },
+  ]);
 });
 
 test("generateOverview discards a body cut off mid-content (never reached the citations key)", async () => {
