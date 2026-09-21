@@ -55,7 +55,7 @@ The recent list returns the sampled rows themselves and does not multiply them b
 
 Queries go to the Analytics Engine SQL API: `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/analytics_engine/sql` with the SQL as the body. The bearer token and account id are `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, resolved by `resolveCloudflareAeCredentials` — the same Secrets Store bindings as Browser Rendering and webhook delivery history. There is no second token.
 
-Missing credentials return `503` with code `deliveries_unavailable`. A non-2xx SQL response returns `502` with code `ae_query_failed`. The token is sent only on the `Authorization` header. SQL is not logged. Analytics Engine has no bound parameters, so every interpolated value is an allowlisted literal, a regex-checked token, or a timestamp the API formatted itself. Anything else is a `400` `bad_request` and never reaches the statement.
+Missing credentials return `503` with code `deliveries_unavailable`. A non-2xx SQL response returns `502` with code `ae_query_failed`. `UpstreamError` keeps the message generic. `details` carries only `{ query, status }` — which of the summary statements failed, and the Analytics Engine HTTP status. The response body from Analytics Engine is logged, not returned. The token is sent only on the `Authorization` header. SQL is not logged. Analytics Engine has no bound parameters, so every interpolated value is an allowlisted literal, a regex-checked token, or a timestamp the API formatted itself. Anything else is a `400` `bad_request` and never reaches the statement.
 
 ## Routes
 

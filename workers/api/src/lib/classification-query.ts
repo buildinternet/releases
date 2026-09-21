@@ -693,6 +693,14 @@ export function shapeClassificationRecent(
   };
 }
 
+/** Safe operator context. The Analytics Engine body stays in the log. */
+function aeQueryError(query: string, status?: number): UpstreamError {
+  return new UpstreamError("AE query failed", {
+    code: "ae_query_failed",
+    details: status === undefined ? { query } : { query, status },
+  });
+}
+
 async function queryAe(
   creds: { apiToken: string; accountId: string },
   sql: string,
@@ -713,7 +721,7 @@ async function queryAe(
       event: "ae-query-failed",
       query: queryName,
     });
-    return new UpstreamError("AE query failed", { code: "ae_query_failed" });
+    return aeQueryError(queryName);
   }
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 180);
@@ -724,17 +732,17 @@ async function queryAe(
       status: res.status,
       detail,
     });
-    return new UpstreamError(`AE query returned ${res.status}`, { code: "ae_query_failed" });
+    return aeQueryError(queryName, res.status);
   }
   let body: unknown;
   try {
     body = await res.json();
   } catch {
-    return new UpstreamError("AE query returned invalid JSON", { code: "ae_query_failed" });
+    return aeQueryError(queryName, res.status);
   }
   const data = (body as { data?: unknown }).data;
   if (!Array.isArray(data)) {
-    return new UpstreamError("AE query returned no data", { code: "ae_query_failed" });
+    return aeQueryError(queryName, res.status);
   }
   return data as AeRow[];
 }

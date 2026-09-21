@@ -26,6 +26,7 @@ import {
   CLASSIFICATIONS_EMPTY_COPY,
   CLASSIFICATIONS_ERROR_COPY,
   CLASSIFICATIONS_LOADING_COPY,
+  classificationFailureNote,
   DEFAULT_CLASSIFICATION_ORIGIN,
   EMPTY_MARK,
   classificationRecentUrl,
@@ -52,6 +53,22 @@ const ORIGIN_LABELS: Record<ClassificationOrigin, string> = {
   eval: "Eval",
   all: "All",
 };
+
+class ClassificationsRequestError extends Error {
+  readonly note: string | null;
+
+  constructor(status: number, note: string | null) {
+    super(`classifications ${status}`);
+    this.name = "ClassificationsRequestError";
+    this.note = note;
+  }
+}
+
+async function readClassificationsResponse(res: Response): Promise<unknown> {
+  if (res.ok) return res.json() as Promise<unknown>;
+  const body = await res.json().catch(() => null);
+  throw new ClassificationsRequestError(res.status, classificationFailureNote(body));
+}
 
 class ClassificationsTabBoundary extends Component<
   { children: ReactNode },
@@ -347,6 +364,7 @@ function ClassificationsTabInner({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
+  const [errorNote, setErrorNote] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const generation = useRef(0);
   const loadMoreAbort = useRef<AbortController | null>(null);
@@ -360,6 +378,7 @@ function ClassificationsTabInner({
     setItems([]);
     setNextCursor(null);
     setError(false);
+    setErrorNote(null);
     setLoadMoreError(false);
     setLoading(true);
     setLoadingMore(false);
@@ -377,14 +396,12 @@ function ClassificationsTabInner({
     const recentUrl = classificationRecentUrl(range, origin);
 
     Promise.all([
-      fetch(summaryUrl, { signal: controller.signal }).then(async (res) => {
-        if (!res.ok) throw new Error(`summary ${res.status}`);
-        return res.json() as Promise<unknown>;
-      }),
-      fetch(recentUrl, { signal: controller.signal }).then(async (res) => {
-        if (!res.ok) throw new Error(`recent ${res.status}`);
-        return res.json() as Promise<unknown>;
-      }),
+      fetch(summaryUrl, { signal: controller.signal }).then((res) =>
+        readClassificationsResponse(res),
+      ),
+      fetch(recentUrl, { signal: controller.signal }).then((res) =>
+        readClassificationsResponse(res),
+      ),
     ])
       .then(([summaryBody, recentBody]) => {
         if (gen !== generation.current) return;
@@ -399,6 +416,7 @@ function ClassificationsTabInner({
       .catch((err: unknown) => {
         if (gen !== generation.current || isAbort(err)) return;
         console.error("[ClassificationsTab]", err);
+        setErrorNote(err instanceof ClassificationsRequestError ? err.note : null);
         setError(true);
         setLoading(false);
       });
@@ -455,7 +473,10 @@ function ClassificationsTabInner({
         <p className="text-xs text-stone-500">{CLASSIFICATIONS_LOADING_COPY}</p>
       ) : null}
       {state === "error" ? (
-        <p className="text-xs text-red-500 py-4">{CLASSIFICATIONS_ERROR_COPY}</p>
+        <p className="text-xs text-red-500 py-4">
+          {CLASSIFICATIONS_ERROR_COPY}
+          {errorNote ? <span className="block mt-1">{errorNote}</span> : null}
+        </p>
       ) : null}
       {state === "empty" ? (
         <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">

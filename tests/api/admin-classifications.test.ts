@@ -125,9 +125,19 @@ describe("GET /admin/classifications/summary", () => {
     });
     const first = await request(path);
     expect(first.status).toBe(502);
-    const body = (await first.json()) as { error: { code: string; type: string } };
+    const body = (await first.json()) as {
+      error: {
+        code: string;
+        type: string;
+        message: string;
+        details?: { query?: string; status?: number };
+      };
+    };
     expect(body.error.code).toBe("ae_query_failed");
     expect(body.error.type).toBe("upstream");
+    expect(body.error.message).toBe("Upstream service error");
+    expect(body.error.details).toEqual({ query: "totals", status: 500 });
+    expect(JSON.stringify(body)).not.toContain("nope");
     const second = await request(path);
     expect(second.status).toBe(502);
     expect(calls).toBeGreaterThan(1);
