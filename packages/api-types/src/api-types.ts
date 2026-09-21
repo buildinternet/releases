@@ -217,6 +217,11 @@ import type {
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
 import type {
+  ClassificationSummarySchema,
+  ClassificationRecentResponseSchema,
+  ClassificationRecentItemSchema,
+} from "./schemas/classifications.js";
+import type {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
 } from "./schemas/recommendations.js";
@@ -551,6 +556,11 @@ export {
   FeedbackUpdateBodySchema,
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
+export {
+  ClassificationSummarySchema,
+  ClassificationRecentResponseSchema,
+  ClassificationRecentItemSchema,
+} from "./schemas/classifications.js";
 export {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
@@ -1754,6 +1764,11 @@ export type FeedbackItem = z.infer<typeof FeedbackItemSchema>;
 export type FeedbackListResponse = z.infer<typeof FeedbackListResponseSchema>;
 export type FeedbackUpdateBody = z.infer<typeof FeedbackUpdateBodySchema>;
 export type FeedbackDeleteResponse = z.infer<typeof FeedbackDeleteResponseSchema>;
+
+// ── Classification analytics ──
+export type ClassificationSummary = z.infer<typeof ClassificationSummarySchema>;
+export type ClassificationRecentResponse = z.infer<typeof ClassificationRecentResponseSchema>;
+export type ClassificationRecentItem = z.infer<typeof ClassificationRecentItemSchema>;
 
 // ── Recommendations ──
 export type RecommendationNotifyAddedBody = z.infer<typeof RecommendationNotifyAddedBodySchema>;

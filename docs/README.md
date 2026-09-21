@@ -56,6 +56,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 ### Search and AI
 
 - **[semantic-search.md](architecture/semantic-search.md)** — the three Vectorize indexes, hybrid RRF ranking with recency boosts, the query-embedding cache, and related-entity rails.
+- **[classification-analytics.md](architecture/classification-analytics.md)** — admin read API over marketing-classifier decisions in Analytics Engine: sampling, retention, the two routes, and the summary cache.
 - **[ai-gateway.md](architecture/ai-gateway.md)** — how Anthropic calls route through Cloudflare AI Gateway for observability, which paths deliberately bypass it, and the OpenRouter cheap-lane switch.
 - **[feature-flags.md](architecture/feature-flags.md)** — the Flagship flag registry and every live flag with its polarity.
 - **[content-pipelines.md](architecture/content-pipelines.md)** — a map of every routine/scheduled AI-content pipeline (overview regen, batch summarize, feed enrichment, digests) with schedule, gate, model lane, and manual trigger.

@@ -30,6 +30,7 @@ import type { RawRelease } from "@releases/adapters/types";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
 import { clearAiLaneModelCache } from "../src/lib/ai-lane-models.js";
 import { marketingDecisionResponse } from "../../../tests/marketing-decision-fixture";
+import type { ClassificationDataPoint } from "../src/lib/classification-schema.js";
 
 // ── feed-adapter stub ───────────────────────────────────────────────────────
 //
@@ -194,12 +195,22 @@ async function seedFeedSource(db: ReturnType<typeof mkDb>, metadata: Record<stri
 // test wants the classifier to actually fire. Embed bindings stay undefined so
 // the inline embed step is a no-op (the assertion is about insert state, not
 // vector writes).
-function makeEnv(opts: { withAnthropic: boolean }): unknown {
+function makeEnv(opts: { withAnthropic: boolean; points?: ClassificationDataPoint[] }): unknown {
   return {
     GITHUB_TOKEN: undefined,
     RELEASES_INDEX: undefined,
     CHANGELOG_CHUNKS_INDEX: undefined,
     ANTHROPIC_API_KEY: opts.withAnthropic ? { get: async () => "sk-ant-test-key" } : undefined,
+    ...(opts.points
+      ? {
+          ENVIRONMENT: "production",
+          RELEASE_CLASSIFICATIONS_AE: {
+            writeDataPoint(point: ClassificationDataPoint) {
+              opts.points!.push(point);
+            },
+          },
+        }
+      : {}),
   };
 }
 
@@ -543,5 +554,167 @@ describe("fetchOne — metadata.marketingFilter", () => {
     } finally {
       errorSpy?.mockRestore();
     }
+  });
+
+  it("records suppressed and kept inserts, and skips a url that already exists", async () => {
+    installFetch((input, init) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        const bodyText = init?.body as string | undefined;
+        if (bodyText?.includes("How TestCo migrated")) {
+          return anthropicJson({ marketing: true, reason: "case_study" });
+        }
+        return anthropicJson({ marketing: false, reason: "not_marketing" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    await db.insert(releases).values({
+      id: "rel_existing",
+      sourceId: "src_ch_blog",
+      title: "ClickHouse Release 26.4",
+      content: "Already stored.",
+      url: "https://clickhouse.com/blog/clickhouse-release-26-04",
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(1);
+    expect(points).toHaveLength(1);
+    const point = points[0]!;
+    expect(point.blobs[2]).toBe("ingest");
+    expect(point.blobs[8]).toBe("case_study");
+    expect(point.blobs[9]).toBe("suppressed");
+    expect(point.blobs[4]).toMatch(/^rel_/);
+    expect(point.blobs[4]).not.toBe("rel_existing");
+    expect(point.indexes.join(" ") + point.blobs.join(" ")).not.toContain("TestCo");
+    expect(point.blobs.join(" ")).not.toContain("http");
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    const marketingRow = rows.find((row) => row.url === "https://clickhouse.com/blog/testco");
+    expect(marketingRow?.suppressed).toBe(true);
+    expect(point.blobs[4]).toBe(marketingRow?.id ?? "");
+  });
+
+  it("records a kept insert for a non-marketing item", async () => {
+    installFetch(() => anthropicJson({ marketing: false, reason: "not_marketing" }));
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    nextFeedReleases = [ITEMS_FOR_CLASSIFICATION[1]!];
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.insertedIds).toHaveLength(1);
+    expect(points).toHaveLength(1);
+    expect(points[0]?.blobs[8]).toBe("not_marketing");
+    expect(points[0]?.blobs[9]).toBe("kept");
+    expect(points[0]?.blobs[10]).toBe("unspecified");
+    expect(points[0]?.blobs[4]).toBe(result.insertedIds?.[0] ?? "");
+    expect(points[0]?.blobs[4]).toMatch(/^rel_/);
+  });
+
+  it("records failed when classify throws and still inserts the release visibly", async () => {
+    installFetch((input) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        return new Response(
+          JSON.stringify({
+            id: "msg_test",
+            type: "message",
+            role: "assistant",
+            model: "claude-haiku-4-5",
+            content: [{ type: "text", text: "this is not the format we asked for" }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 50, output_tokens: 8 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    nextFeedReleases = [ITEMS_FOR_CLASSIFICATION[0]!];
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(1);
+    expect(result.insertedIds).toHaveLength(1);
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows.every((row) => row.suppressed === false)).toBe(true);
+    expect(points).toHaveLength(1);
+    const flat = [...(points[0]?.indexes ?? []), ...(points[0]?.blobs ?? [])].join("\n");
+    expect(points[0]?.blobs[9]).toBe("failed");
+    expect(points[0]?.blobs[12]).toBe("classify_error");
+    expect(points[0]?.blobs[8]).toBe("");
+    expect(points[0]?.blobs[4]).toMatch(/^rel_/);
+    expect(points[0]?.doubles[0]).toBe(-1);
+    expect(points[0]?.doubles[4]).toBe(-1);
+    expect(points[0]?.doubles[6]).toBeGreaterThanOrEqual(0);
+    expect(flat).not.toContain("format");
+    expect(flat).not.toContain("TestCo");
+  });
+
+  it("does not write a point on a dry run", async () => {
+    installFetch(() => anthropicJson({ marketing: true, reason: "case_study" }));
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+      {
+        dryRun: true,
+      },
+    );
+
+    expect(result.status).toBe("dry_run");
+    expect(points).toHaveLength(0);
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows).toHaveLength(0);
   });
 });

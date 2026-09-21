@@ -65,6 +65,7 @@ export const adminRoutes = [
   "admin/cron-runs",
   "admin/logs",
   "admin/search-queries",
+  "admin/classifications",
   "admin/feedback",
   "admin/recommendations",
   "admin/overviews",

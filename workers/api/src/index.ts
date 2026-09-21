@@ -329,6 +329,10 @@ export type Env = {
     // wrangler.jsonc vars and "staging" in the env.staging block. Read by
     // /v1/graphql to gate GraphiQL + introspection. Absent in `wrangler dev`.
     ENVIRONMENT?: string;
+    // Marketing-classification points. Optional — local dev omits it and the
+    // write no-ops. Staging must bind `release_classifications_staging`, not
+    // the prod dataset.
+    RELEASE_CLASSIFICATIONS_AE?: AnalyticsEngineDataset;
     // Cloudflare Browser Rendering credentials for feed-content enrichment.
     // Bound via Secrets Store in Task 9 — optional here so the route degrades
     // gracefully (cheap-path-only) when absent.

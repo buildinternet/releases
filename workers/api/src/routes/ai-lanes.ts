@@ -55,7 +55,13 @@ import {
 import {
   classifyMarketing,
   type MarketingClassifierInput,
+  type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
+import { writeClassificationPoint } from "../lib/classification-schema.js";
+import {
+  marketingClassificationInput,
+  type MarketingClassificationRecord,
+} from "../lib/classification-points.js";
 import {
   summarizeRelease,
   type SummarizeReleaseInput,
@@ -84,6 +90,12 @@ interface LaneRequestBody {
   content?: string;
   url?: string;
   apply?: boolean;
+  /**
+   * Marketing lane only. Omitted or `"manual"` records a manual point;
+   * `"eval"` records an eval point. Any other value is a 400. Ignored on
+   * summarize and feed-enrich.
+   */
+  origin?: string;
 }
 
 /** Row shape loaded when `releaseId` resolves. */
@@ -184,6 +196,29 @@ function resolveCostUsd(
     },
     model,
   )?.totalUsd;
+}
+
+/** Marketing-lane telemetry origin. `"ingest"` is rejected so a caller cannot forge that series. */
+function marketingLaneOrigin(value: unknown): "manual" | "eval" | null {
+  if (value === undefined || value === "manual") return "manual";
+  if (value === "eval") return "eval";
+  return null;
+}
+
+function writeLaneClassification(
+  env: Env["Bindings"],
+  record: Omit<MarketingClassificationRecord, "index">,
+  ctx: {
+    origin: "manual" | "eval";
+    releaseId?: string | null;
+    sourceId?: string | null;
+  },
+): void {
+  writeClassificationPoint(
+    env.RELEASE_CLASSIFICATIONS_AE,
+    env.ENVIRONMENT,
+    marketingClassificationInput(record, ctx),
+  );
 }
 
 function usagePayload(provider: string, model: string, usage: TextModelUsage) {
@@ -319,6 +354,15 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
   const fetchEnv = await buildFetchOneEnv(c.env);
 
   if (lane === "marketing") {
+    const origin = marketingLaneOrigin(body.origin);
+    if (!origin) {
+      return respondError(
+        c,
+        new ValidationError('origin must be omitted, "manual", or "eval"', {
+          code: "bad_request",
+        }),
+      );
+    }
     if (!resolvedTitle) {
       return respondError(
         c,
@@ -327,8 +371,22 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
         }),
       );
     }
+    const releaseId = release?.id ?? null;
+    const pointSourceId = source?.id ?? null;
     const model = await resolveMarketingModel(fetchEnv);
     if (!model) {
+      writeLaneClassification(
+        c.env,
+        {
+          disposition: "skipped",
+          failureCategory: "no_provider",
+          verdict: null,
+          provider: null,
+          model: null,
+          durationMs: null,
+        },
+        { origin, releaseId, sourceId: pointSourceId },
+      );
       return respondError(
         c,
         new ServiceUnavailableError("No model provider configured for the marketing lane"),
@@ -342,8 +400,38 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       hint: marketingFilterHint ?? null,
       sourceId: source?.id,
     };
-    const verdict = await runLane(lane, () => classifyMarketing(model, input));
     const { provider, model: modelName } = splitModelId(model.id);
+    const started = Date.now();
+    let verdict: MarketingClassifierResult;
+    try {
+      verdict = await runLane(lane, () => classifyMarketing(model, input));
+    } catch (err) {
+      writeLaneClassification(
+        c.env,
+        {
+          disposition: "failed",
+          failureCategory: "classify_error",
+          verdict: null,
+          provider,
+          model: modelName,
+          durationMs: Date.now() - started,
+        },
+        { origin, releaseId, sourceId: pointSourceId },
+      );
+      throw err;
+    }
+    writeLaneClassification(
+      c.env,
+      {
+        disposition: verdict.isMarketing ? "suppressed" : "kept",
+        failureCategory: null,
+        verdict,
+        provider,
+        model: modelName,
+        durationMs: Date.now() - started,
+      },
+      { origin, releaseId, sourceId: pointSourceId },
+    );
 
     let applied = false;
     if (apply && release) {

@@ -33,6 +33,7 @@
  */
 import { getSecret } from "@releases/lib/secrets";
 import type { MediaTransformBinding } from "../lib/media-ingest.js";
+import type { ClassificationDataset } from "../lib/classification-schema.js";
 import type { FetchOneEnv } from "../cron/poll-fetch.js";
 import type { AnthropicEnv } from "../lib/anthropic.js";
 import type { TextModelEnv } from "../lib/text-model.js";
@@ -76,6 +77,12 @@ export interface WorkflowFetchEnv
   FEED_THIN_CHARS?: string;
   CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
   CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
+  /**
+   * Marketing-classification Analytics Engine dataset. Forwarded so workflow
+   * ingest can write points. Absent → the write no-ops. Staging must stay on
+   * its own dataset.
+   */
+  RELEASE_CLASSIFICATIONS_AE?: ClassificationDataset;
 }
 
 /**
@@ -111,7 +118,9 @@ type CriticalFetchKeys =
   // Outbound ping. Fails open to "skipped", so a drop looks exactly like the
   // feature being off — see the scope note above.
   | "WEB_SERVICE_KEY"
-  | "WEB_BASE_URL";
+  | "WEB_BASE_URL"
+  // Missing binding looks exactly like classification telemetry being off.
+  | "RELEASE_CLASSIFICATIONS_AE";
 
 /**
  * `FetchOneEnv` with the critical keys promoted from optional to required —
@@ -167,6 +176,7 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     // model var — its "lane is off" signal — and silently routes the marketing
     // classifier + feed-enrich extractor to Anthropic Haiku instead.
     ENVIRONMENT: env.ENVIRONMENT,
+    RELEASE_CLASSIFICATIONS_AE: env.RELEASE_CLASSIFICATIONS_AE,
     OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,

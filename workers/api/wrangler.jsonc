@@ -242,6 +242,11 @@
     { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" },
   ],
+  // Marketing-classification points. Staging must stay on its own dataset —
+  // env blocks do not inherit bindings, so the staging block repeats this.
+  "analytics_engine_datasets": [
+    { "binding": "RELEASE_CLASSIFICATIONS_AE", "dataset": "release_classifications" },
+  ],
   // KV namespaces. LATEST_CACHE fronts GET /v1/releases/latest with a
   // 300s TTL (keys: latest:v2:<sorted-qs>). Optional — `withLatestCache`
   // degrades to pass-through when the binding is absent.
@@ -841,6 +846,13 @@
       ],
       // Flagship staging app (separate from prod so flag states are isolated).
       "flagship": [{ "binding": "FLAGS", "app_id": "548a95f1-4f8c-402d-8aa2-1b861523d377" }],
+      // Staging must stay on its own dataset so prod queries never mix in staging points.
+      "analytics_engine_datasets": [
+        {
+          "binding": "RELEASE_CLASSIFICATIONS_AE",
+          "dataset": "release_classifications_staging",
+        },
+      ],
       // KV reuses the preview namespaces — those already exist and aren't
       // bound to prod. Keeps `wrangler dev` and staging in the same cache.
       // ALERT_DEDUP_KV shares the LATEST_CACHE namespace (distinct key prefix).

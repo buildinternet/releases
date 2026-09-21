@@ -38,6 +38,7 @@ import { aiModelRoutes } from "./routes/ai-models.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminSearchQueriesRoutes } from "./routes/admin-search-queries.js";
+import { adminClassificationsRoutes } from "./routes/admin-classifications.js";
 import { adminOverviewsRoutes } from "./routes/admin-overviews.js";
 import { adminSourcesRoutes } from "./routes/admin-sources.js";
 import { adminOrgDependentsRoutes } from "./routes/admin-org-dependents.js";
@@ -106,6 +107,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", adminEmbedStatusRoutes);
   v1.route("/", adminCronRunsRoutes);
   v1.route("/", adminSearchQueriesRoutes);
+  v1.route("/", adminClassificationsRoutes);
   v1.route("/", adminOverviewsRoutes);
   v1.route("/", adminSourcesRoutes);
   v1.route("/", adminOrgDependentsRoutes);
