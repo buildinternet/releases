@@ -28,6 +28,7 @@ import {
 } from "./session-error-display";
 import { formatStatusTimestamp } from "./status-shared";
 import { FetchActivityChart, type SelectedWindow } from "./fetch-activity-chart";
+import { DateRangeControl, type StatusDateRange } from "./date-range-control";
 import { useProviderHealth } from "./use-provider-health";
 import { ProviderHealthBanner, ProviderHealthTab } from "./provider-health-tab";
 
@@ -132,7 +133,7 @@ type Tab =
   | "searches"
   | "batch"
   | "classifications";
-type DateRange = "today" | "week" | "month" | "all";
+type DateRange = StatusDateRange;
 
 type SourceSortField =
   | "name"
@@ -208,13 +209,6 @@ function getDateRangeAfter(range: DateRange): string | null {
   return now.toISOString();
 }
 
-const dateRangeLabels: Record<DateRange, string> = {
-  today: "Today",
-  week: "This Week",
-  month: "This Month",
-  all: "All Time",
-};
-
 function formatModelName(model: string): string {
   // e.g. "claude-haiku-4-5-20251001" → "Haiku 4.5", "claude-sonnet-4-5-20250514" → "Sonnet 4.5"
   const match = model.match(/claude-(\w+)-(\d+)-(\d+)/);
@@ -273,6 +267,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   );
   const providerHealth = useProviderHealth();
   const [dateRange, setDateRange] = useState<DateRange>("week");
+  const tablistRef = useRef<HTMLDivElement>(null);
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
   const [hydrateError, setHydrateError] = useState(false);
@@ -293,6 +288,20 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reconnectDelay = useRef(1000);
   const intentionalClose = useRef(false);
+
+  // Keep the active tab in view when the strip scrolls under a narrow content column.
+  useEffect(() => {
+    const container = tablistRef.current;
+    const activeTab = container?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!container || !activeTab) return;
+    const tabRect = activeTab.getBoundingClientRect();
+    const listRect = container.getBoundingClientRect();
+    if (tabRect.left < listRect.left) {
+      container.scrollLeft -= listRect.left - tabRect.left;
+    } else if (tabRect.right > listRect.right) {
+      container.scrollLeft += tabRect.right - listRect.right;
+    }
+  }, [tab]);
 
   // Track tab visibility
   const [visible, setVisible] = useState(true);
@@ -603,16 +612,24 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         }}
       />
 
-      {/* Date range + Tabs */}
-      <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 mb-4">
-        <div className="flex gap-1">
+      {/* Tabs scroll; the range menu stays in a trailing slot so the two don't share one cramped line. */}
+      <div className="mb-4 flex items-end gap-3 border-b border-stone-200 dark:border-stone-800">
+        <div
+          ref={tablistRef}
+          role="tablist"
+          aria-label="Status"
+          className="-mb-px flex min-w-0 flex-1 gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {TABS.map(({ value, label }) => (
             <button
               key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
               onClick={() => setTab(value)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
                 tab === value
-                  ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
+                  ? "border-stone-900 text-stone-900 dark:border-stone-100 dark:text-stone-100"
                   : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
               }`}
             >
@@ -624,25 +641,14 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
             </button>
           ))}
         </div>
-        <div className="flex gap-1 mb-px">
-          {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
-            <button
-              key={range}
-              onClick={() => {
-                setDateRange(range);
-                setSessionPage(0);
-                setFetchLogWindow(null);
-              }}
-              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-                dateRange === range
-                  ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
-                  : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
-              }`}
-            >
-              {dateRangeLabels[range]}
-            </button>
-          ))}
-        </div>
+        <DateRangeControl
+          value={dateRange}
+          onChange={(range) => {
+            setDateRange(range);
+            setSessionPage(0);
+            setFetchLogWindow(null);
+          }}
+        />
       </div>
 
       {/* Tab content */}
