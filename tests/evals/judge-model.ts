@@ -19,7 +19,14 @@
  * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-4-6` to go
  * back to Sonnet, or `JUDGE_MODEL=google/gemini-2.5-flash-lite` for cheaper.
  */
-import { buildLaneOpenRouterModel, buildLaneAnthropicModel } from "@releases/adapters/lane-model";
+import {
+  buildLaneOpenRouterModel,
+  buildLaneAnthropicModel,
+  buildLaneOpenRouterDecisionModel,
+} from "@releases/adapters/lane-model";
+import { aisdkDecisionModel } from "@releases/ai-internal/aisdk-decision-model";
+import type { MarketingModel } from "@releases/ai-internal/marketing-classifier";
+import { MARKETING_DECISION_MODEL } from "@releases/core-internal/ai-lane-models";
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import type { LanguageModel } from "ai";
@@ -122,6 +129,33 @@ export function resolveEvalModel(
     return { model: asEvalTextModel(lane, label), label };
   }
   return null;
+}
+
+/** Marketing's candidate may use Decisions; other eval lanes remain text-only. */
+export function resolveMarketingEvalModel(
+  opts: EvalLaneOptions,
+): { model: MarketingModel; label: string } | null {
+  const id = process.env[opts.orModelEnvVar]?.trim();
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (id === MARKETING_DECISION_MODEL && apiKey) {
+    const label = evalLabel("openrouter", id);
+    return {
+      label,
+      model: aisdkDecisionModel(
+        buildLaneOpenRouterDecisionModel({
+          apiKey,
+          model: id,
+          baseURL: process.env.OPENROUTER_BASE_URL?.trim() || undefined,
+          sessionId: opts.generationName,
+          referer: EVAL_REFERER,
+          title: EVAL_TITLE,
+          trace: { generationName: opts.generationName, environment: EVAL_ENV },
+        }),
+        label,
+      ),
+    };
+  }
+  return resolveEvalModel(opts);
 }
 
 /**

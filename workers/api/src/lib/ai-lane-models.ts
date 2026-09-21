@@ -5,6 +5,7 @@
  */
 import {
   AI_LANES,
+  MARKETING_DECISION_MODEL,
   AI_LANE_META,
   applyLaneOverride,
   parseOpenRouterModelId,
@@ -26,6 +27,17 @@ let catalogCache: {
   catalog: OpenRouterCatalogModel[];
   fetchedAt: string;
 } | null = null;
+
+// The text-only catalog excludes JEV. Keep the supported decision model available
+// even when catalog fetching fails; unknown pricing stays unknown.
+const DECISION_CATALOG: OpenRouterCatalogModel = {
+  id: MARKETING_DECISION_MODEL,
+  name: "Typesafe: JEV 1.13 (decision)",
+  contextLength: null,
+  promptPricePerMillion: null,
+  completionPricePerMillion: null,
+  vision: false,
+};
 
 export function clearAiLaneModelCache(): void {
   overlayCache = null;
@@ -137,9 +149,9 @@ function toPerMillion(raw: unknown): number | null {
 }
 
 function parseCatalog(payload: unknown): OpenRouterCatalogModel[] {
-  if (typeof payload !== "object" || payload === null) return [];
+  if (typeof payload !== "object" || payload === null) return [DECISION_CATALOG];
   const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data)) return [];
+  if (!Array.isArray(data)) return [DECISION_CATALOG];
   const out: OpenRouterCatalogModel[] = [];
   for (const row of data) {
     if (typeof row !== "object" || row === null) continue;
@@ -157,6 +169,7 @@ function parseCatalog(payload: unknown): OpenRouterCatalogModel[] {
       vision: modalities.includes("image"),
     });
   }
+  if (!out.some((m) => m.id === MARKETING_DECISION_MODEL)) out.push(DECISION_CATALOG);
   out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   return out;
 }
@@ -193,7 +206,7 @@ export async function fetchOpenRouterCatalog(env: LaneModelEnv): Promise<{
         status: res.status,
       });
       return {
-        catalog: catalogCache?.catalog ?? [],
+        catalog: catalogCache?.catalog ?? [DECISION_CATALOG],
         catalogFetchedAt: catalogCache?.fetchedAt ?? null,
         catalogError: err,
       };
@@ -210,7 +223,7 @@ export async function fetchOpenRouterCatalog(env: LaneModelEnv): Promise<{
       err: message,
     });
     return {
-      catalog: catalogCache?.catalog ?? [],
+      catalog: catalogCache?.catalog ?? [DECISION_CATALOG],
       catalogFetchedAt: catalogCache?.fetchedAt ?? null,
       catalogError: message,
     };

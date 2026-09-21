@@ -28,6 +28,8 @@ import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { clearAiLaneModelCache } from "../src/lib/ai-lane-models.js";
+import { marketingDecisionResponse } from "../../../tests/marketing-decision-fixture";
 
 // ── feed-adapter stub ───────────────────────────────────────────────────────
 //
@@ -204,6 +206,39 @@ function makeEnv(opts: { withAnthropic: boolean }): unknown {
 // ── tests ────────────────────────────────────────────────────────────────────
 
 describe("fetchOne — metadata.marketingFilter", () => {
+  for (const [choice, probability, suppressed, status] of [
+    ["case_study", 0.8, true, 200],
+    ["case_study", 0.79, false, 200],
+    ["real_product_news", 1, false, 200],
+    ["unclear_other", 1, false, 200],
+    ["invented", 1, false, 200],
+    ["case_study", 1, false, 500],
+  ] as const) {
+    it(`ingests JEV ${choice} at ${probability} with HTTP ${status} safely`, async () => {
+      clearAiLaneModelCache();
+      nextFeedReleases = [ITEMS_FOR_CLASSIFICATION[0]];
+      installFetch(() => Response.json(marketingDecisionResponse(choice, probability), { status }));
+      const db = mkDb();
+      await seedFeedSource(db, {
+        feedUrl: "https://clickhouse.com/rss.xml",
+        feedType: "rss",
+        marketingFilter: true,
+      });
+      const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+      const result = await fetchOne(db as never, src, {
+        OPENROUTER_ENABLED: "true",
+        OPENROUTER_API_KEY: { get: async () => "test-or" },
+        MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+      } as never);
+      const [row] = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+      expect(result.status).toBe("success");
+      expect(requestedUrls).toEqual(["https://openrouter.ai/api/alpha/decisions"]);
+      expect(row.suppressed).toBe(suppressed);
+      expect(row.suppressedReason).toBe(suppressed ? "marketing_classifier:case_study" : null);
+      expect(result.insertedIds).toHaveLength(suppressed ? 0 : 1);
+    });
+  }
+
   beforeEach(() => {
     feedFetchCalls.length = 0;
     nextFeedReleases = ITEMS_FOR_CLASSIFICATION;

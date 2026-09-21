@@ -20,6 +20,9 @@ import { createTestDb, clearAllTables, type TestDatabase } from "../../../../tes
 import { organizations, sources, releases, products } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 import { aiLaneRoutes } from "./ai-lanes.js";
+import { clearAiLaneModelCache } from "../lib/ai-lane-models.js";
+import { respondError } from "../lib/error-response.js";
+import { marketingDecisionResponse } from "../../../../tests/marketing-decision-fixture";
 
 let testDatabase: TestDatabase;
 let fetchApi: (req: Request) => Response | Promise<Response>;
@@ -124,6 +127,103 @@ function post(path: string, body: unknown) {
 type ErrorBody = { error: { code: string; type: string; message: string } };
 
 describe("POST /v1/ai/lanes/:lane", () => {
+  for (const status of [200, 500]) {
+    it(`does not change existing suppression after a malformed or failed JEV call (HTTP ${status})`, async () => {
+      clearAiLaneModelCache();
+      await testDatabase.db
+        .update(releases)
+        .set({ suppressed: true, suppressedReason: "manual" })
+        .where(eq(releases.id, "rel_1"));
+      const urls: string[] = [];
+      globalThis.fetch = (async (url) => {
+        urls.push(String(url));
+        return Response.json(
+          {
+            answers: {
+              decision: {
+                type: "choice",
+                choice: "case_study",
+                probabilities: { case_study: 0.99 },
+              },
+            },
+          },
+          { status },
+        );
+      }) as typeof fetch;
+      const app = new Hono().route("/v1", aiLaneRoutes);
+      app.onError((err, c) => respondError(c, err));
+      const response = await app.request(
+        "/v1/ai/lanes/marketing",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ releaseId: "rel_1", apply: true }),
+        },
+        {
+          ...baseEnv(),
+          OPENROUTER_ENABLED: "true",
+          OPENROUTER_API_KEY: secretBinding("test-or"),
+          MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+        } as never,
+      );
+      expect(response.status).toBe(502);
+      expect(urls).toEqual(["https://openrouter.ai/api/alpha/decisions"]);
+      const row = await testDatabase.db.query.releases.findFirst({
+        where: (r, { eq: equals }) => equals(r.id, "rel_1"),
+      });
+      expect(row?.suppressed).toBe(true);
+      expect(row?.suppressedReason).toBe("manual");
+    });
+  }
+
+  for (const [choice, probability, expected] of [
+    ["case_study", 0.8, true],
+    ["case_study", 0.79, false],
+    ["real_product_news", 1, false],
+    ["unclear_other", 1, false],
+    ["invented", 1, false],
+  ] as const) {
+    it(`applies the JEV verdict safely: ${choice} at ${probability}`, async () => {
+      clearAiLaneModelCache();
+      const urls: string[] = [];
+      globalThis.fetch = (async (url) => {
+        urls.push(String(url));
+        return Response.json(marketingDecisionResponse(choice, probability, 0.12));
+      }) as typeof fetch;
+      const app = new Hono().route("/v1", aiLaneRoutes);
+      app.onError((err, c) => respondError(c, err));
+      const response = await app.request(
+        "/v1/ai/lanes/marketing",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ releaseId: "rel_1", apply: true }),
+        },
+        {
+          ...baseEnv(),
+          OPENROUTER_ENABLED: "true",
+          OPENROUTER_API_KEY: secretBinding("test-or"),
+          MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+        } as never,
+      );
+      expect(urls).toEqual(["https://openrouter.ai/api/alpha/decisions"]);
+      const row = await testDatabase.db.query.releases.findFirst({
+        where: (r, { eq: equals }) => equals(r.id, "rel_1"),
+      });
+      expect(row?.suppressed).toBe(expected);
+      expect(row?.suppressedReason).toBe(expected ? "marketing_classifier:case_study" : null);
+      expect(response.status).toBe(choice === "invented" ? 502 : 200);
+      if (choice !== "invented") {
+        expect(await response.json()).toMatchObject({
+          result: {
+            isMarketing: expected,
+            decision: { choice, selectedChoiceProbability: probability, providerConfidence: 0.12 },
+          },
+        });
+      }
+    });
+  }
+
   it("400s on an unknown lane", async () => {
     const res = await post("/v1/ai/lanes/nonsense", {});
     expect(res.status).toBe(400);
@@ -169,7 +269,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.usage.input).toBe(10);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.suppressed).toBeFalsy();
   });
@@ -182,9 +282,10 @@ describe("POST /v1/ai/lanes/:lane", () => {
     const body = (await res.json()) as { applied: boolean; result: { isMarketing: boolean } };
     expect(body.applied).toBe(true);
     expect(body.result.isMarketing).toBe(true);
+    expect(body.result).not.toHaveProperty("decision");
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.suppressed).toBe(true);
     expect(row?.suppressedReason).toBe("marketing_classifier:case_study");
@@ -220,7 +321,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.result.importance).toBe(3);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.titleGenerated).toBeNull();
     expect(row?.summary).toBeNull();
@@ -237,7 +338,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.applied).toBe(true);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.titleGenerated).toBe("Acme v2.0 speeds up queries");
     expect(row?.titleShort).toBe("Faster queries in v2.0");
@@ -260,7 +361,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.result.content).toBe("Cleaned up article body.");
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.content).toBe("Acme v2.0 ships a faster query planner and fixes several bugs.");
   });
@@ -274,7 +375,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(body.applied).toBe(true);
 
     const row = await testDatabase.db.query.releases.findFirst({
-      where: (r, { eq }) => eq(r.id, "rel_1"),
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
     });
     expect(row?.content).toBe("Cleaned up article body.");
   });

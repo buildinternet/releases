@@ -20,7 +20,7 @@ import {
   type MarketingClassifierInput,
 } from "@releases/ai-internal/marketing-classifier";
 import { gradeBinary, type BinaryCase, type BinaryPrediction } from "./graders";
-import { resolveEvalModel } from "./judge-model";
+import { resolveMarketingEvalModel } from "./judge-model";
 import { saveRun } from "./results";
 
 const ACCURACY_FLOOR = 0.85; // headroom for 1-run noise across the fixture set
@@ -36,7 +36,7 @@ interface MarketingFixture {
 async function main() {
   // The model under test: Anthropic Haiku (production baseline) by default, or an
   // OpenRouter candidate when OPENROUTER_API_KEY + EVAL_MODEL are set. See ./judge-model.ts.
-  const picked = resolveEvalModel({
+  const picked = resolveMarketingEvalModel({
     anthropicModel: MODEL,
     generationName: "marketing-classifier-eval",
     orModelEnvVar: "EVAL_MODEL",

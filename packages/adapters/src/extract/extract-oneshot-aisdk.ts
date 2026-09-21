@@ -18,9 +18,11 @@ import {
   generateText,
   jsonSchema,
   tool,
+  ToolChoiceViolationError,
   type JSONSchema7,
   type LanguageModel,
   type ModelMessage,
+  type LanguageModelUsage,
 } from "ai";
 import {
   EXTRACTION_TEMPERATURE,
@@ -79,6 +81,10 @@ export async function runOneShotAiSdk(
     ...(opts.guardrail ? [{ role: "system", content: opts.guardrail } as ModelMessage] : []),
   ];
 
+  // AI SDK 7.0.103 enforces required tools before returning a result, even when
+  // the provider stopped on length before producing a tool call. Retain that
+  // call's usage and the existing hitMaxTokens retry signal.
+  let callUsage: LanguageModelUsage | undefined;
   const result = await generateText({
     model: deps.model,
     instructions: instructions as Parameters<typeof generateText>[0]["instructions"],
@@ -97,7 +103,15 @@ export async function runOneShotAiSdk(
     // Opus 4.7+ / Fable, which 400 on it. Mirrors the legacy runOneShot gate.
     ...(modelAcceptsTemperature(deps.modelLabel) ? { temperature: EXTRACTION_TEMPERATURE } : {}),
     maxOutputTokens: opts.maxOutputTokens,
+    onLanguageModelCallEnd: ({ usage }) => {
+      callUsage = usage;
+    },
     ...agentTelemetry({ functionId: "extract-oneshot", sourceId: opts.sourceId }),
+  }).catch((err: unknown) => {
+    if (ToolChoiceViolationError.isInstance(err) && err.finishReason === "length" && callUsage) {
+      return { usage: callUsage, finishReason: "length" as const, toolCalls: [] };
+    }
+    throw err;
   });
 
   const usage = result.usage;

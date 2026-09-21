@@ -7,7 +7,7 @@
 
 import { createOpenRouter, type OpenRouterChatSettings } from "@openrouter/ai-sdk-provider";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import type { LanguageModel } from "ai";
+import type { LanguageModel, Experimental_EvaluationModel } from "ai";
 
 export interface LaneOpenRouterModelOpts {
   apiKey: string;
@@ -75,6 +75,23 @@ export function buildLaneOpenRouterModel(opts: LaneOpenRouterModelOpts): Languag
     ? ({ reasoning: opts.reasoning } as OpenRouterChatSettings)
     : undefined;
   return provider(opts.model, settings);
+}
+
+/** JEV uses OpenRouter's Decisions endpoint, never chat completions. */
+export function buildLaneOpenRouterDecisionModel(
+  opts: LaneOpenRouterModelOpts,
+): Experimental_EvaluationModel {
+  const trace = serializeTrace(opts.trace);
+  return createOpenRouter({
+    apiKey: opts.apiKey,
+    ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
+    headers: {
+      "HTTP-Referer": opts.referer,
+      "X-Title": opts.title,
+      "x-session-id": opts.sessionId,
+    },
+    extraBody: { session_id: opts.sessionId, ...(trace ? { trace } : {}) },
+  }).evaluationModel(opts.model);
 }
 
 /** Build the Anthropic fail-open lane model, preserving CF AI Gateway routing when configured. */

@@ -9,6 +9,7 @@ import type {
 } from "@buildinternet/releases-api-types";
 import { inputClass, primaryButtonClass, smallButtonClass } from "@releases/design-system";
 import { setAiLaneModelAction } from "@/app/actions/ai-models";
+import { modelOptions } from "./model-options";
 
 function formatPrice(n: number | null): string | null {
   if (n == null) return null;
@@ -44,13 +45,7 @@ function LanePicker({
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const rows = q
-      ? catalog.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
-      : catalog;
-    return rows.slice(0, 40);
-  }, [catalog, query]);
+  const matches = useMemo(() => modelOptions(catalog, lane.id, query), [catalog, lane.id, query]);
 
   const dirty = query.trim() !== (lane.override ?? lane.effective ?? "");
   const clearing = query.trim() === "" && lane.override != null;
@@ -189,7 +184,7 @@ export function ModelsForm({ initial }: { initial: AiLaneModelsResponse }) {
         </p>
       ) : (
         <p className="text-[13px] text-stone-500 dark:text-stone-400">
-          {state.catalog.length.toLocaleString()} text models from OpenRouter
+          {state.catalog.length.toLocaleString()} models available (JEV decisions for marketing)
           {state.catalogFetchedAt
             ? ` · fetched ${new Date(state.catalogFetchedAt).toLocaleString()}`
             : ""}

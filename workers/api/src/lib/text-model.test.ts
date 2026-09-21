@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { createTestDb } from "../../../../tests/db-helper.js";
 import { putStoredAiLaneModels } from "../queries/site-settings.js";
 import { clearAiLaneModelCache } from "./ai-lane-models.js";
@@ -11,6 +11,8 @@ import {
 } from "./text-model.js";
 import type { FlagshipBinding } from "@releases/lib/flags";
 import type { TextModel } from "@releases/ai-internal/text-model";
+import { classifyMarketing } from "@releases/ai-internal/marketing-classifier";
+import { marketingDecisionResponse } from "../../../../tests/marketing-decision-fixture";
 
 /** Flagship stub: `true`/`false` = present key with that value; absent key echoes the default. */
 function flagsBinding(values: Record<string, boolean>): FlagshipBinding {
@@ -69,6 +71,111 @@ function baseEnv(overrides: Partial<TextModelEnv> = {}): TextModelEnv {
 }
 
 describe("resolveMarketingModel — single openrouter-enabled switch", () => {
+  for (const [choice, probability, confidence] of [
+    ["case_study", 0.79, 0.98],
+    ["unclear_other", 0.95, 0.12],
+  ] as const) {
+    it(`retains distinct ${choice} diagnostics in the classifier result and structured telemetry`, async () => {
+      clearAiLaneModelCache();
+      const original = globalThis.fetch;
+      const logs = spyOn(console, "log").mockImplementation(() => undefined);
+      globalThis.fetch = (async () =>
+        Response.json(
+          marketingDecisionResponse(choice, probability, confidence),
+        )) as unknown as typeof fetch;
+      try {
+        const model = await resolveMarketingModel(
+          baseEnv({ OPENROUTER_ENABLED: "true", MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13" }),
+        );
+        const result = await classifyMarketing(model!, {
+          sourceName: "Blog",
+          title: "Story",
+          content: "Body",
+          url: null,
+        });
+        expect(result.isMarketing).toBe(false);
+        const diagnostics = {
+          choice,
+          selectedChoiceProbability: probability,
+          providerConfidence: confidence,
+        };
+        expect(result.decision).toEqual(diagnostics);
+        const record = logs.mock.calls
+          .map(([line]) => JSON.parse(String(line)))
+          .find((row) => row.event === "ai_usage" && row.lane === "marketing-classifier");
+        expect(record).toMatchObject({
+          provider: "openrouter",
+          model: "typesafe/jev-1.13",
+          decision: diagnostics,
+        });
+      } finally {
+        globalThis.fetch = original;
+        logs.mockRestore();
+        clearAiLaneModelCache();
+      }
+    });
+  }
+
+  it("routes the stored JEV override to Decisions with lane tags and usage", async () => {
+    const db = createTestDb();
+    const original = globalThis.fetch;
+    clearAiLaneModelCache();
+    let url = "";
+    let body: Record<string, unknown> = {};
+    globalThis.fetch = (async (input, init) => {
+      url = String(input);
+      body = JSON.parse(init!.body as string);
+      return Response.json(marketingDecisionResponse("case_study", 0.8));
+    }) as typeof fetch;
+    try {
+      await putStoredAiLaneModels(db.db, { marketing: "typesafe/jev-1.13" });
+      const model = await resolveMarketingModel(
+        baseEnv({ OPENROUTER_ENABLED: "true", DB: db.db as unknown as D1Database }),
+      );
+      const result = await classifyMarketing(model!, {
+        sourceName: "Blog",
+        title: "Story",
+        content: "Body",
+        url: null,
+      });
+      expect(url).toBe("https://openrouter.ai/api/alpha/decisions");
+      expect(body.model).toBe("typesafe/jev-1.13");
+      expect(body.session_id).toBe("marketing-classifier");
+      expect(body.trace).toEqual({ generation_name: "marketing-classifier", environment: "test" });
+      expect(body).not.toHaveProperty("messages");
+      expect(result.isMarketing).toBe(true);
+      expect(result.usage.costUsd).toBe(0.001);
+    } finally {
+      globalThis.fetch = original;
+      clearAiLaneModelCache();
+      db.cleanup();
+    }
+  });
+
+  for (const overrides of [
+    { OPENROUTER_ENABLED: "false" },
+    { OPENROUTER_API_KEY: undefined },
+    {
+      OPENROUTER_API_KEY: {
+        get: async () => {
+          throw new Error("missing secret");
+        },
+      },
+    },
+  ]) {
+    it(`keeps the Anthropic text fallback for unavailable JEV: ${Object.keys(overrides)[0]}`, async () => {
+      const model = await resolveMarketingModel(
+        baseEnv({
+          OPENROUTER_ENABLED: "true",
+          MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+          ...overrides,
+        }),
+      );
+      expect(model?.id).toBe("anthropic:claude-haiku-4-5");
+      expect(model).toHaveProperty("complete");
+    });
+  }
+
   it("switch ON + model set → OpenRouter", async () => {
     const env = baseEnv({ FLAGS: flagsBinding({ "openrouter-enabled": true }) });
     const model = await resolveMarketingModel(env);
@@ -83,7 +190,11 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
 
   it("does NOT carry summarize-lane reasoning/provider routing (lane-scoped)", async () => {
     const env = baseEnv({ FLAGS: flagsBinding({ "openrouter-enabled": true }) });
-    const body = await captureOpenRouterBody(resolveMarketingModel, env);
+    const body = await captureOpenRouterBody(async (e) => {
+      const model = await resolveMarketingModel(e);
+      if (model && !("complete" in model)) throw new Error("Expected a text model");
+      return model;
+    }, env);
     expect("reasoning" in body).toBe(false);
     expect("provider" in body).toBe(false);
   });

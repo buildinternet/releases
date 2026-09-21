@@ -5,6 +5,8 @@
  */
 
 export const AI_LANE_MODELS_KEY = "ai_lane_models";
+/** Decisions API model supported by the marketing lane; not a text-generation model. */
+export const MARKETING_DECISION_MODEL = "typesafe/jev-1.13";
 
 export const AI_LANES = ["summarize", "extract", "feed-enrich", "marketing"] as const;
 export type AiLane = (typeof AI_LANES)[number];

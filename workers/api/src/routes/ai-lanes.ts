@@ -331,7 +331,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
     if (!model) {
       return respondError(
         c,
-        new ServiceUnavailableError("No text-model provider configured for the marketing lane"),
+        new ServiceUnavailableError("No model provider configured for the marketing lane"),
       );
     }
     const input: MarketingClassifierInput = {
@@ -363,7 +363,11 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       model: modelName,
       applied,
       input,
-      result: { isMarketing: verdict.isMarketing, reason: verdict.reason },
+      result: {
+        isMarketing: verdict.isMarketing,
+        reason: verdict.reason,
+        ...(verdict.decision ? { decision: verdict.decision } : {}),
+      },
       usage: usagePayload(provider, modelName, verdict.usage),
     });
   }

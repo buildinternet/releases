@@ -181,6 +181,15 @@ describe("runOneShotAiSdk", () => {
 
     expect(result.hitMaxTokens).toBe(true);
     expect(result.entries).toHaveLength(0);
+    expect(result.totalInput).toBe(10);
+    expect(result.totalOutput).toBe(5);
+  });
+
+  it("still rejects a missing required tool when the response was not truncated", async () => {
+    const mockFetch = (async () => anthropicResponse([])) as unknown as typeof fetch;
+    await expect(
+      runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch })),
+    ).rejects.toThrow(/required tool/);
   });
 
   it("returns no entries when the terminal input has a malformed releases field", async () => {
