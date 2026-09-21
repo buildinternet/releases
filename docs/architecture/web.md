@@ -243,6 +243,8 @@ Operator tools live under `/admin/*` inside the account settings shell (`Setting
 
 Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`), **Models** (`/admin/models`).
 
+**Classifications** on Status (`/admin/status?tab=classifications`) reads `GET /v1/admin/classifications/summary` and `/recent`, defaults to ingest, and isolates a chart or API failure from the rest of the page. See [classification-analytics.md](classification-analytics.md).
+
 **Models** (`GET`/`PUT /v1/ai/models`) lets operators pick the OpenRouter model for each cheap-call lane (summarize, extract, feed-enrich, marketing classifier) from OpenRouter's live catalog. Overrides live in `site_settings` (`ai_lane_models`); wrangler vars remain the fallback when a lane has no override. The next AI call picks up a change (isolate cache ≤30s). Empty wrangler + no override still means Anthropic Haiku fail-open.
 
 The catalog supplements the text-only OpenRouter response with `typesafe/jev-1.13` (JEV decisions), including when the remote catalog is unavailable. Its pricing/context remain unknown instead of inferred from text models. The picker offers JEV only for marketing, and the write route rejects it for text-only lanes. Marketing defaults to JEV in production/staging; a stored override still wins. Choosing a text model restores the existing text classifier, while the shared `openrouter-enabled` switch controls the Anthropic fallback.

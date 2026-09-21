@@ -23,6 +23,7 @@ import { aiLaneRoutes } from "./ai-lanes.js";
 import { clearAiLaneModelCache } from "../lib/ai-lane-models.js";
 import { respondError } from "../lib/error-response.js";
 import { marketingDecisionResponse } from "../../../../tests/marketing-decision-fixture";
+import type { ClassificationDataPoint } from "../lib/classification-schema.js";
 
 let testDatabase: TestDatabase;
 let fetchApi: (req: Request) => Response | Promise<Response>;
@@ -113,6 +114,34 @@ beforeEach(async () => {
 afterEach(() => {
   restoreFetch();
 });
+
+function classificationEnv(points: ClassificationDataPoint[], extra: Record<string, unknown> = {}) {
+  return {
+    ...baseEnv(),
+    ENVIRONMENT: "production",
+    RELEASE_CLASSIFICATIONS_AE: {
+      writeDataPoint(point: ClassificationDataPoint) {
+        points.push(point);
+      },
+    },
+    ...extra,
+  };
+}
+
+function requestLane(path: string, body: unknown, env: unknown) {
+  const app = new Hono();
+  app.onError((err, c) => respondError(c, err));
+  app.route("/v1", aiLaneRoutes);
+  return app.request(
+    path,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    env as never,
+  );
+}
 
 function post(path: string, body: unknown) {
   return fetchApi(
@@ -453,5 +482,101 @@ describe("POST /v1/ai/lanes/:lane", () => {
       where: (r, { eq: e }) => e(r.id, "rel_1"),
     });
     expect(row?.summary).toBeNull();
+  });
+
+  it("records a manual marketing point, and eval when the body sets it", async () => {
+    mockAnthropicFetch("<marketing>false</marketing>");
+    const points: ClassificationDataPoint[] = [];
+    const res = await requestLane(
+      "/v1/ai/lanes/marketing",
+      { releaseId: "rel_1" },
+      classificationEnv(points),
+    );
+    expect(res.status).toBe(200);
+    expect(points).toHaveLength(1);
+    expect(points[0]?.blobs[2]).toBe("manual");
+    expect(points[0]?.blobs[4]).toBe("rel_1");
+    expect(points[0]?.blobs[5]).toBe("src_1");
+    expect(points[0]?.blobs[8]).toBe("not_marketing");
+    expect(points[0]?.blobs[9]).toBe("kept");
+    expect(points[0]?.blobs.join(" ")).not.toContain("Acme");
+
+    points.length = 0;
+    mockAnthropicFetch("<marketing>true</marketing>\n<reason>case_study</reason>");
+    const evalRes = await requestLane(
+      "/v1/ai/lanes/marketing",
+      { releaseId: "rel_1", origin: "eval" },
+      classificationEnv(points),
+    );
+    expect(evalRes.status).toBe(200);
+    expect(points[0]?.blobs[2]).toBe("eval");
+    expect(points[0]?.blobs[8]).toBe("case_study");
+    expect(points[0]?.blobs[9]).toBe("suppressed");
+  });
+
+  it("rejects a forged ingest origin and writes nothing", async () => {
+    const points: ClassificationDataPoint[] = [];
+    let called = false;
+    globalThis.fetch = (() => {
+      called = true;
+      throw new Error("should not classify");
+    }) as unknown as typeof fetch;
+    const res = await requestLane(
+      "/v1/ai/lanes/marketing",
+      { releaseId: "rel_1", origin: "ingest" },
+      classificationEnv(points),
+    );
+    expect(res.status).toBe(400);
+    expect(points).toHaveLength(0);
+    expect(called).toBe(false);
+  });
+
+  it("ignores origin on non-marketing lanes", async () => {
+    mockAnthropicFetch(
+      "<empty>false</empty>\n<title>t</title>\n<title_short>t</title_short>\n<summary>s</summary>\n<composition><bugs>0</bugs><features>1</features><enhancements>0</enhancements></composition>\n<breaking>none</breaking>\n<migration>none</migration>\n<importance>3</importance>",
+    );
+    const points: ClassificationDataPoint[] = [];
+    const res = await requestLane(
+      "/v1/ai/lanes/summarize",
+      { releaseId: "rel_1", origin: "ingest" },
+      classificationEnv(points),
+    );
+    expect(res.status).toBe(200);
+    expect(points).toHaveLength(0);
+  });
+
+  it("records classify_error when the marketing lane throws, then returns the upstream error", async () => {
+    mockAnthropicFetch("this is not the format we asked for");
+    const points: ClassificationDataPoint[] = [];
+    const res = await requestLane(
+      "/v1/ai/lanes/marketing",
+      { title: "Probe title", content: "Probe body" },
+      classificationEnv(points),
+    );
+    expect(res.status).toBe(502);
+    expect(points).toHaveLength(1);
+    expect(points[0]?.blobs[2]).toBe("manual");
+    expect(points[0]?.blobs[4]).toBe("");
+    expect(points[0]?.blobs[9]).toBe("failed");
+    expect(points[0]?.blobs[12]).toBe("classify_error");
+    const flat = [...(points[0]?.indexes ?? []), ...(points[0]?.blobs ?? [])].join("\n");
+    expect(flat).not.toContain("format");
+    expect(flat).not.toContain("Probe");
+  });
+
+  it("records no_provider and returns 503 when the marketing lane has no model", async () => {
+    const points: ClassificationDataPoint[] = [];
+    const res = await requestLane(
+      "/v1/ai/lanes/marketing",
+      { releaseId: "rel_1" },
+      classificationEnv(points, { ANTHROPIC_API_KEY: undefined }),
+    );
+    expect(res.status).toBe(503);
+    expect(points).toHaveLength(1);
+    expect(points[0]?.blobs[6]).toBe("unknown");
+    expect(points[0]?.blobs[9]).toBe("skipped");
+    expect(points[0]?.blobs[12]).toBe("no_provider");
+    expect(points[0]?.blobs[4]).toBe("rel_1");
+    expect(points[0]?.blobs[5]).toBe("src_1");
   });
 });

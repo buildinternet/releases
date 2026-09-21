@@ -94,11 +94,22 @@ import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { newReleaseId } from "@buildinternet/releases-core/id";
 import {
   classifyMarketing,
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
+import { splitModelId } from "@releases/ai-internal/text-model";
 import { resolveMarketingModel, type TextModelEnv } from "../lib/text-model.js";
+import {
+  writeClassificationPoint,
+  type ClassificationDataset,
+} from "../lib/classification-schema.js";
+import {
+  marketingClassificationInput,
+  pointsForInserted,
+  type MarketingClassificationRecord,
+} from "../lib/classification-points.js";
 import { assessFeedDepth, DEFAULT_FEED_THIN_CHARS } from "@releases/adapters/feed-depth";
 import {
   enrichNewThinItems,
@@ -741,6 +752,13 @@ export interface FetchOneEnv extends WebRevalidateEnv, TextModelEnv, UpdateDispa
   // on, an ingested `image/gif` is stored as a small MP4 instead of the raw GIF.
   MEDIA_TRANSFORM?: MediaTransformBinding;
   MEDIA_GIF_TRANSCODE_ENABLED?: string;
+  /**
+   * Marketing-classification Analytics Engine dataset. Optional — a missing
+   * binding skips the write. Staging must stay on its own dataset.
+   */
+  RELEASE_CLASSIFICATIONS_AE?: ClassificationDataset;
+  /** Stamped on classification points. Also declared on `TextModelEnv`. */
+  ENVIRONMENT?: string;
 }
 
 /**
@@ -1200,19 +1218,37 @@ async function selectNewReleaseIndices(
   return indices;
 }
 
+interface MarketingClassificationPass {
+  /** Marketing hits only. Suppression still keys off `verdict?.isMarketing === true`. */
+  hits: Map<number, MarketingClassifierResult>;
+  /** One disposition per index from `selectNewReleaseIndices`. */
+  records: MarketingClassificationRecord[];
+}
+
+function skippedMarketingRecords(
+  indices: readonly number[],
+  failureCategory: "cap_tripped" | "no_provider",
+): MarketingClassificationRecord[] {
+  return indices.map((index) => ({
+    index,
+    disposition: "skipped",
+    failureCategory,
+    verdict: null,
+    provider: null,
+    model: null,
+    durationMs: null,
+  }));
+}
+
 /**
- * Per-source marketing classification. Runs Haiku 4.5 sequentially over each
- * raw release; returns a map keyed by raw-release array index (collision-free
- * across title-only feed items) containing only entries classified as
- * marketing. Callers flip `suppressed=true` + `suppressedReason` on those rows
- * before insert so they never enter the publish / embed paths.
+ * Per-source marketing classification. Runs sequentially over each genuinely-new
+ * raw release. `hits` contains only marketing verdicts. `records` has one
+ * disposition for every new index so telemetry can be written after insert.
+ * URLs `selectNewReleaseIndices` already dropped are omitted.
  *
- * Fail-open: every error path (missing API key, classifier throw, cap tripped,
- * client-construction throw) returns an empty map after logging, never lets an
- * exception escape. False negatives are recoverable (operators can suppress
- * post-hoc); false positives create user-visible churn. Sequential per-item
- * (vs. parallel) is a cost/concurrency-budget choice; the prompt cache hit is
- * isolate-wide, so it doesn't depend on call ordering.
+ * Fail-open: missing provider, a classifier throw, and the per-fire cap never
+ * throw and never suppress. Sequential per-item (vs. parallel) bounds concurrent
+ * inference; the prompt cache hit is isolate-wide, so ordering doesn't matter.
  */
 async function classifyMarketingForReleases(
   db: D1Db,
@@ -1220,16 +1256,16 @@ async function classifyMarketingForReleases(
   meta: SourceMetadata,
   rawReleases: readonly RawRelease[],
   env: FetchOneEnv,
-): Promise<Map<number, MarketingClassifierResult>> {
-  const result = new Map<number, MarketingClassifierResult>();
-  if (rawReleases.length === 0) return result;
+): Promise<MarketingClassificationPass> {
+  const hits = new Map<number, MarketingClassifierResult>();
+  if (rawReleases.length === 0) return { hits, records: [] };
 
   // Only the items an insert would actually persist are worth classifying;
   // the rest are re-listed feed entries we already have. Counting the whole
   // window against the cap is what let marketing slip through on high-volume
   // feeds (see selectNewReleaseIndices).
   const newIndices = await selectNewReleaseIndices(db, source.id, rawReleases);
-  if (newIndices.length === 0) return result;
+  if (newIndices.length === 0) return { hits, records: [] };
 
   if (newIndices.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
     logEvent("warn", {
@@ -1239,7 +1275,7 @@ async function classifyMarketingForReleases(
       candidateCount: newIndices.length,
       cap: MARKETING_CLASSIFIER_MAX_PER_FIRE,
     });
-    return result;
+    return { hits, records: skippedMarketingRecords(newIndices, "cap_tripped") };
   }
 
   let suppressedCount = 0;
@@ -1261,12 +1297,16 @@ async function classifyMarketingForReleases(
       event: "marketing-filter-no-api-key",
       sourceSlug: source.slug,
     });
-    return result;
+    return { hits, records: skippedMarketingRecords(newIndices, "no_provider") };
   }
+
+  const { provider, model: modelName } = splitModelId(model.id);
+  const records: MarketingClassificationRecord[] = [];
 
   try {
     for (const index of newIndices) {
       const raw = rawReleases[index];
+      const itemStarted = Date.now();
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent inference load per cron fire; the prompt cache hit doesn't depend on ordering
         const verdict = await classifyMarketing(model, {
@@ -1283,16 +1323,26 @@ async function classifyMarketingForReleases(
         outputTokens += verdict.usage.output;
         costUsd += verdict.usage.costUsd ?? 0;
         if (verdict.isMarketing) {
-          result.set(index, verdict);
+          hits.set(index, verdict);
           suppressedCount++;
         }
+        records.push({
+          index,
+          disposition: verdict.isMarketing ? "suppressed" : "kept",
+          failureCategory: null,
+          verdict,
+          provider,
+          model: modelName,
+          durationMs: Date.now() - itemStarted,
+        });
       } catch (err) {
         failedCount++;
         // A provider quota/billing shutoff surfaces here as an ordinary classify
         // failure — same blind spot #2168 found in the Firecrawl path. Emit the
         // dedicated event too so it's alertable/groupable across lanes, without
         // changing the fail-open disposition below (still counts as `failed`,
-        // still lets the loop continue to the next item).
+        // still lets the loop continue to the next item). The point records only
+        // `classify_error` — never `err.message` or other provider text.
         const quota = classifyProviderQuota(err);
         if (quota) {
           logEvent("error", {
@@ -1312,6 +1362,15 @@ async function classifyMarketingForReleases(
           itemUrl: raw.url ?? null,
           err,
         });
+        records.push({
+          index,
+          disposition: "failed",
+          failureCategory: "classify_error",
+          verdict: null,
+          provider,
+          model: modelName,
+          durationMs: Date.now() - itemStarted,
+        });
       }
     }
   } catch (err) {
@@ -1323,7 +1382,7 @@ async function classifyMarketingForReleases(
       sourceSlug: source.slug,
       err,
     });
-    return result;
+    return { hits, records };
   }
 
   logEvent("info", {
@@ -1342,7 +1401,28 @@ async function classifyMarketingForReleases(
     durationMs: Date.now() - startedAt,
   });
 
-  return result;
+  return { hits, records };
+}
+
+/** Best-effort. A thrown write never fails the insert that already committed. */
+function writeInsertedMarketingPoints(
+  env: FetchOneEnv,
+  sourceId: string,
+  records: readonly MarketingClassificationRecord[],
+  idByIndex: ReadonlyMap<number, string>,
+  returnedIds: ReadonlySet<string>,
+): void {
+  for (const record of pointsForInserted(records, idByIndex, returnedIds)) {
+    writeClassificationPoint(
+      env.RELEASE_CLASSIFICATIONS_AE,
+      env.ENVIRONMENT,
+      marketingClassificationInput(record, {
+        origin: "ingest",
+        releaseId: record.releaseId,
+        sourceId,
+      }),
+    );
+  }
 }
 
 export interface IngestResult {
@@ -1415,10 +1495,11 @@ export async function ingestRawReleases(
     }
   }
 
-  const marketingMap =
+  const marketingPass =
     meta.marketingFilter === true
       ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
-      : new Map<number, MarketingClassifierResult>();
+      : { hits: new Map<number, MarketingClassifierResult>(), records: [] };
+  const marketingMap = marketingPass.hits;
 
   const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
 
@@ -1501,12 +1582,16 @@ export async function ingestRawReleases(
     }
   }
 
+  const idByIndex = new Map<number, string>();
   const rows = rawReleases.map((raw, index) => {
     const enrich = enrichMap.get(index);
     const content = enrich?.content ?? raw.content;
     const size = computeContentSize(content);
     const verdict = marketingMap.get(index);
+    const id = newReleaseId();
+    idByIndex.set(index, id);
     return {
+      id,
       sourceId: source.id,
       version: raw.version ?? null,
       versionSort: computeVersionSort(raw.version),
@@ -1534,6 +1619,9 @@ export async function ingestRawReleases(
   const publishRows: InsertedReleaseRow[] = [];
   const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
   const suppressedIds = new Set<string>();
+  // Every id INSERT … RETURNING actually persisted, including suppressed rows.
+  // `insertedIds` drops those, so it cannot decide which points to write.
+  const returnedIds = new Set<string>();
   for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
     // Build publish rows from the RETURNING set (not zipped against
@@ -1554,12 +1642,14 @@ export async function ingestRawReleases(
     });
     inserted += result.length;
     for (const r of result) {
+      returnedIds.add(r.id);
       const { content, suppressed, ...publishRow } = r;
       if (suppressed === true) suppressedIds.add(r.id);
       publishRows.push(publishRow);
       clusterRows.push({ id: r.id, version: r.version, content });
     }
   }
+  writeInsertedMarketingPoints(env, source.id, marketingPass.records, idByIndex, returnedIds);
   const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
 
   // Detect changesets cascade rows and demote them to coverage so they

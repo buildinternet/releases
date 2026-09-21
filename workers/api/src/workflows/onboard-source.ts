@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import type { ClassificationDataset } from "../lib/classification-schema.js";
 import { buildFetchOneEnv } from "./_fetch-env.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedSourceSideEffect } from "../routes/sources.js";
@@ -61,6 +62,11 @@ export type OnboardSourceWorkflowEnv = InvalidationEnv &
     WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
     CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
+    /**
+     * Marketing-classification Analytics Engine dataset. Forwarded by
+     * `buildFetchOneEnv`. Staging must stay on its own dataset. Absent → no points.
+     */
+    RELEASE_CLASSIFICATIONS_AE?: ClassificationDataset;
     /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
     /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */

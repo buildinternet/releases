@@ -11,6 +11,7 @@
  * Gate: pass iff accuracy >= ACCURACY_FLOOR AND falsePositives <= MAX_FALSE_POSITIVES.
  * A false positive = a real release misclassified as marketing (it would be
  * hidden), which the classifier prompt explicitly treats as the costly error.
+ * A `POST /v1/ai/lanes/marketing` request records `origin: "eval"` when the JSON body sets it.
  */
 import { readFileSync } from "fs";
 import { join } from "path";

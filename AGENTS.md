@@ -144,6 +144,7 @@ Deep dives live in `docs/architecture/`. A reader's guide with task-based entry 
 - [events.md](docs/architecture/events.md) — release event bus: `ReleaseHub` Durable Object, `GET /v1/releases/stream` WebSocket, fire-and-forget publish from batch + cron ingest.
 - [cli-distribution.md](docs/architecture/cli-distribution.md) — OSS repo, npm, Homebrew tap.
 - [ai-gateway.md](docs/architecture/ai-gateway.md) — optional Cloudflare AI Gateway passthrough for Anthropic SDK calls; covers direct worker calls, leaves Voyage embeddings + managed-agent internal loops on the direct path.
+- [classification-analytics.md](docs/architecture/classification-analytics.md) — marketing-classifier decisions in Analytics Engine: positional schema, sampling, retention, admin summary/recent routes, and the Status Classifications tab.
 - [extract.md](docs/architecture/extract.md) — two-tier extraction path: one-shot inline for small bodies, multi-round tool-use loop for large ones, hard fallback to one-shot on any failure. Feature-gated behind `EXTRACT_TOOLLOOP_ENABLED`.
 - [local-ingest.md](docs/architecture/local-ingest.md) — local Claude Code onboarding path: the `local-ingest` skill has the agent extract releases itself and write via `/batch` (no remote MA, no extraction billing), gated by a mandatory `robots.txt`/`Content-Signal` opt-out preflight.
 - [feature-flags.md](docs/architecture/feature-flags.md) — Cloudflare Flagship Tier-1 boolean flags: registry, evaluation order, per-flag reference, dashboard setup.

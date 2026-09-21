@@ -18,6 +18,7 @@ import { evaluateFetchPending } from "./source-fetch-status";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
 import { BatchRunsTab } from "./batch-runs-tab";
+import { ClassificationsTab } from "./classifications-tab";
 import { StuckSourcesTab } from "./stuck-sources-tab";
 import {
   formatSessionError,
@@ -129,7 +130,8 @@ type Tab =
   | "orgs"
   | "cron"
   | "searches"
-  | "batch";
+  | "batch"
+  | "classifications";
 type DateRange = "today" | "week" | "month" | "all";
 
 type SourceSortField =
@@ -152,6 +154,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "cron", label: "Cron" },
   { value: "searches", label: "Searches" },
   { value: "batch", label: "Batch Runs" },
+  { value: "classifications", label: "Classifications" },
 ];
 const DEFAULT_TAB: Tab = "sessions";
 
@@ -691,6 +694,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}
       {tab === "batch" && <BatchRunsTab />}
+      {tab === "classifications" && <ClassificationsTab after={after} dateRange={dateRange} />}
     </div>
   );
 }

@@ -28,6 +28,11 @@ import {
 export const MODEL = "claude-haiku-4-5";
 export type MarketingModel = TextModel | DecisionModel;
 
+/** Selected-choice probability at or above this, and at most 1, suppresses. */
+export const MARKETING_SUPPRESSION_THRESHOLD = 0.8;
+/** Policy version stamped on marketing classification points. */
+export const MARKETING_POLICY_VERSION = "marketing-v1";
+
 const MARKETING_CHOICES = {
   real_product_news:
     "Real product news: release notes, feature launches, technical deep dives, concrete integrations, benchmarks with hard data, bug fixes or security advisories.",
@@ -192,9 +197,9 @@ export function parseMarketingVerdict(raw: string): {
 
 /**
  * Classify a single feed item. Decisions suppress only one of the six named
- * marketing choices with selected-choice probability >= 0.80. Provider confidence
- * is not that probability. Invalid / absent probabilities and safe choices keep
- * the item visible. Transport / SDK validation errors propagate to callers.
+ * marketing choices with selected-choice probability >= MARKETING_SUPPRESSION_THRESHOLD.
+ * Provider confidence is not that probability. Invalid / absent probabilities and safe
+ * choices keep the item visible. Transport / SDK validation errors propagate to callers.
  * The caller constructs the `MarketingModel` so the
  * provider (Anthropic Haiku via AI Gateway, or a cheap OpenRouter model) and
  * routing are decided outside this pure helper. `MODEL` is the Anthropic
@@ -224,7 +229,7 @@ export async function classifyMarketing(
       recognized &&
       typeof probability === "number" &&
       Number.isFinite(probability) &&
-      probability >= 0.8 &&
+      probability >= MARKETING_SUPPRESSION_THRESHOLD &&
       probability <= 1;
     return {
       isMarketing,

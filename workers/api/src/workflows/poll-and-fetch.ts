@@ -55,6 +55,7 @@ export {
 import { type AnthropicEnv } from "../lib/anthropic.js";
 import { type TextModelEnv } from "../lib/text-model.js";
 import { type WebRevalidateEnv } from "../lib/web-revalidate.js";
+import type { ClassificationDataset } from "../lib/classification-schema.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 
 /**
@@ -119,6 +120,11 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     FEED_THIN_CHARS?: string;
     CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
+    /**
+     * Marketing-classification Analytics Engine dataset. Forwarded by
+     * `buildFetchOneEnv`. Staging must stay on its own dataset. Absent → no points.
+     */
+    RELEASE_CLASSIFICATIONS_AE?: ClassificationDataset;
     /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
     /** Staleness horizon for the poll-path self-flag producer (default 72h). */
