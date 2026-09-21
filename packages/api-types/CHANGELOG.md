@@ -1,5 +1,11 @@
 # @buildinternet/releases-api-types
 
+## 0.52.1
+
+### Patch Changes
+
+- a22c112: Add admin classification analytics response types
+
 ## 0.52.0
 
 ### Minor Changes
