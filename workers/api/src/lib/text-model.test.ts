@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { createTestDb } from "../../../../tests/db-helper.js";
 import { putStoredAiLaneModels } from "../queries/site-settings.js";
 import { clearAiLaneModelCache } from "./ai-lane-models.js";
@@ -71,6 +71,51 @@ function baseEnv(overrides: Partial<TextModelEnv> = {}): TextModelEnv {
 }
 
 describe("resolveMarketingModel — single openrouter-enabled switch", () => {
+  for (const [choice, probability, confidence] of [
+    ["case_study", 0.79, 0.98],
+    ["unclear_other", 0.95, 0.12],
+  ] as const) {
+    it(`retains distinct ${choice} diagnostics in the classifier result and structured telemetry`, async () => {
+      clearAiLaneModelCache();
+      const original = globalThis.fetch;
+      const logs = spyOn(console, "log").mockImplementation(() => undefined);
+      globalThis.fetch = (async () =>
+        Response.json(
+          marketingDecisionResponse(choice, probability, confidence),
+        )) as unknown as typeof fetch;
+      try {
+        const model = await resolveMarketingModel(
+          baseEnv({ OPENROUTER_ENABLED: "true", MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13" }),
+        );
+        const result = await classifyMarketing(model!, {
+          sourceName: "Blog",
+          title: "Story",
+          content: "Body",
+          url: null,
+        });
+        expect(result.isMarketing).toBe(false);
+        const diagnostics = {
+          choice,
+          selectedChoiceProbability: probability,
+          providerConfidence: confidence,
+        };
+        expect(result.decision).toEqual(diagnostics);
+        const record = logs.mock.calls
+          .map(([line]) => JSON.parse(String(line)))
+          .find((row) => row.event === "ai_usage" && row.lane === "marketing-classifier");
+        expect(record).toMatchObject({
+          provider: "openrouter",
+          model: "typesafe/jev-1.13",
+          decision: diagnostics,
+        });
+      } finally {
+        globalThis.fetch = original;
+        logs.mockRestore();
+        clearAiLaneModelCache();
+      }
+    });
+  }
+
   it("routes the stored JEV override to Decisions with lane tags and usage", async () => {
     const db = createTestDb();
     const original = globalThis.fetch;

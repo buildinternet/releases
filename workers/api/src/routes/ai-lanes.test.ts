@@ -188,7 +188,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
       const urls: string[] = [];
       globalThis.fetch = (async (url) => {
         urls.push(String(url));
-        return Response.json(marketingDecisionResponse(choice, probability));
+        return Response.json(marketingDecisionResponse(choice, probability, 0.12));
       }) as typeof fetch;
       const app = new Hono().route("/v1", aiLaneRoutes);
       app.onError((err, c) => respondError(c, err));
@@ -213,6 +213,14 @@ describe("POST /v1/ai/lanes/:lane", () => {
       expect(row?.suppressed).toBe(expected);
       expect(row?.suppressedReason).toBe(expected ? "marketing_classifier:case_study" : null);
       expect(response.status).toBe(choice === "invented" ? 502 : 200);
+      if (choice !== "invented") {
+        expect(await response.json()).toMatchObject({
+          result: {
+            isMarketing: expected,
+            decision: { choice, selectedChoiceProbability: probability, providerConfidence: 0.12 },
+          },
+        });
+      }
     });
   }
 
@@ -274,6 +282,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     const body = (await res.json()) as { applied: boolean; result: { isMarketing: boolean } };
     expect(body.applied).toBe(true);
     expect(body.result.isMarketing).toBe(true);
+    expect(body.result).not.toHaveProperty("decision");
 
     const row = await testDatabase.db.query.releases.findFirst({
       where: (r, { eq }) => eq(r.id, "rel_1"),

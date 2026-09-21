@@ -17,6 +17,7 @@
  */
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
 import { aisdkDecisionModel } from "@releases/ai-internal/aisdk-decision-model";
+import { decisionDiagnostics } from "@releases/ai-internal/decision-model";
 import { MARKETING_DECISION_MODEL } from "@releases/core-internal/ai-lane-models";
 import {
   withUsageLogging,
@@ -264,6 +265,7 @@ export async function resolveMarketingModel(env: TextModelEnv): Promise<Marketin
               promptTokens: result.usage.inputTokens ?? 0,
               cacheHitRate: 0,
               costUsd: result.usage.costUsd,
+              decision: decisionDiagnostics(result),
             });
             return result;
           },

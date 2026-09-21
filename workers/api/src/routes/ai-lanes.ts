@@ -363,7 +363,11 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       model: modelName,
       applied,
       input,
-      result: { isMarketing: verdict.isMarketing, reason: verdict.reason },
+      result: {
+        isMarketing: verdict.isMarketing,
+        reason: verdict.reason,
+        ...(verdict.decision ? { decision: verdict.decision } : {}),
+      },
       usage: usagePayload(provider, modelName, verdict.usage),
     });
   }

@@ -28,6 +28,29 @@ export interface DecisionModelResult<OPTION extends string> {
   usage: DecisionModelUsage;
 }
 
+/** Operator-facing scores: selected-option probability and provider confidence
+ * are independent signals. Missing or nonfinite scores remain absent. */
+export interface DecisionDiagnostics {
+  choice: string;
+  selectedChoiceProbability?: number;
+  providerConfidence?: number;
+}
+
+export function decisionDiagnostics<OPTION extends string>(
+  result: DecisionModelResult<OPTION>,
+): DecisionDiagnostics {
+  const probability = result.probabilities?.[result.choice];
+  return {
+    choice: result.choice,
+    ...(typeof probability === "number" && Number.isFinite(probability)
+      ? { selectedChoiceProbability: probability }
+      : {}),
+    ...(typeof result.confidence === "number" && Number.isFinite(result.confidence)
+      ? { providerConfidence: result.confidence }
+      : {}),
+  };
+}
+
 export interface DecisionModel {
   /** `<provider>:<model>` — used for telemetry / log attribution. */
   readonly id: string;

@@ -63,10 +63,41 @@ describe("marketing decisions", () => {
       expect(await classifyMarketing(decision(reason, 0.8, 0.1), input)).toEqual({
         isMarketing: true,
         reason,
+        decision: { choice: reason, selectedChoiceProbability: 0.8, providerConfidence: 0.1 },
         usage: { input: 12, output: 2, cacheCreate: 0, cacheRead: 0, costUsd: 0.001 },
       });
     });
   }
+
+  for (const [choice, probability, confidence] of [
+    ["case_study", 0.79, 0.98],
+    ["unclear_other", 0.95, 0.12],
+  ] as const) {
+    it(`retains the selected choice and distinct diagnostics when keeping ${choice}`, async () => {
+      expect(
+        await classifyMarketing(decision(choice, probability, confidence), input),
+      ).toMatchObject({
+        isMarketing: false,
+        reason: "unspecified",
+        decision: {
+          choice,
+          selectedChoiceProbability: probability,
+          providerConfidence: confidence,
+        },
+      });
+    });
+  }
+
+  it("does not fabricate missing or nonfinite diagnostic scores", async () => {
+    const model: DecisionModel = {
+      id: "test",
+      decide: async () => ({ choice: "unclear_other", usage: {} }) as never,
+    };
+    expect((await classifyMarketing(model, input)).decision).toEqual({ choice: "unclear_other" });
+    expect(
+      (await classifyMarketing(decision("case_study", NaN, Infinity), input)).decision,
+    ).toEqual({ choice: "case_study" });
+  });
 
   for (const [choice, probability] of [
     ["case_study", 0.799999],

@@ -1,5 +1,9 @@
 /** Complete Decisions API distribution, consumed through the real AI SDK validator. */
-export function marketingDecisionResponse(choice: string, probability: number) {
+export function marketingDecisionResponse(
+  choice: string,
+  probability: number,
+  confidence?: number,
+) {
   const probabilities: Record<string, number> = {
     real_product_news: 0,
     case_study: 0,
@@ -14,7 +18,14 @@ export function marketingDecisionResponse(choice: string, probability: number) {
     1 - probability;
   probabilities[choice] = probability;
   return {
-    answers: { decision: { type: "choice", choice, probabilities } },
+    answers: {
+      decision: {
+        type: "choice",
+        choice,
+        probabilities,
+        ...(confidence !== undefined ? { confidence } : {}),
+      },
+    },
     usage: { input_tokens: 12, output_tokens: 2, cost: 0.001 },
   };
 }

@@ -19,7 +19,11 @@
 
 import { extractTagged } from "./release-content";
 import type { TextModel, TextModelUsage } from "./text-model";
-import type { DecisionModel } from "./decision-model";
+import {
+  decisionDiagnostics,
+  type DecisionDiagnostics,
+  type DecisionModel,
+} from "./decision-model";
 
 export const MODEL = "claude-haiku-4-5";
 export type MarketingModel = TextModel | DecisionModel;
@@ -90,6 +94,8 @@ export interface MarketingClassifierResult {
   /** A short slug. When `isMarketing=false`, callers should treat as informational only. */
   reason: MarketingReason;
   usage: MarketingClassifierUsage;
+  /** Present only for decision models, including safe and below-threshold choices. */
+  decision?: DecisionDiagnostics;
 }
 
 /**
@@ -223,6 +229,7 @@ export async function classifyMarketing(
     return {
       isMarketing,
       reason: isMarketing ? (answer.choice as MarketingReason) : "unspecified",
+      decision: decisionDiagnostics(answer),
       usage: {
         input: answer.usage.inputTokens ?? 0,
         output: answer.usage.outputTokens ?? 0,
