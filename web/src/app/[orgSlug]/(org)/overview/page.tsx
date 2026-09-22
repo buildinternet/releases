@@ -150,7 +150,7 @@ export default async function OrgOverviewPage({
   const heatmap: OrgHeatmap | null = heatmapResult.data;
 
   const releaseListId = `${orgUrl}#releases`;
-  // Declare the overview's provenance as internal release-page citations (#1934).
+  // Declare the overview's provenance as upstream source citations (#1934, #2218).
   const overviewCitationNode = overview
     ? buildOverviewCitationJsonLd(overview.citations, {
         orgName: org.name,

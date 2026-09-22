@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { OverviewCitation } from "@buildinternet/releases-api-types";
-import { citationHref, definitionLabel, isInternalCitation } from "@/lib/overview-citations";
+import { citationHref, definitionLabel } from "@/lib/overview-citations";
 import { EXTERNAL_UGC_REL, isSafeHref } from "@/lib/sanitize";
 
 // Collapse the Sources footer once it grows past this many chips (so 7+
@@ -18,11 +18,10 @@ const chipClass =
 
 /**
  * Chip-based "Sources" footer for an overview (#1934). Each chip links to the
- * source the overview drew on — preferring the canonical on-registry release
- * page (internal, crawlable, same-tab so link equity stays on-domain) and
- * falling back to the external source URL (new tab + UGC rel) when the source
- * didn't resolve to a release. Kept a client island only for the collapse
- * toggle; the overview body stays a server component.
+ * upstream source the overview drew on (new tab + UGC rel) — the #2218 link
+ * policy points every release-standing link upstream rather than at the
+ * noindexed on-registry `/release/*` page. Kept a client island only for the
+ * collapse toggle; the overview body stays a server component.
  */
 export function OverviewSourceChips({
   citations,
@@ -46,17 +45,17 @@ export function OverviewSourceChips({
         {items.map((citation, i) => {
           const hiddenNow = collapsible && !expanded && i >= SOURCE_COLLAPSE_THRESHOLD;
           const href = citationHref(citation);
-          const internal = isInternalCitation(citation);
-          // Internal release links: same-tab, no rel — let crawlers follow and
-          // link equity flow to the on-registry page. External sources: new tab
-          // + UGC rel. Guard the scheme either way; unsafe values drop to a
-          // non-navigable chip that still shows the label.
-          const external = !internal;
+          // Always the upstream source: new tab + UGC rel. Guard the scheme;
+          // an unsafe value drops to a non-navigable chip that still shows the
+          // label. `data-release-id` keeps the chip tied to the registry
+          // release it stands for even though the click leaves the site.
           return (
             <a
               key={`${href}-${i}`}
               href={isSafeHref(href) ? href : undefined}
-              {...(external ? { target: "_blank", rel: EXTERNAL_UGC_REL } : {})}
+              target="_blank"
+              rel={EXTERNAL_UGC_REL}
+              data-release-id={citation.releaseId ?? undefined}
               className={`${hiddenNow ? "hidden" : "inline-flex"} ${chipClass}`}
             >
               <span className="min-w-0 truncate">{definitionLabel(citation)}</span>

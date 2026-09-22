@@ -76,15 +76,25 @@ describe("sourceToAtom", () => {
   it("emits entries with stable ids and published + updated timestamps", () => {
     const xml = sourceToAtom(makeSource(), { baseUrl: BASE });
 
-    // The atom <id> stays the bare release path (stable across title churn);
-    // the human <link> is the slugged canonical (#1906).
+    // <id> stays the bare release path (stable identity, never a link target).
     expect(xml).toInclude("<id>https://releases.sh/release/rel_abc123</id>");
+    // Human alternate goes upstream when the release has an http(s) url (#2218 link policy).
     expect(xml).toInclude(
-      '<link rel="alternate" type="text/html" href="https://releases.sh/release/rel_abc123-next-js-15-0" />',
+      `<link rel="alternate" type="text/html" href="${makeSource().releases[0].url}" />`,
     );
     expect(xml).toInclude("<published>2026-04-10T12:34:56.000Z</published>");
     // Date-only source timestamps get widened to midnight UTC.
     expect(xml).toInclude("<published>2026-03-22T00:00:00.000Z</published>");
+  });
+
+  it("falls back to the slugged release page when the release has no upstream url", () => {
+    const source = makeSource();
+    source.releases = [{ ...source.releases[0]!, url: null }];
+    const xml = sourceToAtom(source, { baseUrl: BASE });
+
+    expect(xml).toInclude(
+      '<link rel="alternate" type="text/html" href="https://releases.sh/release/rel_abc123-next-js-15-0" />',
+    );
   });
 
   it("escapes markdown/HTML content so XML stays valid", () => {

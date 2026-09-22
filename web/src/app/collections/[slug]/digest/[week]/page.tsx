@@ -14,7 +14,7 @@ import { DigestFormatLinks } from "@/components/digest-format-links";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
-import { isExternalReleaseLink, releaseLinkProps } from "@/lib/release-link";
+import { isExternalReleaseLink, releaseLinkProps, releaseLinkTarget } from "@/lib/release-link";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
 import { weekOfLabel } from "@/lib/digest-format";
 import { createDigestAnchorSlugger } from "@releases/rendering/digest-sections";
@@ -222,7 +222,10 @@ export default async function CollectionDigestPage({
       intro: digest.intro,
       weekEndDate,
       generatedAt: digest.generatedAt,
-      releaseUrls: digest.releases.map((r) => `${SITE_URL}${r.path}`),
+      releaseUrls: digest.releases.map((r) => {
+        const link = releaseLinkTarget(r);
+        return link?.external ? link.href : `${SITE_URL}${link?.href ?? r.path}`;
+      }),
     },
     { pageUrl, collectionName: detail.name, collectionUrl, digestsIndexUrl },
   );

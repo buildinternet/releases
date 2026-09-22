@@ -88,19 +88,19 @@ function feedId(scope: string, slug: string, baseUrl: string): string {
 }
 
 /**
- * Human-facing canonical link for an entry's `<link rel="alternate">`: the
- * slugged release path (`/release/<id>-<slug>`) for crawler/AI legibility
- * (#1906), falling back to the release's upstream URL when there's no id.
- * The atom `<id>` stays the bare `/release/<id>` form (see `entryId`) so a
- * churning title-derived slug never re-notifies readers.
+ * Human-facing `<link rel="alternate">` for an entry: the release's upstream
+ * URL when it has an http(s) one (the #2218 link policy — /release/* pages are
+ * noindexed and robots-disallowed), else the slugged on-site path. The atom
+ * `<id>` stays the bare `/release/<id>` form (see `entryId`) — identity, not a link.
  */
 function releaseAlternateHref(
   release: Pick<ReleaseItem, "id" | "url" | "titleShort" | "titleGenerated" | "title" | "version">,
   baseUrl: string,
 ): string | null {
-  const { id } = release;
-  if (!id) return release.url ?? null;
-  return releaseWebUrl(baseUrl, { ...release, id });
+  const url = (release.url ?? "").trim();
+  if (/^https?:\/\//i.test(url)) return url;
+  if (!release.id) return null;
+  return releaseWebUrl(baseUrl, { ...release, id: release.id });
 }
 
 // ── Entry builder ────────────────────────────────────────────────────
@@ -114,8 +114,8 @@ interface EntryInput {
 
 function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated: string | null } {
   const { release, sourceSlug, sourceName, orgName } = input;
-  // The human <link> is the slugged canonical, derived here (symmetric with the
-  // bare <id> in `entryId`) so every formatter gets it without restating it.
+  // The human <link> points upstream when available, derived here (see
+  // `releaseAlternateHref`) so every formatter gets it without restating it.
   const linkHref = releaseAlternateHref(release, baseUrl);
   const published = toRfc3339(release.publishedAt);
   // Atom requires <updated>; when we lack a real timestamp fall back to
