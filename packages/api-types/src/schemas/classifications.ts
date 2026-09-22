@@ -11,7 +11,8 @@ const ClassificationOriginFilterSchema = z.enum(["ingest", "manual", "eval", "al
 const ClassificationDispositionSchema = z.enum(["kept", "suppressed", "failed", "skipped"]);
 
 const ProbabilityBinSchema = z.object({
-  /** Inclusive. Width is 0.1. `0.8` is the start of the threshold bin. */
+  /** Inclusive. Width is 0.1. See `probability.threshold` for the current
+   *  effective suppression threshold and which bin it falls in. */
   start: z.number(),
   /** Exclusive, except the last bin (`0.9`–`1`) which includes `1`. */
   end: z.number(),
@@ -65,7 +66,10 @@ export const ClassificationSummarySchema = z.object({
     }),
   ),
   probability: z.object({
-    threshold: z.literal(0.8),
+    /** Current effective suppression threshold (operator override, else the
+     *  code default) — no longer a fixed literal now that it's editable via
+     *  `GET/PUT /v1/admin/marketing-classifier`. */
+    threshold: z.number(),
     selected: ProbabilityHistogramSchema,
     confidence: ProbabilityHistogramSchema,
   }),

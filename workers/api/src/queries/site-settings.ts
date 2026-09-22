@@ -9,6 +9,10 @@ import {
   parseAiLaneModels,
   type AiLaneModels,
 } from "@releases/core-internal/ai-lane-models";
+import {
+  MARKETING_CLASSIFIER_SETTING_KEY,
+  parseMarketingClassifierThreshold,
+} from "@releases/core-internal/marketing-classifier-settings";
 import type { AnyDb } from "../db.js";
 import { siteSettings } from "../db/schema-site-settings.js";
 
@@ -84,4 +88,34 @@ export async function putStoredAiLaneModels(
 ): Promise<StoredAiLaneModels> {
   const now = await setSetting(db, AI_LANE_MODELS_KEY, JSON.stringify(models));
   return { models, updatedAt: now.toISOString() };
+}
+
+export interface StoredMarketingThreshold {
+  threshold: number;
+  updatedAt: string | null;
+}
+
+/** Read the operator marketing-classifier threshold, or the default when unset. */
+export async function getStoredMarketingThreshold(db: AnyDb): Promise<StoredMarketingThreshold> {
+  const row = await db
+    .select()
+    .from(siteSettings)
+    .where(eq(siteSettings.key, MARKETING_CLASSIFIER_SETTING_KEY))
+    .get();
+  if (!row) {
+    return { threshold: parseMarketingClassifierThreshold(null), updatedAt: null };
+  }
+  return {
+    threshold: parseMarketingClassifierThreshold(row.value),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** Persist the marketing-classifier threshold and return it stamped. */
+export async function putStoredMarketingThreshold(
+  db: AnyDb,
+  threshold: number,
+): Promise<StoredMarketingThreshold> {
+  const now = await setSetting(db, MARKETING_CLASSIFIER_SETTING_KEY, JSON.stringify({ threshold }));
+  return { threshold, updatedAt: now.toISOString() };
 }

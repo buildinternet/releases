@@ -243,7 +243,7 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 Operator tools live under `/admin/*` inside the account settings shell (`SettingsShell` + `AccountSettingsNav`) — an **Admin** sidebar section alongside Personal / Workspace. Nav items live in `web/src/lib/account-nav.ts` (same source as the rest of settings); the Admin group is only rendered when `useIsAdmin(devAdmin)` is true. Server gate is `isAdminViewer()` on `web/src/app/admin/layout.tsx` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. The account dropdown **Admin** link goes to `adminDefaultHref()` (first ready panel, currently Site notice). Bare `/admin` 308-redirects there so old bookmarks still land in the sidebar shell.
 
-Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`), **Models** (`/admin/models`), **Semantic alerts** (`/admin/semantic-alerts`).
+Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`), **Models** (`/admin/models`), **Marketing classifier** (`/admin/classifier` — suppression threshold + per-source filter, see [ingest.md → Marketing classifier](ingest.md#marketing-classifier)), **Semantic alerts** (`/admin/semantic-alerts`).
 
 **Classifications** on Status (`/admin/status?tab=classifications`) reads `GET /v1/admin/classifications/summary` and `/recent`, defaults to ingest, and isolates a chart or API failure from the rest of the page. See [classification-analytics.md](classification-analytics.md).
 

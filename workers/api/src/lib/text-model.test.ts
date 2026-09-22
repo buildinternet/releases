@@ -72,7 +72,7 @@ function baseEnv(overrides: Partial<TextModelEnv> = {}): TextModelEnv {
 
 describe("resolveMarketingModel — single openrouter-enabled switch", () => {
   for (const [choice, probability, confidence] of [
-    ["case_study", 0.79, 0.98],
+    ["case_study", 0.64, 0.98],
     ["unclear_other", 0.95, 0.12],
   ] as const) {
     it(`retains distinct ${choice} diagnostics in the classifier result and structured telemetry`, async () => {

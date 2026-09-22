@@ -503,6 +503,13 @@ function ClassificationsTabInner({
                 threshold={summary.probability.threshold}
                 showThreshold
               />
+              <p className="mt-1 text-[12px] text-stone-500 dark:text-stone-400">
+                Threshold {summary.probability.threshold} —{" "}
+                <Link href="/admin/classifier" className="hover:underline">
+                  tune it
+                </Link>
+                .
+              </p>
             </div>
             <div className="min-w-0">
               <ProbabilityHistogram

@@ -118,6 +118,20 @@ describe("marketingClassificationInput", () => {
     expect(input.selectedChoiceProbability).toBeNull();
   });
 
+  it("stamps the caller-supplied effective threshold, falling back to the default", () => {
+    const withThreshold = marketingClassificationInput(
+      record({ index: 0, disposition: "kept", verdict: verdict({ isMarketing: false }) }),
+      { origin: "ingest", threshold: 0.72 },
+    );
+    expect(withThreshold.threshold).toBe(0.72);
+
+    const withoutThreshold = marketingClassificationInput(
+      record({ index: 0, disposition: "kept", verdict: verdict({ isMarketing: false }) }),
+      { origin: "ingest" },
+    );
+    expect(withoutThreshold.threshold).toBe(0.65);
+  });
+
   it("maps a text-model keep to not_marketing", () => {
     const input = marketingClassificationInput(
       record({

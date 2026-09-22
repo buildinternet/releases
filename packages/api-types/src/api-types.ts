@@ -22,6 +22,11 @@ import type {
   AiLaneModelsResponseSchema,
 } from "./schemas/ai-models.js";
 import type {
+  MarketingClassifierThresholdPutSchema,
+  MarketingFilteredSourceSchema,
+  MarketingClassifierStateSchema,
+} from "./schemas/marketing-classifier.js";
+import type {
   MediaItemSchema,
   PaginationSchema,
   StatsSchema,
@@ -310,6 +315,13 @@ export {
   OpenRouterCatalogModelSchema,
   AiLaneModelsResponseSchema,
 } from "./schemas/ai-models.js";
+export {
+  MarketingClassifierThresholdPutSchema,
+  MarketingFilteredSourceSchema,
+  MarketingClassifierStateSchema,
+  MARKETING_THRESHOLD_MIN,
+  MARKETING_THRESHOLD_MAX,
+} from "./schemas/marketing-classifier.js";
 export {
   OrgListItemSchema,
   OrgListResponseSchema,
@@ -640,6 +652,10 @@ export type AiLaneModelsPut = z.infer<typeof AiLaneModelsPutSchema>;
 export type AiLaneState = z.infer<typeof AiLaneStateSchema>;
 export type OpenRouterCatalogModel = z.infer<typeof OpenRouterCatalogModelSchema>;
 export type AiLaneModelsResponse = z.infer<typeof AiLaneModelsResponseSchema>;
+
+export type MarketingClassifierThresholdPut = z.infer<typeof MarketingClassifierThresholdPutSchema>;
+export type MarketingFilteredSource = z.infer<typeof MarketingFilteredSourceSchema>;
+export type MarketingClassifierState = z.infer<typeof MarketingClassifierStateSchema>;
 
 // ── Stub tier (#1947) ──
 
