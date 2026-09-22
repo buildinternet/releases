@@ -14,6 +14,7 @@ import type { D1Db } from "../db.js";
 
 export const MAX_USER_WEBHOOK_SUBSCRIPTIONS = 10;
 export const MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS = 1;
+export const MAX_WORKSPACE_WEBHOOK_SUBSCRIPTIONS = 10;
 
 const orgFields = {
   id: organizations.id,
@@ -174,14 +175,21 @@ export function userWebhookDeliveryHealth(sub: WebhookSubscription): {
   return { deliveryHealth: view.health, deliveryHealthSummary: view.summary };
 }
 
-export async function listUserWebhookSubscriptionsEnriched(
-  db: D1Db,
-  userId: string,
-  opts?: { enabledOnly?: boolean },
-): Promise<UserWebhookListItem[]> {
-  const predicates = [eq(webhookSubscriptions.userId, userId)];
-  if (opts?.enabledOnly) predicates.push(eq(webhookSubscriptions.enabled, true));
+interface EnrichedWebhookRow {
+  subscription: WebhookSubscription;
+  orgSlug: string | null;
+  orgName: string | null;
+  sourceSlug: string | null;
+  sourceName: string | null;
+  productSlug: string | null;
+  productName: string | null;
+}
 
+/** Shared row shape + join, keyed by an arbitrary owner predicate (user or workspace). */
+async function selectEnrichedWebhookRows(
+  db: D1Db,
+  predicates: ReturnType<typeof eq>[],
+): Promise<EnrichedWebhookRow[]> {
   const rows = await db
     .select({
       subscription: webhookSubscriptions,
@@ -197,36 +205,98 @@ export async function listUserWebhookSubscriptionsEnriched(
     .leftJoin(sources, eq(sources.id, webhookSubscriptions.sourceId))
     .leftJoin(products, eq(products.id, webhookSubscriptions.productId))
     .where(and(...predicates));
+  return rows.map((row) => ({
+    subscription: row.subscription,
+    orgSlug: row.orgSlug ?? null,
+    orgName: row.orgName ?? null,
+    sourceSlug: row.sourceSlug ?? null,
+    sourceName: row.sourceName ?? null,
+    productSlug: row.productSlug ?? null,
+    productName: row.productName ?? null,
+  }));
+}
 
-  return rows.map(
-    ({ subscription: s, orgSlug, orgName, sourceSlug, sourceName, productSlug, productName }) => {
-      const item = {
-        id: s.id,
-        scope: s.scope,
-        url: s.url,
-        enabled: s.enabled,
-        description: s.description,
-        secretVersion: s.secretVersion,
-        createdAt: s.createdAt,
-        orgId: s.orgId,
-        orgSlug: orgSlug ?? null,
-        orgName: orgName ?? null,
-        sourceId: s.sourceId,
-        sourceSlug: sourceSlug ?? null,
-        sourceName: sourceName ?? null,
-        productId: s.productId,
-        productSlug: productSlug ?? null,
-        productName: productName ?? null,
-        releaseType: s.releaseType,
-        format: s.format,
-        lastSuccessAt: s.lastSuccessAt,
-        lastErrorAt: s.lastErrorAt,
-        lastErrorMsg: s.lastErrorMsg,
-        consecutiveFailures: s.consecutiveFailures,
-        disabledReason: s.disabledReason,
-        failureStreakStartedAt: s.failureStreakStartedAt,
-      };
-      return { ...item, ...userWebhookDeliveryHealth(s) };
-    },
+/** Base mapped item shared by the personal + workspace list responses. */
+function baseWebhookListItem(row: EnrichedWebhookRow): UserWebhookListItem {
+  const s = row.subscription;
+  const item = {
+    id: s.id,
+    scope: s.scope,
+    url: s.url,
+    enabled: s.enabled,
+    description: s.description,
+    secretVersion: s.secretVersion,
+    createdAt: s.createdAt,
+    orgId: s.orgId,
+    orgSlug: row.orgSlug,
+    orgName: row.orgName,
+    sourceId: s.sourceId,
+    sourceSlug: row.sourceSlug,
+    sourceName: row.sourceName,
+    productId: s.productId,
+    productSlug: row.productSlug,
+    productName: row.productName,
+    releaseType: s.releaseType,
+    format: s.format,
+    lastSuccessAt: s.lastSuccessAt,
+    lastErrorAt: s.lastErrorAt,
+    lastErrorMsg: s.lastErrorMsg,
+    consecutiveFailures: s.consecutiveFailures,
+    disabledReason: s.disabledReason,
+    failureStreakStartedAt: s.failureStreakStartedAt,
+  };
+  return { ...item, ...userWebhookDeliveryHealth(s) };
+}
+
+export async function listUserWebhookSubscriptionsEnriched(
+  db: D1Db,
+  userId: string,
+  opts?: { enabledOnly?: boolean },
+): Promise<UserWebhookListItem[]> {
+  const predicates = [eq(webhookSubscriptions.userId, userId)];
+  if (opts?.enabledOnly) predicates.push(eq(webhookSubscriptions.enabled, true));
+  const rows = await selectEnrichedWebhookRows(db, predicates);
+  return rows.map(baseWebhookListItem);
+}
+
+export async function countWorkspaceWebhookSubscriptions(
+  db: D1Db,
+  workspaceId: string,
+): Promise<number> {
+  const row = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.workspaceId, workspaceId))
+    .get();
+  return Number(row?.n ?? 0);
+}
+
+export async function getWorkspaceWebhookSubscription(
+  db: D1Db,
+  workspaceId: string,
+  id: string,
+): Promise<WebhookSubscription | null> {
+  return (
+    (await db
+      .select()
+      .from(webhookSubscriptions)
+      .where(
+        and(eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.workspaceId, workspaceId)),
+      )
+      .get()) ?? null
   );
+}
+
+export async function listWorkspaceWebhookSubscriptionsEnriched(
+  db: D1Db,
+  workspaceId: string,
+  opts?: { enabledOnly?: boolean },
+): Promise<(UserWebhookListItem & { workspaceId: string | null })[]> {
+  const predicates = [eq(webhookSubscriptions.workspaceId, workspaceId)];
+  if (opts?.enabledOnly) predicates.push(eq(webhookSubscriptions.enabled, true));
+  const rows = await selectEnrichedWebhookRows(db, predicates);
+  return rows.map((row) => ({
+    ...baseWebhookListItem(row),
+    workspaceId: row.subscription.workspaceId,
+  }));
 }

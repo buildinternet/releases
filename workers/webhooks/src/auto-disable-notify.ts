@@ -5,7 +5,13 @@ import type { EmailEnv } from "./email.js";
 import { sendWebhookAlert, sendWebhookUserNotice } from "./email.js";
 import { getOrgLabelById } from "./queries.js";
 import type { D1Db } from "./db.js";
-import { formatUserAutoPauseEmail, getWebhookUserContact } from "./user-notify.js";
+import {
+  formatUserAutoPauseEmail,
+  formatWorkspaceAutoPauseEmail,
+  getWebhookUserContact,
+  getWorkspaceName,
+  getWorkspaceOwnerAdminContacts,
+} from "./user-notify.js";
 
 export type AutoDisableNotifyEnv = EmailEnv & { WEB_BASE_URL?: string };
 
@@ -40,6 +46,11 @@ export async function notifyAutoDisabledSubscription(
   });
   await sendWebhookAlert(env, alert.subject, alert.body, alert.html);
 
+  if (sub.workspaceId) {
+    await notifyWorkspaceOwnersAdmins(db, env, sub, org, reason, lastError);
+    return;
+  }
+
   if (!sub.userId) return;
 
   try {
@@ -66,5 +77,66 @@ export async function notifyAutoDisabledSubscription(
       subscriptionId: sub.id,
       err,
     });
+  }
+}
+
+/** Notify every owner/admin of a workspace-owned subscription's workspace. Send failures per-recipient are logged and don't block others. */
+async function notifyWorkspaceOwnersAdmins(
+  db: D1Db,
+  env: AutoDisableNotifyEnv,
+  sub: WebhookSubscription,
+  org: { name: string; slug: string } | null,
+  reason: string,
+  lastError: string | null,
+): Promise<void> {
+  if (!sub.workspaceId) return;
+  const workspaceId = sub.workspaceId;
+
+  let workspaceName: string | null = null;
+  let contacts: Awaited<ReturnType<typeof getWorkspaceOwnerAdminContacts>> = [];
+  try {
+    [workspaceName, contacts] = await Promise.all([
+      getWorkspaceName(db, workspaceId),
+      getWorkspaceOwnerAdminContacts(db, workspaceId),
+    ]);
+  } catch (err) {
+    logEvent("warn", {
+      component: "webhook-auto-disable",
+      event: "workspace-notify-lookup-failed",
+      subscriptionId: sub.id,
+      workspaceId,
+      err,
+    });
+    return;
+  }
+  if (!workspaceName || contacts.length === 0) return;
+
+  const workspaceWebhooksUrl = `${env.WEB_BASE_URL ?? "https://releases.sh"}/account/workspace-webhooks`;
+  const notice = formatWorkspaceAutoPauseEmail({
+    recipientName: null,
+    url: sub.url,
+    description: sub.description,
+    workspaceName,
+    orgName: org?.name ?? null,
+    orgSlug: org?.slug ?? null,
+    consecutiveFailures: sub.consecutiveFailures,
+    lastError,
+    disabledReason: reason,
+    workspaceWebhooksUrl,
+  });
+
+  for (const contact of contacts) {
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- per-recipient sends must not block on each other's failures
+      await sendWebhookUserNotice(env, contact.email, notice.subject, notice.text, notice.html);
+    } catch (err) {
+      logEvent("warn", {
+        component: "webhook-auto-disable",
+        event: "workspace-notify-failed",
+        subscriptionId: sub.id,
+        workspaceId,
+        err,
+      });
+    }
   }
 }

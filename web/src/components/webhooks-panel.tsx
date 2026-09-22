@@ -32,7 +32,50 @@ import {
 } from "@/lib/webhooks";
 import { webhookCreateInitialState, type WebhookCreatePrefill } from "@/lib/webhook-create";
 
-const MAX_ORG_WEBHOOKS = 10;
+/** Applies to both personal (`/v1/me/webhooks`) and workspace-owned org subscriptions. */
+export const MAX_ORG_WEBHOOKS = 10;
+
+/**
+ * The subset of the webhook CRUD surface {@link WebhooksPanel} drives. The
+ * default (`defaultClient`, below) binds the personal `/v1/me/webhooks`
+ * functions; {@link WorkspaceWebhooksPanel} in `workspace-webhooks-panel.tsx`
+ * binds the `/v1/workspaces/:workspaceId/webhooks` ones (#2324) to the same
+ * shape, parameterized by workspace id.
+ */
+export type WebhooksPanelClient = {
+  list: () => Promise<UserWebhookListItem[]>;
+  create: (input: {
+    url: string;
+    scope?: UserWebhookScope;
+    orgSlug?: string;
+    productSlug?: string;
+    sourceSlug?: string;
+    releaseType?: "feature" | "rollup";
+    format?: UserWebhookFormat;
+    description?: string;
+  }) => Promise<{ signingKey?: string }>;
+  update: (
+    id: string,
+    patch: { url?: string; description?: string | null; enabled?: boolean },
+  ) => Promise<UserWebhookListItem>;
+  delete: (id: string) => Promise<void>;
+  rotateSecret: (id: string) => ReturnType<typeof rotateWebhookSecret>;
+  test: (id: string) => ReturnType<typeof testWebhook>;
+  listDeliveries: (
+    id: string,
+    opts?: { failed?: boolean; limit?: number },
+  ) => Promise<WebhookDeliveryRow[] | null>;
+};
+
+const defaultClient: WebhooksPanelClient = {
+  list: listWebhooks,
+  create: createWebhook,
+  update: updateWebhook,
+  delete: deleteWebhook,
+  rotateSecret: rotateWebhookSecret,
+  test: testWebhook,
+  listDeliveries: listWebhookDeliveries,
+};
 
 function subscriptionLabel(sub: UserWebhookListItem): string {
   if (sub.description?.trim()) return sub.description.trim();
@@ -68,7 +111,13 @@ function outcomeTone(outcome: string | undefined): string {
   }
 }
 
-function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
+function WebhookDeliveriesLog({
+  subscriptionId,
+  listDeliveries,
+}: {
+  subscriptionId: string;
+  listDeliveries: WebhooksPanelClient["listDeliveries"];
+}) {
   const [rows, setRows] = useState<WebhookDeliveryRow[] | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,7 +127,7 @@ function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
       setRows(undefined);
       setError(null);
       try {
-        const data = await listWebhookDeliveries(subscriptionId, { limit: 15 });
+        const data = await listDeliveries(subscriptionId, { limit: 15 });
         if (!cancelled) setRows(data);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load activity.");
@@ -87,7 +136,7 @@ function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [subscriptionId]);
+  }, [subscriptionId, listDeliveries]);
 
   if (rows === undefined) {
     return <p className="text-[11px] text-stone-400 dark:text-stone-500">Loading activity…</p>;
@@ -178,11 +227,32 @@ function healthTone(health: UserWebhookListItem["deliveryHealth"]): string {
 export function WebhooksPanel({
   initialWebhooks = null,
   createPrefill = null,
+  client = defaultClient,
+  allowFollows = true,
+  canManage = true,
+  intro = (
+    <>
+      Receive signed <code className="font-mono text-[0.9em]">release.created</code> POSTs in real
+      time — for everything you follow or a single org.{" "}
+      <Link href="/docs/api/webhooks" className="underline underline-offset-2">
+        Docs
+      </Link>
+    </>
+  ),
 }: {
   /** Optional bootstrap from GET /v1/me/settings/developer (skips mount fetch). */
   initialWebhooks?: UserWebhookListItem[] | null;
   /** Org-page deep-link: start the create form on Org scope with the slug filled. */
   createPrefill?: WebhookCreatePrefill | null;
+  /** CRUD surface to drive — defaults to personal `/v1/me/webhooks`; workspace mode
+   *  (#2324) binds `/v1/workspaces/:workspaceId/webhooks` to the same shape. */
+  client?: WebhooksPanelClient;
+  /** False for workspace webhooks — there is no workspace follows scope. */
+  allowFollows?: boolean;
+  /** False hides create/edit/pause/rotate/delete; Test + the delivery log stay visible. */
+  canManage?: boolean;
+  /** Intro copy under the "Webhooks" heading. */
+  intro?: React.ReactNode;
 }) {
   const prefill = webhookCreateInitialState(createPrefill);
   const [subs, setSubs] = useState<UserWebhookListItem[]>(initialWebhooks ?? []);
@@ -191,7 +261,7 @@ export function WebhooksPanel({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [scope, setScope] = useState<UserWebhookScope>(prefill.scope);
+  const [scope, setScope] = useState<UserWebhookScope>(allowFollows ? prefill.scope : "org");
   const [url, setUrl] = useState("");
   const [orgSlug, setOrgSlug] = useState(prefill.orgSlug);
   const [productSlug, setProductSlug] = useState("");
@@ -207,29 +277,31 @@ export function WebhooksPanel({
   const { copied, copy } = useCopyToClipboard();
 
   const orgCount = subs.filter((s) => s.scope === "org").length;
-  const hasFollows = subs.some((s) => s.scope === "follows");
-  const canCreateFollows = !hasFollows;
+  const hasFollows = allowFollows && subs.some((s) => s.scope === "follows");
+  const canCreateFollows = allowFollows && !hasFollows;
   const canCreateOrg = orgCount < MAX_ORG_WEBHOOKS;
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setSubs(await listWebhooks());
+      setSubs(await client.list());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load webhooks.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [client]);
 
   useEffect(() => {
     if (initialWebhooks != null) return;
     void refresh();
-  }, [initialWebhooks, refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialWebhooks]);
 
   async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!canManage) return;
     if (creating || !url.trim()) return;
     if (scope === "follows" && !canCreateFollows) return;
     if (scope === "org" && (!orgSlug.trim() || !canCreateOrg)) return;
@@ -238,7 +310,7 @@ export function WebhooksPanel({
     setError(null);
     setSuccess(null);
     try {
-      const created = await createWebhook({
+      const created = await client.create({
         url: url.trim(),
         scope,
         format,
@@ -290,11 +362,12 @@ export function WebhooksPanel({
   }
 
   async function onRotate(id: string) {
+    if (!canManage) return;
     setBusyId(id);
     setError(null);
     setSuccess(null);
     try {
-      const { signingKey } = await rotateWebhookSecret(id);
+      const { signingKey } = await client.rotateSecret(id);
       setRevealedKey(signingKey);
       setSuccess("Signing key rotated. Copy it before dismissing.");
       await refresh();
@@ -307,7 +380,8 @@ export function WebhooksPanel({
   }
 
   async function onDelete(id: string) {
-    await runAction(id, () => deleteWebhook(id));
+    if (!canManage) return;
+    await runAction(id, () => client.delete(id));
     setConfirm(null);
   }
 
@@ -318,13 +392,12 @@ export function WebhooksPanel({
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
         Webhooks
       </h2>
-      <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-        Receive signed <code className="font-mono text-[0.9em]">release.created</code> POSTs in real
-        time — for everything you follow or a single org.{" "}
-        <Link href="/docs/api/webhooks" className="underline underline-offset-2">
-          Docs
-        </Link>
-      </p>
+      <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{intro}</p>
+      {!canManage && (
+        <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+          Only workspace owners and admins can add or change webhooks.
+        </p>
+      )}
 
       {error && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{error}</p>}
       {success && <p className="mt-2 text-[12px] text-green-700 dark:text-green-400">{success}</p>}
@@ -381,30 +454,32 @@ export function WebhooksPanel({
                     disabled={busy || !sub.enabled}
                     onClick={() =>
                       void runAction(sub.id, async () => {
-                        await testWebhook(sub.id);
+                        await client.test(sub.id);
                       })
                     }
                     className={smallButtonClass}
                   >
                     {busy ? "…" : "Send test"}
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void runAction(sub.id, async () => {
-                        await updateWebhook(sub.id, { enabled: !sub.enabled });
-                      })
-                    }
-                    className={smallButtonClass}
-                  >
-                    {sub.enabled ? "Pause" : "Resume"}
-                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(sub.id, async () => {
+                          await client.update(sub.id, { enabled: !sub.enabled });
+                        })
+                      }
+                      className={smallButtonClass}
+                    >
+                      {sub.enabled ? "Pause" : "Resume"}
+                    </button>
+                  )}
                   <span className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-stone-800 dark:text-stone-300">
                     <WebhookFormatIcon format={sub.format} className="size-3.5 shrink-0" />
                     {webhookFormatLabel(sub.format)}
                   </span>
-                  {!isUnsignedWebhookFormat(sub.format) && (
+                  {canManage && !isUnsignedWebhookFormat(sub.format) && (
                     <button
                       type="button"
                       disabled={busy}
@@ -422,21 +497,26 @@ export function WebhooksPanel({
                   >
                     {activityId === sub.id ? "Hide activity" : "Activity"}
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setConfirm({ kind: "delete", id: sub.id })}
-                    className="text-red-500 hover:text-red-700 hover:underline underline-offset-2 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    Delete
-                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setConfirm({ kind: "delete", id: sub.id })}
+                      className="text-red-500 hover:text-red-700 hover:underline underline-offset-2 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
                 {activityId === sub.id && (
                   <div className="rounded border border-stone-100 bg-stone-50/80 p-2 dark:border-stone-800 dark:bg-stone-950/50">
                     <p className="mb-2 text-[11px] font-medium text-stone-500 dark:text-stone-400">
                       Recent deliveries
                     </p>
-                    <WebhookDeliveriesLog subscriptionId={sub.id} />
+                    <WebhookDeliveriesLog
+                      subscriptionId={sub.id}
+                      listDeliveries={client.listDeliveries}
+                    />
                   </div>
                 )}
               </li>
@@ -447,242 +527,246 @@ export function WebhooksPanel({
         <p className="mt-3 text-[13px] text-stone-500 dark:text-stone-400">No webhooks yet.</p>
       )}
 
-      <form
-        id="add-webhook"
-        onSubmit={onCreate}
-        className="mt-4 space-y-3 border-t border-stone-200 pt-4 dark:border-stone-800"
-      >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Add webhook
-        </p>
-
-        <div
-          className="inline-flex overflow-hidden rounded border border-stone-200 dark:border-stone-700"
-          role="group"
-          aria-label="Webhook scope"
+      {canManage && (
+        <form
+          id="add-webhook"
+          onSubmit={onCreate}
+          className="mt-4 space-y-3 border-t border-stone-200 pt-4 dark:border-stone-800"
         >
-          {(
-            [
-              { value: "follows" as const, label: "Follows" },
-              { value: "org" as const, label: "Org" },
-            ] as const
-          ).map((o) => {
-            const disabled = o.value === "follows" ? !canCreateFollows : !canCreateOrg;
-            return (
-              <button
-                key={o.value}
-                type="button"
-                disabled={disabled}
-                aria-pressed={scope === o.value}
-                onClick={() => setScope(o.value)}
-                className={`px-3 py-1.5 text-[13px] disabled:opacity-40 ${
-                  scope === o.value
-                    ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-                    : "bg-white text-stone-700 hover:bg-stone-50 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800"
-                }`}
-              >
-                {o.label}
-              </button>
-            );
-          })}
-        </div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+            Add webhook
+          </p>
 
-        {scope === "org" && (
-          <>
-            <div>
-              <label
-                htmlFor="webhook-org"
-                className="text-[12px] text-stone-600 dark:text-stone-300"
-              >
-                Org slug
-              </label>
-              <input
-                id="webhook-org"
-                value={orgSlug}
-                onChange={(e) => setOrgSlug(e.target.value)}
-                placeholder="vercel"
-                className={`${inputClass} mt-1`}
-                required
-              />
-              <p className="mt-1 text-[11px] text-stone-400">
-                {orgCount}/{MAX_ORG_WEBHOOKS} org webhooks used
+          {allowFollows && (
+            <div
+              className="inline-flex overflow-hidden rounded border border-stone-200 dark:border-stone-700"
+              role="group"
+              aria-label="Webhook scope"
+            >
+              {(
+                [
+                  { value: "follows" as const, label: "Follows" },
+                  { value: "org" as const, label: "Org" },
+                ] as const
+              ).map((o) => {
+                const disabled = o.value === "follows" ? !canCreateFollows : !canCreateOrg;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    disabled={disabled}
+                    aria-pressed={scope === o.value}
+                    onClick={() => setScope(o.value)}
+                    className={`px-3 py-1.5 text-[13px] disabled:opacity-40 ${
+                      scope === o.value
+                        ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
+                        : "bg-white text-stone-700 hover:bg-stone-50 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {scope === "org" && (
+            <>
+              <div>
+                <label
+                  htmlFor="webhook-org"
+                  className="text-[12px] text-stone-600 dark:text-stone-300"
+                >
+                  Org slug
+                </label>
+                <input
+                  id="webhook-org"
+                  value={orgSlug}
+                  onChange={(e) => setOrgSlug(e.target.value)}
+                  placeholder="vercel"
+                  className={`${inputClass} mt-1`}
+                  required
+                />
+                <p className="mt-1 text-[11px] text-stone-400">
+                  {orgCount}/{MAX_ORG_WEBHOOKS} org webhooks used
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="webhook-product"
+                  className="text-[12px] text-stone-600 dark:text-stone-300"
+                >
+                  Product slug (optional)
+                </label>
+                <input
+                  id="webhook-product"
+                  value={productSlug}
+                  onChange={(e) => setProductSlug(e.target.value)}
+                  placeholder="next-js"
+                  className={`${inputClass} mt-1`}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="webhook-source"
+                  className="text-[12px] text-stone-600 dark:text-stone-300"
+                >
+                  Source slug (optional)
+                </label>
+                <input
+                  id="webhook-source"
+                  value={sourceSlug}
+                  onChange={(e) => setSourceSlug(e.target.value)}
+                  placeholder="changelog"
+                  className={`${inputClass} mt-1`}
+                />
+              </div>
+            </>
+          )}
+
+          <div>
+            <label
+              htmlFor="webhook-release-type"
+              className="text-[12px] text-stone-600 dark:text-stone-300"
+            >
+              Release type (optional)
+            </label>
+            <Select
+              value={releaseType === "" ? "any" : releaseType}
+              onValueChange={(v) => {
+                if (v === "any" || v === "feature" || v === "rollup") {
+                  setReleaseType(v === "any" ? "" : v);
+                }
+              }}
+              items={[
+                { value: "any", label: "Any" },
+                { value: "feature", label: "Feature" },
+                { value: "rollup", label: "Rollup" },
+              ]}
+            >
+              <SelectTrigger id="webhook-release-type" className="mt-1 h-10 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any</SelectItem>
+                <SelectItem value="feature">Feature</SelectItem>
+                <SelectItem value="rollup">Rollup</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="webhook-format"
+              className="text-[12px] text-stone-600 dark:text-stone-300"
+            >
+              Format
+            </label>
+            <Select
+              value={format}
+              onValueChange={(v) => {
+                if (v === "json" || v === "slack" || v === "discord") setFormat(v);
+              }}
+              items={[
+                { value: "json", label: webhookFormatPickerLabel("json") },
+                { value: "slack", label: webhookFormatPickerLabel("slack") },
+                { value: "discord", label: webhookFormatPickerLabel("discord") },
+              ]}
+            >
+              <SelectTrigger id="webhook-format" className="mt-1 h-10 w-full">
+                <WebhookFormatIcon format={format} />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="json">
+                  <WebhookFormatIcon format="json" />
+                  {webhookFormatPickerLabel("json")}
+                </SelectItem>
+                <SelectItem value="slack">
+                  <WebhookFormatIcon format="slack" />
+                  {webhookFormatPickerLabel("slack")}
+                </SelectItem>
+                <SelectItem value="discord">
+                  <WebhookFormatIcon format="discord" />
+                  {webhookFormatPickerLabel("discord")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {format === "slack" && (
+              <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+                Posts a formatted message to a Slack incoming webhook URL (hooks.slack.com). No
+                signature is sent.{" "}
+                <Link href="/docs/integrations/slack" className="underline underline-offset-2">
+                  Setup guide
+                </Link>
               </p>
-            </div>
-            <div>
-              <label
-                htmlFor="webhook-product"
-                className="text-[12px] text-stone-600 dark:text-stone-300"
-              >
-                Product slug (optional)
-              </label>
-              <input
-                id="webhook-product"
-                value={productSlug}
-                onChange={(e) => setProductSlug(e.target.value)}
-                placeholder="next-js"
-                className={`${inputClass} mt-1`}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="webhook-source"
-                className="text-[12px] text-stone-600 dark:text-stone-300"
-              >
-                Source slug (optional)
-              </label>
-              <input
-                id="webhook-source"
-                value={sourceSlug}
-                onChange={(e) => setSourceSlug(e.target.value)}
-                placeholder="changelog"
-                className={`${inputClass} mt-1`}
-              />
-            </div>
-          </>
-        )}
+            )}
+            {format === "discord" && (
+              <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+                Posts a formatted embed to a Discord incoming webhook URL
+                (discord.com/api/webhooks). No signature is sent.{" "}
+                <Link href="/docs/integrations/discord" className="underline underline-offset-2">
+                  Setup guide
+                </Link>
+              </p>
+            )}
+          </div>
 
-        <div>
-          <label
-            htmlFor="webhook-release-type"
-            className="text-[12px] text-stone-600 dark:text-stone-300"
-          >
-            Release type (optional)
-          </label>
-          <Select
-            value={releaseType === "" ? "any" : releaseType}
-            onValueChange={(v) => {
-              if (v === "any" || v === "feature" || v === "rollup") {
-                setReleaseType(v === "any" ? "" : v);
+          {scope === "follows" && hasFollows && (
+            <p className="text-[11px] text-stone-400">You already have a follows webhook.</p>
+          )}
+
+          <div>
+            <label htmlFor="webhook-url" className="text-[12px] text-stone-600 dark:text-stone-300">
+              HTTPS endpoint
+            </label>
+            <input
+              id="webhook-url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder={
+                format === "slack"
+                  ? "https://hooks.slack.com/services/…"
+                  : format === "discord"
+                    ? "https://discord.com/api/webhooks/…"
+                    : "https://your.app/releases"
               }
-            }}
-            items={[
-              { value: "any", label: "Any" },
-              { value: "feature", label: "Feature" },
-              { value: "rollup", label: "Rollup" },
-            ]}
-          >
-            <SelectTrigger id="webhook-release-type" className="mt-1 h-10 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="any">Any</SelectItem>
-              <SelectItem value="feature">Feature</SelectItem>
-              <SelectItem value="rollup">Rollup</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+              className={`${inputClass} mt-1`}
+              required
+            />
+          </div>
 
-        <div>
-          <label
-            htmlFor="webhook-format"
-            className="text-[12px] text-stone-600 dark:text-stone-300"
-          >
-            Format
-          </label>
-          <Select
-            value={format}
-            onValueChange={(v) => {
-              if (v === "json" || v === "slack" || v === "discord") setFormat(v);
-            }}
-            items={[
-              { value: "json", label: webhookFormatPickerLabel("json") },
-              { value: "slack", label: webhookFormatPickerLabel("slack") },
-              { value: "discord", label: webhookFormatPickerLabel("discord") },
-            ]}
-          >
-            <SelectTrigger id="webhook-format" className="mt-1 h-10 w-full">
-              <WebhookFormatIcon format={format} />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="json">
-                <WebhookFormatIcon format="json" />
-                {webhookFormatPickerLabel("json")}
-              </SelectItem>
-              <SelectItem value="slack">
-                <WebhookFormatIcon format="slack" />
-                {webhookFormatPickerLabel("slack")}
-              </SelectItem>
-              <SelectItem value="discord">
-                <WebhookFormatIcon format="discord" />
-                {webhookFormatPickerLabel("discord")}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          {format === "slack" && (
-            <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
-              Posts a formatted message to a Slack incoming webhook URL (hooks.slack.com). No
-              signature is sent.{" "}
-              <Link href="/docs/integrations/slack" className="underline underline-offset-2">
-                Setup guide
-              </Link>
-            </p>
-          )}
-          {format === "discord" && (
-            <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
-              Posts a formatted embed to a Discord incoming webhook URL (discord.com/api/webhooks).
-              No signature is sent.{" "}
-              <Link href="/docs/integrations/discord" className="underline underline-offset-2">
-                Setup guide
-              </Link>
-            </p>
-          )}
-        </div>
+          <div>
+            <label
+              htmlFor="webhook-description"
+              className="text-[12px] text-stone-600 dark:text-stone-300"
+            >
+              Label (optional)
+            </label>
+            <input
+              id="webhook-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Production hook"
+              className={`${inputClass} mt-1`}
+            />
+          </div>
 
-        {scope === "follows" && hasFollows && (
-          <p className="text-[11px] text-stone-400">You already have a follows webhook.</p>
-        )}
-
-        <div>
-          <label htmlFor="webhook-url" className="text-[12px] text-stone-600 dark:text-stone-300">
-            HTTPS endpoint
-          </label>
-          <input
-            id="webhook-url"
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder={
-              format === "slack"
-                ? "https://hooks.slack.com/services/…"
-                : format === "discord"
-                  ? "https://discord.com/api/webhooks/…"
-                  : "https://your.app/releases"
+          <button
+            type="submit"
+            disabled={
+              creating ||
+              !url.trim() ||
+              (scope === "org" && (!orgSlug.trim() || !canCreateOrg)) ||
+              (scope === "follows" && !canCreateFollows)
             }
-            className={`${inputClass} mt-1`}
-            required
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="webhook-description"
-            className="text-[12px] text-stone-600 dark:text-stone-300"
+            className={smallButtonClass}
           >
-            Label (optional)
-          </label>
-          <input
-            id="webhook-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Production hook"
-            className={`${inputClass} mt-1`}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={
-            creating ||
-            !url.trim() ||
-            (scope === "org" && (!orgSlug.trim() || !canCreateOrg)) ||
-            (scope === "follows" && !canCreateFollows)
-          }
-          className={smallButtonClass}
-        >
-          {creating ? "Creating…" : "Create webhook"}
-        </button>
-      </form>
+            {creating ? "Creating…" : "Create webhook"}
+          </button>
+        </form>
+      )}
 
       <ConfirmDialog
         open={confirm != null}

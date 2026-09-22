@@ -91,6 +91,7 @@ export async function insertWebhookSubscription(
     format?: WebhookFormat;
     description: string | null;
     userId?: string | null;
+    workspaceId?: string | null;
   },
 ): Promise<WebhookSubscription> {
   const scope = input.scope ?? "org";
@@ -106,6 +107,7 @@ export async function insertWebhookSubscription(
       format: input.format ?? "json",
       description: input.description,
       userId: input.userId ?? null,
+      workspaceId: input.workspaceId ?? null,
     })
     .returning();
   return row;

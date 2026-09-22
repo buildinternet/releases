@@ -27,6 +27,10 @@ personal workspace; they can create more.
   (sign-in prompt, email-mismatch, invalid, and accept/decline).
 - Workspace **Integrations** (`/account/integrations`): connect an uploads.sh account
   via OAuth (owner/admin). See [uploads-oauth.md](uploads-oauth.md).
+- Workspace **webhooks** (`/v1/workspaces/:workspaceId/webhooks`, #2324): a webhook
+  subscription owned by the workspace (`webhook_subscriptions.workspace_id`) instead of a
+  user — org-scoped only, owner/admin manage, any member can view/test, cap of 10, cascades
+  on workspace delete. Mirrors `/v1/me/webhooks`; see [docs/webhooks.md](../webhooks.md).
 
 ## Personal-workspace provisioning (lazy)
 
