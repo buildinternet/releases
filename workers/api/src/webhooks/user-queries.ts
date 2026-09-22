@@ -109,22 +109,6 @@ function ownerPredicate(owner: WebhookOwner) {
     : eq(webhookSubscriptions.workspaceId, owner.workspaceId);
 }
 
-/**
- * Org-scoped subscription count for an owner. The user-owned count is
- * `scope = 'org'` only (users can also hold one `follows`-scoped row, which
- * must not count toward the org limit); workspace rows are always org-scoped
- * already, but the same filter is kept so both callers share one predicate
- * and the semantics stay correct if that ever changes.
- */
-async function countOwnerOrgWebhookSubscriptions(db: D1Db, owner: WebhookOwner): Promise<number> {
-  const row = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(webhookSubscriptions)
-    .where(and(ownerPredicate(owner), eq(webhookSubscriptions.scope, "org")))
-    .get();
-  return Number(row?.n ?? 0);
-}
-
 async function getOwnerWebhookSubscription(
   db: D1Db,
   owner: WebhookOwner,
@@ -135,25 +119,6 @@ async function getOwnerWebhookSubscription(
       .select()
       .from(webhookSubscriptions)
       .where(and(eq(webhookSubscriptions.id, id), ownerPredicate(owner)))
-      .get()) ?? null
-  );
-}
-
-export async function countUserOrgWebhookSubscriptions(db: D1Db, userId: string): Promise<number> {
-  return countOwnerOrgWebhookSubscriptions(db, { userId });
-}
-
-export async function getUserFollowsWebhookSubscription(
-  db: D1Db,
-  userId: string,
-): Promise<WebhookSubscription | null> {
-  return (
-    (await db
-      .select()
-      .from(webhookSubscriptions)
-      .where(
-        and(eq(webhookSubscriptions.userId, userId), eq(webhookSubscriptions.scope, "follows")),
-      )
       .get()) ?? null
   );
 }

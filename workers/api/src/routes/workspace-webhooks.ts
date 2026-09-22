@@ -12,7 +12,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { createDb } from "../db.js";
 import {
-  insertWorkspaceWebhookSubscriptionCapped,
+  insertWebhookSubscriptionCapped,
   updateWebhookSubscription,
   deleteWebhookSubscription,
   bumpWebhookSecretVersion,
@@ -176,10 +176,11 @@ workspaceWebhookHandlers.post(
         };
       },
       execute: async (input) => {
-        const sub = await insertWorkspaceWebhookSubscriptionCapped(
+        const sub = await insertWebhookSubscriptionCapped(
           input.db,
+          { workspaceId: input.workspaceId },
           {
-            workspaceId: input.workspaceId,
+            scope: "org",
             orgId: input.org.id,
             url: input.url,
             sourceId: input.resolvedSourceId,

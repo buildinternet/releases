@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { createDb } from "../db.js";
 import {
-  insertWebhookSubscription,
+  insertWebhookSubscriptionCapped,
   updateWebhookSubscription,
   deleteWebhookSubscription,
   bumpWebhookSecretVersion,
@@ -28,8 +28,6 @@ import {
   type WebhookFormat,
 } from "@buildinternet/releases-core/schema";
 import {
-  countUserOrgWebhookSubscriptions,
-  getUserFollowsWebhookSubscription,
   getUserWebhookSubscription,
   listUserWebhookSubscriptionsEnriched,
   MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS,
@@ -197,40 +195,33 @@ meWebhookHandlers.post(
         };
       },
       execute: async (input) => {
-        if (input.scope === "follows") {
-          const existing = await getUserFollowsWebhookSubscription(input.db, session.user.id);
-          if (existing) {
-            return respondError(
-              c,
-              new RateLimitedError(
-                `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
-                { code: "limit_exceeded" },
-              ),
-            );
-          }
-        } else {
-          const count = await countUserOrgWebhookSubscriptions(input.db, session.user.id);
-          if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
-            return respondError(
-              c,
-              new RateLimitedError(
-                `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
-                { code: "limit_exceeded" },
-              ),
-            );
-          }
+        const follows = input.scope === "follows";
+        const sub = await insertWebhookSubscriptionCapped(
+          input.db,
+          { userId: session.user.id },
+          {
+            scope: input.scope,
+            orgId: follows ? null : input.org.id,
+            url: input.url,
+            sourceId: follows ? null : input.resolvedSourceId,
+            productId: follows ? null : input.resolvedProductId,
+            releaseType: input.releaseType,
+            format: input.format,
+            description: input.description,
+          },
+          follows ? MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS : MAX_USER_WEBHOOK_SUBSCRIPTIONS,
+        );
+        if (!sub) {
+          return respondError(
+            c,
+            new RateLimitedError(
+              follows
+                ? `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`
+                : `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
+              { code: "limit_exceeded" },
+            ),
+          );
         }
-        const sub = await insertWebhookSubscription(input.db, {
-          scope: input.scope,
-          orgId: input.scope === "follows" ? null : input.org.id,
-          url: input.url,
-          sourceId: input.scope === "follows" ? null : input.resolvedSourceId,
-          productId: input.scope === "follows" ? null : input.resolvedProductId,
-          releaseType: input.releaseType,
-          format: input.format,
-          description: input.description,
-          userId: session.user.id,
-        });
         const signingKey = isUnsignedWebhookFormat(input.format)
           ? undefined
           : await signingKeyFor(input.masterKey, sub.id, sub.secretVersion);
