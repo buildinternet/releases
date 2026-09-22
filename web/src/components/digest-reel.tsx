@@ -3,37 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { OrgAvatar } from "./org-avatar";
+import { DigestIcon } from "./digest-icons";
 import { DigestSectionRow } from "./digest-reel-section";
 import { weekRangeLabel } from "@/lib/digest-format";
-import { digestHref, splitDigestReel, type ReelDigest } from "@/lib/digest-reel";
+import { digestHref, type ReelCard, type ReelPreview } from "@/lib/digest-reel";
 
 /** Card width (360px) + track gap (16px): one arrow press advances one card. */
 const SCROLL_STEP = 376;
-/** Section rows shown per card; the rest live on the digest page. */
-const CARD_SECTIONS = 3;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
-function NewspaperIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
-      <path d="M18 14h-8" />
-      <path d="M15 18h-5" />
-      <path d="M10 6h8v4h-8V6Z" />
-    </svg>
-  );
-}
 
 function Chevron({ dir }: { dir: "left" | "right" }) {
   return (
@@ -55,14 +33,14 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
 
 /** One issue card. An article, not one big link: the title, each section row,
  *  and the footer are separate links. */
-function DigestCard({ digest }: { digest: ReelDigest }) {
+function DigestCard({ digest }: { digest: ReelCard }) {
   const href = digestHref(digest);
   return (
     <article className="flex w-[88%] flex-none snap-start flex-col gap-3 rounded-xl border border-stone-200 bg-white p-[18px] shadow-sm sm:h-[440px] sm:w-[360px] sm:gap-3.5 sm:px-[22px] sm:pt-5 sm:pb-[18px] dark:border-stone-800 dark:bg-stone-900 dark:shadow-black/25">
       <div className="flex items-center gap-2.5">
         {digest.orgs.length > 0 && (
           <div className="flex pr-1.5">
-            {digest.orgs.slice(0, 3).map((o) => (
+            {digest.orgs.map((o) => (
               <span
                 key={o.slug}
                 className="-mr-1.5 rounded-full ring-2 ring-white dark:ring-stone-900"
@@ -102,7 +80,7 @@ function DigestCard({ digest }: { digest: ReelDigest }) {
           <div className="mb-1 font-mono text-[10px] tracking-[0.14em] text-stone-400 uppercase dark:text-stone-500">
             In this issue
           </div>
-          {digest.sections.slice(0, CARD_SECTIONS).map((s, i) => (
+          {digest.sections.map((s, i) => (
             <DigestSectionRow key={s.anchor} digest={digest} section={s} index={i} />
           ))}
         </div>
@@ -114,7 +92,7 @@ function DigestCard({ digest }: { digest: ReelDigest }) {
       >
         <span className="font-mono text-[11px] text-stone-400 dark:text-stone-500">
           {plural(digest.releaseCount, "release", "releases")} ·{" "}
-          {plural(digest.orgs.length, "org", "orgs")}
+          {plural(digest.orgCount, "org", "orgs")}
         </span>
         <Link
           href={href}
@@ -132,8 +110,10 @@ function DigestCard({ digest }: { digest: ReelDigest }) {
  * Homepage "Weekly digests" band: a full-bleed, natively scrolling reel of the
  * newest week's collection digests (featured first, then busiest), with the
  * overflow listed under "Also this week". Renders nothing for an empty list.
+ * `preview` is the server-trimmed payload from `toReelPreview` — already
+ * split into cards/overflow, so nothing here re-derives it per render.
  */
-export function DigestReel({ digests }: { digests: ReelDigest[] }) {
+export function DigestReel({ preview }: { preview: ReelPreview }) {
   const headingId = useId();
   const trackRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ start: true, end: false });
@@ -153,8 +133,8 @@ export function DigestReel({ digests }: { digests: ReelDigest[] }) {
     return () => window.removeEventListener("resize", measure);
   }, [measure]);
 
-  if (digests.length === 0) return null;
-  const { cards, more } = splitDigestReel(digests);
+  const { cards, more } = preview;
+  if (cards.length === 0) return null;
   const weekStart = cards[0].weekStart;
 
   const scroll = (dir: 1 | -1) => {
@@ -179,7 +159,7 @@ export function DigestReel({ digests }: { digests: ReelDigest[] }) {
         <div className="flex flex-1 flex-col gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2">
             <span className="text-stone-400 dark:text-stone-500">
-              <NewspaperIcon />
+              <DigestIcon size={13} />
             </span>
             <h2
               id={headingId}
@@ -193,7 +173,7 @@ export function DigestReel({ digests }: { digests: ReelDigest[] }) {
           </p>
           <p className="text-[13px] text-stone-500 sm:text-[14px] dark:text-stone-400">
             New issues every Monday. Week of {weekRangeLabel(weekStart, { year: false })} ·{" "}
-            {plural(digests.length, "collection", "collections")}
+            {plural(preview.totalCount, "collection", "collections")}
           </p>
         </div>
         <div className="hidden gap-2 sm:flex">

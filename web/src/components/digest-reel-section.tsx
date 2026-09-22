@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { OrgAvatar } from "./org-avatar";
+import { ExternalArrow } from "./digest-icons";
 import { isExternalReleaseLink, releaseLinkProps } from "@/lib/release-link";
-import { digestHref, sectionProducts, type ReelDigest } from "@/lib/digest-reel";
+import { digestHref, HOVER_RELEASES, type ReelCard, type ReelCardSection } from "@/lib/digest-reel";
 
-/** Releases listed in a section's hover card before the "+N more" count. */
-const HOVER_RELEASES = 3;
 /** Products shown in the hover card's single-line row before the "+N" chip. */
 const HOVER_PRODUCTS = 3;
 
@@ -23,28 +22,6 @@ export function focusIsInside(
   return !!container && !!active && container.contains(active);
 }
 
-type ReelSection = ReelDigest["sections"][number];
-
-function ExternalArrow() {
-  return (
-    <svg
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="shrink-0 text-stone-400 dark:text-stone-500"
-    >
-      <path d="M7 17 17 7" />
-      <path d="M8 7h9v9" />
-    </svg>
-  );
-}
-
 /**
  * One "In this issue" row: an internal link to the section's anchor on the
  * digest page (same tab, no ↗). On md+ a hover/focus card previews the
@@ -57,12 +34,12 @@ export function DigestSectionRow({
   section,
   index,
 }: {
-  digest: ReelDigest;
-  section: ReelSection;
+  digest: ReelCard;
+  section: ReelCardSection;
   index: number;
 }) {
   const [open, setOpen] = useState(false);
-  const products = sectionProducts(section);
+  const products = section.products;
   const href = digestHref(digest, section.anchor);
   const linkRef = useRef<HTMLAnchorElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -135,12 +112,12 @@ export function DigestSectionPreview({
   digest,
   section,
 }: {
-  digest: ReelDigest;
-  section: ReelSection;
+  digest: ReelCard;
+  section: ReelCardSection;
 }) {
-  const products = sectionProducts(section);
+  const products = section.products;
   const href = digestHref(digest, section.anchor);
-  const total = section.releases.length;
+  const total = section.releaseCount;
   const more = total - HOVER_RELEASES;
   const shownProducts = products.slice(0, HOVER_PRODUCTS);
   const extraProducts = products.length - HOVER_PRODUCTS;
@@ -173,8 +150,8 @@ export function DigestSectionPreview({
         </p>
       )}
       <div className="flex flex-col gap-0.5 border-t border-stone-200 pt-2 dark:border-stone-700">
-        {section.releases.slice(0, HOVER_RELEASES).map((r) => {
-          const linkProps = releaseLinkProps(r) ?? { href: r.path, "data-release-id": r.id };
+        {section.releases.map((r) => {
+          const linkProps = releaseLinkProps(r);
           return (
             <a
               key={r.id}
@@ -190,7 +167,10 @@ export function DigestSectionPreview({
               <span className="min-w-0 flex-1 truncate">{r.title}</span>
               {isExternalReleaseLink(linkProps) && (
                 <>
-                  <ExternalArrow />
+                  <ExternalArrow
+                    size={11}
+                    className="shrink-0 text-stone-400 dark:text-stone-500"
+                  />
                   <span className="sr-only"> (opens in new tab)</span>
                 </>
               )}

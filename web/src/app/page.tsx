@@ -28,7 +28,7 @@ import { TerminalSession, type TerminalTab } from "@/components/terminal-session
 import { SignupCta } from "@/components/signup-cta";
 import { AgentUseCases, AgentUseCasesJumpLink } from "@/components/agent-use-cases";
 import { DigestReel } from "@/components/digest-reel";
-import type { ReelDigest } from "@/lib/digest-reel";
+import { toReelPreview, type ReelDigest } from "@/lib/digest-reel";
 import { formatStars } from "@/lib/format-stars";
 import {
   FeaturedCollections,
@@ -477,7 +477,7 @@ export default async function HomePage() {
       </div>
       {latestDigests.length > 0 && (
         <div className="mt-4">
-          <DigestReel digests={latestDigests} />
+          <DigestReel preview={toReelPreview(latestDigests)} />
         </div>
       )}
       {/* Intro material lives below the changing content (ticker + tables):

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReelDigest } from "@/lib/digest-reel";
+import { toReelPreview, type ReelDigest } from "@/lib/digest-reel";
 import { DigestReel } from "./digest-reel.tsx";
 import { DigestSectionPreview, focusIsInside } from "./digest-reel-section.tsx";
 
@@ -53,7 +53,10 @@ const serverlessPostgres: ReelDigest = {
   sections: [],
 };
 
-const render = (digests: ReelDigest[]) => renderToStaticMarkup(<DigestReel digests={digests} />);
+// Renders through `toReelPreview` — the same server trim `page.tsx` runs —
+// so these tests exercise the real client payload, not the full `ReelDigest`.
+const render = (digests: ReelDigest[]) =>
+  renderToStaticMarkup(<DigestReel preview={toReelPreview(digests)} />);
 
 /** All `<a …>` opening tags whose href matches `href` exactly. */
 const anchorsTo = (html: string, href: string) =>
@@ -126,9 +129,11 @@ describe("DigestReel", () => {
 });
 
 describe("DigestSectionPreview (hover card)", () => {
-  const html = renderToStaticMarkup(
-    <DigestSectionPreview digest={codingAgents} section={codingAgents.sections[0]} />,
-  );
+  // The card/section the client actually receives after `toReelPreview`'s
+  // server-side trim — not the raw `ReelDigest` fixture.
+  const card = toReelPreview([codingAgents]).cards[0];
+  const section = card.sections[0];
+  const html = renderToStaticMarkup(<DigestSectionPreview digest={card} section={section} />);
 
   it("upstream release links open in a new tab and carry data-release-id", () => {
     const [upstream] = anchorsTo(html, "https://example.com/codex#voice");
@@ -153,11 +158,11 @@ describe("DigestSectionPreview (hover card)", () => {
     expect(html).toContain("Neon");
     expect(html).toContain("Coding agents started speaking.");
     expect(html).toContain("2 releases");
-    const [section] = anchorsTo(
+    const [sectionLink] = anchorsTo(
       html,
       "/collections/coding-agents/digest/2026-09-14#agents-learn-to-talk",
     );
-    expect(section).not.toContain('target="_blank"');
+    expect(sectionLink).not.toContain('target="_blank"');
     expect(html).toContain("Read the section →");
   });
 
@@ -178,19 +183,25 @@ describe("DigestSectionPreview (hover card)", () => {
       ...release(id, id, null, o),
       product: null,
     });
-    const fourProductSection = {
-      heading: "A busy section",
-      anchor: "a-busy-section",
-      lede: "",
-      releases: [
-        noProduct("rel_1", openai),
-        noProduct("rel_2", neon),
-        noProduct("rel_3", org("cognition", "Cognition")),
-        noProduct("rel_4", org("vercel", "Vercel")),
+    const fourProductDigest: ReelDigest = {
+      ...codingAgents,
+      sections: [
+        {
+          heading: "A busy section",
+          anchor: "a-busy-section",
+          lede: "",
+          releases: [
+            noProduct("rel_1", openai),
+            noProduct("rel_2", neon),
+            noProduct("rel_3", org("cognition", "Cognition")),
+            noProduct("rel_4", org("vercel", "Vercel")),
+          ],
+        },
       ],
     };
+    const fourProductCard = toReelPreview([fourProductDigest]).cards[0];
     const manyProductsHtml = renderToStaticMarkup(
-      <DigestSectionPreview digest={codingAgents} section={fourProductSection} />,
+      <DigestSectionPreview digest={fourProductCard} section={fourProductCard.sections[0]} />,
     );
     // First 3 products' names render; the 4th is folded into "+1".
     expect(manyProductsHtml).toContain("OpenAI");

@@ -4,6 +4,9 @@ import {
   sectionProducts,
   sectionProductsFromDetail,
   splitDigestReel,
+  toReelPreview,
+  CARD_SECTIONS,
+  HOVER_RELEASES,
   type ReelDigest,
 } from "./digest-reel";
 
@@ -121,5 +124,98 @@ describe("digestHref", () => {
     expect(digestHref(d, "agents-learn-to-talk")).toBe(
       "/collections/coding-agents/digest/2026-09-14#agents-learn-to-talk",
     );
+  });
+});
+
+describe("toReelPreview", () => {
+  // A digest with more orgs/sections/releases than any card ever renders, so
+  // slicing is exercised on every axis at once.
+  const bigDigest = (slug: string, releaseCount: number): ReelDigest => {
+    const orgs = Array.from({ length: 5 }, (_, i) => org(`${slug}-org${i}`));
+    const releaseFor = (o: ReturnType<typeof org>, id: string) => ({
+      id,
+      title: `Release ${id}`,
+      url: null,
+      path: `/release/${id}`,
+      org: o,
+      product: null,
+    });
+    const sections = Array.from({ length: 5 }, (_, s) => ({
+      heading: `Section ${s}`,
+      anchor: `section-${s}`,
+      lede: `Lede ${s}`,
+      // 5 releases across 5 distinct orgs, so `products` dedupes to 5 too —
+      // more than HOVER_RELEASES, so slicing and the full-products list
+      // diverge and are both independently checkable.
+      releases: orgs.map((o, i) => releaseFor(o, `${slug}-s${s}-r${i}`)),
+    }));
+    return {
+      collection: { slug, name: slug, isFeatured: false },
+      weekStart: "2026-09-14",
+      title: `${slug} digest`,
+      intro: `${slug} intro`,
+      releaseCount,
+      orgs,
+      sections,
+    } as ReelDigest;
+  };
+
+  test("caps cards at splitDigestReel's default (6), the rest land in more", () => {
+    const digests = Array.from({ length: 9 }, (_, i) => bigDigest(`c${i}`, 9 - i));
+    const preview = toReelPreview(digests);
+    expect(preview.totalCount).toBe(9);
+    expect(preview.cards.length).toBe(6);
+    expect(preview.more.length).toBe(3);
+    expect(preview.cards.map((c) => c.collection.slug)).toEqual([
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5",
+    ]);
+  });
+
+  test("each card's sections/releases/orgs are sliced to the shared constants", () => {
+    const preview = toReelPreview([bigDigest("coding-agents", 25)]);
+    const [card] = preview.cards;
+    expect(card.sections.length).toBe(CARD_SECTIONS);
+    expect(card.orgs.length).toBe(3);
+    for (const section of card.sections) {
+      expect(section.releases.length).toBe(HOVER_RELEASES);
+    }
+  });
+
+  test("preserves total counts independent of the sliced arrays", () => {
+    const preview = toReelPreview([bigDigest("coding-agents", 25)]);
+    const [card] = preview.cards;
+    // releaseCount/orgCount are the digest's real totals, not sliced-array
+    // lengths — orgs is capped to 3 but there are 5.
+    expect(card.releaseCount).toBe(25);
+    expect(card.orgCount).toBe(5);
+    expect(card.orgs.length).toBe(3);
+    for (const section of card.sections) {
+      // 5 releases per section, sliced to HOVER_RELEASES (3) below —
+      // releaseCount must still read 5.
+      expect(section.releaseCount).toBe(5);
+    }
+  });
+
+  test("section products are the full deduped list, not capped to what's shown", () => {
+    const preview = toReelPreview([bigDigest("coding-agents", 25)]);
+    const [card] = preview.cards;
+    // 5 distinct orgs per section (product: null falls back to org name) —
+    // the full list survives even though `releases` is sliced to 3.
+    for (const section of card.sections) {
+      expect(section.products.length).toBe(5);
+    }
+  });
+
+  test("more items carry only collection name/slug and weekStart", () => {
+    const digests = Array.from({ length: 7 }, (_, i) => bigDigest(`c${i}`, 7 - i));
+    const preview = toReelPreview(digests);
+    expect(preview.more).toEqual([
+      { collection: { slug: "c6", name: "c6" }, weekStart: "2026-09-14" },
+    ]);
   });
 });
