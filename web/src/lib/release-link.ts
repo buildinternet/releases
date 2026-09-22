@@ -27,8 +27,9 @@ export interface ReleaseLinkTarget {
  * the default place a click lands. This also strips the main internal-link
  * paths crawlers used to discover tens of thousands of `/release/` URLs.
  *
- * Fallback order: upstream http(s) `url` → internal `/release/<id>` → null
- * (row renders an unlinked heading).
+ * Fallback order: upstream http(s) `url` → the slugged `/release/…` `path`
+ * when provided → bare `/release/<id>` → null (row renders an unlinked
+ * heading).
  */
 export function releaseLinkTarget(release: ReleaseLinkInput): ReleaseLinkTarget | null {
   const url = (release.url ?? "").trim();
