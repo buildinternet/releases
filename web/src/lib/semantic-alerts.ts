@@ -1,6 +1,6 @@
 /**
  * Browser client for semantic alerts (`/v1/me/semantic-alerts`).
- * Phase 1 stores preferences only — nothing here fetches matched releases.
+ * Preferences only — matched releases are delivered by email and webhook, not listed here.
  *
  * Types and caps live here, not via `@buildinternet/releases-api-types`. That
  * barrel is a server/type import; a Client Component value-import pulls every

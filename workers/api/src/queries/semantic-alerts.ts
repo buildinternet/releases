@@ -1,8 +1,14 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray, or, type SQL } from "drizzle-orm";
+import { chunkArray, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import { webhookSubscriptions } from "@buildinternet/releases-core/schema";
 import type { SemanticAlert } from "@buildinternet/releases-api-types";
 import type { AnyDb } from "../db.js";
-import { semanticAlerts, type SemanticAlertRow } from "../db/schema-semantic-alerts.js";
+import { userFollows } from "../db/schema-follows.js";
+import {
+  semanticAlertMatches,
+  semanticAlerts,
+  type SemanticAlertRow,
+} from "../db/schema-semantic-alerts.js";
 
 /** Unix-second timestamp. `mode: "timestamp"` stores whole seconds. */
 function nowSeconds(): Date {
@@ -126,6 +132,110 @@ export async function updateSemanticAlert(
     .where(and(eq(semanticAlerts.id, id), eq(semanticAlerts.userId, userId)))
     .returning();
   return row ? toSemanticAlert(row) : null;
+}
+
+export interface SemanticAlertCandidateRow {
+  id: string;
+  userId: string;
+  query: string;
+  threshold: number;
+  deliverEmail: boolean;
+  deliverWebhook: boolean;
+  webhookSubscriptionId: string | null;
+}
+
+/**
+ * Enabled alerts whose owner follows this release's org or product and that
+ * have at least one delivery channel. Same follow predicate as `/v1/me/feed`:
+ * an org follow covers the org's sources; a product follow matches that product.
+ * A user who follows both is returned once.
+ */
+export async function listSemanticAlertCandidates(
+  db: AnyDb,
+  owner: { orgId: string | null; productId: string | null },
+): Promise<SemanticAlertCandidateRow[]> {
+  const followMatch: SQL[] = [];
+  if (owner.orgId) {
+    const clause = and(eq(userFollows.targetType, "org"), eq(userFollows.targetId, owner.orgId));
+    if (clause) followMatch.push(clause);
+  }
+  if (owner.productId) {
+    const clause = and(
+      eq(userFollows.targetType, "product"),
+      eq(userFollows.targetId, owner.productId),
+    );
+    if (clause) followMatch.push(clause);
+  }
+  if (followMatch.length === 0) return [];
+  const followWhere = followMatch.length === 1 ? followMatch[0] : or(...followMatch);
+  const delivery = or(
+    eq(semanticAlerts.deliverEmail, true),
+    eq(semanticAlerts.deliverWebhook, true),
+  );
+  if (!followWhere || !delivery) return [];
+
+  const rows = await db
+    .select({
+      id: semanticAlerts.id,
+      userId: semanticAlerts.userId,
+      query: semanticAlerts.query,
+      threshold: semanticAlerts.threshold,
+      deliverEmail: semanticAlerts.deliverEmail,
+      deliverWebhook: semanticAlerts.deliverWebhook,
+      webhookSubscriptionId: semanticAlerts.webhookSubscriptionId,
+    })
+    .from(semanticAlerts)
+    .innerJoin(userFollows, eq(userFollows.userId, semanticAlerts.userId))
+    .where(and(eq(semanticAlerts.enabled, true), delivery, followWhere));
+
+  const byId = new Map<string, SemanticAlertCandidateRow>();
+  for (const row of rows) byId.set(row.id, row);
+  return [...byId.values()].toSorted((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Alert ids that already matched this release. Republish skips them. */
+export async function listClaimedSemanticAlertIds(
+  db: AnyDb,
+  releaseId: string,
+  alertIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const chunk of chunkArray(alertIds, IN_ARRAY_CHUNK_SIZE)) {
+    if (chunk.length === 0) continue;
+    // oxlint-disable-next-line no-await-in-loop -- D1 bind-budget chunks
+    const rows = await db
+      .select({ alertId: semanticAlertMatches.alertId })
+      .from(semanticAlertMatches)
+      .where(
+        and(
+          eq(semanticAlertMatches.releaseId, releaseId),
+          inArray(semanticAlertMatches.alertId, chunk),
+        ),
+      );
+    for (const row of rows) out.add(row.alertId);
+  }
+  return out;
+}
+
+/**
+ * Insert the match row. Returns false when this alert already matched this
+ * release, so the caller does not deliver again.
+ */
+export async function claimSemanticAlertMatch(
+  db: AnyDb,
+  input: { alertId: string; releaseId: string; probability: number },
+): Promise<boolean> {
+  const inserted = await db
+    .insert(semanticAlertMatches)
+    .values({
+      alertId: input.alertId,
+      releaseId: input.releaseId,
+      probability: input.probability,
+      createdAt: nowSeconds(),
+    })
+    .onConflictDoNothing()
+    .returning({ alertId: semanticAlertMatches.alertId });
+  return inserted.length > 0;
 }
 
 export async function deleteSemanticAlert(db: AnyDb, userId: string, id: string): Promise<boolean> {

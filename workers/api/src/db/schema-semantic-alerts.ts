@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
 import { webhookSubscriptions } from "@buildinternet/releases-core/schema";
 import { user } from "./schema-auth.js";
 
@@ -10,10 +10,9 @@ import { user } from "./schema-auth.js";
  * the OSS CLI has no business with. Queried via explicit `.select().from(semanticAlerts)`
  * on a `createDb(...)` handle.
  *
- * Phase 1 stores the freeform interest and delivery preferences only. There is
- * no matcher, no JEV call, and no fanout. The candidate pool is follows-only
- * for every row (a product constant, not a column): when matching ships, a
- * release is eligible only if it already hits the owner's follow graph.
+ * The candidate pool is follows-only for every row (a product constant, not a
+ * column): a release is eligible only if it already hits the owner's follow
+ * graph. Phase 2 scores enabled rows with JEV and delivers email/webhook.
  *
  * `query` is user-private. Do not copy it into Analytics Engine points or logs.
  * `webhook_subscription_id` optionally points at one of the owner's
@@ -52,3 +51,25 @@ export const semanticAlerts = sqliteTable(
 
 export type SemanticAlertRow = typeof semanticAlerts.$inferSelect;
 export type NewSemanticAlertRow = typeof semanticAlerts.$inferInsert;
+
+/**
+ * One recorded match per alert and release. The primary key is the idempotency
+ * key: a second publish of the same pair does not send again. Query text is
+ * not stored here.
+ *
+ * Paired migration: 20260922030000_semantic_alert_matches.sql.
+ */
+export const semanticAlertMatches = sqliteTable(
+  "semantic_alert_matches",
+  {
+    alertId: text("alert_id")
+      .notNull()
+      .references(() => semanticAlerts.id, { onDelete: "cascade" }),
+    releaseId: text("release_id").notNull(),
+    probability: real("probability").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.alertId, t.releaseId] })],
+);
+
+export type SemanticAlertMatchRow = typeof semanticAlertMatches.$inferSelect;

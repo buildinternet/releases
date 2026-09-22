@@ -35,7 +35,7 @@ Positional and append-only. Queries pin these indexes. Do not reorder blobs or d
 - `double7`: duration milliseconds, or `-1` when absent
 - `double8`: event count (always `1`)
 
-The writer lives in `workers/api/src/lib/classification-schema.ts`. Reads always filter `blob1 = '1'` and `blob4 = 'marketing'`.
+The writer lives in `workers/api/src/lib/classification-schema.ts`. Reads always filter `blob1 = '1'` and `blob4 = 'marketing'`. Semantic-alert decisions share this dataset with `blob4 = semantic-alert` and a separate writer; they stay out of the marketing admin queries. See [semantic-alerts.md](semantic-alerts.md).
 
 Absent numerics use the sentinel `-1` (`ABSENT_DOUBLE`). Zero is a real value. Probabilities are only meaningful in `0..1`. The threshold stored on the point is `MARKETING_SUPPRESSION_THRESHOLD` (`0.8`). Selected-choice probability and provider confidence stay on different doubles; confidence is not a substitute for the probability the suppression rule uses.
 

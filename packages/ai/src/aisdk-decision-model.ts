@@ -9,6 +9,9 @@ import type {
   DecisionModel,
   DecisionModelRequest,
   DecisionModelResult,
+  NoulBatchModel,
+  NoulBatchRequest,
+  NoulBatchResult,
 } from "./decision-model";
 
 type AisdkDecisionQuestion<OPTION extends string> = DecisionChoiceQuestion<OPTION> & {
@@ -101,8 +104,70 @@ const defaultEvaluate: AisdkDecisionEvaluate = async <OPTION extends string>({
   };
 };
 
+/** Boolean questions are JEV `noul` on the OpenRouter Decisions wire. */
+export interface AisdkNoulQuestion {
+  type: "boolean";
+  instructions: string;
+  criteria: { true: string; false: string };
+}
+
+export interface AisdkNoulEvaluateRequest {
+  model: Experimental_EvaluationModel;
+  state: string;
+  questions: Record<string, AisdkNoulQuestion>;
+  maxRetries: number;
+  abortSignal: AbortSignal;
+}
+
+export interface AisdkNoulEvaluateResult {
+  answers: Record<string, { type: "boolean"; probability?: number }>;
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  providerMetadata?: unknown;
+}
+
+export type AisdkNoulEvaluate = (
+  request: AisdkNoulEvaluateRequest,
+) => Promise<AisdkNoulEvaluateResult>;
+
+const defaultEvaluateNoul: AisdkNoulEvaluate = async ({
+  model,
+  state,
+  questions,
+  maxRetries,
+  abortSignal,
+}) => {
+  const result = await experimental_evaluate({
+    model,
+    state,
+    questions,
+    maxRetries,
+    abortSignal,
+  });
+  const answers: AisdkNoulEvaluateResult["answers"] = {};
+  for (const [id, answer] of Object.entries(result.answers)) {
+    if (answer.type !== "boolean") {
+      throw new TypeError("Decision model returned a non-boolean answer.");
+    }
+    const probability = answer.probability;
+    answers[id] = {
+      type: "boolean",
+      ...(typeof probability === "number" && Number.isFinite(probability) ? { probability } : {}),
+    };
+  }
+  return {
+    answers,
+    usage: result.usage,
+    providerMetadata: result.providerMetadata,
+  };
+};
+
 export interface AisdkDecisionModelOpts {
   evaluate?: AisdkDecisionEvaluate;
+  evaluateNoul?: AisdkNoulEvaluate;
   /** Bound one-shot decisions like text completions (30 seconds by default). */
   timeoutMs?: number;
 }
@@ -112,10 +177,53 @@ export function aisdkDecisionModel(
   model: Experimental_EvaluationModel,
   id: string,
   opts?: AisdkDecisionModelOpts,
-): DecisionModel {
+): DecisionModel & NoulBatchModel {
   const evaluate = opts?.evaluate ?? defaultEvaluate;
+  const evaluateNoul = opts?.evaluateNoul ?? defaultEvaluateNoul;
+  const timeoutMs = opts?.timeoutMs ?? 30_000;
   return {
     id,
+    async decideNoul(request: NoulBatchRequest): Promise<NoulBatchResult> {
+      const questions: Record<string, AisdkNoulQuestion> = {};
+      for (const question of request.questions) {
+        questions[question.id] = {
+          type: "boolean",
+          instructions: question.instructions,
+          criteria: question.criteria,
+        };
+      }
+      const result = await evaluateNoul({
+        model,
+        state: request.state,
+        questions,
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(timeoutMs),
+      });
+      const metadata = providerMetadata(result.providerMetadata);
+      return {
+        answers: request.questions.map((question) => {
+          const probability = result.answers[question.id]?.probability;
+          return {
+            id: question.id,
+            ...(typeof probability === "number" && Number.isFinite(probability)
+              ? { probability }
+              : {}),
+          };
+        }),
+        usage: {
+          ...(result.usage.inputTokens !== undefined
+            ? { inputTokens: result.usage.inputTokens }
+            : {}),
+          ...(result.usage.outputTokens !== undefined
+            ? { outputTokens: result.usage.outputTokens }
+            : {}),
+          ...(result.usage.totalTokens !== undefined
+            ? { totalTokens: result.usage.totalTokens }
+            : {}),
+          ...(metadata.costUsd !== undefined ? { costUsd: metadata.costUsd } : {}),
+        },
+      };
+    },
     async decide<OPTION extends string>(
       request: DecisionModelRequest<OPTION>,
     ): Promise<DecisionModelResult<OPTION>> {
@@ -125,7 +233,7 @@ export function aisdkDecisionModel(
         questions: { decision: { type: "choice", ...request.question } },
         // Callers own retry/fail-open policy; avoid retrying a paid decision internally.
         maxRetries: 0,
-        abortSignal: AbortSignal.timeout(opts?.timeoutMs ?? 30_000),
+        abortSignal: AbortSignal.timeout(timeoutMs),
       });
       const answer = result.answers.decision;
       const metadata = providerMetadata(result.providerMetadata);

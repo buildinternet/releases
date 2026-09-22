@@ -3,6 +3,8 @@ import {
   aisdkDecisionModel,
   type AisdkDecisionEvaluate,
   type AisdkDecisionEvaluateRequest,
+  type AisdkNoulEvaluate,
+  type AisdkNoulEvaluateRequest,
 } from "./aisdk-decision-model";
 
 describe("aisdkDecisionModel", () => {
@@ -142,4 +144,71 @@ describe("aisdkDecisionModel", () => {
       ).rejects.toThrow(message);
     });
   }
+});
+
+describe("aisdkDecisionModel noul batch", () => {
+  it("sends one boolean question per alert and reads P(true)", async () => {
+    let request: AisdkNoulEvaluateRequest | undefined;
+    const evaluateNoul: AisdkNoulEvaluate = async (input) => {
+      request = input;
+      return {
+        answers: {
+          sal_a: { type: "boolean", probability: 0.91 },
+          sal_b: { type: "boolean", probability: 0.2 },
+        },
+        usage: { inputTokens: 40, outputTokens: 6, totalTokens: 46 },
+        providerMetadata: { openrouter: { usage: { cost: 0.00004 } } },
+      };
+    };
+    const model = aisdkDecisionModel({} as never, "openrouter:typesafe/jev-1.13", {
+      evaluateNoul,
+    });
+    const result = await model.decideNoul({
+      state: "Title: Slack for finance",
+      questions: [
+        {
+          id: "sal_a",
+          instructions: "Does this match?",
+          criteria: { true: "Slack integrations", false: "Unrelated" },
+        },
+        {
+          id: "sal_b",
+          instructions: "Does this match?",
+          criteria: { true: "Mobile SDK", false: "Unrelated" },
+        },
+      ],
+    });
+    expect(request?.questions.sal_a).toEqual({
+      type: "boolean",
+      instructions: "Does this match?",
+      criteria: { true: "Slack integrations", false: "Unrelated" },
+    });
+    expect(request?.maxRetries).toBe(0);
+    expect(result).toEqual({
+      answers: [
+        { id: "sal_a", probability: 0.91 },
+        { id: "sal_b", probability: 0.2 },
+      ],
+      usage: { inputTokens: 40, outputTokens: 6, totalTokens: 46, costUsd: 0.00004 },
+    });
+  });
+
+  it("omits a non-finite noul probability", async () => {
+    const evaluateNoul: AisdkNoulEvaluate = async () => ({
+      answers: { sal_a: { type: "boolean", probability: Number.NaN } },
+      usage: {},
+    });
+    const model = aisdkDecisionModel({} as never, "test", { evaluateNoul });
+    const result = await model.decideNoul({
+      state: "Title: x",
+      questions: [
+        {
+          id: "sal_a",
+          instructions: "Does this match?",
+          criteria: { true: "Interest", false: "Unrelated" },
+        },
+      ],
+    });
+    expect(result.answers).toEqual([{ id: "sal_a" }]);
+  });
 });
