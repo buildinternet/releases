@@ -6,7 +6,7 @@
  * worker's `respondError` emits — see `@buildinternet/releases-core/errors` and
  * `@releases/lib/releases-error`). Kept in its own dependency-light module so
  * the envelope is unit-testable without pulling in the worker runtime
- * (`cloudflare:workers`, the Sandbox/DO exports) that `index.ts` re-exports.
+ * (`cloudflare:workers`, the Durable Object export) that `index.ts` pulls in.
  */
 import { statusToType, type ErrorCode, type ErrorType } from "@buildinternet/releases-core/errors";
 

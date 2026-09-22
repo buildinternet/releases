@@ -1,5 +1,0 @@
-# Ignore everything, then allowlist only what the sandbox needs
-*
-
-# Agent skills (copied to /usr/share/releases/skills/ and .claude/skills/ in Dockerfile)
-!.claude/skills/
