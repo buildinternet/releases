@@ -4,9 +4,11 @@
  * list — operators toggle the filter per source via the existing source PATCH
  * route (`PATCH /v1/sources/:id`), not through this query.
  */
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import type { AnyDb } from "../db.js";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "../lib/d1-limits.js";
 
 export interface MarketingFilteredSource {
   id: string;
@@ -37,21 +39,21 @@ export async function getMarketingFilteredSources(db: AnyDb): Promise<MarketingF
     .orderBy(desc(sources.lastFetchedAt));
 
   const countBySource = new Map<string, number>();
-  if (rows.length > 0) {
-    const cutoff = new Date(Date.now() - RECENT_RELEASE_DAYS * 86_400_000).toISOString();
-    const counts = await db
-      .select({ sourceId: releases.sourceId, count: sql<number>`count(*)` })
-      .from(releases)
-      .where(
-        sql`${releases.sourceId} IN (${sql.join(
-          rows.map((r: { id: string }) => sql`${r.id}`),
-          sql`, `,
-        )}) AND ${releases.publishedAt} >= ${cutoff}`,
-      )
-      .groupBy(releases.sourceId);
-    for (const c of counts as Array<{ sourceId: string; count: number }>) {
-      countBySource.set(c.sourceId, c.count);
-    }
+  const cutoff = daysAgoIso(RECENT_RELEASE_DAYS);
+  const countChunks = await Promise.all(
+    chunkArray(
+      rows.map((r: { id: string }) => r.id),
+      IN_ARRAY_CHUNK_SIZE,
+    ).map((ids) =>
+      db
+        .select({ sourceId: releases.sourceId, count: sql<number>`count(*)` })
+        .from(releases)
+        .where(and(inArray(releases.sourceId, ids), gte(releases.publishedAt, cutoff)))
+        .groupBy(releases.sourceId),
+    ),
+  );
+  for (const c of countChunks.flat() as Array<{ sourceId: string; count: number }>) {
+    countBySource.set(c.sourceId, c.count);
   }
 
   return rows.map((row: (typeof rows)[number]) => {

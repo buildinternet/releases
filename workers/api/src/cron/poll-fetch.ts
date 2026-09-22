@@ -1262,17 +1262,24 @@ async function classifyMarketingForReleases(
   env: FetchOneEnv,
 ): Promise<MarketingClassificationPass> {
   const hits = new Map<number, MarketingClassifierResult>();
-  // Operator-editable overlay (site_settings, ~30s isolate cache); resolved
-  // once per pass and stamped on every point this pass writes.
-  const threshold = await loadMarketingThreshold(env.DB);
-  if (rawReleases.length === 0) return { hits, records: [], threshold };
+  // No records → the threshold is never stamped, so skip the settings read.
+  const empty: MarketingClassificationPass = {
+    hits,
+    records: [],
+    threshold: MARKETING_SUPPRESSION_THRESHOLD,
+  };
+  if (rawReleases.length === 0) return empty;
 
   // Only the items an insert would actually persist are worth classifying;
   // the rest are re-listed feed entries we already have. Counting the whole
   // window against the cap is what let marketing slip through on high-volume
   // feeds (see selectNewReleaseIndices).
   const newIndices = await selectNewReleaseIndices(db, source.id, rawReleases);
-  if (newIndices.length === 0) return { hits, records: [], threshold };
+  if (newIndices.length === 0) return empty;
+
+  // Operator-editable overlay (site_settings, ~30s isolate cache); resolved
+  // once per pass and stamped on every point this pass writes.
+  const threshold = await loadMarketingThreshold(env.DB);
 
   if (newIndices.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
     logEvent("warn", {

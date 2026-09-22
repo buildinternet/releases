@@ -806,13 +806,11 @@ export async function fetchClassificationSummary(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ClassificationSummary | ReleasesError> {
   const dataset = classificationDatasetName(env.ENVIRONMENT);
-  const rows = await queryClassificationDataset(
-    env,
-    buildSummaryStatements(query, dataset),
-    fetchImpl,
-  );
+  const [rows, effectiveThreshold] = await Promise.all([
+    queryClassificationDataset(env, buildSummaryStatements(query, dataset), fetchImpl),
+    loadMarketingThreshold(env.DB),
+  ]);
   if (rows instanceof ReleasesError) return rows;
-  const effectiveThreshold = await loadMarketingThreshold(env.DB);
   return shapeClassificationSummary({
     afterIso: query.afterIso,
     beforeIso: query.beforeIso,

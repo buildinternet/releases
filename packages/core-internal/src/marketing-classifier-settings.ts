@@ -5,6 +5,11 @@
  * values fall through to `DEFAULT_MARKETING_THRESHOLD` — fail-safe, never throws.
  */
 
+import {
+  MARKETING_THRESHOLD_MAX,
+  MARKETING_THRESHOLD_MIN,
+} from "@buildinternet/releases-api-types";
+
 export const MARKETING_CLASSIFIER_SETTING_KEY = "marketing_classifier";
 
 /**
@@ -17,8 +22,7 @@ export const MARKETING_CLASSIFIER_SETTING_KEY = "marketing_classifier";
  */
 export const DEFAULT_MARKETING_THRESHOLD = 0.65;
 
-export const MARKETING_THRESHOLD_MIN = 0.5;
-export const MARKETING_THRESHOLD_MAX = 0.99;
+export { MARKETING_THRESHOLD_MIN, MARKETING_THRESHOLD_MAX };
 
 export interface MarketingClassifierSettings {
   threshold: number;

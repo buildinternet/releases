@@ -10,13 +10,9 @@
  */
 import { Hono } from "hono";
 import { MarketingClassifierThresholdPutSchema } from "@buildinternet/releases-api-types";
-import {
-  DEFAULT_MARKETING_THRESHOLD,
-  MARKETING_THRESHOLD_MIN,
-  MARKETING_THRESHOLD_MAX,
-} from "@releases/core-internal/marketing-classifier-settings";
+import { DEFAULT_MARKETING_THRESHOLD } from "@releases/core-internal/marketing-classifier-settings";
 import { logEvent } from "@releases/lib/log-event";
-import { ForbiddenError, ValidationError } from "@releases/lib/releases-error";
+import { ForbiddenError } from "@releases/lib/releases-error";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { isValidBearerAuth, resolveAuthIdentity } from "../middleware/auth.js";
@@ -26,8 +22,12 @@ import { clearMarketingThresholdCache } from "../lib/marketing-classifier-settin
 import {
   getStoredMarketingThreshold,
   putStoredMarketingThreshold,
+  type StoredMarketingThreshold,
 } from "../queries/site-settings.js";
-import { getMarketingFilteredSources } from "../queries/marketing-classifier-sources.js";
+import {
+  getMarketingFilteredSources,
+  type MarketingFilteredSource,
+} from "../queries/marketing-classifier-sources.js";
 
 export const adminMarketingClassifierRoutes = new Hono<Env>();
 
@@ -38,12 +38,7 @@ async function requireAdmin(c: Parameters<typeof isValidBearerAuth>[0]) {
   return null;
 }
 
-async function buildState(c: any) {
-  const db = createDb(c.env.DB);
-  const [stored, sources] = await Promise.all([
-    getStoredMarketingThreshold(db),
-    getMarketingFilteredSources(db),
-  ]);
+function buildState(stored: StoredMarketingThreshold, sources: MarketingFilteredSource[]) {
   return {
     threshold: stored.threshold,
     defaultThreshold: DEFAULT_MARKETING_THRESHOLD,
@@ -56,8 +51,13 @@ adminMarketingClassifierRoutes.get("/admin/marketing-classifier", async (c) => {
   const denied = await requireAdmin(c);
   if (denied) return denied;
 
+  const db = createDb(c.env.DB);
+  const [stored, sources] = await Promise.all([
+    getStoredMarketingThreshold(db),
+    getMarketingFilteredSources(db),
+  ]);
   c.header("Cache-Control", "private, no-store");
-  return c.json(await buildState(c));
+  return c.json(buildState(stored, sources));
 });
 
 adminMarketingClassifierRoutes.put(
@@ -69,16 +69,8 @@ adminMarketingClassifierRoutes.put(
   },
   validateJson(MarketingClassifierThresholdPutSchema),
   async (c) => {
+    // Range is enforced by MarketingClassifierThresholdPutSchema.
     const { threshold } = c.req.valid("json");
-    if (threshold < MARKETING_THRESHOLD_MIN || threshold > MARKETING_THRESHOLD_MAX) {
-      return respondError(
-        c,
-        new ValidationError(
-          `threshold must be between ${MARKETING_THRESHOLD_MIN} and ${MARKETING_THRESHOLD_MAX}`,
-        ),
-      );
-    }
-
     const db = createDb(c.env.DB);
     const previous = await getStoredMarketingThreshold(db);
     const stored = await putStoredMarketingThreshold(db, threshold);
@@ -99,6 +91,6 @@ adminMarketingClassifierRoutes.put(
       threshold: stored.threshold,
     });
 
-    return c.json(await buildState(c));
+    return c.json(buildState(stored, await getMarketingFilteredSources(db)));
   },
 );
