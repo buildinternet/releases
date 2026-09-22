@@ -122,7 +122,7 @@ export interface ClassificationCacheKv {
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
-type AeRow = Record<string, unknown>;
+export type AeRow = Record<string, unknown>;
 type AeEnv = Parameters<typeof resolveCloudflareAeCredentials>[0] & { ENVIRONMENT?: string };
 
 interface HydratedSource {
@@ -183,7 +183,7 @@ function formatAeTimestamp(ms: number): string {
   return formatted;
 }
 
-function sqlDateTime(ms: number): string {
+export function sqlDateTime(ms: number): string {
   return `toDateTime('${formatAeTimestamp(ms)}')`;
 }
 
@@ -194,7 +194,7 @@ function quoteLiteral(value: string, pattern: RegExp): string {
 }
 
 /** Quote a value already constrained to `allowed`. Throws instead of escaping. */
-function enumLiteral(value: string, allowed: readonly string[]): string {
+export function enumLiteral(value: string, allowed: readonly string[]): string {
   if (!allowed.includes(value)) throw new Error("refusing to interpolate enum");
   return `'${value}'`;
 }
@@ -208,18 +208,18 @@ function dispositionPredicate(disposition: ClassificationDisposition): string {
   return `blob10 = ${enumLiteral(disposition, CLASSIFICATION_DISPOSITIONS)}`;
 }
 
-function intervalSql(bucket: ClassificationBucket): string {
+export function intervalSql(bucket: ClassificationBucket): string {
   if (bucket === "hour") return "INTERVAL '1' HOUR";
   if (bucket === "day") return "INTERVAL '1' DAY";
   throw new Error("refusing to interpolate bucket");
 }
 
-function datasetSql(name: string): string {
+export function datasetSql(name: string): string {
   if (name === DATASET_PRODUCTION || name === DATASET_STAGING) return name;
   throw new Error("refusing to interpolate dataset");
 }
 
-function schemaVersionLiteral(): string {
+export function schemaVersionLiteral(): string {
   if (!/^[0-9]+$/.test(CLASSIFICATION_SCHEMA_VERSION)) {
     throw new Error("refusing to interpolate schema version");
   }
@@ -250,7 +250,7 @@ function whereClause(filter: {
   return parts.join(" AND ");
 }
 
-function histogramColumns(
+export function histogramColumns(
   column: "double1" | "double2",
   prefix: "selected" | "confidence",
 ): string {
@@ -456,22 +456,33 @@ export function summaryCacheMaterial(query: ValidatedSummary, dataset: string): 
   ].join("\n");
 }
 
-export async function summaryCacheKey(material: string): Promise<string> {
+const CACHE_PREFIX_RE = /^[-a-z0-9:]{1,80}$/;
+
+/** `prefix` is a trusted constant (`classification-summary:v1:`), never request input. */
+export async function prefixedSummaryCacheKey(prefix: string, material: string): Promise<string> {
+  if (!CACHE_PREFIX_RE.test(prefix)) throw new Error("refusing cache prefix");
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
   const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-  return `${SUMMARY_CACHE_PREFIX}${hex}`;
+  return `${prefix}${hex}`;
 }
 
-export function readSummaryCache(raw: unknown, now: number): ClassificationSummary | null {
+export async function summaryCacheKey(material: string): Promise<string> {
+  return prefixedSummaryCacheKey(SUMMARY_CACHE_PREFIX, material);
+}
+
+export function readSummaryCache<T extends object = ClassificationSummary>(
+  raw: unknown,
+  now: number,
+): T | null {
   if (!raw || typeof raw !== "object") return null;
-  const entry = raw as { at?: unknown; body?: ClassificationSummary };
+  const entry = raw as { at?: unknown; body?: T };
   if (typeof entry.at !== "number" || !Number.isFinite(entry.at)) return null;
   if (now - entry.at >= SUMMARY_CACHE_TTL_MS) return null;
   if (!entry.body || typeof entry.body !== "object" || !("totals" in entry.body)) return null;
   return entry.body;
 }
 
-export function summaryCacheEntry(body: ClassificationSummary, now: number): string {
+export function summaryCacheEntry(body: object, now: number): string {
   return JSON.stringify({ at: now, body });
 }
 
@@ -485,7 +496,7 @@ function finiteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function countOf(value: unknown): number {
+export function countOf(value: unknown): number {
   const n = finiteNumber(value);
   if (n === null || n < 0) return 0;
   return n;
@@ -502,7 +513,7 @@ function textOf(value: unknown): string {
   return value.length > 500 ? value.slice(0, 500) : value;
 }
 
-function aeTimestampToIso(value: unknown): string | null {
+export function aeTimestampToIso(value: unknown): string | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     const ms = value < 1e12 ? value * 1000 : value;
     return new Date(ms).toISOString();
@@ -759,37 +770,53 @@ async function requireCreds(
   return creds;
 }
 
-export async function fetchClassificationSummary(
+/**
+ * Run named Analytics Engine statements with the shared classifications
+ * credentials. Statement names land in `ae_query_failed` details — keep them
+ * short and free of SQL. A missing credential is `deliveries_unavailable`.
+ */
+export async function queryClassificationDataset<T extends Record<keyof T, string>>(
   env: AeEnv,
-  query: ValidatedSummary,
+  statements: T,
   fetchImpl: typeof fetch = fetch,
-): Promise<ClassificationSummary | ReleasesError> {
+): Promise<{ [K in keyof T]: AeRow[] } | ReleasesError> {
   const creds = await requireCreds(env);
   if (creds instanceof ReleasesError) return creds;
-  const dataset = classificationDatasetName(env.ENVIRONMENT);
-  const statements = buildSummaryStatements(query, dataset);
-  const keys = ["totals", "series", "choices", "choiceSeries", "models", "histogram"] as const;
+  const keys = Object.keys(statements) as (keyof T & string)[];
   const results = await Promise.all(
     keys.map((key) => queryAe(creds, statements[key], fetchImpl, key)),
   );
   const failed = results.find((result) => result instanceof ReleasesError);
   if (failed instanceof ReleasesError) return failed;
-  const rows = Object.fromEntries(keys.map((key, i) => [key, results[i]])) as Record<
-    (typeof keys)[number],
-    AeRow[]
-  >;
+  return Object.fromEntries(keys.map((key, i) => [key, results[i]])) as {
+    [K in keyof T]: AeRow[];
+  };
+}
+
+export async function fetchClassificationSummary(
+  env: AeEnv,
+  query: ValidatedSummary,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ClassificationSummary | ReleasesError> {
+  const dataset = classificationDatasetName(env.ENVIRONMENT);
+  const rows = await queryClassificationDataset(
+    env,
+    buildSummaryStatements(query, dataset),
+    fetchImpl,
+  );
+  if (rows instanceof ReleasesError) return rows;
   return shapeClassificationSummary({
     afterIso: query.afterIso,
     beforeIso: query.beforeIso,
     bucket: query.bucket,
     origin: query.origin,
     dataset,
-    totals: rows.totals,
-    series: rows.series,
-    choices: rows.choices,
-    choiceSeries: rows.choiceSeries,
-    models: rows.models,
-    histogram: rows.histogram,
+    totals: rows.totals ?? [],
+    series: rows.series ?? [],
+    choices: rows.choices ?? [],
+    choiceSeries: rows.choiceSeries ?? [],
+    models: rows.models ?? [],
+    histogram: rows.histogram ?? [],
   });
 }
 

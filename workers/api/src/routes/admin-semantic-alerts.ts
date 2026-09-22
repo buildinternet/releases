@@ -1,18 +1,37 @@
 /**
- * Admin semantic-alerts preview (#2304).
+ * Admin semantic-alerts (#2304, visibility #2312).
+ *
+ * `GET /summary` reads sampled match / below-threshold / fail-closed counts
+ * from Analytics Engine (`blob4 = semantic-alert`). Alert query text is not
+ * in the response. JEV spend stays on `ai_usage`, not this route.
  *
  * `POST /preview` inserts synthetic changelog rows through the real batch
  * ingest path (D1 upsert, then `publishReleaseEvents` + webhook fanout).
  * `POST /purge` deletes rows flagged `metadata.semanticAlertDemo`.
  *
  * Auth is the `admin/semantic-alerts` entry in `adminRoutes` (`authMiddleware`,
- * admin scope or root). This file does not re-check the bearer.
+ * admin scope or root). This file does not re-check the bearer. The summary
+ * is not behind `semantic-alerts-enabled` — operators can read it while the
+ * user-facing lane is off.
  */
 import { Hono } from "hono";
+import type { SemanticAlertSummary } from "@buildinternet/releases-api-types";
+import { ReleasesError, ValidationError } from "@releases/lib/releases-error";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { respondError } from "../lib/error-response.js";
-import { ValidationError } from "@releases/lib/releases-error";
+import {
+  parseSummaryQuery,
+  readSummaryCache,
+  SUMMARY_CACHE_KV_TTL_SECONDS,
+  summaryCacheEntry,
+} from "../lib/classification-query.js";
+import { classificationDatasetName } from "../lib/classification-schema.js";
+import {
+  fetchSemanticAlertSummary,
+  semanticAlertSummaryCacheKey,
+  semanticAlertSummaryCacheMaterial,
+} from "../lib/semantic-alert-summary.js";
 import {
   SEMANTIC_ALERT_DEMO_DEFAULT_COUNT,
   SEMANTIC_ALERT_DEMO_MAX_COUNT,
@@ -21,6 +40,48 @@ import {
 } from "../lib/semantic-alert-demo.js";
 
 export const adminSemanticAlertsRoutes = new Hono<Env>();
+
+function getAeFetch(c: any): typeof fetch {
+  return c.get("aeFetch") ?? fetch;
+}
+
+adminSemanticAlertsRoutes.get("/admin/semantic-alerts/summary", async (c) => {
+  const now = Date.now();
+  const parsed = parseSummaryQuery(
+    {
+      after: c.req.query("after"),
+      before: c.req.query("before"),
+      bucket: c.req.query("bucket"),
+    },
+    now,
+  );
+  if (parsed instanceof ValidationError) return respondError(c, parsed);
+
+  const dataset = classificationDatasetName(c.env?.ENVIRONMENT);
+  const key = await semanticAlertSummaryCacheKey(
+    semanticAlertSummaryCacheMaterial(parsed, dataset),
+  );
+  const kv = c.env?.LATEST_CACHE;
+  if (kv) {
+    const cached = readSummaryCache<SemanticAlertSummary>(
+      await kv.get(key, "json").catch(() => null),
+      Date.now(),
+    );
+    if (cached) return c.json(cached);
+  }
+
+  const result = await fetchSemanticAlertSummary(c.env, parsed, getAeFetch(c));
+  if (result instanceof ReleasesError) return respondError(c, result);
+
+  if (kv) {
+    await kv
+      .put(key, summaryCacheEntry(result, Date.now()), {
+        expirationTtl: SUMMARY_CACHE_KV_TTL_SECONDS,
+      })
+      .catch(() => undefined);
+  }
+  return c.json(result);
+});
 
 function parseCount(value: unknown): number {
   if (value === undefined) return SEMANTIC_ALERT_DEMO_DEFAULT_COUNT;

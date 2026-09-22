@@ -54,6 +54,7 @@ Structure:
 
 What to include: new user-visible capabilities, product launches and GAs, breaking changes, deprecations, security changes that warrant a heads-up.
 What to skip: routine patch releases, minor dependency bumps, bug fixes that don't indicate a pattern, version numbers that don't add meaning, raw API surface (endpoint names, parameter names) as the headline, SDK / library version bumps that don't ship a new capability.
+Also skip changes only the org's own staff would notice. The reader uses the product; they don't run it. Leave out admin consoles, operator-only commands and emails, internal tooling, and moderation or curation workflows, even when the release notes describe them. Leave out internal helper, function, and module names, and don't close with a wrap-up of internal package versions ("Supported by \`core\` 0.30.0").
 
 Guidelines:
 - Past tense, active voice for ship verbs — "shipped", "added", "removed". Present tense is fine when describing what a shipped feature does ("the new endpoint accepts JSON"). No progressive forms about the org ("is shipping", "has been improving").

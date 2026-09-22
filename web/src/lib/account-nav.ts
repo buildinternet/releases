@@ -213,7 +213,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         href: "/admin/semantic-alerts",
         group: ADMIN_GROUP_LABEL,
         description:
-          "Insert synthetic releases through the live publish path to demo freeform alerts.",
+          "Match rate and fail-closed counts for interest alerts, plus a synthetic-release preview.",
         Icon: PreviewIcon,
         ready: true,
       },

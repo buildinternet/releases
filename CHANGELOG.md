@@ -34,7 +34,6 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 - Discord webhook format — add a Discord incoming webhook URL as the delivery target and receive `release.created` events as native Discord embeds (linked title, truncated summary, org avatar, timestamp); available alongside Slack and signed JSON in the webhook create form; no relay needed.
 - Uploads.sh workspace connect — workspace owners and admins can link an uploads.sh account under Account → Integrations; the connected workspace is displayed after authorization and Disconnect revokes the grant.
 - Org-page webhook shortcut — a new Add webhook action in the ⋯ overflow menu on org pages opens the webhook form with that org prefilled, including when redirected through sign-in.
-- Recommendation notify-added — operators can send a one-time confirmation email to a submitter after their source goes live via the admin recommendations API; requires a contact address on the recommendation and is idempotent.
 
 **Fixed**
 - Header search now opens a typeahead in place on every page instead of navigating away on the first keystroke — results include orgs, products, and sources with a loading indicator while fetching and a "no results" state when the query returns no matches; Enter or clicking a result navigates.
@@ -45,11 +44,6 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 **Changed**
 - The product is now presented as "Release Notes Index" — new primary name on the homepage hero, header wordmark, OG metadata, and `llms.txt`; "Releases Index" is used in page titles, footer, and emails. Domain, API paths, and CLI binary are unchanged.
 - The MCP server's primary URL is now `https://agents.releases.sh/mcp` — docs, installer cards, `llms.txt`, and the MCP Registry all point here; `https://mcp.releases.sh/mcp` remains a working alias and existing tokens and client configs continue to work.
-
-## September 10, 2026
-
-**Added**
-- Admin hub gains a Models page (`/admin/models`) — operators can now pick the AI model per processing lane (summarize, extract, feed-enrich, marketing classifier) from OpenRouter's live catalog without a wrangler config edit; changes take effect on the next AI call with no redeploy.
 
 ## September 9, 2026
 
@@ -125,22 +119,11 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 **Fixed**
 - Incremental extraction now escalates to a full-page pass when a scrape window returns zero results on a page whose content has changed — sources with long individual entries no longer silently stall between fetch cycles.
 - Video sources now trigger site revalidation and route through the configured AI models on initial ingest; both were silently skipped before.
-- Staleness digest no longer re-reports provider outages that have already been cleared.
 
 ## July 29, 2026
 
 **Added**
 - MCP server now implements MCP spec `2026-07-28` — modern clients receive plain JSON responses; 2025-era clients continue receiving SSE framing unchanged.
-- `POST /v1/ai/lanes/:lane` — invoke any ingest-time AI lane (marketing classifier, summarizer, or feed-enrich) against a stored release or inline content; `apply: true` writes the result back, including product context the summarizer uses when available.
-
-## July 28, 2026
-
-**Added**
-- Admin status page gains a Health tab — sources are ranked by last successful check timestamp (not release recency), with an amber/red alert banner when multiple orgs' checks have stalled; a frozen timestamp distinguishes a provider outage from an ordinary quiet period.
-- Operator staleness digest now leads with AI provider quota alerts — when a provider cuts off access the digest reports it first: which provider, its stated restore time, and the verbatim message, so a shutoff surfaces in hours rather than days.
-
-**Fixed**
-- Backfill dry runs now report honest counts — `inserted` is `null` instead of a fabricated zero, and a `notStored` field shows exactly how many extracted URLs aren't yet in the index.
 
 ## July 22, 2026
 
@@ -419,9 +402,6 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 
 ## June 15, 2026
 
-**Added**
-- Signed-in admin users can now access the full admin surface in production — inline edit menus on orgs, sources, products, and releases; the Status dashboard; and Fetch Log and Playbook tabs on org pages. Previously only available in local development.
-
 **Changed**
 - The /live feed now shows rich release cards: org avatar and name, source and product identity, descriptive AI title with version tag, two-line summary, and inline media or video preview.
 - Feed and collection surfaces now serve AI-generated excerpts instead of the full release body; the complete text stays on the canonical release detail page.
@@ -468,7 +448,6 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 ## June 11, 2026
 
 **Added**
-- Site-wide notices — admins can post a banner or homepage card with a configurable color and an optional dismiss button.
 - Avatar facepile previews on category pages and collection search results — up to three member logos so you can recognize what's inside at a glance.
 
 **Changed**
@@ -533,7 +512,6 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 ## June 3, 2026
 
 **Added**
-- Curators can now post a notice on an organization, product, or source, surfaced as a banner on the page and a pointer in the MCP server.
 - Organization and product pages now show a "Featured in" sidebar listing the collections they belong to.
 
 **Changed**
