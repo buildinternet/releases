@@ -191,6 +191,11 @@ export default async function CollectionDigestPage({
   const bodyHtml = renderBodyMarkdownToHtml(digest.body, "full", {
     demoteHeadings: 0,
     headingIds: createDigestAnchorSlugger(),
+    // parseDigestSections (server, wire `sections[].anchor`) only slugs `###`
+    // headings — restrict ids to source level 3 too, or a same-slug heading
+    // at another level would consume a counter slot here and drift the DOM
+    // ids out of sync with the API's parsed anchors.
+    headingIdLevel: 3,
     releaseLinks,
   });
 

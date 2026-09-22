@@ -43,6 +43,29 @@ describe("renderBodyMarkdownToHtml headingIds", () => {
     expect(html).toContain('<h3 id="bug-fixes">');
     expect(html).toContain('<h3 id="bug-fixes-2">');
   });
+
+  // headingIdLevel keeps the page's DOM ids in sync with parseDigestSections,
+  // which only slugs `###` sections — a `##` heading (or any other level)
+  // sharing a slug with a `###` section must not consume a counter slot, or
+  // the page's ids drift from the API's parsed `sections[].anchor` values.
+  test("headingIdLevel restricts ids to the source heading level (digest ### sections)", async () => {
+    const { createDigestAnchorSlugger, parseDigestSections } =
+      await import("@releases/rendering/digest-sections");
+    const body = "## Bug fixes\n\nintro\n\n### Bug fixes\n\nfirst\n\n### Bug fixes\n\nsecond";
+    const expectedAnchors = parseDigestSections(body).map((s) => s.anchor);
+    expect(expectedAnchors).toEqual(["bug-fixes", "bug-fixes-2"]);
+
+    const html = renderBodyMarkdownToHtml(body, "full", {
+      demoteHeadings: 0,
+      headingIds: createDigestAnchorSlugger(),
+      headingIdLevel: 3,
+    });
+    expect(html).toContain('<h3 id="bug-fixes">');
+    expect(html).toContain('<h3 id="bug-fixes-2">');
+    // The ## heading (source level 2) gets no id at all.
+    expect(html).toContain("<h2>Bug fixes</h2>");
+    expect(html).not.toMatch(/<h2[^>]*\sid=/);
+  });
 });
 
 describe("renderBodyMarkdownToHtml releaseLinks", () => {

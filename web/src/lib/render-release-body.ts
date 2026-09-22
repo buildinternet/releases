@@ -76,6 +76,12 @@ type RehypeBodyOpts = {
   demoteHeadings?: DemoteHeadings;
   /** When set, headings get an `id` derived from their text (digest section anchors). */
   headingIds?: (text: string) => string;
+  /** When set, `headingIds` only runs for headings whose SOURCE level (before
+   *  `demoteHeadings`) equals this — e.g. `3` so only markdown `###` headings
+   *  get an id, keeping DOM ids in sync with `parseDigestSections`, which
+   *  only slugs `###` sections. Other heading levels get no id. Unset ⇒ every
+   *  level gets one (unchanged default behavior). */
+  headingIdLevel?: number;
   /** When set, `<a href="/release/rel_…">` links are tagged `data-release-id` and,
    *  when the map has an http(s) upstream url for that id, rewritten to open the
    *  upstream link in a new tab (mirrors `releaseLinkTarget()`). */
@@ -95,17 +101,18 @@ function hastText(node: any): string {
  * external UGC.
  */
 function rehypeReleaseBody(opts: RehypeBodyOpts) {
-  const { variant, demoteHeadings = 2, headingIds, releaseLinks } = opts;
+  const { variant, demoteHeadings = 2, headingIds, headingIdLevel, releaseLinks } = opts;
   return (tree: any) => {
     visit(tree, "element", (node: any, index: any, parent: any) => {
       const tag = node.tagName as string;
 
       const heading = /^h([1-6])$/.exec(tag);
       if (heading) {
+        const sourceLevel = Number(heading[1]);
         if (demoteHeadings > 0) {
-          node.tagName = `h${Math.min(Number(heading[1]) + demoteHeadings, 6)}`;
+          node.tagName = `h${Math.min(sourceLevel + demoteHeadings, 6)}`;
         }
-        if (headingIds) {
+        if (headingIds && (headingIdLevel === undefined || sourceLevel === headingIdLevel)) {
           const text = hastText(node).trim();
           if (text) node.properties = { ...node.properties, id: headingIds(text) };
         }
@@ -179,6 +186,7 @@ export function renderBodyMarkdownToHtml(
   opts?: {
     demoteHeadings?: DemoteHeadings;
     headingIds?: (text: string) => string;
+    headingIdLevel?: number;
     releaseLinks?: ReadonlyMap<string, string | null>;
   },
 ): string {
@@ -190,6 +198,7 @@ export function renderBodyMarkdownToHtml(
       variant,
       demoteHeadings: opts?.demoteHeadings ?? 2,
       headingIds: opts?.headingIds,
+      headingIdLevel: opts?.headingIdLevel,
       releaseLinks: opts?.releaseLinks,
     })
     .use([rehypeShikiPlugin])
