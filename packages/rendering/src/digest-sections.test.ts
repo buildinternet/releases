@@ -91,6 +91,30 @@ describe("parseDigestSections", () => {
   test("body with no ### headings yields no sections", () => {
     expect(parseDigestSections("Just prose.")).toEqual([]);
   });
+
+  test("code spans keep their underscores instead of bleeding into a cross-span emphasis match", () => {
+    const [section] = parseDigestSections(
+      "### Params\n\nThe `max_tokens` and `top_p` params both changed.",
+    );
+    expect(section.lede).toBe("The max_tokens and top_p params both changed.");
+  });
+
+  test("heading markdown (code, bold) is stripped for both display and anchor", () => {
+    const [section] = parseDigestSections("### Faster `bun` **installs**\n\nBody text.");
+    expect(section.heading).toBe("Faster bun installs");
+    expect(section.anchor).toBe("faster-bun-installs");
+  });
+
+  test("a linked heading anchors on the link text alone, not the URL", () => {
+    const [section] = parseDigestSections("### [Cursor](https://cursor.com) ships agents\n\nBody.");
+    expect(section.heading).toBe("Cursor ships agents");
+    expect(section.anchor).toBe("cursor-ships-agents");
+  });
+
+  test("allows up to 3 leading spaces before ### (CommonMark)", () => {
+    const sections = parseDigestSections("  ### Indented heading\n\nBody text.");
+    expect(sections.map((s) => s.heading)).toEqual(["Indented heading"]);
+  });
 });
 
 describe("releaseIdFromPath", () => {

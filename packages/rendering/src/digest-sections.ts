@@ -45,12 +45,42 @@ export function createDigestAnchorSlugger(): (heading: string) => string {
   };
 }
 
+// Private-Use-Area sentinel (not a control character, won't appear in real
+// markdown) marking a code span's position while emphasis stripping runs.
+const CODE_SPAN_PLACEHOLDER = "";
+
+/**
+ * Strips inline markdown down to its display text, matching how rehype
+ * flattens a rendered heading/paragraph to plain text (`hastText` in
+ * web/src/lib/render-release-body.ts): images drop, links keep only their
+ * text, code spans keep only their content, emphasis markers drop.
+ *
+ * Code span contents are swapped for placeholders *before* emphasis is
+ * stripped, then restored afterward — otherwise two separate code spans each
+ * containing one `_` (e.g. "the `max_tokens` and `top_p` params") look like a
+ * single underscore-emphasis run spanning both, and the regex eats the text
+ * between them (`max_tokens` / `top_p` → `maxtokens` / `topp`).
+ */
 function stripInlineMarkdown(s: string): string {
-  return s
+  const codeSpans: string[] = [];
+  const withPlaceholders = s
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/(\*\*|__|\*|_)(.+?)\1/g, "$2")
+    .replace(/`([^`]*)`/g, (_m, inner: string) => {
+      codeSpans.push(inner);
+      return `${CODE_SPAN_PLACEHOLDER}${codeSpans.length - 1}${CODE_SPAN_PLACEHOLDER}`;
+    });
+  const withoutEmphasis = withPlaceholders
+    // `*`/`**` — any pair, as before.
+    .replace(/(\*\*|\*)(.+?)\1/g, "$2")
+    // `_`/`__` — only at non-word boundaries, so identifiers like
+    // `max_tokens` (a single underscore inside a word) never match.
+    .replace(/(^|\W)(__?)(\S.*?\S|\S)\2(?=\W|$)/g, "$1$3");
+  return withoutEmphasis
+    .replace(
+      new RegExp(`${CODE_SPAN_PLACEHOLDER}(\\d+)${CODE_SPAN_PLACEHOLDER}`, "g"),
+      (_m, i: string) => codeSpans[Number(i)] ?? "",
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -62,11 +92,16 @@ function firstSentence(paragraph: string): string {
 }
 
 export function parseDigestSections(body: string): ParsedDigestSection[] {
-  const parts = body.split(/^###[ \t]+/m).slice(1);
+  // CommonMark allows up to 3 leading spaces before an ATX heading marker.
+  const parts = body.split(/^ {0,3}###[ \t]+/m).slice(1);
   const slugger = createDigestAnchorSlugger();
   return parts.map((part) => {
     const nl = part.indexOf("\n");
-    const heading = (nl === -1 ? part : part.slice(0, nl)).trim();
+    const rawHeading = (nl === -1 ? part : part.slice(0, nl)).trim();
+    // Display text and the anchor's slug source are the same stripped
+    // heading: it's what rehype's `hastText` produces for the rendered
+    // heading, so slugging it here matches the DOM id the page assigns.
+    const heading = stripInlineMarkdown(rawHeading);
     const rest = nl === -1 ? "" : part.slice(nl + 1);
     const firstPara = rest.trim().split(/\n\s*\n/)[0] ?? "";
     const releaseIds: string[] = [];

@@ -66,6 +66,37 @@ describe("renderBodyMarkdownToHtml headingIds", () => {
     expect(html).toContain("<h2>Bug fixes</h2>");
     expect(html).not.toMatch(/<h2[^>]*\sid=/);
   });
+
+  // parseDigestSections' anchor must equal the DOM id rehype assigns from the
+  // rendered heading's text content (#F2) — code spans and emphasis markers
+  // disappear from that text, but link targets were never in it either way.
+  test("anchor parity: heading with code + bold markup", async () => {
+    const { createDigestAnchorSlugger, parseDigestSections } =
+      await import("@releases/rendering/digest-sections");
+    const body = "### Faster `bun` **installs**\n\nBody text.";
+    const [expected] = parseDigestSections(body).map((s) => s.anchor);
+    const html = renderBodyMarkdownToHtml(body, "full", {
+      demoteHeadings: 0,
+      headingIds: createDigestAnchorSlugger(),
+      headingIdLevel: 3,
+    });
+    expect(expected).toBe("faster-bun-installs");
+    expect(html).toContain(`<h3 id="${expected}">`);
+  });
+
+  test("anchor parity: linked heading anchors on the link text, not the URL", async () => {
+    const { createDigestAnchorSlugger, parseDigestSections } =
+      await import("@releases/rendering/digest-sections");
+    const body = "### [Cursor](https://cursor.com) ships agents\n\nBody.";
+    const [expected] = parseDigestSections(body).map((s) => s.anchor);
+    const html = renderBodyMarkdownToHtml(body, "full", {
+      demoteHeadings: 0,
+      headingIds: createDigestAnchorSlugger(),
+      headingIdLevel: 3,
+    });
+    expect(expected).toBe("cursor-ships-agents");
+    expect(html).toContain(`<h3 id="${expected}">`);
+  });
 });
 
 describe("renderBodyMarkdownToHtml releaseLinks", () => {
