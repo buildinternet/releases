@@ -208,6 +208,15 @@ export function MailIcon(p: IconProps) {
   );
 }
 
+export function PreviewIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <path d="M9 3h6" />
+      <path d="M10 3v5.2L6.2 18.2A2 2 0 0 0 8 21h8a2 2 0 0 0 1.8-2.8L14 8.2V3" />
+    </Icon>
+  );
+}
+
 export function ModelIcon(p: IconProps) {
   return (
     <Icon {...p}>

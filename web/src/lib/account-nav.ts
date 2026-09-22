@@ -22,6 +22,7 @@ import {
   KeyIcon,
   MailIcon,
   ModelIcon,
+  PreviewIcon,
 } from "@/components/account/icons";
 
 /** Reveal not-yet-wired panels in the sidebar. Flip to true once their backends land. */
@@ -204,6 +205,16 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         group: ADMIN_GROUP_LABEL,
         description: "Pick the OpenRouter model for each AI lane without a deploy.",
         Icon: ModelIcon,
+        ready: true,
+      },
+      {
+        key: "admin-semantic-alerts",
+        label: "Semantic alerts",
+        href: "/admin/semantic-alerts",
+        group: ADMIN_GROUP_LABEL,
+        description:
+          "Insert synthetic releases through the live publish path to demo freeform alerts.",
+        Icon: PreviewIcon,
         ready: true,
       },
     ],

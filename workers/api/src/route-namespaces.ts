@@ -76,6 +76,8 @@ export const adminRoutes = [
   "admin/oauth",
   "admin/digest",
   "admin/emails",
+  // Operator preview: synthetic releases through the real publish path (#2304).
+  "admin/semantic-alerts",
   "errata",
   "webhooks",
   "workflows",
