@@ -156,8 +156,23 @@ describe("GET /v1/collections/:slug/digests/:weekStart", () => {
     // rel_wd_deleted never existed — dropped from the resolved list, not a dead link.
     expect(body.releases).toHaveLength(2);
     expect(body.releases.map((r: any) => r.id)).toEqual(["rel_wd_a1", "rel_wd_a2"]);
-    expect(body.releases[0].org).toEqual({ slug: "wd-anthropic", name: "Anthropic" });
+    expect(body.releases[0].org).toEqual({
+      slug: "wd-anthropic",
+      name: "Anthropic",
+      avatarUrl: null,
+      githubHandle: null,
+    });
     expect(body.releases[0].path).toContain("rel_wd_a1");
+    expect(body.releases[0].url).toBe("https://www.anthropic.com/news/claude-4-7");
+    expect(body.releases[0].product).toBeNull();
+    expect(body.sections).toEqual([
+      {
+        heading: "Highlights",
+        anchor: "highlights",
+        lede: "Anthropic shipped Claude 4.7 and Claude 4.6.",
+        releaseIds: [],
+      },
+    ]);
   });
 
   it("returns 404 for a week with no digest", async () => {

@@ -398,12 +398,24 @@ function safeParseReleaseIds(raw: string): string[] {
 // D1 caps prepared statements at 100 bound params; chunk inArray lookups at 90.
 const IN_LOOKUP_CHUNK = 90;
 
+// Correlated subquery used to pick a single deterministic github handle per
+// org (mirrors `githubHandleSubquery` in routes/collections.ts). `org_accounts`
+// only enforces UNIQUE(platform, handle) globally — not per (org, platform).
+function githubHandleSubquery(orgIdExpr: ReturnType<typeof sql>) {
+  return sql<string | null>`(
+    SELECT handle FROM org_accounts
+    WHERE org_id = ${orgIdExpr} AND platform = 'github'
+    ORDER BY created_at, id LIMIT 1
+  )`;
+}
+
 /**
  * Resolve a digest's cited `releaseIds` to minimal display info (title, org,
- * canonical `/release/*` path) for the "Releases covered" section, server-side
- * so the web page never N+1s. IDs that no longer resolve (deleted/suppressed
- * since generation) are silently dropped — never surfaced as a dead link.
- * Preserves the input `releaseIds` order.
+ * upstream url, product, canonical `/release/*` fallback path) for the
+ * "Releases covered" section, server-side so the web page never N+1s. IDs
+ * that no longer resolve (deleted/suppressed since generation) are silently
+ * dropped — never surfaced as a dead link. Preserves the input `releaseIds`
+ * order.
  */
 export async function resolveDigestCoveredReleases(
   db: AnyDb,
@@ -426,14 +438,20 @@ export async function resolveDigestCoveredReleases(
           titleShort: releasesVisible.titleShort,
           version: releasesVisible.version,
           importance: releasesVisible.importance,
+          url: releasesVisible.url,
           orgSlug: organizationsPublic.slug,
           orgName: organizationsPublic.name,
+          orgAvatarUrl: organizationsPublic.avatarUrl,
+          orgGithubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
+          productSlug: productsActive.slug,
+          productName: productsActive.name,
         })
         .from(releasesVisible)
         // Public read path: join through the hidden-filtered source view and
         // the public org view so hidden/on-demand rows never surface.
         .innerJoin(sourcesVisible, eq(sourcesVisible.id, releasesVisible.sourceId))
         .innerJoin(organizationsPublic, eq(organizationsPublic.id, sourcesVisible.orgId))
+        .leftJoin(productsActive, eq(productsActive.id, sourcesVisible.productId))
         .where(inArray(releasesVisible.id, idChunk)),
     ),
   );
@@ -453,7 +471,15 @@ export async function resolveDigestCoveredReleases(
           title: r.title,
           version: r.version,
         }),
-        org: { slug: r.orgSlug, name: r.orgName },
+        url: r.url ?? null,
+        org: {
+          slug: r.orgSlug,
+          name: r.orgName,
+          avatarUrl: r.orgAvatarUrl ?? null,
+          githubHandle: r.orgGithubHandle ?? null,
+        },
+        product:
+          r.productSlug && r.productName ? { slug: r.productSlug, name: r.productName } : null,
         importance: r.importance ?? null,
       },
     ];

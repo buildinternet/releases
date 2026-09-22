@@ -41,6 +41,7 @@ import {
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
+import { parseDigestSections } from "@releases/rendering/digest-sections.js";
 import type { Env } from "../index.js";
 import {
   CollectionListResponseSchema,
@@ -886,7 +887,7 @@ collectionRoutes.get(
     tags: ["Collections"],
     summary: "One collection's weekly digest, with resolved release links",
     description:
-      "Full digest row (title, intro, markdown body, cited release ids) for one ET week, plus server-resolved minimal release info (title, org, canonical `/release/*` path) for every cited release — resolved server-side so the web page never N+1s. `:weekStart` must be the Monday (YYYY-MM-DD, ET) starting the week. Release ids that no longer resolve (deleted/suppressed since generation) are silently dropped from `releases`.",
+      "Full digest row (title, intro, markdown body, cited release ids) for one ET week, plus server-resolved minimal release info (title, org, upstream url, product, canonical `/release/*` fallback path) for every cited release, and the body's parsed `###` sections (heading, anchor, lede, cited release ids) — resolved server-side so the web page never N+1s. `releases[].url` is the primary link when present; `path` is the fallback. `:weekStart` must be the Monday (YYYY-MM-DD, ET) starting the week. Release ids that no longer resolve (deleted/suppressed since generation) are silently dropped from `releases`.",
     parameters: [
       {
         name: "slug",
@@ -952,6 +953,7 @@ collectionRoutes.get(
       releaseCount: digest.releaseCount,
       generatedAt: digest.generatedAt,
       releases,
+      sections: parseDigestSections(digest.body),
     });
   },
 );

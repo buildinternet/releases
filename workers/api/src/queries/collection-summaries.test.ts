@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { createTestDb, type TestDb } from "../../../../tests/db-helper";
 import {
   collectionDailySummaries,
@@ -14,6 +15,7 @@ import {
   listCollectionDailySummaries,
   getCollectionMembers,
   getCollectionDayReleases,
+  resolveDigestCoveredReleases,
 } from "./collection-summaries";
 
 describe("collection_daily_summaries schema", () => {
@@ -244,5 +246,46 @@ describe("getCollectionDayReleases", () => {
 
     const rows = await getCollectionDayReleases(db, { orgIds: ["org_s"], productIds: [] }, window);
     expect(rows.map((r) => r.title)).toEqual(["Visible"]);
+  });
+});
+
+describe("resolveDigestCoveredReleases", () => {
+  test("returns upstream url, product, and org avatar in input order", async () => {
+    const { db } = createTestDb();
+    await seedOrgSource(db, { orgId: "org_d", sourceId: "src_d", productId: "prod_d" });
+    await seedOrgSource(db, { orgId: "org_e", sourceId: "src_e" });
+    await db
+      .update(organizations)
+      .set({ avatarUrl: "https://media.example.com/org_d.png" })
+      .where(eq(organizations.id, "org_d"));
+    await db.insert(releases).values([
+      {
+        id: "rel_d",
+        sourceId: "src_d",
+        title: "D",
+        content: "b",
+        url: "https://example.com/changelog#d",
+        publishedAt: "2026-09-15T00:00:00.000Z",
+      },
+      {
+        id: "rel_e",
+        sourceId: "src_e",
+        title: "E",
+        content: "b",
+        url: null,
+        publishedAt: "2026-09-16T00:00:00.000Z",
+      },
+    ]);
+
+    const out = await resolveDigestCoveredReleases(db, ["rel_e", "rel_missing", "rel_d"]);
+
+    expect(out.map((r) => r.id)).toEqual(["rel_e", "rel_d"]);
+    expect(out[1]).toMatchObject({
+      url: "https://example.com/changelog#d",
+      product: { slug: "prod_d", name: "Product prod_d" },
+      org: { slug: "org_d", avatarUrl: "https://media.example.com/org_d.png" },
+    });
+    expect(out[0]).toMatchObject({ url: null, product: null });
+    expect(out[0].path.startsWith("/release/rel_e")).toBe(true);
   });
 });
