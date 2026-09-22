@@ -58,6 +58,9 @@ export type NewSemanticAlertRow = typeof semanticAlerts.$inferInsert;
  * not stored here.
  *
  * Paired migration: 20260922030000_semantic_alert_matches.sql.
+ * `(alert_id, created_at)` backs the account activity read (30-day counts
+ * and the latest match per alert). Paired migration:
+ * 20260922200000_semantic_alert_matches_alert_created_idx.sql.
  */
 export const semanticAlertMatches = sqliteTable(
   "semantic_alert_matches",
@@ -69,7 +72,10 @@ export const semanticAlertMatches = sqliteTable(
     probability: real("probability").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.alertId, t.releaseId] })],
+  (t) => [
+    primaryKey({ columns: [t.alertId, t.releaseId] }),
+    index("idx_semantic_alert_matches_alert_created").on(t.alertId, t.createdAt),
+  ],
 );
 
 export type SemanticAlertMatchRow = typeof semanticAlertMatches.$inferSelect;

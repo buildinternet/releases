@@ -76,6 +76,37 @@ const alertSchema = {
   },
 } as const;
 
+const activitySchema = {
+  type: "object",
+  description:
+    "Claimed matches only (rows written when the alert notified). Below-threshold scores are not stored. Omitted on create, update, and single-get.",
+  required: ["matches7d", "matches30d", "lastMatchedAt", "lastMatch"],
+  properties: {
+    matches7d: { type: "integer", minimum: 0 },
+    matches30d: { type: "integer", minimum: 0 },
+    lastMatchedAt: { type: "string", format: "date-time", nullable: true },
+    lastMatch: {
+      type: "object",
+      nullable: true,
+      required: ["releaseId", "title", "path"],
+      properties: {
+        releaseId: { type: "string" },
+        title: { type: "string" },
+        path: { type: "string", description: "Canonical site path, `/release/rel_…`." },
+      },
+    },
+  },
+} as const;
+
+const listAlertSchema = {
+  type: "object",
+  required: [...alertSchema.required, "activity"],
+  properties: {
+    ...alertSchema.properties,
+    activity: activitySchema,
+  },
+} as const;
+
 function jsonBody(description: string, schema: Record<string, unknown>) {
   return {
     description,
@@ -196,15 +227,18 @@ meSemanticAlertHandlers.get(
     description: LANE_DESCRIPTION,
     security: [{ bearerAuth: [] }],
     responses: {
-      200: jsonBody("The caller's alerts. Empty when none are saved.", {
-        type: "object",
-        required: ["alerts", "candidatePool", "maxAlerts"],
-        properties: {
-          alerts: { type: "array", items: alertSchema },
-          candidatePool: { type: "string", enum: ["follows"] },
-          maxAlerts: { type: "integer" },
+      200: jsonBody(
+        "The caller's alerts, each with recent claimed-match activity. Empty when none are saved.",
+        {
+          type: "object",
+          required: ["alerts", "candidatePool", "maxAlerts"],
+          properties: {
+            alerts: { type: "array", items: listAlertSchema },
+            candidatePool: { type: "string", enum: ["follows"] },
+            maxAlerts: { type: "integer" },
+          },
         },
-      }),
+      ),
       401: errorResponse("Sign-in required"),
       404: errorResponse("Semantic alerts are disabled"),
     },

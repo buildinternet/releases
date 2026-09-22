@@ -24,7 +24,9 @@ Routes under `/v1/me/semantic-alerts`, same principal as follows: Better Auth se
 
 `webhookSubscriptionId` must be one of the caller's own `/v1/me/webhooks` rows. `deliverEmail` / `deliverWebhook` are independent. An alert may point at a subscription and still leave `deliverWebhook` false. An alert with both flags false is stored but never scored.
 
-Account UI on [Notifications](https://releases.sh/account/notifications): list, create, enable/disable, delete. The panel does not list matched releases.
+`GET /v1/me/semantic-alerts` and `semanticAlerts` on the notifications bootstrap add `activity` on each alert: `matches7d`, `matches30d` (the 30-day count includes the 7-day window), `lastMatchedAt`, and `lastMatch` (`releaseId`, `title`, `path`) when the release row still exists. Create, update, and single-get omit `activity`. The read is two statements for the caller's alert ids — a grouped count limited to 30 days, and one latest row per id left-joined to `releases` and capped at that id count (max 5). Index `idx_semantic_alert_matches_alert_created` on `(alert_id, created_at)`. No extra matcher writes and no cron.
+
+Account UI on [Notifications](https://releases.sh/account/notifications): list, create, edit (query, threshold, email, webhook), enable/disable, and delete. Each row shows trailing activity from claimed matches: last matched (relative time and a release link when the row still exists) plus counts for the last 7 and 30 days. Below-threshold scores are not stored for this view.
 
 ## Matcher
 
@@ -100,10 +102,10 @@ The same actions are on **Admin → Semantic alerts** (`/admin/semantic-alerts`)
 
 ## Code
 
-- Schema + migrations: `workers/api/src/db/schema-semantic-alerts.ts`, `workers/api/migrations/20260922020000_add_semantic_alerts.sql`, `workers/api/migrations/20260922030000_semantic_alert_matches.sql`
+- Schema + migrations: `workers/api/src/db/schema-semantic-alerts.ts`, `workers/api/migrations/20260922020000_add_semantic_alerts.sql`, `workers/api/migrations/20260922030000_semantic_alert_matches.sql`, `workers/api/migrations/20260922200000_semantic_alert_matches_alert_created_idx.sql`
 - Routes: `workers/api/src/routes/me-semantic-alerts.ts`
 - Matcher: `packages/ai/src/semantic-alert-match.ts`, `workers/api/src/semantic-alerts/run.ts` (hooked from `workers/api/src/events/publish.ts`), `workers/api/src/lib/semantic-alert-matcher.ts` (admin preview seam)
-- Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, list response, threshold and cap constants)
+- Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, `SemanticAlertActivity` on list rows, threshold and cap constants)
 - Web: `web/src/components/semantic-alerts-section.tsx` on the notifications panel
 - Admin preview: `workers/api/src/routes/admin-semantic-alerts.ts`, `workers/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
 - Admin quality summary: `workers/api/src/lib/semantic-alert-summary.ts`, `GET /v1/admin/semantic-alerts/summary`

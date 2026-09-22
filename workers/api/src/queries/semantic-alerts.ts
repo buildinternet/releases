@@ -1,7 +1,12 @@
-import { and, count, desc, eq, inArray, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { chunkArray, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
-import { webhookSubscriptions } from "@buildinternet/releases-core/schema";
-import type { SemanticAlert } from "@buildinternet/releases-api-types";
+import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { releases, webhookSubscriptions } from "@buildinternet/releases-core/schema";
+import type {
+  SemanticAlert,
+  SemanticAlertActivity,
+  SemanticAlertListItem,
+} from "@buildinternet/releases-api-types";
 import type { AnyDb } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
 import {
@@ -41,13 +46,189 @@ export async function countSemanticAlerts(db: AnyDb, userId: string): Promise<nu
   return row?.n ?? 0;
 }
 
-export async function listSemanticAlerts(db: AnyDb, userId: string): Promise<SemanticAlert[]> {
+export function emptySemanticAlertActivity(): SemanticAlertActivity {
+  return { matches7d: 0, matches30d: 0, lastMatchedAt: null, lastMatch: null };
+}
+
+const MATCH_WINDOW_7D_SEC = 7 * 24 * 60 * 60;
+const MATCH_WINDOW_30D_SEC = 30 * 24 * 60 * 60;
+
+interface MatchCountRow {
+  alertId: string;
+  matches7d: number | null;
+  matches30d: number | null;
+}
+
+interface LatestMatchRow {
+  alertId: string;
+  releaseId: string;
+  createdAt: number | string | null;
+  title: string | null;
+  titleShort: string | null;
+  titleGenerated: string | null;
+  version: string | null;
+}
+
+function toCount(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.trunc(n);
+}
+
+/** `created_at` is unix seconds (`mode: "timestamp"`). */
+function matchTimeIso(value: unknown): string | null {
+  const seconds = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(seconds)) return null;
+  return new Date(seconds * 1000).toISOString();
+}
+
+function idList(ids: string[]): SQL {
+  return sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+}
+
+/**
+ * Claimed-match activity for a caller's alert ids.
+ *
+ * Two statements, not one per alert: a 30-day aggregate (7-day count is a
+ * case inside it) and one latest row per id. Both use
+ * `idx_semantic_alert_matches_alert_created`. The release join is the latest
+ * row only, capped at the id count (at most 5 on the account list).
+ * Below-threshold scores are not in this table.
+ */
+export async function loadSemanticAlertActivity(
+  db: AnyDb,
+  alertIds: string[],
+  nowMs: number = Date.now(),
+): Promise<Map<string, SemanticAlertActivity>> {
+  const ids = [...new Set(alertIds)];
+  const byId = new Map<string, SemanticAlertActivity>();
+  for (const id of ids) byId.set(id, emptySemanticAlertActivity());
+  if (ids.length === 0) return byId;
+
+  const nowSec = Math.floor(nowMs / 1000);
+  const since7 = nowSec - MATCH_WINDOW_7D_SEC;
+  const since30 = nowSec - MATCH_WINDOW_30D_SEC;
+
+  const [counts, latest] = await Promise.all([
+    loadMatchCounts(db, ids, since7, since30),
+    loadLatestMatches(db, ids),
+  ]);
+
+  for (const row of counts) {
+    const activity = byId.get(row.alertId);
+    if (!activity) continue;
+    activity.matches7d = toCount(row.matches7d);
+    activity.matches30d = toCount(row.matches30d);
+  }
+
+  for (const row of latest) {
+    const activity = byId.get(row.alertId);
+    if (!activity) continue;
+    activity.lastMatchedAt = matchTimeIso(row.createdAt);
+    if (row.title == null) continue;
+    const title =
+      row.titleShort?.trim() ||
+      row.titleGenerated?.trim() ||
+      row.title.trim() ||
+      row.version?.trim() ||
+      "Release";
+    activity.lastMatch = {
+      releaseId: row.releaseId,
+      title,
+      path: releasePath({
+        id: row.releaseId,
+        titleShort: row.titleShort,
+        titleGenerated: row.titleGenerated,
+        title: row.title,
+        version: row.version,
+      }),
+    };
+  }
+
+  return byId;
+}
+
+async function loadMatchCounts(
+  db: AnyDb,
+  alertIds: string[],
+  since7: number,
+  since30: number,
+): Promise<MatchCountRow[]> {
+  const chunks = chunkArray(alertIds, IN_ARRAY_CHUNK_SIZE);
+  const parts = await Promise.all(
+    chunks.map((chunk) =>
+      db.all<MatchCountRow>(sql`
+        SELECT
+          alert_id as alertId,
+          SUM(CASE WHEN created_at >= ${since7} THEN 1 ELSE 0 END) as matches7d,
+          COUNT(*) as matches30d
+        FROM semantic_alert_matches
+        WHERE alert_id IN (${idList(chunk)})
+          AND created_at >= ${since30}
+        GROUP BY alert_id
+      `),
+    ),
+  );
+  return parts.flat();
+}
+
+async function loadLatestMatches(db: AnyDb, alertIds: string[]): Promise<LatestMatchRow[]> {
+  const chunks = chunkArray(alertIds, IN_ARRAY_CHUNK_SIZE);
+  const parts = await Promise.all(
+    chunks.map((chunk) => {
+      const branches = chunk.map(
+        (id) => sql`
+          SELECT alert_id, release_id, created_at FROM (
+            SELECT alert_id, release_id, created_at
+            FROM semantic_alert_matches
+            WHERE alert_id = ${id}
+            ORDER BY created_at DESC
+            LIMIT 1
+          )
+        `,
+      );
+      return db.all<LatestMatchRow>(sql`
+        SELECT
+          latest.alert_id as alertId,
+          latest.release_id as releaseId,
+          latest.created_at as createdAt,
+          r.title as title,
+          r.title_short as titleShort,
+          r.title_generated as titleGenerated,
+          r.version as version
+        FROM (
+          ${sql.join(branches, sql` UNION ALL `)}
+        ) as latest
+        LEFT JOIN ${releases} as r ON r.id = latest.release_id
+        LIMIT ${chunk.length}
+      `);
+    }),
+  );
+  return parts.flat();
+}
+
+export async function listSemanticAlerts(
+  db: AnyDb,
+  userId: string,
+): Promise<SemanticAlertListItem[]> {
   const rows = await db
     .select()
     .from(semanticAlerts)
     .where(eq(semanticAlerts.userId, userId))
     .orderBy(desc(semanticAlerts.createdAt));
-  return rows.map(toSemanticAlert);
+  if (rows.length === 0) return [];
+  const activity = await loadSemanticAlertActivity(
+    db,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) =>
+    Object.assign(toSemanticAlert(row), {
+      activity: activity.get(row.id) ?? emptySemanticAlertActivity(),
+    }),
+  );
 }
 
 export async function getSemanticAlert(
