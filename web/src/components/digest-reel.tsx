@@ -118,7 +118,7 @@ function DigestCard({ digest }: { digest: ReelDigest }) {
         </span>
         <Link
           href={href}
-          aria-label={`Read the ${digest.collection.name} digest`}
+          aria-label={`Read issue: ${digest.collection.name} digest`}
           className="text-[12.5px] font-medium text-[var(--accent)] hover:underline"
         >
           Read issue →

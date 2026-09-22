@@ -94,6 +94,7 @@ function CoveredReleaseLink({
     <a {...linkProps} className={`${className} inline-flex items-center gap-1`}>
       {release.title}
       <ExternalArrow />
+      <span className="sr-only"> (opens in new tab)</span>
     </a>
   ) : (
     <Link {...linkProps} className={className}>
