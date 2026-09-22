@@ -25,6 +25,35 @@ describe("renderEmail", () => {
     expect(html).not.toContain('"Segoe UI"');
   });
 
+  it("renders a markdown link in fine copy as a text link, once, in both parts", () => {
+    const url = "https://releases.test/account/notifications";
+    const { html, text } = renderEmail({
+      ...base,
+      blocks: [
+        { t: "button", label: "View release", url: "https://releases.test/release/rel_1" },
+        { t: "fine", text: `Turn this off. [Manage alerts](${url}).` },
+      ],
+    });
+    expect(html.match(/padding:12px 22px/g)?.length).toBe(1);
+    expect(html).toContain(`<a href="${url}"`);
+    expect(html).toContain(">Manage alerts</a>");
+    expect(html).not.toContain(`Or paste this link into your browser:<br><a href="${url}"`);
+    expect(html.split(url).length - 1).toBe(1);
+    expect(text).toContain(`Manage alerts (${url}).`);
+    expect(text.split(url).length - 1).toBe(1);
+  });
+
+  it("does not promote a non-http fine link into a clickable target", () => {
+    const { html, text } = renderEmail({
+      ...base,
+      blocks: [{ t: "fine", text: "See [more](javascript:alert(1))." }],
+    });
+    expect(html).not.toContain('href="javascript:');
+    expect(html).toContain("[more](javascript:alert(1))");
+    expect(text).not.toContain("javascript:");
+    expect(text).toContain("more");
+  });
+
   it("pairs every button with the URL in copyable text, in both parts", () => {
     const url = "https://api.releases.test/verify?token=abc123";
     const { html, text } = renderEmail({

@@ -30,9 +30,9 @@ function webhookLabel(hook: SemanticAlertWebhookOption): string {
 }
 
 /**
- * Account Notifications section for semantic alerts. Render only when the
+ * Account Notifications section for interest alerts. Render only when the
  * settings bootstrap includes an array (`null` means the flag is off).
- * Matching and delivery are not live — this saves the preference.
+ * Matches are delivered by email and webhook; this panel does not list them.
  */
 export function SemanticAlertsSection({
   alerts: initialAlerts,
@@ -122,8 +122,8 @@ export function SemanticAlertsSection({
         Interest alerts
       </div>
       <p className="mt-1 mb-3.5 text-[13px] text-stone-500 dark:text-stone-400">
-        Describe what you care about in plain language. Saved alerts are matched later against
-        releases from organizations and products you follow. Matching and delivery are not live yet.
+        Describe what you care about in plain language. When a release from an organization or
+        product you follow matches, we send an email or a webhook.
       </p>
       {error && (
         <div className="mb-3">

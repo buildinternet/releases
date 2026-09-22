@@ -23,7 +23,8 @@ describe("SemanticAlertsSection", () => {
     const html = renderToStaticMarkup(<SemanticAlertsSection alerts={[]} webhooks={[]} />);
     expect(html).toContain("Interest alerts");
     expect(html).toContain("No interest alerts yet");
-    expect(html).toContain("not live yet");
+    expect(html).toContain("we send an email or a webhook");
+    expect(html).not.toContain("not live yet");
     expect(html).toContain("0 of 5");
     expect(html).toMatch(/disabled[^>]*>Save alert</);
   });

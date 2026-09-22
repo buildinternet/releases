@@ -167,7 +167,15 @@ export type EmailRollup = {
 export type EmailBlock =
   /** Body copy. `text` is markdown; both parts render it, neither shows syntax. */
   | { t: "p"; text: string }
-  /** Secondary copy — expiry notices, "ignore this if…" caveats. */
+  /**
+   * Secondary copy — expiry notices, caveats, and quiet actions.
+   *
+   * A markdown link here is a text link, not a button: no blue control, no
+   * "paste this link" line. Use it for manage-settings and similar secondary
+   * destinations, and do not repeat that same URL as a `button` or a footer
+   * link. The plain-text part keeps an http(s) target in parentheses so the
+   * action is still completable without HTML.
+   */
   | { t: "fine"; text: string }
   /** Monospace section label above a group. */
   | { t: "kicker"; text: string }
@@ -521,12 +529,27 @@ function renderHtml(doc: EmailDoc): string {
 
 /* ── Plain text ─────────────────────────────────────────────────────────── */
 
+/**
+ * Plain-text form of a `fine` block. `stripMarkdown` drops link targets, which
+ * is right for release summaries and wrong for a secondary action: the text
+ * part would say "manage alerts" with nowhere to go. Http(s) targets are kept
+ * in parentheses; anything else still falls through to `stripMarkdown`.
+ */
+function fineText(text: string): string {
+  const expanded = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (whole, label: string, url: string) => {
+    const target = url.trim();
+    if (!/^https?:\/\//i.test(target)) return whole;
+    return `${label} (${target})`;
+  });
+  return stripMarkdown(expanded);
+}
+
 function blockText(b: EmailBlock): string[] {
   switch (b.t) {
     case "p":
       return [stripMarkdown(b.text), ""];
     case "fine":
-      return [stripMarkdown(b.text), ""];
+      return [fineText(b.text), ""];
     case "kicker":
       return [b.text.toUpperCase(), ""];
     case "button":
