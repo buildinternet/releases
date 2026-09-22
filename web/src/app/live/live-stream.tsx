@@ -10,8 +10,7 @@ import { orgAvatarSrc } from "@/components/org-avatar";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { FallbackImage } from "@/components/fallback-image";
 import { PlayBadge } from "@/components/play-badge";
-import { releaseLinkTarget } from "@/lib/release-link";
-import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
+import { releaseLinkProps } from "@/lib/release-link";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
@@ -165,6 +164,7 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
   // Drop the org name when it just restates the product/source label (e.g.
   // PostHog / PostHog) — same dedup as the search-results byline.
   const showOrg = !!orgName && !productLabel.toLowerCase().startsWith(orgName.toLowerCase());
+  const linkProps = releaseLinkProps(release);
 
   return (
     <article className="border border-stone-200 dark:border-stone-800 rounded-lg bg-white dark:bg-stone-900 px-4 py-3.5">
@@ -205,10 +205,7 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
           {/* Default click → upstream source when the release has one (see
               release-link.ts); the on-site page stays on the Details link. */}
           <Link
-            href={releaseLinkTarget(release)?.href ?? `/release/${release.id}`}
-            {...(releaseLinkTarget(release)?.external
-              ? { target: "_blank", rel: EXTERNAL_UGC_REL }
-              : {})}
+            {...(linkProps ?? { href: `/release/${release.id}` })}
             className="hover:underline underline-offset-2"
           >
             {heading}
