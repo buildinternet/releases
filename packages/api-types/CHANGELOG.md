@@ -1,5 +1,22 @@
 # @buildinternet/releases-api-types
 
+## 0.53.0
+
+### Minor Changes
+
+- 2338326: Add marketing-classifier threshold wire types for `GET/PUT /v1/admin/marketing-classifier` (operator-editable suppression threshold + filtered-source listing). Widen `ClassificationSummary.probability.threshold` from the `0.8` literal to `number` now that the threshold is operator-editable.
+- 891fb78: Add wire types for `GET /v1/me/workspaces`, which lists the caller's workspace memberships (#2327).
+- fc0ef10: Add match activity to interest-alert list responses: 7-day and 30-day counts plus the latest matched release (#2320).
+- 7e24bea: Add the admin interest-alert quality summary shape for `GET /v1/admin/semantic-alerts/summary` (#2312). Counts only — no alert query text.
+- 1329c3d: Add semantic alert wire types for `GET/POST/PATCH/DELETE /v1/me/semantic-alerts` and `semanticAlerts` on the notifications settings bootstrap (#2304). Phase 1 stores preferences only.
+- 256fdfb: Add workspace webhook wire types for `/v1/workspaces/:workspaceId/webhooks` (#2324).
+
+### Patch Changes
+
+- 7c2c2c7: Type `MeWorkspace.role` as the shared `WorkspaceMemberRole` alias. The allowed values (`owner`, `admin`, `member`) are unchanged.
+- Updated dependencies [256fdfb]
+  - @buildinternet/releases-core@0.31.0
+
 ## 0.52.1
 
 ### Patch Changes
