@@ -1391,6 +1391,30 @@ export interface DeveloperSettingsResponse {
   apiKeys: UserApiKey[] | null;
 }
 
+/**
+ * A Better Auth organization "role" for the caller's membership in a workspace —
+ * `member.role`, NOT `user.role` (the separate OAuth scope-entitlement ceiling).
+ * Shared with #2325 (workspace webhooks); keep this definition identical there.
+ */
+export type WorkspaceMemberRole = "owner" | "admin" | "member";
+
+/** GET /v1/me/workspaces — one row per workspace the caller belongs to. */
+export interface MeWorkspace {
+  /** Better Auth organization id. */
+  id: string;
+  name: string;
+  slug: string;
+  logo: string | null;
+  role: WorkspaceMemberRole;
+  /** The caller's active workspace (see docs/architecture/workspaces.md). */
+  active: boolean;
+  createdAt: string;
+}
+
+export interface MeWorkspacesResponse {
+  workspaces: MeWorkspace[];
+}
+
 // ── Search ──
 
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;

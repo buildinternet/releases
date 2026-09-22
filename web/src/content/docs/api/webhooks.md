@@ -59,6 +59,39 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 | `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                                      |
 | `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (see [Delivery activity](#delivery-activity)) |
 
+### Finding your workspace id (`/v1/me/workspaces`)
+
+Better Auth organization plugin "Workspaces" — user tenancy, distinct from the
+registry orgs/products these webhooks watch. Every account has at least a
+personal workspace. `GET /v1/me/workspaces` lists the ones you belong to,
+which is how the CLI and MCP server resolve a workspace id for
+workspace-scoped operations:
+
+```bash
+curl https://api.releases.sh/v1/me/workspaces \
+  -H "Authorization: Bearer $RELEASES_TOKEN"
+```
+
+```json
+{
+  "workspaces": [
+    {
+      "id": "org_abc123",
+      "name": "Ann's Workspace",
+      "slug": "ws-u_1",
+      "logo": null,
+      "role": "owner",
+      "active": true,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+`role` is your membership role (`owner` | `admin` | `member`), and `active`
+marks your current workspace. Read-only — creating, renaming, and switching
+workspaces stay on Better Auth (`releases.sh/account/workspaces`).
+
 ### Account UI
 
 Signed-in users can manage webhooks without raw API calls: **Account → Webhooks & API** on [releases.sh](https://releases.sh/account/webhooks). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
