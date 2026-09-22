@@ -275,6 +275,7 @@ import type {
   CollectionWeeklyDigestListItemSchema,
   CollectionWeeklyDigestsResponseSchema,
   DigestCoveredReleaseSchema,
+  DigestSectionSchema,
   CollectionWeeklyDigestDetailSchema,
 } from "./schemas/collections.js";
 import type {
@@ -625,6 +626,7 @@ export {
   CollectionWeeklyDigestListItemSchema,
   CollectionWeeklyDigestsResponseSchema,
   DigestCoveredReleaseSchema,
+  DigestSectionSchema,
   CollectionWeeklyDigestDetailSchema,
 } from "./schemas/collections.js";
 export {
@@ -1748,6 +1750,7 @@ export type CollectionDailySummariesResponse = z.infer<
 export type CollectionWeeklyDigestListItem = z.infer<typeof CollectionWeeklyDigestListItemSchema>;
 export type CollectionWeeklyDigestsResponse = z.infer<typeof CollectionWeeklyDigestsResponseSchema>;
 export type DigestCoveredRelease = z.infer<typeof DigestCoveredReleaseSchema>;
+export type DigestSection = z.infer<typeof DigestSectionSchema>;
 export type CollectionWeeklyDigestDetail = z.infer<typeof CollectionWeeklyDigestDetailSchema>;
 
 // ── Releases (enriched) ──

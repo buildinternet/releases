@@ -273,14 +273,35 @@ export const CollectionWeeklyDigestsResponseSchema = z.object({
 export const DigestCoveredReleaseSchema = z.object({
   id: z.string(),
   title: z.string(),
+  /** Internal `/release/*` path — fallback link only (see `url`). */
   path: z.string(),
-  org: z.object({ slug: z.string(), name: z.string() }),
+  /** Upstream source URL. Primary link target when http(s); optional for older servers. */
+  url: z.string().nullable().optional(),
+  org: z.object({
+    slug: z.string(),
+    name: z.string(),
+    avatarUrl: z.string().nullable().optional(),
+    githubHandle: z.string().nullable().optional(),
+  }),
+  /** Product the release's source belongs to, when it has one. */
+  product: z.object({ slug: z.string(), name: z.string() }).nullable().optional(),
   /**
    * AI-scored importance 1–5. Null when unscored; optional for older
    * servers. Cheap to project on the existing hydrate — powers the flame
    * marker on the collapsed "Releases covered" list.
    */
   importance: ImportanceScoreSchema,
+});
+
+/** One `###` section of a digest body, parsed server-side. */
+export const DigestSectionSchema = z.object({
+  heading: z.string(),
+  /** Slug the digest page renders as the heading's `id` — link target `#anchor`. */
+  anchor: z.string(),
+  /** First sentence of the section, plain text. */
+  lede: z.string(),
+  /** Cited release ids in first-seen order; resolve against the detail's `releases`. */
+  releaseIds: z.array(z.string()),
 });
 
 /** Full row returned by `GET /v1/collections/:slug/digests/:weekStart`. */
@@ -297,4 +318,6 @@ export const CollectionWeeklyDigestDetailSchema = z.object({
    *  still resolves — a release deleted/suppressed after generation is
    *  dropped rather than surfaced as a dead link. */
   releases: z.array(DigestCoveredReleaseSchema),
+  /** Parsed `###` sections. Optional for older servers. */
+  sections: z.array(DigestSectionSchema).optional(),
 });
