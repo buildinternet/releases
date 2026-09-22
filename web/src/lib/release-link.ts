@@ -4,6 +4,10 @@ import { EXTERNAL_UGC_REL } from "./sanitize";
 export interface ReleaseLinkInput {
   id?: string | null;
   url?: string | null;
+  /** Internal `/release/*` path (slugged), when the caller's data has it —
+   *  preferred over the bare `/release/<id>` fallback so the internal link
+   *  matches the canonical slugged URL. */
+  path?: string | null;
 }
 
 export interface ReleaseLinkTarget {
@@ -29,6 +33,8 @@ export interface ReleaseLinkTarget {
 export function releaseLinkTarget(release: ReleaseLinkInput): ReleaseLinkTarget | null {
   const url = (release.url ?? "").trim();
   if (/^https?:\/\//i.test(url)) return { href: url, external: true };
+  const path = (release.path ?? "").trim();
+  if (path.startsWith("/release/")) return { href: path, external: false };
   if (release.id) return { href: `/release/${release.id}`, external: false };
   return null;
 }

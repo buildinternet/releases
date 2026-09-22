@@ -40,6 +40,29 @@ describe("releaseLinkTarget", () => {
     expect(releaseLinkTarget({ id: null, url: null })).toBeNull();
     expect(releaseLinkTarget({})).toBeNull();
   });
+
+  test("prefers a slugged internal path over the bare id fallback", () => {
+    expect(
+      releaseLinkTarget({ id: "rel_1", url: null, path: "/release/rel_1-voice-conversations" }),
+    ).toEqual({ href: "/release/rel_1-voice-conversations", external: false });
+  });
+
+  test("ignores a path that isn't a /release/ path", () => {
+    expect(releaseLinkTarget({ id: "rel_1", url: null, path: "/collections/x" })).toEqual({
+      href: "/release/rel_1",
+      external: false,
+    });
+  });
+
+  test("an upstream URL still wins over a slugged path", () => {
+    expect(
+      releaseLinkTarget({
+        id: "rel_1",
+        url: "https://example.com/x",
+        path: "/release/rel_1-slug",
+      }),
+    ).toEqual({ href: "https://example.com/x", external: true });
+  });
 });
 
 describe("releaseLinkProps", () => {

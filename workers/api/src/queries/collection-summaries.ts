@@ -534,7 +534,10 @@ export async function listLatestWeeklyDigests(db: AnyDb): Promise<LatestWeeklyDi
   return parsed.map(({ row, sections }) => {
     const resolved = sections.map((s) => ({
       ...s,
-      releases: s.releaseIds.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
+      releases: s.releaseIds.flatMap((id) => {
+        const r = byId.get(id);
+        return r ? [r] : [];
+      }),
     }));
     const orgs = new Map<string, DigestCoveredRelease["org"]>();
     for (const s of resolved)

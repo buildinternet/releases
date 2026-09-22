@@ -80,6 +80,10 @@ export function LatestDigestHero({
             </div>
             {sections.map((section, i) => {
               const products = sectionProductsFromDetail(section, releaseById);
+              // Count only ids that resolved against the digest's
+              // covered-releases list — `releaseIds.length` can include ids
+              // that didn't resolve (e.g. a release since suppressed).
+              const resolvedCount = section.releaseIds.filter((id) => releaseById.has(id)).length;
               return (
                 <Link
                   key={section.anchor}
@@ -104,8 +108,7 @@ export function LatestDigestHero({
                         </span>
                       ))}
                       <span className="font-mono text-[10.5px] text-[var(--fg-3)]">
-                        {section.releaseIds.length}{" "}
-                        {section.releaseIds.length === 1 ? "release" : "releases"}
+                        {resolvedCount} {resolvedCount === 1 ? "release" : "releases"}
                       </span>
                     </span>
                   </span>

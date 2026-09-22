@@ -112,6 +112,29 @@ describe("LatestDigestHero", () => {
     expect(html).toContain('href="/collections/coding-agents/digest"');
   });
 
+  test("per-section count reflects only ids resolved in the covered-releases list", () => {
+    const digestWithUnresolvedId: CollectionWeeklyDigestDetail = {
+      ...baseDigest,
+      sections: [
+        {
+          heading: "Agents learn to talk",
+          anchor: "agents-learn-to-talk",
+          lede: "Voice sessions everywhere.",
+          // "r3" isn't in `digest.releases` (e.g. suppressed after the
+          // digest was generated) — the shown count should still be 2, not 3.
+          releaseIds: ["r1", "r2", "r3"],
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <LatestDigestHero slug="coding-agents" digest={digestWithUnresolvedId} earlier={[]} />,
+    );
+    expect(html).toContain("2 releases");
+    // Word-boundary check: `digest.releaseCount` is 13, and "13 releases
+    // covered" legitimately contains the substring "3 releases".
+    expect(html).not.toMatch(/\b3 releases\b/);
+  });
+
   test('no "In this issue" column when sections is undefined', () => {
     const digestNoSections: CollectionWeeklyDigestDetail = {
       ...baseDigest,

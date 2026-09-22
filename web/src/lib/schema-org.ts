@@ -373,7 +373,11 @@ export function buildOverviewCitationJsonLd(
   opts: { orgName: string; aboutId: string; dateModified?: string | null },
 ): Record<string, unknown> | null {
   const urls = Array.from(
-    new Set((citations ?? []).map((c) => c.sourceUrl).filter((u): u is string => !!u)),
+    new Set(
+      (citations ?? [])
+        .map((c) => c.sourceUrl?.trim())
+        .filter((u): u is string => !!u && /^https?:\/\//i.test(u)),
+    ),
   );
   if (urls.length === 0) return null;
   return {
