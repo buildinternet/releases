@@ -1334,9 +1334,35 @@ export interface SemanticAlert {
   updatedAt: string;
 }
 
+/**
+ * Claimed-match activity for one alert (#2320). Counts are rows in
+ * `semantic_alert_matches` (notified matches only — below-threshold scores
+ * are not stored). Present on list and notifications-bootstrap rows.
+ */
+export interface SemanticAlertActivity {
+  /** Matches in the last 7 days. Included in `matches30d`. */
+  matches7d: number;
+  /** Matches in the last 30 days. */
+  matches30d: number;
+  /** Newest claim, or null when the alert has never matched. */
+  lastMatchedAt: string | null;
+  /** Newest claim's release, when that row still exists. */
+  lastMatch: {
+    releaseId: string;
+    title: string;
+    /** Canonical site path, `/release/rel_…`. */
+    path: string;
+  } | null;
+}
+
+/** A list row: the saved alert plus recent match activity. */
+export interface SemanticAlertListItem extends SemanticAlert {
+  activity: SemanticAlertActivity;
+}
+
 /** GET /v1/me/semantic-alerts. `candidatePool` is the locked v1 scope. */
 export interface SemanticAlertListResponse {
-  alerts: SemanticAlert[];
+  alerts: SemanticAlertListItem[];
   candidatePool: typeof SEMANTIC_ALERT_CANDIDATE_POOL;
   maxAlerts: number;
 }
@@ -1352,7 +1378,7 @@ export interface NotificationSettingsResponse {
   cadence: DigestCadence;
   feedToken: FeedToken | null;
   webhooks: UserWebhookListItem[];
-  semanticAlerts: SemanticAlert[] | null;
+  semanticAlerts: SemanticAlertListItem[] | null;
 }
 
 /**
