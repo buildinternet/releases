@@ -196,7 +196,7 @@ function PreviewResultView({ result }: { result: PreviewResult }) {
     result.matcher.status === "scored"
       ? `${result.matcher.matches.filter((hit) => hit.matched).length} match${result.matcher.matches.filter((hit) => hit.matched).length === 1 ? "" : "es"} of ${result.matcher.matches.length} scored`
       : result.matcher.status === "unavailable"
-        ? "Matcher is not wired yet (Phase 2). Inserts and events still ran."
+        ? `Matcher unavailable${result.matcher.reason ? ` (${result.matcher.reason})` : ""}. Inserts and events still ran.`
         : result.matcher.status === "error"
           ? "Matcher failed closed. Inserts and events still ran."
           : "Matching skipped.";
@@ -213,12 +213,12 @@ function PreviewResultView({ result }: { result: PreviewResult }) {
       {result.source.followsEligible ? (
         <p className="text-sm text-stone-600 dark:text-stone-400">
           Follow <code>{result.follow.slug}</code> so these releases sit in that account&apos;s
-          candidate pool once matching is live.
+          follows-scoped candidate pool.
         </p>
       ) : (
         <p className="text-sm text-stone-600 dark:text-stone-400">
-          This source is hidden, so the follow feed (and the Phase 2 candidate pool) will not see
-          these rows.
+          This source is hidden, so the follow feed (and the semantic-alert candidate pool) will not
+          see these rows.
         </p>
       )}
       <ul className="divide-y divide-stone-200 border border-stone-200 dark:divide-stone-800 dark:border-stone-800">

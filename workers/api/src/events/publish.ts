@@ -6,6 +6,7 @@ import type { ReleaseFanoutMessage } from "../queues/types.js";
 import { newLocalEventId } from "@buildinternet/releases-core/id";
 import type { ReleaseEvent } from "./types.js";
 import { logEvent } from "@releases/lib/log-event";
+import { runSemanticAlertMatch, type SemanticAlertEnv } from "../semantic-alerts/run.js";
 
 export interface PublishContext {
   src: {
@@ -80,11 +81,9 @@ async function resolveSourceContext(
   }
 }
 
-export interface PublishEnv {
+export interface PublishEnv extends SemanticAlertEnv {
   RELEASE_HUB: DurableObjectNamespace;
-  WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   RELEASE_EVENTS_QUEUE?: Queue<ReleaseFanoutMessage>;
-  DB?: D1Database;
   /** Web origin for building each payload's slugged `webUrl` (#1906). */
   WEB_BASE_URL?: string;
 }
@@ -93,8 +92,10 @@ export interface PublishEnv {
  * Publish release.created events:
  *   1. To ReleaseHub (WebSocket fan-out + ring buffer).
  *   2. To webhook-delivery queue (per-subscription fan-out).
+ *   3. Semantic-alert matching (follows prefilter, then JEV). Skipped entirely
+ *      when `semantic-alerts-enabled` is off. Errors are logged, never thrown.
  *
- * Both branches are fire-and-forget. Caller already wraps this in
+ * All branches are fire-and-forget. Caller already wraps this in
  * ctx.waitUntil(). Errors are logged, never thrown.
  */
 export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext): Promise<void> {
@@ -173,5 +174,13 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
       ? fanoutWebhooks(env, events, eventOwners, env.RELEASE_EVENTS_QUEUE)
       : Promise.resolve();
 
-  await Promise.all([hubPublish, webhookFanout]);
+  const semanticAlerts = runSemanticAlertMatch(env, {
+    sourceName: ctx.src.name,
+    sourceId: ctx.src.sourceId,
+    orgId: ctx.src.orgId,
+    productId: ctx.src.productId ?? null,
+    releases: events.map((event) => ({ id: event.release.id, event })),
+  });
+
+  await Promise.all([hubPublish, webhookFanout, semanticAlerts]);
 }

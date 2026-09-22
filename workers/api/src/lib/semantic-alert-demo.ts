@@ -337,6 +337,7 @@ type MatchFn = (
     sourceId: string;
     orgId: string | null;
   }>,
+  env: BatchIngestEnv & BatchEffectsEnv,
 ) => Promise<SemanticAlertMatchPreview>;
 
 function isUniqueConflict(err: unknown): boolean {
@@ -645,6 +646,7 @@ export async function runSemanticAlertPreview(
           sourceId: target.source.id,
           orgId: target.source.orgId,
         })),
+        env,
       );
       matcher = {
         status: scored.status,

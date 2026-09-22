@@ -1,9 +1,9 @@
 /**
  * Self-serve semantic alert routes at `/v1/me/semantic-alerts`.
  *
- * Phase 1 of #2304: store the freeform interest and delivery preferences.
- * No scoring, no JEV, no fanout. Query text is user-private — do not log it
- * and do not write it to Analytics Engine.
+ * #2304: store the freeform interest and delivery preferences. Matching and
+ * delivery run from publish, not from these routes. Query text is
+ * user-private — do not log it and do not write it to Analytics Engine.
  *
  * Gated like follows: production mounts these handlers behind
  * `requireFollowsPrincipal` (session or user Bearer). Handlers still check
@@ -48,7 +48,7 @@ import {
 export const meSemanticAlertHandlers = new Hono<Env>();
 
 const LANE_DESCRIPTION =
-  "Signed-in semantic alerts (#2304). Phase 1 stores the freeform interest and delivery preferences only — nothing is scored or delivered. When matching ships, the candidate pool is follows-only (releases that already match the caller's follow graph), one JEV decision per release with a question per enabled alert. Default threshold is 0.80 (allowed 0.50–1.00). At most 5 alerts per account. Query text is user-private and is never written to Analytics Engine. Requires a Better Auth session or a user Bearer token (`relu_` or OAuth JWT); machine `relk_` tokens and anonymous callers are refused. Returns 404 when `semantic-alerts-enabled` is off.";
+  "Signed-in semantic alerts (#2304). Stores a freeform interest and email/webhook preferences. Matching runs after release.created for releases already on the caller's follow graph: one JEV decision per release, one question per enabled alert, notify when the matches-interest probability is at least the alert threshold (default 0.80, allowed 0.50–1.00). At most 5 alerts per account. Query text is user-private and is never written to Analytics Engine. Requires a Better Auth session or a user Bearer token (`relu_` or OAuth JWT); machine `relk_` tokens and anonymous callers are refused. Returns 404 when `semantic-alerts-enabled` is off.";
 
 const alertSchema = {
   type: "object",

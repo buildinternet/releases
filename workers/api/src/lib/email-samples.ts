@@ -14,6 +14,7 @@ import {
   type AuthEmailEnv,
 } from "../auth/email.js";
 import { buildDigestEmail } from "./digest-email.js";
+import { buildSemanticAlertEmail } from "./semantic-alert-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
 import { formatPollFetchAlert } from "./poll-fetch-alert.js";
 import {
@@ -46,6 +47,7 @@ export type EmailSampleId =
   | "auth.magic-link"
   | "digest.daily"
   | "digest.weekly"
+  | "alert.semantic-match"
   | "recommendation.ack"
   | "recommendation.added"
   | "listing.claim-verified"
@@ -102,6 +104,12 @@ export const EMAIL_SAMPLE_CATALOG: EmailSampleMeta[] = [
     id: "digest.weekly",
     label: "Follow digest (weekly)",
     description: "Weekly variant of the follow digest",
+    channel: "auth",
+  },
+  {
+    id: "alert.semantic-match",
+    label: "Semantic alert match",
+    description: "A followed release matched a freeform interest alert",
     channel: "auth",
   },
   {
@@ -361,6 +369,16 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
         referenceDate: new Date().toISOString(),
       });
     }
+    case "alert.semantic-match":
+      return buildSemanticAlertEmail({
+        recipientName: "Admin",
+        query: "Slack integrations with B2B software",
+        releaseTitle: "Slack for finance teams",
+        sourceName: "Example Changelog",
+        summary: "Connect Slack channels to approval workflows.",
+        releaseUrl: `${web}/release/rel_sample-slack-for-finance-teams`,
+        manageUrl: `${web}/account/notifications`,
+      });
     case "recommendation.ack":
       return formatRecommendationAckEmail(SAMPLE_RECOMMENDATION, web);
     case "recommendation.added":

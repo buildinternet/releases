@@ -58,3 +58,37 @@ export interface DecisionModel {
     request: DecisionModelRequest<OPTION>,
   ): Promise<DecisionModelResult<OPTION>>;
 }
+
+/**
+ * One yes/no question on a shared state. The AI SDK spells this `boolean`;
+ * JEV and OpenRouter's Decisions API spell it `noul`. `criteria.true` is the
+ * positive option. The answer probability is P(true) — the selected-choice
+ * probability of that option, not provider confidence.
+ */
+export interface NoulQuestion {
+  id: string;
+  instructions: string;
+  criteria: { true: string; false: string };
+}
+
+export interface NoulAnswer {
+  id: string;
+  /** P(true). Absent when the provider omits it or returns a non-finite value. */
+  probability?: number;
+}
+
+export interface NoulBatchRequest {
+  state: string;
+  questions: NoulQuestion[];
+}
+
+export interface NoulBatchResult {
+  answers: NoulAnswer[];
+  usage: DecisionModelUsage;
+}
+
+/** Multi-question noul call. One shared state, one provider round trip. */
+export interface NoulBatchModel {
+  readonly id: string;
+  decideNoul(request: NoulBatchRequest): Promise<NoulBatchResult>;
+}

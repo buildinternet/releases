@@ -71,7 +71,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 
 - **[web.md](architecture/web.md)** — the frontend feature reference: product-first URLs, changelog slicing, OG images, org overviews, categories, collections, the media/video pipeline, follows, and the admin hub.
 - **[webhooks.md](webhooks.md)** — the public subscriber contract: delivery headers, HMAC verification (with code samples), retries and DLQ.
-- **[semantic-alerts.md](architecture/semantic-alerts.md)** — freeform interest alerts (#2304): Phase 1 preference store, account UI, and the admin preview that inserts synthetic releases through `release.created`. The JEV matcher is Phase 2.
+- **[semantic-alerts.md](architecture/semantic-alerts.md)** — freeform interest alerts (#2304): follows-only JEV matching, webhook and email delivery, the account preference UI, and the admin preview that inserts synthetic releases through `release.created`.
 - **[mcp.md](architecture/mcp.md)** — the hosted MCP server: the tool/resource/prompt catalog, auth and scope enforcement, App UIs, and the MCP Registry listing.
 - **[mcp-cimd-interop.md](architecture/mcp-cimd-interop.md)** — generic MCP client OAuth (MCPJam-class): DCR extra `grant_types`, kitchen-sink `scope=`, origin vs `/mcp` resource, forwarded Bearer `aud` on REST.
 - **[workspaces.md](architecture/workspaces.md)** — user-tenancy Workspaces. Not the registry `organizations` — the doc opens with exactly that warning.

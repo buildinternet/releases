@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { user } from "../src/db/schema-auth.js";
+import { userFollows } from "../src/db/schema-follows.js";
+import { semanticAlerts } from "../src/db/schema-semantic-alerts.js";
 import { adminSemanticAlertsRoutes } from "../src/routes/admin-semantic-alerts.js";
 import { adminRoutes } from "../src/route-namespaces.js";
 import {
@@ -256,7 +258,7 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
     expect(hubBodies).toHaveLength(0);
   });
 
-  it("reports the matcher as unavailable until Phase 2 wires it", async () => {
+  it("scores an empty candidate set once the matcher is wired", async () => {
     await h.db.insert(user).values({
       id: "user_preview",
       name: "Preview",
@@ -272,11 +274,58 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
+      matcher: { status: string; reason?: string; userId: string; matches: unknown[] };
+    };
+    expect(body.matcher.status).toBe("scored");
+    expect(body.matcher.matches).toEqual([]);
+    expect(body.matcher.userId).toBe("user_preview");
+    expect(body.matcher.reason).toBeUndefined();
+  });
+
+  it("reports model_unavailable when eligible alerts exist but OpenRouter is unbound", async () => {
+    await h.db.insert(user).values({
+      id: "user_model",
+      name: "Model",
+      email: "model@example.com",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const bootstrap = await post("/v1/admin/semantic-alerts/preview", { count: 1, seed: "boot" });
+    expect(bootstrap.status).toBe(200);
+    const bootBody = (await bootstrap.json()) as { follow: { targetId: string } };
+    const now = new Date();
+    await h.db.insert(userFollows).values({
+      id: "uf_model_org",
+      userId: "user_model",
+      targetType: "org",
+      targetId: bootBody.follow.targetId,
+      createdAt: now,
+    });
+    await h.db.insert(semanticAlerts).values({
+      id: "sal_model",
+      userId: "user_model",
+      query: "Slack integrations with B2B software",
+      enabled: true,
+      threshold: 0.8,
+      deliverEmail: true,
+      deliverWebhook: false,
+      webhookSubscriptionId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const res = await post("/v1/admin/semantic-alerts/preview", {
+      count: 1,
+      userId: "user_model",
+      seed: "model",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
       matcher: { status: string; reason?: string; userId: string };
     };
     expect(body.matcher.status).toBe("unavailable");
-    expect(body.matcher.reason).toBe("matcher_not_wired");
-    expect(body.matcher.userId).toBe("user_preview");
+    expect(body.matcher.reason).toBe("model_unavailable");
+    expect(body.matcher.userId).toBe("user_model");
   });
 
   it("returns scored matches when a matcher is injected", async () => {
@@ -297,7 +346,7 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
         seed: "scored",
       },
       {
-        match: async (_db, _userId, rows) => ({
+        match: async (_db, _userId, rows, _env) => ({
           status: "scored",
           matches: [
             {

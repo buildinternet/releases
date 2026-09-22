@@ -302,8 +302,8 @@ export const FLAGS = {
     description:
       "Self-serve Tier-1 promotion for verified owners (/v1/listing/promote). Off = route refuses. Creates live fetching sources, so this is a genuine incident lever distinct from the zero-cost listing lane.",
   },
-  // #2304 Phase 1 stores preferences only. The flag stays a kill switch so the
-  // later matcher can be shut off without touching structural follow webhooks.
+  // #2304. Off skips CRUD and the release.created matcher. Structural follow
+  // webhooks keep working either way.
   semanticAlertsEnabled: {
     key: "semantic-alerts-enabled",
     env: "SEMANTIC_ALERTS_ENABLED",
@@ -311,7 +311,7 @@ export const FLAGS = {
     kind: "kill-switch",
     reads: ["api"],
     description:
-      "Semantic-alert preferences for signed-in users (/v1/me/semantic-alerts, #2304). Off = routes 404 and the account UI hides the section. Does not score or deliver matches.",
+      "Semantic alerts (#2304). Off = /v1/me/semantic-alerts 404, the account UI hides the section, and the release matcher does not run. On = preferences plus follows-only JEV matching with webhook and email. Structural follow webhooks are unaffected.",
   },
 } as const satisfies Record<string, FlagDef>;
 
