@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 21, 2026
+
+**Added**
+- Classification analytics on the admin status page — a new Classifications tab shows marketing-classifier decisions over time broken down by model, choice, and probability; every ingest event that runs the classifier is recorded so operators can monitor suppression rates and spot model drift across any time window.
+
 ## September 17, 2026
 
 **Added**
