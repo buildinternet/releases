@@ -19,11 +19,14 @@ haven't created one before.
 
 ## 2. Connect it on Releases Index
 
-Open [Webhooks & API](/account/webhooks), set **Format** to **Discord message**, paste the webhook
-URL, and click **Create**. Choose **Follows** for everything you follow, or **Org** for a single
-organization.
+Open [Notifications](/account/notifications), find the **Slack & Discord** section, pick
+**Discord**, paste the webhook URL, and click **Connect**. You'll get a Discord message for
+everything you follow.
 
-Use the **Send test** button to post a sample embed and confirm the channel is wired up.
+Use the **Test** button to post a sample embed and confirm the channel is wired up.
+
+For a single organization instead, open [Webhooks & API](/account/webhooks), set **Format** to
+**Discord message**, choose **Org**, and click **Create**.
 
 ## What the message looks like
 
