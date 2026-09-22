@@ -21,6 +21,18 @@ Internal refactors, test changes, CI/build/tooling, dependency bumps, schema mig
 directly enable a user feature — then describe the feature, not the migration), logging, code
 cleanup, non-user-facing docs, and anything unreleased / flag-gated that wasn't actually shipped.
 
+**Operator-only changes are internal too.** The reader uses releases.sh; they don't run it. Leave
+out anything only the releases.sh team would see or use:
+
+- The admin hub (`/admin/*`), the Status dashboard, and admin-only menus and controls.
+- `releases admin …` CLI commands and admin-scoped API routes.
+- Operator emails, alerts, and digests (staleness, quota, and health reports).
+- Curation and moderation tools: recommendations, source review, model or lane settings, backfills.
+
+The test: would someone who never signs in as a releases.sh admin notice this change? If not, drop
+it. Roles inside a user's own workspace (owner, admin, member) are user-facing. "Admin" there means
+the customer's admin, not ours.
+
 ## Conventional-commit prior
 
 `feat` and `fix` PRs are candidates; `chore` / `test` / `refactor` / `docs` / `perf` are dropped by
@@ -39,7 +51,8 @@ is unclear.
 ## Guardrails
 
 No PR numbers, no commit hashes, no internal file/function names, no conventional-commit prefixes,
-no competitor-named bug call-outs, and never mention features that weren't actually shipped.
+no competitor-named bug call-outs, no operator/admin tooling (see Exclude), and never mention
+features that weren't actually shipped.
 
 ## Reference
 
