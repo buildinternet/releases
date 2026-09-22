@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SemanticAlert } from "@buildinternet/releases-api-types";
+import type { SemanticAlert } from "@/lib/semantic-alerts";
 import { SemanticAlertsSection } from "./semantic-alerts-section.tsx";
 
 function alert(overrides: Partial<SemanticAlert> = {}): SemanticAlert {

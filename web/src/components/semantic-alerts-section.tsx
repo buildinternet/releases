@@ -1,14 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { SemanticAlert, UserWebhookListItem } from "@buildinternet/releases-api-types";
-import {
-  SEMANTIC_ALERT_MAX_PER_USER,
-  SEMANTIC_ALERT_QUERY_MAX_CHARS,
-  SEMANTIC_ALERT_THRESHOLD_DEFAULT,
-  SEMANTIC_ALERT_THRESHOLD_MAX,
-  SEMANTIC_ALERT_THRESHOLD_MIN,
-} from "@buildinternet/releases-api-types";
 import {
   ErrorText,
   Toggle,
@@ -19,12 +11,19 @@ import {
   textareaClass,
 } from "@releases/design-system";
 import {
+  SEMANTIC_ALERT_MAX_PER_USER,
+  SEMANTIC_ALERT_QUERY_MAX_CHARS,
+  SEMANTIC_ALERT_THRESHOLD_DEFAULT,
+  SEMANTIC_ALERT_THRESHOLD_MAX,
+  SEMANTIC_ALERT_THRESHOLD_MIN,
   createSemanticAlert,
   deleteSemanticAlert,
   updateSemanticAlert,
+  type SemanticAlert,
+  type SemanticAlertWebhookOption,
 } from "@/lib/semantic-alerts";
 
-function webhookLabel(hook: UserWebhookListItem): string {
+function webhookLabel(hook: SemanticAlertWebhookOption): string {
   if (hook.description?.trim()) return hook.description.trim();
   if (hook.scope === "follows") return "Follows webhook";
   return hook.orgName ?? hook.orgSlug ?? "Webhook";
@@ -40,7 +39,7 @@ export function SemanticAlertsSection({
   webhooks,
 }: {
   alerts: SemanticAlert[];
-  webhooks: UserWebhookListItem[];
+  webhooks: SemanticAlertWebhookOption[];
 }) {
   const [alerts, setAlerts] = useState(initialAlerts);
   const [query, setQuery] = useState("");
