@@ -135,11 +135,13 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
       source: {
         id: string;
         slug: string;
+        orgId: string;
         orgSlug: string;
         demo: boolean;
         followsEligible: boolean;
       };
       releases: Array<{ id: string; title: string; theme: string }>;
+      follow: { targetType: string; targetId: string; slug: string; ensured: boolean };
       matcher: { status: string; reason?: string; userId: string | null; matches: unknown[] };
       cleanup: { path: string; sourceId: string };
     };
@@ -150,12 +152,19 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
     expect(body.source.followsEligible).toBe(true);
     expect(body.source.orgSlug).toBe(SEMANTIC_ALERT_DEMO_ORG_SLUG);
     expect(body.source.slug).toBe(SEMANTIC_ALERT_DEMO_SOURCE_SLUG);
+    expect(body.follow).toEqual({
+      targetType: "org",
+      targetId: body.source.orgId,
+      slug: SEMANTIC_ALERT_DEMO_ORG_SLUG,
+      ensured: false,
+    });
     expect(body.matcher).toEqual({
       status: "skipped",
       reason: "user_not_requested",
       userId: null,
       matches: [],
     });
+    expect(await h.db.select().from(userFollows)).toHaveLength(0);
     expect(body.cleanup.sourceId).toBe(body.source.id);
 
     const rows = await h.db.select().from(releases).where(eq(releases.sourceId, body.source.id));
@@ -255,6 +264,7 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
     const res = await post("/v1/admin/semantic-alerts/preview", { count: 1, userId: "missing" });
     expect(res.status).toBe(404);
     expect(await h.db.select().from(releases)).toHaveLength(0);
+    expect(await h.db.select().from(userFollows)).toHaveLength(0);
     expect(hubBodies).toHaveLength(0);
   });
 
@@ -274,12 +284,129 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
+      follow: { ensured: boolean; targetId: string };
       matcher: { status: string; reason?: string; userId: string; matches: unknown[] };
     };
     expect(body.matcher.status).toBe("scored");
     expect(body.matcher.matches).toEqual([]);
     expect(body.matcher.userId).toBe("user_preview");
     expect(body.matcher.reason).toBeUndefined();
+    expect(body.follow.ensured).toBe(true);
+    const follows = await h.db.select().from(userFollows);
+    expect(follows).toHaveLength(1);
+    expect(follows[0]?.userId).toBe("user_preview");
+    expect(follows[0]?.targetType).toBe("org");
+    expect(follows[0]?.targetId).toBe(body.follow.targetId);
+  });
+
+  it("upserts the demo-org follow so an existing alert is eligible to score", async () => {
+    const now = new Date();
+    await h.db.insert(user).values({
+      id: "user_follow",
+      name: "Follow",
+      email: "follow@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await h.db.insert(semanticAlerts).values({
+      id: "sal_follow",
+      userId: "user_follow",
+      query: "Slack integrations with B2B software",
+      enabled: true,
+      threshold: 0.8,
+      deliverEmail: true,
+      deliverWebhook: false,
+      webhookSubscriptionId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await post("/v1/admin/semantic-alerts/preview", {
+      count: 1,
+      userId: "user_follow",
+      seed: "follow",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      follow: { targetType: string; targetId: string; slug: string; ensured: boolean };
+      matcher: { status: string; reason?: string; userId: string; matches: unknown[] };
+    };
+    expect(body.follow).toEqual({
+      targetType: "org",
+      targetId: body.follow.targetId,
+      slug: SEMANTIC_ALERT_DEMO_ORG_SLUG,
+      ensured: true,
+    });
+    // model_unavailable is only returned after the follows-only prefilter keeps
+    // the release. A missing follow comes back as scored with matches: [].
+    expect(body.matcher.status).toBe("unavailable");
+    expect(body.matcher.reason).toBe("model_unavailable");
+    expect(body.matcher.userId).toBe("user_follow");
+    expect(body.matcher.matches).toEqual([]);
+
+    const follows = await h.db.select().from(userFollows);
+    expect(follows).toHaveLength(1);
+    expect(follows[0]).toMatchObject({
+      userId: "user_follow",
+      targetType: "org",
+      targetId: body.follow.targetId,
+    });
+
+    const again = await post("/v1/admin/semantic-alerts/preview", {
+      count: 1,
+      userId: "user_follow",
+      seed: "follow-again",
+    });
+    expect(again.status).toBe(200);
+    const againBody = (await again.json()) as { follow: { ensured: boolean } };
+    expect(againBody.follow.ensured).toBe(true);
+    expect(await h.db.select().from(userFollows)).toHaveLength(1);
+  });
+
+  it("does not follow an explicit source when userId is set", async () => {
+    const now = new Date();
+    await h.db.insert(user).values({
+      id: "user_explicit",
+      name: "Explicit",
+      email: "explicit@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await h.db.insert(organizations).values({
+      id: "org_nofollow00000000001",
+      slug: "acme",
+      name: "Acme",
+    });
+    await h.db.insert(sources).values({
+      id: "src_nofollow00000000001",
+      orgId: "org_nofollow00000000001",
+      slug: "changelog",
+      name: "Acme changelog",
+      type: "feed",
+      url: "https://acme.example/changelog",
+    });
+
+    const res = await post("/v1/admin/semantic-alerts/preview", {
+      count: 1,
+      sourceId: "acme/changelog",
+      userId: "user_explicit",
+      seed: "nofollow",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      follow: { targetType: string; targetId: string; slug: string; ensured: boolean };
+      source: { demo: boolean };
+    };
+    expect(body.source.demo).toBe(false);
+    expect(body.follow).toEqual({
+      targetType: "org",
+      targetId: "org_nofollow00000000001",
+      slug: "acme",
+      ensured: false,
+    });
+    expect(await h.db.select().from(userFollows)).toHaveLength(0);
   });
 
   it("reports model_unavailable when eligible alerts exist but OpenRouter is unbound", async () => {
@@ -360,6 +487,7 @@ describe("POST /v1/admin/semantic-alerts/preview", () => {
         }),
       },
     );
+    expect(result.follow.ensured).toBe(true);
     expect(result.matcher.status).toBe("scored");
     expect(result.matcher.matches).toEqual([
       {
@@ -414,6 +542,31 @@ describe("POST /v1/admin/semantic-alerts/purge", () => {
 
     const remaining = await h.db.select().from(releases);
     expect(remaining.map((row) => row.id)).toEqual(["rel_real000000000000001"]);
+  });
+
+  it("does not unfollow the demo org", async () => {
+    const now = new Date();
+    await h.db.insert(user).values({
+      id: "user_purge",
+      name: "Purge",
+      email: "purge@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await post("/v1/admin/semantic-alerts/preview", {
+      count: 1,
+      userId: "user_purge",
+      seed: "purge-follow",
+    });
+    expect(created.status).toBe(200);
+
+    const res = await post("/v1/admin/semantic-alerts/purge", {});
+    expect(res.status).toBe(200);
+    const follows = await h.db.select().from(userFollows);
+    expect(follows).toHaveLength(1);
+    expect(follows[0]?.userId).toBe("user_purge");
+    expect(follows[0]?.targetType).toBe("org");
   });
 
   it("all:true removes flagged rows on every source", async () => {
