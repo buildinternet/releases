@@ -46,9 +46,8 @@ export function buildSemanticAlertEmail(
   }
   blocks.push({
     t: "fine",
-    text: "Turn this alert off or edit it from your notification settings.",
+    text: `Turn this alert off or edit it from your notification settings. [Manage alerts](${input.manageUrl}).`,
   });
-  blocks.push({ t: "button", label: "Manage alerts", url: input.manageUrl });
 
   const { html, text } = renderEmail({
     lane: "Alerts · Interest",
@@ -57,8 +56,7 @@ export function buildSemanticAlertEmail(
     blocks,
     footer: {
       reason:
-        "You received this because a release from something you follow matched a semantic alert on your Releases Index account.",
-      links: [{ label: "Manage alerts", href: input.manageUrl }],
+        "You received this because a release from something you follow matched an interest alert on your Releases Index account.",
     },
   });
   return { subject: `A release matched your alert: ${short}`, text, html };

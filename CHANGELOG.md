@@ -3,6 +3,16 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 22, 2026
+
+**Added**
+
+Interest alerts let you describe what you care about in plain language, and hear about it when a release you already follow matches.
+
+Write the interest the way you would say it — "Slack integrations with B2B software" is enough. Releases Index looks only at releases from the organizations and products you follow. When a new release matches, you get an email, a webhook, or both. The default confidence is 0.80, which you can raise or lower, and you can keep up to five interests. The words you write stay private to your account.
+
+Turn one on from Account → Notifications. Follows, the digest, and webhooks still cover every release you follow. An interest alert sits beside them, as the note for the release that is actually about the thing you named.
+
 ## September 17, 2026
 
 **Added**
