@@ -59,18 +59,18 @@ describe("marketing decisions", () => {
     "positioning_piece",
     "localized_marketing",
   ]) {
-    it(`suppresses ${reason} at exactly 0.80 even with low provider confidence`, async () => {
-      expect(await classifyMarketing(decision(reason, 0.8, 0.1), input)).toEqual({
+    it(`suppresses ${reason} at exactly the default threshold (0.65) even with low provider confidence`, async () => {
+      expect(await classifyMarketing(decision(reason, 0.65, 0.1), input)).toEqual({
         isMarketing: true,
         reason,
-        decision: { choice: reason, selectedChoiceProbability: 0.8, providerConfidence: 0.1 },
+        decision: { choice: reason, selectedChoiceProbability: 0.65, providerConfidence: 0.1 },
         usage: { input: 12, output: 2, cacheCreate: 0, cacheRead: 0, costUsd: 0.001 },
       });
     });
   }
 
   for (const [choice, probability, confidence] of [
-    ["case_study", 0.79, 0.98],
+    ["case_study", 0.64, 0.98],
     ["unclear_other", 0.95, 0.12],
   ] as const) {
     it(`retains the selected choice and distinct diagnostics when keeping ${choice}`, async () => {
@@ -88,6 +88,18 @@ describe("marketing decisions", () => {
     });
   }
 
+  it("uses opts.threshold instead of the default when provided", async () => {
+    // 0.7 is below the legacy 0.80 threshold but at/above the new 0.65 default.
+    expect(
+      (await classifyMarketing(decision("case_study", 0.7, 1), input, { threshold: 0.65 }))
+        .isMarketing,
+    ).toBe(true);
+    expect(
+      (await classifyMarketing(decision("case_study", 0.7, 1), input, { threshold: 0.8 }))
+        .isMarketing,
+    ).toBe(false);
+  });
+
   it("does not fabricate missing or nonfinite diagnostic scores", async () => {
     const model: DecisionModel = {
       id: "test",
@@ -100,7 +112,7 @@ describe("marketing decisions", () => {
   });
 
   for (const [choice, probability] of [
-    ["case_study", 0.799999],
+    ["case_study", 0.649999],
     ["case_study", undefined],
     ["case_study", NaN],
     ["case_study", Infinity],

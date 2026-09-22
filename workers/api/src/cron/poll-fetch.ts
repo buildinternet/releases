@@ -97,10 +97,12 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { newReleaseId } from "@buildinternet/releases-core/id";
 import {
   classifyMarketing,
+  MARKETING_SUPPRESSION_THRESHOLD,
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
 import { splitModelId } from "@releases/ai-internal/text-model";
 import { resolveMarketingModel, type TextModelEnv } from "../lib/text-model.js";
+import { loadMarketingThreshold } from "../lib/marketing-classifier-settings.js";
 import {
   writeClassificationPoint,
   type ClassificationDataset,
@@ -1223,6 +1225,8 @@ interface MarketingClassificationPass {
   hits: Map<number, MarketingClassifierResult>;
   /** One disposition per index from `selectNewReleaseIndices`. */
   records: MarketingClassificationRecord[];
+  /** Effective threshold used for this pass — stamped on every point. */
+  threshold: number;
 }
 
 function skippedMarketingRecords(
@@ -1258,14 +1262,17 @@ async function classifyMarketingForReleases(
   env: FetchOneEnv,
 ): Promise<MarketingClassificationPass> {
   const hits = new Map<number, MarketingClassifierResult>();
-  if (rawReleases.length === 0) return { hits, records: [] };
+  // Operator-editable overlay (site_settings, ~30s isolate cache); resolved
+  // once per pass and stamped on every point this pass writes.
+  const threshold = await loadMarketingThreshold(env.DB);
+  if (rawReleases.length === 0) return { hits, records: [], threshold };
 
   // Only the items an insert would actually persist are worth classifying;
   // the rest are re-listed feed entries we already have. Counting the whole
   // window against the cap is what let marketing slip through on high-volume
   // feeds (see selectNewReleaseIndices).
   const newIndices = await selectNewReleaseIndices(db, source.id, rawReleases);
-  if (newIndices.length === 0) return { hits, records: [] };
+  if (newIndices.length === 0) return { hits, records: [], threshold };
 
   if (newIndices.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
     logEvent("warn", {
@@ -1275,7 +1282,7 @@ async function classifyMarketingForReleases(
       candidateCount: newIndices.length,
       cap: MARKETING_CLASSIFIER_MAX_PER_FIRE,
     });
-    return { hits, records: skippedMarketingRecords(newIndices, "cap_tripped") };
+    return { hits, records: skippedMarketingRecords(newIndices, "cap_tripped"), threshold };
   }
 
   let suppressedCount = 0;
@@ -1297,7 +1304,7 @@ async function classifyMarketingForReleases(
       event: "marketing-filter-no-api-key",
       sourceSlug: source.slug,
     });
-    return { hits, records: skippedMarketingRecords(newIndices, "no_provider") };
+    return { hits, records: skippedMarketingRecords(newIndices, "no_provider"), threshold };
   }
 
   const { provider, model: modelName } = splitModelId(model.id);
@@ -1309,14 +1316,18 @@ async function classifyMarketingForReleases(
       const itemStarted = Date.now();
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent inference load per cron fire; the prompt cache hit doesn't depend on ordering
-        const verdict = await classifyMarketing(model, {
-          sourceName: source.name,
-          title: raw.title,
-          content: raw.content,
-          url: raw.url ?? null,
-          hint: meta.marketingFilterHint ?? null,
-          sourceId: source.id,
-        });
+        const verdict = await classifyMarketing(
+          model,
+          {
+            sourceName: source.name,
+            title: raw.title,
+            content: raw.content,
+            url: raw.url ?? null,
+            hint: meta.marketingFilterHint ?? null,
+            sourceId: source.id,
+          },
+          { threshold },
+        );
         inputTokens += verdict.usage.input;
         cacheCreateTokens += verdict.usage.cacheCreate;
         cacheReadTokens += verdict.usage.cacheRead;
@@ -1382,7 +1393,7 @@ async function classifyMarketingForReleases(
       sourceSlug: source.slug,
       err,
     });
-    return { hits, records };
+    return { hits, records, threshold };
   }
 
   logEvent("info", {
@@ -1390,6 +1401,7 @@ async function classifyMarketingForReleases(
     event: "marketing-filter-applied",
     sourceSlug: source.slug,
     modelId: model.id,
+    threshold,
     classified: newIndices.length,
     suppressed: suppressedCount,
     failed: failedCount,
@@ -1401,7 +1413,7 @@ async function classifyMarketingForReleases(
     durationMs: Date.now() - startedAt,
   });
 
-  return { hits, records };
+  return { hits, records, threshold };
 }
 
 /** Best-effort. A thrown write never fails the insert that already committed. */
@@ -1411,6 +1423,7 @@ function writeInsertedMarketingPoints(
   records: readonly MarketingClassificationRecord[],
   idByIndex: ReadonlyMap<number, string>,
   returnedIds: ReadonlySet<string>,
+  threshold: number,
 ): void {
   for (const record of pointsForInserted(records, idByIndex, returnedIds)) {
     writeClassificationPoint(
@@ -1420,6 +1433,7 @@ function writeInsertedMarketingPoints(
         origin: "ingest",
         releaseId: record.releaseId,
         sourceId,
+        threshold,
       }),
     );
   }
@@ -1495,10 +1509,14 @@ export async function ingestRawReleases(
     }
   }
 
-  const marketingPass =
+  const marketingPass: MarketingClassificationPass =
     meta.marketingFilter === true
       ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
-      : { hits: new Map<number, MarketingClassifierResult>(), records: [] };
+      : {
+          hits: new Map<number, MarketingClassifierResult>(),
+          records: [],
+          threshold: MARKETING_SUPPRESSION_THRESHOLD,
+        };
   const marketingMap = marketingPass.hits;
 
   const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
@@ -1649,7 +1667,14 @@ export async function ingestRawReleases(
       clusterRows.push({ id: r.id, version: r.version, content });
     }
   }
-  writeInsertedMarketingPoints(env, source.id, marketingPass.records, idByIndex, returnedIds);
+  writeInsertedMarketingPoints(
+    env,
+    source.id,
+    marketingPass.records,
+    idByIndex,
+    returnedIds,
+    marketingPass.threshold,
+  );
   const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
 
   // Detect changesets cascade rows and demote them to coverage so they

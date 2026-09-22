@@ -58,6 +58,7 @@ import {
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
 import { writeClassificationPoint } from "../lib/classification-schema.js";
+import { loadMarketingThreshold } from "../lib/marketing-classifier-settings.js";
 import {
   marketingClassificationInput,
   type MarketingClassificationRecord,
@@ -212,6 +213,7 @@ function writeLaneClassification(
     origin: "manual" | "eval";
     releaseId?: string | null;
     sourceId?: string | null;
+    threshold?: number | null;
   },
 ): void {
   writeClassificationPoint(
@@ -373,6 +375,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
     }
     const releaseId = release?.id ?? null;
     const pointSourceId = source?.id ?? null;
+    const threshold = await loadMarketingThreshold(fetchEnv.DB);
     const model = await resolveMarketingModel(fetchEnv);
     if (!model) {
       writeLaneClassification(
@@ -385,7 +388,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
           model: null,
           durationMs: null,
         },
-        { origin, releaseId, sourceId: pointSourceId },
+        { origin, releaseId, sourceId: pointSourceId, threshold },
       );
       return respondError(
         c,
@@ -404,7 +407,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
     const started = Date.now();
     let verdict: MarketingClassifierResult;
     try {
-      verdict = await runLane(lane, () => classifyMarketing(model, input));
+      verdict = await runLane(lane, () => classifyMarketing(model, input, { threshold }));
     } catch (err) {
       writeLaneClassification(
         c.env,
@@ -416,7 +419,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
           model: modelName,
           durationMs: Date.now() - started,
         },
-        { origin, releaseId, sourceId: pointSourceId },
+        { origin, releaseId, sourceId: pointSourceId, threshold },
       );
       throw err;
     }
@@ -430,7 +433,7 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
         model: modelName,
         durationMs: Date.now() - started,
       },
-      { origin, releaseId, sourceId: pointSourceId },
+      { origin, releaseId, sourceId: pointSourceId, threshold },
     );
 
     let applied = false;

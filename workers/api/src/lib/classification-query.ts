@@ -40,6 +40,7 @@ import {
   type ClassificationOrigin,
 } from "./classification-schema.js";
 import { resolveCloudflareAeCredentials } from "../webhooks/shared.js";
+import { loadMarketingThreshold } from "./marketing-classifier-settings.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RANGE_MS = 100 * DAY_MS;
@@ -123,7 +124,10 @@ export interface ClassificationCacheKv {
 }
 
 export type AeRow = Record<string, unknown>;
-type AeEnv = Parameters<typeof resolveCloudflareAeCredentials>[0] & { ENVIRONMENT?: string };
+type AeEnv = Parameters<typeof resolveCloudflareAeCredentials>[0] & {
+  ENVIRONMENT?: string;
+  DB?: D1Database;
+};
 
 interface HydratedSource {
   name: string;
@@ -570,6 +574,9 @@ export function shapeClassificationSummary(input: {
   choiceSeries: AeRow[];
   models: AeRow[];
   histogram: AeRow[];
+  /** Current effective threshold (operator override, else the code default).
+   *  Falls back to `MARKETING_SUPPRESSION_THRESHOLD` when omitted. */
+  effectiveThreshold?: number;
 }): ClassificationSummary {
   const totals = { kept: 0, suppressed: 0, failed: 0, skipped: 0, costUsd: 0 };
   for (const row of input.totals) {
@@ -637,7 +644,7 @@ export function shapeClassificationSummary(input: {
       .map(([t, choiceCounts]) => ({ t, choices: choiceCounts })),
     models,
     probability: {
-      threshold: MARKETING_SUPPRESSION_THRESHOLD,
+      threshold: input.effectiveThreshold ?? MARKETING_SUPPRESSION_THRESHOLD,
       selected: fillHistogram(histogram, "selected"),
       confidence: fillHistogram(histogram, "confidence"),
     },
@@ -805,6 +812,7 @@ export async function fetchClassificationSummary(
     fetchImpl,
   );
   if (rows instanceof ReleasesError) return rows;
+  const effectiveThreshold = await loadMarketingThreshold(env.DB);
   return shapeClassificationSummary({
     afterIso: query.afterIso,
     beforeIso: query.beforeIso,
@@ -817,6 +825,7 @@ export async function fetchClassificationSummary(
     choiceSeries: rows.choiceSeries ?? [],
     models: rows.models ?? [],
     histogram: rows.histogram ?? [],
+    effectiveThreshold,
   });
 }
 

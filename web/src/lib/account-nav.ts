@@ -23,6 +23,7 @@ import {
   MailIcon,
   ModelIcon,
   PreviewIcon,
+  ShieldIcon,
 } from "@/components/account/icons";
 
 /** Reveal not-yet-wired panels in the sidebar. Flip to true once their backends land. */
@@ -205,6 +206,15 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         group: ADMIN_GROUP_LABEL,
         description: "Pick the OpenRouter model for each AI lane without a deploy.",
         Icon: ModelIcon,
+        ready: true,
+      },
+      {
+        key: "admin-marketing-classifier",
+        label: "Marketing classifier",
+        href: "/admin/classifier",
+        group: ADMIN_GROUP_LABEL,
+        description: "Tune the suppression threshold and per-source marketing filter.",
+        Icon: ShieldIcon,
         ready: true,
       },
       {

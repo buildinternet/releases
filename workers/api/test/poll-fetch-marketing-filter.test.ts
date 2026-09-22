@@ -219,7 +219,7 @@ function makeEnv(opts: { withAnthropic: boolean; points?: ClassificationDataPoin
 describe("fetchOne — metadata.marketingFilter", () => {
   for (const [choice, probability, suppressed, status] of [
     ["case_study", 0.8, true, 200],
-    ["case_study", 0.79, false, 200],
+    ["case_study", 0.64, false, 200],
     ["real_product_news", 1, false, 200],
     ["unclear_other", 1, false, 200],
     ["invented", 1, false, 200],

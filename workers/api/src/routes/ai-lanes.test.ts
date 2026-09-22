@@ -206,8 +206,8 @@ describe("POST /v1/ai/lanes/:lane", () => {
   }
 
   for (const [choice, probability, expected] of [
-    ["case_study", 0.8, true],
-    ["case_study", 0.79, false],
+    ["case_study", 0.65, true],
+    ["case_study", 0.64, false],
     ["real_product_news", 1, false],
     ["unclear_other", 1, false],
     ["invented", 1, false],

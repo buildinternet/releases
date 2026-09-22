@@ -28,8 +28,16 @@ import {
 export const MODEL = "claude-haiku-4-5";
 export type MarketingModel = TextModel | DecisionModel;
 
-/** Selected-choice probability at or above this, and at most 1, suppresses. */
-export const MARKETING_SUPPRESSION_THRESHOLD = 0.8;
+/**
+ * Selected-choice probability at or above this, and at most 1, suppresses.
+ * Default only — operator-editable at runtime via the `marketing_classifier`
+ * site_settings key (see `@releases/core-internal/marketing-classifier-settings`
+ * and `classifyMarketing`'s `opts.threshold`). Lowered from 0.80 to 0.65
+ * (2026-09) from a prod dry-run: every marketing-labeled item scoring
+ * 0.65-0.80 was genuine marketing. Keep this literal in sync with
+ * `DEFAULT_MARKETING_THRESHOLD` in core-internal.
+ */
+export const MARKETING_SUPPRESSION_THRESHOLD = 0.65;
 /** Policy version stamped on marketing classification points. */
 export const MARKETING_POLICY_VERSION = "marketing-v1";
 
@@ -208,10 +216,19 @@ export function parseMarketingVerdict(raw: string): {
  * unparseable output; production callers should catch and fail open (insert
  * visibly).
  */
+export interface ClassifyMarketingOptions {
+  /** Overrides `MARKETING_SUPPRESSION_THRESHOLD` for this call — the caller's
+   *  resolved operator/effective threshold. Decision-path only; ignored on the
+   *  text-model path (no threshold there). */
+  threshold?: number;
+}
+
 export async function classifyMarketing(
   model: MarketingModel,
   input: MarketingClassifierInput,
+  opts: ClassifyMarketingOptions = {},
 ): Promise<MarketingClassifierResult> {
+  const threshold = opts.threshold ?? MARKETING_SUPPRESSION_THRESHOLD;
   if ("decide" in model) {
     const answer = await model.decide({
       state: buildClassifierInput(input),
@@ -229,7 +246,7 @@ export async function classifyMarketing(
       recognized &&
       typeof probability === "number" &&
       Number.isFinite(probability) &&
-      probability >= MARKETING_SUPPRESSION_THRESHOLD &&
+      probability >= threshold &&
       probability <= 1;
     return {
       isMarketing,

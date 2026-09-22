@@ -201,7 +201,7 @@ describe("GET /admin/classifications/summary", () => {
     expect(body.models).toEqual([
       { provider: "openrouter", model: "typesafe/jev-1.13", count: 5, costUsd: 0.02 },
     ]);
-    expect(body.probability.threshold).toBe(0.8);
+    expect(body.probability.threshold).toBe(0.65);
     expect(body.probability.selected.bins).toHaveLength(10);
     expect(body.probability.selected.bins[8]).toMatchObject({ start: 0.8, count: 4 });
     expect(body.probability.selected.missing).toBe(2);
