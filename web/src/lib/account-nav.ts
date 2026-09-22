@@ -88,6 +88,16 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         ready: true,
       },
       {
+        key: "webhooks",
+        label: "Webhooks & API",
+        href: "/account/webhooks",
+        group: "Personal",
+        description:
+          "Programmatic access and event delivery — API keys for the REST API and MCP server, plus signed release webhooks.",
+        Icon: WebhooksIcon,
+        ready: true,
+      },
+      {
         key: "collections",
         label: "Collections",
         href: "/account/collections",
@@ -137,16 +147,6 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         group: "Workspace",
         description: "Connect the tools your team already works in.",
         Icon: IntegrationsIcon,
-        ready: true,
-      },
-      {
-        key: "webhooks",
-        label: "Webhooks & API",
-        href: "/account/webhooks",
-        group: "Workspace",
-        description:
-          "Programmatic access and event delivery — API keys for the REST API and MCP server, plus signed release webhooks.",
-        Icon: WebhooksIcon,
         ready: true,
       },
       {

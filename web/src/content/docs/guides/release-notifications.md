@@ -32,7 +32,7 @@ RSS is pull, not push: your reader decides when to check. For "tell me the momen
 The most common ask — "post new releases to our team channel" — takes two steps and no app install:
 
 1. Create a [Slack incoming webhook](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/) for the channel.
-2. Paste the URL into the Slack section of [Notifications](/account/notifications).
+2. On [Notifications](/account/notifications), pick **Slack** in the **Slack & Discord** section, paste the URL, and connect.
 
 Each release you follow arrives as a compact message: linked title, short summary, org avatar, and date. There's a Test button to confirm the wiring. Full details, including why the webhook URL must stay secret: [Send releases to Slack](/docs/integrations/slack).
 
@@ -41,9 +41,11 @@ Each release you follow arrives as a compact message: linked title, short summar
 Same two-step setup as Slack — no bot to install:
 
 1. Create a [Discord incoming webhook](https://support.discord.com/hc/en-us/articles/228383668) for the channel.
-2. On [Webhooks & API](/account/webhooks), set **Format** to **Discord message**, paste the URL, and create.
+2. On [Notifications](/account/notifications), pick **Discord** in the **Slack & Discord** section, paste the URL, and connect.
 
-Each release you follow arrives as a compact embed: linked title, short summary, org avatar, and date. There's a Send test button to confirm the wiring. Full details, including why the webhook URL must stay secret: [Send releases to Discord](/docs/integrations/discord).
+Each release you follow arrives as a compact embed: linked title, short summary, org avatar, and date. There's a Test button to confirm the wiring. Full details, including why the webhook URL must stay secret: [Send releases to Discord](/docs/integrations/discord).
+
+The Notifications page holds one connection for everything you follow, so pick Slack or Discord there. To post one organization's releases to another channel, add an org webhook with the Slack or Discord format on [Webhooks & API](/account/webhooks).
 
 Microsoft Teams, Mattermost, and other chat tools still use an RSS bot on a `.atom` URL, or a [signed webhook](#webhooks-for-your-own-systems) plus a small relay.
 
@@ -76,15 +78,15 @@ For a live terminal view, the CLI can follow the stream directly: `releases tail
 
 ## Which one should I use?
 
-| You want                           | Use                                                             |
-| ---------------------------------- | --------------------------------------------------------------- |
-| Updates in a feed reader           | `.atom` feeds, or a personal feed token for your follows        |
-| A message in a team Slack channel  | The Slack connection on [Notifications](/account/notifications) |
-| A message in a Discord channel     | Discord format on [Webhooks & API](/account/webhooks)           |
-| A message in Teams or another chat | An RSS bot on a `.atom` URL, or a webhook + relay               |
-| One summary email a day or week    | The release digest                                              |
-| Events into your own code          | Signed webhooks (`/v1/me/webhooks`)                             |
-| An agent that checks on demand     | The MCP server or CLI                                           |
+| You want                           | Use                                                      |
+| ---------------------------------- | -------------------------------------------------------- |
+| Updates in a feed reader           | `.atom` feeds, or a personal feed token for your follows |
+| A message in a team Slack channel  | Slack on [Notifications](/account/notifications)         |
+| A message in a Discord channel     | Discord on [Notifications](/account/notifications)       |
+| A message in Teams or another chat | An RSS bot on a `.atom` URL, or a webhook + relay        |
+| One summary email a day or week    | The release digest                                       |
+| Events into your own code          | Signed webhooks (`/v1/me/webhooks`)                      |
+| An agent that checks on demand     | The MCP server or CLI                                    |
 
 ## FAQ
 
