@@ -14,8 +14,10 @@ import { DigestFormatLinks } from "@/components/digest-format-links";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
+import { isExternalReleaseLink, releaseLinkProps } from "@/lib/release-link";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
 import { weekOfLabel } from "@/lib/digest-format";
+import { digestSectionAnchor } from "@releases/rendering/digest-sections";
 import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
@@ -50,6 +52,54 @@ function weekRangeLabel(weekStart: string): string {
 
 function clampMetaTitle(title: string): string {
   return title.length > MAX_TITLE_LEN ? `${title.slice(0, MAX_TITLE_LEN - 1)}…` : title;
+}
+
+function ExternalArrow() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="shrink-0 text-[var(--fg-3)]"
+    >
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </svg>
+  );
+}
+
+/**
+ * A "Releases covered" row's link: goes to the release's upstream url when it
+ * has one (new tab, ↗), falling back to the on-site `/release/<id>` page.
+ * Mirrors `releaseLinkTarget()` (`web/src/lib/release-link.ts`).
+ */
+function CoveredReleaseLink({
+  release,
+  className,
+}: {
+  release: DigestCoveredRelease;
+  className: string;
+}) {
+  const linkProps = releaseLinkProps(release) ?? {
+    href: release.path,
+    "data-release-id": release.id,
+  };
+  return isExternalReleaseLink(linkProps) ? (
+    <a {...linkProps} className={`${className} inline-flex items-center gap-1`}>
+      {release.title}
+      <ExternalArrow />
+    </a>
+  ) : (
+    <Link {...linkProps} className={className}>
+      {release.title}
+    </Link>
+  );
 }
 
 /**
@@ -133,7 +183,16 @@ export default async function CollectionDigestPage({
 
   // No heading demotion — digest `###` sections should render as h3 under the
   // page h1 (card/changelog pipelines demote by 2 for their own outline).
-  const bodyHtml = renderBodyMarkdownToHtml(digest.body, "full", { demoteHeadings: 0 });
+  // headingIds anchors each section (`#agents-learn-to-talk`) so the "In this
+  // issue" reel and the covered-releases index can deep-link into the body.
+  // releaseLinks rewrites in-body `/release/<id>` citations to the release's
+  // upstream url (new tab) when it has one, matching `releaseLinkTarget()`.
+  const releaseLinks = new Map(digest.releases.map((r) => [r.id, r.url ?? null]));
+  const bodyHtml = renderBodyMarkdownToHtml(digest.body, "full", {
+    demoteHeadings: 0,
+    headingIds: digestSectionAnchor,
+    releaseLinks,
+  });
 
   const collectionUrl = `${SITE_URL}/collections/${slug}`;
   const digestsIndexUrl = `${collectionUrl}/digest`;
@@ -247,7 +306,7 @@ export default async function CollectionDigestPage({
         />
 
         <div
-          className="prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed prose-headings:tracking-tight prose-a:text-stone-600 dark:prose-a:text-stone-400 prose-a:no-underline [&_a:hover]:underline prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono"
+          className="prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-a:text-stone-600 dark:prose-a:text-stone-400 prose-a:no-underline [&_a:hover]:underline prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono"
           // Sanitized server-side — see the renderBodyMarkdownToHtml call above.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
@@ -291,12 +350,10 @@ export default async function CollectionDigestPage({
                     {group.items.map((r) => (
                       <li key={r.id} className="flex items-baseline gap-1.5">
                         <ImportanceMarker importance={r.importance} />
-                        <Link
-                          href={r.path}
+                        <CoveredReleaseLink
+                          release={r}
                           className="text-[14px] text-[var(--fg-2)] transition-colors hover:text-[var(--accent)]"
-                        >
-                          {r.title}
-                        </Link>
+                        />
                       </li>
                     ))}
                   </ul>
