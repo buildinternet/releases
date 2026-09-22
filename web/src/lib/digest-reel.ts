@@ -1,3 +1,4 @@
+import type { DigestCoveredRelease, DigestSection } from "@buildinternet/releases-api-types";
 import type { HomepageDigestsQuery } from "@/lib/graphql/__generated__/graphql";
 
 export type ReelDigest = HomepageDigestsQuery["latestWeeklyDigests"][number];
@@ -23,6 +24,23 @@ export function splitDigestReel(digests: ReelDigest[], cardCount = 6) {
 export function sectionProducts(section: ReelSection) {
   const out = new Map<string, { key: string; name: string; org: ReelOrg }>();
   for (const r of section.releases) {
+    const key = r.product?.slug ?? `org:${r.org.slug}`;
+    if (!out.has(key)) out.set(key, { key, name: r.product?.name ?? r.org.name, org: r.org });
+  }
+  return [...out.values()];
+}
+
+/** Same dedupe rule as {@link sectionProducts}, but resolves a REST
+ *  `CollectionWeeklyDigestDetail`'s `DigestSection.releaseIds` against a
+ *  `releases` lookup map instead of a GraphQL section's embedded releases. */
+export function sectionProductsFromDetail(
+  section: DigestSection,
+  byId: Map<string, DigestCoveredRelease>,
+) {
+  const out = new Map<string, { key: string; name: string; org: DigestCoveredRelease["org"] }>();
+  for (const id of section.releaseIds) {
+    const r = byId.get(id);
+    if (!r) continue;
     const key = r.product?.slug ?? `org:${r.org.slug}`;
     if (!out.has(key)) out.set(key, { key, name: r.product?.name ?? r.org.name, org: r.org });
   }

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ApiSetupError, type CollectionDailySummary } from "@/lib/api";
+import { api, ApiSetupError, type CollectionDailySummary } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
 import { CollectionContextRail } from "@/components/collection-context-rail";
+import { LatestDigestHero } from "@/components/latest-digest-hero";
 import { CollectionAdminMenu } from "@/components/collection-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
@@ -65,6 +66,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   const { detail, releases, summaries } = page;
   const recentDigests = await recentDigestsPromise;
   const latestDigest = recentDigests[0] ?? null;
+  // Fails soft to `null` — a hiccup fetching the full digest body/sections
+  // just drops the hero, same fail-soft posture as `getRecentDigests`.
+  const latestDigestDetail = latestDigest
+    ? await api.collectionWeeklyDigest(slug, latestDigest.weekStart).catch(() => null)
+    : null;
   // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
 
@@ -106,14 +112,12 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             {detail.description}
           </p>
         )}
-        {latestDigest && (
-          <Link
-            href={`/collections/${slug}/digest/${latestDigest.weekStart}`}
-            className="mt-2 inline-block text-[14px] font-medium text-[var(--accent)] transition-colors hover:underline"
-            aria-label={`This week's digest: ${latestDigest.title}`}
-          >
-            This week: {latestDigest.title} →
-          </Link>
+        {latestDigestDetail && (
+          <LatestDigestHero
+            slug={slug}
+            digest={latestDigestDetail}
+            earlier={recentDigests.slice(1, 3)}
+          />
         )}
         <AdminOnly devAdmin={isLocalAdminEnabled()}>
           <div className="mt-3">
@@ -137,7 +141,6 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           </main>
           <CollectionContextRail
             formatPath={formatPath}
-            digests={recentDigests}
             report={{
               kind: "collection",
               name: detail.name,

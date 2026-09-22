@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { digestHref, sectionProducts, splitDigestReel, type ReelDigest } from "./digest-reel";
+import {
+  digestHref,
+  sectionProducts,
+  sectionProductsFromDetail,
+  splitDigestReel,
+  type ReelDigest,
+} from "./digest-reel";
 
 const org = (slug: string) => ({
   slug,
@@ -69,6 +75,42 @@ describe("sectionProducts", () => {
       ],
     } as ReelDigest["sections"][number];
     expect(sectionProducts(section).map((p) => p.name)).toEqual(["Codex", "NEON"]);
+  });
+});
+
+describe("sectionProductsFromDetail", () => {
+  test("resolves ids through the releases map", () => {
+    const byId = new Map([
+      [
+        "r1",
+        {
+          id: "r1",
+          title: "",
+          path: "/release/r1",
+          url: null,
+          importance: null,
+          org: { slug: "openai", name: "OpenAI" },
+          product: { slug: "codex", name: "Codex" },
+        },
+      ],
+      [
+        "r2",
+        {
+          id: "r2",
+          title: "",
+          path: "/release/r2",
+          url: null,
+          importance: null,
+          org: { slug: "cognition", name: "Cognition" },
+          product: { slug: "devin", name: "Devin" },
+        },
+      ],
+    ]);
+    const out = sectionProductsFromDetail(
+      { heading: "h", anchor: "h", lede: "", releaseIds: ["r1", "rX", "r2", "r1"] },
+      byId as any,
+    );
+    expect(out.map((p) => p.name)).toEqual(["Codex", "Devin"]);
   });
 });
 
