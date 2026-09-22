@@ -59,6 +59,39 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 | `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                                      |
 | `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (see [Delivery activity](#delivery-activity)) |
 
+### Finding your workspace id (`/v1/me/workspaces`)
+
+A workspace is your team's account on Releases Index. It's separate from the
+companies and products that webhooks watch. Every account has at least one
+personal workspace. `GET /v1/me/workspaces` lists the workspaces you belong
+to, so scripts, the CLI, and the MCP server can find a workspace id:
+
+```bash
+curl https://api.releases.sh/v1/me/workspaces \
+  -H "Authorization: Bearer $RELEASES_TOKEN"
+```
+
+```json
+{
+  "workspaces": [
+    {
+      "id": "Xk3vQ9dLm2PzR8tYw1Hn",
+      "name": "Acme Team",
+      "slug": "acme-team",
+      "logo": null,
+      "role": "owner",
+      "active": true,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+`role` is your role in that workspace (`owner`, `admin`, or `member`).
+`active` marks the workspace you last switched to. This route only reads.
+Create, rename, and switch workspaces from
+[your account settings](https://releases.sh/account/workspaces).
+
 ### Account UI
 
 Signed-in users can manage webhooks without raw API calls: **Account → Webhooks & API** on [releases.sh](https://releases.sh/account/webhooks). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.

@@ -1431,6 +1431,24 @@ export interface DeveloperSettingsResponse {
   apiKeys: UserApiKey[] | null;
 }
 
+/** GET /v1/me/workspaces — one row per workspace the caller belongs to. */
+export interface MeWorkspace {
+  /** Better Auth organization id. */
+  id: string;
+  name: string;
+  slug: string;
+  logo: string | null;
+  /** Workspace membership role (`member.role`, not `user.role`). */
+  role: "owner" | "admin" | "member";
+  /** The caller's active workspace (see docs/architecture/workspaces.md). */
+  active: boolean;
+  createdAt: string;
+}
+
+export interface MeWorkspacesResponse {
+  workspaces: MeWorkspace[];
+}
+
 // ── Search ──
 
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;
