@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createDigestAnchorSlugger,
   digestSectionAnchor,
   parseDigestSections,
   rewriteDigestReleaseLinks,
@@ -35,6 +36,27 @@ describe("digestSectionAnchor", () => {
   });
 });
 
+describe("createDigestAnchorSlugger", () => {
+  test("returns the plain slug the first time, then numbered suffixes for repeats", () => {
+    const slug = createDigestAnchorSlugger();
+    expect(slug("Bug fixes")).toBe("bug-fixes");
+    expect(slug("Bug fixes")).toBe("bug-fixes-2");
+    expect(slug("Bug fixes")).toBe("bug-fixes-3");
+  });
+
+  test("tracks distinct headings independently", () => {
+    const slug = createDigestAnchorSlugger();
+    expect(slug("Agents learn to talk")).toBe("agents-learn-to-talk");
+    expect(slug("Bug fixes")).toBe("bug-fixes");
+    expect(slug("Agents learn to talk")).toBe("agents-learn-to-talk-2");
+  });
+
+  test("a fresh slugger starts over (no cross-call state)", () => {
+    expect(createDigestAnchorSlugger()("Bug fixes")).toBe("bug-fixes");
+    expect(createDigestAnchorSlugger()("Bug fixes")).toBe("bug-fixes");
+  });
+});
+
 describe("parseDigestSections", () => {
   test("splits on ### headings, ignoring the preamble", () => {
     const sections = parseDigestSections(BODY);
@@ -43,6 +65,13 @@ describe("parseDigestSections", () => {
       "Claude Code's week: hardening the edges",
     ]);
     expect(sections[0].anchor).toBe("agents-learn-to-talk");
+  });
+
+  test("duplicate headings get deduped anchors (bug-fixes, bug-fixes-2)", () => {
+    const sections = parseDigestSections(
+      "### Bug fixes\n\nFirst fix.\n\n### Bug fixes\n\nSecond fix.",
+    );
+    expect(sections.map((s) => s.anchor)).toEqual(["bug-fixes", "bug-fixes-2"]);
   });
 
   test("collects unique cited release ids in first-seen order", () => {

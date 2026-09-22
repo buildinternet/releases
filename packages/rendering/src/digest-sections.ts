@@ -27,6 +27,24 @@ export function digestSectionAnchor(heading: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/**
+ * Stateful heading→anchor slugger. A digest body can repeat a heading (e.g.
+ * two "Bug fixes" sections); using the plain `digestSectionAnchor()` for both
+ * produces duplicate DOM ids, so anchor links mis-target the first match.
+ * Call once per render and reuse the returned function across every heading
+ * in that body: the first occurrence of a given slug gets the plain slug,
+ * repeats get `-2`, `-3`, … suffixes.
+ */
+export function createDigestAnchorSlugger(): (heading: string) => string {
+  const seen = new Map<string, number>();
+  return (heading: string) => {
+    const base = digestSectionAnchor(heading);
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return count === 1 ? base : `${base}-${count}`;
+  };
+}
+
 function stripInlineMarkdown(s: string): string {
   return s
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
@@ -45,6 +63,7 @@ function firstSentence(paragraph: string): string {
 
 export function parseDigestSections(body: string): ParsedDigestSection[] {
   const parts = body.split(/^###[ \t]+/m).slice(1);
+  const slugger = createDigestAnchorSlugger();
   return parts.map((part) => {
     const nl = part.indexOf("\n");
     const heading = (nl === -1 ? part : part.slice(0, nl)).trim();
@@ -56,7 +75,7 @@ export function parseDigestSections(body: string): ParsedDigestSection[] {
     }
     return {
       heading,
-      anchor: digestSectionAnchor(heading),
+      anchor: slugger(heading),
       lede: firstPara ? firstSentence(firstPara) : "",
       releaseIds,
     };

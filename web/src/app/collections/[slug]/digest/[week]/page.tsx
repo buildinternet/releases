@@ -17,7 +17,7 @@ import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
 import { isExternalReleaseLink, releaseLinkProps } from "@/lib/release-link";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
 import { weekOfLabel } from "@/lib/digest-format";
-import { digestSectionAnchor } from "@releases/rendering/digest-sections";
+import { createDigestAnchorSlugger } from "@releases/rendering/digest-sections";
 import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
@@ -190,7 +190,7 @@ export default async function CollectionDigestPage({
   const releaseLinks = new Map(digest.releases.map((r) => [r.id, r.url ?? null]));
   const bodyHtml = renderBodyMarkdownToHtml(digest.body, "full", {
     demoteHeadings: 0,
-    headingIds: digestSectionAnchor,
+    headingIds: createDigestAnchorSlugger(),
     releaseLinks,
   });
 

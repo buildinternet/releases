@@ -33,6 +33,16 @@ describe("renderBodyMarkdownToHtml headingIds", () => {
   test("no ids by default", () => {
     expect(renderBodyMarkdownToHtml("### X\n\nb", "full", { demoteHeadings: 0 })).toContain("<h3>");
   });
+  test("duplicate headings get deduped ids via createDigestAnchorSlugger", async () => {
+    const { createDigestAnchorSlugger } = await import("@releases/rendering/digest-sections");
+    const html = renderBodyMarkdownToHtml(
+      "### Bug fixes\n\nfirst\n\n### Bug fixes\n\nsecond",
+      "full",
+      { demoteHeadings: 0, headingIds: createDigestAnchorSlugger() },
+    );
+    expect(html).toContain('<h3 id="bug-fixes">');
+    expect(html).toContain('<h3 id="bug-fixes-2">');
+  });
 });
 
 describe("renderBodyMarkdownToHtml releaseLinks", () => {
@@ -57,5 +67,18 @@ describe("renderBodyMarkdownToHtml releaseLinks", () => {
     expect(html).toContain(`href="/release/${B}"`);
     expect(html).toContain(`data-release-id="${B}"`);
     expect(html).not.toMatch(new RegExp(`href="/release/${B}"[^>]*target=`));
+  });
+
+  // A digest call (releaseLinks set) also owns non-release same-origin links,
+  // e.g. a section pointing back at another collection — those should stay
+  // same-tab too, not just the /release/<id> ones.
+  test("non-release internal links stay same-tab when releaseLinks is set", () => {
+    const html = renderBodyMarkdownToHtml("[See collections](/collections/x)", "full", {
+      demoteHeadings: 0,
+      releaseLinks: new Map(),
+    });
+    expect(html).toContain('href="/collections/x"');
+    expect(html).not.toContain('target="_blank"');
+    expect(html).not.toContain("nofollow ugc");
   });
 });

@@ -132,8 +132,8 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
           return index;
         }
         const releaseId = releaseLinks ? releaseIdFromPath(href) : null;
-        if (releaseId) {
-          const upstream = (releaseLinks!.get(releaseId) ?? "").trim();
+        if (releaseLinks && releaseId) {
+          const upstream = (releaseLinks.get(releaseId) ?? "").trim();
           if (/^https?:\/\//i.test(upstream)) {
             node.properties = {
               ...node.properties,
@@ -147,8 +147,13 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
           }
           return;
         }
-        // Same-origin app paths stay in-document: no new tab, no UGC rel.
-        if (isInternalHref(href)) return;
+        // Same-origin app paths stay in-document: no new tab, no UGC rel. Only
+        // for callers that opted into release-link handling (digest pages) —
+        // other callers (release/changelog bodies) render scraped/vendor
+        // content that isn't guaranteed to have gone through
+        // `rewriteRelativeLinks`, so a root-relative href there keeps the
+        // default new-tab + external-UGC treatment.
+        if (releaseLinks && isInternalHref(href)) return;
         // Same-page fragment links stay in-document — no new tab, no external rel.
         if (isFragmentHref(href)) return;
         node.properties = { ...node.properties, target: "_blank", rel: EXTERNAL_UGC_REL };
