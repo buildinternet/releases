@@ -54,14 +54,6 @@
     // #1536); reasoning is disabled in the OpenRouter model.
     "EXTRACT_MODEL": "deepseek/deepseek-v4.1-flash",
   },
-  "containers": [
-    {
-      "class_name": "Sandbox",
-      "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:7ad76ac516d5",
-      "instance_type": "basic",
-      "max_instances": 5,
-    },
-  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -85,16 +77,16 @@
   ],
   "services": [{ "binding": "API_WORKER", "service": "releases-api" }],
   "durable_objects": {
-    "bindings": [
-      { "class_name": "Sandbox", "name": "Sandbox" },
-      { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
-    ],
+    "bindings": [{ "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" }],
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
     { "new_classes": ["DiscoverySession"], "tag": "v2" },
     { "new_classes": ["ManagedAgentsSession"], "tag": "v3" },
     { "deleted_classes": ["DiscoverySession"], "tag": "v4" },
+    // Sandbox backed the pre-Managed-Agents discovery container (removed in
+    // #386); nothing used it after that (#2317).
+    { "deleted_classes": ["Sandbox"], "tag": "v5" },
   ],
   "secrets_store_secrets": [
     {
@@ -166,14 +158,6 @@
         // (OPENROUTER_API_KEY is bound below; flag + non-empty var still required).
         "EXTRACT_MODEL": "deepseek/deepseek-v4.1-flash",
       },
-      "containers": [
-        {
-          "class_name": "Sandbox",
-          "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:7ad76ac516d5",
-          "instance_type": "basic",
-          "max_instances": 2,
-        },
-      ],
       "d1_databases": [
         {
           "binding": "DB",
@@ -188,15 +172,13 @@
       "kv_namespaces": [{ "binding": "LATEST_CACHE", "id": "832712867aff4c91bc11bb3cecd7da9e" }],
       "services": [{ "binding": "API_WORKER", "service": "releases-api-staging" }],
       "durable_objects": {
-        "bindings": [
-          { "class_name": "Sandbox", "name": "Sandbox" },
-          { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
-        ],
+        "bindings": [{ "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" }],
       },
       // Fresh worker — collapse prod's v1-v4 into a single create step.
       "migrations": [
         { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
         { "new_classes": ["ManagedAgentsSession"], "tag": "v2" },
+        { "deleted_classes": ["Sandbox"], "tag": "v3" },
       ],
       "secrets_store_secrets": [
         {

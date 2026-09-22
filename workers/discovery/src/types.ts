@@ -1,4 +1,3 @@
-import type { Sandbox } from "@cloudflare/sandbox";
 import type { FlagshipBinding } from "@releases/lib/flags";
 
 export interface OnboardRequest {
@@ -41,7 +40,6 @@ export interface StatusResponse {
 export type SecretBinding = { get(): Promise<string> };
 
 export interface Env {
-  Sandbox: DurableObjectNamespace<Sandbox>;
   MANAGED_AGENTS_SESSION: DurableObjectNamespace;
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;

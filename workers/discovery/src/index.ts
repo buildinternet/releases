@@ -7,7 +7,6 @@ import { checkSpendCap } from "@releases/lib/spend-cap";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { FLAGS, flag } from "@releases/lib/flags";
 
-export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
 
 /**
