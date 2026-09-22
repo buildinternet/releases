@@ -243,7 +243,7 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 Operator tools live under `/admin/*` inside the account settings shell (`SettingsShell` + `AccountSettingsNav`) — an **Admin** sidebar section alongside Personal / Workspace. Nav items live in `web/src/lib/account-nav.ts` (same source as the rest of settings); the Admin group is only rendered when `useIsAdmin(devAdmin)` is true. Server gate is `isAdminViewer()` on `web/src/app/admin/layout.tsx` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. The account dropdown **Admin** link goes to `adminDefaultHref()` (first ready panel, currently Site notice). Bare `/admin` 308-redirects there so old bookmarks still land in the sidebar shell.
 
-Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`), **Models** (`/admin/models`).
+Panels: **Site notice** (`/admin/site-notice`), **Status** (`/admin/status`), **API tokens** (`/admin/api-tokens`), **Test emails** (`/admin/emails`), **Models** (`/admin/models`), **Semantic alerts** (`/admin/semantic-alerts`).
 
 **Classifications** on Status (`/admin/status?tab=classifications`) reads `GET /v1/admin/classifications/summary` and `/recent`, defaults to ingest, and isolates a chart or API failure from the rest of the page. See [classification-analytics.md](classification-analytics.md).
 
@@ -254,3 +254,5 @@ The catalog supplements the text-only OpenRouter response with `typesafe/jev-1.1
 **Test emails** lists every outbound template from `GET /v1/admin/emails/samples` and sends fabricated `[test]` previews through `POST /v1/admin/emails/test` (proxied via `/api/proxy/admin/emails/test`). Samples use static fixture data — auth templates go through `AUTH_EMAIL`, operator alerts through `SEND_EMAIL`. This is the fast path for checking footers, links, and deliverability after template edits.
 
 **Live digest test** is separate: `POST /v1/admin/digest/test` (root-key or admin JWT) sends a real follow digest for one user with live watermark/lookback rules. Use it when validating digest content against actual follows; use `/admin/emails` when previewing the render with fixture releases.
+
+**Semantic alerts preview** (`POST /v1/admin/semantic-alerts/preview`, purge via `POST /v1/admin/semantic-alerts/purge`) inserts synthetic changelog rows through the real batch publish path so the Phase 2 matcher can be demoed. The dedicated `semantic-alerts-demo` org is the default target. See [semantic-alerts.md](semantic-alerts.md).

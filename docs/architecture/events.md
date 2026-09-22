@@ -39,11 +39,11 @@ observed and pass it as `?since=<seq>` on reconnect.
 
 ## Publish path
 
-Two ingest sites call `publishReleaseEvents(env, { src, inserted })` via
-`ctx.waitUntil` after the D1 commit:
+Callers of `publishReleaseEvents` after the D1 commit:
 
-- `POST /v1/sources/:slug/releases/batch` (primary CLI fetch path) — `workers/api/src/routes/sources.ts`
+- `POST /v1/sources/:slug/releases/batch` (primary CLI fetch path) — `workers/api/src/routes/sources.ts`, via `ctx.waitUntil`
 - Hourly cron `fetchOne` — `workers/api/src/cron/poll-fetch.ts`
+- `POST /v1/admin/semantic-alerts/preview` — same `runBatchIngestEffects` helper, awaited. Synthetic rows only. See [semantic-alerts.md](semantic-alerts.md).
 
 `publishReleaseEvents` is fire-and-forget: any hub failure is logged and
 swallowed so publish errors cannot fail ingestion. Event payloads are built

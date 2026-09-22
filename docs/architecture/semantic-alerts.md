@@ -59,10 +59,32 @@ Each JEV call logs an `ai_usage` event (`lane: semantic-alert-match`) with token
 
 Optional Analytics Engine points go to the existing classifications dataset with `blob4 = semantic-alert`. Marketing admin queries filter `blob4 = 'marketing'`, so these points stay out of that dashboard. The point carries release id, source id, alert id, disposition (`matched` | `below_threshold` | `failed`), P(true), and the alert threshold. Cost stays on `ai_usage` because one call covers many alerts. Failure categories are `provider_error` or `invalid_probability` — never the provider message.
 
+## Admin preview
+
+Operator tool for local development and live demos. Admin or root only (`admin/semantic-alerts` in `adminRoutes`). It is not behind `semantic-alerts-enabled` — inserts work while the user-facing lane is off. When `userId` is set, the response scores that account's enabled alerts through `matchSemanticAlertsForUser` (the same JEV path as production, without claiming or delivering again).
+
+`POST /v1/admin/semantic-alerts/preview` with `{ count?, sourceId?, userId?, seed? }`:
+
+- `count` is an integer from 1 to **20** (default 5).
+- Omit `sourceId` to use the dedicated org `semantic-alerts-demo` / source `preview`. The handler creates them if needed: visible (so a follow puts rows in the Phase 2 candidate pool — the feed query drops hidden orgs and sources), not featured, org `fetchPaused`, source `fetchPriority: paused`. The placeholder URL is `https://demo.releases.invalid/changelog` and is never polled.
+- `sourceId` is `src_…` or `orgSlug/sourceSlug` when the demo org is the wrong target. A bare slug is rejected. This is the only way to write onto any other org.
+- Rows go through `ingestReleaseBatch` and `runBatchIngestEffects` (the batch upsert, `publishReleaseEvents`, and webhook fanout). Summaries and embeddings are skipped so a demo does not spend the summarize lane or write vectors.
+- Titles are prefixed `[demo]`. `metadata.semanticAlertDemo` is `true`. The dedicated demo source refuses a request that would push it past 20 flagged rows (`429 limit_exceeded`).
+- `userId`, when set, must be a real account. The response `matcher` field is `scored` when the JEV model is available (including an empty candidate set), or `unavailable` with `model_unavailable` when OpenRouter cannot be built. Omit `userId` and `matcher.status` is `skipped`. A matcher exception is reported as `error` and does not roll back the insert. Follow `semantic-alerts-demo` (or the target org) and create enabled alerts on that account before expecting matches.
+
+`POST /v1/admin/semantic-alerts/purge` deletes **only** rows with `semanticAlertDemo: true`.
+
+- `{}` purges the dedicated demo source.
+- `{ sourceId }` purges flagged rows on that source.
+- `{ all: true }` purges every flagged row. Unflagged releases are left in place.
+
+The same actions are on **Admin → Semantic alerts** (`/admin/semantic-alerts`), proxied through `/api/proxy` so the root key stays server-side.
+
 ## Code
 
 - Schema + migrations: `workers/api/src/db/schema-semantic-alerts.ts`, `workers/api/migrations/20260922020000_add_semantic_alerts.sql`, `workers/api/migrations/20260922030000_semantic_alert_matches.sql`
 - Routes: `workers/api/src/routes/me-semantic-alerts.ts`
-- Matcher: `packages/ai/src/semantic-alert-match.ts`, `workers/api/src/semantic-alerts/run.ts` (hooked from `workers/api/src/events/publish.ts`)
+- Matcher: `packages/ai/src/semantic-alert-match.ts`, `workers/api/src/semantic-alerts/run.ts` (hooked from `workers/api/src/events/publish.ts`), `workers/api/src/lib/semantic-alert-matcher.ts` (admin preview seam)
 - Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, list response, threshold and cap constants)
 - Web: `web/src/components/semantic-alerts-section.tsx` on the notifications panel
+- Admin preview: `workers/api/src/routes/admin-semantic-alerts.ts`, `workers/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
