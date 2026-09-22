@@ -217,6 +217,9 @@
     "ENVIRONMENT": "production",
     "WEB_BOT_AUTH_ENABLED": "true",
     "USER_API_KEYS_ENABLED": "false",
+    // Semantic alerts preference store (/v1/me/semantic-alerts, #2304).
+    // Off = routes 404 and the account UI hides the section. Matching is later.
+    "SEMANTIC_ALERTS_ENABLED": "false",
     "WELL_KNOWN_MATERIALIZATION_ENABLED": "true",
     // Comma-separated audience URIs accepted in JWT access tokens issued by the
     // OAuth provider. The API worker origin (BETTER_AUTH_URL) is always included;
@@ -828,6 +831,8 @@
         "ENVIRONMENT": "staging",
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
+        // Semantic alerts preference store. Mirrors prod: off until the lane is flipped on.
+        "SEMANTIC_ALERTS_ENABLED": "false",
         "WELL_KNOWN_MATERIALIZATION_ENABLED": "true",
         // Staging issuer/baseURL — overrides the inherited top-level prod value so
         // createAuth's baseURL and oauthValidAudiences() resolve to the staging

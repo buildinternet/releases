@@ -11,6 +11,7 @@ import type {
 import { getNotificationSettings } from "@/lib/me-settings";
 import { setDigestCadence, mintFeedToken, revokeFeedToken } from "@/lib/follows";
 import { listWebhooks, createWebhook, testWebhook, deleteWebhook } from "@/lib/webhooks";
+import { SemanticAlertsSection } from "@/components/semantic-alerts-section";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";
 import {
@@ -441,6 +442,9 @@ export function NotificationsPanel({
         <EmailSection cadence={data.cadence} />
         <FeedTokenSection token={data.feedToken} />
         <SlackSection webhooks={data.webhooks} />
+        {data.semanticAlerts != null && (
+          <SemanticAlertsSection alerts={data.semanticAlerts} webhooks={data.webhooks} />
+        )}
       </div>
     </PanelGrid>
   );

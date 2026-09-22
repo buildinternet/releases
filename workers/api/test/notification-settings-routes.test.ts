@@ -50,11 +50,13 @@ describe("GET /v1/me/settings/notifications", () => {
       cadence: string;
       feedToken: unknown;
       webhooks: unknown[];
+      semanticAlerts: unknown;
     };
     expect(body).toEqual({
       cadence: "off",
       feedToken: null,
       webhooks: [],
+      semanticAlerts: null,
     });
   });
 

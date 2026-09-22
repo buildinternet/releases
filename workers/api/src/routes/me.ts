@@ -41,8 +41,10 @@ import {
 } from "../lib/feed-cache.js";
 import { withLatestCache } from "../lib/latest-cache.js";
 import { listUserWebhookSubscriptionsEnriched } from "../webhooks/user-queries.js";
+import { listSemanticAlerts } from "../queries/semantic-alerts.js";
 import { listUserApiKeys } from "./user-api-keys.js";
 import { meWebhookHandlers } from "./me-webhooks.js";
+import { meSemanticAlertHandlers } from "./me-semantic-alerts.js";
 import { accountProfileHandlers } from "./account-profile.js";
 import { respondError } from "../lib/error-response.js";
 import { UnauthorizedError, ValidationError, NotFoundError } from "@releases/lib/releases-error";
@@ -258,16 +260,24 @@ meHandlers.get("/me/settings/notifications", async (c) => {
   const db = createDb(c.env.DB);
   const userId = session.user.id;
 
-  const [digestRow, feedRow, webhooks] = await Promise.all([
+  const alertsOn = await flag(
+    c.env.FLAGS,
+    c.env.SEMANTIC_ALERTS_ENABLED,
+    FLAGS.semanticAlertsEnabled,
+  );
+
+  const [digestRow, feedRow, webhooks, semanticAlerts] = await Promise.all([
     getDigestPrefs(db, userId),
     getFeedToken(db, userId),
     listUserWebhookSubscriptionsEnriched(db, userId),
+    alertsOn ? listSemanticAlerts(db, userId) : Promise.resolve(null),
   ]);
 
   const body: NotificationSettingsResponse = {
     cadence: digestRow?.cadence ?? "off",
     feedToken: feedRow ? feedTokenPayload(c, feedRow) : null,
     webhooks,
+    semanticAlerts,
   };
   return privateJson(c, body);
 });
@@ -314,4 +324,5 @@ export const meRoutes = new Hono<Env>();
 meRoutes.use("/me/*", requireFollowsPrincipal);
 meRoutes.route("/", meHandlers);
 meRoutes.route("/", meWebhookHandlers);
+meRoutes.route("/", meSemanticAlertHandlers);
 meRoutes.route("/", accountProfileHandlers);
