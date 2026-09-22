@@ -35,6 +35,9 @@ const IDEMPOTENT_POST_PATHS = [
   "/webhooks/{id}/test",
   "/recommendations",
   "/feedback",
+  "/workspaces/{workspaceId}/webhooks",
+  "/workspaces/{workspaceId}/webhooks/{id}/rotate-secret",
+  "/workspaces/{workspaceId}/webhooks/{id}/test",
 ] as const;
 
 const IDEMPOTENT_SUCCESS_STATUS: Record<(typeof IDEMPOTENT_POST_PATHS)[number], string> = {
@@ -46,6 +49,9 @@ const IDEMPOTENT_SUCCESS_STATUS: Record<(typeof IDEMPOTENT_POST_PATHS)[number], 
   "/webhooks/{id}/test": "200",
   "/recommendations": "202",
   "/feedback": "202",
+  "/workspaces/{workspaceId}/webhooks": "201",
+  "/workspaces/{workspaceId}/webhooks/{id}/rotate-secret": "200",
+  "/workspaces/{workspaceId}/webhooks/{id}/test": "200",
 };
 
 type Spec = {
@@ -104,7 +110,7 @@ describe("idempotent POST OpenAPI contract", () => {
     );
   });
 
-  test("advertises the key contract on exactly the eight approved POST operations", async () => {
+  test("advertises the key contract on exactly the eleven approved POST operations", async () => {
     const spec = await idempotencySpec();
     const advertisedPaths = Object.entries(spec.paths ?? {})
       .filter(([, path]) =>

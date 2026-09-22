@@ -1333,6 +1333,14 @@ export const webhookSubscriptions = sqliteTable(
     id: text("id").primaryKey().$defaultFn(newWebhookSubscriptionId),
     /** Set for self-serve `/v1/me/webhooks` rows; null for admin-provisioned subs. */
     userId: text("user_id"),
+    /**
+     * Set for self-serve `/v1/workspaces/:workspaceId/webhooks` rows (owned by
+     * a Better Auth organization, not the registry `organizations` table — no
+     * `.references()` since that table lives outside this package). A row has
+     * `user_id`, `workspace_id`, or neither, never both (enforced by a CHECK
+     * in the migration); workspace webhooks are `scope: "org"` only.
+     */
+    workspaceId: text("workspace_id"),
     /** `org` = single-org filter; `follows` = deliver releases matching user_follows. */
     scope: text("scope", { enum: WEBHOOK_SCOPES }).notNull().default("org"),
     /** Null when `scope = follows`. */
@@ -1364,6 +1372,7 @@ export const webhookSubscriptions = sqliteTable(
     index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
     index("idx_webhook_subs_org_product").on(table.orgId, table.productId),
     index("idx_webhook_subs_user").on(table.userId),
+    index("idx_webhook_subs_workspace").on(table.workspaceId),
     index("idx_webhook_subs_scope_enabled").on(table.scope, table.enabled),
   ],
 );

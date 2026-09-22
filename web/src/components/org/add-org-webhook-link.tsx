@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { WebhooksIcon } from "@/components/account/icons";
-import { orgWebhookCreatePath } from "@/lib/webhook-create";
+import { orgWebhookCreatePath, orgWorkspaceWebhookCreatePath } from "@/lib/webhook-create";
 import { MoreIcon } from "./icons";
 
 /**
@@ -48,6 +48,7 @@ export function AddOrgWebhookLink({ orgSlug, orgName }: { orgSlug: string; orgNa
             className="account-menu-pop absolute right-0 top-full z-40 mt-1.5 w-[240px] rounded-xl border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_16px_40px_-14px_rgba(0,0,0,0.35)]"
           >
             <AddOrgWebhookMenuItem orgSlug={orgSlug} orgName={orgName} />
+            <AddOrgWorkspaceWebhookMenuItem orgSlug={orgSlug} orgName={orgName} />
           </div>
         </>
       )}
@@ -55,24 +56,64 @@ export function AddOrgWebhookLink({ orgSlug, orgName }: { orgSlug: string; orgNa
   );
 }
 
-/** Menu row — extracted so tests can assert the deep-link without opening state. */
-export function AddOrgWebhookMenuItem({ orgSlug, orgName }: { orgSlug: string; orgName?: string }) {
+/** Shared menu-row markup for both webhook create deep-links below. */
+function WebhookMenuItem({
+  href,
+  ariaLabel,
+  title,
+  subtitle,
+}: {
+  href: string;
+  ariaLabel: string;
+  title: string;
+  subtitle: string;
+}) {
   return (
     <Link
       role="menuitem"
-      href={orgWebhookCreatePath(orgSlug)}
-      aria-label={orgName ? `Add webhook for ${orgName}` : "Add webhook"}
+      href={href}
+      aria-label={ariaLabel}
       className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-2)]"
     >
       <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--fg-2)]">
         <WebhooksIcon className="h-[15px] w-[15px]" />
       </span>
       <span className="min-w-0">
-        <span className="block text-[13px] font-medium text-[var(--fg)]">Add webhook</span>
-        <span className="block truncate text-[11.5px] text-[var(--fg-3)]">
-          Notify on new releases
-        </span>
+        <span className="block text-[13px] font-medium text-[var(--fg)]">{title}</span>
+        <span className="block truncate text-[11.5px] text-[var(--fg-3)]">{subtitle}</span>
       </span>
     </Link>
+  );
+}
+
+/** Menu row — extracted so tests can assert the deep-link without opening state. */
+export function AddOrgWebhookMenuItem({ orgSlug, orgName }: { orgSlug: string; orgName?: string }) {
+  return (
+    <WebhookMenuItem
+      href={orgWebhookCreatePath(orgSlug)}
+      ariaLabel={orgName ? `Add webhook for me — ${orgName}` : "Add webhook for me"}
+      title="Add webhook for me"
+      subtitle="Only you see this one"
+    />
+  );
+}
+
+/** Menu row deep-linking to the workspace webhooks page (#2324), scoped to this org. */
+export function AddOrgWorkspaceWebhookMenuItem({
+  orgSlug,
+  orgName,
+}: {
+  orgSlug: string;
+  orgName?: string;
+}) {
+  return (
+    <WebhookMenuItem
+      href={orgWorkspaceWebhookCreatePath(orgSlug)}
+      ariaLabel={
+        orgName ? `Add webhook for this workspace — ${orgName}` : "Add webhook for this workspace"
+      }
+      title="Add webhook for this workspace"
+      subtitle="Everyone in the workspace sees this one"
+    />
   );
 }

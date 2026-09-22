@@ -150,6 +150,16 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         ready: true,
       },
       {
+        key: "workspace-webhooks",
+        label: "Webhooks",
+        href: "/account/workspace-webhooks",
+        group: "Workspace",
+        description:
+          "Send new releases to your team's Slack, Discord, or any URL. Everyone in the workspace can see these; owners and admins manage them.",
+        Icon: WebhooksIcon,
+        ready: true,
+      },
+      {
         key: "danger",
         label: "Danger zone",
         href: "/account/danger",

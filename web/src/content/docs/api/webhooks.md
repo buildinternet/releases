@@ -106,6 +106,28 @@ Webhook URLs must be public **HTTPS** endpoints. Private IPs, internal hostnames
 
 After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. Filter flags on `add` / `edit`: `--product`, `--source`, `--type` (`feature` | `rollup`), and `--clear-*` on edit. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
 
+## Workspace webhooks (`/v1/workspaces/:workspaceId/webhooks`)
+
+A webhook can also be owned by a workspace (a Workspaces organization, not a registry org) instead of your personal account, so a shared team channel keeps working after the person who set it up leaves. The route family mirrors `/v1/me/webhooks` exactly, one level down under the workspace:
+
+| Method   | Path                                                     | Purpose                                     |
+| -------- | -------------------------------------------------------- | ------------------------------------------- |
+| `GET`    | `/v1/workspaces/:workspaceId/webhooks`                   | List — includes your `role` and `canManage` |
+| `POST`   | `/v1/workspaces/:workspaceId/webhooks`                   | Create (owner/admin only)                   |
+| `GET`    | `/v1/workspaces/:workspaceId/webhooks/:id`               | Detail                                      |
+| `PATCH`  | `/v1/workspaces/:workspaceId/webhooks/:id`               | Update (owner/admin only)                   |
+| `DELETE` | `/v1/workspaces/:workspaceId/webhooks/:id`               | Remove (owner/admin only)                   |
+| `POST`   | `/v1/workspaces/:workspaceId/webhooks/:id/rotate-secret` | Rotate HMAC signing key (owner/admin only)  |
+| `POST`   | `/v1/workspaces/:workspaceId/webhooks/:id/test`          | Enqueue a synthetic test delivery           |
+| `GET`    | `/v1/workspaces/:workspaceId/webhooks/:id/deliveries`    | Recent delivery attempts                    |
+
+Differences from a personal webhook:
+
+- **Org-scoped only** — there's no workspace "follows" scope. `POST` with `{"scope": "follows"}` returns `400`.
+- **Owners and admins** create/edit/rotate/delete; **any member** can list, view, and test. A non-member gets `404`; a member without manage rights gets `403`.
+- Up to **10** subscriptions per workspace, tracked separately from each member's personal cap.
+- Deleting the workspace deletes its webhooks; a member leaving does not.
+
 ## Admin-provisioned webhooks
 
 Operators with admin API access can manage org-scoped subscriptions via `POST /v1/webhooks` (admin route family). See the admin CLI docs for `releases admin webhook …` commands.

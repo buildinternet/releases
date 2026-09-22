@@ -10,7 +10,13 @@ import {
 } from "@releases/lib/releases-error";
 import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
-import { WEBHOOK_FORMATS, type WebhookFormat } from "@buildinternet/releases-core/schema";
+import {
+  WEBHOOK_FORMATS,
+  type WebhookFormat,
+  type WebhookSubscription,
+} from "@buildinternet/releases-core/schema";
+import { newEventId } from "../events/types.js";
+import type { DeliveryMessage } from "./types.js";
 
 /** AE SQL doesn't support bound parameters; validates id before string interpolation. */
 /** Matches `newWebhookSubscriptionId()` — `whk_` + nanoid(16) (`A-Za-z0-9_-`). */
@@ -92,6 +98,39 @@ export async function resolveCloudflareAeCredentials(
   ]);
   if (!apiToken || !accountId) return null;
   return { apiToken, accountId };
+}
+
+/** Synthetic `release.created` event for POST …/webhooks/:id/test (personal + workspace routes). */
+export function buildWebhookTestEvent(
+  sub: Pick<WebhookSubscription, "id" | "url" | "secretVersion" | "format">,
+): DeliveryMessage {
+  return {
+    subscriptionId: sub.id,
+    url: sub.url,
+    secretVersion: sub.secretVersion,
+    format: sub.format,
+    event: {
+      id: newEventId(),
+      seq: 0,
+      ts: Date.now(),
+      type: "release.created",
+      release: {
+        id: "rel_synthetic",
+        title: "Webhook test",
+        version: null,
+        publishedAt: null,
+        sourceName: "synthetic",
+        sourceSlug: "synthetic",
+        summary: "This is a synthetic test event from your Releases Index webhook subscription.",
+        titleGenerated: null,
+        titleShort: null,
+        media: [],
+        contentChars: null,
+        contentTokens: null,
+      },
+    },
+    attempt: 1,
+  };
 }
 
 /** Shared handler body for GET …/webhooks/:id/deliveries (admin + self-serve). */

@@ -12,6 +12,7 @@ function sub(o: Partial<WebhookSubscription>): WebhookSubscription {
     id: "whk_x",
     scope: "org",
     userId: null,
+    workspaceId: null,
     orgId: "org_a",
     url: "https://hook.example/u",
     sourceId: null,
