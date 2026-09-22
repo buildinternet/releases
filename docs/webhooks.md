@@ -200,7 +200,7 @@ Response:
 
 ## Semantic alerts
 
-Follow and org webhooks above deliver every matching `release.created` event. Semantic alerts are a separate signed-in preference: a freeform description of what you care about, later scored only against releases that already match your follows. Phase 1 stores the alert at `/v1/me/semantic-alerts` and does not deliver matches. See [architecture/semantic-alerts.md](./architecture/semantic-alerts.md) and [#2304](https://github.com/buildinternet/releases/issues/2304).
+Follow and org webhooks above deliver every matching `release.created` event. Semantic alerts are a separate signed-in preference: a freeform description of what you care about, later scored only against releases that already match your follows. Phase 1 stores the alert at `/v1/me/semantic-alerts` and does not deliver matches. Operators can push synthetic releases through that same publish path with `POST /v1/admin/semantic-alerts/preview`. See [architecture/semantic-alerts.md](./architecture/semantic-alerts.md) and [#2304](https://github.com/buildinternet/releases/issues/2304).
 
 ## Local debugging
 

@@ -23,6 +23,27 @@ Structural notifications stay as they are: follows, digest email, and `/v1/me/we
 
 `webhookSubscriptionId` must be one of the caller's own `/v1/me/webhooks` rows. `deliverEmail` / `deliverWebhook` are independent booleans so a later sender can honor them without a schema change. An alert may point at a subscription and still leave `deliverWebhook` false.
 
+## Admin preview
+
+Operator tool for local development and live demos. It does **not** replace the Phase 2 matcher. Admin or root only (`admin/semantic-alerts` in `adminRoutes`). It is not behind `semantic-alerts-enabled` — inserts work while the user-facing lane is off.
+
+`POST /v1/admin/semantic-alerts/preview` with `{ count?, sourceId?, userId?, seed? }`:
+
+- `count` is an integer from 1 to **20** (default 5).
+- Omit `sourceId` to use the dedicated org `semantic-alerts-demo` / source `preview`. The handler creates them if needed: visible (so a follow puts rows in the Phase 2 candidate pool — the feed query drops hidden orgs and sources), not featured, org `fetchPaused`, source `fetchPriority: paused`. The placeholder URL is `https://demo.releases.invalid/changelog` and is never polled.
+- `sourceId` is `src_…` or `orgSlug/sourceSlug` when the demo org is the wrong target. A bare slug is rejected. This is the only way to write onto any other org.
+- Rows go through `ingestReleaseBatch` and `runBatchIngestEffects` (the batch upsert, `publishReleaseEvents`, and webhook fanout). Summaries and embeddings are skipped so a demo does not spend the summarize lane or write vectors.
+- Titles are prefixed `[demo]`. `metadata.semanticAlertDemo` is `true`. The dedicated demo source refuses a request that would push it past 20 flagged rows (`429 limit_exceeded`).
+- `userId`, when set, must be a real account. The response `matcher` field is `unavailable` (`matcher_not_wired`) until Phase 2 fills `matchSemanticAlertsForUser` in `workers/api/src/lib/semantic-alert-matcher.ts`. Omit `userId` and `matcher.status` is `skipped`. A matcher exception is reported as `error` and does not roll back the insert.
+
+`POST /v1/admin/semantic-alerts/purge` deletes **only** rows with `semanticAlertDemo: true`.
+
+- `{}` purges the dedicated demo source.
+- `{ sourceId }` purges flagged rows on that source.
+- `{ all: true }` purges every flagged row. Unflagged releases are left in place.
+
+The same actions are on **Admin → Semantic alerts** (`/admin/semantic-alerts`), proxied through `/api/proxy` so the root key stays server-side. Follow `semantic-alerts-demo` before expecting a later matcher to treat the rows as candidates.
+
 ## Phase 2 (not this change)
 
 After `release.created` / the existing webhook fanout path: load enabled alerts for users whose follows already include that release, ask JEV once per release with one `noul` question per alert, and deliver webhook + email when the probability is at least the alert's threshold. Fail **closed** on matcher errors (no notify). Cap questions per batch. Query text still never goes into Analytics Engine.
@@ -33,3 +54,4 @@ After `release.created` / the existing webhook fanout path: load enabled alerts 
 - Routes: `workers/api/src/routes/me-semantic-alerts.ts` (mounted with the other `/v1/me/*` handlers)
 - Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, list response, threshold and cap constants)
 - Web: `web/src/components/semantic-alerts-section.tsx` on the notifications panel
+- Admin preview: `workers/api/src/routes/admin-semantic-alerts.ts`, `workers/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
