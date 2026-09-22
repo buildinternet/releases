@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { etDayKey, etWeekStart } from "@buildinternet/releases-core/dates";
 import { api, ApiSetupError, type CollectionDailySummary } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
@@ -73,6 +74,10 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     : null;
   // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
+  const digestsByWeek = new Map(recentDigests.map((d) => [d.weekStart, d]));
+  // Computed once here (not with `new Date()` inside the client component) so
+  // the feed's "in progress" week divider agrees between SSR and hydration.
+  const currentWeekStart = etWeekStart(etDayKey(new Date()));
 
   const collectionUrl = `https://releases.sh/collections/${slug}`;
   const jsonLd = buildFeedPageJsonLd(releases.releases, {
@@ -137,6 +142,10 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
               initialCursor={releases.pagination.nextCursor}
               members={detail.members}
               summaryByDate={summaryByDate}
+              digestsByWeek={digestsByWeek}
+              heroWeekStart={latestDigest?.weekStart ?? null}
+              digestBasePath={`/collections/${slug}/digest`}
+              currentWeekStart={currentWeekStart}
             />
           </main>
           <CollectionContextRail
