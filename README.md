@@ -1,6 +1,7 @@
 <div align="center">
 
 <img src="docs/assets/readme-home.png" alt="Release Notes Index — the latest product releases, indexed for agents" width="760">
+[![MCP Queen operational grade](https://mcpqueen.com/badge/sh.releases/mcp.svg)](https://mcpqueen.com/s/sh.releases/mcp)
 
 <h1>Release Notes Index</h1>
 
