@@ -1279,15 +1279,62 @@ export interface DigestPrefsRequest {
   cadence: DigestCadence;
 }
 
+// ── Semantic alerts (#2304 Phase 1) ──
+
+/** Hard cap on saved semantic alerts per account. Enforced on create. */
+export const SEMANTIC_ALERT_MAX_PER_USER = 5;
+
+/** Freeform interest text, after trim. User-private — never an analytics label. */
+export const SEMANTIC_ALERT_QUERY_MAX_CHARS = 500;
+
+/** Default selected-choice probability. Phase 2 matcher uses this unless overridden. */
+export const SEMANTIC_ALERT_THRESHOLD_DEFAULT = 0.8;
+
+export const SEMANTIC_ALERT_THRESHOLD_MIN = 0.5;
+export const SEMANTIC_ALERT_THRESHOLD_MAX = 1;
+
+/**
+ * v1 candidate pool. Matching (Phase 2) scores only releases that already hit
+ * the caller's follow graph. Not a per-alert setting.
+ */
+export const SEMANTIC_ALERT_CANDIDATE_POOL = "follows" as const;
+
+/** One saved semantic alert. Query text is returned only to the owning user. */
+export interface SemanticAlert {
+  id: string;
+  query: string;
+  enabled: boolean;
+  /** Inclusive match probability in [0.50, 1.00]. Default 0.80. */
+  threshold: number;
+  /** Stored preference. Phase 1 does not send email. */
+  deliverEmail: boolean;
+  /** Stored preference. Phase 1 does not send webhook deliveries. */
+  deliverWebhook: boolean;
+  /** Optional link to one of the caller's `/v1/me/webhooks` subscriptions. */
+  webhookSubscriptionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /v1/me/semantic-alerts. `candidatePool` is the locked v1 scope. */
+export interface SemanticAlertListResponse {
+  alerts: SemanticAlert[];
+  candidatePool: typeof SEMANTIC_ALERT_CANDIDATE_POOL;
+  maxAlerts: number;
+}
+
 /**
  * GET /v1/me/settings/notifications — one-shot bootstrap for `/account/notifications`.
  * Composes digest cadence + feed token + webhook list so the settings page can
  * render with a single round-trip instead of three independent mounts.
+ * `semanticAlerts` is `null` when `semantic-alerts-enabled` is off (hide the
+ * section); an array, possibly empty, when the lane is on.
  */
 export interface NotificationSettingsResponse {
   cadence: DigestCadence;
   feedToken: FeedToken | null;
   webhooks: UserWebhookListItem[];
+  semanticAlerts: SemanticAlert[] | null;
 }
 
 /**

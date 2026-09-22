@@ -87,6 +87,11 @@ const TAGS = [
   { name: "Admin", description: "Admin-only telemetry. Bearer required." },
   { name: "Workflows", description: "Job triggers. Bearer required." },
   { name: "Webhooks", description: "Webhook subscription management." },
+  {
+    name: "Account",
+    description:
+      "Signed-in account preferences. Session cookie or user Bearer (`relu_` / OAuth JWT). Semantic alerts store interests only — matching is a later phase.",
+  },
   { name: "Sessions", description: "Managed-agent discovery sessions." },
 ];
 

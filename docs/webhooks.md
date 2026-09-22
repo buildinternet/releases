@@ -198,6 +198,10 @@ Response:
 
 `gap` is set when `since` is below what we still have buffered (~7 days). Backfill older events via `GET /v1/releases/latest`.
 
+## Semantic alerts
+
+Follow and org webhooks above deliver every matching `release.created` event. Semantic alerts are a separate signed-in preference: a freeform description of what you care about, later scored only against releases that already match your follows. Phase 1 stores the alert at `/v1/me/semantic-alerts` and does not deliver matches. See [architecture/semantic-alerts.md](./architecture/semantic-alerts.md) and [#2304](https://github.com/buildinternet/releases/issues/2304).
+
 ## Local debugging
 
 Verify signatures from a captured payload using the CLI:

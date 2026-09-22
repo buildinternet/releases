@@ -302,6 +302,17 @@ export const FLAGS = {
     description:
       "Self-serve Tier-1 promotion for verified owners (/v1/listing/promote). Off = route refuses. Creates live fetching sources, so this is a genuine incident lever distinct from the zero-cost listing lane.",
   },
+  // #2304 Phase 1 stores preferences only. The flag stays a kill switch so the
+  // later matcher can be shut off without touching structural follow webhooks.
+  semanticAlertsEnabled: {
+    key: "semantic-alerts-enabled",
+    env: "SEMANTIC_ALERTS_ENABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description:
+      "Semantic-alert preferences for signed-in users (/v1/me/semantic-alerts, #2304). Off = routes 404 and the account UI hides the section. Does not score or deliver matches.",
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

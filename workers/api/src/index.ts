@@ -296,6 +296,9 @@ export type Env = {
     // When "true", all relk_… tokens are rejected without a DB lookup.
     API_TOKENS_DISABLED?: string;
     USER_API_KEYS_ENABLED?: string;
+    // Semantic alerts CRUD (/v1/me/semantic-alerts, #2304). Fallback for the
+    // `semantic-alerts-enabled` flag. Off = routes 404. Matching is a later phase.
+    SEMANTIC_ALERTS_ENABLED?: string;
     WELL_KNOWN_MATERIALIZATION_ENABLED?: string;
     // Mobile-app discovery sweep tunables (cron/mobile-app-discovery.ts).
     MOBILE_DISCOVERY_INTERVAL_HOURS?: string;
