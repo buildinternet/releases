@@ -100,13 +100,47 @@ export function sourceProductFilterMismatch(
   return sourceProductId !== filterProductId;
 }
 
-export async function countUserOrgWebhookSubscriptions(db: D1Db, userId: string): Promise<number> {
+/** A webhook subscription's owner — either a user (personal) or a workspace. */
+export type WebhookOwner = { userId: string } | { workspaceId: string };
+
+function ownerPredicate(owner: WebhookOwner) {
+  return "userId" in owner
+    ? eq(webhookSubscriptions.userId, owner.userId)
+    : eq(webhookSubscriptions.workspaceId, owner.workspaceId);
+}
+
+/**
+ * Org-scoped subscription count for an owner. The user-owned count is
+ * `scope = 'org'` only (users can also hold one `follows`-scoped row, which
+ * must not count toward the org limit); workspace rows are always org-scoped
+ * already, but the same filter is kept so both callers share one predicate
+ * and the semantics stay correct if that ever changes.
+ */
+async function countOwnerOrgWebhookSubscriptions(db: D1Db, owner: WebhookOwner): Promise<number> {
   const row = await db
     .select({ n: sql<number>`count(*)` })
     .from(webhookSubscriptions)
-    .where(and(eq(webhookSubscriptions.userId, userId), eq(webhookSubscriptions.scope, "org")))
+    .where(and(ownerPredicate(owner), eq(webhookSubscriptions.scope, "org")))
     .get();
   return Number(row?.n ?? 0);
+}
+
+async function getOwnerWebhookSubscription(
+  db: D1Db,
+  owner: WebhookOwner,
+  id: string,
+): Promise<WebhookSubscription | null> {
+  return (
+    (await db
+      .select()
+      .from(webhookSubscriptions)
+      .where(and(eq(webhookSubscriptions.id, id), ownerPredicate(owner)))
+      .get()) ?? null
+  );
+}
+
+export async function countUserOrgWebhookSubscriptions(db: D1Db, userId: string): Promise<number> {
+  return countOwnerOrgWebhookSubscriptions(db, { userId });
 }
 
 export async function getUserFollowsWebhookSubscription(
@@ -129,13 +163,7 @@ export async function getUserWebhookSubscription(
   userId: string,
   id: string,
 ): Promise<WebhookSubscription | null> {
-  return (
-    (await db
-      .select()
-      .from(webhookSubscriptions)
-      .where(and(eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.userId, userId)))
-      .get()) ?? null
-  );
+  return getOwnerWebhookSubscription(db, { userId }, id);
 }
 
 export interface UserWebhookListItem {
@@ -248,14 +276,23 @@ function baseWebhookListItem(row: EnrichedWebhookRow): UserWebhookListItem {
   return { ...item, ...userWebhookDeliveryHealth(s) };
 }
 
+/** Shared list query for an owner (user or workspace), enriched with join fields. */
+async function listOwnerWebhookSubscriptionsEnriched(
+  db: D1Db,
+  owner: WebhookOwner,
+  opts?: { enabledOnly?: boolean },
+): Promise<EnrichedWebhookRow[]> {
+  const predicates = [ownerPredicate(owner)];
+  if (opts?.enabledOnly) predicates.push(eq(webhookSubscriptions.enabled, true));
+  return selectEnrichedWebhookRows(db, predicates);
+}
+
 export async function listUserWebhookSubscriptionsEnriched(
   db: D1Db,
   userId: string,
   opts?: { enabledOnly?: boolean },
 ): Promise<UserWebhookListItem[]> {
-  const predicates = [eq(webhookSubscriptions.userId, userId)];
-  if (opts?.enabledOnly) predicates.push(eq(webhookSubscriptions.enabled, true));
-  const rows = await selectEnrichedWebhookRows(db, predicates);
+  const rows = await listOwnerWebhookSubscriptionsEnriched(db, { userId }, opts);
   return rows.map(baseWebhookListItem);
 }
 
@@ -263,12 +300,7 @@ export async function countWorkspaceWebhookSubscriptions(
   db: D1Db,
   workspaceId: string,
 ): Promise<number> {
-  const row = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(webhookSubscriptions)
-    .where(eq(webhookSubscriptions.workspaceId, workspaceId))
-    .get();
-  return Number(row?.n ?? 0);
+  return countOwnerOrgWebhookSubscriptions(db, { workspaceId });
 }
 
 export async function getWorkspaceWebhookSubscription(
@@ -276,15 +308,7 @@ export async function getWorkspaceWebhookSubscription(
   workspaceId: string,
   id: string,
 ): Promise<WebhookSubscription | null> {
-  return (
-    (await db
-      .select()
-      .from(webhookSubscriptions)
-      .where(
-        and(eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.workspaceId, workspaceId)),
-      )
-      .get()) ?? null
-  );
+  return getOwnerWebhookSubscription(db, { workspaceId }, id);
 }
 
 export async function listWorkspaceWebhookSubscriptionsEnriched(
@@ -292,9 +316,7 @@ export async function listWorkspaceWebhookSubscriptionsEnriched(
   workspaceId: string,
   opts?: { enabledOnly?: boolean },
 ): Promise<(UserWebhookListItem & { workspaceId: string | null })[]> {
-  const predicates = [eq(webhookSubscriptions.workspaceId, workspaceId)];
-  if (opts?.enabledOnly) predicates.push(eq(webhookSubscriptions.enabled, true));
-  const rows = await selectEnrichedWebhookRows(db, predicates);
+  const rows = await listOwnerWebhookSubscriptionsEnriched(db, { workspaceId }, opts);
   return rows.map((row) => ({
     ...baseWebhookListItem(row),
     workspaceId: row.subscription.workspaceId,

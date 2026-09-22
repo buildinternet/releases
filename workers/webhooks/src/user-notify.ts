@@ -40,7 +40,7 @@ export async function getWorkspaceOwnerAdminContacts(
   return rows.filter((row): row is WebhookUserContact => Boolean(row?.email));
 }
 
-export function formatUserAutoPauseEmail(input: {
+interface AutoPauseEmailFields {
   recipientName: string | null;
   url: string;
   description: string | null;
@@ -49,22 +49,49 @@ export function formatUserAutoPauseEmail(input: {
   consecutiveFailures: number;
   lastError: string | null;
   disabledReason: string;
-  accountUrl: string;
-}): { subject: string; text: string; html: string } {
+}
+
+type AutoPauseOwnerContext =
+  | { kind: "account"; accountUrl: string }
+  | { kind: "workspace"; workspaceName: string; workspaceWebhooksUrl: string };
+
+/**
+ * Shared renderer for the personal and workspace auto-pause emails — the two
+ * differ only in the owner-scoped label/copy/link (account vs. workspace)
+ * and an extra "Workspace" data row. {@link formatUserAutoPauseEmail} and
+ * {@link formatWorkspaceAutoPauseEmail} are thin wrappers over this.
+ */
+function formatAutoPauseEmail(
+  input: AutoPauseEmailFields,
+  owner: AutoPauseOwnerContext,
+): { subject: string; text: string; html: string } {
   const label =
     input.description?.trim() ||
-    (input.orgName ? `${input.orgName} webhook` : "your follows webhook");
+    (owner.kind === "workspace"
+      ? `${owner.workspaceName} webhook`
+      : input.orgName
+        ? `${input.orgName} webhook`
+        : "your follows webhook");
+
+  const manageUrl = owner.kind === "workspace" ? owner.workspaceWebhooksUrl : owner.accountUrl;
+  const manageLabel = owner.kind === "workspace" ? "Manage workspace webhooks" : "Manage webhooks";
+  const patchPathHint =
+    owner.kind === "workspace" ? "/v1/workspaces/:workspaceId/webhooks/:id" : "/v1/me/webhooks/:id";
 
   const blocks: EmailBlock[] = [];
   if (input.recipientName) blocks.push({ t: "p", text: `Hi ${input.recipientName},` });
   blocks.push({
     t: "p",
-    text: `We paused **${label}** because we couldn't deliver events to your endpoint.`,
+    text:
+      owner.kind === "workspace"
+        ? `We paused **${label}** in the **${owner.workspaceName}** workspace because we couldn't deliver events to its endpoint.`
+        : `We paused **${label}** because we couldn't deliver events to your endpoint.`,
   });
   blocks.push({
     t: "data",
     rows: [
       { label: "Endpoint", value: input.url },
+      ...(owner.kind === "workspace" ? [{ label: "Workspace", value: owner.workspaceName }] : []),
       ...(input.orgName && input.orgSlug
         ? [{ label: "Org", value: `${input.orgName} (${input.orgSlug})` }]
         : []),
@@ -81,88 +108,53 @@ export function formatUserAutoPauseEmail(input: {
   });
   blocks.push({
     t: "p",
-    text: "While paused, we won't send new events to this URL. Fix your endpoint, then re-enable the webhook from your account.",
+    text:
+      owner.kind === "workspace"
+        ? "While paused, we won't send new events to this URL. Fix the endpoint, then re-enable the webhook from the workspace's webhook settings."
+        : "While paused, we won't send new events to this URL. Fix your endpoint, then re-enable the webhook from your account.",
   });
-  blocks.push({ t: "button", label: "Manage webhooks", url: input.accountUrl });
+  blocks.push({ t: "button", label: manageLabel, url: manageUrl });
   blocks.push({
     t: "fine",
-    text: 'You can also use `PATCH /v1/me/webhooks/:id` with `{"enabled": true}` once delivery should work again.',
+    text: `You can also use \`PATCH ${patchPathHint}\` with \`{"enabled": true}\` once delivery should work again.`,
   });
 
+  const title =
+    owner.kind === "workspace"
+      ? `A ${owner.workspaceName} webhook was paused`
+      : "Your Releases Index webhook was paused";
+
   const { html, text } = renderEmail({
-    lane: "Account · Webhooks",
-    title: "Your Releases Index webhook was paused",
+    lane: owner.kind === "workspace" ? "Workspace · Webhooks" : "Account · Webhooks",
+    title,
     preheader: `We paused ${label} after repeated delivery failures.`,
     blocks,
     footer: {
       reason:
-        "You received this because a webhook subscription tied to your Releases Index account was auto-paused.",
-      links: [{ label: "Manage webhooks", href: input.accountUrl }],
+        owner.kind === "workspace"
+          ? `You received this because you're an owner or admin of the ${owner.workspaceName} workspace, and one of its webhook subscriptions was auto-paused.`
+          : "You received this because a webhook subscription tied to your Releases Index account was auto-paused.",
+      links: [{ label: manageLabel, href: manageUrl }],
     },
   });
 
-  return { subject: "Your Releases Index webhook was paused", text, html };
+  return { subject: title, text, html };
 }
 
-export function formatWorkspaceAutoPauseEmail(input: {
-  recipientName: string | null;
-  url: string;
-  description: string | null;
-  workspaceName: string;
-  orgName: string | null;
-  orgSlug: string | null;
-  consecutiveFailures: number;
-  lastError: string | null;
-  disabledReason: string;
-  workspaceWebhooksUrl: string;
-}): { subject: string; text: string; html: string } {
-  const label = input.description?.trim() || `${input.workspaceName} webhook`;
+export function formatUserAutoPauseEmail(input: AutoPauseEmailFields & { accountUrl: string }): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  return formatAutoPauseEmail(input, { kind: "account", accountUrl: input.accountUrl });
+}
 
-  const blocks: EmailBlock[] = [];
-  if (input.recipientName) blocks.push({ t: "p", text: `Hi ${input.recipientName},` });
-  blocks.push({
-    t: "p",
-    text: `We paused **${label}** in the **${input.workspaceName}** workspace because we couldn't deliver events to its endpoint.`,
+export function formatWorkspaceAutoPauseEmail(
+  input: AutoPauseEmailFields & { workspaceName: string; workspaceWebhooksUrl: string },
+): { subject: string; text: string; html: string } {
+  return formatAutoPauseEmail(input, {
+    kind: "workspace",
+    workspaceName: input.workspaceName,
+    workspaceWebhooksUrl: input.workspaceWebhooksUrl,
   });
-  blocks.push({
-    t: "data",
-    rows: [
-      { label: "Endpoint", value: input.url },
-      { label: "Workspace", value: input.workspaceName },
-      ...(input.orgName && input.orgSlug
-        ? [{ label: "Org", value: `${input.orgName} (${input.orgSlug})` }]
-        : []),
-      {
-        label: "Failures",
-        value: `${input.consecutiveFailures} consecutive delivery failures`,
-        kind: "err" as const,
-      },
-      ...(input.lastError
-        ? [{ label: "Last error", value: input.lastError, kind: "err" as const }]
-        : []),
-      { label: "Reason", value: input.disabledReason },
-    ],
-  });
-  blocks.push({
-    t: "p",
-    text: "While paused, we won't send new events to this URL. Fix the endpoint, then re-enable the webhook from the workspace's webhook settings.",
-  });
-  blocks.push({ t: "button", label: "Manage workspace webhooks", url: input.workspaceWebhooksUrl });
-  blocks.push({
-    t: "fine",
-    text: 'You can also use `PATCH /v1/workspaces/:workspaceId/webhooks/:id` with `{"enabled": true}` once delivery should work again.',
-  });
-
-  const { html, text } = renderEmail({
-    lane: "Workspace · Webhooks",
-    title: `A ${input.workspaceName} webhook was paused`,
-    preheader: `We paused ${label} after repeated delivery failures.`,
-    blocks,
-    footer: {
-      reason: `You received this because you're an owner or admin of the ${input.workspaceName} workspace, and one of its webhook subscriptions was auto-paused.`,
-      links: [{ label: "Manage workspace webhooks", href: input.workspaceWebhooksUrl }],
-    },
-  });
-
-  return { subject: `A ${input.workspaceName} webhook was paused`, text, html };
 }

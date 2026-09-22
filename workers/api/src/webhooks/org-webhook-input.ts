@@ -14,8 +14,15 @@ import {
   sourceProductFilterMismatch,
 } from "./user-queries.js";
 import { parseReleaseTypeFilter } from "./subscription-match.js";
+import { buildWebhookPatchUpdates } from "./shared.js";
+import type { WebhookSubscriptionUpdates } from "./queries.js";
 import type { D1Db } from "../db.js";
-import { NotFoundError, ValidationError, type ReleasesError } from "@releases/lib/releases-error";
+import {
+  NotFoundError,
+  ValidationError,
+  isReleasesError,
+  type ReleasesError,
+} from "@releases/lib/releases-error";
 
 const encoder = new TextEncoder();
 
@@ -166,4 +173,91 @@ export async function resolveOrgWebhookPatchFilters(
   if (body.productId !== undefined || body.productSlug !== undefined)
     result.productId = nextProductId;
   return result;
+}
+
+export interface OwnedWebhookForPatch {
+  scope: "org" | "follows";
+  orgId: string | null;
+  sourceId: string | null;
+  productId: string | null;
+  format: WebhookFormat;
+  url: string;
+}
+
+/**
+ * Full PATCH-body validation for both `/v1/me/webhooks/:id` and
+ * `/v1/workspaces/:workspaceId/webhooks/:id` — url safety, the field-level
+ * patch builder, the effective format/url re-check, releaseType, and
+ * scope-appropriate source/product filter resolution (org-scoped webhooks
+ * reuse {@link resolveOrgWebhookPatchFilters}; follows-scoped ones reject
+ * source/product fields outright — workspace webhooks are always org-scoped,
+ * so that branch never applies there). Returns the same errors, in the same
+ * order, that both routes threw before this was shared.
+ */
+export async function buildWebhookPatch(
+  db: D1Db,
+  owned: OwnedWebhookForPatch,
+  body: Record<string, unknown>,
+): Promise<WebhookSubscriptionUpdates | ReleasesError> {
+  if (typeof body.url === "string") {
+    const urlError = await assertPublicWebhookTarget(body.url);
+    if (urlError) return new ValidationError(urlError, { code: "bad_request" });
+  }
+
+  const basePatch = buildWebhookPatchUpdates(
+    body as Partial<{
+      url: string;
+      description: string | null;
+      enabled: boolean;
+      disabledReason: string | null;
+      format: WebhookFormat;
+    }>,
+  );
+  const patch = "error" in basePatch ? ({} as WebhookSubscriptionUpdates) : basePatch;
+  if ("error" in basePatch && basePatch.error !== "no recognized fields to update") {
+    return new ValidationError(basePatch.error, { code: "bad_request" });
+  }
+
+  {
+    const effectiveFormat = parseWebhookFormat(body.format ?? owned.format);
+    const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
+    if (effectiveFormat === null) {
+      return new ValidationError("format must be 'json', 'slack', or 'discord'", {
+        code: "bad_request",
+      });
+    }
+    const formatUrlError = validateFormatWebhookUrl(effectiveFormat, effectiveUrl);
+    if (formatUrlError) return new ValidationError(formatUrlError, { code: "bad_request" });
+  }
+
+  if (body.releaseType !== undefined) {
+    const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
+    if (releaseTypeFilter === "invalid") {
+      return new ValidationError("releaseType must be feature or rollup", { code: "bad_request" });
+    }
+    patch.releaseType = releaseTypeFilter;
+  }
+
+  if (owned.scope === "org") {
+    const filters = await resolveOrgWebhookPatchFilters(db, owned, body);
+    if (isReleasesError(filters)) return filters;
+    if ("sourceId" in filters) patch.sourceId = filters.sourceId ?? null;
+    if ("productId" in filters) patch.productId = filters.productId ?? null;
+  } else if (
+    body.sourceId !== undefined ||
+    body.sourceSlug !== undefined ||
+    body.productId !== undefined ||
+    body.productSlug !== undefined
+  ) {
+    return new ValidationError(
+      "follows-scoped webhooks cannot set sourceId, sourceSlug, productId, or productSlug",
+      { code: "bad_request" },
+    );
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return new ValidationError("no recognized fields to update", { code: "bad_request" });
+  }
+
+  return patch;
 }

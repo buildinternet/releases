@@ -56,25 +56,45 @@ export function AddOrgWebhookLink({ orgSlug, orgName }: { orgSlug: string; orgNa
   );
 }
 
-/** Menu row — extracted so tests can assert the deep-link without opening state. */
-export function AddOrgWebhookMenuItem({ orgSlug, orgName }: { orgSlug: string; orgName?: string }) {
+/** Shared menu-row markup for both webhook create deep-links below. */
+function WebhookMenuItem({
+  href,
+  ariaLabel,
+  title,
+  subtitle,
+}: {
+  href: string;
+  ariaLabel: string;
+  title: string;
+  subtitle: string;
+}) {
   return (
     <Link
       role="menuitem"
-      href={orgWebhookCreatePath(orgSlug)}
-      aria-label={orgName ? `Add webhook for me — ${orgName}` : "Add webhook for me"}
+      href={href}
+      aria-label={ariaLabel}
       className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-2)]"
     >
       <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--fg-2)]">
         <WebhooksIcon className="h-[15px] w-[15px]" />
       </span>
       <span className="min-w-0">
-        <span className="block text-[13px] font-medium text-[var(--fg)]">Add webhook for me</span>
-        <span className="block truncate text-[11.5px] text-[var(--fg-3)]">
-          Only you see this one
-        </span>
+        <span className="block text-[13px] font-medium text-[var(--fg)]">{title}</span>
+        <span className="block truncate text-[11.5px] text-[var(--fg-3)]">{subtitle}</span>
       </span>
     </Link>
+  );
+}
+
+/** Menu row — extracted so tests can assert the deep-link without opening state. */
+export function AddOrgWebhookMenuItem({ orgSlug, orgName }: { orgSlug: string; orgName?: string }) {
+  return (
+    <WebhookMenuItem
+      href={orgWebhookCreatePath(orgSlug)}
+      ariaLabel={orgName ? `Add webhook for me — ${orgName}` : "Add webhook for me"}
+      title="Add webhook for me"
+      subtitle="Only you see this one"
+    />
   );
 }
 
@@ -87,25 +107,13 @@ export function AddOrgWorkspaceWebhookMenuItem({
   orgName?: string;
 }) {
   return (
-    <Link
-      role="menuitem"
+    <WebhookMenuItem
       href={orgWorkspaceWebhookCreatePath(orgSlug)}
-      aria-label={
+      ariaLabel={
         orgName ? `Add webhook for this workspace — ${orgName}` : "Add webhook for this workspace"
       }
-      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-2)]"
-    >
-      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--fg-2)]">
-        <WebhooksIcon className="h-[15px] w-[15px]" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[13px] font-medium text-[var(--fg)]">
-          Add webhook for this workspace
-        </span>
-        <span className="block truncate text-[11.5px] text-[var(--fg-3)]">
-          Everyone in the workspace sees this one
-        </span>
-      </span>
-    </Link>
+      title="Add webhook for this workspace"
+      subtitle="Everyone in the workspace sees this one"
+    />
   );
 }

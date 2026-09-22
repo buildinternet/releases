@@ -125,18 +125,19 @@ async function notifyWorkspaceOwnersAdmins(
     workspaceWebhooksUrl,
   });
 
-  for (const contact of contacts) {
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- per-recipient sends must not block on each other's failures
-      await sendWebhookUserNotice(env, contact.email, notice.subject, notice.text, notice.html);
-    } catch (err) {
-      logEvent("warn", {
-        component: "webhook-auto-disable",
-        event: "workspace-notify-failed",
-        subscriptionId: sub.id,
-        workspaceId,
-        err,
-      });
-    }
-  }
+  await Promise.all(
+    contacts.map((contact) =>
+      sendWebhookUserNotice(env, contact.email, notice.subject, notice.text, notice.html).catch(
+        (err) => {
+          logEvent("warn", {
+            component: "webhook-auto-disable",
+            event: "workspace-notify-failed",
+            subscriptionId: sub.id,
+            workspaceId,
+            err,
+          });
+        },
+      ),
+    ),
+  );
 }

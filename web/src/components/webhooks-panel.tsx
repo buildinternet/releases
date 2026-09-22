@@ -296,8 +296,7 @@ export function WebhooksPanel({
   useEffect(() => {
     if (initialWebhooks != null) return;
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialWebhooks]);
+  }, [initialWebhooks, refresh]);
 
   async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

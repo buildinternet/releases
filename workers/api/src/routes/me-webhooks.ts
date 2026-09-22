@@ -12,13 +12,11 @@ import {
   bumpWebhookSecretVersion,
 } from "../webhooks/queries.js";
 import {
-  buildWebhookPatchUpdates,
   buildWebhookTestEvent,
   queryWebhookDeliveries,
   requireMasterKey,
   signingKeyFor,
 } from "../webhooks/shared.js";
-import { assertPublicWebhookTarget, validateFormatWebhookUrl } from "../webhooks/url-safety.js";
 import {
   checkWebhookTestRateLimit,
   WEBHOOK_TEST_RATE_WINDOW_SECONDS,
@@ -26,7 +24,6 @@ import {
 } from "../webhooks/test-rate-limit.js";
 import {
   isUnsignedWebhookFormat,
-  parseWebhookFormat,
   type WebhookSubscription,
   type WebhookFormat,
 } from "@buildinternet/releases-core/schema";
@@ -41,8 +38,8 @@ import {
 } from "../webhooks/user-queries.js";
 import { parseReleaseTypeFilter } from "../webhooks/subscription-match.js";
 import {
+  buildWebhookPatch,
   parseWebhookCommonFields,
-  resolveOrgWebhookPatchFilters,
   resolveOrgWebhookScopeFields,
 } from "../webhooks/org-webhook-input.js";
 
@@ -273,86 +270,13 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
     return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
   }
 
-  if (typeof body.url === "string") {
-    const urlError = await assertPublicWebhookTarget(body.url);
-    if (urlError) return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
-  }
-
-  const basePatch = buildWebhookPatchUpdates(
-    body as Partial<{
-      url: string;
-      description: string | null;
-      enabled: boolean;
-      disabledReason: string | null;
-      format: WebhookFormat;
-    }>,
-  );
-  const patch =
-    "error" in basePatch
-      ? ({} as import("../webhooks/queries.js").WebhookSubscriptionUpdates)
-      : basePatch;
-  if ("error" in basePatch && basePatch.error !== "no recognized fields to update") {
-    return respondError(c, new ValidationError(basePatch.error, { code: "bad_request" }));
-  }
-
   const id = c.req.param("id");
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
   if (!owned) return respondError(c, new NotFoundError());
 
-  {
-    const effectiveFormat = parseWebhookFormat(body.format ?? owned.format);
-    const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
-    if (effectiveFormat === null) {
-      return respondError(
-        c,
-        new ValidationError("format must be 'json', 'slack', or 'discord'", {
-          code: "bad_request",
-        }),
-      );
-    }
-    const formatUrlError = validateFormatWebhookUrl(effectiveFormat, effectiveUrl);
-    if (formatUrlError)
-      return respondError(c, new ValidationError(formatUrlError, { code: "bad_request" }));
-  }
-
-  if (body.releaseType !== undefined) {
-    const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
-    if (releaseTypeFilter === "invalid") {
-      return respondError(
-        c,
-        new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
-      );
-    }
-    patch.releaseType = releaseTypeFilter;
-  }
-
-  if (owned.scope === "org") {
-    const filters = await resolveOrgWebhookPatchFilters(db, owned, body);
-    if (isReleasesError(filters)) return respondError(c, filters);
-    if ("sourceId" in filters) patch.sourceId = filters.sourceId ?? null;
-    if ("productId" in filters) patch.productId = filters.productId ?? null;
-  } else if (
-    body.sourceId !== undefined ||
-    body.sourceSlug !== undefined ||
-    body.productId !== undefined ||
-    body.productSlug !== undefined
-  ) {
-    return respondError(
-      c,
-      new ValidationError(
-        "follows-scoped webhooks cannot set sourceId, sourceSlug, productId, or productSlug",
-        { code: "bad_request" },
-      ),
-    );
-  }
-
-  if (Object.keys(patch).length === 0) {
-    return respondError(
-      c,
-      new ValidationError("no recognized fields to update", { code: "bad_request" }),
-    );
-  }
+  const patch = await buildWebhookPatch(db, owned, body);
+  if (isReleasesError(patch)) return respondError(c, patch);
 
   const fresh = await updateWebhookSubscription(db, id, patch);
   if (!fresh) return respondError(c, new NotFoundError());

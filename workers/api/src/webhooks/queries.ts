@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import {
   webhookSubscriptions,
   type WebhookSubscription,
@@ -151,16 +151,20 @@ export async function listWebhookSubscriptionsByOrg(
 
 /**
  * Worker-local partial update. Returns null when id matches no row.
- * D1 UPDATE on a missing row is a no-op, so re-fetching tells us both
- * "current state" and "did the row exist" in one round-trip.
+ * A single `UPDATE … RETURNING` gives us the fresh row and "did it exist"
+ * in one round-trip, instead of an UPDATE followed by a SELECT.
  */
 export async function updateWebhookSubscription(
   db: D1Db,
   id: string,
   updates: WebhookSubscriptionUpdates,
 ): Promise<WebhookSubscription | null> {
-  await db.update(webhookSubscriptions).set(updates).where(eq(webhookSubscriptions.id, id));
-  return getWebhookSubscriptionById(db, id);
+  const [row] = await db
+    .update(webhookSubscriptions)
+    .set(updates)
+    .where(eq(webhookSubscriptions.id, id))
+    .returning();
+  return row ?? null;
 }
 
 /** Worker-local delete. Idempotent — no error if id missing. */
@@ -169,17 +173,16 @@ export async function deleteWebhookSubscription(db: D1Db, id: string): Promise<v
 }
 
 /**
- * Bump secret_version via read-modify-write. Returns the new version, or
- * null when the subscription is missing. Not atomic — concurrent rotations
- * could collide on the same version (admin endpoint, low contention).
+ * Atomically bumps secret_version via `UPDATE … SET secret_version =
+ * secret_version + 1 … RETURNING`. Returns the new version, or null when the
+ * subscription is missing. Atomic — no read-modify-write race between
+ * concurrent rotations.
  */
 export async function bumpWebhookSecretVersion(db: D1Db, id: string): Promise<number | null> {
-  const cur = await getWebhookSubscriptionById(db, id);
-  if (!cur) return null;
-  const newVersion = cur.secretVersion + 1;
-  await db
+  const [row] = await db
     .update(webhookSubscriptions)
-    .set({ secretVersion: newVersion })
-    .where(eq(webhookSubscriptions.id, id));
-  return newVersion;
+    .set({ secretVersion: sql`${webhookSubscriptions.secretVersion} + 1` })
+    .where(eq(webhookSubscriptions.id, id))
+    .returning({ secretVersion: webhookSubscriptions.secretVersion });
+  return row?.secretVersion ?? null;
 }

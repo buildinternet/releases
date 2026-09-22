@@ -18,13 +18,11 @@ import {
   bumpWebhookSecretVersion,
 } from "../webhooks/queries.js";
 import {
-  buildWebhookPatchUpdates,
   buildWebhookTestEvent,
   queryWebhookDeliveries,
   requireMasterKey,
   signingKeyFor,
 } from "../webhooks/shared.js";
-import { assertPublicWebhookTarget, validateFormatWebhookUrl } from "../webhooks/url-safety.js";
 import {
   checkWebhookTestRateLimit,
   WEBHOOK_TEST_RATE_WINDOW_SECONDS,
@@ -32,7 +30,6 @@ import {
 } from "../webhooks/test-rate-limit.js";
 import {
   isUnsignedWebhookFormat,
-  parseWebhookFormat,
   type WebhookSubscription,
 } from "@buildinternet/releases-core/schema";
 import {
@@ -42,10 +39,9 @@ import {
   MAX_WORKSPACE_WEBHOOK_SUBSCRIPTIONS,
   userWebhookDeliveryHealth,
 } from "../webhooks/user-queries.js";
-import { parseReleaseTypeFilter } from "../webhooks/subscription-match.js";
 import {
+  buildWebhookPatch,
   parseWebhookCommonFields,
-  resolveOrgWebhookPatchFilters,
   resolveOrgWebhookScopeFields,
 } from "../webhooks/org-webhook-input.js";
 import {
@@ -99,7 +95,7 @@ workspaceWebhookHandlers.get("/workspaces/:workspaceId/webhooks", async (c) => {
   const workspaceId = c.req.param("workspaceId");
   const db = getDb(c);
   const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-  if (!member.ok) return respondError(c, workspaceGateError({ ok: false, status: 404 }));
+  if (!member.ok) return respondError(c, workspaceGateError(member));
 
   const enabledParam = c.req.query("enabled");
   const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
@@ -227,7 +223,7 @@ workspaceWebhookHandlers.get("/workspaces/:workspaceId/webhooks/:id", async (c) 
   const workspaceId = c.req.param("workspaceId");
   const db = getDb(c);
   const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-  if (!member.ok) return respondError(c, workspaceGateError({ ok: false, status: 404 }));
+  if (!member.ok) return respondError(c, workspaceGateError(member));
 
   const id = c.req.param("id");
   const sub = await getWorkspaceWebhookSubscription(db, workspaceId, id);
@@ -251,71 +247,14 @@ workspaceWebhookHandlers.patch("/workspaces/:workspaceId/webhooks/:id", async (c
     return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
   }
 
-  if (typeof body.url === "string") {
-    const urlError = await assertPublicWebhookTarget(body.url);
-    if (urlError) return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
-  }
-
-  const basePatch = buildWebhookPatchUpdates(
-    body as Partial<{
-      url: string;
-      description: string | null;
-      enabled: boolean;
-      disabledReason: string | null;
-      format: WebhookSubscription["format"];
-    }>,
-  );
-  const patch =
-    "error" in basePatch
-      ? ({} as import("../webhooks/queries.js").WebhookSubscriptionUpdates)
-      : basePatch;
-  if ("error" in basePatch && basePatch.error !== "no recognized fields to update") {
-    return respondError(c, new ValidationError(basePatch.error, { code: "bad_request" }));
-  }
-
   const id = c.req.param("id");
   const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
   if (!owned) return respondError(c, new NotFoundError());
 
-  {
-    const effectiveFormat = parseWebhookFormat(body.format ?? owned.format);
-    const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
-    if (effectiveFormat === null) {
-      return respondError(
-        c,
-        new ValidationError("format must be 'json', 'slack', or 'discord'", {
-          code: "bad_request",
-        }),
-      );
-    }
-    const formatUrlError = validateFormatWebhookUrl(effectiveFormat, effectiveUrl);
-    if (formatUrlError)
-      return respondError(c, new ValidationError(formatUrlError, { code: "bad_request" }));
-  }
-
-  if (body.releaseType !== undefined) {
-    const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
-    if (releaseTypeFilter === "invalid") {
-      return respondError(
-        c,
-        new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
-      );
-    }
-    patch.releaseType = releaseTypeFilter;
-  }
-
-  // Workspace webhooks are always org-scoped — reuse the shared org-patch resolver directly.
-  const filters = await resolveOrgWebhookPatchFilters(db, owned, body);
-  if (isReleasesError(filters)) return respondError(c, filters);
-  if ("sourceId" in filters) patch.sourceId = filters.sourceId ?? null;
-  if ("productId" in filters) patch.productId = filters.productId ?? null;
-
-  if (Object.keys(patch).length === 0) {
-    return respondError(
-      c,
-      new ValidationError("no recognized fields to update", { code: "bad_request" }),
-    );
-  }
+  // Workspace webhooks are always org-scoped — the shared patch builder's
+  // org-scope branch (resolveOrgWebhookPatchFilters) always applies here.
+  const patch = await buildWebhookPatch(db, owned, body);
+  if (isReleasesError(patch)) return respondError(c, patch);
 
   const fresh = await updateWebhookSubscription(db, id, patch);
   if (!fresh) return respondError(c, new NotFoundError());
@@ -420,7 +359,7 @@ workspaceWebhookHandlers.post(
       preclaim: async () => {
         const db = getDb(c);
         const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-        if (!member.ok) return respondError(c, workspaceGateError({ ok: false, status: 404 }));
+        if (!member.ok) return respondError(c, workspaceGateError(member));
 
         const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
         if (!queue) {
@@ -467,7 +406,7 @@ workspaceWebhookHandlers.get("/workspaces/:workspaceId/webhooks/:id/deliveries",
   const workspaceId = c.req.param("workspaceId");
   const db = getDb(c);
   const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-  if (!member.ok) return respondError(c, workspaceGateError({ ok: false, status: 404 }));
+  if (!member.ok) return respondError(c, workspaceGateError(member));
 
   const id = c.req.param("id");
   const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
