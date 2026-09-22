@@ -31,7 +31,7 @@ type PreviewResult = {
     demo: boolean;
     followsEligible: boolean;
   };
-  follow: { slug: string };
+  follow: { slug: string; ensured: boolean };
   releases: PreviewRelease[];
   matcher: {
     status: string;
@@ -117,10 +117,11 @@ export function SemanticAlertPreviewPanel() {
       <p className="text-sm text-stone-600 dark:text-stone-400">
         Generates plausible changelog entries and inserts them through the same batch path as
         production ingest, including <code>release.created</code> and webhook fanout. A blank source
-        uses the dedicated <code>semantic-alerts-demo</code> org (visible so follows can include it,
-        not featured, fetch paused). Titles start with <code>[demo]</code>. At most {MAX_COUNT} per
-        request, and that org holds at most {MAX_COUNT} synthetic rows until you purge. Summaries
-        and embeddings are skipped.
+        uses the dedicated <code>semantic-alerts-demo</code> org (visible, not featured, fetch
+        paused). Passing a user id on that source follows the org for the account so scoring can
+        run. Titles start with <code>[demo]</code>. At most {MAX_COUNT} per request, and that org
+        holds at most {MAX_COUNT} synthetic rows until you purge. Purge leaves the follow in place.
+        Summaries and embeddings are skipped.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -152,7 +153,7 @@ export function SemanticAlertPreviewPanel() {
           </span>
           <input
             className={inputClass}
-            placeholder="Better Auth user id — omitted skips matching"
+            placeholder="Better Auth user id — on the demo source, this account follows that org"
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
           />
@@ -191,7 +192,7 @@ export function SemanticAlertPreviewPanel() {
   );
 }
 
-function PreviewResultView({ result }: { result: PreviewResult }) {
+export function PreviewResultView({ result }: { result: PreviewResult }) {
   const matcher =
     result.matcher.status === "scored"
       ? `${result.matcher.matches.filter((hit) => hit.matched).length} match${result.matcher.matches.filter((hit) => hit.matched).length === 1 ? "" : "es"} of ${result.matcher.matches.length} scored`
@@ -210,7 +211,12 @@ function PreviewResultView({ result }: { result: PreviewResult }) {
         </code>
         . {matcher}
       </p>
-      {result.source.followsEligible ? (
+      {result.follow.ensured ? (
+        <p className="text-sm text-stone-600 dark:text-stone-400">
+          This account follows <code>{result.follow.slug}</code>, so these releases are in its
+          candidate pool. Purge removes the synthetic releases and leaves the follow in place.
+        </p>
+      ) : result.source.followsEligible ? (
         <p className="text-sm text-stone-600 dark:text-stone-400">
           Follow <code>{result.follow.slug}</code> so these releases sit in that account&apos;s
           follows-scoped candidate pool.

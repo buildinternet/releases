@@ -70,9 +70,10 @@ Operator tool for local development and live demos. Admin or root only (`admin/s
 - `sourceId` is `src_…` or `orgSlug/sourceSlug` when the demo org is the wrong target. A bare slug is rejected. This is the only way to write onto any other org.
 - Rows go through `ingestReleaseBatch` and `runBatchIngestEffects` (the batch upsert, `publishReleaseEvents`, and webhook fanout). Summaries and embeddings are skipped so a demo does not spend the summarize lane or write vectors.
 - Titles are prefixed `[demo]`. `metadata.semanticAlertDemo` is `true`. The dedicated demo source refuses a request that would push it past 20 flagged rows (`429 limit_exceeded`).
-- `userId`, when set, must be a real account. The response `matcher` field is `scored` when the JEV model is available (including an empty candidate set), or `unavailable` with `model_unavailable` when OpenRouter cannot be built. Omit `userId` and `matcher.status` is `skipped`. A matcher exception is reported as `error` and does not roll back the insert. Follow `semantic-alerts-demo` (or the target org) and create enabled alerts on that account before expecting matches.
+- `userId`, when set, must be a real account. The response `matcher` field is `scored` when the JEV model is available (including an empty candidate set), or `unavailable` with `model_unavailable` when OpenRouter cannot be built. Omit `userId` and `matcher.status` is `skipped`. A matcher exception is reported as `error` and does not roll back the insert or the follow. Create enabled alerts on that account before expecting matches.
+- On a successful preview of the dedicated demo source, `userId` upserts an org follow of `semantic-alerts-demo` for that account before insert and publish, so the follows-only matcher has a candidate pool. `follow.ensured` is `true` when that upsert ran, including when the follow was already there. Purge leaves the follow in place. Omit `userId` and no follow is written (`follow.ensured` is `false`). An explicit `sourceId` is not auto-followed — follow that org before expecting matches there.
 
-`POST /v1/admin/semantic-alerts/purge` deletes **only** rows with `semanticAlertDemo: true`.
+`POST /v1/admin/semantic-alerts/purge` deletes **only** rows with `semanticAlertDemo: true`. It does not unfollow `semantic-alerts-demo`. Unfollow from the account if the demo org should leave the feed.
 
 - `{}` purges the dedicated demo source.
 - `{ sourceId }` purges flagged rows on that source.
