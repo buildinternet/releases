@@ -1439,7 +1439,7 @@ export interface MeWorkspace {
   slug: string;
   logo: string | null;
   /** Workspace membership role (`member.role`, not `user.role`). */
-  role: "owner" | "admin" | "member";
+  role: WorkspaceMemberRole;
   /** The caller's active workspace (see docs/architecture/workspaces.md). */
   active: boolean;
   createdAt: string;
