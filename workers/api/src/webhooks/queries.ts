@@ -4,6 +4,7 @@ import {
   type WebhookSubscription,
   type WebhookFormat,
 } from "@buildinternet/releases-core/schema";
+import { newWebhookSubscriptionId } from "@buildinternet/releases-core/id";
 import { userFollows } from "../db/schema-follows.js";
 import { foldUserFollowRows, type UserFollowTargets } from "./follows-match.js";
 import type { D1Db } from "../db.js";
@@ -111,6 +112,43 @@ export async function insertWebhookSubscription(
     })
     .returning();
   return row;
+}
+
+/**
+ * Insert a workspace-owned org-scoped subscription only while the workspace has
+ * fewer than `max` org-scoped rows. The cap check and the insert are one
+ * statement, so concurrent creates can't push a workspace past the cap.
+ * Returns null when the workspace is already at the cap.
+ */
+export async function insertWorkspaceWebhookSubscriptionCapped(
+  db: D1Db,
+  input: {
+    workspaceId: string;
+    orgId: string;
+    url: string;
+    sourceId: string | null;
+    productId: string | null;
+    releaseType: "feature" | "rollup" | null;
+    format: WebhookFormat;
+    description: string | null;
+  },
+  max: number,
+): Promise<WebhookSubscription | null> {
+  const id = newWebhookSubscriptionId();
+  const createdAt = new Date().toISOString();
+  const inserted = await db.all<{ id: string }>(sql`
+    INSERT INTO webhook_subscriptions
+      (id, scope, org_id, url, source_id, product_id, release_type, format, description, workspace_id, created_at)
+    SELECT ${id}, 'org', ${input.orgId}, ${input.url}, ${input.sourceId}, ${input.productId},
+      ${input.releaseType}, ${input.format}, ${input.description}, ${input.workspaceId}, ${createdAt}
+    WHERE (
+      SELECT COUNT(*) FROM webhook_subscriptions
+      WHERE workspace_id = ${input.workspaceId} AND scope = 'org'
+    ) < ${max}
+    RETURNING id
+  `);
+  if (inserted.length === 0) return null;
+  return getWebhookSubscriptionById(db, id);
 }
 
 /**

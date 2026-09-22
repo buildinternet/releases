@@ -296,13 +296,6 @@ export async function listUserWebhookSubscriptionsEnriched(
   return rows.map(baseWebhookListItem);
 }
 
-export async function countWorkspaceWebhookSubscriptions(
-  db: D1Db,
-  workspaceId: string,
-): Promise<number> {
-  return countOwnerOrgWebhookSubscriptions(db, { workspaceId });
-}
-
 export async function getWorkspaceWebhookSubscription(
   db: D1Db,
   workspaceId: string,

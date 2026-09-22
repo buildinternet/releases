@@ -12,7 +12,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { createDb } from "../db.js";
 import {
-  insertWebhookSubscription,
+  insertWorkspaceWebhookSubscriptionCapped,
   updateWebhookSubscription,
   deleteWebhookSubscription,
   bumpWebhookSecretVersion,
@@ -33,7 +33,6 @@ import {
   type WebhookSubscription,
 } from "@buildinternet/releases-core/schema";
 import {
-  countWorkspaceWebhookSubscriptions,
   getWorkspaceWebhookSubscription,
   listWorkspaceWebhookSubscriptionsEnriched,
   MAX_WORKSPACE_WEBHOOK_SUBSCRIPTIONS,
@@ -177,8 +176,21 @@ workspaceWebhookHandlers.post(
         };
       },
       execute: async (input) => {
-        const count = await countWorkspaceWebhookSubscriptions(input.db, input.workspaceId);
-        if (count >= MAX_WORKSPACE_WEBHOOK_SUBSCRIPTIONS) {
+        const sub = await insertWorkspaceWebhookSubscriptionCapped(
+          input.db,
+          {
+            workspaceId: input.workspaceId,
+            orgId: input.org.id,
+            url: input.url,
+            sourceId: input.resolvedSourceId,
+            productId: input.resolvedProductId,
+            releaseType: input.releaseType,
+            format: input.format,
+            description: input.description,
+          },
+          MAX_WORKSPACE_WEBHOOK_SUBSCRIPTIONS,
+        );
+        if (!sub) {
           return respondError(
             c,
             new RateLimitedError(
@@ -187,18 +199,6 @@ workspaceWebhookHandlers.post(
             ),
           );
         }
-
-        const sub = await insertWebhookSubscription(input.db, {
-          scope: "org",
-          orgId: input.org.id,
-          url: input.url,
-          sourceId: input.resolvedSourceId,
-          productId: input.resolvedProductId,
-          releaseType: input.releaseType,
-          format: input.format,
-          description: input.description,
-          workspaceId: input.workspaceId,
-        });
         const signingKey = isUnsignedWebhookFormat(input.format)
           ? undefined
           : await signingKeyFor(input.masterKey, sub.id, sub.secretVersion);

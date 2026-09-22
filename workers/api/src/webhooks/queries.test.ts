@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createTestDb, type TestDatabase } from "../../../../tests/db-helper.js";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { authOrganization } from "../db/schema-auth.js";
-import { insertWebhookSubscription, matchWebhookSubscriptions } from "./queries.js";
+import {
+  insertWebhookSubscription,
+  insertWorkspaceWebhookSubscriptionCapped,
+  matchWebhookSubscriptions,
+} from "./queries.js";
 import type { D1Db } from "../db.js";
 
 let h: TestDatabase;
@@ -43,5 +47,35 @@ describe("matchWebhookSubscriptions", () => {
     const matched = matches.find((m) => m.id === sub.id);
     expect(matched?.workspaceId).toBe("ws_1");
     expect(matched?.userId).toBeNull();
+  });
+});
+
+describe("insertWorkspaceWebhookSubscriptionCapped", () => {
+  const input = {
+    workspaceId: "ws_1",
+    orgId: "org_a",
+    url: "https://1.1.1.1/hook",
+    sourceId: null,
+    productId: null,
+    releaseType: null,
+    format: "json" as const,
+    description: null,
+  };
+
+  it("inserts below the cap and returns the full row", async () => {
+    const sub = await insertWorkspaceWebhookSubscriptionCapped(db(), input, 2);
+    expect(sub?.workspaceId).toBe("ws_1");
+    expect(sub?.scope).toBe("org");
+    expect(sub?.enabled).toBe(true);
+    expect(sub?.secretVersion).toBe(1);
+  });
+
+  it("returns null and inserts nothing once the workspace is at the cap", async () => {
+    const results = await Promise.all(
+      [1, 2, 3].map(() => insertWorkspaceWebhookSubscriptionCapped(db(), input, 2)),
+    );
+    expect(results.filter(Boolean)).toHaveLength(2);
+    const rows = await matchWebhookSubscriptions(db(), ["org_a"]);
+    expect(rows).toHaveLength(2);
   });
 });
