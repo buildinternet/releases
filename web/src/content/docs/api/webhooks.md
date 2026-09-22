@@ -61,11 +61,10 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 
 ### Finding your workspace id (`/v1/me/workspaces`)
 
-Better Auth organization plugin "Workspaces" — user tenancy, distinct from the
-registry orgs/products these webhooks watch. Every account has at least a
-personal workspace. `GET /v1/me/workspaces` lists the ones you belong to,
-which is how the CLI and MCP server resolve a workspace id for
-workspace-scoped operations:
+A workspace is your team's account on Releases Index. It's separate from the
+companies and products that webhooks watch. Every account has at least one
+personal workspace. `GET /v1/me/workspaces` lists the workspaces you belong
+to, so scripts, the CLI, and the MCP server can find a workspace id:
 
 ```bash
 curl https://api.releases.sh/v1/me/workspaces \
@@ -76,9 +75,9 @@ curl https://api.releases.sh/v1/me/workspaces \
 {
   "workspaces": [
     {
-      "id": "org_abc123",
-      "name": "Ann's Workspace",
-      "slug": "ws-u_1",
+      "id": "Xk3vQ9dLm2PzR8tYw1Hn",
+      "name": "Acme Team",
+      "slug": "acme-team",
       "logo": null,
       "role": "owner",
       "active": true,
@@ -88,9 +87,10 @@ curl https://api.releases.sh/v1/me/workspaces \
 }
 ```
 
-`role` is your membership role (`owner` | `admin` | `member`), and `active`
-marks your current workspace. Read-only — creating, renaming, and switching
-workspaces stay on Better Auth (`releases.sh/account/workspaces`).
+`role` is your role in that workspace (`owner`, `admin`, or `member`).
+`active` marks the workspace you last switched to. This route only reads.
+Create, rename, and switch workspaces from
+[your account settings](https://releases.sh/account/workspaces).
 
 ### Account UI
 
