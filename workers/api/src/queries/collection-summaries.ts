@@ -15,6 +15,7 @@ import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { releasePath } from "@buildinternet/releases-core/release-slug";
 import { parseDigestSections, type ParsedDigestSection } from "@releases/rendering/digest-sections";
 import type { AnyDb } from "../db.js";
+import { githubHandleSubquery } from "./shared.js";
 import type { CollectionDayRelease } from "@releases/ai-internal/collection-summary";
 import type { WeeklyDigestRelease } from "@releases/ai-internal/collection-weekly-digest";
 import type {
@@ -399,17 +400,6 @@ function safeParseReleaseIds(raw: string): string[] {
 
 // D1 caps prepared statements at 100 bound params; chunk inArray lookups at 90.
 const IN_LOOKUP_CHUNK = 90;
-
-// Correlated subquery used to pick a single deterministic github handle per
-// org (mirrors `githubHandleSubquery` in routes/collections.ts). `org_accounts`
-// only enforces UNIQUE(platform, handle) globally — not per (org, platform).
-function githubHandleSubquery(orgIdExpr: ReturnType<typeof sql>) {
-  return sql<string | null>`(
-    SELECT handle FROM org_accounts
-    WHERE org_id = ${orgIdExpr} AND platform = 'github'
-    ORDER BY created_at, id LIMIT 1
-  )`;
-}
 
 /**
  * Resolve a digest's cited `releaseIds` to minimal display info (title, org,

@@ -38,6 +38,7 @@ import {
   getCollectionWeeklyDigest,
   resolveDigestCoveredReleases,
 } from "../queries/collection-summaries.js";
+import { githubHandleSubquery } from "../queries/shared.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -419,9 +420,6 @@ function interleaveMembers(
   return items.map((i) => i.value);
 }
 
-// Correlated subquery used to pick a single deterministic github handle per
-// org so a multi-handle org doesn't fan out the JOIN. `org_accounts` only
-// enforces UNIQUE(platform, handle) globally — not per (org, platform).
 function parseSlugSet(raw: string | undefined): Set<string> | null {
   if (raw === undefined) return null;
   return new Set(
@@ -430,14 +428,6 @@ function parseSlugSet(raw: string | undefined): Set<string> | null {
       .map((s) => s.trim().toLowerCase())
       .filter((s) => s.length > 0),
   );
-}
-
-function githubHandleSubquery(orgIdExpr: ReturnType<typeof sql>) {
-  return sql<string | null>`(
-    SELECT handle FROM org_accounts
-    WHERE org_id = ${orgIdExpr} AND platform = 'github'
-    ORDER BY created_at, id LIMIT 1
-  )`;
 }
 
 collectionRoutes.get(

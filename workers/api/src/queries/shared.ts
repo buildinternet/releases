@@ -32,6 +32,17 @@ export type SourceWithStats = {
   metadata: string | null;
 };
 
+// Correlated subquery used to pick a single deterministic github handle per
+// org so a multi-handle org doesn't fan out the JOIN. `org_accounts` only
+// enforces UNIQUE(platform, handle) globally — not per (org, platform).
+export function githubHandleSubquery(orgIdExpr: ReturnType<typeof sql>) {
+  return sql<string | null>`(
+    SELECT handle FROM org_accounts
+    WHERE org_id = ${orgIdExpr} AND platform = 'github'
+    ORDER BY created_at, id LIMIT 1
+  )`;
+}
+
 /** Common row type for org list items */
 export type OrgListRow = {
   id: string;
