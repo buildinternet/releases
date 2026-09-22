@@ -1,3 +1,4 @@
+import type { ApiKey } from "@better-auth/api-key";
 import type { Context, MiddlewareHandler } from "hono";
 import { FLAGS, flag, type FlagDef } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
@@ -208,11 +209,13 @@ async function verifyUserKey(
         verifyApiKey?: (a: { body: { key: string } }) => Promise<{
           valid: boolean;
           error?: { code?: string | null } | null;
-          key?: {
-            id?: string;
-            userId?: string | null;
+          // Typed from the plugin so a field rename fails the build. Better Auth
+          // 1.7 renamed the owner field `userId` → `referenceId`; the old
+          // hand-written shape still said `userId`, which silently resolved to
+          // undefined and 401'd every relu_ Bearer on the /me/* gate.
+          key?: Pick<ApiKey, "id" | "referenceId"> & {
             permissions?: Record<string, string[]> | null;
-          } | null;
+          };
         }>;
       }
     ).verifyApiKey;
@@ -225,7 +228,8 @@ async function verifyUserKey(
           ok: true,
           scopes,
           keyId: result.key.id ?? presented.slice(0, 12),
-          userId: result.key.userId ?? null,
+          // `references: "user"` in the plugin config → referenceId is the user id.
+          userId: result.key.referenceId ?? null,
         };
       return { ok: false, rateLimited: false };
     }

@@ -115,7 +115,7 @@ describe("requireFollowsPrincipal", () => {
       sessionUser: null,
       verifyApiKey: async () => ({
         valid: true,
-        key: { id: "ak_1", userId: "u_key", permissions: { api: ["read"] } },
+        key: { id: "ak_1", referenceId: "u_key", permissions: { api: ["read"] } },
       }),
     });
     const res = await a.request("/v1/me/follows", bearer("relu_abc.secret"), env);
@@ -135,7 +135,7 @@ describe("requireFollowsPrincipal", () => {
       sessionUser: null,
       verifyApiKey: async () => ({
         valid: true,
-        key: { id: "ak_1", userId: "u_key", permissions: { api: ["read"] } },
+        key: { id: "ak_1", referenceId: "u_key", permissions: { api: ["read"] } },
       }),
       env: { BETTER_AUTH_URL: ORIGIN }, // USER_API_KEYS_ENABLED unset → flag off
     });
