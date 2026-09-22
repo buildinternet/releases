@@ -61,7 +61,7 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 
 ### Account UI
 
-Signed-in users can manage webhooks without raw API calls: **Workspace → Webhooks & API** on [releases.sh](https://releases.sh/account/webhooks). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
+Signed-in users can manage webhooks without raw API calls: **Account → Webhooks & API** on [releases.sh](https://releases.sh/account/webhooks). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
 
 From an organization page, **Add webhook** in the header ⋯ menu opens this form already scoped to that org.
 
