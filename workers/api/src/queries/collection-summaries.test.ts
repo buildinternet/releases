@@ -5,6 +5,7 @@ import {
   collectionDailySummaries,
   collections,
   collectionMembers,
+  collectionWeeklyDigests,
   organizations,
   products,
   releases,
@@ -16,6 +17,7 @@ import {
   getCollectionMembers,
   getCollectionDayReleases,
   resolveDigestCoveredReleases,
+  listLatestWeeklyDigests,
 } from "./collection-summaries";
 
 describe("collection_daily_summaries schema", () => {
@@ -287,5 +289,52 @@ describe("resolveDigestCoveredReleases", () => {
     });
     expect(out[0]).toMatchObject({ url: null, product: null });
     expect(out[0].path.startsWith("/release/rel_e")).toBe(true);
+  });
+});
+
+describe("listLatestWeeklyDigests", () => {
+  test("returns only the newest week, with sections resolved and orgs deduped", async () => {
+    const { db } = createTestDb();
+    await seedOrgSource(db, { orgId: "org_x", sourceId: "src_x", productId: "prod_x" });
+    await db.insert(releases).values([
+      {
+        id: "rel_aaaaaaaaaaaaaaaaaaaaa",
+        sourceId: "src_x",
+        title: "A",
+        content: "b",
+        url: "https://example.com/a",
+        publishedAt: "2026-09-15T00:00:00.000Z",
+      },
+    ]);
+    await db.insert(collections).values([
+      { id: "col_1", slug: "one", name: "One", isFeatured: true },
+      { id: "col_2", slug: "two", name: "Two" },
+    ]);
+    const body =
+      "### First\n\nLead sentence here. More. [A](/release/rel_aaaaaaaaaaaaaaaaaaaaa-a)\n";
+    const base = {
+      title: "T",
+      intro: "I",
+      releaseCount: 3,
+      modelId: null,
+      releaseIds: JSON.stringify(["rel_aaaaaaaaaaaaaaaaaaaaa"]),
+      generatedAt: "2026-09-21T06:00:00.000Z",
+    };
+    await db.insert(collectionWeeklyDigests).values([
+      { id: "cwd_new1", collectionId: "col_1", weekStart: "2026-09-14", body, ...base },
+      { id: "cwd_old2", collectionId: "col_2", weekStart: "2026-09-07", body, ...base },
+    ]);
+
+    const out = await listLatestWeeklyDigests(db);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].collection).toEqual({ slug: "one", name: "One", isFeatured: true });
+    expect(out[0].sections[0]).toMatchObject({
+      heading: "First",
+      anchor: "first",
+      lede: "Lead sentence here.",
+    });
+    expect(out[0].sections[0].releases[0].url).toBe("https://example.com/a");
+    expect(out[0].orgs.map((o) => o.slug)).toEqual(["org_x"]);
   });
 });

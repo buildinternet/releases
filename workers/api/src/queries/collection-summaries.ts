@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import {
   collectionMembers,
   collectionDailySummaries,
+  collections,
   collectionWeeklyDigests,
   organizationsActive,
   organizationsPublic,
@@ -12,6 +13,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { parseDigestSections, type ParsedDigestSection } from "@releases/rendering/digest-sections";
 import type { AnyDb } from "../db.js";
 import type { CollectionDayRelease } from "@releases/ai-internal/collection-summary";
 import type { WeeklyDigestRelease } from "@releases/ai-internal/collection-weekly-digest";
@@ -483,5 +485,68 @@ export async function resolveDigestCoveredReleases(
         importance: r.importance ?? null,
       },
     ];
+  });
+}
+
+export type LatestWeeklyDigest = {
+  collection: { slug: string; name: string; isFeatured: boolean };
+  weekStart: string;
+  title: string;
+  intro: string;
+  releaseCount: number;
+  sections: Array<ParsedDigestSection & { releases: DigestCoveredRelease[] }>;
+  /** Distinct orgs across cited releases, first-seen order (facepile). */
+  orgs: DigestCoveredRelease["org"][];
+};
+
+/**
+ * Every collection's digest for the newest digested week, for the homepage
+ * reel. One query for the rows, one chunked hydrate for all cited releases —
+ * no per-collection N+1. `collections` has no hidden/unlisted concept (unlike
+ * orgs/sources/products), so every collection with a digest for the newest
+ * week is included — same universe `getCollectionsList` draws from.
+ */
+export async function listLatestWeeklyDigests(db: AnyDb): Promise<LatestWeeklyDigest[]> {
+  const [latest] = await db
+    .select({ weekStart: sql<string>`max(${collectionWeeklyDigests.weekStart})` })
+    .from(collectionWeeklyDigests);
+  if (!latest?.weekStart) return [];
+
+  const rows = await db
+    .select({
+      weekStart: collectionWeeklyDigests.weekStart,
+      title: collectionWeeklyDigests.title,
+      intro: collectionWeeklyDigests.intro,
+      body: collectionWeeklyDigests.body,
+      releaseCount: collectionWeeklyDigests.releaseCount,
+      slug: collections.slug,
+      name: collections.name,
+      isFeatured: collections.isFeatured,
+    })
+    .from(collectionWeeklyDigests)
+    .innerJoin(collections, eq(collections.id, collectionWeeklyDigests.collectionId))
+    .where(eq(collectionWeeklyDigests.weekStart, latest.weekStart));
+
+  const parsed = rows.map((r) => ({ row: r, sections: parseDigestSections(r.body) }));
+  const allIds = [...new Set(parsed.flatMap((p) => p.sections.flatMap((s) => s.releaseIds)))];
+  const byId = new Map((await resolveDigestCoveredReleases(db, allIds)).map((r) => [r.id, r]));
+
+  return parsed.map(({ row, sections }) => {
+    const resolved = sections.map((s) => ({
+      ...s,
+      releases: s.releaseIds.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
+    }));
+    const orgs = new Map<string, DigestCoveredRelease["org"]>();
+    for (const s of resolved)
+      for (const r of s.releases) if (!orgs.has(r.org.slug)) orgs.set(r.org.slug, r.org);
+    return {
+      collection: { slug: row.slug, name: row.name, isFeatured: row.isFeatured },
+      weekStart: row.weekStart,
+      title: row.title,
+      intro: row.intro,
+      releaseCount: row.releaseCount,
+      sections: resolved,
+      orgs: [...orgs.values()],
+    };
   });
 }
