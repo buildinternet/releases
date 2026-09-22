@@ -84,7 +84,9 @@ jobs:
                  Bucket the results by Eastern day. Ignore any PR that falls outside every
                  listed range.
               2. Keep only user-facing changes per the style guide; inspect a PR's diff with
-                 `gh pr diff <number>` when its user impact is unclear.
+                 `gh pr diff <number>` when its user impact is unclear. Operator-only work
+                 (admin hub, `releases admin` commands, operator emails, curation tooling) is
+                 internal. Drop it even when it is a `feat` PR.
               3. For each window day with user-facing survivors, PREPEND a `## <Month D, YYYY>`
                  section to CHANGELOG.md (newest at the top, directly under the `# Changelog`
                  preamble), with **Added**/**Changed**/**Fixed** sections. A quiet/all-internal

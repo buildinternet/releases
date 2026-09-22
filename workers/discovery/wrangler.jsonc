@@ -57,7 +57,7 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:1cef970df963",
+      "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:7ad76ac516d5",
       "instance_type": "basic",
       "max_instances": 5,
     },
@@ -169,7 +169,7 @@
       "containers": [
         {
           "class_name": "Sandbox",
-          "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:1cef970df963",
+          "image": "registry.cloudflare.com/b082600d280d44fd5da3501bc1bffe2f/releases-discovery-sandbox:7ad76ac516d5",
           "instance_type": "basic",
           "max_instances": 2,
         },
