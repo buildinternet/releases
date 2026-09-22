@@ -15,6 +15,7 @@ import {
   type CollectionWeeklyDigestListItem,
 } from "@/lib/api";
 import { weekBoundaries } from "@/lib/timeline-weeks";
+import { weekDividerLabel } from "@/lib/digest-format";
 import { type CollectionReleaseItemView } from "@/lib/release-view";
 import { ReleaseTitleLink } from "@/components/release-title-link";
 import { memberKey } from "@/lib/member-key";
@@ -22,6 +23,7 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
 import { Caret } from "./caret";
+import { DigestIcon } from "./digest-icons";
 import {
   FilterMenuCheckbox,
   FilterMenuRadio,
@@ -61,31 +63,35 @@ interface CollectionTimelineProps {
    */
   summaryByDate?: Map<string, CollectionDailySummary>;
   /**
-   * Newest-first weekly digests keyed by their ET Monday `weekStart`. Only
-   * the collection page passes this — when present, the feed renders a week
-   * divider before the first loaded day of each ET week, plus a digest card
-   * for weeks that have one. The category page omits it and the timeline
-   * renders exactly as before (no dividers, no digest cards).
+   * Weekly-digest data for the feed's week dividers and inline digest cards.
+   * Only the collection page passes this — when present, the feed renders a
+   * week divider before the first loaded day of each ET week, plus a digest
+   * card for weeks that have one. The category page omits it and the
+   * timeline renders exactly as before (no dividers, no digest cards). The
+   * four fields are always passed together or all omitted, so they're
+   * bundled into one prop rather than four independently-optional ones.
    */
-  digestsByWeek?: Map<string, CollectionWeeklyDigestListItem>;
-  /**
-   * The `weekStart` already shown in full by the page's `LatestDigestHero`
-   * above the feed — that week's divider gets a compact one-line link
-   * instead of the full inline card, so the issue isn't rendered twice.
-   */
-  heroWeekStart?: string | null;
-  /**
-   * Base path digest links append `/<weekStart>` to, e.g.
-   * `/collections/<slug>/digest`. Required whenever `digestsByWeek` is
-   * passed; unused otherwise.
-   */
-  digestBasePath?: string;
-  /**
-   * ET Monday `weekStart` for "now" — computed once on the server page (not
-   * with `new Date()` here) so the "in progress" divider label agrees
-   * between SSR and hydration even right at a week rollover.
-   */
-  currentWeekStart?: string | null;
+  digestFeed?: {
+    /** Newest-first weekly digests keyed by their ET Monday `weekStart`. */
+    byWeek: Map<string, CollectionWeeklyDigestListItem>;
+    /**
+     * The `weekStart` already shown in full by the page's `LatestDigestHero`
+     * above the feed — that week's divider gets a compact one-line link
+     * instead of the full inline card, so the issue isn't rendered twice.
+     */
+    heroWeekStart: string | null;
+    /**
+     * Base path digest links append `/<weekStart>` to, e.g.
+     * `/collections/<slug>/digest`.
+     */
+    basePath: string;
+    /**
+     * ET Monday `weekStart` for "now" — computed once on the server page
+     * (not with `new Date()` here) so the "in progress" divider label agrees
+     * between SSR and hydration even right at a week rollover.
+     */
+    currentWeekStart: string | null;
+  };
 }
 
 function memberAvatar(m: CollectionMember) {
@@ -287,10 +293,7 @@ export function CollectionTimeline({
   initialCursor,
   members,
   summaryByDate,
-  digestsByWeek,
-  heroWeekStart,
-  digestBasePath,
-  currentWeekStart,
+  digestFeed,
 }: CollectionTimelineProps) {
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
@@ -454,7 +457,7 @@ export function CollectionTimeline({
 
   // First (newest) loaded day of each ET week → that week's Monday. Drives
   // where the week dividers land; empty (and inert) on the category page,
-  // which never passes `digestsByWeek`.
+  // which never passes `digestFeed`.
   const weekBoundariesMap = useMemo(() => weekBoundaries(days.map((d) => d.key)), [days]);
   // Release count per ET week, summed over the currently loaded days only —
   // the divider's count grows as more pages load, same as everything else in
@@ -571,24 +574,24 @@ export function CollectionTimeline({
         <div className="mt-2">
           {days.map((day) => {
             // Only set when this day opens a new ET week AND the page passed
-            // digests to place — the category page passes neither, so this
+            // a digest feed to place — the category page passes none, so this
             // (and everything below it) is a no-op there.
-            const weekStart = digestsByWeek ? weekBoundariesMap.get(day.key) : undefined;
-            const digest = weekStart ? digestsByWeek?.get(weekStart) : undefined;
+            const weekStart = digestFeed ? weekBoundariesMap.get(day.key) : undefined;
+            const digest = digestFeed && weekStart ? digestFeed.byWeek.get(weekStart) : undefined;
             return (
               <Fragment key={day.key}>
-                {weekStart && (
+                {digestFeed && weekStart && (
                   <WeekDivider
                     weekStart={weekStart}
                     releaseCount={weekReleaseCounts.get(weekStart) ?? 0}
-                    inProgress={weekStart === currentWeekStart}
+                    inProgress={weekStart === digestFeed.currentWeekStart}
                   />
                 )}
-                {digest && digestBasePath && weekStart === heroWeekStart && (
-                  <CompactDigestLink digest={digest} basePath={digestBasePath} />
+                {digestFeed && digest && weekStart === digestFeed.heroWeekStart && (
+                  <CompactDigestLink digest={digest} basePath={digestFeed.basePath} />
                 )}
-                {digest && digestBasePath && weekStart !== heroWeekStart && (
-                  <InlineDigestCard digest={digest} basePath={digestBasePath} />
+                {digestFeed && digest && weekStart !== digestFeed.heroWeekStart && (
+                  <InlineDigestCard digest={digest} basePath={digestFeed.basePath} />
                 )}
                 <DaySection
                   day={day}
@@ -797,26 +800,13 @@ function DaySection({
 
 // ── Week dividers + inline digests ──────────────────────────────
 //
-// Only rendered when the collection page passes `digestsByWeek` (see
+// Only rendered when the collection page passes `digestFeed` (see
 // `CollectionTimeline`'s render loop above) — the category page never does,
 // so none of this is reachable there. `.org-surface` tokens throughout,
 // matching `Collection-Hero.dc.html`'s feed half; the rest of this file
 // intentionally stays on stone Tailwind utilities (pre-existing timeline
 // chrome), but these three components sit only inside the collection page's
 // `.org-surface` wrapper, so the CSS variables always resolve.
-
-const WEEK_DIVIDER_DATE_FMT = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
-/** "Week of Sep 14" — the divider's short label. Distinct from
- *  `weekOfLabel` (long month + year, used for page titles/metadata) and
- *  `weekRangeLabel` (a Monday–Sunday span); the divider needs neither. */
-function weekDividerLabel(weekStart: string): string {
-  return `Week of ${WEEK_DIVIDER_DATE_FMT.format(new Date(`${weekStart}T00:00:00Z`))}`;
-}
 
 /** Marks the start of an ET week in the feed: a short mono label, the
  *  release count for that week (or "in progress · digest Monday" for the
@@ -842,30 +832,6 @@ export function WeekDivider({
       </span>
       <span aria-hidden className="h-px flex-1 bg-[var(--line)]" />
     </div>
-  );
-}
-
-// Small notebook/journal glyph marking a digest — matches the icon used in
-// the design mockup and the homepage digest reel's newspaper cue.
-function DigestIcon({ size = 13, className }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
-      <path d="M18 14h-8" />
-      <path d="M15 18h-5" />
-      <path d="M10 6h8v4h-8V6Z" />
-    </svg>
   );
 }
 

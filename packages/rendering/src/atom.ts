@@ -15,6 +15,7 @@ import type {
   CollectionWeeklyDigestListItem,
 } from "@buildinternet/releases-api-types";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
+import { isHttpUrl } from "./digest-sections";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */
@@ -98,7 +99,7 @@ function releaseAlternateHref(
   baseUrl: string,
 ): string | null {
   const url = (release.url ?? "").trim();
-  if (/^https?:\/\//i.test(url)) return url;
+  if (isHttpUrl(url)) return url;
   if (!release.id) return null;
   return releaseWebUrl(baseUrl, { ...release, id: release.id });
 }

@@ -50,10 +50,12 @@ describe("CollectionTimeline — week dividers + inline digests", () => {
         initialReleases={releases}
         initialCursor={null}
         members={[]}
-        digestsByWeek={new Map([[digest.weekStart, digest]])}
-        heroWeekStart={null}
-        digestBasePath="/collections/coding-agents/digest"
-        currentWeekStart="2026-09-21"
+        digestFeed={{
+          byWeek: new Map([[digest.weekStart, digest]]),
+          heroWeekStart: null,
+          basePath: "/collections/coding-agents/digest",
+          currentWeekStart: "2026-09-21",
+        }}
       />,
     );
     expect(html).toContain("Week of Sep 14");
@@ -67,10 +69,12 @@ describe("CollectionTimeline — week dividers + inline digests", () => {
         initialReleases={releases}
         initialCursor={null}
         members={[]}
-        digestsByWeek={new Map([[digest.weekStart, digest]])}
-        heroWeekStart={null}
-        digestBasePath="/collections/coding-agents/digest"
-        currentWeekStart="2026-09-21"
+        digestFeed={{
+          byWeek: new Map([[digest.weekStart, digest]]),
+          heroWeekStart: null,
+          basePath: "/collections/coding-agents/digest",
+          currentWeekStart: "2026-09-21",
+        }}
       />,
     );
     expect(html).toContain("Weekly digest");
@@ -87,10 +91,12 @@ describe("CollectionTimeline — week dividers + inline digests", () => {
         initialReleases={releases}
         initialCursor={null}
         members={[]}
-        digestsByWeek={new Map([[digest.weekStart, digest]])}
-        heroWeekStart="2026-09-07"
-        digestBasePath="/collections/coding-agents/digest"
-        currentWeekStart="2026-09-21"
+        digestFeed={{
+          byWeek: new Map([[digest.weekStart, digest]]),
+          heroWeekStart: "2026-09-07",
+          basePath: "/collections/coding-agents/digest",
+          currentWeekStart: "2026-09-21",
+        }}
       />,
     );
     expect(html).not.toContain("Weekly digest");
@@ -106,10 +112,12 @@ describe("CollectionTimeline — week dividers + inline digests", () => {
         initialReleases={releases}
         initialCursor={null}
         members={[]}
-        digestsByWeek={new Map([[digest.weekStart, digest]])}
-        heroWeekStart={null}
-        digestBasePath="/collections/coding-agents/digest"
-        currentWeekStart="2026-09-14"
+        digestFeed={{
+          byWeek: new Map([[digest.weekStart, digest]]),
+          heroWeekStart: null,
+          basePath: "/collections/coding-agents/digest",
+          currentWeekStart: "2026-09-14",
+        }}
       />,
     );
     expect(html).toContain("in progress");

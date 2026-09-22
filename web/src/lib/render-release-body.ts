@@ -9,7 +9,7 @@ import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
-import { releaseIdFromPath } from "@releases/rendering/digest-sections";
+import { releaseIdFromPath, isHttpUrl } from "@releases/rendering/digest-sections";
 import {
   EXTERNAL_UGC_REL,
   isFragmentHref,
@@ -141,7 +141,7 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
         const releaseId = releaseLinks ? releaseIdFromPath(href) : null;
         if (releaseLinks && releaseId) {
           const upstream = (releaseLinks.get(releaseId) ?? "").trim();
-          if (/^https?:\/\//i.test(upstream)) {
+          if (isHttpUrl(upstream)) {
             node.properties = {
               ...node.properties,
               href: upstream,

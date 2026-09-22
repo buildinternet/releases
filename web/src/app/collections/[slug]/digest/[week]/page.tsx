@@ -15,6 +15,8 @@ import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
 import { isExternalReleaseLink, releaseLinkProps, releaseLinkTarget } from "@/lib/release-link";
+import { ReleaseLink } from "@/components/release-link";
+import { ExternalArrow } from "@/components/digest-icons";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
 import { weekOfLabel } from "@/lib/digest-format";
 import { createDigestAnchorSlugger } from "@releases/rendering/digest-sections";
@@ -54,26 +56,6 @@ function clampMetaTitle(title: string): string {
   return title.length > MAX_TITLE_LEN ? `${title.slice(0, MAX_TITLE_LEN - 1)}…` : title;
 }
 
-function ExternalArrow() {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="shrink-0 text-[var(--fg-3)]"
-    >
-      <path d="M7 17 17 7" />
-      <path d="M8 7h9v9" />
-    </svg>
-  );
-}
-
 /**
  * A "Releases covered" row's link: goes to the release's upstream url when it
  * has one (new tab, ↗), falling back to the on-site `/release/<id>` page.
@@ -86,20 +68,21 @@ function CoveredReleaseLink({
   release: DigestCoveredRelease;
   className: string;
 }) {
-  const linkProps = releaseLinkProps(release) ?? {
-    href: release.path,
-    "data-release-id": release.id,
-  };
-  return isExternalReleaseLink(linkProps) ? (
-    <a {...linkProps} className={`${className} inline-flex items-center gap-1`}>
+  const linkProps = releaseLinkProps(release);
+  const external = isExternalReleaseLink(linkProps);
+  return (
+    <ReleaseLink
+      linkProps={linkProps}
+      className={external ? `${className} inline-flex items-center gap-1` : className}
+    >
       {release.title}
-      <ExternalArrow />
-      <span className="sr-only"> (opens in new tab)</span>
-    </a>
-  ) : (
-    <Link {...linkProps} className={className}>
-      {release.title}
-    </Link>
+      {external && (
+        <>
+          <ExternalArrow size={10} className="shrink-0 text-[var(--fg-3)]" />
+          <span className="sr-only"> (opens in new tab)</span>
+        </>
+      )}
+    </ReleaseLink>
   );
 }
 

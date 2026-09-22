@@ -1,4 +1,5 @@
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
+import { isHttpUrl } from "@releases/rendering/digest-sections";
 import { releaseLinkTarget } from "./release-link";
 
 /** Current month + year (e.g. "May 2026") in `en-US`, for freshness signals in
@@ -376,7 +377,7 @@ export function buildOverviewCitationJsonLd(
     new Set(
       (citations ?? [])
         .map((c) => c.sourceUrl?.trim())
-        .filter((u): u is string => !!u && /^https?:\/\//i.test(u)),
+        .filter((u): u is string => !!u && isHttpUrl(u)),
     ),
   );
   if (urls.length === 0) return null;

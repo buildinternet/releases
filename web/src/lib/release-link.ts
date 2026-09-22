@@ -1,4 +1,5 @@
 import { EXTERNAL_UGC_REL } from "./sanitize";
+import { isHttpUrl } from "@releases/rendering/digest-sections";
 
 /** Minimal shape needed to pick a release row's default link target. */
 export interface ReleaseLinkInput {
@@ -33,7 +34,7 @@ export interface ReleaseLinkTarget {
  */
 export function releaseLinkTarget(release: ReleaseLinkInput): ReleaseLinkTarget | null {
   const url = (release.url ?? "").trim();
-  if (/^https?:\/\//i.test(url)) return { href: url, external: true };
+  if (isHttpUrl(url)) return { href: url, external: true };
   const path = (release.path ?? "").trim();
   if (path.startsWith("/release/")) return { href: path, external: false };
   if (release.id) return { href: `/release/${release.id}`, external: false };
@@ -51,6 +52,8 @@ export type ReleaseLinkProps = {
   "data-release-id"?: string;
 };
 
+export function releaseLinkProps(r: ReleaseLinkInput & { id: string }): ReleaseLinkProps;
+export function releaseLinkProps(r: ReleaseLinkInput): ReleaseLinkProps | null;
 export function releaseLinkProps(release: ReleaseLinkInput): ReleaseLinkProps | null {
   const link = releaseLinkTarget(release);
   if (!link) return null;

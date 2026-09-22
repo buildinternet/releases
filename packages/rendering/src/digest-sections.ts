@@ -117,6 +117,11 @@ export function parseDigestSections(body: string): ParsedDigestSection[] {
   });
 }
 
+/** True when the trimmed string is an http(s) URL. */
+export function isHttpUrl(s: string | null | undefined): boolean {
+  return /^https?:\/\//i.test((s ?? "").trim());
+}
+
 /** The `rel_…` id from an on-site release path (`/release/rel_<id>[-slug]`), else null. */
 export function releaseIdFromPath(href: string): string | null {
   const m = /^\/release\/(rel_[A-Za-z0-9_-]{21})(?:-[^/?#\s]*)?(?:[?#].*)?$/.exec(href.trim());
@@ -132,6 +137,6 @@ export function rewriteDigestReleaseLinks(
 ): string {
   return body.replace(RELEASE_MD_LINK_RE, (match, id: string) => {
     const url = (urlById.get(id) ?? "").trim();
-    return /^https?:\/\//i.test(url) ? `](${url})` : match;
+    return isHttpUrl(url) ? `](${url})` : match;
   });
 }

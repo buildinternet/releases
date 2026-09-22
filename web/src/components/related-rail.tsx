@@ -1,14 +1,14 @@
-import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { api, type RelatedCacheMode, type RelatedReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { clamp, stripMarkdown } from "@/lib/og-helpers";
 import { appRowInfoFromWire } from "@/lib/app-source";
-import { isExternalReleaseLink, releaseLinkProps, type ReleaseLinkProps } from "@/lib/release-link";
+import { releaseLinkProps, type ReleaseLinkProps } from "@/lib/release-link";
 import { ImportanceMarker } from "./importance-marker";
 import { AppStoreIcon } from "./app-store-icon";
 import { AppPlatformCue } from "./app-platform-cue";
 import { ReleaseThumb } from "./release-thumb";
+import { ReleaseLink } from "./release-link";
 
 interface RelatedRailProps {
   anchorReleaseId: string | null;
@@ -131,10 +131,7 @@ interface ReleaseCardProps {
 export function ReleaseCard({ item }: ReleaseCardProps) {
   // Default click target: the upstream source URL when the release has one,
   // the on-site /release/{id} page only as fallback (see release-link.ts).
-  const linkProps = releaseLinkProps(item) ?? {
-    href: `/release/${item.id}`,
-    "data-release-id": item.id,
-  };
+  const linkProps = releaseLinkProps(item);
   // Prefer the product name over the bare source/feed name when the release's
   // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
   const trailingName = item.source.productName ?? item.source.name;
@@ -189,15 +186,9 @@ export function ReleaseCard({ item }: ReleaseCardProps) {
     // inside an <a> (same rule as feed cards: flame sibling of title link).
     <div className={`${CARD_CLASS} items-start`}>
       <ImportanceMarker importance={item.importance} className="mt-0.5" />
-      {isExternalReleaseLink(linkProps) ? (
-        <a {...linkProps} className="flex flex-1 gap-3 min-w-0 h-full">
-          {cardContent}
-        </a>
-      ) : (
-        <Link {...linkProps} className="flex flex-1 gap-3 min-w-0 h-full">
-          {cardContent}
-        </Link>
-      )}
+      <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full">
+        {cardContent}
+      </ReleaseLink>
     </div>
   );
 }
@@ -245,15 +236,9 @@ function AppReleaseCard({
   return (
     <div className={`${CARD_CLASS} items-start`}>
       <ImportanceMarker importance={item.importance} className="mt-0.5" />
-      {isExternalReleaseLink(linkProps) ? (
-        <a {...linkProps} className="flex flex-1 gap-3 min-w-0 h-full items-start">
-          {cardContent}
-        </a>
-      ) : (
-        <Link {...linkProps} className="flex flex-1 gap-3 min-w-0 h-full items-start">
-          {cardContent}
-        </Link>
-      )}
+      <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full items-start">
+        {cardContent}
+      </ReleaseLink>
     </div>
   );
 }

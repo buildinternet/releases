@@ -28,6 +28,7 @@ import { CompactComposition } from "./compact-composition";
 import { PlayBadge } from "./play-badge";
 import { useLightboxImage, type LightboxEntry } from "./lightbox";
 import { releaseLinkProps, isExternalReleaseLink } from "@/lib/release-link";
+import { ReleaseLink } from "./release-link";
 
 /** Release context shared by every previewable image in one feed row. */
 type RowMeta = Pick<
@@ -222,25 +223,14 @@ export function ReleaseListItem({
   // row wrappers (App Store / video rows).
   const headingLink = (children: ReactNode) => {
     if (!linkProps) return children;
-    if (isExternalReleaseLink(linkProps)) {
-      return (
-        <a
-          {...linkProps}
-          onClick={(e) => e.stopPropagation()}
-          className="hover:underline underline-offset-2"
-        >
-          {children}
-        </a>
-      );
-    }
     return (
-      <Link
-        {...linkProps}
+      <ReleaseLink
+        linkProps={linkProps}
         onClick={(e) => e.stopPropagation()}
         className="hover:underline underline-offset-2"
       >
         {children}
-      </Link>
+      </ReleaseLink>
     );
   };
 

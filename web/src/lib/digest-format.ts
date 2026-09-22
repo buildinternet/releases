@@ -4,6 +4,26 @@ export function weekOfLabel(weekStart: string): string {
   return `Week of ${start.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
 }
 
+let shortMonthDayFormatter: Intl.DateTimeFormat | undefined;
+
+/** "Sep 14" — short month + numeric day, UTC. Cached module-level formatter
+ *  since this is called per-row in feeds/timelines. */
+export function shortMonthDayLabel(date: string): string {
+  shortMonthDayFormatter ??= new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  return shortMonthDayFormatter.format(new Date(`${date}T00:00:00Z`));
+}
+
+/** "Week of Sep 14" — a week divider's short label. Distinct from
+ *  `weekOfLabel` (long month + year, used for page titles/metadata) and
+ *  `weekRangeLabel` (a Monday–Sunday span); the divider needs neither. */
+export function weekDividerLabel(weekStart: string): string {
+  return `Week of ${shortMonthDayLabel(weekStart)}`;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Monday–Sunday range for a digest's `weekStart`: "Sep 14 – 20, 2026",
@@ -15,16 +35,19 @@ export function weekRangeLabel(
 ): string {
   const start = new Date(`${weekStart}T00:00:00Z`);
   const end = new Date(start.getTime() + 6 * DAY_MS);
-  const part = (d: Date, opts: Intl.DateTimeFormatOptions) =>
-    d.toLocaleDateString("en-US", { ...opts, timeZone: "UTC" });
   const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
   const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
   const withYear = year && !sameYear;
-  const from = part(start, {
-    month: "short",
-    day: "numeric",
-    ...(withYear ? { year: "numeric" } : {}),
-  });
-  const to = part(end, sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" });
+  const from = withYear
+    ? start.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : shortMonthDayLabel(weekStart);
+  const to = sameMonth
+    ? end.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" })
+    : end.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   return year ? `${from} – ${to}, ${end.getUTCFullYear()}` : `${from} – ${to}`;
 }

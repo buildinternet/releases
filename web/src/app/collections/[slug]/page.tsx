@@ -142,10 +142,12 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
               initialCursor={releases.pagination.nextCursor}
               members={detail.members}
               summaryByDate={summaryByDate}
-              digestsByWeek={digestsByWeek}
-              heroWeekStart={latestDigest?.weekStart ?? null}
-              digestBasePath={`/collections/${slug}/digest`}
-              currentWeekStart={currentWeekStart}
+              digestFeed={{
+                byWeek: digestsByWeek,
+                heroWeekStart: latestDigest?.weekStart ?? null,
+                basePath: `/collections/${slug}/digest`,
+                currentWeekStart,
+              }}
             />
           </main>
           <CollectionContextRail

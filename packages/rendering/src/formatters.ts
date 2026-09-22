@@ -21,7 +21,7 @@ import type {
   CollectionWeeklyDigestListItem,
   CollectionWeeklyDigestDetail,
 } from "@buildinternet/releases-api-types";
-import { rewriteDigestReleaseLinks } from "./digest-sections";
+import { rewriteDigestReleaseLinks, isHttpUrl } from "./digest-sections";
 
 // Re-export under the old names for any callers still using them
 export type FormatRelease = ReleaseItem;
@@ -879,7 +879,7 @@ export function collectionDigestToMarkdown(
       lines.push("");
       for (const r of group.items) {
         const upstream = (r.url ?? "").trim();
-        const href = /^https?:\/\//i.test(upstream)
+        const href = isHttpUrl(upstream)
           ? upstream
           : opts.baseUrl
             ? `${opts.baseUrl}${r.path}`

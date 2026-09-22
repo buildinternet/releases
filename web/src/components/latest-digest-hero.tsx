@@ -2,15 +2,8 @@ import Link from "next/link";
 import type { CollectionWeeklyDigestDetail, CollectionWeeklyDigestListItem } from "@/lib/api";
 import { OrgAvatar } from "@/components/org-avatar";
 import { sectionProductsFromDetail } from "@/lib/digest-reel";
-import { weekRangeLabel } from "@/lib/digest-format";
-
-/** "Sep 7" — short date for an `Earlier` strip row. Distinct from
- *  {@link weekRangeLabel} (a Monday–Sunday span): this labels a single-day
- *  list item by its week's start date. */
-function shortDateLabel(weekStart: string): string {
-  const d = new Date(`${weekStart}T00:00:00Z`);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
+import { pluralReleases } from "@/lib/formatters";
+import { weekRangeLabel, shortMonthDayLabel } from "@/lib/digest-format";
 
 /**
  * Collection page hero: leads with the latest weekly digest issue instead of
@@ -68,7 +61,7 @@ export function LatestDigestHero({
               Read the digest
             </Link>
             <span className="font-mono text-[11px] text-[var(--fg-3)]">
-              {digest.releaseCount} {digest.releaseCount === 1 ? "release" : "releases"} covered
+              {digest.releaseCount} {pluralReleases(digest.releaseCount)} covered
             </span>
           </div>
         </div>
@@ -108,7 +101,7 @@ export function LatestDigestHero({
                         </span>
                       ))}
                       <span className="font-mono text-[10.5px] text-[var(--fg-3)]">
-                        {resolvedCount} {resolvedCount === 1 ? "release" : "releases"}
+                        {resolvedCount} {pluralReleases(resolvedCount)}
                       </span>
                     </span>
                   </span>
@@ -131,7 +124,7 @@ export function LatestDigestHero({
               className="flex items-center gap-2 text-[var(--fg-2)] transition-colors hover:text-[var(--fg)]"
             >
               <span className="pt-px font-mono text-[11px] text-[var(--fg-3)]">
-                {shortDateLabel(d.weekStart)}
+                {shortMonthDayLabel(d.weekStart)}
               </span>
               {d.title}
             </Link>

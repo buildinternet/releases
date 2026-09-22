@@ -1,9 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { weekOfLabel, weekRangeLabel } from "./digest-format";
+import { weekOfLabel, weekRangeLabel, shortMonthDayLabel, weekDividerLabel } from "./digest-format";
 
 describe("weekOfLabel", () => {
   test("labels the ET Monday", () => {
     expect(weekOfLabel("2026-09-14")).toBe("Week of September 14, 2026");
+  });
+});
+
+describe("shortMonthDayLabel", () => {
+  test("short month + numeric day, UTC", () => {
+    expect(shortMonthDayLabel("2026-09-14")).toBe("Sep 14");
+    expect(shortMonthDayLabel("2026-01-01")).toBe("Jan 1");
+  });
+});
+
+describe("weekDividerLabel", () => {
+  test("prefixes the short label with 'Week of'", () => {
+    expect(weekDividerLabel("2026-09-14")).toBe("Week of Sep 14");
   });
 });
 
