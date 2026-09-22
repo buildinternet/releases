@@ -221,6 +221,7 @@ import type {
   ClassificationRecentResponseSchema,
   ClassificationRecentItemSchema,
 } from "./schemas/classifications.js";
+import type { SemanticAlertSummarySchema } from "./schemas/semantic-alert-summary.js";
 import type {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
@@ -561,6 +562,7 @@ export {
   ClassificationRecentResponseSchema,
   ClassificationRecentItemSchema,
 } from "./schemas/classifications.js";
+export { SemanticAlertSummarySchema } from "./schemas/semantic-alert-summary.js";
 export {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
@@ -1816,6 +1818,8 @@ export type FeedbackDeleteResponse = z.infer<typeof FeedbackDeleteResponseSchema
 export type ClassificationSummary = z.infer<typeof ClassificationSummarySchema>;
 export type ClassificationRecentResponse = z.infer<typeof ClassificationRecentResponseSchema>;
 export type ClassificationRecentItem = z.infer<typeof ClassificationRecentItemSchema>;
+
+export type SemanticAlertSummary = z.infer<typeof SemanticAlertSummarySchema>;
 
 // ── Recommendations ──
 export type RecommendationNotifyAddedBody = z.infer<typeof RecommendationNotifyAddedBodySchema>;

@@ -55,9 +55,26 @@ The payload is the same signed `release.created` event the structural fanout use
 
 ## Telemetry
 
-Each JEV call logs an `ai_usage` event (`lane: semantic-alert-match`) with token counts, cost, question count, and release id. No query text.
+Each JEV call logs an `ai_usage` event (`lane: semantic-alert-match`) with token counts, cost, question count, and release id. No query text. Daily and weekly spend queries for that lane are in [ai-provider-monitors.md → Interest alert match spend](../runbooks/ai-provider-monitors.md#interest-alert-match-spend).
 
 Optional Analytics Engine points go to the existing classifications dataset with `blob4 = semantic-alert`. Marketing admin queries filter `blob4 = 'marketing'`, so these points stay out of that dashboard. The point carries release id, source id, alert id, disposition (`matched` | `below_threshold` | `failed`), P(true), and the alert threshold. Cost stays on `ai_usage` because one call covers many alerts. Failure categories are `provider_error` or `invalid_probability` — never the provider message.
+
+## Operator visibility
+
+Admin or root (`admin/semantic-alerts`, same gate as the preview). Not behind `semantic-alerts-enabled`.
+
+`GET /v1/admin/semantic-alerts/summary` reads those points for a window (`after`, `before`, `bucket` — same bounds as the marketing summary: default last 7 days, max 100 days). The writer always sets origin `ingest`, and the summary keeps that filter. Counts use `SUM(_sample_interval)`. The body is:
+
+- `totals.scored` — `matched` + `belowThreshold` (a probability came back)
+- `totals.matchRate` — `matched / scored`, or null when nothing was scored
+- `totals.failed` — fail-closed. Stays out of the rate
+- `series` — the same three counts per hour or day
+- `failures` — `provider_error`, `invalid_probability`, or `unknown`
+- `probability` — ten bins of P(true) on `double1`. `0.8` is the start of the default-threshold bin. Each point still stores its own threshold; the chart marks the default
+
+`meta.sampled` is true, `meta.retentionDays` is 90, and `meta.costLane` is `semantic-alert-match`. The response has no alert query, no alert id, and no dollar total. Missing Analytics Engine credentials are `503` `deliveries_unavailable`. A failed statement is `502` `ae_query_failed` with `{ query, status }` only. The summary is cached for 45 seconds in `LATEST_CACHE` under `semantic-alert-summary:v1:` (same TTL trick as marketing classifications).
+
+**Admin → Semantic alerts** (`/admin/semantic-alerts`) renders the summary for 24h / 7d / 30d and pastes the Axiom spend queries under the chart. The synthetic-release preview stays on the same page.
 
 ## Admin preview
 
@@ -89,3 +106,4 @@ The same actions are on **Admin → Semantic alerts** (`/admin/semantic-alerts`)
 - Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, list response, threshold and cap constants)
 - Web: `web/src/components/semantic-alerts-section.tsx` on the notifications panel
 - Admin preview: `workers/api/src/routes/admin-semantic-alerts.ts`, `workers/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
+- Admin quality summary: `workers/api/src/lib/semantic-alert-summary.ts`, `GET /v1/admin/semantic-alerts/summary`

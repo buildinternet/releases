@@ -318,6 +318,28 @@ Quota errors with their context:
 | sort by _time desc
 ```
 
+## Interest alert match spend
+
+Not a monitor. Interest-alert matching logs one `ai_usage` event per JEV call with `lane: semantic-alert-match` (`costUsd`, token counts, `questionCount`, `releaseId`). Cost is intentionally absent from the Analytics Engine points: one call covers many alerts, so a per-alert dollar would over-count. Match rate and fail-closed counts are in-product at **Admin → Semantic alerts** (`GET /v1/admin/semantic-alerts/summary`). This section is how to check dollars.
+
+Alert query text is not on the event. Do not add a projection for it.
+
+Daily cost, calls, questions, and distinct releases:
+
+```kusto
+['releases-cloudflare-logs']
+| where ['body'] contains '"event":"ai_usage"'
+| extend p = parse_json(['body'])
+| where tostring(p['lane']) == 'semantic-alert-match'
+| extend cost = todouble(p['costUsd']), questions = toint(p['questionCount']), releaseId = tostring(p['releaseId'])
+| summarize costUsd = sum(cost), calls = count(), questions = sum(questions), releases = dcount(releaseId) by bin(_time, 1d)
+| sort by _time desc
+```
+
+Weekly: the same query with `bin(_time, 7d)`.
+
+Spend that rises with `questions` is volume. Spend that rises while `questions` stays flat is a price or model change. The admin page pastes both queries under the match-rate chart. See [semantic-alerts.md → Operator visibility](../architecture/semantic-alerts.md#operator-visibility).
+
 ## Retuning
 
 Re-measure before changing any window; don't reason from the daily averages, which hide the
