@@ -57,7 +57,7 @@ const PING_TIMEOUT_MS = 2000;
 // Mirrors the web route's own cap (see web/src/lib/revalidate-request.ts) —
 // enforced here too so a caller handing us an unexpectedly long list still
 // sends a bounded request instead of relying on the other side to reject it.
-const MAX_PATHS = 50;
+export const MAX_REVALIDATE_PATHS = 50;
 
 function logSkip(sourceSlug: string, reason: string): RevalidateResult {
   logEvent("info", { component: "web-revalidate", event: "skipped", sourceSlug, reason });
@@ -197,7 +197,7 @@ export async function notifyWebRevalidatePaths(
   if (!env.WEB_SERVICE_KEY) return logPathsSkip(component, paths, "no_secret_binding");
   if (paths.length === 0) return logPathsSkip(component, paths, "no_paths");
 
-  const capped = paths.length > MAX_PATHS ? paths.slice(0, MAX_PATHS) : paths;
+  const capped = paths.length > MAX_REVALIDATE_PATHS ? paths.slice(0, MAX_REVALIDATE_PATHS) : paths;
 
   let secret: string | undefined;
   try {

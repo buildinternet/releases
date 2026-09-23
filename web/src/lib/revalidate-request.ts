@@ -41,24 +41,34 @@ interface RevalidateBody {
 const SAFE_SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 
 /**
- * Cap on the `paths` array (below). Callers today send at most a handful of
- * entries (homepage + a few collection pages); this is a hard ceiling against
- * a caller bug turning one ping into a cache-eviction storm.
+ * Cap on the `paths` array (below). The worker chunks larger digest backfills
+ * to this size (`MAX_REVALIDATE_PATHS` in `workers/api/src/lib/web-revalidate.ts`);
+ * it is a hard ceiling against a caller bug turning one ping into a
+ * cache-eviction storm.
  */
 const MAX_PATHS = 50;
 
+/** A digest week is its canonical ET-Monday date, `YYYY-MM-DD`. */
+const DIGEST_WEEK = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
  * Allowlist for the `{ paths }` shape: exactly `/`, `/collections`,
- * `/collections/<slug>`, and the same one/two-segment slug shapes the
- * orgSlug-based body below already sends (`/<org>`, `/<org>/<source-or-product>`).
- * Nothing else is a valid `revalidatePath()` target for this endpoint.
+ * `/collections/<slug>`, the same one/two-segment slug shapes the
+ * orgSlug-based body below already sends (`/<org>`, `/<org>/<source-or-product>`),
+ * and a collection's weekly-digest pages (`/collections/<slug>/digest` and
+ * `/collections/<slug>/digest/<YYYY-MM-DD>`), which go stale when a digest is
+ * added or regenerated. Nothing else is a valid `revalidatePath()` target for
+ * this endpoint.
  */
 function isAllowedRevalidatePath(path: string): boolean {
   if (typeof path !== "string" || !path.startsWith("/")) return false;
   const segments = path.split("/").filter(Boolean);
   if (segments.length === 0) return true; // "/"
-  if (segments.length > 2) return false;
-  return segments.every((s) => SAFE_SLUG.test(s));
+  if (segments.length <= 2) return segments.every((s) => SAFE_SLUG.test(s));
+  const [root, slug, digest, week] = segments;
+  if (root !== "collections" || digest !== "digest" || !SAFE_SLUG.test(slug)) return false;
+  if (segments.length === 3) return true;
+  return segments.length === 4 && DIGEST_WEEK.test(week);
 }
 
 interface RevalidatePathsBody {
@@ -120,9 +130,10 @@ export async function handleRevalidateRequest(
   if (!raw || typeof raw !== "object") return json({ error: "invalid_body" }, 400);
   const rawBody = raw as Record<string, unknown>;
 
-  // Generalized shape: an explicit path list (homepage + collection pages from
-  // the weekly-digest cron). Checked first so a caller sending `paths` never
-  // falls through to the orgSlug branch's stricter "orgSlug is required" error.
+  // Generalized shape: an explicit path list (homepage, collection pages, and
+  // digest pages from the weekly-digest cron and backfill). Checked first so a
+  // caller sending `paths` never falls through to the orgSlug branch's stricter
+  // "orgSlug is required" error.
   if ("paths" in rawBody) {
     const pathsBody = parsePathsBody(rawBody);
     if (!pathsBody) return json({ error: "invalid_body" }, 400);

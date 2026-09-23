@@ -109,6 +109,8 @@ import {
   generateCollectionSummariesForDay,
   generateCollectionWeeklyDigestsForWeek,
   listCollectionWeeklyDigestTargets,
+  pingAfterDigests,
+  type DigestedWeek,
 } from "../cron/collection-summaries.js";
 import {
   resolveCollectionSummaryModel,
@@ -3367,11 +3369,13 @@ workflowsRoutes.post("/workflows/backfill-weekly-digests", async (c) => {
   }
 
   let totals = { generated: 0, skipped: 0, failed: 0 };
+  const digested: DigestedWeek[] = [];
   for (const weekStart of weekStarts) {
     // oxlint-disable-next-line no-await-in-loop -- small bounded sweep (<= 52 weeks x collections)
     const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
       collectionId,
       force,
+      onGenerated: (col) => digested.push({ slug: col.slug, weekStart }),
     });
     totals = {
       generated: totals.generated + r.generated,
@@ -3379,6 +3383,10 @@ workflowsRoutes.post("/workflows/backfill-weekly-digests", async (c) => {
       failed: totals.failed + r.failed,
     };
   }
+
+  // Same pings as the cron: without them a regenerated (`force`) digest keeps
+  // serving its cached page for up to the 24h ISR backstop. Never throws.
+  await pingAfterDigests(c.env, digested);
 
   logEvent("info", {
     component: "collection-weekly-digest",

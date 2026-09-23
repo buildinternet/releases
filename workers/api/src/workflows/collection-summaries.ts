@@ -24,6 +24,7 @@ import {
   summarizeCollectionForDay,
   generateWeeklyDigestForCollection,
   pingAfterDigests,
+  type DigestedWeek,
   type CollectionSummaryTarget,
 } from "../cron/collection-summaries.js";
 import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
@@ -227,7 +228,7 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
     let generated = 0;
     let skipped = 0;
     let failed = 0;
-    const digestedSlugs = new Set<string>();
+    const digested: DigestedWeek[] = [];
 
     for (let i = 0; i < plan.tasks.length; i++) {
       const task = plan.tasks[i];
@@ -251,7 +252,7 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
       );
       if (outcome === "generated") {
         generated++;
-        digestedSlugs.add(task.collectionSlug);
+        digested.push({ slug: task.collectionSlug, weekStart: task.weekStart });
       } else if (outcome === "skipped") skipped++;
       else failed++;
     }
@@ -268,10 +269,10 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
     // are memoized once they resolve, and this call never throws (see
     // pingAfterDigests / notifyWebRevalidatePaths), so RETRY_REVALIDATE's zero
     // retries only ever matter for a genuine bug, never a flaky ping.
-    if (digestedSlugs.size > 0) {
+    if (digested.length > 0) {
       await step.do("revalidate web", RETRY_REVALIDATE, async () => {
-        await pingAfterDigests(this.env, [...digestedSlugs]);
-        return { pinged: true, collectionSlugs: [...digestedSlugs] };
+        await pingAfterDigests(this.env, digested);
+        return { pinged: true, digests: digested };
       });
     }
   }
