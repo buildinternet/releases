@@ -150,7 +150,7 @@ for (let i = 0; i < all.length; i += 50) {
 ### Step 6 — Validate
 
 ```bash
-releases tail <slug> --json   # or: get_latest_releases (typed tool)
+releases tail <slug> --json   # or the MCP get_latest_releases tool
 ```
 
 Confirm releases have non-empty **titles, dates, content, and media**. If a row is _empty_, fix the extraction and **re-run** — the default upsert backfills empty rows safely. If a row already has _thin-but-non-empty_ content (e.g. an index-summary stub you now want to replace with the full body), a plain re-run is a no-op — use the `mode: "upsert-content"` enrichment re-POST from Step 5.
@@ -159,7 +159,7 @@ Confirm releases have non-empty **titles, dates, content, and media**. If a row 
 
 ### Step 7 — Playbook note
 
-Record how this source was ingested so future agents don't re-derive it. Via `manage_playbook` (action `update_notes`) or `releases admin playbook <org> --notes-file -`. Note that the source was **locally ingested** (not on the cron path yet), its observed cadence, and any extraction quirks. Follow the `managing-sources` playbook-authoring rubric (imperative voice, keep-test, `### Fetch instructions` / `### Traps` / `### Coverage`). Don't restate metadata the header already carries.
+Record how this source was ingested so future agents don't re-derive it. Via `releases admin playbook <org> --notes-file -`. Note that the source was **locally ingested** (not on the cron path yet), its observed cadence, and any extraction quirks. Follow the `managing-sources` playbook-authoring rubric (imperative voice, keep-test, `### Fetch instructions` / `### Traps` / `### Coverage`). Don't restate metadata the header already carries.
 
 ## Parity requirements
 
@@ -186,7 +186,7 @@ The batch path intentionally omits `title_generated` / `title_short` / `summary`
 - **Skipping the preflight.** It's the first step for a reason — silently ingesting an opt-out source is the exact failure this skill exists to prevent. `conductor.build` must be refused.
 - **Silent truncation.** Capping the window is fine; not telling the user what you skipped is not.
 - **Missing `url`.** Breaks idempotency — re-runs duplicate instead of upserting.
-- **Triggering a fetch on the new source.** `releases admin source fetch` / `manage_source` action `fetch` starts the remote update workflow (billed server-side extraction) — the cost you're avoiding. Create the source, then write via `/batch`.
+- **Triggering a fetch on the new source.** `releases admin source fetch` starts the remote update workflow (billed server-side extraction) — the cost you're avoiding. Create the source, then write via `/batch`.
 - **Fetching detail pages in the parent agent during fan-out.** Delegate to sub-agents; keep the parent context clean.
 - **Using this for a clean feed source.** Add it and let cron fetch — don't hand-extract what the feed adapter handles for free.
 - **Running it in a managed-agent session.** Local Claude Code only.
