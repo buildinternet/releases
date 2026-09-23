@@ -33,13 +33,7 @@ The monorepo no longer ships a local CLI. If you need `releases <cmd>` while wor
 
 Everything under `.claude/` auto-loads on a trusted clone with no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the repo-local commands in `.claude/commands/`, and the hosted MCP tools from the repo-root `.mcp.json`.
 
-On top of that, the repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. If you operate/maintain sources, also install the `releases-admin` plugin (operator playbooks) from the same marketplace:
-
-```
-/plugin install releases-admin@releases
-```
-
-It isn't auto-suggested because it expects admin access to the hosted registry. The monorepo's own skills under `.claude/skills/` load natively and take precedence over same-named plugin skills, so installing these plugins won't shadow them.
+On top of that, the repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. The operator skills (source management, maintenance, overviews, backfills) are the ones under `.claude/skills/`; the separate `releases-admin` plugin was retired in [releases-cli#370](https://github.com/buildinternet/releases-cli/pull/370). The monorepo's own skills load natively and take precedence over same-named plugin skills, so installing the `releases` plugin won't shadow them.
 
 ## Environment variables
 
