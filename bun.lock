@@ -19,6 +19,7 @@
         "@releases/ai-internal": "workspace:*",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
+        "@releases/queries": "workspace:*",
         "@releases/rendering": "workspace:*",
         "@releases/search": "workspace:*",
         "ai": "^7.0.103",
@@ -241,6 +242,15 @@
         "@buildinternet/releases-core": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "jose": "^6.2.5",
+      },
+    },
+    "packages/queries": {
+      "name": "@releases/queries",
+      "version": "0.0.0",
+      "dependencies": {
+        "@buildinternet/releases-core": "workspace:*",
+        "@releases/lib": "workspace:*",
+        "drizzle-orm": "^0.45.2",
       },
     },
     "packages/rendering": {
@@ -1048,6 +1058,8 @@
     "@releases/design-system": ["@releases/design-system@workspace:packages/design-system"],
 
     "@releases/lib": ["@releases/lib@workspace:packages/lib"],
+
+    "@releases/queries": ["@releases/queries@workspace:packages/queries"],
 
     "@releases/rendering": ["@releases/rendering@workspace:packages/rendering"],
 
