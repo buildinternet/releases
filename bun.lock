@@ -248,6 +248,7 @@
       "name": "@releases/queries",
       "version": "0.0.0",
       "dependencies": {
+        "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "@releases/lib": "workspace:*",
         "drizzle-orm": "^0.45.2",

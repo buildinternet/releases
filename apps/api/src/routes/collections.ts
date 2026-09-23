@@ -33,6 +33,11 @@ import { etDayKey, addDaysToDateKey, isDateKey } from "@buildinternet/releases-c
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
 import { getCollectionsList } from "../queries/collections.js";
 import {
+  findCollectionBySlug,
+  getCollectionFullMembers,
+  listCollectionMemberIds,
+} from "@releases/queries/collections";
+import {
   listCollectionDailySummaries,
   listCollectionWeeklyDigests,
   getCollectionWeeklyDigest,
@@ -93,14 +98,6 @@ function rowToWire(row: typeof collections.$inferSelect): CollectionRow {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-async function findCollectionBySlug(db: ReturnType<typeof createDb>, slug: string) {
-  const [row] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(eq(collections.slug, slug));
-  return row ?? null;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -496,46 +493,12 @@ collectionRoutes.get(
     const slug = c.req.param("slug");
     const db = createDb(c.env.DB);
 
-    const [collection] = await db.select().from(collections).where(eq(collections.slug, slug));
+    const collection = await findCollectionBySlug(db, slug);
     if (!collection) {
       return respondError(c, new NotFoundError("Collection not found"));
     }
 
-    const [orgsList, productsList] = await Promise.all([
-      db
-        .select({
-          position: collectionMembers.position,
-          slug: organizationsPublic.slug,
-          name: organizationsPublic.name,
-          domain: organizationsPublic.domain,
-          avatarUrl: organizationsPublic.avatarUrl,
-          description: organizationsPublic.description,
-          githubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
-        })
-        .from(collectionMembers)
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-        .where(eq(collectionMembers.collectionId, collection.id))
-        .orderBy(collectionMembers.position, organizationsPublic.name),
-      db
-        .select({
-          position: collectionMembers.position,
-          productSlug: productsActive.slug,
-          productName: productsActive.name,
-          productDescription: productsActive.description,
-          parentOrgSlug: organizationsPublic.slug,
-          parentOrgName: organizationsPublic.name,
-          parentOrgDomain: organizationsPublic.domain,
-          parentOrgAvatarUrl: organizationsPublic.avatarUrl,
-          parentOrgGithubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
-        })
-        .from(collectionMembers)
-        .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
-        .where(eq(collectionMembers.collectionId, collection.id))
-        .orderBy(collectionMembers.position, productsActive.name),
-    ]);
-
-    const members = interleaveMembers(orgsList, productsList);
+    const members = await getCollectionFullMembers(db, collection.id);
     // Legacy `orgs` field — org-kind members only, without the `kind` discriminator.
     const orgs: CollectionMemberOrg[] = members
       .filter((m): m is CollectionMember & { kind: "org" } => m.kind === "org")
@@ -647,31 +610,17 @@ collectionRoutes.get(
 
     const db = createDb(c.env.DB);
 
-    const [collection] = await db
-      .select({ id: collections.id, name: collections.name })
-      .from(collections)
-      .where(eq(collections.slug, slug));
+    const collection = await findCollectionBySlug(db, slug);
     if (!collection) {
       return respondError(c, new NotFoundError("Collection not found"));
     }
 
     // Resolve org + product members through their visible-row views so the
     // feed agrees with the detail page on visible membership.
-    const [orgRows, productRows] = await Promise.all([
-      db
-        .select({ orgId: organizationsPublic.id, slug: organizationsPublic.slug })
-        .from(collectionMembers)
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-        .where(eq(collectionMembers.collectionId, collection.id)),
-      // Inner-join through organizationsPublic on the parent org so a product
-      // attached to an on_demand / soft-deleted org doesn't surface releases.
-      db
-        .select({ productId: productsActive.id, slug: productsActive.slug })
-        .from(collectionMembers)
-        .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
-        .where(eq(collectionMembers.collectionId, collection.id)),
-    ]);
+    const { orgs: orgRows, products: productRows } = await listCollectionMemberIds(
+      db,
+      collection.id,
+    );
 
     // Apply optional subset filters. `null` = no narrowing, full member set.
     // When a filter is set on one kind but not the other, narrowing applies
