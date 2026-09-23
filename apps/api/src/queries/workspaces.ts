@@ -38,7 +38,7 @@ export async function listMemberWorkspaces(
 
 /**
  * The caller's active workspace id, or null. Backed by `user.lastActiveOrganizationId`,
- * which the Better Auth session hooks (auth/index.ts) keep in sync with the live
+ * which the Better Auth session hooks (auth/instance.ts) keep in sync with the live
  * session's `activeOrganizationId` on BOTH session create (first sign-in / new device)
  * and session update (an explicit workspace switch via the org plugin's `setActive`
  * endpoint) — so this column reflects the current active workspace without a second

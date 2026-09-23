@@ -614,7 +614,7 @@ export const authInvitation = sqliteTable(
  * `@better-auth/stripe` subscription store. Field set mirrors the plugin's schema
  * (its `subscriptions` model). `referenceId` = the workspace (organization) id, gated
  * by `authorizeReference` (auth/workspace.ts `isOrgOwnerOrAdmin`). With `plans: []`
- * (auth/index.ts `buildStripePlugin`) no row is ever written yet — this is the inert
+ * (auth/instance.ts `buildStripePlugin`) no row is ever written yet — this is the inert
  * org-billing seam; the table exists so adding real plans later needs no migration.
  * Property keys are the plugin's camelCase field names (the adapter resolves by key);
  * SQL columns stay snake_case. Paired migration:

@@ -14,10 +14,10 @@ import {
   type GraphqlCacheBinding,
   HOMEPAGE_TICKER_VARS,
   lookupCached,
-  persistedOperationsPlugin,
   purgeKeysForHomepageTicker,
   storeIfCacheable,
 } from "../src/graphql/persisted.js";
+import { persistedOperationsPlugin } from "../src/graphql/persisted-plugin.js";
 import { hardeningPlugins } from "../src/graphql/plugins.js";
 
 interface Ctx {

@@ -1,0 +1,5 @@
+-- Marker migration: no DDL.
+-- apps/api/src/db/schema-auth.ts changed only in a code comment (buildStripePlugin
+-- moved from auth/index.ts to auth/instance.ts when Better Auth became lazily
+-- loaded). The CI schema-pairing gate requires a migration for any schema-file
+-- edit; this file satisfies it without changing the schema.

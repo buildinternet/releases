@@ -71,12 +71,18 @@ function postSummary(r: ReleaseLatestItem): string | null {
 // Subject/title dates render in Eastern time to match the project's ET day
 // convention (etDayKey) — a digest "for Jun 24" reads as the US-Eastern day,
 // not a UTC boundary that flips hours earlier.
-const DIGEST_DATE_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
+// Built on first use: a time-zone-aware Intl formatter loads ICU zone data,
+// which would otherwise run during worker startup.
+let digestDateFmt: Intl.DateTimeFormat | undefined;
+function digestDateFormatter(): Intl.DateTimeFormat {
+  digestDateFmt ??= new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return digestDateFmt;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -93,9 +99,9 @@ const WEEK_MS = 7 * DAY_MS;
 function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): string {
   const end = new Date(referenceDate);
   if (cadence === "weekly") {
-    return `week of ${DIGEST_DATE_FMT.format(new Date(end.getTime() - WEEK_MS))}`;
+    return `week of ${digestDateFormatter().format(new Date(end.getTime() - WEEK_MS))}`;
   }
-  return DIGEST_DATE_FMT.format(new Date(end.getTime() - DAY_MS));
+  return digestDateFormatter().format(new Date(end.getTime() - DAY_MS));
 }
 
 /**
@@ -273,18 +279,22 @@ function groupByOrg(releases: ReleaseLatestItem[]): Array<{
 }
 
 /** Short form for the subject line — the year is noise in an inbox list. */
-const DIGEST_SUBJECT_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
+let digestSubjectFmt: Intl.DateTimeFormat | undefined;
+function digestSubjectFormatter(): Intl.DateTimeFormat {
+  digestSubjectFmt ??= new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+  });
+  return digestSubjectFmt;
+}
 
 function subjectDateLabel(cadence: "daily" | "weekly", referenceDate: string): string {
   const end = new Date(referenceDate);
   const start = new Date(end.getTime() - (cadence === "weekly" ? WEEK_MS : DAY_MS));
   return cadence === "weekly"
-    ? `week of ${DIGEST_SUBJECT_FMT.format(start)}`
-    : DIGEST_SUBJECT_FMT.format(start);
+    ? `week of ${digestSubjectFormatter().format(start)}`
+    : digestSubjectFormatter().format(start);
 }
 
 export function buildDigestEmail(content: DigestEmailContent): {

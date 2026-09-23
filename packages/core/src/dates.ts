@@ -143,33 +143,49 @@ export function timeAgo(isoDate: string | null): string | null {
 // product audience + the self-changelog cron both use ET). No tz library:
 // Intl handles the DST math.
 
-const ET_DATE_FMT = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/New_York",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
+// The ET formatters are built on first use, not at import. Constructing a
+// time-zone-aware Intl formatter loads ICU zone data, which is several ms of
+// CPU; at module scope that cost lands in every importer's startup (the API
+// worker's script-startup CPU is capped by Cloudflare).
+let etDateFmt: Intl.DateTimeFormat | undefined;
+function etDateFormatter(): Intl.DateTimeFormat {
+  etDateFmt ??= new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return etDateFmt;
+}
 
 /** The Eastern calendar day (`YYYY-MM-DD`) for a UTC instant. */
 export function etDayKey(instant: string | Date): string {
   const d = typeof instant === "string" ? new Date(instant) : instant;
-  return ET_DATE_FMT.format(d); // en-CA renders ISO-style YYYY-MM-DD
+  return etDateFormatter().format(d); // en-CA renders ISO-style YYYY-MM-DD
 }
 
-const ET_OFFSET_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
+let etOffsetFmt: Intl.DateTimeFormat | undefined;
+function etOffsetFormatter(): Intl.DateTimeFormat {
+  etOffsetFmt ??= new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  return etOffsetFmt;
+}
 
 /** Offset (minutes east of UTC) of America/New_York at a given instant. */
 function etOffsetMinutes(at: Date): number {
-  const p = Object.fromEntries(ET_OFFSET_FMT.formatToParts(at).map((x) => [x.type, x.value]));
+  const p = Object.fromEntries(
+    etOffsetFormatter()
+      .formatToParts(at)
+      .map((x) => [x.type, x.value]),
+  );
   const asUtc = Date.UTC(
     Number(p.year),
     Number(p.month) - 1,

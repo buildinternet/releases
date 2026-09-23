@@ -3,7 +3,6 @@ import { describeRoute } from "hono-openapi";
 import { and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { apikey } from "../db/schema-auth.js";
-import { APIError } from "better-auth/api";
 import { createAuth } from "../auth/index.js";
 import {
   scopeToPermissions,
@@ -188,7 +187,7 @@ userApiKeyHandlers.post(
         // `requestedScope` is validated to be within the user-key ceiling, which is
         // exactly the ladder label scopeLabel(scopeToPermissions(scope)) round-trips.
         // The create's audit (`api-key-created`, with the owning userId) is emitted by
-        // the `/api-key/create` after-hook in auth/index.ts — one chokepoint for both
+        // the `/api-key/create` after-hook in auth/instance.ts — one chokepoint for both
         // this route and the native endpoint — so it isn't logged again here.
         let created;
         try {
@@ -204,6 +203,9 @@ userApiKeyHandlers.post(
         } catch (err) {
           // The before-hook cap backstop throws this when a concurrent create slipped
           // past the pre-check above — surface the same clean 409, not a 500.
+          // better-auth/api is imported here, not at module scope, to keep it out of
+          // worker startup; createAuth() above has already loaded it.
+          const { APIError } = await import("better-auth/api");
           if (err instanceof APIError && err.body?.code === API_KEY_LIMIT_CODE) {
             return respondError(
               c,

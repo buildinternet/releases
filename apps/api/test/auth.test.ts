@@ -13,7 +13,6 @@ import {
 } from "../src/db/schema-auth.js";
 import {
   buildSocialProviders,
-  buildStripePlugin,
   mapDisplayEmail,
   syncDisplayEmailOnUpdate,
   emailFromGoogleIdToken,
@@ -28,6 +27,7 @@ import {
   LOGGED_IN_HINT_COOKIE,
   type BetterAuthInstance,
 } from "../src/auth/index.js";
+import { buildStripePlugin } from "../src/auth/instance.js";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
