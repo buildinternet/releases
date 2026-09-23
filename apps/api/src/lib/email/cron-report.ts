@@ -216,7 +216,7 @@ export function formatCronReport(report: CronReport): FormattedReport {
   }
 
   // The plain-text body above is pinned byte-for-byte by
-  // tests/unit/cron-report-formatter.test.ts — it stays hand-built. Only the
+  // apps/api/test/cron-report-formatter.test.ts — it stays hand-built. Only the
   // HTML twin below goes through the shared email shell.
   const text = lines.join("\n");
 

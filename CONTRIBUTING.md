@@ -83,13 +83,19 @@ Tests use Bun's built-in test runner — no extra dependencies required.
 
 ```bash
 bun run test                 # run all tests via the root script (evals are excluded by design)
-bun test tests/unit/         # run unit tests only
-bun test tests/api/          # run worker-side route tests
-bun test apps/api            # API worker's colocated tests (the root script runs these in their own process)
+bun test apps/api            # API worker tests (the root script runs these in their own process)
+bun test apps/mcp            # MCP worker tests
+bun test tests/              # cross-app tests, script/action/workflow tests
 bun test --watch             # re-run on file changes
 ```
 
-Tests live in `tests/` with this structure:
+Tests live next to the code they cover:
+
+- `apps/api/test/`, `apps/mcp/test/`, `apps/discovery/test/`, `apps/webhooks/test/`: per-app suites.
+- `apps/web/src/**/*.test.ts` and `packages/*/src/**/*.test.ts`: colocated with the module under test.
+- `tests/`: shared helpers and fixtures, tests for root `scripts/` and `actions/`, and tests that import from more than one app.
+
+The root `tests/` folder has this structure:
 
 ```text
 tests/
@@ -98,8 +104,8 @@ tests/
   fixtures/
     feeds/              # RSS, Atom, JSON Feed samples
     html/               # HTML pages for parser testing
-  unit/                 # pure function tests and Hono route tests via app.fetch()
-  api/                  # worker-side route + query tests
+  unit/                 # shared-package and cross-app tests
+  api/                  # worker tests that must stay out of the isolated apps/api process
   evals/                # AI eval suites (see below)
 ```
 

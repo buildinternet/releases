@@ -12,7 +12,7 @@ const baseEnv = {
 async function makeApp() {
   const auth = await createAuth(baseEnv, undefined, { db: createTestDb(), sendEmail: () => {} });
   // Blank Hono + `(c as any).set` is the repo's known-good route-test pattern
-  // (see tests/api/admin-search-queries.test.ts) — avoids strict-Variables
+  // (see apps/api/test/admin-search-queries.test.ts) — avoids strict-Variables
   // friction while still mounting the Hono<Env> route module.
   const app = new Hono();
   app.use("/admin/oauth/*", (c, next) => {

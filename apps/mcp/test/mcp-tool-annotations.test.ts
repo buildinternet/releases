@@ -1,0 +1,166 @@
+import { describe, it, expect, beforeAll } from "bun:test";
+import { Client } from "@modelcontextprotocol/client";
+import { InMemoryTransport } from "@modelcontextprotocol/server";
+import { createServer, type Env } from "../src/mcp-agent.js";
+
+/**
+ * Stub Env wired so that `createServer()` can initialize without touching D1,
+ * Vectorize, or Anthropic. `tools/list` doesn't invoke any tool handler, so the
+ * bindings only need to satisfy the TypeScript shape — we cast through
+ * `unknown` to avoid pulling `@cloudflare/workers-types` into the root tests
+ * tsconfig.
+ */
+const notCalled = () => {
+  throw new Error("tool handler should not run during tools/list");
+};
+
+function stubEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    DB: { prepare: notCalled, batch: notCalled, exec: notCalled } as unknown as Env["DB"],
+    RELEASES_INDEX: {} as Env["RELEASES_INDEX"],
+    ENTITIES_INDEX: {} as Env["ENTITIES_INDEX"],
+    CHANGELOG_CHUNKS_INDEX: {} as Env["CHANGELOG_CHUNKS_INDEX"],
+    ...overrides,
+  };
+}
+
+async function listTools(env: Env) {
+  const server = await createServer(env);
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test", version: "0.0.0" });
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  return tools;
+}
+
+describe("MCP tool annotations", () => {
+  let tools: Awaited<ReturnType<typeof listTools>>;
+
+  beforeAll(async () => {
+    tools = await listTools(stubEnv());
+  });
+
+  // The per-user follows tools (#1520) mutate the caller's account, so they are
+  // NOT read-only. They're still listed in tools/list (gating is at call time via
+  // the user credential), so the surface includes them. `manage_webhook`
+  // (#1678, #2326) is the same story — a per-user/per-workspace write.
+  const MUTATION_TOOLS = new Set(["follow", "unfollow", "manage_webhook"]);
+
+  it("exposes the full tool surface (read-only catalog + per-user follows + webhooks)", () => {
+    const names = tools.map((t) => t.name).toSorted();
+    expect(names).toEqual([
+      "follow",
+      "get_catalog_entry",
+      "get_collection",
+      "get_collection_releases",
+      "get_latest_releases",
+      "get_organization",
+      "get_personalized_feed",
+      "get_release",
+      "list_catalog",
+      "list_collections",
+      "list_follows",
+      "list_organizations",
+      "list_webhooks",
+      "lookup_domain",
+      "manage_webhook",
+      "search",
+      "unfollow",
+      "whats_changed",
+    ]);
+  });
+
+  it("marks every data-read tool as read-only, idempotent, closed-world", () => {
+    for (const tool of tools) {
+      if (MUTATION_TOOLS.has(tool.name)) continue;
+      expect(tool.annotations?.readOnlyHint).toBe(true);
+      expect(tool.annotations?.destructiveHint).toBe(false);
+      expect(tool.annotations?.idempotentHint).toBe(true);
+      expect(tool.annotations?.openWorldHint).toBe(false);
+      expect(tool.annotations?.title).toBeString();
+      expect(tool.title).toBeString();
+    }
+  });
+
+  it("marks the follows mutation tools as non-read-only but idempotent", () => {
+    for (const name of ["follow", "unfollow"]) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool, `expected ${name} in tools list`).toBeDefined();
+      expect(tool!.annotations?.readOnlyHint).toBe(false);
+      expect(tool!.annotations?.destructiveHint).toBe(false);
+      expect(tool!.annotations?.idempotentHint).toBe(true);
+      expect(tool!.annotations?.openWorldHint).toBe(false);
+      expect(tool!.annotations?.title).toBeString();
+      expect(tool!.title).toBeString();
+    }
+  });
+
+  it("marks manage_webhook as a non-read-only, destructive, open-world write", () => {
+    const tool = tools.find((t) => t.name === "manage_webhook");
+    expect(tool, "expected manage_webhook in tools list").toBeDefined();
+    expect(tool!.annotations?.readOnlyHint).toBe(false);
+    expect(tool!.annotations?.destructiveHint).toBe(true);
+    expect(tool!.annotations?.idempotentHint).toBe(false);
+    expect(tool!.annotations?.openWorldHint).toBe(true);
+    expect(tool!.annotations?.title).toBeString();
+    expect(tool!.title).toBeString();
+  });
+
+  it("marks list_webhooks as a read-only tool", () => {
+    const tool = tools.find((t) => t.name === "list_webhooks");
+    expect(tool, "expected list_webhooks in tools list").toBeDefined();
+    expect(tool!.annotations?.readOnlyHint).toBe(true);
+    expect(tool!.annotations?.destructiveHint).toBe(false);
+    expect(tool!.annotations?.idempotentHint).toBe(true);
+    expect(tool!.annotations?.openWorldHint).toBe(false);
+  });
+
+  it("advertises an MCP App UI for the release-feed tools", () => {
+    const expectedUri = "ui://releases/release-feed.html";
+    const feedTools = ["get_latest_releases", "get_collection_releases"];
+    for (const name of feedTools) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool, `expected ${name} in tools list`).toBeDefined();
+      // Set both the current nested key (`_meta.ui.resourceUri`) AND the
+      // legacy flat key (`_meta["ui/resourceUri"]`). MCP Inspector and some
+      // hosts only recognize the flat form — assert both to prevent regression.
+      const meta = tool!._meta as
+        | { ui?: { resourceUri?: string }; "ui/resourceUri"?: string }
+        | undefined;
+      expect(meta?.ui?.resourceUri).toBe(expectedUri);
+      expect(meta?.["ui/resourceUri"]).toBe(expectedUri);
+    }
+  });
+});
+
+describe("tool input schemas", () => {
+  it("advertises an object JSON Schema for a no-argument tool", async () => {
+    const tools = await listTools(stubEnv());
+    const listFollows = tools.find((t) => t.name === "list_follows");
+    expect(listFollows?.inputSchema).toMatchObject({ type: "object" });
+  });
+
+  it("advertises pagination fields on a paginated tool", async () => {
+    const tools = await listTools(stubEnv());
+    const listOrgs = tools.find((t) => t.name === "list_organizations");
+    expect(Object.keys(listOrgs?.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining(["page", "limit"]),
+    );
+  });
+});
+
+describe("prompt arguments", () => {
+  it("still advertises completable prompt arguments after the v2 wrap", async () => {
+    const server = await createServer(stubEnv());
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0.0.0" });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+    const { prompts } = await client.listPrompts();
+    const whatsNew = prompts.find((p) => p.name === "whats_new");
+    expect(whatsNew?.arguments?.map((a) => a.name)).toEqual(
+      expect.arrayContaining(["product", "days"]),
+    );
+    await client.close();
+  });
+});

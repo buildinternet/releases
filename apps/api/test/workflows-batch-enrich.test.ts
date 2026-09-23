@@ -1,7 +1,7 @@
 // Smoke tests for POST /v1/workflows/batch-enrich — the dispatch wiring + gates.
 // The deep enrichment logic (candidate selection, batch-request construction,
-// result→upsert mapping) is unit-tested in tests/unit/enrich-apply.test.ts and
-// tests/unit/enrich-batch.test.ts; this file only proves the HTTP layer.
+// result→upsert mapping) is unit-tested in apps/api/test/enrich-apply.test.ts and
+// apps/api/test/enrich-batch.test.ts; this file only proves the HTTP layer.
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
