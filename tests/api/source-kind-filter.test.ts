@@ -7,10 +7,10 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../workers/api/src/routes/products.js";
-import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
-import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
-import { searchRoutes } from "../../workers/api/src/routes/search.js";
+import { productRoutes } from "../../apps/api/src/routes/products.js";
+import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
+import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
+import { searchRoutes } from "../../apps/api/src/routes/search.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { makeCaller } from "./route-test-helpers.js";
 

@@ -7,7 +7,7 @@
  * shape.
  *
  * Used by:
- *   - `workers/api/src/workflows/batch-summarize.ts`
+ *   - `apps/api/src/workflows/batch-summarize.ts`
  *
  * NOT used by scripts/generate-release-content.ts — that file uses raw SQL
  * via wrangler subprocess and is a separate refactor.
@@ -85,7 +85,7 @@ export function summarizeEligibilityConds(opts: { ignoreAutoGate?: boolean } = {
  *   - Source is not hidden
  *
  * Matches the JOIN shape from generateContentForReleases in
- * workers/api/src/workflows/poll-and-fetch.ts (lines 152–192), but uses a
+ * apps/api/src/workflows/poll-and-fetch.ts (lines 152–192), but uses a
  * time-window predicate instead of inArray(insertedIds).
  *
  * When `orgSlugs` is provided the filter is applied as

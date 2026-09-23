@@ -6,8 +6,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
-import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
-import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
+import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
+import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 

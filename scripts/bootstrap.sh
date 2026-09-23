@@ -8,7 +8,7 @@
 #   1. tooling    — check Bun (the runtime); install portless (npm global) for
 #                   the named HTTPS dev hosts, and flag Node < 24 (portless needs it)
 #   2. install    — bun install
-#   3. env files  — scaffold .env / web/.env.local / workers/*/.dev.vars from the
+#   3. env files  — scaffold .env / apps/web/.env.local / apps/*/.dev.vars from the
 #                   committed *.example templates (only if absent), and mint a
 #                   local Better Auth dev secret so sign-in works out of the box
 #   4. database   — build a local D1 from migrations (only if none exists yet)
@@ -112,14 +112,14 @@ bun install
 # ── 3. env files ─────────────────────────────────────────────────────────────
 step "Scaffolding env files (non-destructive)"
 scaffold "$ROOT/.env.example" "$ROOT/.env"
-scaffold "$ROOT/web/.env.example" "$ROOT/web/.env.local"
+scaffold "$ROOT/apps/web/.env.example" "$ROOT/apps/web/.env.local"
 for w in api mcp discovery webhooks; do
-  scaffold "$ROOT/workers/$w/.dev.vars.example" "$ROOT/workers/$w/.dev.vars"
+  scaffold "$ROOT/apps/$w/.dev.vars.example" "$ROOT/apps/$w/.dev.vars"
 done
 
 # Mint a stable local Better Auth secret if .dev.vars still carries the template
 # placeholder — otherwise local sessions reset on every dev:api restart (#1425).
-DEV_VARS="$ROOT/workers/api/.dev.vars"
+DEV_VARS="$ROOT/apps/api/.dev.vars"
 if [ -f "$DEV_VARS" ] && grep -qE '^BETTER_AUTH_SECRET_DEV=replace-with-any-stable-string$' "$DEV_VARS"; then
   if have openssl; then
     secret="$(openssl rand -base64 32)"
@@ -127,9 +127,9 @@ if [ -f "$DEV_VARS" ] && grep -qE '^BETTER_AUTH_SECRET_DEV=replace-with-any-stab
     tmp="$(mktemp)"
     sed "s#^BETTER_AUTH_SECRET_DEV=replace-with-any-stable-string\$#BETTER_AUTH_SECRET_DEV=${secret}#" \
       "$DEV_VARS" >"$tmp" && mv "$tmp" "$DEV_VARS"
-    add "minted BETTER_AUTH_SECRET_DEV in workers/api/.dev.vars"
+    add "minted BETTER_AUTH_SECRET_DEV in apps/api/.dev.vars"
   else
-    note "openssl not found — set BETTER_AUTH_SECRET_DEV to any stable string in workers/api/.dev.vars"
+    note "openssl not found — set BETTER_AUTH_SECRET_DEV to any stable string in apps/api/.dev.vars"
   fi
 fi
 
@@ -138,7 +138,7 @@ if [ "$SKIP_DB" = 1 ]; then
   step "Skipping local database (--skip-db)"
 else
   step "Building the local D1 database"
-  if [ -d "$ROOT/workers/api/.wrangler/state/v3/d1" ]; then
+  if [ -d "$ROOT/apps/api/.wrangler/state/v3/d1" ]; then
     ok "local D1 already present — left as-is (run 'bun run db:reset:local' to rebuild from scratch)"
   else
     # A fresh DB applies the squash baseline cleanly; db:reset:local is the

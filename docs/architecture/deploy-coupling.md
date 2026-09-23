@@ -3,7 +3,7 @@
 Everything here is Apache-2.0 and runnable locally for contribution. The
 canonical [releases.sh](https://releases.sh) deployment pins Cloudflare resource
 IDs, custom domains, Anthropic managed-agent resources, and observability sinks
-in `workers/{api,mcp,discovery,webhooks}/wrangler.jsonc`.
+in `apps/{api,mcp,discovery,webhooks}/wrangler.jsonc`.
 
 This doc is what a **fork or self-hoster** must replace. It inventories account-scoped bindings; it does not parameterize them. For local setup, see [CONTRIBUTING.md](../../CONTRIBUTING.md). Staging mirrors prod with different IDs — [AGENTS.md → Staging](../../AGENTS.md#staging).
 
@@ -82,7 +82,7 @@ Values live in the dashboard, never in git. Forks provision their own store and 
 
 Workspace uploads.sh connect reuses `IDEMPOTENCY_ENCRYPTION_KEY` (already bound). Public client id `releases-sh` is hardcoded — no new secret and no dashboard client-id var. See [uploads-oauth.md](uploads-oauth.md).
 
-Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api + discovery; unset → direct Anthropic. Local dev: `workers/*/.dev.vars.example`.
+Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api + discovery; unset → direct Anthropic. Local dev: `apps/{api,mcp,discovery,webhooks}/.dev.vars.example`.
 
 ### URL vars and email
 
@@ -92,7 +92,7 @@ Operator alerts: `EMAIL_NOTIFY_TO` (`admin@releases.sh`), `EMAIL_FROM`, `AUTH_EM
 
 ### Anthropic managed agents (prod)
 
-Provisioned via `bun run deploy:agents` / `scripts/sync-agent-skills.ts`. IDs in `workers/discovery/wrangler.jsonc`:
+Provisioned via `bun run deploy:agents` / `scripts/sync-agent-skills.ts`. IDs in `apps/discovery/wrangler.jsonc`:
 
 | Var                              | Value                               |
 | -------------------------------- | ----------------------------------- |
@@ -107,10 +107,10 @@ Staging uses a separate agent/env/vault/memstore set in `[env.staging]`. API wor
 
 ### Container image retention (retired)
 
-The discovery worker no longer declares a Cloudflare container. Its `Sandbox` container backed the original Agent SDK discovery path, which #386 replaced with Managed Agents sessions; the binding lingered unused until #2317 removed it, along with `workers/discovery/Dockerfile`, the content-hash image pin (#2261), and the registry prune script (#2260). The `Sandbox` Durable Object class is deleted via a `deleted_classes` migration in both environments (prod `v5`, staging `v3`), so a fork or self-host of the discovery worker needs no container registry, Docker, or container-app quota.
+The discovery worker no longer declares a Cloudflare container. Its `Sandbox` container backed the original Agent SDK discovery path, which #386 replaced with Managed Agents sessions; the binding lingered unused until #2317 removed it, along with `apps/discovery/Dockerfile`, the content-hash image pin (#2261), and the registry prune script (#2260). The `Sandbox` Durable Object class is deleted via a `deleted_classes` migration in both environments (prod `v5`, staging `v3`), so a fork or self-host of the discovery worker needs no container registry, Docker, or container-app quota.
 
 ### Outside wrangler
 
-- **Web (Vercel):** `web/.env.example` — `NEXT_PUBLIC_BETTER_AUTH_URL`, `RELEASES_API_URL`, `RELEASES_SERVICE_KEY` (channel credential for API-worker → web internal endpoints, mirroring `RELEASES_PROXY_KEY` inbound; must match the api worker's `WEB_SERVICE_KEY`; deliberately unbound on staging so prod ingest can't reach staging web's ISR cache).
+- **Web (Vercel):** `apps/web/.env.example` — `NEXT_PUBLIC_BETTER_AUTH_URL`, `RELEASES_API_URL`, `RELEASES_SERVICE_KEY` (channel credential for API-worker → web internal endpoints, mirroring `RELEASES_PROXY_KEY` inbound; must match the api worker's `WEB_SERVICE_KEY`; deliberately unbound on staging so prod ingest can't reach staging web's ISR cache).
 - **MCP Registry:** `sh.releases/mcp` — domain auth via `/.well-known/mcp-registry-auth`; CI secret `MCP_REGISTRY_PRIVATE_KEY_PEM`.
 - **Security disclosure:** `security@releases.sh`, [releases.sh/.well-known/security.txt](https://releases.sh/.well-known/security.txt) (no root `SECURITY.md`).

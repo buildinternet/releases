@@ -7,7 +7,7 @@ import {
   LIVE_MAX_ITEMS,
   fromStreamEvent,
   fromLatestItem,
-} from "../../web/src/hooks/use-release-stream";
+} from "../../apps/web/src/hooks/use-release-stream";
 
 const rel = (id: string, overrides: Partial<LiveRelease> = {}): LiveRelease => ({
   id,

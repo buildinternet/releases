@@ -18,9 +18,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from "bun:test";
-import { buildFeedCursor, parseFeedCursor } from "../../workers/api/src/utils.js";
-import { getCollectionReleasesFeed } from "../../workers/api/src/queries/orgs.js";
-import type { D1Db } from "../../workers/api/src/db.js";
+import { buildFeedCursor, parseFeedCursor } from "../../apps/api/src/utils.js";
+import { getCollectionReleasesFeed } from "../../apps/api/src/queries/orgs.js";
+import type { D1Db } from "../../apps/api/src/db.js";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 

@@ -8,7 +8,7 @@ import { ReleasesJsonConfigSchema } from "@buildinternet/releases-api-types";
 // https://releases.sh/.well-known/releases.json. Keep it schema-valid.
 describe("public/.well-known/releases.json", () => {
   // Resolve relative to this test file — the root `bun test` runs from the
-  // repo root, not web/, so process.cwd() would point at the wrong tree.
+  // repo root, not apps/web/, so process.cwd() would point at the wrong tree.
   const raw = readFileSync(
     join(import.meta.dir, "..", "public", ".well-known", "releases.json"),
     "utf8",

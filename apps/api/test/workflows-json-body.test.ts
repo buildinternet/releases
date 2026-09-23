@@ -29,7 +29,7 @@ function mkDb() {
 function mkApp(db: ReturnType<typeof mkDb>, extra: Record<string, unknown> = {}) {
   const fakeEnv = { DB: db, ...extra };
   const app = new Hono();
-  // Mirror the global error handler from workers/api/src/index.ts — the real
+  // Mirror the global error handler from apps/api/src/index.ts — the real
   // `respondError` boundary serializer, so HTTPException(400) thrown by
   // parseJsonBody renders the same nested envelope as production.
   app.onError((err, c) => respondError(c, err));

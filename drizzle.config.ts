@@ -10,7 +10,7 @@ export default defineConfig({
   schema: [
     "./packages/core/src/schema.ts",
     "./packages/core-internal/src/schema-coverage.ts",
-    "./workers/api/src/db/schema-cron.ts",
+    "./apps/api/src/db/schema-cron.ts",
   ],
   out: "./.drizzle-out",
   migrations: {

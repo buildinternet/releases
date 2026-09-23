@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { applyMigrations, createTestDb, type TestDatabase } from "../db-helper";
 import { organizations } from "@buildinternet/releases-core/schema";
-import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
+import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 
 describe("organizations.is_hidden column", () => {

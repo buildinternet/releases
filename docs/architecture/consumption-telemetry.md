@@ -55,13 +55,13 @@ them):
 
 ### Where each surface emits
 
-- **MCP** (`workers/mcp/src/auth.ts`): one event per **billable** call. Protocol
+- **MCP** (`apps/mcp/src/auth.ts`): one event per **billable** call. Protocol
   overhead (`initialize` / `tools/list` / `ping` / `notifications/*`) is excluded
   via the shared `isBillableMethod` peek. **Anonymous calls ARE counted** — on an
   agent-native surface, an anonymous MCP `tools/call` _is_ agent consumption.
-- **API** (`workers/api/src/middleware/auth.ts`, `recordAuth`): one event per
+- **API** (`apps/api/src/middleware/auth.ts`, `recordAuth`): one event per
   **authenticated** request. Anonymous public reads bypass `recordAuth` and are
-  **not** counted here — they are mostly web/browser traffic (tracked via
+  **not** counted here — they are mostly apps/web/browser traffic (tracked via
   `search_queries` + web analytics), not the agent channel. Internal MCP→API
   introspection on `GET /v1/tokens/me` shows up as `operation: "GET tokens"` —
   filter it out for pure external-consumer counts.

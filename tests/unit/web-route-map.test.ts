@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { routeMap } from "../../web/src/lib/route-map";
+import { routeMap } from "../../apps/web/src/lib/route-map";
 
 describe("routeMap", () => {
   const mappings: Array<[string, string]> = [

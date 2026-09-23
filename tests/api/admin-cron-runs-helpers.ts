@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../db-helper";
 import { Hono } from "hono";
-import { adminCronRunsRoutes } from "../../workers/api/src/routes/admin-cron-runs";
+import { adminCronRunsRoutes } from "../../apps/api/src/routes/admin-cron-runs";
 
 export function mkDb() {
   const sqlite = new Database(":memory:");

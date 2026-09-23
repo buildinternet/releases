@@ -17,7 +17,7 @@ const DEFAULT_RELEASE_LIMIT = 20;
  * carry admin-facing aggregate stats — `releaseCount`, `avgReleasesPerWeek`,
  * `stars`, … — that none of the source-page views read; see AGENTS.md /
  * #1978 slice 3). Every field here is actually consumed by
- * `web/src/app/[orgSlug]/[slug]` or `web/src/app/sources/[id]`.
+ * `apps/web/src/app/[orgSlug]/[slug]` or `apps/web/src/app/sources/[id]`.
  */
 
 export type MappedRelease = {
@@ -172,7 +172,7 @@ export function mapSourceDetail(
     productId: source.productId,
     isHidden: source.isHidden ?? false,
     // `Source.discovery` is a plain `String!` on the wire (not a GraphQL
-    // enum — see workers/api/src/graphql/types/enums.ts's comment on why only
+    // enum — see apps/api/src/graphql/types/enums.ts's comment on why only
     // `Org.discovery` is typed today); narrow to the known value set here,
     // same as REST's `SourceDiscoverySchema`.
     discovery: source.discovery as SourceDiscovery,

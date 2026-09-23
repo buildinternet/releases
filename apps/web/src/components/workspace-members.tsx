@@ -1,4 +1,4 @@
-// web/src/components/workspace-members.tsx
+// apps/web/src/components/workspace-members.tsx
 "use client";
 
 import { useCallback, useState } from "react";

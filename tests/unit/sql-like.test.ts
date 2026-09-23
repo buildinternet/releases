@@ -4,8 +4,8 @@ import { escapeLikePattern } from "@buildinternet/releases-core/sql-like";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { getOrgsWithStats, countOrgsForList } from "../../workers/api/src/queries/orgs.js";
-import type { D1Db } from "../../workers/api/src/db.js";
+import { getOrgsWithStats, countOrgsForList } from "../../apps/api/src/queries/orgs.js";
+import type { D1Db } from "../../apps/api/src/db.js";
 
 const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;
 

@@ -17,7 +17,7 @@ import {
   countSourcesForList,
   getSourcesWithStats,
   SOURCE_STALE_DAYS,
-} from "../../workers/api/src/queries/sources.js";
+} from "../../apps/api/src/queries/sources.js";
 
 let tdb: TestDatabase;
 

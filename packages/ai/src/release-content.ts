@@ -575,7 +575,7 @@ function parseCount(block: string, tag: string): number | null {
  * Takes the joined text + stop_reason rather than the SDK's `Message` type so
  * consumers of this module don't drag the full `@anthropic-ai/sdk` namespace
  * through their own typecheck. The workspace has dupe-installs of the SDK
- * (root + workers/api/packages resolve to different `.bun/` hashes for the
+ * (root + apps/api/packages resolve to different `.bun/` hashes for the
  * same 0.95.0 version), and exporting an SDK-namespace type from this file
  * surfaces a `#private`-field nominal mismatch on the `Anthropic` class
  * downstream. Passing a string + nullable string sidesteps it entirely.

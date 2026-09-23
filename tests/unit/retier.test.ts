@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { computeMedianGapDays, classifyTier } from "../../workers/api/src/cron/retier";
+import { computeMedianGapDays, classifyTier } from "../../apps/api/src/cron/retier";
 
 describe("computeMedianGapDays", () => {
   it("returns infinity for fewer than 2 dates", () => {

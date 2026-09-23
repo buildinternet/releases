@@ -1,6 +1,6 @@
 -- Semantic alerts: user-owned freeform interests (#2304 Phase 1).
 -- Preferences only — no matcher, no delivery. Paired with
--- workers/api/src/db/schema-semantic-alerts.ts.
+-- apps/api/src/db/schema-semantic-alerts.ts.
 CREATE TABLE IF NOT EXISTS semantic_alerts (
   id                      TEXT PRIMARY KEY,
   user_id                 TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,

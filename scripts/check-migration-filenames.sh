@@ -10,7 +10,7 @@ set -euo pipefail
 base="${1:-origin/main}"
 
 added=$(git diff --name-only --diff-filter=A "$base"...HEAD -- \
-  'workers/api/migrations/*.sql' || true)
+  'apps/api/migrations/*.sql' || true)
 
 if [ -z "$added" ]; then
   exit 0

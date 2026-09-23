@@ -29,7 +29,7 @@ import {
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
 
-/** Custom header carrying the staging shared secret. Mirrors workers/api. */
+/** Custom header carrying the staging shared secret. Mirrors apps/api. */
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
 
 /**

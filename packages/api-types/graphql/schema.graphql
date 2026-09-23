@@ -1,5 +1,5 @@
 # GENERATED — do not edit by hand.
-# Regenerate with: bun workers/api/scripts/print-graphql-schema.ts
+# Regenerate with: bun apps/api/scripts/print-graphql-schema.ts
 
 """
 App Store platform + icon for a `type: appstore` source. Lets clients render the compact app-update treatment (icon + 'Available for iOS/macOS').

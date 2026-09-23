@@ -1,7 +1,7 @@
 /**
  * Characterization tests for source CRUD (issue #1652).
  *
- * `workers/api/src/routes/sources.ts` (~3,900 LOC) is one of the two top
+ * `apps/api/src/routes/sources.ts` (~3,900 LOC) is one of the two top
  * churn hotspots in the repo and carries the bulk of the release-write
  * logic. This suite pins CURRENT behavior of the create/read/update/delete
  * routes via real Hono route invocations against a migrated test DB, so a

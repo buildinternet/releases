@@ -4,11 +4,11 @@ Repo-specific gotchas for future `/design-sync` runs of this package. Read befor
 
 ## What this package is
 
-A NEW workspace package (`packages/design-system/`, `@releases/design-system`, global `window.ReleasesDS`) that **productizes** the web app's design vocabulary into real React components for claude.ai/design. It is **Phase 1** of a phased plan — the web app (`web/`) does **not** consume it yet; migrating `web/src` to import from it is a separate, later step. The Claude Design project is **"Releases"** (`projectId` in config.json).
+A NEW workspace package (`packages/design-system/`, `@releases/design-system`, global `window.ReleasesDS`) that **productizes** the web app's design vocabulary into real React components for claude.ai/design. It is **Phase 1** of a phased plan — the web app (`apps/web/`) does **not** consume it yet; migrating `apps/web/src` to import from it is a separate, later step. The Claude Design project is **"Releases"** (`projectId` in config.json).
 
 ## How the components were built
 
-- `src/classes.ts` (class-string constants) and `src/tokens.css` (brand `:root` + `.org-surface` palette) ARE the design vocabulary. As of Phase 2 (#1764) the web app imports them from `@releases/design-system` rather than keeping its own copies: `web/src/components/account/ui.tsx` was deleted and `web/src/app/globals.css` now `@import`s the package's `tokens.css`. So they are the single source of truth, shared by the standalone card renderer and the web app — there is no copy left to drift, and the interim #1765 parity guard has been retired.
+- `src/classes.ts` (class-string constants) and `src/tokens.css` (brand `:root` + `.org-surface` palette) ARE the design vocabulary. As of Phase 2 (#1764) the web app imports them from `@releases/design-system` rather than keeping its own copies: `apps/web/src/components/account/ui.tsx` was deleted and `apps/web/src/app/globals.css` now `@import`s the package's `tokens.css`. So they are the single source of truth, shared by the standalone card renderer and the web app — there is no copy left to drift, and the interim #1765 parity guard has been retired.
 - Settings/feedback/theme/data components are faithful ports of real app components (`account/ui.tsx`, `account/settings-section.tsx`, `theme-provider.tsx`, `theme-toggle.tsx`, `sparkline.tsx`). The `Foundations` group (BrandColors/ProductPalette/SurfaceTokens/Typography/Radius) are token _reference_ cards authored for this package (no app counterpart).
 
 ## Build
@@ -43,4 +43,4 @@ None outstanding. After the column-mode + viewport overrides, validate exits cle
 - **classes.ts / styles.css vs the app** — the biggest one. They're hand-copied from `account/ui.tsx` + `globals.css`; an app change there silently desyncs the design system. Re-check on any account-UI/token change.
 - **Build lockfile** — pinned via the committed `packages/design-system/package-lock.json` (#1769); install with `npm ci --no-workspaces`. Regenerate it outside the workspace (see the Build section) when bumping a build dep, never with a plain in-dir `npm install`.
 - **chromium pin** — tied to the local Playwright cache (build 1228 / playwright 1.61.1). A fresh machine needs a matching install.
-- **Phase 2 (app adoption) not done** — if/when `web/src` migrates to import `@releases/design-system`, the copy-vs-import drift risk above goes away; until then, keep them in sync manually.
+- **Phase 2 (app adoption) not done** — if/when `apps/web/src` migrates to import `@releases/design-system`, the copy-vs-import drift risk above goes away; until then, keep them in sync manually.

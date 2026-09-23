@@ -10,7 +10,7 @@ import { organizations, sources, releases, categories } from "@buildinternet/rel
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { listOrganizations } from "../../workers/mcp/src/tools.js";
+import { listOrganizations } from "../../apps/mcp/src/tools.js";
 
 let testDb: TestDatabase;
 

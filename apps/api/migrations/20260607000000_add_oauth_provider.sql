@@ -1,6 +1,6 @@
 -- Better Auth OAuth Provider plugin (@better-auth/oauth-provider) + jwt() keyset.
 -- Paired with the oauth_client/oauth_access_token/oauth_refresh_token/
--- oauth_consent/jwks tables in workers/api/src/db/schema-auth.ts (the
+-- oauth_consent/jwks tables in apps/api/src/db/schema-auth.ts (the
 -- schema↔migration pairing gate in ci.yml watches that file). string[] columns
 -- are JSON text; timestamps are integer epoch ms (Better Auth Drizzle shape).
 CREATE TABLE oauth_client (

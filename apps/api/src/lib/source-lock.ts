@@ -1,6 +1,6 @@
 /**
  * Per-source scrape-lock helpers (#1780 Box 1 / #1814), relocated from
- * `workers/discovery/src/source-lock.ts` with the deterministic-update
+ * `apps/discovery/src/source-lock.ts` with the deterministic-update
  * dispatch (#1946). Semantics unchanged: the lock lives on the source's own
  * `SourceActor` DO, where the check→claim and check→delete are atomic.
  *

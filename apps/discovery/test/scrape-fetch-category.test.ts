@@ -95,7 +95,7 @@ function buildApiFetcher() {
 
 /**
  * Simulate the catch block logic from scrapeFetch to verify category tagging.
- * This mirrors the exact code path in workers/discovery/src/scrape-fetch.ts.
+ * This mirrors the exact code path in apps/discovery/src/scrape-fetch.ts.
  */
 // Mirror the regex from managed-agents-session.ts
 function extract(text: string): string | null {

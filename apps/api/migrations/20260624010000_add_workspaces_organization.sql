@@ -5,7 +5,7 @@
 -- (referenceId = workspace id) — the inert org-billing seam (nothing is purchasable
 -- yet; see auth/index.ts buildStripePlugin `plans: []`).
 --
--- Paired with workers/api/src/db/schema-auth.ts (the ci.yml schema↔migration gate
+-- Paired with apps/api/src/db/schema-auth.ts (the ci.yml schema↔migration gate
 -- watches that file). Timestamps are integer epoch-ms (Better Auth's Drizzle shape);
 -- the organization/member field set mirrors the plugin's schema (organization has no
 -- updated_at), the subscription field set mirrors @better-auth/stripe's `subscriptions`

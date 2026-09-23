@@ -42,7 +42,7 @@ The batch endpoint deliberately omits the AI fields (`title_generated` / `title_
 
 ## Building blocks
 
-- **Batch write, no AI on insert** — `POST /v1/sources/:slug/releases/batch` and the org-scoped `/v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch` (handler `postReleasesBatchHandler`, `workers/api/src/routes/sources.ts`). Body `{ releases: [{ version?, title, content, url?, contentHash?, publishedAt?, media?, type?, prerelease? }] }`. Upserts on `UNIQUE(source_id, url)` — idempotent, safe to re-run and page. Requires `write` scope; the static `RELEASES_API_KEY` (root) satisfies it.
+- **Batch write, no AI on insert** — `POST /v1/sources/:slug/releases/batch` and the org-scoped `/v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch` (handler `postReleasesBatchHandler`, `apps/api/src/routes/sources.ts`). Body `{ releases: [{ version?, title, content, url?, contentHash?, publishedAt?, media?, type?, prerelease? }] }`. Upserts on `UNIQUE(source_id, url)` — idempotent, safe to re-run and page. Requires `write` scope; the static `RELEASES_API_KEY` (root) satisfies it.
 - **Pure extract libs (optional, "Approach A")** — `packages/adapters/src/extract/*` (`extractFromBody`, `extractWithTools`, `runDirectFetchExtraction`). `ExtractDeps.cloudflare` is nullable and `repo` can be a noop, so they run with just an Anthropic key (proof: `scripts/smoke-toolloop.ts`). These packages are `private: true` — monorepo-only, never the thin CLI.
 - **Shared conventions** — `.claude/skills/{parsing-changelogs,managing-sources,finding-changelogs}` carry the release `type`, version-format, date-normalization, media-unwrap, and dedup rules the local output must match.
 - **Media unwrap** — `normalizeMediaUrl` (`packages/rendering/src/media-url.ts`) strips `_next/image` / Vercel optimizer wrappers.
@@ -76,8 +76,8 @@ The default `/batch` upsert is **fill-don't-clobber** (`RELEASE_URL_UPSERT`, #95
 ## Pointers
 
 - Skill: `.claude/skills/local-ingest/SKILL.md` + `preflight.ts`.
-- Batch / single-insert / PATCH handlers: `workers/api/src/routes/sources.ts`.
-- MA model choice (what local-ingest avoids): `workers/discovery/src/managed-agents-session.ts`.
+- Batch / single-insert / PATCH handlers: `apps/api/src/routes/sources.ts`.
+- MA model choice (what local-ingest avoids): `apps/discovery/src/managed-agents-session.ts`.
 - Extract libs + smoke: `packages/adapters/src/extract/`, `scripts/smoke-toolloop.ts`.
 - CLI `--local` handoff (separate repo): `buildinternet/releases-cli`, `src/cli/commands/fetch.ts`.
 

@@ -114,7 +114,7 @@ export const SearchReleaseHitSchema = z.object({
    * The release's upstream source URL, when it has one. Lets the web link
    * search/lookup hits straight to the original page instead of the
    * noindexed `/release/<id>` stub — see `releaseLinkProps()` in
-   * `web/src/lib/release-link.ts`. Optional for older servers / mid-deploy
+   * `apps/web/src/lib/release-link.ts`. Optional for older servers / mid-deploy
    * pin tolerance.
    */
   url: z.string().nullable().optional(),

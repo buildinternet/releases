@@ -1,4 +1,4 @@
-// web/src/components/workspace-invitations.tsx
+// apps/web/src/components/workspace-invitations.tsx
 "use client";
 
 import { useCallback, useState } from "react";

@@ -3,7 +3,7 @@
  *
  * The web app sends only a sha256 hash of its query (codegen-time). The
  * server maps the hash back to the document via a manifest committed to the
- * repo by `bun web/codegen.ts`. Unknown hashes reject for non-admin callers.
+ * repo by `bun apps/web/codegen.ts`. Unknown hashes reject for non-admin callers.
  *
  * Two responsibilities live here together because they share the manifest
  * and key format:
@@ -24,11 +24,11 @@ import {
 } from "@graphql-yoga/plugin-persisted-operations";
 import { logEvent } from "@releases/lib/log-event";
 import type { LatestCacheBinding } from "../lib/latest-cache.js";
-// The codegen output ships under web/. The API trusts web's manifest because
+// The codegen output ships under apps/web/. The API trusts web's manifest because
 // they're versioned together in the monorepo — schema.graphql is the same
 // pattern. The relative path crosses workspaces but stays inside the repo;
 // tsconfig's `include` extends to the JSON file specifically.
-import rawManifest from "../../../../web/src/lib/graphql/__generated__/persisted-documents.json" with { type: "json" };
+import rawManifest from "../../../web/src/lib/graphql/__generated__/persisted-documents.json" with { type: "json" };
 
 /**
  * Sentinel header set by the route handler when the request should bypass
@@ -41,7 +41,7 @@ import rawManifest from "../../../../web/src/lib/graphql/__generated__/persisted
 export const GRAPHQL_ADMIN_HEADER = "x-releases-graphql-admin";
 
 // Bare sha256 (no `sha256:` prefix) is what Apollo APQ wire format uses.
-// Keep in sync with web/src/lib/graphql/client.ts which strips the same
+// Keep in sync with apps/web/src/lib/graphql/client.ts which strips the same
 // prefix on the way out.
 const HASH_PREFIX = "sha256:";
 const stripHashPrefix = (key: string) =>
@@ -214,7 +214,7 @@ export async function storeIfCacheable(
  * The KV API has no prefix-delete, so we either need a list-and-delete walk
  * (extra reads) or well-known variable shapes per op. The homepage ticker
  * pins `{ limit: 40, exclude: ["github"] }`, so one key covers the only
- * writer today. Keep in sync with web/src/app/page.tsx.
+ * writer today. Keep in sync with apps/web/src/app/page.tsx.
  */
 export const HOMEPAGE_TICKER_VARS = { exclude: ["github"], limit: 40 };
 

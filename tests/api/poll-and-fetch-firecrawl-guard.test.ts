@@ -12,8 +12,8 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { organizations, sources, fetchLog } from "@buildinternet/releases-core/schema";
 import { applyMigrations, ensureBatchShim } from "../db-helper";
-import { PollAndFetchWorkflow } from "../../workers/api/src/workflows/poll-and-fetch";
-import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/poll-and-fetch";
+import { PollAndFetchWorkflow } from "../../apps/api/src/workflows/poll-and-fetch";
+import type { PollAndFetchWorkflowEnv } from "../../apps/api/src/workflows/poll-and-fetch";
 import { mkFakeStep } from "./_workflow-test-helpers";
 
 function mkDb() {

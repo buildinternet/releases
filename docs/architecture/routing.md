@@ -6,8 +6,8 @@ Read this before adding or changing an API route. It answers the questions every
 
 Three buckets, by intent:
 
-- **Resource CRUD** → canonical path `/v1/<resource>/...`, auth gated by the `adminRoutes` allowlist in `workers/api/src/index.ts` (this includes `/v1/lookups`).
-- **Job / side-effect triggers** (batch-summarize, batch-enrich, embed backfills, notifications-test) → `/v1/workflows/<job-name>` in `workers/api/src/routes/workflows.ts`.
+- **Resource CRUD** → canonical path `/v1/<resource>/...`, auth gated by the `adminRoutes` allowlist in `apps/api/src/index.ts` (this includes `/v1/lookups`).
+- **Job / side-effect triggers** (batch-summarize, batch-enrich, embed backfills, notifications-test) → `/v1/workflows/<job-name>` in `apps/api/src/routes/workflows.ts`.
 - **Admin-only telemetry** that fits neither bucket (cron-runs list/detail, embed/status, `admin/logs/*`, search-queries, the cross-org overview manifest under `admin/overviews`) → stays under `/v1/admin/...`.
 
 Do **not** add new `/v1/admin/*` endpoints for CRUD or for async triggers — those belong on the canonical path or under `/v1/workflows/*` respectively. Existing `/v1/admin/*` CRUD is tech debt (#494).
@@ -19,7 +19,7 @@ A fourth, narrower bucket exists for **self-serve, session-authed** resources:
 write/admin scope is refused; see remote-mode.md) is gated by `requireSession`
 (Better Auth session cookie), not by the Bearer-token middleware. It is intentionally
 absent from both `publicReadRoutes` and `adminRoutes` in
-`workers/api/src/route-namespaces.ts` (so neither the public-read nor admin auth loop
+`apps/api/src/route-namespaces.ts` (so neither the public-read nor admin auth loop
 touches it) and from the public-read OpenAPI coverage gate. CORS is origin-based
 worker-wide (`apiCorsMiddleware` in `auth/index.ts`): first-party browser origins
 get credentialed reflection automatically — no per-route carve-out. This bucket is
@@ -124,7 +124,7 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   source feeds, homepage ticker, `/updates`, `/live`, `/following`,
   collections) link a release row's title straight to its upstream `url`
   when it has a referenceable http(s) one, via `releaseLinkTarget()`
-  (`web/src/lib/release-link.ts`) / `<ReleaseTitleLink>`. The on-site
+  (`apps/web/src/lib/release-link.ts`) / `<ReleaseTitleLink>`. The on-site
   `/release/<id>` page stays reachable as a secondary affordance ("Read
   more" / "Details" / lightbox) and as the fallback when no URL exists —
   it's a permalink, not the default destination. This also strips the
@@ -147,7 +147,7 @@ Post-#698 the bare form rejects bare _slugs_ with `400 bare_slug_rejected` (thro
 
 ## The `/v1/lookups` resolver family
 
-The whole `lookups` namespace lives in `publicReadRoutes` (`workers/api/src/route-namespaces.ts`), so auth is gated by method, not by route:
+The whole `lookups` namespace lives in `publicReadRoutes` (`apps/api/src/route-namespaces.ts`), so auth is gated by method, not by route:
 
 - **Public-read (no auth, rate-limited, cacheable):** `GET /v1/lookups/source-by-slug`, `GET /v1/lookups/product-by-slug`, `GET /v1/lookups/by-domain` — pure resolution primitives.
 - **Write (Bearer required):** `POST /v1/lookups` (the on-demand GitHub indexer) — gated by `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.
@@ -188,7 +188,7 @@ Catalog wire shapes live in `@buildinternet/releases-api-types`; the catalog pay
 
 > **Beta — subject to change.**
 
-`GET /v1/whats-changed?package=&from=&to=&ecosystem=npm|pypi|github` (`workers/api/src/routes/whats-changed.ts`) returns the changelog entries in the half-open version range `(from, to]` for a package — summaries + breaking verdicts (#1696) + migration notes, composed by the pure `resolveUpgradeRange` (`@buildinternet/releases-core/upgrade-range`) over **already-ingested** releases (no live fetch; no per-request AI — the summaries/verdicts are read from columns generated at ingest). Resolution is **read-only**: exact source-slug match, then a non-materializing GitHub `owner/repo` coordinate match (mirrors `/v1/lookups/source-by-coordinate`, never the materializing `POST /v1/lookups`) — a read tool must not write, so an unresolvable package returns `status: "unknown"` at **HTTP 200** (a valid answer, not a 404). Bare npm/PyPI names resolve to `unknown` until #1345 lands a name→source map. Wide ranges are token-budgeted against `CHANGELOG_TOKEN_BRACKETS` (newest kept, `truncated` flagged). The MCP `whats_changed` tool proxies this route over the `API` binding (single source of truth). Phase 2 (`upgrade_plan` over a manifest) fans this out per dependency.
+`GET /v1/whats-changed?package=&from=&to=&ecosystem=npm|pypi|github` (`apps/api/src/routes/whats-changed.ts`) returns the changelog entries in the half-open version range `(from, to]` for a package — summaries + breaking verdicts (#1696) + migration notes, composed by the pure `resolveUpgradeRange` (`@buildinternet/releases-core/upgrade-range`) over **already-ingested** releases (no live fetch; no per-request AI — the summaries/verdicts are read from columns generated at ingest). Resolution is **read-only**: exact source-slug match, then a non-materializing GitHub `owner/repo` coordinate match (mirrors `/v1/lookups/source-by-coordinate`, never the materializing `POST /v1/lookups`) — a read tool must not write, so an unresolvable package returns `status: "unknown"` at **HTTP 200** (a valid answer, not a 404). Bare npm/PyPI names resolve to `unknown` until #1345 lands a name→source map. Wide ranges are token-budgeted against `CHANGELOG_TOKEN_BRACKETS` (newest kept, `truncated` flagged). The MCP `whats_changed` tool proxies this route over the `API` binding (single source of truth). Phase 2 (`upgrade_plan` over a manifest) fans this out per dependency.
 
 ## Pagination shape
 
@@ -206,17 +206,17 @@ Audited 2026-05-05: `get_latest_releases` is the only feed-shaped MCP tool — e
 
 `GET /v1/releases/latest?minImportance=N` restricts the feed to releases whose AI-scored `importance` (1–5, scored at ingest — see [ingest.md → Content summarization](ingest.md)) is at or above `N`. `N` must be an integer 1–5 (`isImportanceScore`, `@buildinternet/releases-core/importance`); an out-of-range or non-integer value 400s rather than silently falling through to an unfiltered feed, matching the `exclude` param's rationale.
 
-Unscored releases (`importance IS NULL`) are always excluded once the filter is applied: the SQL condition `r.importance >= ?` (`workers/api/src/queries/releases.ts`) never matches a `NULL` column, so there's no separate "treat null as 0" branch to maintain.
+Unscored releases (`importance IS NULL`) are always excluded once the filter is applied: the SQL condition `r.importance >= ?` (`apps/api/src/queries/releases.ts`) never matches a `NULL` column, so there's no separate "treat null as 0" branch to maintain.
 
-Like `since`/`until`, any `minImportance` value forces the KV read-through cache to bypass (`X-Cache: BYPASS`; `workers/api/src/lib/latest-cache.ts#isCacheableDefaultShape`) — it's a low-cardinality-unfriendly shape (arbitrarily many distinct thresholds crossed with the existing filter combinations) that must never collide with the shared homepage/CLI cache key. D1 handles the filtered read directly instead.
+Like `since`/`until`, any `minImportance` value forces the KV read-through cache to bypass (`X-Cache: BYPASS`; `apps/api/src/lib/latest-cache.ts#isCacheableDefaultShape`) — it's a low-cardinality-unfriendly shape (arbitrarily many distinct thresholds crossed with the existing filter combinations) that must never collide with the shared homepage/CLI cache key. D1 handles the filtered read directly instead.
 
 ## Read-path freshness (Cache-Control)
 
-Public GET routes advertise per-route `Cache-Control` headers (registered in `workers/api/src/index.ts` via `cacheControl()`). These headers are read by **Workers Cache** — Cloudflare's per-Worker tiered edge cache, enabled by `"cache": { "enabled": true }` in `workers/api/wrangler.jsonc` — which stores/serves responses in front of the fetch handler, so a cache hit never runs the Worker (zero CPU, skips auth/rate-limit/D1 and any per-request counters like the search-query log). Only anonymous GETs are cached: `cacheControl()` itself forces `private, no-store` on requests bearing `Authorization` and stamps `Vary: Authorization` on anonymous entries — Workers Cache alone would NOT exclude them, because RFC 9111 lets an explicit `public` override the shared-cache Authorization restriction, which would both leak principal-shaped responses (admin projections, `include_hidden`, playbook content) into the shared cache and serve anonymous-shaped entries to authed callers. Responses with `Set-Cookie` auto-bypass; inbound `Cookie` headers do not. Workers Cache also applies **heuristic freshness** to responses with no `Cache-Control` header at all (200 → ~2h, 404 → ~3min), so the root app registers `cacheDefaultDeny()` first: any response without an explicit `Cache-Control` is stamped `private, no-store`, making caching strictly opt-in — this is what keeps `/api/auth/*` (e.g. `get-session`, which Better Auth serves header-less to cookie-bearing callers) out of the shared cache. The cache key includes the Worker version, so every deploy starts from an empty cache. Staging keeps it explicitly disabled so the `STAGING_ACCESS_KEY` gate always runs. Invalidation: `cacheControl(..., { tags })` emits `Cache-Tag`; today only `/v1/releases/latest` is tagged (`latest`), purged by `purgeLatestCacheTag()` in `lib/latest-cache.ts` on publish. The `cache-disabled` flag is a slow-drain kill switch — it stops new entries (no header emitted) but already-stored entries age out over their remaining `max-age`. Single-entity reads — including `GET /v1/releases/:id` (#1580) — use `public, max-age=60, stale-while-revalidate=30`, so a just-written field (e.g. generate-content's `title_short`/`summary`) can read stale for up to ~90s through a caching intermediary; read back through an uncached route (the source-releases list) or wait out the window before concluding a write failed.
+Public GET routes advertise per-route `Cache-Control` headers (registered in `apps/api/src/index.ts` via `cacheControl()`). These headers are read by **Workers Cache** — Cloudflare's per-Worker tiered edge cache, enabled by `"cache": { "enabled": true }` in `apps/api/wrangler.jsonc` — which stores/serves responses in front of the fetch handler, so a cache hit never runs the Worker (zero CPU, skips auth/rate-limit/D1 and any per-request counters like the search-query log). Only anonymous GETs are cached: `cacheControl()` itself forces `private, no-store` on requests bearing `Authorization` and stamps `Vary: Authorization` on anonymous entries — Workers Cache alone would NOT exclude them, because RFC 9111 lets an explicit `public` override the shared-cache Authorization restriction, which would both leak principal-shaped responses (admin projections, `include_hidden`, playbook content) into the shared cache and serve anonymous-shaped entries to authed callers. Responses with `Set-Cookie` auto-bypass; inbound `Cookie` headers do not. Workers Cache also applies **heuristic freshness** to responses with no `Cache-Control` header at all (200 → ~2h, 404 → ~3min), so the root app registers `cacheDefaultDeny()` first: any response without an explicit `Cache-Control` is stamped `private, no-store`, making caching strictly opt-in — this is what keeps `/api/auth/*` (e.g. `get-session`, which Better Auth serves header-less to cookie-bearing callers) out of the shared cache. The cache key includes the Worker version, so every deploy starts from an empty cache. Staging keeps it explicitly disabled so the `STAGING_ACCESS_KEY` gate always runs. Invalidation: `cacheControl(..., { tags })` emits `Cache-Tag`; today only `/v1/releases/latest` is tagged (`latest`), purged by `purgeLatestCacheTag()` in `lib/latest-cache.ts` on publish. The `cache-disabled` flag is a slow-drain kill switch — it stops new entries (no header emitted) but already-stored entries age out over their remaining `max-age`. Single-entity reads — including `GET /v1/releases/:id` (#1580) — use `public, max-age=60, stale-while-revalidate=30`, so a just-written field (e.g. generate-content's `title_short`/`summary`) can read stale for up to ~90s through a caching intermediary; read back through an uncached route (the source-releases list) or wait out the window before concluding a write failed.
 
 ## OpenAPI coverage gate (#894 Phase 3)
 
-Every method registered under a `publicReadRoutes` prefix (defined in `workers/api/src/route-namespaces.ts`) must appear in `/v1/openapi.json`. Enforced by `scripts/check-openapi-coverage.ts`, run as a step in the CI `test` job.
+Every method registered under a `publicReadRoutes` prefix (defined in `apps/api/src/route-namespaces.ts`) must appear in `/v1/openapi.json`. Enforced by `scripts/check-openapi-coverage.ts`, run as a step in the CI `test` job.
 
 Add `describeRoute(...)` annotations from `hono-openapi` to new public-read routes. If a public-read route is genuinely meant to stay undocumented, add an explicit entry to the script's `ALLOWLIST` set with a rationale comment (stale entries log a warning so they don't accumulate). Admin-only routes (`adminRoutes` in the same module) are intentionally outside the gate's scope.
 

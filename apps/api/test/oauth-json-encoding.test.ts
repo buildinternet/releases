@@ -25,7 +25,7 @@ const baseEnv = {
   WEB_BASE_URL: "https://releases.localhost",
 } satisfies Partial<Bindings> as Bindings;
 
-const MIGRATION = "workers/api/migrations/20260901000000_oauth_json_double_encoded.sql";
+const MIGRATION = "apps/api/migrations/20260901000000_oauth_json_double_encoded.sql";
 
 /** Strip comments and split the migration into executable statements. */
 function migrationStatements(): string[] {

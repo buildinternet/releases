@@ -1,4 +1,4 @@
-// web/src/components/workspace-detail-panel.tsx
+// apps/web/src/components/workspace-detail-panel.tsx
 "use client";
 
 import { useCallback, useEffect, useState } from "react";

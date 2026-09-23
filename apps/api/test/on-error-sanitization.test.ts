@@ -1,5 +1,5 @@
 /**
- * Verifies that the global onError handler in workers/api/src/index.ts
+ * Verifies that the global onError handler in apps/api/src/index.ts
  * returns a generic message on unhandled (non-HTTPException) 500s and
  * does NOT leak the raw Error.message to the caller (#advisor-003).
  */
@@ -9,7 +9,7 @@ import { HTTPException } from "hono/http-exception";
 import { respondError } from "../src/lib/error-response";
 
 // Build a minimal app that wires the REAL `respondError` boundary serializer
-// as `onError`, exactly like `workers/api/src/index.ts` does. This exercises
+// as `onError`, exactly like `apps/api/src/index.ts` does. This exercises
 // the production handler directly rather than a hand-copied stand-in, so
 // there is nothing here that can drift from the source.
 function makeApp() {

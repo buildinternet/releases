@@ -104,14 +104,14 @@ Rollups come from two places, neither of them new:
 
 Structured stderr logs (`@buildinternet/releases-lib/logger`) emit one `info` line per extraction with mode, rounds, tool chars, cache read/write tokens, and entry count; one `warn` on fallback with the reason.
 
-- **`ai_usage` log event (one-shot tier only, issue #2166)** — the same `{ component: "ai", event: "ai_usage", lane, provider, model, input, output, cacheCreate, cacheRead }` shape the other AI-SDK lanes emit (`workers/api/src/lib/text-model.ts`'s `withLaneUsageLogging`), tagged `lane: "extract-oneshot"`. This is what makes the one-shot tier's real routing (OpenRouter vs. Anthropic fallback) visible in Axiom — the `usage_log` D1 columns above record token counts but not which provider served them.
+- **`ai_usage` log event (one-shot tier only, issue #2166)** — the same `{ component: "ai", event: "ai_usage", lane, provider, model, input, output, cacheCreate, cacheRead }` shape the other AI-SDK lanes emit (`apps/api/src/lib/text-model.ts`'s `withLaneUsageLogging`), tagged `lane: "extract-oneshot"`. This is what makes the one-shot tier's real routing (OpenRouter vs. Anthropic fallback) visible in Axiom — the `usage_log` D1 columns above record token counts but not which provider served them.
 
 ## Rollout
 
 `EXTRACT_TOOLLOOP_ENABLED=false` by default, so flipping the branch on main is a no-op until the flag is set in a worker env. Two knobs for progressive rollout:
 
 - **Per-source override** — set `source.metadata.extractStrategy = "toolloop"` to force the tool-loop tier for a specific source regardless of the env flag. Useful for eval/debug against known large bodies (PostHog, Turborepo, vercel-cli) before flipping the global default.
-- **Global default** — set `EXTRACT_TOOLLOOP_ENABLED=true` in `workers/discovery/wrangler.jsonc` to enable for all sources whose body exceeds 50K tokens.
+- **Global default** — set `EXTRACT_TOOLLOOP_ENABLED=true` in `apps/discovery/wrangler.jsonc` to enable for all sources whose body exceeds 50K tokens.
 
 The AI Gateway dashboard surfaces cost/token deltas per call; SQL rollups on `usage_log` answer "what fraction of calls fell back" and "median `tool_rounds` for bodies > 100K".
 

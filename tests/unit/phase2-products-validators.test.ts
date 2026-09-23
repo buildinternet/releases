@@ -4,7 +4,7 @@
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { productRoutes } from "../../workers/api/src/routes/products.js";
+import { productRoutes } from "../../apps/api/src/routes/products.js";
 import { organizations, products, productTags, tags } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 

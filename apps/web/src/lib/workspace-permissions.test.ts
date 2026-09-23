@@ -1,4 +1,4 @@
-// web/src/lib/workspace-permissions.test.ts
+// apps/web/src/lib/workspace-permissions.test.ts
 import { describe, expect, test } from "bun:test";
 import { isManager, roleToggleTarget, canActOnMember } from "./workspace-permissions";
 

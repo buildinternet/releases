@@ -53,7 +53,7 @@ const MAGIC_LINK_ENABLED = process.env.NEXT_PUBLIC_AUTH_MAGIC_LINK === "true";
  * `NODE_ENV` is "development" (Next.js inlines it at build); a production build —
  * Vercel prod or any preview — sets it to "production", so this notice ships to zero
  * real users with no env var to remember. The worker logs the verify/sign-in link to
- * the `dev:api` console (see workers/api/src/auth/email.ts); this banner points there.
+ * the `dev:api` console (see apps/api/src/auth/email.ts); this banner points there.
  */
 const DEV_EMAIL_NOTICE = process.env.NODE_ENV === "development";
 

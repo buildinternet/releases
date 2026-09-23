@@ -33,7 +33,7 @@ const devAllowedOrigins = [
 ];
 
 const nextConfig: NextConfig = {
-  outputFileTracingRoot: path.resolve(__dirname, ".."),
+  outputFileTracingRoot: path.resolve(__dirname, "../.."),
   allowedDevOrigins: devAllowedOrigins,
   // Next 16.3 removed the `viewTransition` config flag entirely — the App
   // Router's <ViewTransition> integration now works with no configuration,
@@ -54,12 +54,12 @@ const nextConfig: NextConfig = {
     ],
   },
   turbopack: {
-    root: path.resolve(__dirname, ".."),
+    root: path.resolve(__dirname, "../.."),
     resolveAlias: {
-      "@buildinternet/releases-api-types": "../packages/api-types/src/api-types.ts",
-      "@releases/design-system": "../packages/design-system/src/index.ts",
-      "@releases/lib/*": "../packages/lib/src/*",
-      "@releases/rendering/*": "../packages/rendering/src/*",
+      "@buildinternet/releases-api-types": "../../packages/api-types/src/api-types.ts",
+      "@releases/design-system": "../../packages/design-system/src/index.ts",
+      "@releases/lib/*": "../../packages/lib/src/*",
+      "@releases/rendering/*": "../../packages/rendering/src/*",
     },
   },
   webpack: (config) => {
@@ -67,11 +67,14 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       "@buildinternet/releases-api-types": path.resolve(
         __dirname,
-        "../packages/api-types/src/api-types.ts",
+        "../../packages/api-types/src/api-types.ts",
       ),
-      "@releases/design-system": path.resolve(__dirname, "../packages/design-system/src/index.ts"),
-      "@releases/lib": path.resolve(__dirname, "../packages/lib/src"),
-      "@releases/rendering": path.resolve(__dirname, "../packages/rendering/src"),
+      "@releases/design-system": path.resolve(
+        __dirname,
+        "../../packages/design-system/src/index.ts",
+      ),
+      "@releases/lib": path.resolve(__dirname, "../../packages/lib/src"),
+      "@releases/rendering": path.resolve(__dirname, "../../packages/rendering/src"),
     };
     return config;
   },
@@ -162,7 +165,7 @@ const nextConfig: NextConfig = {
           {
             // `cdn.jsdelivr.net` carries the pinned Scalar bundle mounted by
             // `/docs/api/rest`. The same origin is used by the API worker at
-            // `workers/api/src/openapi.ts`. style-src adds it too because
+            // `apps/api/src/openapi.ts`. style-src adds it too because
             // Scalar injects its stylesheet from the same CDN.
             // `accounts.google.com/gsi/*` is Google Identity Services for the
             // Google One Tap sign-in prompt (better-auth `oneTapClient`, auto-

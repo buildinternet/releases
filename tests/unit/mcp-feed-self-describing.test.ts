@@ -17,7 +17,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { getLatestReleases, getCollectionReleases } from "../../workers/mcp/src/tools.js";
+import { getLatestReleases, getCollectionReleases } from "../../apps/mcp/src/tools.js";
 
 let testDb: TestDatabase;
 const LONG_ID = "rel_selfdesclong00000";

@@ -45,7 +45,7 @@ function isPersistedQueryNotFound(errors: GraphQLError[]): boolean {
 }
 
 // Codegen embeds `__meta__.hash` on every TypedDocumentNode when the
-// `persistedDocuments` preset option is on (see web/codegen.ts). The API
+// `persistedDocuments` preset option is on (see apps/web/codegen.ts). The API
 // rejects requests without a known hash from non-admin callers, so we
 // pull it off the document and send it in Apollo APQ wire format.
 interface PersistedDocument {
@@ -53,7 +53,7 @@ interface PersistedDocument {
 }
 
 // Apollo APQ wire format expects the bare sha256 (no `sha256:` prefix). The
-// API mirrors this strip in workers/api/src/graphql/persisted.ts — keep the
+// API mirrors this strip in apps/api/src/graphql/persisted.ts — keep the
 // two in sync if the algorithm ever changes.
 const HASH_PREFIX = "sha256:";
 function persistedHashOf(document: PersistedDocument): string {

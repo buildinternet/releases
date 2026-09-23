@@ -3,17 +3,17 @@ import {
   IDENTITY_SCOPES as API_IDENTITY_SCOPES,
   ROLE_LADDER as API_ROLE_LADDER,
   entitledScopes as apiEntitledScopes,
-} from "../../workers/api/src/auth/entitlement.js";
+} from "../../apps/api/src/auth/entitlement.js";
 import {
   IDENTITY_SCOPES as WEB_IDENTITY_SCOPES,
   ROLE_LADDER as WEB_ROLE_LADDER,
   entitledScopes as webEntitledScopes,
-} from "../../web/src/lib/entitlement";
+} from "../../apps/web/src/lib/entitlement";
 
 // Drift gate (#1481). The OAuth scope entitlement map lives in two copies that
 // must stay in sync: the authoritative worker boundary
-// (workers/api/src/auth/entitlement.ts) and a display-only mirror the Next.js
-// consent page uses (web/src/lib/entitlement.ts). The web app is a separate
+// (apps/api/src/auth/entitlement.ts) and a display-only mirror the Next.js
+// consent page uses (apps/web/src/lib/entitlement.ts). The web app is a separate
 // build and cannot import the worker module, so the constants + fail-closed
 // logic are duplicated. Nothing else stops them silently diverging — drift
 // can't escalate privilege (the worker copy gates every token) but it makes the

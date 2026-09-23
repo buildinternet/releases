@@ -5,7 +5,7 @@
  * kind / since / until / sourceIds.
  *
  * These cases lock API-correctness alignment after removing the inline
- * `releases_fts MATCH` in workers/mcp/src/tools.ts.
+ * `releases_fts MATCH` in apps/mcp/src/tools.ts.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
@@ -15,7 +15,7 @@ import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { searchReleasesFts } from "@releases/search/releases-fts.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { search } from "../../workers/mcp/src/tools.js";
+import { search } from "../../apps/mcp/src/tools.js";
 
 let testDb: TestDatabase;
 

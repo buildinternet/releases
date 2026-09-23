@@ -12,7 +12,7 @@
  * call) and all rows insert visibly.
  *
  * Why we stub `@releases/adapters/feed.js` via `mock.module` instead of
- * mocking `globalThis.fetch` at the test boundary: `workers/api/test/fetch-log.test.ts`
+ * mocking `globalThis.fetch` at the test boundary: `apps/api/test/fetch-log.test.ts`
  * already registers a process-global `mock.module` for the same path with a
  * stub that returns `releases: []` by default. Bun applies that stub for every
  * subsequently-evaluated test file in the same run, so any test below it that

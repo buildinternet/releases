@@ -6,7 +6,7 @@ import { mock } from "bun:test";
 //
 // NOTE: the `.test.ts` suffix on this file is load-bearing — it keeps this
 // file (which imports `bun:test`, undeclarable in the Next build context) out
-// of `next build`'s type-check via web/tsconfig.json's `**/*.test.ts`
+// of `next build`'s type-check via apps/web/tsconfig.json's `**/*.test.ts`
 // exclusion. It contains no tests itself.
 //
 // IMPORTANT: bun resolves and loads the entire static module graph (including
@@ -31,7 +31,7 @@ mock.module("next/cache", () => ({
 /** Route adminActionEnv() down its local-admin branch (no next/headers). */
 export function enableLocalAdminEnv(): void {
   process.env.RELEASES_API_KEY = "test-admin-key";
-  // Force-set (not `??=`) — the ambient .env / web/.env.local loaded by bun
+  // Force-set (not `??=`) — the ambient .env / apps/web/.env.local loaded by bun
   // already defines RELEASES_API_URL, which would otherwise leak a real host
   // into the recorded-request assertions.
   process.env.RELEASES_API_URL = "http://api.test.local";

@@ -100,7 +100,7 @@ function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): st
 
 /**
  * Where a release row in the digest sends the reader. Mirrors the web feed policy
- * in `web/src/lib/release-link.ts` (`releaseLinkTarget`): `/release/<id>` pages are
+ * in `apps/web/src/lib/release-link.ts` (`releaseLinkTarget`): `/release/<id>` pages are
  * noindexed stubs of upstream content, so the default click goes straight to the
  * upstream page whenever the release has a referenceable http(s) URL. The on-site
  * permalink stays the fallback — the slugged canonical (`webUrl`, populated when the

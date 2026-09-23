@@ -8,8 +8,8 @@
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { collectionRoutes } from "../../workers/api/src/routes/collections.js";
-import { ignoreRoutes } from "../../workers/api/src/routes/ignore.js";
+import { collectionRoutes } from "../../apps/api/src/routes/collections.js";
+import { ignoreRoutes } from "../../apps/api/src/routes/ignore.js";
 import {
   organizations,
   collections,

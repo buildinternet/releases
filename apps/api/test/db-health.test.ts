@@ -7,7 +7,7 @@ import { dbHealthCheck } from "../src/middleware/db-health.js";
  * applied?" probe. Its 503 now carries the standardized nested error envelope
  * (#1830 item 3) with the stable `database_not_initialized` code and the setup
  * steps in `details.setup` — the exact contract the web transport
- * (`web/src/lib/api.ts`) decodes to show the operator how to migrate.
+ * (`apps/web/src/lib/api.ts`) decodes to show the operator how to migrate.
  */
 type Bindings = { DB: D1Database };
 

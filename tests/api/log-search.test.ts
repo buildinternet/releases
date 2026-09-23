@@ -3,8 +3,8 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../db-helper";
 import { searchQueries } from "@buildinternet/releases-core/schema";
-import { prepareSearchLogRow, MAX_QUERY_LEN } from "../../workers/api/src/lib/log-search";
-import { prepareMcpSearchLogRow } from "../../workers/mcp/src/lib/log-search";
+import { prepareSearchLogRow, MAX_QUERY_LEN } from "../../apps/api/src/lib/log-search";
+import { prepareMcpSearchLogRow } from "../../apps/mcp/src/lib/log-search";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

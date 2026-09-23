@@ -169,7 +169,7 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
       // for GIFs. Fail-open: a missing body or any transcode error leaves the
       // third-party URL in place (no r2Key), exactly like a GIF that fails to
       // mirror today. The stored MP4 lets the serve layer skip the per-view
-      // cross-origin transform (web/src/lib/media.ts releaseVideoUrl).
+      // cross-origin transform (apps/web/src/lib/media.ts releaseVideoUrl).
       if (opts.transcodeGif && opts.mediaTransform && contentType === "image/gif") {
         if (!res.body) {
           logSkip("gif-no-body", item.url, opts.sourceId, {});

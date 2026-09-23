@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
+import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 import { restoreGlobalFetch } from "../global-fetch";

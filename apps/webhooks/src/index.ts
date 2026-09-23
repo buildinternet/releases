@@ -44,7 +44,7 @@ export interface Env {
   PER_SUB_RATE_LIMITER: RateLimit;
   DELIVERY_TIMEOUT_MS: string;
   AUTO_DISABLE_THRESHOLD: string;
-  // Email alert bindings (see workers/webhooks/src/email.ts).
+  // Email alert bindings (see apps/webhooks/src/email.ts).
   // Absent → alert emails silently no-op.
   SEND_EMAIL?: { send(message: unknown): Promise<void> };
   EMAIL_NOTIFY_ENABLED?: string;

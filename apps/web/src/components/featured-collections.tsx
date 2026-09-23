@@ -4,7 +4,7 @@ import { OrgAvatar } from "@/components/org-avatar";
 /**
  * Homepage-only collection member shapes, matching the `HomepageCollections`
  * GraphQL operation's selection
- * (`web/src/lib/graphql/operations/homepage-collections.graphql`). GraphQL
+ * (`apps/web/src/lib/graphql/operations/homepage-collections.graphql`). GraphQL
  * unions discriminate on `__typename` rather than the REST wire's `kind`
  * field — kept local to this component (rather than folded into the shared
  * `@/lib/member-key`, which other non-homepage components still consume

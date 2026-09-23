@@ -1050,7 +1050,7 @@ function hasCustomAuthDeps(deps: CreateAuthDeps): boolean {
 
 /**
  * Name of the non-httpOnly "is there a session" hint cookie. The web client gates
- * its `getSession` probe on this cookie's presence (see web/src/lib/auth-client.ts):
+ * its `getSession` probe on this cookie's presence (see apps/web/src/lib/auth-client.ts):
  * absent → skip the network call entirely and treat the visitor as anonymous.
  */
 export const LOGGED_IN_HINT_COOKIE = "releases.logged_in";
@@ -1256,7 +1256,7 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     // k-anonymity; only the first 5 hash chars leave the worker) and credential
     // stuffing once a visitor crosses the block threshold — and issue a non-blocking
     // Proof-of-Work CHALLENGE (the web sentinelClient auto-solves it; see
-    // web/src/lib/auth-client.ts) for bots, suspicious IPs, and the first
+    // apps/web/src/lib/auth-client.ts) for bots, suspicious IPs, and the first
     // credential-stuffing threshold. Impossible travel and stale-account
     // reactivation are LOG-only: observe in the Security dashboard before enforcing,
     // per the plugin's own best practice. emailNormalization dedupes Gmail-dot/plus

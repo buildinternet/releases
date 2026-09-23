@@ -13,11 +13,11 @@ personal workspace; they can create more.
 ## What ships
 
 - The `organization()` plugin (core `better-auth`, no extra package) is registered
-  **always-on, no feature flag** in `workers/api/src/auth/index.ts`. It's additive and inert
+  **always-on, no feature flag** in `apps/api/src/auth/index.ts`. It's additive and inert
   for anyone who never creates a second workspace.
 - Built-in `owner` / `admin` / `member` roles; **no teams**, no custom access-control roles.
 - Tables (`auth*`-prefixed Drizzle vars, BA-default SQL names) live in the worker-local
-  `workers/api/src/db/schema-auth.ts`: `authOrganization` → `organization`, `authMember` →
+  `apps/api/src/db/schema-auth.ts`: `authOrganization` → `organization`, `authMember` →
   `member`, `authInvitation` → `invitation`, plus the `@better-auth/stripe` `subscription`
   table. New columns: `session.active_organization_id`, `user.last_active_organization_id`.
 - Account UI: `/account/workspaces` (list / create / switch active); each row links to

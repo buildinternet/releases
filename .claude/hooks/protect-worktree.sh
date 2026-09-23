@@ -3,7 +3,7 @@
 #
 # The failure this exists for is silent, which is why it needs a hook rather
 # than care. On 2026-07-28 a full verification pass (`bun run lint`, `bun test
-# web/`, `bun test workers/api`) ran with a `cd <main checkout>` prefix while
+# apps/web/`, `bun test apps/api`) ran with a `cd <main checkout>` prefix while
 # the session's work lived in a worktree. Everything passed — against a tree
 # that contained none of the changes. Nothing was dirty, nothing collided,
 # no command errored. The only tell was a test count that went DOWN.

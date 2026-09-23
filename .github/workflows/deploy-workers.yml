@@ -58,25 +58,25 @@ jobs:
               - '.github/workflows/deploy-workers.yml'
             api:
               - *shared
-              - 'workers/api/**'
+              - 'apps/api/**'
               # The API worker compiles the persisted-document allowlist into
-              # the bundle (workers/api/src/graphql/persisted.ts). When the web
+              # the bundle (apps/api/src/graphql/persisted.ts). When the web
               # codegen mints a new hash, the API must redeploy or non-admin
               # callers hit PERSISTED_QUERY_NOT_IN_LIST.
-              - 'web/src/lib/graphql/__generated__/persisted-documents.json'
+              - 'apps/web/src/lib/graphql/__generated__/persisted-documents.json'
             mcp:
               - *shared
-              - 'workers/mcp/**'
+              - 'apps/mcp/**'
             mcp_registry:
-              - 'workers/mcp/server.json'
+              - 'apps/mcp/server.json'
               - '.github/workflows/deploy-workers.yml'
             discovery:
               - *shared
-              - 'workers/discovery/**'
+              - 'apps/discovery/**'
               - 'src/**'
             webhooks:
               - *shared
-              - 'workers/webhooks/**'
+              - 'apps/webhooks/**'
 
   deploy-api:
     name: Deploy API worker (${{ matrix.environment }})
@@ -113,16 +113,16 @@ jobs:
           TARGET_ENV: ${{ matrix.environment }}
         run: |
           if [ "$TARGET_ENV" = "staging" ]; then
-            bunx wrangler d1 migrations apply DB --env staging --remote --config workers/api/wrangler.jsonc
+            bunx wrangler d1 migrations apply DB --env staging --remote --config apps/api/wrangler.jsonc
           else
-            bunx wrangler d1 migrations apply released-db --remote --config workers/api/wrangler.jsonc
+            bunx wrangler d1 migrations apply released-db --remote --config apps/api/wrangler.jsonc
           fi
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
-        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/api/wrangler.jsonc
+        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config apps/api/wrangler.jsonc
 
   deploy-mcp:
     name: Deploy MCP worker (${{ matrix.environment }})
@@ -145,17 +145,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: bun install --frozen-lockfile
-      # workers/mcp is intentionally excluded from root workspaces (cloudflare:workers
+      # apps/mcp is intentionally excluded from root workspaces (cloudflare:workers
       # imports break Bun's eager workspace resolution). Install its deps locally.
       - name: Install MCP worker deps
-        working-directory: workers/mcp
+        working-directory: apps/mcp
         run: bun install --frozen-lockfile
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
-        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/mcp/wrangler.jsonc
+        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config apps/mcp/wrangler.jsonc
 
   deploy-discovery:
     name: Deploy discovery worker (${{ matrix.environment }})
@@ -179,14 +179,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - run: bun install --frozen-lockfile
       - name: Install discovery worker deps
-        working-directory: workers/discovery
+        working-directory: apps/discovery
         run: bun install --frozen-lockfile
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
-        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/discovery/wrangler.jsonc
+        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config apps/discovery/wrangler.jsonc
 
   deploy-webhooks:
     name: Deploy webhooks worker
@@ -208,16 +208,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: bun install --frozen-lockfile
-      # workers/webhooks is intentionally excluded from root workspaces (cloudflare:workers
+      # apps/webhooks is intentionally excluded from root workspaces (cloudflare:workers
       # imports break Bun's eager workspace resolution). Install its deps locally.
       - name: Install webhooks worker deps
-        working-directory: workers/webhooks
+        working-directory: apps/webhooks
         run: bun install --frozen-lockfile
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler deploy --config workers/webhooks/wrangler.jsonc
+        run: bunx wrangler deploy --config apps/webhooks/wrangler.jsonc
       # Live e2e: enqueue a synthetic event through the echo subscriber and tail
       # deliveries. Only runs on push to main when WEBHOOK_E2E_SUBSCRIPTION_ID is set.
       # continue-on-error keeps the job green; the `|| echo` lines print a named
@@ -267,7 +267,7 @@ jobs:
           tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp mcp-publisher
           sudo mv /tmp/mcp-publisher /usr/local/bin/mcp-publisher
       - name: Login and publish
-        working-directory: workers/mcp
+        working-directory: apps/mcp
         env:
           PRIVATE_KEY_PEM: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY_PEM }}
         run: |

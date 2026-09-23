@@ -1,6 +1,6 @@
 /**
  * Client-side locator classification for the claim/promote panel.
- * Mirrors `classifyLocation` in workers/api materialize.ts so the verified
+ * Mirrors `classifyLocation` in apps/api materialize.ts so the verified
  * owner sees the same tier-1-live / tier-2-review split promote will apply —
  * without a network round-trip. (Cross-org GitHub demotion still happens
  * server-side at promote time; the preview labels github as tier-1.)

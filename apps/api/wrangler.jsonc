@@ -147,7 +147,7 @@
     "FEED_ENRICH_MODEL": "deepseek/deepseek-v4.1-flash",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
-    // See workers/api/src/workflows/poll-and-fetch.ts.
+    // See apps/api/src/workflows/poll-and-fetch.ts.
     "FANOUT_JITTER_WINDOW_MS": "300000",
     // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
     // walks the past 24h of releases across orgs with auto_generate_content=true
@@ -374,7 +374,7 @@
     { "new_classes": ["OrgActor"], "tag": "v4" },
   ],
   // Cloudflare Workflows — durable, retriable multi-step pipelines. See
-  // workers/api/src/workflows/. Prod-only; staging doesn't
+  // apps/api/src/workflows/. Prod-only; staging doesn't
   // run crons (see memory: feedback_staging_no_crons.md).
   "workflows": [
     {

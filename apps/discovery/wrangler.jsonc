@@ -26,7 +26,7 @@
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
     // Routes onboard sessions through the multi-agent coordinator (Sonnet)
     // that delegates fetches to the worker agent. Clear this var to fall
-    // back to single-agent discovery. See workers/discovery/src/managed-
+    // back to single-agent discovery. See apps/discovery/src/managed-
     // agents-session.ts for the routing logic.
     "ANTHROPIC_COORDINATOR_AGENT_ID": "agent_011Can9iMPcPuLy3oEgjGCs6",
     // Memory stores attached to every session (#537). IDs created via

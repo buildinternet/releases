@@ -22,7 +22,7 @@ import { weekOfLabel } from "@/lib/digest-format";
 import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
-// sync with applyCacheInit's default (web/src/lib/api.ts).
+// sync with applyCacheInit's default (apps/web/src/lib/api.ts).
 export const revalidate = 86400;
 
 const SITE_URL = "https://releases.sh";
@@ -58,7 +58,7 @@ function clampMetaTitle(title: string): string {
 /**
  * A "Releases covered" row's link: goes to the release's upstream url when it
  * has one (new tab, ↗), falling back to the on-site `/release/<id>` page.
- * Mirrors `releaseLinkTarget()` (`web/src/lib/release-link.ts`).
+ * Mirrors `releaseLinkTarget()` (`apps/web/src/lib/release-link.ts`).
  */
 function CoveredReleaseLink({
   release,

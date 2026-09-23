@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../db-helper";
 import { searchQueries } from "@buildinternet/releases-core/schema";
-import { getTopSearchQueries } from "../../workers/api/src/lib/search-queries-top";
+import { getTopSearchQueries } from "../../apps/api/src/lib/search-queries-top";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

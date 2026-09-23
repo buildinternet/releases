@@ -366,7 +366,7 @@ export async function generateCollectionWeeklyDigestsForWeek(
  * Pure: the ISR paths that went stale when these collections got a new weekly
  * digest. The homepage reel and each digested collection's own page (its
  * latest-digest hero) always change; `/collections` also shows per-row digest
- * recency (see `web/src/app/collections/page.tsx`), so it's included
+ * recency (see `apps/web/src/app/collections/page.tsx`), so it's included
  * unconditionally too. The digest pages themselves are a separate ping — see
  * `digestPagePaths`.
  *

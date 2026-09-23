@@ -22,7 +22,7 @@ export type Fetcher = {
   fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 };
 
-/** Staging access gate header — must match workers/api/src/middleware/staging-access.ts. */
+/** Staging access gate header — must match apps/api/src/middleware/staging-access.ts. */
 export const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
 
 /**

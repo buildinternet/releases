@@ -34,12 +34,12 @@ read-surface for UI/API iteration; see the Staging section of the top-level
 [`AGENTS.md`](../../AGENTS.md)).
 
 ```bash
-bunx wrangler deploy --config workers/api/wrangler.jsonc
-bunx wrangler deploy --env staging --config workers/api/wrangler.jsonc
+bunx wrangler deploy --config apps/api/wrangler.jsonc
+bunx wrangler deploy --env staging --config apps/api/wrangler.jsonc
 ```
 
 Local dev: `bun run dev:api` (runs through [portless](https://github.com/vercel-labs/portless)
-at `https://api.releases.localhost`; requires `workers/api/.dev.vars`, see
+at `https://api.releases.localhost`; requires `apps/api/.dev.vars`, see
 `.dev.vars.example`).
 
 ## Docs

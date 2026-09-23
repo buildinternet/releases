@@ -103,8 +103,8 @@ else
   info "wrangler not on PATH — that's fine, the db:*/dev:* scripts invoke it via bun"
 fi
 
-if [ -d "$ROOT/workers/api/.wrangler/state/v3/d1" ]; then
-  pass "local D1 state present (workers/api/.wrangler/state/v3/d1)"
+if [ -d "$ROOT/apps/api/.wrangler/state/v3/d1" ]; then
+  pass "local D1 state present (apps/api/.wrangler/state/v3/d1)"
 else
   warn "local D1 not built yet — dev:api will 500 on DB-backed routes" \
     "bun run db:reset:local  (builds a fresh D1 from migrations)"
@@ -112,33 +112,33 @@ fi
 
 # ── Env files ────────────────────────────────────────────────────────────────
 section "Env files"
-# workers/api/.dev.vars drives local auth — the one env file that materially
+# apps/api/.dev.vars drives local auth — the one env file that materially
 # affects the core dev loop (sign-in). The rest degrade gracefully.
-API_DEV_VARS="$ROOT/workers/api/.dev.vars"
+API_DEV_VARS="$ROOT/apps/api/.dev.vars"
 if [ -f "$API_DEV_VARS" ]; then
-  pass "workers/api/.dev.vars present (local auth/AI fallbacks)"
+  pass "apps/api/.dev.vars present (local auth/AI fallbacks)"
   if grep -qE '^BETTER_AUTH_SECRET_DEV=.+$' "$API_DEV_VARS" &&
     ! grep -qE '^BETTER_AUTH_SECRET_DEV=replace-with-any-stable-string$' "$API_DEV_VARS"; then
     pass "BETTER_AUTH_SECRET_DEV is set (local sessions survive dev:api restarts)"
   else
     warn "BETTER_AUTH_SECRET_DEV is unset or still the placeholder — local sessions reset on each restart (#1425)" \
-      "set it to any stable string in workers/api/.dev.vars  (or re-run: bun run bootstrap)"
+      "set it to any stable string in apps/api/.dev.vars  (or re-run: bun run bootstrap)"
   fi
 else
-  warn "workers/api/.dev.vars missing — local sign-in and secret-backed routes fail" \
-    "cp workers/api/.dev.vars.example workers/api/.dev.vars  (or: bun run bootstrap)"
+  warn "apps/api/.dev.vars missing — local sign-in and secret-backed routes fail" \
+    "cp apps/api/.dev.vars.example apps/api/.dev.vars  (or: bun run bootstrap)"
 fi
 
 for w in mcp discovery webhooks; do
-  if [ -f "$ROOT/workers/$w/.dev.vars" ]; then
-    pass "workers/$w/.dev.vars present"
+  if [ -f "$ROOT/apps/$w/.dev.vars" ]; then
+    pass "apps/$w/.dev.vars present"
   else
-    info "workers/$w/.dev.vars absent — optional (only needed to run dev:$w with bound secrets)"
+    info "apps/$w/.dev.vars absent — optional (only needed to run dev:$w with bound secrets)"
   fi
 done
 
-[ -f "$ROOT/web/.env.local" ] && pass "web/.env.local present" \
-  || info "web/.env.local absent — optional (dev:web falls back to sensible defaults)"
+[ -f "$ROOT/apps/web/.env.local" ] && pass "apps/web/.env.local present" \
+  || info "apps/web/.env.local absent — optional (dev:web falls back to sensible defaults)"
 [ -f "$ROOT/.env" ] && pass "root .env present (CLI + deploy credentials)" \
   || info "root .env absent — optional (only needed for AI passes, scrape fetches, and deploys)"
 

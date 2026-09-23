@@ -2,10 +2,10 @@ import path from "node:path";
 import { describe, expect, it } from "bun:test";
 
 // The docs manifest this route pulls sections from resolves markdown content
-// relative to `process.cwd()` (`web/src/content/...`) once, at module-load
-// time — which only holds when the process cwd is `web/` (true for `next
-// dev`/`next build`, and for `bun test` invoked from inside `web/`, but not
-// for the root multi-dir `bun test tests/ web/ ...` invocation). Pin the cwd
+// relative to `process.cwd()` (`apps/web/src/content/...`) once, at module-load
+// time — which only holds when the process cwd is `apps/web/` (true for `next
+// dev`/`next build`, and for `bun test` invoked from inside `apps/web/`, but not
+// for the root multi-dir `bun test tests/ apps/web/ ...` invocation). Pin the cwd
 // just long enough to import the route module, then restore it, so this test
 // resolves content correctly regardless of where the runner was launched
 // from without disturbing cwd-sensitive tests elsewhere in the same process.

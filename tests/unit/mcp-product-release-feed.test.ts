@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources, releases, products } from "@buildinternet/releases-core/schema";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { getLatestReleases } from "../../workers/mcp/src/tools.js";
+import { getLatestReleases } from "../../apps/mcp/src/tools.js";
 
 interface FeedRow {
   id: string;

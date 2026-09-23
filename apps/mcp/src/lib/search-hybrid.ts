@@ -2,7 +2,7 @@
  * Worker-local bindings for the shared hybrid-search helper in
  * `@releases/search/hybrid-search-worker`. `createWorkerSearch` baked with
  * the shared `buildEmbedConfig` keeps the call sites in
- * `workers/mcp/src/tools.ts` unchanged.
+ * `apps/mcp/src/tools.ts` unchanged.
  */
 
 import { createWorkerSearch } from "@releases/search/hybrid-search-worker.js";

@@ -40,7 +40,7 @@ describe("buildEntitySitemapEntries", () => {
 
   test("product in a single-product org is omitted (org page is canonical; the bare URL 308-redirects)", () => {
     // Mirrors the page's `org.products.length <= 1` collapse redirect
-    // (web/src/app/[orgSlug]/[slug]/page.tsx): for a single-product org the
+    // (apps/web/src/app/[orgSlug]/[slug]/page.tsx): for a single-product org the
     // bare /[org]/[slug] URL permanently redirects to /[org], so listing it
     // would put a redirecting URL in the sitemap. The /[org] entry (emitted
     // by the org-entry builder in sitemap.ts) already covers the content.

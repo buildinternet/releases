@@ -1,6 +1,6 @@
 -- Add the `passkey` table for the Better Auth passkey plugin (`@better-auth/passkey`)
 -- — WebAuthn / FIDO2 credentials, one row per registered passkey. Paired with the
--- `passkey` table in workers/api/src/db/schema-auth.ts (the schema↔migration pairing
+-- `passkey` table in apps/api/src/db/schema-auth.ts (the schema↔migration pairing
 -- gate in ci.yml watches that file). Field set + names are mandated by the plugin's
 -- schema; `user_id` cascades on user delete, and `user_id` / `credential_id` carry
 -- the plugin's declared indexes. SQL columns are snake_case; the drizzle-adapter

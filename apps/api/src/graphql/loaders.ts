@@ -30,7 +30,7 @@ type Release = typeof releasesVisible.$inferSelect;
 export type Loaders = ReturnType<typeof createLoaders>;
 
 /** Org-level aggregate stats — mirrors the REST `GET /v1/orgs/:slug` computation
- *  (`workers/api/src/routes/orgs.ts`). Batched by org id via one grouped query
+ *  (`apps/api/src/routes/orgs.ts`). Batched by org id via one grouped query
  *  per stat family rather than N+1 per-org round trips. */
 export type OrgStats = {
   releaseCount: number;
@@ -42,7 +42,7 @@ export type OrgStats = {
 };
 
 /** Per-source release aggregate — mirrors `getOrgSourcesWithStats`
- *  (`workers/api/src/queries/orgs.ts`), batched by source id. */
+ *  (`apps/api/src/queries/orgs.ts`), batched by source id. */
 export type SourceStats = {
   releaseCount: number;
   latestVersion: string | null;
@@ -380,7 +380,7 @@ export function createLoaders(db: D1Db) {
       });
     }),
 
-    // Mirrors `getOrgSourcesWithStats` (workers/api/src/queries/orgs.ts),
+    // Mirrors `getOrgSourcesWithStats` (apps/api/src/queries/orgs.ts),
     // batched by source id instead of scoped to a single org so it composes
     // with the existing sourcesByOrgId / sourcesByProductId loaders.
     sourceStatsBySourceId: new DataLoader<string, SourceStats>(async (sourceIds) => {
@@ -465,7 +465,7 @@ export function createLoaders(db: D1Db) {
 
     // Existence check for a source's mirrored GitHub CHANGELOG file(s)
     // (`source_changelog_files`). Mirrors the `changelogExistsRows` probe in
-    // `buildSourceDetailPayload` (workers/api/src/routes/sources.ts).
+    // `buildSourceDetailPayload` (apps/api/src/routes/sources.ts).
     hasChangelogFileBySourceId: new DataLoader<string, boolean>(async (sourceIds) => {
       const rows = await chunkedFetch(sourceIds, (chunk) =>
         db
@@ -558,7 +558,7 @@ export function createLoaders(db: D1Db) {
 }
 
 /** Org list-page aggregate — mirrors the REST `/v1/orgs` catalog stats
- *  (`getOrgStatsByIds` in workers/api/src/queries/orgs.ts), batched by org id. */
+ *  (`getOrgStatsByIds` in apps/api/src/queries/orgs.ts), batched by org id. */
 export type OrgListStats = {
   sourceCount: number;
   releaseCount: number;

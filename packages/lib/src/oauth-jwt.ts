@@ -5,7 +5,7 @@
  * reference_mcp_worker_zod_pinned_to_sdk_nested), so both resource servers
  * (REST API + MCP) verify tokens here with `jose` + the AS JWKS endpoint.
  *
- * The AS (workers/api oauth-provider plugin) issues RS256 JWTs whose `scope`
+ * The AS (apps/api oauth-provider plugin) issues RS256 JWTs whose `scope`
  * claim is already clamped to the user's live role at issuance
  * (entitlement.ts → customAccessTokenClaims). The resource server trusts that
  * claim — it never re-derives scope.

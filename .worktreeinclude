@@ -4,5 +4,5 @@
 # separately by the SessionStart hook (Claude sessions) or setup-worktree.sh.
 # https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees
 .env
-web/.env.local
+apps/web/.env.local
 .dev.vars

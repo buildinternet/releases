@@ -16,7 +16,7 @@ import {
   orgWhere,
   sourceMatchByIdOrSlug,
   productMatchByIdOrSlug,
-} from "../../workers/api/src/utils.js";
+} from "../../apps/api/src/utils.js";
 
 let tdb: TestDatabase;
 

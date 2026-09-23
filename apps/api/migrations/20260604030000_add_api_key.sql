@@ -1,6 +1,6 @@
 -- Better Auth API key plugin (@better-auth/api-key) store — user-owned, metered
 -- API keys (prefix relu_). Paired with the `apikey` table in
--- workers/api/src/db/schema-auth.ts (the schema↔migration pairing gate in ci.yml
+-- apps/api/src/db/schema-auth.ts (the schema↔migration pairing gate in ci.yml
 -- watches that file). referenceId = owning user id (config references: "user").
 -- permissions is a JSON string encoding the scope ladder as cumulative actions on
 -- one `api` resource. Reconcile columns with `@better-auth/cli generate`.

@@ -287,7 +287,7 @@ async function fetchSample(): Promise<ReleaseRow[]> {
     "released-db",
     "--remote",
     "--config",
-    "workers/api/wrangler.jsonc",
+    "apps/api/wrangler.jsonc",
     "--command",
     sql,
     "--json",

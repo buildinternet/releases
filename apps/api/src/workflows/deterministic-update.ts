@@ -78,7 +78,7 @@ export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
   // Direct-D1 persistence + post-insert step bindings (#1946 phase 4). The
   // workflow shares the worker's bindings at runtime; this interface only
   // needs to declare the slice `d1ScrapePersister` + `ingest-steps` consume —
-  // mirrors `PollAndFetchWorkflowEnv` (workers/api/src/workflows/poll-and-fetch.ts).
+  // mirrors `PollAndFetchWorkflowEnv` (apps/api/src/workflows/poll-and-fetch.ts).
   DB?: D1Database;
   // Non-optional to satisfy `BatchEffectsEnv`/`PublishEnv` (release-batch-ingest.ts),
   // which `d1ScrapePersister` requires — mirrors those interfaces exactly.

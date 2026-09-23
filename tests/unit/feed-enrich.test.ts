@@ -5,7 +5,7 @@ import {
   parsePositiveInt,
   type EnrichDeps,
   enrichNewThinItems,
-} from "../../workers/api/src/cron/feed-enrich.js";
+} from "../../apps/api/src/cron/feed-enrich.js";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 

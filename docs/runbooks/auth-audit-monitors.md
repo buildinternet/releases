@@ -3,7 +3,7 @@
 Alerting on the security-relevant auth audit events (#1432, follow-up to #1427 / #1431).
 Human-auth actions emit structured `logEvent` records with `component: "auth"` that land in
 the Axiom dataset **`releases-cloudflare-logs`** as a JSON string in the `body` column
-(`workers/api/src/auth/audit.ts`, plus the admin routes in `workers/api/src/routes/`).
+(`apps/api/src/auth/audit.ts`, plus the admin routes in `apps/api/src/routes/`).
 This runbook turns the queryable signal into alertable monitors.
 
 See [logging.md → Auth audit events](../architecture/logging.md) for the full event table and

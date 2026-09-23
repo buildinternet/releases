@@ -1,12 +1,12 @@
 /**
- * `parseTimeWindow` (workers/api/src/utils.ts) — the shared resolver behind the
+ * `parseTimeWindow` (apps/api/src/utils.ts) — the shared resolver behind the
  * `since`/`until` query params on /v1/search, /v1/releases/latest, and the org
  * feed. Covers resolution, empty/absent passthrough, the per-bound error
  * messages, and the inverted-window guard (since after until → 400, not a
  * silent empty set).
  */
 import { describe, it, expect } from "bun:test";
-import { parseTimeWindow } from "../../workers/api/src/utils.js";
+import { parseTimeWindow } from "../../apps/api/src/utils.js";
 
 describe("parseTimeWindow", () => {
   it("resolves both bounds to canonical ISO", () => {

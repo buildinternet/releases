@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test"
 import { sql } from "drizzle-orm";
 import { createTestDb, clearAllTables, type TestDatabase, type TestDb } from "../db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { getLatestReleasesAcross } from "../../workers/api/src/queries/releases.js";
+import { getLatestReleasesAcross } from "../../apps/api/src/queries/releases.js";
 
 let testDatabase: TestDatabase;
 

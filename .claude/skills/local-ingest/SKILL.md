@@ -107,7 +107,7 @@ curl -sS -X POST "$RELEASES_API_URL/v1/orgs/<orgSlug>/sources/<sourceSlug>/relea
   -d @chunk.json   # { "releases": [ … ] }
 ```
 
-Per-release fields (the real accepted shape — `workers/api/src/routes/sources.ts`, `postReleasesBatchHandler`):
+Per-release fields (the real accepted shape — `apps/api/src/routes/sources.ts`, `postReleasesBatchHandler`):
 
 ```jsonc
 {

@@ -1,7 +1,7 @@
 /**
  * AI SDK v7 fields that project onto Cloudflare Agents dashboard identity.
  * Pure option bag — no Workers/`agents` dependency. Spans only appear when the
- * worker has registered `createAISDKTelemetry()` (`workers/api/src/lib/agent-tracing.ts`).
+ * worker has registered `createAISDKTelemetry()` (`apps/api/src/lib/agent-tracing.ts`).
  *
  * Prefer typed entity ids (`src_…`, `rel_…`); never put secrets or PII here.
  *

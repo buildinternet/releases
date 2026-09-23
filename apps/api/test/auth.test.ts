@@ -571,7 +571,7 @@ describe("apiCorsMiddleware origin policy", () => {
 });
 
 // ── Integration: real Better Auth handler over the migrated D1 schema ──
-// createTestDb() applies every migration under workers/api/migrations/, so the
+// createTestDb() applies every migration under apps/api/migrations/, so the
 // user/session/account/verification tables exist. This exercises the actual
 // column shapes through Better Auth's code paths — a mismatch would throw on
 // insert and fail here.

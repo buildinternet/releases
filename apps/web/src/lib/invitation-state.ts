@@ -1,4 +1,4 @@
-// web/src/lib/invitation-state.ts
+// apps/web/src/lib/invitation-state.ts
 /**
  * Pure load-time state for the /accept-invitation page, derived from the session + the
  * better-auth `getInvitation` result. Endpoint contract (better-auth 1.6.20):

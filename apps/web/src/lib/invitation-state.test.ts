@@ -1,4 +1,4 @@
-// web/src/lib/invitation-state.test.ts
+// apps/web/src/lib/invitation-state.test.ts
 import { describe, expect, test } from "bun:test";
 import { deriveAcceptState, type GetInvitationData } from "./invitation-state";
 

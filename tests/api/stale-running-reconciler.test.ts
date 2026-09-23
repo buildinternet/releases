@@ -2,8 +2,8 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../db-helper";
-import { cronRuns } from "../../workers/api/src/db/schema-cron";
-import { reconcileStaleRunning } from "../../workers/api/src/db/cron-runs-dao";
+import { cronRuns } from "../../apps/api/src/db/schema-cron";
+import { reconcileStaleRunning } from "../../apps/api/src/db/cron-runs-dao";
 import { eq } from "drizzle-orm";
 
 function makeDb() {

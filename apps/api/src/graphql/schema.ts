@@ -34,7 +34,7 @@ const DEFAULT_PAGE_SIZE = 20;
 const clampLimit = (n: number | null | undefined) =>
   Math.max(1, Math.min(n ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE));
 
-// Cursor format mirrors REST's release feed (workers/api/src/routes/orgs.ts):
+// Cursor format mirrors REST's release feed (apps/api/src/routes/orgs.ts):
 // `publishedAt|id`, base64url-wrapped so GraphQL clients treat it as opaque.
 type ReleaseCursor = { publishedAt: string | null; id: string };
 

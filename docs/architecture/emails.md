@@ -54,7 +54,7 @@ to break one message at a time:
   noindexed stubs of upstream content, so a digest's release titles and version
   pills send the reader to the release's own `url` whenever it is http(s), the
   same policy the web feed applies via `releaseLinkTarget()`
-  (`web/src/lib/release-link.ts`). The on-site permalink is the fallback:
+  (`apps/web/src/lib/release-link.ts`). The on-site permalink is the fallback:
   slugged `webUrl`, then the bare-ID path, which 308s to canonical. "and N more"
   in a rollup still goes to the product page — that's an org surface, not a
   release stub.
@@ -117,7 +117,7 @@ markup ships correct and dormant.
 ## Previewing
 
 `/admin/emails` renders and test-sends every message from
-`EMAIL_SAMPLE_CATALOG` (`workers/api/src/lib/email-samples.ts`). Adding a
+`EMAIL_SAMPLE_CATALOG` (`apps/api/src/lib/email-samples.ts`). Adding a
 message means adding a sample there; the catalog is what makes the whole surface
 reviewable in one place.
 

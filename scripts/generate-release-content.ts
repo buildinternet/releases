@@ -92,7 +92,7 @@ function resolveProviderPath(): ProviderPath {
 const providerPath = resolveProviderPath();
 const useAnthropicBatch = providerPath === "anthropic-batch";
 
-/** Same model id as workers/api wrangler.jsonc SUMMARIZE_MODEL. */
+/** Same model id as apps/api wrangler.jsonc SUMMARIZE_MODEL. */
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4.1-flash";
 const openRouterModel =
   process.env.RELEASE_CONTENT_MODEL?.trim() ||
@@ -242,7 +242,7 @@ async function fetchReleases(): Promise<ReleaseRow[]> {
     "released-db",
     "--remote",
     "--config",
-    "workers/api/wrangler.jsonc",
+    "apps/api/wrangler.jsonc",
     "--command",
     sql,
     "--json",
@@ -288,7 +288,7 @@ async function writeRow(w: WritePayload): Promise<void> {
     "released-db",
     "--remote",
     "--config",
-    "workers/api/wrangler.jsonc",
+    "apps/api/wrangler.jsonc",
     "--command",
     sql,
   ]);
@@ -526,7 +526,7 @@ const realtimeModel =
           sessionId: "script-generate-release-content",
           referer: "https://releases.sh",
           title: "Releases",
-          // Mirror workers/api resolveSummarizeModel: don't burn the small
+          // Mirror apps/api resolveSummarizeModel: don't burn the small
           // output budget on CoT; skip outlier DeepSeek latency via gmicloud.
           providerPrefs: { ignore: ["gmicloud"] },
           reasoning: { enabled: false },

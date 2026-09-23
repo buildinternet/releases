@@ -3,8 +3,8 @@ import { logEvent } from "@releases/lib/log-event";
 /**
  * Minimal email + alert helpers for the webhooks worker.
  *
- * Duplicated from workers/api/src/lib/email.ts + send-alert.ts because
- * `workers/webhooks/` is excluded from the root workspace (see AGENTS.md
+ * Duplicated from apps/api/src/lib/email.ts + send-alert.ts because
+ * `apps/webhooks/` is excluded from the root workspace (see AGENTS.md
  * "Workspaces and carved-out packages") and has no shared package on the
  * import path. Keep in sync with the API-worker versions when the send
  * path changes — same `EMAIL_NOTIFY_*` env contract on both sides.

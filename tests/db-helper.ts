@@ -17,7 +17,7 @@ export interface TestDatabase {
 }
 
 /**
- * Apply every .sql file under workers/api/migrations/ in sorted filename
+ * Apply every .sql file under apps/api/migrations/ in sorted filename
  * order to the given sqlite database. Matches what `wrangler d1 migrations
  * apply` does in prod. After the squashed baseline this is usually one file;
  * any forward-delta migrations land in the same directory.

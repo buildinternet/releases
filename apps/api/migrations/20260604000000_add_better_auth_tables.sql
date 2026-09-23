@@ -1,5 +1,5 @@
 -- Better Auth core schema: user / session / account / verification.
--- Paired with workers/api/src/db/schema-auth.ts (worker-local schema island;
+-- Paired with apps/api/src/db/schema-auth.ts (worker-local schema island;
 -- not part of the published @buildinternet/releases-core schema). Human user
 -- sessions — a separate layer from the relk_ machine tokens in api_tokens.
 --

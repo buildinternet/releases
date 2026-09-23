@@ -2,11 +2,11 @@
  * Worker-local copies of webhook subscription helpers from src/db/queries.ts.
  * Cannot import from src/db/queries.ts because that module pulls in bun:sqlite
  * via ./connection.js, which doesn't exist in the Cloudflare Workers runtime.
- * See workers/api/src/webhooks/queries.ts for the same pattern on the API side.
+ * See apps/api/src/webhooks/queries.ts for the same pattern on the API side.
  *
  * When these helpers diverge or grow, the eventual fix is to extract them to a
  * shared worker-safe package (tracked under task #24, packages/core reconciliation).
- * For now, duplicate cleanly here and in workers/api/src/webhooks/queries.ts.
+ * For now, duplicate cleanly here and in apps/api/src/webhooks/queries.ts.
  */
 
 import { eq, inArray } from "drizzle-orm";

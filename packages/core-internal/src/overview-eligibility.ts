@@ -13,7 +13,7 @@
  * `selected` rows → submits one batch request per remaining org.
  *
  * Used by:
- *   - `workers/api/src/workflows/overview-regen.ts`
+ *   - `apps/api/src/workflows/overview-regen.ts`
  *
  * The 2026-04-28 overview-regen feedback called out that `OVERVIEW_STALE_DAYS`
  * (30) was the wrong signal — what matters is "releases since overview." The
@@ -298,7 +298,7 @@ export interface OverviewInputsOptions {
 
 /**
  * Hydrate the per-org overview-input payload. Mirrors the shape of
- * `GET /v1/orgs/:slug/overview/inputs` (workers/api/src/routes/overview-inputs.ts)
+ * `GET /v1/orgs/:slug/overview/inputs` (apps/api/src/routes/overview-inputs.ts)
  * but without the HTTP layer or media-URL hydration — the workflow runs against
  * the same MEDIA_ORIGIN-aware hydration step in its own boundary.
  *

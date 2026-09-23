@@ -164,7 +164,7 @@ export function resolveMarketingEvalModel(
  * other evals grade), the overview lane runs through the AI SDK structured-output
  * path (`generateText` + `Output.object`), so `generateOverview` needs an AI SDK
  * `LanguageModel`. Mirrors production `resolveOverviewModel`
- * (`workers/api/src/lib/text-model.ts`). Returns null when no provider is usable.
+ * (`apps/api/src/lib/text-model.ts`). Returns null when no provider is usable.
  */
 export function resolveOverviewEvalModel(
   opts: EvalLaneOptions,

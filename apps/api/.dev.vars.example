@@ -1,5 +1,5 @@
-# Local secrets for `wrangler dev` on workers/api (loaded by `bun run dev:api`).
-# Copy to `workers/api/.dev.vars` and fill in. NEVER commit the real file.
+# Local secrets for `wrangler dev` on apps/api (loaded by `bun run dev:api`).
+# Copy to `apps/api/.dev.vars` and fill in. NEVER commit the real file.
 # See AGENTS.md → "Local development" / "Auth" for the full rationale.
 
 # Better Auth (local sign-in / sessions)

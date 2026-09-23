@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases, orgAccounts } from "@buildinternet/releases-core/schema";
 import { getCollectionReleasesFeed, buildFeedCursor } from "./collection-feed.js";
-import type { D1Db } from "../../../workers/api/src/db.js";
+import type { D1Db } from "../../../apps/api/src/db.js";
 
 // Cast the Drizzle bun-sqlite db to the D1Db interface used by collection-feed.
 const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;

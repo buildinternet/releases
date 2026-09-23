@@ -1,4 +1,4 @@
-/** Mirrors workers/api/wrangler.jsonc `simple` quotas for webhook test sends. */
+/** Mirrors apps/api/wrangler.jsonc `simple` quotas for webhook test sends. */
 export const WEBHOOK_TEST_SUB_QUOTA = 5;
 export const WEBHOOK_TEST_USER_QUOTA = 20;
 export const WEBHOOK_TEST_RATE_WINDOW_SECONDS = 60;

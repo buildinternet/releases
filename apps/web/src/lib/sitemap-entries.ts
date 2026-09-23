@@ -79,7 +79,7 @@ export function buildOrgSitemapEntries(
  *
  * Single-product orgs are skipped: the org page IS that product's feed, so the
  * product page 308-redirects to `/[org]` (`org.products.length <= 1` collapse,
- * web/src/app/[orgSlug]/[slug]/page.tsx). Emitting its bare URL here would put
+ * apps/web/src/app/[orgSlug]/[slug]/page.tsx). Emitting its bare URL here would put
  * a redirecting URL in the sitemap; the `/[org]` org entry already covers the
  * content. Shadow detection (`productKeys`) still uses the FULL product set so
  * a single-product org's colliding source keeps routing to `/sources/:id`

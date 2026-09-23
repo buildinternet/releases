@@ -305,19 +305,19 @@ export type Env = {
     MOBILE_DISCOVERY_MAX_PER_RUN?: string;
     MOBILE_DISCOVERY_MAX_APPS_PER_ORG?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
-    // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
+    // `search_queries`. Default off → logging on. See apps/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
     // Retention window for `search_queries` rows. Rows older than this many days
     // are deleted by the nightly 05:00 UTC sweep. Default 90.
     SEARCH_QUERY_RETENTION_DAYS?: string;
     // Retention window for soft-deleted org/source/product rows. Tombstoned
     // rows older than this many days are hard-purged by the nightly 05:30 UTC
-    // sweep. Default 30. See workers/api/src/cron/sweep-tombstones.ts (#666).
+    // sweep. Default 30. See apps/api/src/cron/sweep-tombstones.ts (#666).
     TOMBSTONE_RETENTION_DAYS?: string;
     // Stale OAuth-client reaper (nightly 07:00 UTC). Retention window in days
     // (default 30) for abandoned dynamic-registration clients; the enable flag
     // gates delete-vs-observe (fallback for `oauth-client-reaper-enabled`). See
-    // workers/api/src/cron/sweep-oauth-clients.ts.
+    // apps/api/src/cron/sweep-oauth-clients.ts.
     OAUTH_CLIENT_REAPER_RETENTION_DAYS?: string;
     OAUTH_CLIENT_REAPER_ENABLED?: string;
     // Staging-only shared secret — see middleware/staging-access.ts. Absent

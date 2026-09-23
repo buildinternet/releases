@@ -1,7 +1,7 @@
 -- Add user.display_email — the human-facing display form of the email, preserving
 -- the original casing and (for Gmail) dots that the Sentinel `emailNormalization`
 -- pass strips off the canonical, unique `email` column. Paired with the displayEmail
--- field in workers/api/src/db/schema-auth.ts (the schema↔migration pairing gate in
+-- field in apps/api/src/db/schema-auth.ts (the schema↔migration pairing gate in
 -- ci.yml watches that file).
 --
 -- Nullable text and display-only: the unique `email` column stays the dedup / sign-in

@@ -9,8 +9,8 @@ import {
   releases,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
-import overviewInputs from "../../workers/api/src/routes/overview-inputs";
-import { newKnowledgePageId } from "../../workers/api/src/utils";
+import overviewInputs from "../../apps/api/src/routes/overview-inputs";
+import { newKnowledgePageId } from "../../apps/api/src/utils";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

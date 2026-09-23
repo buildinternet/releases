@@ -83,7 +83,7 @@ Managed agents operate against two tool surfaces. They share the same tool-use p
 
 | Surface          | Declared in                                                | Executed by                                                        | Writes? |
 | ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ | ------- |
-| **MCP tools**    | `workers/mcp/src/mcp-agent.ts` (`createServer`)            | `agents.releases.sh` (alias `mcp.releases.sh`) — remote MCP server | No      |
+| **MCP tools**    | `apps/mcp/src/mcp-agent.ts` (`createServer`)               | `agents.releases.sh` (alias `mcp.releases.sh`) — remote MCP server | No      |
 | **Custom tools** | `managed-agents/src/shared/agent-tools.ts` (`AGENT_TOOLS`) | Discovery DO (`ManagedAgentsSession`)                              | Yes     |
 
 Custom tools are plain Anthropic tool definitions ([Managed Agents → Custom tools](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)) that aren't served by any worker. When the model emits an `agent.custom_tool_use` event, the DO intercepts it, dispatches to `createTypedExecutor`, and sends the result back via `user.custom_tool_result`. Every write the agent performs (`manage_source`, `manage_playbook`, `manage_org`, `manage_product`, etc.) is a custom tool — writes run inside the trust boundary using the shared admin API key, not through the public MCP server.
@@ -122,8 +122,8 @@ sequenceDiagram
 ### Where to look
 
 - **Add / edit a custom tool** — append to `AGENT_TOOLS` in `managed-agents/src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call. Merging to `main` auto-deploys both managed agents; `bun run deploy:agents` is only needed for local iteration or staging.
-- **Add / edit an MCP tool** — register it inside `createServer` in `workers/mcp/src/mcp-agent.ts`, deploy the `mcp` worker.
-- **DO interception point** — `workers/discovery/src/managed-agents-session.ts`, the `agent.custom_tool_use` case inside `runSession()`.
+- **Add / edit an MCP tool** — register it inside `createServer` in `apps/mcp/src/mcp-agent.ts`, deploy the `mcp` worker.
+- **DO interception point** — `apps/discovery/src/managed-agents-session.ts`, the `agent.custom_tool_use` case inside `runSession()`.
 
 ### Why not put writes in MCP?
 

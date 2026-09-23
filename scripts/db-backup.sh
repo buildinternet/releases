@@ -66,7 +66,7 @@ TABLES=()
 while IFS= read -r table; do
   TABLES+=("${table}")
 done < <(
-  bunx wrangler d1 execute released-db --remote --config workers/api/wrangler.jsonc --json \
+  bunx wrangler d1 execute released-db --remote --config apps/api/wrangler.jsonc --json \
     --command "SELECT name FROM sqlite_master WHERE type='table'
                AND name NOT LIKE 'sqlite_%'
                AND name NOT LIKE 'releases_fts%'
@@ -89,7 +89,7 @@ done
 
 echo "Exporting released-db (data-only, all real tables)..."
 bunx wrangler d1 export released-db --remote --no-schema "${TABLE_ARGS[@]}" \
-  --output "${DUMP_FILE}" --config workers/api/wrangler.jsonc
+  --output "${DUMP_FILE}" --config apps/api/wrangler.jsonc
 
 # Verify the dump actually contains data for the core tables. A backup that
 # silently exported nothing is worse than a failed run. Counts are NOT

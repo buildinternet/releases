@@ -8,8 +8,8 @@ import { organizations, sources, releases } from "@buildinternet/releases-core/s
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { runHybridSearch } from "../../workers/mcp/src/lib/search-hybrid.js";
-import type { HybridSearchEnv } from "../../workers/mcp/src/lib/search-hybrid.js";
+import { runHybridSearch } from "../../apps/mcp/src/lib/search-hybrid.js";
+import type { HybridSearchEnv } from "../../apps/mcp/src/lib/search-hybrid.js";
 
 const minimalEnv: HybridSearchEnv = {};
 const BODY = "full markdown body that must not ship on list hits by default";

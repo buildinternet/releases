@@ -1,4 +1,4 @@
-// Tier thresholds — must stay in sync with workers/api/src/cron/retier.ts.
+// Tier thresholds — must stay in sync with apps/api/src/cron/retier.ts.
 const CADENCE_NORMAL_MAX = 14;
 const CADENCE_LOW_MAX = 90;
 

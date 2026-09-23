@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FetchStrategy } from "./use-fetch-plan";
 
 // Dev-only endpoint — types kept local (not in api-types), hand-synced with
-// workers/api/src/routes/status.ts and @releases/adapters/workflow-stages.
+// apps/api/src/routes/status.ts and @releases/adapters/workflow-stages.
 export type StageKind = "sync" | "ai" | "async";
 export interface WorkflowStage {
   key: string;

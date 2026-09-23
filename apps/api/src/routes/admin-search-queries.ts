@@ -2,7 +2,7 @@
  * Admin-only routes for inspecting `search_queries` — the per-call log of
  * what users actually typed into `/v1/search` and the MCP `search` tool.
  * Gated by `authMiddleware` via
- * the `admin/search-queries` entry in workers/api/src/index.ts.
+ * the `admin/search-queries` entry in apps/api/src/index.ts.
  *
  * Two endpoints:
  *   GET /admin/search-queries        — paginated raw rows (newest first)
@@ -25,7 +25,7 @@ import { ValidationError } from "@releases/lib/releases-error";
 
 export const adminSearchQueriesRoutes = new Hono<Env>();
 
-// Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
+// Matches the test-injection pattern in apps/api/src/routes/admin-cron-runs.ts;
 // real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
 function getDb(c: any): any {
   return c.get("db") ?? createDb(c.env.DB);

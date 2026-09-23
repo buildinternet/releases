@@ -1,5 +1,5 @@
 /**
- * Regression for #2171: `POST /v1/sources/:slug/fetch` (workers/api/src/routes/
+ * Regression for #2171: `POST /v1/sources/:slug/fetch` (apps/api/src/routes/
  * sources.ts) used to hand-build the `FetchOneEnv` it passes to `fetchOne` as an
  * inline object literal instead of calling `buildFetchOneEnv` (the single source
  * of truth in `_fetch-env.ts`, shared by the poll-and-fetch and onboard-source

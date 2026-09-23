@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { apiTokenRoutes } from "../../workers/api/src/routes/api-tokens.js";
-import type { AuthContext } from "../../workers/api/src/middleware/auth.js";
+import { apiTokenRoutes } from "../../apps/api/src/routes/api-tokens.js";
+import type { AuthContext } from "../../apps/api/src/middleware/auth.js";
 import { apiTokens, idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { parseApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 import { eq } from "drizzle-orm";

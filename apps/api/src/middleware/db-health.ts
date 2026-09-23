@@ -13,7 +13,7 @@ const SETUP_STEPS = [
 
 /**
  * Standardized error for the not-yet-migrated D1. The `database_not_initialized`
- * code is what the web transport (`web/src/lib/api.ts`) branches on to show the
+ * code is what the web transport (`apps/web/src/lib/api.ts`) branches on to show the
  * setup steps, which ride in `details.setup`.
  */
 function databaseNotInitializedError(): ServiceUnavailableError {

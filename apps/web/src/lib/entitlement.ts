@@ -1,6 +1,6 @@
 /**
  * Display-only mirror of the API worker's scope entitlement
- * (workers/api/src/auth/entitlement.ts). Used by the consent page to show only
+ * (apps/api/src/auth/entitlement.ts). Used by the consent page to show only
  * the scopes the signed-in user may grant. NOT a security boundary — the API
  * gates (consent hook + token backstop) are authoritative; this just avoids
  * offering a scope the AS will refuse. Keep ROLE_LADDER/IDENTITY_SCOPES in sync

@@ -4,7 +4,7 @@
  * one input.
  *
  * Why this exists: every one of these lanes is otherwise only reachable as a
- * side effect buried inside `fetchOne` (`workers/api/src/cron/poll-fetch.ts`).
+ * side effect buried inside `fetchOne` (`apps/api/src/cron/poll-fetch.ts`).
  * The marketing classifier in particular only runs on URLs not already stored,
  * so it's structurally impossible to re-run it on anything already ingested.
  * Verifying a routing change to a lane (e.g. an OpenRouter model swap) would

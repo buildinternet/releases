@@ -2,7 +2,7 @@
  * Persisted operations + KV response cache.
  *
  * The plugin gates non-admin callers to the manifest of hashes committed by
- * `bun web/codegen.ts`. The cache layer wraps the route handler and stores
+ * `bun apps/web/codegen.ts`. The cache layer wraps the route handler and stores
  * responses in KV keyed by (hash, variables) for an allowlist of operations.
  */
 import { describe, expect, it, beforeEach } from "bun:test";
@@ -37,7 +37,7 @@ const SCHEMA = createSchema({
   },
 });
 
-// Mirrors the plugin order in workers/api/src/graphql/handler.ts so the
+// Mirrors the plugin order in apps/api/src/graphql/handler.ts so the
 // integration tests catch any ordering surprises (depth/cost/aliases/tokens
 // → introspection gate → persisted-ops).
 function makeYoga() {

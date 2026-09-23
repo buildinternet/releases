@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "cp ../scripts/install.sh public/install && bun scripts/build-well-known.ts && next build",
+    "build": "cp ../../scripts/install.sh public/install && bun scripts/build-well-known.ts && next build",
     "start": "next start",
     "codegen": "graphql-codegen --config codegen.ts"
   },

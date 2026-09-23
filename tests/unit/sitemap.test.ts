@@ -1,6 +1,6 @@
 /**
  * Exercises the sitemap route against an in-memory bun:sqlite DB wired to
- * a Hono app — same `app.fetch()` pattern used across `workers/api/test/`.
+ * a Hono app — same `app.fetch()` pattern used across `apps/api/test/`.
  */
 
 import { describe, test, expect, beforeEach, afterAll, beforeAll } from "bun:test";
@@ -13,7 +13,7 @@ import {
   releases,
   collections,
 } from "@buildinternet/releases-core/schema";
-import { sitemapRoutes } from "../../workers/api/src/routes/sitemap.js";
+import { sitemapRoutes } from "../../apps/api/src/routes/sitemap.js";
 
 let testDatabase: TestDatabase;
 let app: Hono;

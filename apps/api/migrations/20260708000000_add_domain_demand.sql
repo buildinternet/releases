@@ -1,4 +1,4 @@
--- workers/api/migrations/20260708000000_add_domain_demand.sql
+-- apps/api/migrations/20260708000000_add_domain_demand.sql
 -- Demand signal for the manifest sweep (#1947). One row per domain that a
 -- /lookups/by-domain call failed to resolve; the daily well-known tick probes
 -- the highest-demand unlisted domains for a valid /.well-known/releases.json and

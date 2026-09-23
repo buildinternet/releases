@@ -2,7 +2,7 @@
  * Worker-local bindings for the shared hybrid-search helper in
  * `@releases/search/hybrid-search-worker`. `createWorkerSearch` baked
  * with the API worker's `buildEmbedConfig` keeps the call sites in
- * `workers/api/src/routes/search.ts` unchanged.
+ * `apps/api/src/routes/search.ts` unchanged.
  *
  * The single source of truth for FTS, hydration, RRF wiring, and
  * degradation policy lives in the shared module. Runtime changes

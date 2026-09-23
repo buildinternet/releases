@@ -23,6 +23,6 @@
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
-    "../../web/src/lib/graphql/__generated__/persisted-documents.json"
+    "../web/src/lib/graphql/__generated__/persisted-documents.json"
   ]
 }

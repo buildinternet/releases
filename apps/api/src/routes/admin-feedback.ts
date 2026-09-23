@@ -11,7 +11,7 @@ import type { Env } from "../index.js";
 
 export const adminFeedbackRoutes = new Hono<Env>();
 
-// Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
+// Matches the test-injection pattern in apps/api/src/routes/admin-cron-runs.ts;
 // real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
 function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);

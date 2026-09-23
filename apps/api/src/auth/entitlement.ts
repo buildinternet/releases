@@ -6,7 +6,7 @@
  * the consent gate (`hooks.before`) and the token-issuance backstop
  * (`customAccessTokenClaims`) both route through it. Pure + dependency-free so it
  * is exhaustively unit-testable. Fail-closed: an unknown/missing role → read-only.
- * A web-display mirror lives in web/src/lib/entitlement.ts — keep them in sync.
+ * A web-display mirror lives in apps/web/src/lib/entitlement.ts — keep them in sync.
  */
 
 /** Identity scopes everyone who signs in may grant. */

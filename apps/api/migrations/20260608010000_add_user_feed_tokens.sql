@@ -1,5 +1,5 @@
 -- Per-user feed tokens: the credential embedded in a personalized Atom feed URL.
--- Paired with workers/api/src/db/schema-feed-tokens.ts.
+-- Paired with apps/api/src/db/schema-feed-tokens.ts.
 -- Reversible: `secret` is stored plaintext (public-data feed, no PII) so the
 -- full URL is re-revealable. One row per user.
 CREATE TABLE IF NOT EXISTS user_feed_tokens (

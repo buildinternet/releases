@@ -1,5 +1,5 @@
 -- Better Auth database-backed rate-limit store (rateLimit.storage: "database").
--- Paired with the `rateLimit` table in workers/api/src/db/schema-auth.ts (the
+-- Paired with the `rateLimit` table in apps/api/src/db/schema-auth.ts (the
 -- schema↔migration pairing gate in ci.yml watches that file). Keeps rate-limit
 -- counters in D1 so they hold across Worker isolates — Better Auth's in-memory
 -- default resets per isolate and is useless on serverless. Column set is mandated by

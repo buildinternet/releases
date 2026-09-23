@@ -1,6 +1,6 @@
 // Telemetry endpoint for semantic-search backfill progress: per-table
 // embedded vs unembedded counts. Auth-gated via the `admin/embed/status`
-// entry in the adminRoutes allowlist in workers/api/src/index.ts.
+// entry in the adminRoutes allowlist in apps/api/src/index.ts.
 
 import { Hono } from "hono";
 import { count, sql } from "drizzle-orm";

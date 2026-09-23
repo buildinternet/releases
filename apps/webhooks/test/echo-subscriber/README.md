@@ -11,7 +11,7 @@ This Worker is **not deployed by CI**. Deploy it once, then leave it running.
 ### 1. Deploy the Worker
 
 ```sh
-cd workers/webhooks/test/echo-subscriber
+cd apps/webhooks/test/echo-subscriber
 bunx wrangler login   # skip if already authenticated
 bunx wrangler deploy
 ```

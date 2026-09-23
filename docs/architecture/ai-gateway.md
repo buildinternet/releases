@@ -6,8 +6,8 @@ Optional Cloudflare AI Gateway proxy in front of every direct Anthropic SDK call
 
 Covered when `ANTHROPIC_BASE_URL` is set:
 
-- `workers/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
-- `workers/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
+- `apps/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
+- `apps/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
 - `scripts/generate-release-content.ts` — operational backfill / regenerate tool (#1474)
 - `scripts/smoke-toolloop.ts` — one-off tool-loop smoke test (#1474)
@@ -16,7 +16,7 @@ Not covered (by design):
 
 - **Voyage embeddings.** Gateway's supported-provider list excludes Voyage; embedding calls go direct. Behavior unchanged.
 - **Managed-agent internal loop.** Tool use, skill loading, and sub-agent fanout run inside Anthropic's managed-agents environment on their infra. We only proxy non-streaming SDK calls we originate. Per-tool-call attribution stays in the Anthropic console.
-- **Managed-agents session events stream/send + sessions.create + memory store CRUD.** AI Gateway buffers SSE-over-GET responses until the upstream connection closes (#547), which deadlocks `client.beta.sessions.events.stream(...)` because the agent never receives the initial `user.message`. The managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`) also isn't part of the gateway's documented Anthropic provider scope, so non-Messages paths fall back to authenticated pass-through and reject when the cf-aig-authorization header is missing in some constructor sites (#545). The constructors in `workers/discovery/src/managed-agents-session.ts`, `workers/api/src/routes/errata.ts`, and `managed-agents/src/agent/managed-discovery.ts` (legacy CLI) bypass the gateway by explicitly passing `baseURL: "https://api.anthropic.com"` to the SDK constructor — this overrides the `ANTHROPIC_BASE_URL` env var that the SDK auto-reads, which would otherwise route the call through the gateway. Cost telemetry for session inference still surfaces in the Anthropic console.
+- **Managed-agents session events stream/send + sessions.create + memory store CRUD.** AI Gateway buffers SSE-over-GET responses until the upstream connection closes (#547), which deadlocks `client.beta.sessions.events.stream(...)` because the agent never receives the initial `user.message`. The managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`) also isn't part of the gateway's documented Anthropic provider scope, so non-Messages paths fall back to authenticated pass-through and reject when the cf-aig-authorization header is missing in some constructor sites (#545). The constructors in `apps/discovery/src/managed-agents-session.ts`, `apps/api/src/routes/errata.ts`, and `managed-agents/src/agent/managed-discovery.ts` (legacy CLI) bypass the gateway by explicitly passing `baseURL: "https://api.anthropic.com"` to the SDK constructor — this overrides the `ANTHROPIC_BASE_URL` env var that the SDK auto-reads, which would otherwise route the call through the gateway. Cost telemetry for session inference still surfaces in the Anthropic console.
 
 ## Configuration
 
@@ -29,10 +29,10 @@ For prod/staging deploys, set the secret once per worker/env — it survives sub
 
 ```bash
 echo "https://gateway.ai.cloudflare.com/v1/<account-id>/releases/anthropic" \
-  | bunx wrangler secret put ANTHROPIC_BASE_URL --config workers/api/wrangler.jsonc
+  | bunx wrangler secret put ANTHROPIC_BASE_URL --config apps/api/wrangler.jsonc
 echo "https://gateway.ai.cloudflare.com/v1/<account-id>/releases-staging/anthropic" \
-  | bunx wrangler secret put ANTHROPIC_BASE_URL --env staging --config workers/api/wrangler.jsonc
-# …and the same pair for workers/discovery/wrangler.jsonc
+  | bunx wrangler secret put ANTHROPIC_BASE_URL --env staging --config apps/api/wrangler.jsonc
+# …and the same pair for apps/discovery/wrangler.jsonc
 ```
 
 Bind `AI_GATEWAY_TOKEN` through `secrets_store_secrets` if authenticated mode is enabled. Rollback: `wrangler secret delete ANTHROPIC_BASE_URL` (calls fall back to direct Anthropic; no redeploy needed beyond the secret change).
@@ -48,12 +48,12 @@ Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens a
 
 ## Shared helper
 
-Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `workers/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `apps/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
 
 Two routing modes:
 
 - **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. This is the default for Messages-API call sites listed under Scope above.
-- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call sites listed under "Not covered" above (`workers/discovery/src/managed-agents-session.ts`, `workers/api/src/routes/errata.ts`, `managed-agents/src/agent/managed-discovery.ts`). New code should follow this pattern any time it touches the managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`).
+- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call sites listed under "Not covered" above (`apps/discovery/src/managed-agents-session.ts`, `apps/api/src/routes/errata.ts`, `managed-agents/src/agent/managed-discovery.ts`). New code should follow this pattern any time it touches the managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`).
 
 ## What this PR does not configure
 
@@ -64,7 +64,7 @@ Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) a
 Worker-side AI SDK calls (`generateText` in extract, cheap-call lanes, org overviews) emit **agent-aware spans** into Workers Observability when:
 
 1. `observability.traces.enabled` is on in wrangler (already set for api/mcp/discovery/webhooks, exporting to `axiom-traces`), and
-2. the API worker registers `createAISDKTelemetry()` from `agents/observability/ai` (`workers/api/src/lib/agent-tracing.ts`, invoked from the model resolvers; re-evaluated per call so Flagship flips take effect mid-isolate).
+2. the API worker registers `createAISDKTelemetry()` from `agents/observability/ai` (`apps/api/src/lib/agent-tracing.ts`, invoked from the model resolvers; re-evaluated per call so Flagship flips take effect mid-isolate).
 
 Each call tags a lane via AI SDK v7 `telemetry.functionId` + `runtimeContext` (`@releases/adapters/agent-telemetry`, re-exported as `@releases/ai-internal/agent-telemetry`):
 
@@ -103,7 +103,7 @@ This keeps observability entirely within Cloudflare (no new third-party account,
 
 There is deliberately **no transport-selector flag**: the protocol decides the proxy, so a call is never double-hopped, and CF-AI-Gateway-fronting-OpenRouter is not adopted.
 
-**Layer 2 — Provider selection (the switch).** A single Flagship flag, `openrouter-enabled`, governs every secondary lane on the `TextModel` seam (marketing classifier, live summarizer, feed-enrichment article extractor, …). ON moves each lane that ALSO has an OpenRouter model var configured (e.g. `MARKETING_CLASSIFIER_MODEL`, `FEED_ENRICH_MODEL`) onto OpenRouter at runtime; OFF returns them all to Anthropic. A lane with an empty model var stays on Anthropic regardless (fail-open), so per-lane control is just "set the model var or leave it empty" — there are no per-lane flags. Implemented in `workers/api/src/lib/text-model.ts` (`resolveTextModel`), which builds an AI SDK `LanguageModel` per provider (`lane-model`) and wraps it as a `TextModel` via `aisdkTextModel` (`generateText`).
+**Layer 2 — Provider selection (the switch).** A single Flagship flag, `openrouter-enabled`, governs every secondary lane on the `TextModel` seam (marketing classifier, live summarizer, feed-enrichment article extractor, …). ON moves each lane that ALSO has an OpenRouter model var configured (e.g. `MARKETING_CLASSIFIER_MODEL`, `FEED_ENRICH_MODEL`) onto OpenRouter at runtime; OFF returns them all to Anthropic. A lane with an empty model var stays on Anthropic regardless (fail-open), so per-lane control is just "set the model var or leave it empty" — there are no per-lane flags. Implemented in `apps/api/src/lib/text-model.ts` (`resolveTextModel`), which builds an AI SDK `LanguageModel` per provider (`lane-model`) and wraps it as a `TextModel` via `aisdkTextModel` (`generateText`).
 
 **Unified usage view.** `resolveTextModel` wraps every resolved model in `withUsageLogging`, emitting one `ai_usage` `logEvent` per call: `provider`, `model`, `lane`, `environment`, token counts, and `costUsd` (provider-reported for OpenRouter; derived via `@releases/lib/anthropic-pricing` for Anthropic). These ride in the existing `releases-cloudflare-logs` Axiom dataset as the `ai_usage` event — **no new dataset**. Query example: `["releases-cloudflare-logs"] | where ["event"] == "ai_usage" | summarize sum(toreal(costUsd)) by ["lane"], ["provider"]`. The daily batch summarize/overview workflows are **not** on this seam — they call the Anthropic Message Batches API directly and price via `estimateCost()`. That is correct because there is no OpenRouter Batches equivalent, so batch spend is always Anthropic; a future OpenRouter batch path is the one place this assumption would need revisiting.
 

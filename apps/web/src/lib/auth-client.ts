@@ -62,7 +62,7 @@ const SENTINEL_IDENTIFY_URL = process.env.NEXT_PUBLIC_BETTER_AUTH_IDENTIFY_URL;
 /**
  * Name of the non-httpOnly session-presence hint cookie the API worker sets in
  * lockstep with the session-token cookie (see `LOGGED_IN_HINT_COOKIE` in
- * workers/api/src/auth/index.ts). Present iff this browser currently holds a session.
+ * apps/api/src/auth/index.ts). Present iff this browser currently holds a session.
  */
 const LOGGED_IN_HINT_COOKIE = "releases.logged_in";
 
@@ -120,12 +120,12 @@ export const authClient = createAuthClient({
   fetchOptions: { credentials: "include", customFetchImpl: sessionGatedFetch },
   plugins: [
     // Client half of Better Auth Infrastructure ("dash"). Pairs with the server-side
-    // dash() plugin (workers/api/src/auth/index.ts) so the hosted dashboard's
+    // dash() plugin (apps/api/src/auth/index.ts) so the hosted dashboard's
     // admin/audit endpoints are reachable from this client. No API key here — the
     // client plugin only exposes the endpoints; the key lives server-side.
     asClientPlugin(dashClient()),
     // Client half of Sentinel (the server-side sentinel() plugin lives in
-    // workers/api/src/auth/index.ts). It attaches a stable device fingerprint via
+    // apps/api/src/auth/index.ts). It attaches a stable device fingerprint via
     // the `X-Visitor-Id` header (feeding credential-stuffing + abuse detection) and,
     // with `autoSolveChallenge`, transparently solves the server's Proof-of-Work
     // challenge and retries — so a legit user briefly caught by a "challenge" action

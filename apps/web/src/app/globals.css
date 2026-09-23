@@ -374,7 +374,7 @@
 }
 
 /*
-  Overlay primitives (`web/src/components/ui`) speak shadcn/Base UI token
+  Overlay primitives (`apps/web/src/components/ui`) speak shadcn/Base UI token
   names (`bg-popover`, `border-input`, `text-muted-foreground`, …). Map those
   onto the house stone palette here.
 

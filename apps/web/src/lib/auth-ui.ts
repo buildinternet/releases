@@ -28,7 +28,7 @@ export const AUTH_CONFIGURED = Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
  * rpID mismatch. The visible symptom is a generic "couldn't sign in" with no
  * hint that the deployment URL is the cause — this lets the UI say so instead.
  *
- * `deriveCookieDomain()` in `workers/api/src/auth/index.ts` is the server twin of
+ * `deriveCookieDomain()` in `apps/api/src/auth/index.ts` is the server twin of
  * this leftmost-label drop; keep the two in step.
  *
  * Returns `{ supported: false, canonicalOrigin }` on an off-family origin so the

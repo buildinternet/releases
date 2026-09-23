@@ -54,7 +54,7 @@ const REVALIDATE_PATH = "/api/revalidate";
 // This runs inside fetchOne()'s waitUntil and must not stretch the cron's
 // per-source budget if web is slow or blackholed.
 const PING_TIMEOUT_MS = 2000;
-// Mirrors the web route's own cap (see web/src/lib/revalidate-request.ts) —
+// Mirrors the web route's own cap (see apps/web/src/lib/revalidate-request.ts) —
 // enforced here too so a caller handing us an unexpectedly long list still
 // sends a bounded request instead of relying on the other side to reject it.
 export const MAX_REVALIDATE_PATHS = 50;
@@ -180,7 +180,7 @@ function logPathsSkip(component: string, paths: string[], reason: string): Reval
  * Generalized sibling of `notifyWebRevalidate`: pings web with an explicit list of
  * paths instead of deriving them from a source/org/product triple. Used by callers
  * whose changed pages aren't source-shaped — e.g. the weekly collection digest cron
- * (`workers/api/src/cron/collection-summaries.ts`), which busts the homepage reel
+ * (`apps/api/src/cron/collection-summaries.ts`), which busts the homepage reel
  * and every collection page that just got a new digest.
  *
  * Same fire-and-forget contract as `notifyWebRevalidate`: gated on the same

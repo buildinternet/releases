@@ -4,7 +4,7 @@
  * that actually matters (`releasesSinceOverview`), not just date diff.
  *
  * Gated by `authMiddleware` via the `admin/overviews` entry in
- * workers/api/src/index.ts.
+ * apps/api/src/index.ts.
  *
  *   GET /v1/admin/overviews
  *

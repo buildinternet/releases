@@ -10,7 +10,7 @@ type AuthIdentity =
   | null;
 
 const { resolveAuthIdentity } =
-  (await import("../../workers/api/src/middleware/auth.js")) as unknown as {
+  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
     resolveAuthIdentity: (c: unknown) => Promise<AuthIdentity>;
   };
 

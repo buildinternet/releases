@@ -13,7 +13,7 @@ export const revalidate = false;
 // The REST API worker publishes its own, distinct protected-resource document
 // at https://api.releases.sh/.well-known/oauth-protected-resource with
 // `resource: https://api.releases.sh`. Two origins, two self-consistent docs,
-// one shared authorization server — see `workers/api/src/oauth-discovery.ts`.
+// one shared authorization server — see `apps/api/src/oauth-discovery.ts`.
 const BASE_URL = "https://releases.sh";
 const OAUTH_AS_URL = "https://api.releases.sh/api/auth";
 

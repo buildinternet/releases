@@ -1,5 +1,5 @@
 /**
- * #2171 item 3: `buildEnrichMap` (workers/api/src/cron/poll-fetch.ts) used to
+ * #2171 item 3: `buildEnrichMap` (apps/api/src/cron/poll-fetch.ts) used to
  * skip enrichment silently in every case — flag off, no usable model, or the
  * source simply isn't `feedContentDepth: "summary-only"` — returning an empty
  * map with no diagnostic. That silence is what let the manual-fetch route's

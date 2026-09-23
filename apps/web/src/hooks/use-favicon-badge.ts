@@ -35,7 +35,7 @@ function renderFavicon({ connected, hasUnseen }: BadgeState): string | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
-  // Base icon — mirrors web/src/app/icon.svg.
+  // Base icon — mirrors apps/web/src/app/icon.svg.
   ctx.fillStyle = "#1c1917";
   roundRect(ctx, 0, 0, size, size, 14);
   ctx.fill();

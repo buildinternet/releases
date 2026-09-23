@@ -41,7 +41,7 @@ const MAX_MESSAGE = 4000;
 const MAX_CONTACT = 200;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
-// Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
+// Matches the test-injection pattern in apps/api/src/routes/admin-cron-runs.ts;
 // real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
 function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);

@@ -8,7 +8,7 @@
  * Skills are hosted in the OSS CLI repo (buildinternet/releases-cli) — at build
  * time we fetch each SKILL.md, compute a sha256 digest, and pull the
  * description out of the YAML frontmatter. The MCP server card is derived from
- * workers/mcp/server.json so it stays in sync on version bumps.
+ * apps/mcp/server.json so it stays in sync on version bumps.
  *
  * Each fetch retries (fetchWithRetry) on a thrown network error or a 5xx/429
  * response — a transient blip on raw.githubusercontent.com shouldn't fail a
@@ -94,9 +94,9 @@ async function buildSkillsIndex() {
 }
 
 function buildMcpServerCard() {
-  const server = JSON.parse(readFileSync(join(REPO_ROOT, "workers/mcp/server.json"), "utf8"));
+  const server = JSON.parse(readFileSync(join(REPO_ROOT, "apps/mcp/server.json"), "utf8"));
   const endpoint = server.remotes?.[0]?.url as string | undefined;
-  if (!endpoint) throw new Error("workers/mcp/server.json is missing remotes[0].url");
+  if (!endpoint) throw new Error("apps/mcp/server.json is missing remotes[0].url");
 
   writeJson(SERVER_CARD_PATH, {
     $schema: "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",

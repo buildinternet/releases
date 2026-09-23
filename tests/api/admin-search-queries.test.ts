@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
 import { applyMigrations } from "../db-helper";
 import { searchQueries } from "@buildinternet/releases-core/schema";
-import { adminSearchQueriesRoutes } from "../../workers/api/src/routes/admin-search-queries";
+import { adminSearchQueriesRoutes } from "../../apps/api/src/routes/admin-search-queries";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

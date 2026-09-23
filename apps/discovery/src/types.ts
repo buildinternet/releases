@@ -70,7 +70,7 @@ export interface Env {
   /**
    * Staging access gate shared secret. Present only in [env.staging]; when set,
    * outbound calls to api-staging attach `X-Releases-Staging-Key` so they pass
-   * the middleware in workers/api/src/middleware/staging-access.ts.
+   * the middleware in apps/api/src/middleware/staging-access.ts.
    */
   STAGING_ACCESS_KEY?: SecretBinding;
   /** Managed-agents memory stores — attached as read-write mounts. See #537. */

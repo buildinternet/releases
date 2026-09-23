@@ -11,7 +11,7 @@ export const OG_CONTENT_TYPE = "image/png" as const;
 /**
  * Per-response cache headers for OG routes that need to control their own
  * `Cache-Control` rather than inherit it from ISR (used by the shared org OG
- * route, `web/src/app/api/og/org/[slug]/route.tsx`).
+ * route, `apps/web/src/app/api/og/org/[slug]/route.tsx`).
  *
  * Such a route must be `force-dynamic` (no `export const revalidate`) so the
  * handler runs per request and its own `Cache-Control` ships verbatim — Next

@@ -28,7 +28,7 @@ sequenceDiagram
 
 ## Monitor lifecycle (admin)
 
-`POST /v1/sources/:slug/firecrawl/sync` — body `{ enabled: boolean, schedule?, proxy?: "auto"|"basic"|"stealth"|"enhanced", goal?, target?: "scrape"|"crawl" }`. Takes a typed `src_…` ID (via `resolveSourceFromContext`), admin-gated through `publicReadAuthMiddleware`'s non-SAFE_METHODS branch, hidden from the prod OpenAPI spec. Enabling creates the monitor; disabling deletes it. Implemented in `workers/api/src/routes/firecrawl.ts` + `workers/api/src/lib/firecrawl-sync.ts`.
+`POST /v1/sources/:slug/firecrawl/sync` — body `{ enabled: boolean, schedule?, proxy?: "auto"|"basic"|"stealth"|"enhanced", goal?, target?: "scrape"|"crawl" }`. Takes a typed `src_…` ID (via `resolveSourceFromContext`), admin-gated through `publicReadAuthMiddleware`'s non-SAFE_METHODS branch, hidden from the prod OpenAPI spec. Enabling creates the monitor; disabling deletes it. Implemented in `apps/api/src/routes/firecrawl.ts` + `apps/api/src/lib/firecrawl-sync.ts`.
 
 `deriveMonitorSpec` is a pure, reconcile-safe spec builder:
 
@@ -84,7 +84,7 @@ This is the load-bearing, easy-to-get-wrong detail. Firecrawl's **published docs
 
 ## Ingest workflow
 
-`FirecrawlIngestWorkflow` (`workers/api/src/workflows/firecrawl-ingest.ts`), spawned by the receiver after the cost gate, with small params `{ sourceId, url, checkId, status, delta }` (no markdown blob through Workflow serialization). Steps:
+`FirecrawlIngestWorkflow` (`apps/api/src/workflows/firecrawl-ingest.ts`), spawned by the receiver after the cost gate, with small params `{ sourceId, url, checkId, status, delta }` (no markdown blob through Workflow serialization). Steps:
 
 1. **load-source** — refuses to run if `metadata.firecrawl.enabled` is false.
 2. **resolve-body** — if `delta` is present, return it and **skip the paid full-page re-scrape** (steady state). Only a `new`/baseline event (or an empty delta) calls `client.scrapeOnce(url)` for the full markdown.
@@ -103,7 +103,7 @@ This is the load-bearing, easy-to-get-wrong detail. Firecrawl's **published docs
 
 Firecrawl-enabled sources are **excluded from the poll-fetch cron** — `queryDueSources` reads `json_extract(metadata, '$.firecrawl.enabled')` and drops them, plus a workflow-side guard — so we never double-fetch or clobber monitor bookkeeping.
 
-Because a hard-blocked source has **no in-repo fetch fallback** (that's why it's on Firecrawl), the only signal that ingestion stalled is "the monitor went quiet." An hourly `scanStaleFirecrawlSources` (`workers/api/src/cron/firecrawl-staleness.ts`) emits a warn-level event when a `firecrawl.enabled` source's `lastFetchedAt` is older than its staleness window. The window is `max(FIRECRAWL_STALE_HOURS, 2× the monitor's actual cadence)`: `FIRECRAWL_STALE_HOURS` (default **48**) is a _floor_, and the monitor's live `schedule.cron` — read back via `getMonitor`, since the Firecrawl dashboard is a second writer and the stored `metadata.firecrawl.schedule` can be stale — only ever _raises_ the threshold, so a deliberately slow (e.g. weekly) monitor isn't false-warned. A source still inside the floor window needs no schedule read, so the only `getMonitor` calls are for sources already past the floor; any read failure (no API key, getMonitor error, unparseable cron) falls back to the floor rather than suppressing the warning. `cronIntervalHours` recognizes the handful of shapes Firecrawl normalizes to — it is deliberately not a general cron parser. Flagged rows feed the daily operator staleness digest (below).
+Because a hard-blocked source has **no in-repo fetch fallback** (that's why it's on Firecrawl), the only signal that ingestion stalled is "the monitor went quiet." An hourly `scanStaleFirecrawlSources` (`apps/api/src/cron/firecrawl-staleness.ts`) emits a warn-level event when a `firecrawl.enabled` source's `lastFetchedAt` is older than its staleness window. The window is `max(FIRECRAWL_STALE_HOURS, 2× the monitor's actual cadence)`: `FIRECRAWL_STALE_HOURS` (default **48**) is a _floor_, and the monitor's live `schedule.cron` — read back via `getMonitor`, since the Firecrawl dashboard is a second writer and the stored `metadata.firecrawl.schedule` can be stale — only ever _raises_ the threshold, so a deliberately slow (e.g. weekly) monitor isn't false-warned. A source still inside the floor window needs no schedule read, so the only `getMonitor` calls are for sources already past the floor; any read failure (no API key, getMonitor error, unparseable cron) falls back to the floor rather than suppressing the warning. `cronIntervalHours` recognizes the handful of shapes Firecrawl normalizes to — it is deliberately not a general cron parser. Flagged rows feed the daily operator staleness digest (below).
 
 ## Config & secrets
 

@@ -4,8 +4,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../workers/api/src/routes/products.js";
-import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
+import { productRoutes } from "../../apps/api/src/routes/products.js";
+import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 

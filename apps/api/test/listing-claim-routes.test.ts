@@ -597,7 +597,7 @@ describe("POST /v1/listing/promote", () => {
   // `fetchAndParseFeed` call here — `poll-fetch-feed-characterization.test.ts`
   // installs a process-global `mock.module` stub for `@releases/adapters/feed.js`
   // (documented flake, #1553-adjacent) that leaks into any later file's real
-  // feed fetch when the full `workers/api` suite runs.
+  // feed fetch when the full `apps/api` suite runs.
   it("promotes tier-2 locators: bare url + file both queued for review", async () => {
     const a = withSession("u1");
     await seedStubWithLocators([{ url: "https://acme.com/blog" }, { file: "CHANGELOG.md" }]);

@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 // `medianGapDays` / `lastRetieredAt`; the published @buildinternet copy
 // in node_modules is still on v0.13.2 until the next release cuts.
 import { sources } from "../../packages/core/src/schema";
-import { D1_MAX_BINDINGS } from "../../workers/api/src/lib/d1-limits.js";
+import { D1_MAX_BINDINGS } from "../../apps/api/src/lib/d1-limits.js";
 
 // The daily retier issues one UPDATE per source. Each statement binds the
 // new cadence columns plus, when a tier moves, fetchPriority — and the id

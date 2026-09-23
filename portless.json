@@ -1,9 +1,9 @@
 {
   "name": "releases",
   "apps": {
-    "web": { "name": "releases" },
-    "workers/api": { "name": "api.releases" },
-    "workers/mcp": { "name": "mcp.releases" },
-    "workers/discovery": { "name": "discovery.releases" }
+    "apps/web": { "name": "releases" },
+    "apps/api": { "name": "api.releases" },
+    "apps/mcp": { "name": "mcp.releases" },
+    "apps/discovery": { "name": "discovery.releases" }
   }
 }

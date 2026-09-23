@@ -10,7 +10,7 @@ import {
   releases,
   knowledgePageCitations,
 } from "@buildinternet/releases-core/schema";
-import overview from "../../workers/api/src/routes/overview";
+import overview from "../../apps/api/src/routes/overview";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

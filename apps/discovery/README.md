@@ -22,8 +22,8 @@ Onboarding-only production entrypoint for the managed-agents discovery harness â
 Deployed as `releases-discovery` (prod) / `releases-discovery-staging` (staging):
 
 ```bash
-bunx wrangler deploy --config workers/discovery/wrangler.jsonc
-bunx wrangler deploy --env staging --config workers/discovery/wrangler.jsonc
+bunx wrangler deploy --config apps/discovery/wrangler.jsonc
+bunx wrangler deploy --env staging --config apps/discovery/wrangler.jsonc
 ```
 
 Local dev: `bun run dev:discovery` (served via portless at `https://discovery.releases.localhost`).

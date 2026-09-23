@@ -13,7 +13,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import type { D1Database } from "@cloudflare/workers-types";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { searchRoutes } from "../../workers/api/src/routes/search.js";
+import { searchRoutes } from "../../apps/api/src/routes/search.js";
 
 let testDb: TestDatabase;
 

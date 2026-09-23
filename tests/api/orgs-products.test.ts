@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, products } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../workers/api/src/routes/products.js";
+import { productRoutes } from "../../apps/api/src/routes/products.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { makeCaller } from "./route-test-helpers.js";
 

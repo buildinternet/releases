@@ -3,7 +3,7 @@
  *
  * Worker-safe (no `fs`, no `node:*`). Used by:
  *   - `scripts/generate-release-content.ts` — release-content backfill
- *   - Future: a `BatchSummarizeWorkflow` in `workers/api/src/workflows/`,
+ *   - Future: a `BatchSummarizeWorkflow` in `apps/api/src/workflows/`,
  *     and an automated overview-refresh job when we move overviews off
  *     the agent loop for the refresh path.
  *

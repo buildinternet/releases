@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { publishReleaseEvents } from "../../workers/api/src/events/publish.js";
+import { publishReleaseEvents } from "../../apps/api/src/events/publish.js";
 
 function makeHub() {
   const calls: Array<{ url: string; method?: string; body?: string }> = [];

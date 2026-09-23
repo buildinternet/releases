@@ -26,7 +26,7 @@ import {
   listOrganizations,
   lookupDomain,
   search,
-} from "../../workers/mcp/src/tools.js";
+} from "../../apps/mcp/src/tools.js";
 import { domainAliases } from "@buildinternet/releases-core/schema";
 
 function resultText(r: { content: Array<{ type: string; text?: string }> }): string {

@@ -9,8 +9,8 @@ import {
   releases,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
-import { adminOverviewsRoutes } from "../../workers/api/src/routes/admin-overviews";
-import { newKnowledgePageId } from "../../workers/api/src/utils";
+import { adminOverviewsRoutes } from "../../apps/api/src/routes/admin-overviews";
+import { newKnowledgePageId } from "../../apps/api/src/utils";
 import type {
   OverviewManifestResponse,
   OverviewManifestRow,

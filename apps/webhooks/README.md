@@ -24,7 +24,7 @@ Queue consumer that delivers real-time `release.created` fan-out to user and org
 Deployed as `releases-webhooks`:
 
 ```bash
-bunx wrangler deploy --config workers/webhooks/wrangler.jsonc
+bunx wrangler deploy --config apps/webhooks/wrangler.jsonc
 ```
 
 No local dev script is wired up for this worker.

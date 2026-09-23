@@ -1,6 +1,6 @@
 /**
  * Admin-only routes for inspecting cron_runs history. Gated by authMiddleware
- * via the `admin/cron-runs` entry in workers/api/src/index.ts.
+ * via the `admin/cron-runs` entry in apps/api/src/index.ts.
  */
 import { Hono } from "hono";
 import { and, asc, desc, eq, gt, inArray, sql, type SQL } from "drizzle-orm";

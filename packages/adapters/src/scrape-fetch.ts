@@ -508,7 +508,7 @@ async function runAgentPath(
  * abort the extraction it precedes.
  *
  * Retained as a thin wrapper over `httpPersister(env).captureRawSnapshot` for
- * back-compat — `workers/discovery`'s tests import this directly by name.
+ * back-compat — `apps/discovery`'s tests import this directly by name.
  * Callers inside this file go through the resolved `persister` instead (which
  * may be a non-HTTP implementation).
  */

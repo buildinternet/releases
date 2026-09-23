@@ -1,4 +1,4 @@
-// web/src/lib/workspace-permissions.ts
+// apps/web/src/lib/workspace-permissions.ts
 /**
  * Pure role helpers for the Workspaces (Better Auth organization) UI. `role` here is the
  * workspace membership role (owner/admin/member), NOT the Better Auth `user.role` that

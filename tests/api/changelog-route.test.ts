@@ -14,7 +14,7 @@ import {
 
 // This test exercises the response-building path used by both
 // `handleSourceChangelog` (src/api/routes/sources.ts) and
-// `GET /v1/sources/:slug/changelog` (workers/api/src/routes/sources.ts).
+// `GET /v1/sources/:slug/changelog` (apps/api/src/routes/sources.ts).
 // It uses the canonical `selectChangelogFile` from the core package to pick
 // the row, then asserts on the `buildChangelogResponse` output — the part
 // that's unique to the worker layer. The not-found sentinels are covered

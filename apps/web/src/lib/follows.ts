@@ -16,7 +16,7 @@ import type {
 } from "@buildinternet/releases-api-types";
 import { apiBase, errorMessage } from "./user-api";
 
-/** Must match GET /v1/me/feed default page size (workers/api feed-cache). */
+/** Must match GET /v1/me/feed default page size (apps/api feed-cache). */
 export const FEED_PAGE_SIZE = 30;
 
 export async function listFollows(): Promise<Follow[]> {

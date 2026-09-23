@@ -10,8 +10,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { getOrgSourcesWithStats } from "../../workers/api/src/queries/orgs.js";
-import { getSourcesWithStats } from "../../workers/api/src/queries/sources.js";
+import { getOrgSourcesWithStats } from "../../apps/api/src/queries/orgs.js";
+import { getSourcesWithStats } from "../../apps/api/src/queries/sources.js";
 
 let tdb: TestDatabase;
 

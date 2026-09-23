@@ -1,4 +1,4 @@
--- workers/api/migrations/20260707000000_add_organizations_tracking_requested_at.sql
+-- apps/api/migrations/20260707000000_add_organizations_tracking_requested_at.sql
 -- Owner demand signal for the promotion loop (#1947 phase 2). Stamped when a
 -- domain owner requests tracking via the self-serve listing lane
 -- (POST /v1/listing/activate with requestTracking: true), on stub creation or

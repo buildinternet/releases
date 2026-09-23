@@ -99,7 +99,7 @@ export function mountOpenApi(v1: Hono<Env>) {
   // Servers + securitySchemes are computed per-request so production's
   // public spec advertises only api.releases.sh, while staging's spec keeps
   // its own host and the `X-Releases-Staging-Key` scheme visible.
-  // `ENVIRONMENT` is set in workers/api/wrangler.jsonc (production | staging).
+  // `ENVIRONMENT` is set in apps/api/wrangler.jsonc (production | staging).
   v1.get("/openapi.json", async (c) => {
     const isStaging = c.env.ENVIRONMENT === "staging";
     // The single error schema every documented 4xx/5xx response references

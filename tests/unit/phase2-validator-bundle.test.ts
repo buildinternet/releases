@@ -8,9 +8,9 @@
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import playbookRoutes from "../../workers/api/src/routes/playbook.js";
-import { taxonomyRoutes } from "../../workers/api/src/routes/taxonomy.js";
-import { errataRoutes } from "../../workers/api/src/routes/errata.js";
+import playbookRoutes from "../../apps/api/src/routes/playbook.js";
+import { taxonomyRoutes } from "../../apps/api/src/routes/taxonomy.js";
+import { errataRoutes } from "../../apps/api/src/routes/errata.js";
 import { organizations, knowledgePages, categories } from "@buildinternet/releases-core/schema";
 import { eq, and } from "drizzle-orm";
 

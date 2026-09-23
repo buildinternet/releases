@@ -7,7 +7,7 @@
  * removed so callers (CLI, web admin) can show a confirmation preview.
  *
  * Gated by `authMiddleware` via the `admin/orgs` entry in
- * workers/api/src/index.ts.
+ * apps/api/src/index.ts.
  */
 import { Hono } from "hono";
 import type { Context } from "hono";

@@ -132,7 +132,7 @@ export interface Env {
   RELEASES_API_KEY?: SecretBinding;
   /**
    * Staging-only shared secret. When bound, every request must carry a
-   * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
+   * matching `X-Releases-Staging-Key` header. See apps/mcp/src/index.ts.
    */
   STAGING_ACCESS_KEY?: SecretBinding;
   /**
@@ -195,7 +195,7 @@ function uiMeta(resourceUri: string) {
 
 // Shared `page` / `limit` zod fields for the four list_* tools. Defaults
 // (page=1, limit=50, max=200) match `parseMcpPagination` in
-// workers/mcp/src/lib/pagination.ts.
+// apps/mcp/src/lib/pagination.ts.
 const paginationFields = {
   page: z.number().int().min(1).optional().describe("1-based page number. Defaults to 1."),
   limit: z
@@ -220,7 +220,7 @@ export interface CreateServerOptions {
    */
   userAgent?: string | null;
   /**
-   * Caller scopes resolved at the HTTP boundary (workers/mcp/src/auth.ts).
+   * Caller scopes resolved at the HTTP boundary (apps/mcp/src/auth.ts).
    * Defaults to `["read"]` — anonymous public reads. Write/AI tools and the
    * on-demand lookup gate on `write`.
    */

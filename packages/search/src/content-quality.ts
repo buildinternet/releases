@@ -4,7 +4,7 @@
  * Shared by hybrid search (drop empty vectors that pollute RRF) and the
  * related-rails ranking path (hard-exclude empty neighbors). Pure — no I/O.
  *
- * History: first landed in workers/api related-ranking for rails, then
+ * History: first landed in apps/api related-ranking for rails, then
  * generalized here after prod search evals showed empty docs
  * (`langfuse:test` / title+summary "test") ranking #1 for unrelated
  * entity queries via the vector leg of hybrid fusion.

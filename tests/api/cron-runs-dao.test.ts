@@ -3,8 +3,8 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../db-helper";
 import { eq } from "drizzle-orm";
-import { cronRuns } from "../../workers/api/src/db/schema-cron";
-import { insertRunningRow, finalizeRunRow } from "../../workers/api/src/db/cron-runs-dao";
+import { cronRuns } from "../../apps/api/src/db/schema-cron";
+import { insertRunningRow, finalizeRunRow } from "../../apps/api/src/db/cron-runs-dao";
 
 function makeDb() {
   const sqlite = new Database(":memory:");

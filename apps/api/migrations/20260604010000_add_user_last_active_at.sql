@@ -1,5 +1,5 @@
 -- Add user.last_active_at for Better Auth Infrastructure ("dash") activity tracking.
--- Paired with workers/api/src/db/schema-auth.ts (the schema↔migration pairing gate in
+-- Paired with apps/api/src/db/schema-auth.ts (the schema↔migration pairing gate in
 -- ci.yml watches that file). Nullable integer epoch-seconds (Drizzle `timestamp` mode),
 -- matching the other auth timestamps; existing rows and users inactive since this column
 -- was added stay NULL until dash() next records activity.

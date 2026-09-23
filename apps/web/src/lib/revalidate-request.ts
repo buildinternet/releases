@@ -42,7 +42,7 @@ const SAFE_SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 
 /**
  * Cap on the `paths` array (below). The worker chunks larger digest backfills
- * to this size (`MAX_REVALIDATE_PATHS` in `workers/api/src/lib/web-revalidate.ts`);
+ * to this size (`MAX_REVALIDATE_PATHS` in `apps/api/src/lib/web-revalidate.ts`);
  * it is a hard ceiling against a caller bug turning one ping into a
  * cache-eviction storm.
  */

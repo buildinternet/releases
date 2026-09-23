@@ -8,7 +8,7 @@ The conventions below cover the shape of changes so PRs stay easy to review and 
 
 The repo is designed so contribution never requires access to the production infrastructure:
 
-- **No external accounts:** `bun install`, `bun run check`, and `bun test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `workers/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` / `preview:discovery` scripts are the plain-port fallback if you'd rather skip portless.
+- **No external accounts:** `bun install`, `bun run check`, and `bun test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `apps/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` / `preview:discovery` scripts are the plain-port fallback if you'd rather skip portless.
 - **Bring your own keys (feature-scoped):** `ANTHROPIC_API_KEY` for the AI passes (summaries, classification, extraction), `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` (any Cloudflare account) for Browser Rendering scrape fetches, `VOYAGE_API_KEY` for semantic search.
 - **Hosted-only (not reproducible by design):** managed-agent discovery, email, Firecrawl, and the account-scoped bindings in each `wrangler.jsonc` — see [deploy-coupling.md](docs/architecture/deploy-coupling.md) for the fork inventory.
 
@@ -25,7 +25,7 @@ bun run doctor      # read-only diagnosis: what's present, what's missing, the f
 `bun run doctor --strict` treats warnings as failures (handy as a pre-flight gate).
 Both live in [`scripts/bootstrap.sh`](scripts/bootstrap.sh) and [`scripts/doctor.sh`](scripts/doctor.sh); if you'd rather set things up by hand, `bun install` plus the env-file and D1 steps below do the same work.
 
-Working in a git worktree? Claude Code worktrees are self-bootstrapping: env files (`.env`, `web/.env.local`, `.dev.vars`) are copied from the main checkout via [`.worktreeinclude`](.worktreeinclude), and the dependency install runs automatically via a `SessionStart` hook. For terminal-driven worktrees created with a plain `git worktree add` (where neither hook fires), run `./scripts/setup-worktree.sh` once to install dependencies and copy the same env files.
+Working in a git worktree? Claude Code worktrees are self-bootstrapping: env files (`.env`, `apps/web/.env.local`, `.dev.vars`) are copied from the main checkout via [`.worktreeinclude`](.worktreeinclude), and the dependency install runs automatically via a `SessionStart` hook. For terminal-driven worktrees created with a plain `git worktree add` (where neither hook fires), run `./scripts/setup-worktree.sh` once to install dependencies and copy the same env files.
 
 The monorepo no longer ships a local CLI. If you need `releases <cmd>` while working on backend changes, clone [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) alongside this repo and point it at a local API worker (`bun run dev:api`) via `RELEASES_API_URL=http://localhost:8787`.
 
@@ -49,8 +49,8 @@ Copy `.env.example` to `.env` and fill in:
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Required for scraping changelog pages (only used as a fallback when no feed is available)
 - `GITHUB_TOKEN` — Optional, increases GitHub API rate limits
 - `RELEASES_API_URL` / `RELEASES_API_KEY` — Remote mode: route CLI data operations through the API Worker. Compiled binaries default to `https://api.releases.sh` when unset
-- `VOYAGE_API_KEY` — Required on the API and MCP workers for semantic search ingest and queries. Provision the Vectorize indexes once with `./scripts/create-vectorize-indexes.sh`, then add `VOYAGE_API_KEY` to Cloudflare's Secrets Store and confirm both workers bind it in `workers/{api,mcp}/wrangler.jsonc` under `secrets_store_secrets`
-- `EMBEDDING_PROVIDER` — Optional, defaults to `voyage` (`voyage-4-lite`, requested at 512 dims). Set to `openai` or `workers-ai` in `workers/{api,mcp}/wrangler.jsonc` to switch; recreate the indexes if vector dimensionality changes
+- `VOYAGE_API_KEY` — Required on the API and MCP workers for semantic search ingest and queries. Provision the Vectorize indexes once with `./scripts/create-vectorize-indexes.sh`, then add `VOYAGE_API_KEY` to Cloudflare's Secrets Store and confirm both workers bind it in `apps/{api,mcp}/wrangler.jsonc` under `secrets_store_secrets`
+- `EMBEDDING_PROVIDER` — Optional, defaults to `voyage` (`voyage-4-lite`, requested at 512 dims). Set to `openai` or `workers-ai` in `apps/{api,mcp}/wrangler.jsonc` to switch; recreate the indexes if vector dimensionality changes
 
 ## Local development
 
@@ -62,9 +62,9 @@ bun run dev:discovery        # Discovery worker locally
 bun run dev:mcp              # MCP worker locally
 ```
 
-Point the web frontend at the local API worker by setting `RELEASES_API_URL=http://localhost:8787` in `web/.env.local`.
+Point the web frontend at the local API worker by setting `RELEASES_API_URL=http://localhost:8787` in `apps/web/.env.local`.
 
-`wrangler dev` does not pull from Cloudflare's Secrets Store, so endpoints that read bound secrets will fail locally unless you create the worker's `.dev.vars` with the values you need. Each worker ships a checked-in `.dev.vars.example` template (`workers/{api,mcp,discovery,webhooks}/`); copy to `.dev.vars` and fill in. The real files are gitignored.
+`wrangler dev` does not pull from Cloudflare's Secrets Store, so endpoints that read bound secrets will fail locally unless you create the worker's `.dev.vars` with the values you need. Each worker ships a checked-in `.dev.vars.example` template (`apps/{api,mcp,discovery,webhooks}/`); copy to `.dev.vars` and fill in. The real files are gitignored.
 
 ## Checks
 
@@ -72,10 +72,10 @@ Point the web frontend at the local API worker by setting `RELEASES_API_URL=http
 bun run check                        # oxlint (lint + type-check) + oxfmt check — same gate as CI
 bun run lint                         # oxlint only
 bun run format:check                 # oxfmt only
-bun run db:generate                  # scaffold a migration preview under .drizzle-out/ (then hand-author the real file under workers/api/migrations/)
+bun run db:generate                  # scaffold a migration preview under .drizzle-out/ (then hand-author the real file under apps/api/migrations/)
 ```
 
-`bun run typecheck` is an alias for `bun run lint`. For targeted debugging, per-package `tsc` still works (`cd workers/mcp && npx tsc --noEmit`, `cd web && npx tsc --noEmit`, …).
+`bun run typecheck` is an alias for `bun run lint`. For targeted debugging, per-package `tsc` still works (`cd apps/mcp && npx tsc --noEmit`, `cd apps/web && npx tsc --noEmit`, …).
 
 ## Testing
 
@@ -169,7 +169,7 @@ chore(api-types): publish 0.9.0 with collection write types
 A few project-specific things to keep in mind:
 
 - **Workers and managed agents auto-deploy from `main` on merge** — every PR ships to production the moment it lands. Treat reviews accordingly.
-- **Schema changes land in `packages/core/` first**, not under `workers/api/migrations/`. The OSS CLI consumes `@buildinternet/releases-core` from npm, so the shared schema is the source of truth.
+- **Schema changes land in `packages/core/` first**, not under `apps/api/migrations/`. The OSS CLI consumes `@buildinternet/releases-core` from npm, so the shared schema is the source of truth.
 - **Wire-protocol changes** (request/response shapes the API serves) land in `packages/api-types/` first. Additive by default — renames or removals go through a one-minor-version deprecation alias before the field disappears.
 - **Drizzle migrations are mandatory** for any new table or column. Schema-only changes that skip the migration crash local DBs on the next `db:migrate:local`.
 - **D1's 100-bind limit** is real. Batch inserts chunk at `floor(100 / binds_per_row)` per statement; raising without re-checking surfaces as a 500 in production.
@@ -188,4 +188,4 @@ Both endpoints accept `?bots=exclude|include|only` (default: `exclude`). `exclud
 
 The web frontend tags requests as `web` via the `X-Releases-Surface` header so admin reads can split visitor searches from direct API consumers. This log is intentionally separate from `telemetry_events`, which carries only command names and stays PII-clean for the OSS CLI contract. Set `SEARCH_QUERY_LOG_DISABLED=true` on the API or MCP worker to disable writes without removing call sites.
 
-Rows are retained for **90 days** by default. A nightly cron at 05:00 UTC deletes rows older than the configured window, keeping the table bounded and reducing exposure of user-typed query text. Override with `SEARCH_QUERY_RETENTION_DAYS` in `workers/api/wrangler.jsonc`.
+Rows are retained for **90 days** by default. A nightly cron at 05:00 UTC deletes rows older than the configured window, keeping the table bounded and reducing exposure of user-typed query text. Override with `SEARCH_QUERY_RETENTION_DAYS` in `apps/api/wrangler.jsonc`.

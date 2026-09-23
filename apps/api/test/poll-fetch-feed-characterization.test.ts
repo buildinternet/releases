@@ -1,7 +1,7 @@
 /**
  * Characterization tests for the feed fetch cycle in `fetchOne` (issue #1652).
  *
- * `workers/api/src/cron/poll-fetch.ts` (~2,700 LOC) is a top churn hotspot and
+ * `apps/api/src/cron/poll-fetch.ts` (~2,700 LOC) is a top churn hotspot and
  * carries the fetch → parse → dedup/upsert → backoff logic for every source
  * type. This suite pins CURRENT behavior of the feed branch via `fetchOne`
  * against a real migrated test DB.

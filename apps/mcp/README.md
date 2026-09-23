@@ -30,8 +30,8 @@ Remote MCP server at `agents.releases.sh` (alias `mcp.releases.sh`) — serves t
 Deployed as `releases-mcp` (prod) / `releases-mcp-staging` (staging):
 
 ```bash
-bunx wrangler deploy --config workers/mcp/wrangler.jsonc
-bunx wrangler deploy --env staging --config workers/mcp/wrangler.jsonc
+bunx wrangler deploy --config apps/mcp/wrangler.jsonc
+bunx wrangler deploy --env staging --config apps/mcp/wrangler.jsonc
 ```
 
 Local dev: `bun run dev:mcp` (served via portless at `https://mcp.releases.localhost`).

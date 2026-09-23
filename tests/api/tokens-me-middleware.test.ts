@@ -5,7 +5,7 @@ import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
 const { tokensAuthMiddleware } =
-  (await import("../../workers/api/src/middleware/auth.js")) as unknown as {
+  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
     tokensAuthMiddleware: MiddlewareHandler;
   };
 

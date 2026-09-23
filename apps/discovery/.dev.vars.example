@@ -1,6 +1,6 @@
-# Local secrets for `wrangler dev` on workers/discovery (loaded by `bun run dev:discovery`).
-# Copy to `workers/discovery/.dev.vars` and fill in. NEVER commit the real file.
-# Non-secret agent IDs and URLs live in workers/discovery/wrangler.jsonc vars.
+# Local secrets for `wrangler dev` on apps/discovery (loaded by `bun run dev:discovery`).
+# Copy to `apps/discovery/.dev.vars` and fill in. NEVER commit the real file.
+# Non-secret agent IDs and URLs live in apps/discovery/wrangler.jsonc vars.
 
 # API worker auth (service-binding + direct fetch paths)
 RELEASES_API_KEY=

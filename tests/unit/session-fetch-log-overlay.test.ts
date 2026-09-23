@@ -7,7 +7,7 @@ import type { Session } from "@buildinternet/releases-api-types";
 import {
   applyFetchLogOverlay,
   applyFetchLogOverlaySingle,
-} from "../../workers/api/src/lib/session-fetch-log-overlay";
+} from "../../apps/api/src/lib/session-fetch-log-overlay";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

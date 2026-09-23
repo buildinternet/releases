@@ -1,5 +1,5 @@
 -- User follows: a signed-in user following an org or product.
--- Paired with workers/api/src/db/schema-follows.ts.
+-- Paired with apps/api/src/db/schema-follows.ts.
 CREATE TABLE IF NOT EXISTS user_follows (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,

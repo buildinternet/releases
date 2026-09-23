@@ -96,7 +96,7 @@ const SOURCE_LEGACY_TABS = new Set(["highlights", "changelog"]);
 // never lets `/login` etc. reach the org page — but middleware runs *before*
 // routing, so the org-slug `?tab=` redirect below must exclude these by hand or
 // `/login?tab=releases` would 308 to a dead `/login/releases`. Keep in sync with
-// the directories under `web/src/app/`.
+// the directories under `apps/web/src/app/`.
 const RESERVED_FIRST_SEGMENT = new Set([
   "account",
   "actions",

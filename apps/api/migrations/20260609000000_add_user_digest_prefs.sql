@@ -1,6 +1,6 @@
 -- User digest email preferences: cadence (off/daily/weekly), the published-date
 -- watermark (last_digest_at), and the opaque reld_ manage token for the no-login
--- unsubscribe lane. Paired with workers/api/src/db/schema-digest-prefs.ts.
+-- unsubscribe lane. Paired with apps/api/src/db/schema-digest-prefs.ts.
 CREATE TABLE IF NOT EXISTS user_digest_prefs (
   id             TEXT PRIMARY KEY,
   user_id        TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,

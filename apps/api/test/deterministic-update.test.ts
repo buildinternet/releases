@@ -3,7 +3,7 @@
  * (#1946 phase 4, task 8).
  *
  * `scrapeFetch` is mocked at module scope (this file's own `bun test`
- * process — see AGENTS.md's note on `workers/api` running isolated from the
+ * process — see AGENTS.md's note on `apps/api` running isolated from the
  * rest of the suite specifically so a `mock.module` here can't leak into
  * other packages) so the test drives the workflow's step orchestration
  * without a real scrape/extract. It exercises:

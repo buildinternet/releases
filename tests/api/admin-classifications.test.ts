@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { applyMigrations } from "../db-helper";
-import { adminClassificationsRoutes } from "../../workers/api/src/routes/admin-classifications";
+import { adminClassificationsRoutes } from "../../apps/api/src/routes/admin-classifications";
 
 const AFTER = "2026-09-14T00:00:00.000Z";
 const BEFORE = "2026-09-21T00:00:00.000Z";

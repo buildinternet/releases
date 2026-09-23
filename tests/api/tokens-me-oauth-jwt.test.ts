@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
-import { apiTokenRoutes } from "../../workers/api/src/routes/api-tokens.js";
-import type { Env } from "../../workers/api/src/index.js";
+import { apiTokenRoutes } from "../../apps/api/src/routes/api-tokens.js";
+import type { Env } from "../../apps/api/src/index.js";
 
 /** Mount /tokens with an injected oauth_ JWT identity (skips the verify path). */
 function appWithOAuthAuth(tokenId: string, scopes: string[]) {

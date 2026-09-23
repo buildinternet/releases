@@ -95,7 +95,7 @@ export const UpdateCategoryResponseSchema = z.object({
 /**
  * Aggregated release row on `GET /v1/categories/:slug/releases`. Same wire
  * shape as `CollectionReleaseItem` — both surfaces aggregate across orgs and
- * use `formatAggregateReleaseRow` in `workers/api/src/utils.ts` for the
+ * use `formatAggregateReleaseRow` in `apps/api/src/utils.ts` for the
  * formatting. Re-exported here so the two endpoints describe one schema
  * instead of two drifting copies.
  */

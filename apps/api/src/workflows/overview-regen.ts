@@ -4,7 +4,7 @@
  * Collects due orgs via `fetchOverviewCandidates`, chunks them into groups of
  * CHUNK_SIZE, and regenerates each chunk in a retriable `step.do()`. The
  * inner `regenerateOverviewChunk` is unit-tested independently (see
- * workers/api/src/cron/overview-regen.test.ts).
+ * apps/api/src/cron/overview-regen.test.ts).
  *
  * Eligibility is staleness-gated (minNewReleases:0): an overview stale ≥7d with
  * ≥1 new release, or a missing overview — matching the local update-overviews

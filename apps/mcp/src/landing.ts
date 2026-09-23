@@ -10,7 +10,7 @@
 const DOCS_URL = "https://releases.sh/docs/api/mcp";
 const SITE_URL = "https://releases.sh";
 
-// Same markup as web/src/app/icon.svg — inlined so the worker stays a single
+// Same markup as apps/web/src/app/icon.svg — inlined so the worker stays a single
 // module and doesn't need asset bindings.
 const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1c1917"/><rect x="14" y="18" width="28" height="6" rx="1.5" fill="#f5f5f4"/><rect x="14" y="29" width="22" height="6" rx="1.5" fill="#f5f5f4" opacity="0.7"/><rect x="14" y="40" width="36" height="6" rx="1.5" fill="oklch(0.60 0.18 252)"/></svg>`;
 const ICON_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(ICON_SVG)}`;

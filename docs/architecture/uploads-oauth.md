@@ -104,7 +104,7 @@ Secrets Store binding and no dashboard client-id var.
 | --------- | ------------- | --------------------------------------------------------------------------------------------------------------- |
 | Client id | `releases-sh` | Public PKCE. Same pattern as `releases-cli`. Optional override: `UPLOADS_OAUTH_CLIENT_ID` (forks / tests only). |
 
-**Local only** (`workers/api/.dev.vars`; wrangler dev cannot read Secrets Store):
+**Local only** (`apps/api/.dev.vars`; wrangler dev cannot read Secrets Store):
 
 | Name                         | Notes                                                           |
 | ---------------------------- | --------------------------------------------------------------- |

@@ -1,5 +1,5 @@
 // Parity note: a read-only subset of these tools is also exposed in-browser via
-// WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
+// WebMCP in `apps/web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
 import { eq, desc, inArray, and, isNull, or, lt, lte, gte, sql, asc, type SQL } from "drizzle-orm";
@@ -92,7 +92,7 @@ export type ToolResult = {
   content: [{ type: "text"; text: string }];
   /**
    * Typed payload paired with the markdown `content[0].text` fallback. MCP App
-   * UIs (see `workers/mcp/ui/`) read this directly so they don't have to parse
+   * UIs (see `apps/mcp/ui/`) read this directly so they don't have to parse
    * the rendered markdown. Hosts without UI support ignore the field and the
    * model uses the text content as before. Feed tools attach a
    * {@link ReleaseFeedStructured}; `get_release` attaches a
@@ -689,7 +689,7 @@ function resolveToolWindow(params: {
 /**
  * Validate an optional `minImportance` tool input against the shared
  * {@link isImportanceScore} range check — mirrors the REST `?minImportance=`
- * validation in `workers/api/src/routes/releases.ts` exactly (integer,
+ * validation in `apps/api/src/routes/releases.ts` exactly (integer,
  * `IMPORTANCE_MIN`–`IMPORTANCE_MAX`). Zod already enforces this bound at the
  * MCP-server input-schema layer for real callers (see `mcp-agent.ts`); this
  * is the same check applied defensively for callers of the exported function
@@ -2559,7 +2559,7 @@ export async function search(
 
 // ── list_collections / get_collection / get_collection_releases ──────
 //
-// Read-only mirrors of the REST endpoints in workers/api/src/routes/collections.ts.
+// Read-only mirrors of the REST endpoints in apps/api/src/routes/collections.ts.
 // Membership joins through `organizations_public` so on_demand / soft-deleted
 // orgs never leak through a collection — same model as the API, the web feed,
 // and the org-overview surfaces.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { pickWindowVersionRange, type WeeklyBucket } from "../../web/src/lib/cadence";
+import { pickWindowVersionRange, type WeeklyBucket } from "../../apps/web/src/lib/cadence";
 
 function bucket(weekStart: string, earliest: string | null, latest: string | null): WeeklyBucket {
   return {

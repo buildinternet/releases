@@ -299,7 +299,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   // Title hierarchy mirrors the feed (#feed-title): the descriptive title leads
   // the H1 and the version is demoted to a subtitle. The org/source already
   // appears in the breadcrumb and byline, so the heading doesn't repeat the
-  // product name. See web/src/lib/release-title.ts.
+  // product name. See apps/web/src/lib/release-title.ts.
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   const heading = descriptive ?? versionLabel ?? release.title;
   // Breadcrumb leaf: the product page when the source is grouped under a

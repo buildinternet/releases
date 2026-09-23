@@ -23,7 +23,7 @@ import {
  * round-trips `Date`/`boolean` through the adapter cleanly (the repo's app tables
  * use ISO-text timestamps, but auth tables follow Better Auth's expectations).
  *
- * Paired migrations live in workers/api/migrations/ (20260604000000 initial tables,
+ * Paired migrations live in apps/api/migrations/ (20260604000000 initial tables,
  * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store,
  * 20260604030000 the api-key store, 20260605000000 the device-code store,
  * 20260607010000 the admin-plugin role/ban columns, 20260609010000 the Stripe
@@ -226,7 +226,7 @@ export const rateLimit = sqliteTable("rate_limit", {
  * Better Auth API key plugin (`@better-auth/api-key`) store — user-owned, metered
  * API keys. `referenceId` is the owning user id (config `references: "user"`).
  * `permissions` is a JSON string encoding the scope ladder as cumulative actions
- * on one `api` resource (see workers/api/src/auth/api-key-scope.ts). The hashed
+ * on one `api` resource (see apps/api/src/auth/api-key-scope.ts). The hashed
  * key lives in `key`; `start`/`prefix` are non-secret display aids. `configId`
  * scopes the key to a named plugin configuration (default "default"); only
  * relevant with multiple `apiKey()` configs. Column set is mandated by the plugin

@@ -1,6 +1,6 @@
 // GET /v1/orgs/:slug/manifest — reconstructs an owner-declared releases.json v2
 // domain manifest from the org's live products + sources (inverse of the
-// well-known materializer). See workers/api/src/lib/well-known/export-manifest.ts.
+// well-known materializer). See apps/api/src/lib/well-known/export-manifest.ts.
 import { describe, it, expect } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { ReleasesJsonDomainSchema } from "@buildinternet/releases-api-types";

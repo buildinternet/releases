@@ -1,7 +1,7 @@
 /**
  * Worker-side hybrid search helper. Single source of truth for the API
- * and MCP workers — both `workers/api/src/lib/search-hybrid.ts` and
- * `workers/mcp/src/lib/search-hybrid.ts` are thin re-export adapters
+ * and MCP workers — both `apps/api/src/lib/search-hybrid.ts` and
+ * `apps/mcp/src/lib/search-hybrid.ts` are thin re-export adapters
  * that wire in their local `buildEmbedConfig`.
  *
  * Wraps `hybridSearch` from `./vector-search.js` with closures over the
@@ -48,7 +48,7 @@ import { isEmptyReleaseContent } from "./content-quality.js";
 // statement carries today and any added later.
 const D1_IN_CHUNK = 90;
 
-// Local D1 db type — same shape as workers/api and workers/mcp's `D1Db`
+// Local D1 db type — same shape as apps/api and apps/mcp's `D1Db`
 // (both compute `ReturnType<typeof drizzle<typeof schema>>`). Re-deriving
 // here keeps the shared module independent of either worker.
 export type WorkerD1Db = ReturnType<typeof drizzle<typeof schema>>;

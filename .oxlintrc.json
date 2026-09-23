@@ -90,7 +90,7 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "workers/**/test/**"],
+      "files": ["**/*.test.ts", "apps/*/test/**"],
       "rules": {
         "typescript/no-floating-promises": "off",
         "typescript/await-thenable": "off"
@@ -103,11 +103,11 @@
     "dist",
     ".wrangler",
     ".next",
-    "web/**",
+    "apps/web/**",
     "tests/**",
-    "web/.next",
-    "web/next-env.d.ts",
-    "web/public/**",
+    "apps/web/.next",
+    "apps/web/next-env.d.ts",
+    "apps/web/public/**",
     "**/migrations/**",
     "**/*.d.ts",
     "plugins/claude-code/skills/**",
@@ -116,12 +116,12 @@
     "scripts/**",
     "drizzle.config.ts",
     "drizzle-d1.config.ts",
-    "workers/api/scripts/**",
-    "workers/mcp/**",
+    "apps/api/scripts/**",
+    "apps/mcp/**",
     "packages/**/test/**",
     "packages/**/*.test.ts",
     "tests/evals/**",
-    "web/src/lib/graphql/__generated__/**",
+    "apps/web/src/lib/graphql/__generated__/**",
     ".design-sync/**"
   ]
 }

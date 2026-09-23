@@ -19,9 +19,9 @@
  * `mock.module("@releases/adapters/extract")` — the same pattern already used
  * by the sibling scrape-fetch-*.test.ts files in this directory (this test
  * group runs discovery/tests/web/mcp/webhooks in one `bun test` process per
- * AGENTS.md; workers/api is isolated separately specifically because of this
+ * AGENTS.md; apps/api is isolated separately specifically because of this
  * kind of module-mock leak risk, so this mock must stay confined to
- * workers/discovery — never used from a test importing the barrel for real).
+ * apps/discovery — never used from a test importing the barrel for real).
  *
  * `extract-deps-worker.ts` is left REAL (not mocked): its content-hash repo
  * methods (`peekContentHash`/`commitContentHash`) are thin `apiFetcher.fetch`
