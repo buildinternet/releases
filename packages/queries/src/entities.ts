@@ -6,12 +6,18 @@
  * `{ includeDeleted: true }` only for admin paths that need tombstones
  * (hard-purge DELETE, restore). The MCP resolvers use the default.
  *
- * Bare-slug resolution is deliberately NOT here: the API rejects bare slugs on
- * legacy paths (`BareSlugRejected`, #698) and the MCP enumerates cross-org
- * matches to report ambiguity (#1324). Those are surface policy, not queries.
+ * Bare-slug resolution policy is NOT here: the API rejects bare slugs on
+ * legacy paths (`BareSlugRejected`, #698) and the MCP throws on cross-org
+ * ambiguity (#1324). Only the enumeration query the MCP policy runs on
+ * (`listSourcesBySlug` / `listProductsBySlug`) lives here.
  */
 import { and, eq, isNull } from "drizzle-orm";
-import { organizations, products, sources } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  organizationsActive,
+  products,
+  sources,
+} from "@buildinternet/releases-core/schema";
 import type { AnyDb } from "@releases/lib/db";
 
 export interface IncludeDeletedOpts {
@@ -130,4 +136,36 @@ export async function findProductForOrgSlug(
     .where(and(orgWhere(orgIdOrSlug, opts), productMatchByIdOrSlug(productIdOrSlug, opts)))
     .limit(1);
   return rows[0]?.product ?? null;
+}
+
+/** One bare-slug match, with its org's slug for ambiguity candidates. */
+export interface SlugMatch<Row> {
+  row: Row;
+  orgSlug: string;
+}
+
+/**
+ * Every live source with this slug, across live orgs. Source slugs are unique
+ * per org, not globally (#690), so a bare slug can match several rows; the
+ * caller decides what ambiguity means. Joins `organizations_active` like the
+ * API's `/v1/lookups/source-by-slug`, so a deleted org's sources don't match.
+ */
+export async function listSourcesBySlug(db: AnyDb, slug: string): Promise<SlugMatch<SourceRow>[]> {
+  return db
+    .select({ row: sources, orgSlug: organizationsActive.slug })
+    .from(sources)
+    .innerJoin(organizationsActive, eq(sources.orgId, organizationsActive.id))
+    .where(and(eq(sources.slug, slug), isNull(sources.deletedAt)));
+}
+
+/** Sibling of `listSourcesBySlug` for products. */
+export async function listProductsBySlug(
+  db: AnyDb,
+  slug: string,
+): Promise<SlugMatch<ProductRow>[]> {
+  return db
+    .select({ row: products, orgSlug: organizationsActive.slug })
+    .from(products)
+    .innerJoin(organizationsActive, eq(products.orgId, organizationsActive.id))
+    .where(and(eq(products.slug, slug), isNull(products.deletedAt)));
 }

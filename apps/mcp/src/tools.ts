@@ -67,6 +67,8 @@ import {
   findProductForOrgSlug,
   findSourceById,
   findSourceForOrgSlug,
+  listProductsBySlug,
+  listSourcesBySlug,
 } from "@releases/queries/entities";
 import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
 import {
@@ -504,10 +506,10 @@ export function ambiguousEntityToolResult(err: AmbiguousEntityError): ToolResult
  * sorted {@link AmbiguousCandidate}s for an {@link AmbiguousEntityError}.
  */
 function toAmbiguousCandidates(
-  matches: { row: { id: string; slug: string }; orgSlug: string | null }[],
+  matches: { row: { id: string; slug: string }; orgSlug: string }[],
 ): AmbiguousCandidate[] {
   return matches
-    .map((m) => ({ orgSlug: m.orgSlug ?? "?", slug: m.row.slug, id: m.row.id }))
+    .map((m) => ({ orgSlug: m.orgSlug, slug: m.row.slug, id: m.row.id }))
     .toSorted((a, b) => `${a.orgSlug}/${a.slug}`.localeCompare(`${b.orgSlug}/${b.slug}`));
 }
 
@@ -531,11 +533,7 @@ export async function resolveSource(db: D1Db, identifier: string) {
   // short-circuit bare slugs with isBareSlug() for a friendlier hint; this is
   // the safety net so correctness no longer depends on every caller remembering
   // that guard.
-  const matches = await db
-    .select({ row: sources, orgSlug: organizations.slug })
-    .from(sources)
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(eq(sources.slug, id), isNull(sources.deletedAt)));
+  const matches = await listSourcesBySlug(db, id);
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0].row;
   throw new AmbiguousEntityError("source", id, toAmbiguousCandidates(matches));
@@ -553,11 +551,7 @@ export async function resolveProduct(db: D1Db, identifier: string) {
 
   // Bare slug fallback — see resolveSource for the per-org ambiguity rationale
   // (#1324). 0 → null, 1 → resolve, >1 → throw with prod_… candidates.
-  const matches = await db
-    .select({ row: products, orgSlug: organizations.slug })
-    .from(products)
-    .leftJoin(organizations, eq(products.orgId, organizations.id))
-    .where(and(eq(products.slug, id), isNull(products.deletedAt)));
+  const matches = await listProductsBySlug(db, id);
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0].row;
   throw new AmbiguousEntityError("product", id, toAmbiguousCandidates(matches));

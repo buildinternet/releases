@@ -6,6 +6,8 @@ import {
   findProductForOrgSlug,
   findSourceById,
   findSourceForOrgSlug,
+  listProductsBySlug,
+  listSourcesBySlug,
 } from "./entities.js";
 
 const DELETED_AT = "2026-01-01T00:00:00Z";
@@ -136,6 +138,24 @@ describe("entity resolution", () => {
       expect(
         (await findProductForOrgSlug(tdb.db, "acme", "old", { includeDeleted: true }))?.id,
       ).toBe("prod_acme_old");
+    });
+  });
+
+  describe("listSourcesBySlug / listProductsBySlug", () => {
+    it("returns every live org's match for a shared slug", async () => {
+      const src = await listSourcesBySlug(tdb.db, "blog");
+      expect(src.map((m) => `${m.orgSlug}/${m.row.id}`).toSorted()).toEqual([
+        "acme/src_acme_blog",
+        "globex/src_globex_blog",
+      ]);
+      const prod = await listProductsBySlug(tdb.db, "app");
+      expect(prod.map((m) => m.row.id).toSorted()).toEqual(["prod_acme_app", "prod_globex_app"]);
+    });
+
+    it("skips deleted rows and rows under a deleted org", async () => {
+      expect(await listSourcesBySlug(tdb.db, "dead")).toEqual([]);
+      expect(await listSourcesBySlug(tdb.db, "feed")).toEqual([]);
+      expect(await listProductsBySlug(tdb.db, "old")).toEqual([]);
     });
   });
 });
