@@ -414,15 +414,24 @@ export async function generateCollectionWeeklyDigest(
   for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
     // A retry names what the previous draft got wrong; an identical re-ask
     // mostly reproduces the same mistake.
-    const { text, usage } = await model.complete({
-      system: SYSTEM_PROMPT,
-      user:
-        attempt === 1
-          ? user
-          : `${user}\n\nYour previous draft was rejected (${lastFailure}). Write a new draft that fixes this.`,
-      maxTokens: MAX_OUTPUT_TOKENS,
-      cacheSystem: true,
-    });
+    let completion: Awaited<ReturnType<TextModel["complete"]>>;
+    try {
+      completion = await model.complete({
+        system: SYSTEM_PROMPT,
+        user:
+          attempt === 1
+            ? user
+            : `${user}\n\nYour previous draft was rejected (${lastFailure}). Write a new draft that fixes this.`,
+        maxTokens: MAX_OUTPUT_TOKENS,
+        cacheSystem: true,
+      });
+    } catch (err) {
+      // A timed-out or failed call is a failed attempt, not a failed digest:
+      // the retry may route to a healthier provider.
+      lastFailure = `model call failed: ${err instanceof Error ? err.message : String(err)}`;
+      continue;
+    }
+    const { text, usage } = completion;
     totalUsage.input += usage.input;
     totalUsage.output += usage.output;
     totalUsage.cacheCreate += usage.cacheCreate;
