@@ -40,6 +40,41 @@ interface RevalidateBody {
  */
 const SAFE_SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 
+/**
+ * Cap on the `paths` array (below). Callers today send at most a handful of
+ * entries (homepage + a few collection pages); this is a hard ceiling against
+ * a caller bug turning one ping into a cache-eviction storm.
+ */
+const MAX_PATHS = 50;
+
+/**
+ * Allowlist for the `{ paths }` shape: exactly `/`, `/collections`,
+ * `/collections/<slug>`, and the same one/two-segment slug shapes the
+ * orgSlug-based body below already sends (`/<org>`, `/<org>/<source-or-product>`).
+ * Nothing else is a valid `revalidatePath()` target for this endpoint.
+ */
+function isAllowedRevalidatePath(path: string): boolean {
+  if (typeof path !== "string" || !path.startsWith("/")) return false;
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length === 0) return true; // "/"
+  if (segments.length > 2) return false;
+  return segments.every((s) => SAFE_SLUG.test(s));
+}
+
+interface RevalidatePathsBody {
+  paths: string[];
+}
+
+function parsePathsBody(raw: Record<string, unknown>): RevalidatePathsBody | null {
+  const { paths } = raw;
+  if (!Array.isArray(paths)) return null;
+  if (paths.length === 0 || paths.length > MAX_PATHS) return null;
+  for (const p of paths) {
+    if (typeof p !== "string" || !isAllowedRevalidatePath(p)) return null;
+  }
+  return { paths: paths as string[] };
+}
+
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -82,7 +117,21 @@ export async function handleRevalidateRequest(
     return json({ error: "invalid_json" }, 400);
   }
 
-  const body = parseBody(raw);
+  if (!raw || typeof raw !== "object") return json({ error: "invalid_body" }, 400);
+  const rawBody = raw as Record<string, unknown>;
+
+  // Generalized shape: an explicit path list (homepage + collection pages from
+  // the weekly-digest cron). Checked first so a caller sending `paths` never
+  // falls through to the orgSlug branch's stricter "orgSlug is required" error.
+  if ("paths" in rawBody) {
+    const pathsBody = parsePathsBody(rawBody);
+    if (!pathsBody) return json({ error: "invalid_body" }, 400);
+    const unique = [...new Set(pathsBody.paths)];
+    for (const path of unique) deps.revalidate(path);
+    return json({ revalidated: unique }, 200);
+  }
+
+  const body = parseBody(rawBody);
   if (!body) return json({ error: "invalid_body" }, 400);
 
   // Dedup: a single-product org often names its source and product the same, and

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import {
   notifyWebRevalidate,
+  notifyWebRevalidatePaths,
   type WebRevalidateEnv,
   type RevalidateableSource,
 } from "../../workers/api/src/lib/web-revalidate.js";
@@ -219,5 +220,105 @@ describe("notifyWebRevalidate", () => {
 
     expect(res.status).toBe("error");
     expect(res.reason).toContain("ECONNREFUSED");
+  });
+});
+
+describe("notifyWebRevalidatePaths", () => {
+  it("posts the given paths to the web revalidate endpoint", async () => {
+    const { calls, fetchImpl } = recorder();
+    const res = await notifyWebRevalidatePaths(envOn(), ["/", "/collections/ai-labs"], {
+      fetchImpl,
+    });
+
+    expect(res.status).toBe("revalidated");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://releases.sh/api/revalidate");
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.authorization).toBe(`Bearer ${SECRET_VALUE}`);
+    expect(calls[0]!.body).toEqual({ paths: ["/", "/collections/ai-labs"] });
+  });
+
+  it("skips when no secret binding is configured", async () => {
+    const { calls, fetchImpl } = recorder();
+    const res = await notifyWebRevalidatePaths(envOn({ WEB_SERVICE_KEY: undefined }), ["/"], {
+      fetchImpl,
+    });
+
+    expect(res).toEqual({ status: "skipped", reason: "no_secret_binding" });
+    expect(calls).toEqual([]);
+  });
+
+  it("skips an empty path list without a network call", async () => {
+    const { calls, fetchImpl } = recorder();
+    const res = await notifyWebRevalidatePaths(envOn(), [], { fetchImpl });
+
+    expect(res).toEqual({ status: "skipped", reason: "no_paths" });
+    expect(calls).toEqual([]);
+  });
+
+  it("skips when the secret binding resolves empty", async () => {
+    const { calls, fetchImpl } = recorder();
+    const res = await notifyWebRevalidatePaths(
+      envOn({
+        WEB_SERVICE_KEY: {
+          async get() {
+            return undefined;
+          },
+        },
+      }),
+      ["/"],
+      { fetchImpl },
+    );
+
+    expect(res).toEqual({ status: "skipped", reason: "secret_unset" });
+    expect(calls).toEqual([]);
+  });
+
+  it("caps an oversized path list before sending", async () => {
+    const { calls, fetchImpl } = recorder();
+    const paths = Array.from({ length: 60 }, (_, i) => `/collections/c${i}`);
+    const res = await notifyWebRevalidatePaths(envOn(), paths, { fetchImpl });
+
+    expect(res.status).toBe("revalidated");
+    const body = calls[0]!.body as { paths: string[] };
+    expect(body.paths).toHaveLength(50);
+    expect(body.paths).toEqual(paths.slice(0, 50));
+  });
+
+  it("reports a non-2xx response as an error without throwing", async () => {
+    const { fetchImpl } = recorder(401);
+    const res = await notifyWebRevalidatePaths(envOn(), ["/"], { fetchImpl });
+
+    expect(res.status).toBe("error");
+    expect(res.httpStatus).toBe(401);
+  });
+
+  it("swallows a network failure and reports it as an error", async () => {
+    const fetchImpl = (async () => {
+      throw new Error("connect ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    const res = await notifyWebRevalidatePaths(envOn(), ["/"], { fetchImpl });
+
+    expect(res.status).toBe("error");
+    expect(res.reason).toContain("ECONNREFUSED");
+  });
+
+  it("swallows a rejected secret binding and reports it as an error", async () => {
+    const { calls, fetchImpl } = recorder();
+    const res = await notifyWebRevalidatePaths(
+      envOn({
+        WEB_SERVICE_KEY: {
+          async get() {
+            throw new Error("secrets store unavailable");
+          },
+        },
+      }),
+      ["/"],
+      { fetchImpl },
+    );
+
+    expect(res.status).toBe("error");
+    expect(res.reason).toContain("secrets store unavailable");
+    expect(calls).toEqual([]);
   });
 });

@@ -10,10 +10,13 @@ import {
 import {
   collectionSummaryCatchupDates,
   collectionWeeklyDigestCatchupWeeks,
+  digestRevalidatePaths,
   generateCollectionSummariesForDay,
   generateCollectionWeeklyDigestsForWeek,
   generateWeeklyDigestForCollection,
+  pingAfterDigests,
   runCollectionSummaries,
+  runCollectionWeeklyDigests,
   type CollectionSummariesEnv,
 } from "./collection-summaries";
 import {
@@ -452,5 +455,165 @@ describe("runCollectionSummaries — weekly digest hook", () => {
       new Date("2026-06-12T15:00:00.000Z"), // Friday ET
     );
     expect(called).toBe(false);
+  });
+});
+
+// ── Weekly-digest ISR revalidation (#2331) ──────────────────────────
+
+describe("digestRevalidatePaths", () => {
+  test("always includes the homepage and collections index", () => {
+    expect(digestRevalidatePaths(["ai-labs"])).toEqual([
+      "/",
+      "/collections",
+      "/collections/ai-labs",
+    ]);
+  });
+
+  test("adds one path per digested collection, deduped", () => {
+    expect(digestRevalidatePaths(["ai-labs", "dev-tools", "ai-labs"])).toEqual([
+      "/",
+      "/collections",
+      "/collections/ai-labs",
+      "/collections/dev-tools",
+    ]);
+  });
+
+  test("still returns the homepage and index when no collection digested", () => {
+    expect(digestRevalidatePaths([])).toEqual(["/", "/collections"]);
+  });
+});
+
+/** Records the outbound revalidate ping and replies with `status`. */
+function fetchRecorder(status = 200): { calls: unknown[]; fetchImpl: typeof fetch } {
+  const calls: unknown[] = [];
+  const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(init?.body ? JSON.parse(String(init.body)) : null);
+    return new Response(JSON.stringify({ revalidated: [] }), { status });
+  }) as unknown as typeof fetch;
+  return { calls, fetchImpl };
+}
+
+const REVALIDATE_SECRET = {
+  async get() {
+    return "shared-revalidate-secret";
+  },
+};
+
+describe("pingAfterDigests", () => {
+  test("sends one ping with the homepage, collections index, and each digested collection", async () => {
+    const { calls, fetchImpl } = fetchRecorder();
+    await pingAfterDigests(
+      { WEB_SERVICE_KEY: REVALIDATE_SECRET, WEB_BASE_URL: "https://releases.sh" },
+      ["ai-labs"],
+      { fetchImpl },
+    );
+    expect(calls).toEqual([{ paths: ["/", "/collections", "/collections/ai-labs"] }]);
+  });
+
+  test("sends no ping when no collection was digested", async () => {
+    const { calls, fetchImpl } = fetchRecorder();
+    await pingAfterDigests({ WEB_SERVICE_KEY: REVALIDATE_SECRET }, [], { fetchImpl });
+    expect(calls).toEqual([]);
+  });
+
+  test("never throws when the secret binding rejects", async () => {
+    const { calls, fetchImpl } = fetchRecorder();
+    await expect(
+      pingAfterDigests(
+        {
+          WEB_SERVICE_KEY: {
+            async get() {
+              throw new Error("secrets store unavailable");
+            },
+          },
+        },
+        ["ai-labs"],
+        { fetchImpl },
+      ),
+    ).resolves.toBeUndefined();
+    expect(calls).toEqual([]);
+  });
+
+  test("never throws when the network call fails", async () => {
+    const failingFetch = (async () => {
+      throw new Error("connect ECONNREFUSED");
+    }) as unknown as typeof fetch;
+
+    await expect(
+      pingAfterDigests(
+        { WEB_SERVICE_KEY: REVALIDATE_SECRET, WEB_BASE_URL: "https://releases.sh" },
+        ["ai-labs"],
+        { fetchImpl: failingFetch },
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("runCollectionWeeklyDigests — revalidation ping (#2331)", () => {
+  function env(
+    db: ReturnType<typeof createTestDb>["db"],
+    extra?: Partial<CollectionSummariesEnv>,
+  ): CollectionSummariesEnv {
+    return {
+      DB: undefined as unknown as D1Database,
+      _weeklyDigestModelOverride: fakeWeeklyModel(),
+      ...extra,
+    } satisfies CollectionSummariesEnv;
+  }
+
+  test("pings once with the homepage, collections index, and the digested collection", async () => {
+    const { db } = createTestDb();
+    await seedWeeklyCollection(db);
+    const { calls, fetchImpl } = fetchRecorder();
+
+    await runCollectionWeeklyDigests(
+      env(db, {
+        WEB_SERVICE_KEY: REVALIDATE_SECRET,
+        WEB_BASE_URL: "https://releases.sh",
+        _revalidateFetchOverride: fetchImpl,
+      }),
+      db,
+      "2026-06-15", // Monday; catch-up window covers the just-closed week 2026-06-08
+    );
+
+    expect(calls).toEqual([{ paths: ["/", "/collections", "/collections/week"] }]);
+  });
+
+  test("sends no ping when the run writes zero digests", async () => {
+    const { db } = createTestDb();
+    // No enabled collection seeded — generateCollectionWeeklyDigestsForWeek
+    // finds nothing, so the run writes zero digests.
+    const { calls, fetchImpl } = fetchRecorder();
+
+    await runCollectionWeeklyDigests(
+      env(db, {
+        WEB_SERVICE_KEY: REVALIDATE_SECRET,
+        WEB_BASE_URL: "https://releases.sh",
+        _revalidateFetchOverride: fetchImpl,
+      }),
+      db,
+      "2026-06-15",
+    );
+
+    expect(calls).toEqual([]);
+  });
+
+  test("a rejected ping does not throw out of the run", async () => {
+    const { db } = createTestDb();
+    await seedWeeklyCollection(db);
+
+    await expect(
+      runCollectionWeeklyDigests(
+        env(db, {
+          WEB_SERVICE_KEY: {
+            async get() {
+              throw new Error("secrets store unavailable");
+            },
+          },
+        }),
+        db,
+        "2026-06-15",
+      ),
+    ).resolves.toBeUndefined();
   });
 });

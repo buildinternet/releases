@@ -54,10 +54,41 @@ const REVALIDATE_PATH = "/api/revalidate";
 // This runs inside fetchOne()'s waitUntil and must not stretch the cron's
 // per-source budget if web is slow or blackholed.
 const PING_TIMEOUT_MS = 2000;
+// Mirrors the web route's own cap (see web/src/lib/revalidate-request.ts) —
+// enforced here too so a caller handing us an unexpectedly long list still
+// sends a bounded request instead of relying on the other side to reject it.
+const MAX_PATHS = 50;
 
 function logSkip(sourceSlug: string, reason: string): RevalidateResult {
   logEvent("info", { component: "web-revalidate", event: "skipped", sourceSlug, reason });
   return { status: "skipped", reason };
+}
+
+/**
+ * Shared POST-with-timeout mechanics for both revalidate shapes. `notifyWebRevalidate`
+ * does NOT call `notifyWebRevalidatePaths` for its own request — only this low-level
+ * piece is shared — because the two workers (API, web) deploy independently. Routing
+ * the already-live per-source ping through the `{ paths }` body would create a
+ * rolling-deploy window where an old worker's request and a new web's parser (or vice
+ * versa) disagree, for a ping whose wire shape and log fields are otherwise stable and
+ * unit-tested. Sharing just the fetch call removes the duplicate timeout/header wiring
+ * without touching that contract.
+ */
+async function postRevalidate(
+  baseUrl: string,
+  secret: string,
+  body: unknown,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  return fetchImpl(`${baseUrl}${REVALIDATE_PATH}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+  });
 }
 
 export async function notifyWebRevalidate(
@@ -105,19 +136,16 @@ export async function notifyWebRevalidate(
   const fetchImpl = opts?.fetchImpl ?? fetch;
 
   try {
-    const res = await fetchImpl(`${baseUrl}${REVALIDATE_PATH}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify({
+    const res = await postRevalidate(
+      baseUrl,
+      secret,
+      {
         orgSlug,
         sourceSlug: source.slug,
         ...(productSlug ? { productSlug } : {}),
-      }),
-      signal: AbortSignal.timeout(PING_TIMEOUT_MS),
-    });
+      },
+      fetchImpl,
+    );
 
     const ok = res.status >= 200 && res.status < 300;
     logEvent(ok ? "info" : "warn", {
@@ -133,6 +161,71 @@ export async function notifyWebRevalidate(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logEvent("warn", { component: "web-revalidate", event: "ping-failed", sourceSlug, err });
+    return { status: "error", reason: msg };
+  }
+}
+
+export interface RevalidatePathsResult {
+  status: "skipped" | "revalidated" | "error";
+  reason?: string;
+  httpStatus?: number;
+}
+
+function logPathsSkip(component: string, paths: string[], reason: string): RevalidatePathsResult {
+  logEvent("info", { component, event: "skipped", paths, reason });
+  return { status: "skipped", reason };
+}
+
+/**
+ * Generalized sibling of `notifyWebRevalidate`: pings web with an explicit list of
+ * paths instead of deriving them from a source/org/product triple. Used by callers
+ * whose changed pages aren't source-shaped — e.g. the weekly collection digest cron
+ * (`workers/api/src/cron/collection-summaries.ts`), which busts the homepage reel
+ * and every collection page that just got a new digest.
+ *
+ * Same fire-and-forget contract as `notifyWebRevalidate`: gated on the same
+ * WEB_SERVICE_KEY binding, same 2s timeout, never throws — every branch resolves to
+ * a result the caller can log and move on from.
+ */
+export async function notifyWebRevalidatePaths(
+  env: WebRevalidateEnv,
+  paths: string[],
+  opts?: { fetchImpl?: typeof fetch; component?: string },
+): Promise<RevalidatePathsResult> {
+  const component = opts?.component ?? "web-revalidate-paths";
+
+  if (!env.WEB_SERVICE_KEY) return logPathsSkip(component, paths, "no_secret_binding");
+  if (paths.length === 0) return logPathsSkip(component, paths, "no_paths");
+
+  const capped = paths.length > MAX_PATHS ? paths.slice(0, MAX_PATHS) : paths;
+
+  let secret: string | undefined;
+  try {
+    secret = await env.WEB_SERVICE_KEY.get();
+    if (!secret) return logPathsSkip(component, capped, "secret_unset");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logEvent("warn", { component, event: "resolve-failed", paths: capped, err });
+    return { status: "error", reason: msg };
+  }
+
+  const baseUrl = (env.WEB_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+
+  try {
+    const res = await postRevalidate(baseUrl, secret, { paths: capped }, fetchImpl);
+    const ok = res.status >= 200 && res.status < 300;
+    logEvent(ok ? "info" : "warn", {
+      component,
+      event: "pinged",
+      paths: capped,
+      ok,
+      httpStatus: res.status,
+    });
+    return { status: ok ? "revalidated" : "error", httpStatus: res.status };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logEvent("warn", { component, event: "ping-failed", paths: capped, err });
     return { status: "error", reason: msg };
   }
 }
