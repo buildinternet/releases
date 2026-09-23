@@ -1,0 +1,1153 @@
+import { describe, it, expect } from "bun:test";
+import { readFileSync } from "fs";
+import { join } from "path";
+import {
+  parseRss,
+  parseAtom,
+  parseJsonFeed,
+  classifyFeedMime,
+  detectFeedTypeFromContent,
+  extractVersionFromTitle,
+  detectBreaking,
+  htmlToMarkdown,
+  decodeHtmlEntities,
+  extractMedia,
+  iframeSrcToWatchUrl,
+  parseFeedLinks,
+  getSourceMeta,
+  filterByCategoryAllow,
+  filterByKeywordAllow,
+  filterByUrlDeny,
+  isUrlDenied,
+} from "./feed.js";
+import type { RawRelease } from "./types.js";
+
+const fixturesDir = join(import.meta.dirname, "../../../tests/fixtures/feeds");
+
+function readFixture(name: string): string {
+  return readFileSync(join(fixturesDir, name), "utf-8");
+}
+
+// Cache fixtures at module level — they're immutable and small
+const RSS_BASIC = readFixture("rss-basic.xml");
+const ATOM_BASIC = readFixture("atom-basic.xml");
+const ATOM_ZOLA = readFixture("atom-zola.xml");
+const JSONFEED_BASIC = readFixture("jsonfeed-basic.json");
+const RSS_WITH_MEDIA = readFixture("rss-with-media.xml");
+
+// ── RSS parsing ────────────────────────────────────────────────────
+
+describe("parseRss", () => {
+  it("parses basic RSS items (title, content, url, publishedAt)", () => {
+    const releases = parseRss(RSS_BASIC);
+
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("v2.1.0 — Dashboard Redesign");
+    expect(releases[0].url).toBe("https://acme.com/changelog/v2-1-0");
+    expect(releases[0].publishedAt).toEqual(new Date("Mon, 15 Jan 2024 12:00:00 GMT"));
+    expect(releases[0].content).toContain("redesigned the dashboard");
+  });
+
+  it("extracts version from title", () => {
+    const releases = parseRss(RSS_BASIC);
+    expect(releases[0].version).toBe("2.1.0");
+    expect(releases[1].version).toBe("2.0.0");
+  });
+
+  it("detects breaking changes in content", () => {
+    const releases = parseRss(RSS_BASIC);
+    expect(releases[0].isBreaking).toBe(true);
+    expect(releases[1].isBreaking).toBe(false);
+  });
+
+  it("skips items without title", () => {
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item><description>No title here</description></item>
+  <item><title>Has Title</title><description>Content</description></item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].title).toBe("Has Title");
+  });
+
+  it("produces empty content for title-only items (#234)", () => {
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Notion 3.4, part 2</title>
+    <link>https://www.notion.so/releases/2026-04-14</link>
+    <pubDate>Tue Apr 14 2026 00:00:00 GMT+0000</pubDate>
+    <guid>https://www.notion.so/releases/2026-04-14</guid>
+  </item>
+  <item>
+    <title>Notion 3.4</title>
+    <link>https://www.notion.so/releases/2026-04-07</link>
+    <pubDate>Tue Apr 07 2026 00:00:00 GMT+0000</pubDate>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("Notion 3.4, part 2");
+    expect(releases[0].content).toBe("");
+    expect(releases[0].url).toBe("https://www.notion.so/releases/2026-04-14");
+    expect(releases[1].content).toBe("");
+  });
+
+  it("uses content:encoded when description is absent", () => {
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Encoded Content</title>
+    <content:encoded><![CDATA[<p>Rich content here</p>]]></content:encoded>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].content).toContain("Rich content here");
+  });
+
+  it("prefers content:encoded over description when both are present", () => {
+    // Mirrors the OpenAI Codex RSS shape: description is just the title
+    // while content:encoded carries the actual body.
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Codex app</title>
+    <description>Codex app</description>
+    <content:encoded><![CDATA[<h2>New Features</h2><ul><li>Added plugin marketplace support.</li></ul>]]></content:encoded>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].content).toContain("plugin marketplace");
+    expect(releases[0].content).not.toBe("Codex app");
+  });
+
+  it("extracts media from description", () => {
+    const releases = parseRss(RSS_BASIC);
+    expect(releases[0].media).toBeDefined();
+    expect(releases[0].media!.length).toBeGreaterThanOrEqual(1);
+    expect(releases[0].media![0].type).toBe("image");
+    expect(releases[0].media![0].url).toBe("https://acme.com/img/dashboard.png");
+    expect(releases[0].media![0].alt).toBe("New dashboard");
+  });
+
+  it("falls back to <guid> when <link> is absent (auth0 changelog shape)", () => {
+    // Auth0's RSS feed ships only <guid> fragment-hashes — no <link> element.
+    // Without the fallback, releases.url is NULL on every item and the
+    // UNIQUE(source_id, url) dedup constraint never fires (SQLite treats each
+    // NULL as distinct), causing every poll to re-insert the full feed.
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Non-Unique Emails is Now Generally Available</title>
+    <description>Multiple accounts can share one email address</description>
+    <pubDate>Tue, 13 May 2026 00:00:00 GMT</pubDate>
+    <guid>https://auth0.com/changelog#aGVRGJTYvJA0AG9vcs3gu</guid>
+  </item>
+  <item>
+    <title>Opaque-id item</title>
+    <description>guid is a tag URI; still a stable dedup key</description>
+    <guid isPermaLink="false">tag:example.com,2024:post-1</guid>
+  </item>
+  <item>
+    <title>Non-URL guid item</title>
+    <description>a raw opaque token can't be used as a URL</description>
+    <guid isPermaLink="false">deadbeef</guid>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(3);
+    expect(releases[0].url).toBe("https://auth0.com/changelog#aGVRGJTYvJA0AG9vcs3gu");
+    expect(releases[1].url).toBe("tag:example.com,2024:post-1");
+    expect(releases[2].url).toBeUndefined();
+  });
+});
+
+// ── Atom parsing ───────────────────────────────────────────────────
+
+describe("parseAtom", () => {
+  it("parses basic Atom entries (title, url, content)", () => {
+    const releases = parseAtom(ATOM_BASIC);
+
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("v3.0.0 — Breaking: New Auth System");
+    expect(releases[0].url).toBe("https://acme.com/releases/v3-0-0");
+    expect(releases[1].title).toBe("v2.5.0 — Performance Improvements");
+    expect(releases[1].url).toBe("https://acme.com/releases/v2-5-0");
+  });
+
+  it("parses updated dates", () => {
+    const releases = parseAtom(ATOM_BASIC);
+
+    expect(releases[0].publishedAt).toEqual(new Date("2024-03-01T10:00:00Z"));
+    expect(releases[1].publishedAt).toEqual(new Date("2024-02-15T08:00:00Z"));
+  });
+
+  it("handles <content> vs <summary> fallback", () => {
+    const releases = parseAtom(ATOM_BASIC);
+    expect(releases[0].content).toContain("OAuth 2.0");
+    expect(releases[1].content).toContain("Improved query performance");
+  });
+
+  it("falls back to <published> when <updated> is absent", () => {
+    const xml = `<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Published Only</title>
+    <published>2024-06-01T12:00:00Z</published>
+    <summary>Test</summary>
+  </entry>
+</feed>`;
+    const releases = parseAtom(xml);
+    expect(releases[0].publishedAt).toEqual(new Date("2024-06-01T12:00:00Z"));
+  });
+
+  it("detects breaking changes", () => {
+    const releases = parseAtom(ATOM_BASIC);
+    expect(releases[0].isBreaking).toBe(true);
+    expect(releases[1].isBreaking).toBe(false);
+  });
+
+  it("extracts version from title", () => {
+    const releases = parseAtom(ATOM_BASIC);
+    expect(releases[0].version).toBe("3.0.0");
+    expect(releases[1].version).toBe("2.5.0");
+  });
+
+  // Regression for #700: feeds emitted by Zola (and any other generator)
+  // attach `xml:lang` and other attributes to <entry> tags. The previous
+  // hand-rolled parser used a literal `indexOf("<entry>")` and silently
+  // returned zero releases for these feeds (htmx.org being the canonical
+  // example).
+  it("parses entries that carry attributes (e.g. xml:lang)", () => {
+    const releases = parseAtom(ATOM_ZOLA);
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("First Essay");
+    expect(releases[0].url).toBe("https://example.com/essays/first/");
+    expect(releases[0].content).toContain("Body of the first essay");
+    expect(releases[1].title).toBe("Second Essay");
+  });
+});
+
+// ── JSON Feed parsing ──────────────────────────────────────────────
+
+describe("parseJsonFeed", () => {
+  it("parses basic JSON Feed items", () => {
+    const releases = parseJsonFeed(JSONFEED_BASIC);
+
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("v1.5.0 — New CLI Tool");
+    expect(releases[0].url).toBe("https://acme.com/changelog/v1-5-0");
+    expect(releases[0].publishedAt).toEqual(new Date("2024-04-01T00:00:00Z"));
+  });
+
+  it("uses content_text when available, falls back to content_html", () => {
+    const releases = parseJsonFeed(JSONFEED_BASIC);
+    expect(releases[1].content).toBe("Fixed authentication timeout issues.");
+    expect(releases[0].content).toContain("Added a new CLI");
+    expect(releases[0].content).not.toContain("<p>");
+  });
+
+  it("filters out items without title", () => {
+    const json = JSON.stringify({
+      version: "https://jsonfeed.org/version/1.1",
+      items: [
+        { id: "1", content_text: "no title" },
+        { id: "2", title: "Has Title", content_text: "content" },
+      ],
+    });
+    const releases = parseJsonFeed(json);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].title).toBe("Has Title");
+  });
+
+  it("extracts version from title", () => {
+    const releases = parseJsonFeed(JSONFEED_BASIC);
+    expect(releases[0].version).toBe("1.5.0");
+    expect(releases[1].version).toBe("1.4.0");
+  });
+
+  it("extracts media from content_html", () => {
+    const releases = parseJsonFeed(JSONFEED_BASIC);
+    expect(releases[0].media).toBeDefined();
+    expect(releases[0].media!.length).toBeGreaterThanOrEqual(1);
+    expect(releases[0].media![0].type).toBe("gif");
+    expect(releases[0].media![0].url).toBe("https://acme.com/img/cli.gif");
+  });
+});
+
+// ── Feed type detection ────────────────────────────────────────────
+
+describe("classifyFeedMime", () => {
+  it("detects RSS from content-type", () => {
+    expect(classifyFeedMime("application/rss+xml")).toBe("rss");
+    expect(classifyFeedMime("application/rss+xml; charset=utf-8")).toBe("rss");
+  });
+
+  it("detects Atom from content-type", () => {
+    expect(classifyFeedMime("application/atom+xml")).toBe("atom");
+  });
+
+  it("detects JSON Feed from content-type", () => {
+    expect(classifyFeedMime("application/feed+json")).toBe("jsonfeed");
+  });
+
+  it("detects JSON Feed from application/json", () => {
+    expect(classifyFeedMime("application/json")).toBe("jsonfeed");
+  });
+
+  it("returns null for unknown content types", () => {
+    expect(classifyFeedMime("text/html")).toBeNull();
+    expect(classifyFeedMime("application/pdf")).toBeNull();
+    expect(classifyFeedMime("")).toBeNull();
+  });
+});
+
+describe("detectFeedTypeFromContent", () => {
+  it("detects JSON Feed from content body", () => {
+    expect(detectFeedTypeFromContent('{ "version": "https://jsonfeed.org/version/1.1" }')).toBe(
+      "jsonfeed",
+    );
+  });
+
+  it("detects Atom from content body", () => {
+    expect(
+      detectFeedTypeFromContent('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">'),
+    ).toBe("atom");
+  });
+
+  it("detects RSS from <rss> tag", () => {
+    expect(detectFeedTypeFromContent('<?xml version="1.0"?><rss version="2.0">')).toBe("rss");
+  });
+
+  it("detects RSS from <channel> tag", () => {
+    expect(detectFeedTypeFromContent('<?xml version="1.0"?><channel>')).toBe("rss");
+  });
+
+  it("returns null for unknown content", () => {
+    expect(detectFeedTypeFromContent("<html><body>Hello</body></html>")).toBeNull();
+    expect(detectFeedTypeFromContent("plain text")).toBeNull();
+  });
+});
+
+// ── HTML to Markdown conversion ────────────────────────────────────
+
+describe("htmlToMarkdown", () => {
+  it("converts images to markdown", () => {
+    const html = '<img src="https://example.com/img.png" alt="Screenshot" />';
+    expect(htmlToMarkdown(html)).toBe("![Screenshot](https://example.com/img.png)");
+  });
+
+  it("converts images with alt before src", () => {
+    const html = '<img alt="Demo" src="https://example.com/demo.png" />';
+    expect(htmlToMarkdown(html)).toBe("![Demo](https://example.com/demo.png)");
+  });
+
+  it("converts images without alt text", () => {
+    const html = '<img src="https://example.com/img.png" />';
+    expect(htmlToMarkdown(html)).toBe("![](https://example.com/img.png)");
+  });
+
+  it("converts links to markdown", () => {
+    const html = '<a href="https://example.com">Click here</a>';
+    expect(htmlToMarkdown(html)).toBe("[Click here](https://example.com)");
+  });
+
+  it("strips unsafe link schemes (keeps only text)", () => {
+    const html = '<a href="javascript:alert(1)">XSS</a>';
+    expect(htmlToMarkdown(html)).toBe("XSS");
+  });
+
+  it("converts bold and paragraph formatting", () => {
+    const html = "<p>Hello <strong>world</strong></p>";
+    expect(htmlToMarkdown(html)).toBe("Hello **world**");
+  });
+
+  it("converts headings", () => {
+    expect(htmlToMarkdown("<h2>Section</h2>")).toBe("## Section");
+    expect(htmlToMarkdown("<h3>Subsection</h3>")).toBe("### Subsection");
+  });
+
+  it("converts inline code", () => {
+    expect(htmlToMarkdown("Use <code>npm install</code> to install")).toBe(
+      "Use `npm install` to install",
+    );
+  });
+
+  it("converts italic", () => {
+    expect(htmlToMarkdown("This is <em>important</em>")).toBe("This is *important*");
+  });
+
+  it("converts list items", () => {
+    const html = "<ul><li>First</li><li>Second</li></ul>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("- First");
+    expect(result).toContain("- Second");
+  });
+
+  it("converts fenced code blocks", () => {
+    const html = "<pre><code>const x = 1;</code></pre>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("```");
+    expect(result).toContain("const x = 1;");
+  });
+
+  it("decodes HTML entities inside code blocks", () => {
+    const html = "<pre><code>a &amp; b &gt; c</code></pre>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("a & b > c");
+  });
+
+  it("strips Fern visual editor attributes", () => {
+    const html = '<h3 fve-data-id="abc123" fve-mdx-b64="IyMjIEhlbGxv">Hello</h3>';
+    expect(htmlToMarkdown(html)).toBe("### Hello");
+  });
+
+  it("handles iframe embeds (YouTube)", () => {
+    const html = '<iframe src="https://www.youtube.com/embed/abc123" width="560"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("[Video](https://www.youtube.com/watch?v=abc123)");
+  });
+
+  it("handles iframe embeds (Vimeo)", () => {
+    const html = '<iframe src="https://player.vimeo.com/video/999" width="640"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("[Video](https://vimeo.com/999)");
+  });
+
+  it("handles iframe embeds (Loom)", () => {
+    const html = '<iframe src="https://www.loom.com/embed/xyz789" width="640"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("[Video](https://www.loom.com/share/xyz789)");
+  });
+
+  it("converts video elements to links", () => {
+    const html = '<video src="https://example.com/video.mp4"></video>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("[Video](https://example.com/video.mp4)");
+  });
+
+  it("drops iframe with unsafe scheme (javascript:)", () => {
+    const html = '<iframe src="javascript:alert(1)" width="560"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("javascript:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("drops iframe with unsafe scheme (data:)", () => {
+    const html = '<iframe src="data:text/html,<script>1</script>"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("data:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("drops video with unsafe scheme (javascript:)", () => {
+    const html = '<video src="javascript:alert(1)"></video>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("javascript:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("drops video with unsafe <source> scheme (data:)", () => {
+    const html = '<video><source src="data:video/mp4;base64,AAAA" /></video>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("data:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("replaces &nbsp; with spaces", () => {
+    const html = "Hello&nbsp;World";
+    expect(htmlToMarkdown(html)).toBe("Hello World");
+  });
+
+  // Regression: rel_t9fAnizXt0rM0vPDC48ds. The previous regex-based converter
+  // pre-decoded entities, which let `<?php` / `<a>` / `=>` inside <pre> blocks
+  // look like real tags to the fallthrough `<[^>]+>` stripper. Whole code
+  // bodies got swallowed. A DOM parser keeps those characters as text nodes
+  // inside <pre>, so they never collide with tag-stripping passes.
+  it("preserves PHP code blocks with entity-encoded angle brackets", () => {
+    const html =
+      '<pre class="wp-block-code"><code class="">&lt;?php\nthe_author_link();\n// or\necho get_the_author_link();</code></pre>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("<?php");
+    expect(result).toContain("the_author_link();");
+    expect(result).toContain("echo get_the_author_link();");
+  });
+
+  it("preserves code blocks that contain HTML examples inside docstrings", () => {
+    const html =
+      "<pre class=\"brush: php; title: ; notranslate\">\n&lt;?php\n/**\n * Edits text...\n * `&lt;a href=\"https://example.org/author/author/\" rel=\"author\"&gt;Posts by Author&lt;/a&gt;`\n */\nfunction wpdocs_author_posts_link( $link, $author = '', $title = '' ) {\n\t$link = str_replace(\n\t\t'&gt;' . $author . '&lt;/a&gt;',\n\t\t'&gt;' . esc_html( $title ) . '&lt;/a&gt;',\n\t\t$link\n\t);\n\treturn $link;\n}\n</pre>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("<?php");
+    expect(result).toContain("function wpdocs_author_posts_link(");
+    expect(result).toContain("'>' . $author . '</a>'");
+    expect(result).toContain("'>' . esc_html( $title ) . '</a>'");
+  });
+
+  it("handles bare <pre> (WordPress syntaxhighlighter shortcode) as fenced code", () => {
+    const html = '<pre class="brush: php; notranslate">echo "hello";</pre>';
+    const result = htmlToMarkdown(html);
+    expect(result).toMatch(/^```\necho "hello";\n```$/);
+  });
+
+  it("drops WordPress glossary hidden tooltip content", () => {
+    const html =
+      "Authors list <span class='glossary-item-container'>HTML<span class='glossary-item-hidden-content'><span class='glossary-item-header'>HTML</span> <span class='glossary-item-description'>HyperText Markup Language. …</span></span></span>";
+    const result = htmlToMarkdown(html);
+    expect(result).toBe("Authors list HTML");
+  });
+});
+
+// ── Real WP dev-note fixture (rel_t9fAnizXt0rM0vPDC48ds regression) ───
+
+describe("parseRss with WP dev-note code blocks", () => {
+  const WP_FEED = readFixture("rss-wp-codeblocks.xml");
+
+  it("preserves every code block end-to-end", () => {
+    const items = parseRss(WP_FEED);
+    expect(items.length).toBe(1);
+    const content = items[0]!.content;
+    // Each of the four code blocks in the post must survive intact.
+    expect(content).toContain("the_author_link();");
+    expect(content).toContain("the_author_link( false );");
+    expect(content).toContain("the_author_posts_link();");
+    expect(content).toContain("wp_list_authors(");
+    expect(content).toContain("'html' => true // This is true by default.");
+    // The big str_replace example survives with its <a> string literals.
+    expect(content).toContain("function wpdocs_author_posts_link(");
+    expect(content).toContain("'>' . $author . '</a>'");
+    // The headings still render as ATX-style.
+    expect(content).toContain("## Author");
+    expect(content).toContain("## Authors list HTML");
+  });
+});
+
+// ── Version extraction ─────────────────────────────────────────────
+
+describe("extractVersionFromTitle", () => {
+  it("extracts semver with v prefix", () => {
+    expect(extractVersionFromTitle("v2.1.0 — Dashboard Redesign")).toBe("2.1.0");
+  });
+
+  it("extracts semver without v prefix", () => {
+    expect(extractVersionFromTitle("Release 2.1.0")).toBe("2.1.0");
+  });
+
+  it("extracts two-segment version", () => {
+    expect(extractVersionFromTitle("Version 3.5 released")).toBe("3.5");
+  });
+
+  it("extracts pre-release version", () => {
+    expect(extractVersionFromTitle("v4.0.0-beta.1 Preview")).toBe("4.0.0-beta.1");
+  });
+
+  it("returns undefined when no version present", () => {
+    expect(extractVersionFromTitle("Bug fixes and improvements")).toBeUndefined();
+    expect(extractVersionFromTitle("January Update")).toBeUndefined();
+  });
+
+  it("extracts version from middle of title", () => {
+    expect(extractVersionFromTitle("Released: v1.0.0 is here!")).toBe("1.0.0");
+  });
+});
+
+// ── Breaking change detection ──────────────────────────────────────
+
+describe("detectBreaking", () => {
+  it('detects "breaking change" text', () => {
+    expect(detectBreaking("Update", "This is a breaking change in the API")).toBe(true);
+  });
+
+  it('detects "breaking:" prefix', () => {
+    expect(detectBreaking("Breaking: New auth system", "Content here")).toBe(true);
+  });
+
+  it("detects warning character", () => {
+    expect(detectBreaking("⚠ Important update", "Be careful")).toBe(true);
+  });
+
+  it("returns false for normal content", () => {
+    expect(detectBreaking("New Feature", "Added a button")).toBe(false);
+  });
+
+  it("is case insensitive", () => {
+    expect(detectBreaking("BREAKING CHANGE", "content")).toBe(true);
+    expect(detectBreaking("title", "BREAKING CHANGE in API")).toBe(true);
+  });
+});
+
+// ── HTML entity decoding ───────────────────────────────────────────
+
+describe("decodeHtmlEntities", () => {
+  it("decodes &amp;", () => {
+    expect(decodeHtmlEntities("Tom &amp; Jerry")).toBe("Tom & Jerry");
+  });
+
+  it("decodes &lt; and &gt;", () => {
+    expect(decodeHtmlEntities("&lt;div&gt;")).toBe("<div>");
+  });
+
+  it("decodes &quot;", () => {
+    expect(decodeHtmlEntities("He said &quot;hello&quot;")).toBe('He said "hello"');
+  });
+
+  it("decodes &#39; (numeric entity)", () => {
+    expect(decodeHtmlEntities("it&#39;s")).toBe("it's");
+  });
+
+  it("decodes &apos;", () => {
+    expect(decodeHtmlEntities("it&apos;s")).toBe("it's");
+  });
+
+  it("decodes hex entities like &#x27;", () => {
+    expect(decodeHtmlEntities("&#x27;")).toBe("'");
+    expect(decodeHtmlEntities("&#x41;")).toBe("A");
+  });
+
+  it("decodes decimal entities like &#169;", () => {
+    expect(decodeHtmlEntities("&#169;")).toBe("\u00A9"); // copyright symbol
+  });
+
+  it("handles multiple entities in one string", () => {
+    expect(decodeHtmlEntities("&lt;a href=&quot;/&quot;&gt;")).toBe('<a href="/">');
+  });
+});
+
+// ── Media extraction ───────────────────────────────────────────────
+
+describe("extractMedia", () => {
+  it("extracts images with alt text", () => {
+    const html = '<img src="https://example.com/img.png" alt="Screenshot" />';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(1);
+    expect(media[0]).toEqual({
+      type: "image",
+      url: "https://example.com/img.png",
+      alt: "Screenshot",
+    });
+  });
+
+  it("identifies GIFs", () => {
+    const html = '<img src="https://example.com/demo.gif" alt="Demo" />';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("gif");
+  });
+
+  it("extracts YouTube iframe embeds", () => {
+    const html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" width="560"></iframe>';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("video");
+    expect(media[0].url).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  });
+
+  it("extracts Vimeo iframe embeds", () => {
+    const html = '<iframe src="https://player.vimeo.com/video/123456789" width="640"></iframe>';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("video");
+    expect(media[0].url).toBe("https://vimeo.com/123456789");
+  });
+
+  it("extracts Loom iframe embeds", () => {
+    const html = '<iframe src="https://www.loom.com/embed/abc123def456" width="640"></iframe>';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("video");
+    expect(media[0].url).toBe("https://www.loom.com/share/abc123def456");
+  });
+
+  it("extracts video elements", () => {
+    const html = '<video src="https://example.com/video.mp4"></video>';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("video");
+    expect(media[0].url).toBe("https://example.com/video.mp4");
+  });
+
+  it("rejects javascript: URLs (XSS prevention)", () => {
+    const html = '<img src="javascript:alert(1)" alt="XSS" />';
+    const media = extractMedia(html);
+    expect(media).toHaveLength(0);
+  });
+
+  it("extracts all media from a rich feed item", () => {
+    const media = parseRss(RSS_WITH_MEDIA)[0].media!;
+
+    expect(media).toHaveLength(6);
+    expect(media.filter((m) => m.type === "image")).toHaveLength(1);
+    expect(media.filter((m) => m.type === "gif")).toHaveLength(1);
+    expect(media.filter((m) => m.type === "video")).toHaveLength(4);
+    expect(media.every((m) => !m.url.startsWith("javascript:"))).toBe(true);
+  });
+});
+
+// ── iframe URL conversion ──────────────────────────────────────────
+
+describe("iframeSrcToWatchUrl", () => {
+  it("converts YouTube embed to watch URL", () => {
+    expect(iframeSrcToWatchUrl("https://www.youtube.com/embed/dQw4w9WgXcQ")).toBe(
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    );
+  });
+
+  it("converts Vimeo player to direct URL", () => {
+    expect(iframeSrcToWatchUrl("https://player.vimeo.com/video/123456789")).toBe(
+      "https://vimeo.com/123456789",
+    );
+  });
+
+  it("converts Loom embed to share URL", () => {
+    expect(iframeSrcToWatchUrl("https://www.loom.com/embed/abc123")).toBe(
+      "https://www.loom.com/share/abc123",
+    );
+  });
+
+  it("adds https: to protocol-relative URLs", () => {
+    expect(iframeSrcToWatchUrl("//www.example.com/embed/video")).toBe(
+      "https://www.example.com/embed/video",
+    );
+  });
+
+  it("returns original URL for unknown embed sources", () => {
+    expect(iframeSrcToWatchUrl("https://example.com/embed/123")).toBe(
+      "https://example.com/embed/123",
+    );
+  });
+
+  it("handles YouTube with query params", () => {
+    expect(iframeSrcToWatchUrl("https://www.youtube.com/embed/abc123?autoplay=1")).toBe(
+      "https://www.youtube.com/watch?v=abc123",
+    );
+  });
+});
+
+// ── parseFeedLinks ─────────────────────────────────────────────────
+
+describe("parseFeedLinks", () => {
+  it("parses RSS link tags from HTML head", () => {
+    const head = `<head>
+      <link rel="alternate" type="application/rss+xml" href="/feed.xml" />
+    </head>`;
+    const result = parseFeedLinks(head, "https://example.com");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("rss");
+    expect(result!.url).toBe("https://example.com/feed.xml");
+  });
+
+  it("parses Atom link tags", () => {
+    const head = `<link rel="alternate" type="application/atom+xml" href="/atom.xml" />`;
+    const result = parseFeedLinks(head, "https://example.com");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("atom");
+    expect(result!.url).toBe("https://example.com/atom.xml");
+  });
+
+  it("parses JSON Feed link tags", () => {
+    const head = `<link rel="alternate" type="application/feed+json" href="/feed.json" />`;
+    const result = parseFeedLinks(head, "https://example.com");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("jsonfeed");
+    expect(result!.url).toBe("https://example.com/feed.json");
+  });
+
+  it("prefers JSON Feed when multiple types present", () => {
+    const head = `
+      <link rel="alternate" type="application/rss+xml" href="/feed.xml" />
+      <link rel="alternate" type="application/feed+json" href="/feed.json" />
+      <link rel="alternate" type="application/atom+xml" href="/atom.xml" />
+    `;
+    const result = parseFeedLinks(head, "https://example.com");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("jsonfeed");
+    expect(result!.url).toBe("https://example.com/feed.json");
+  });
+
+  it("returns null when no feed links found", () => {
+    const head = `<head><link rel="stylesheet" href="/style.css" /></head>`;
+    expect(parseFeedLinks(head, "https://example.com")).toBeNull();
+  });
+
+  it("returns null for empty head", () => {
+    expect(parseFeedLinks("", "https://example.com")).toBeNull();
+  });
+
+  it("resolves relative URLs against base", () => {
+    const head = `<link rel="alternate" type="application/rss+xml" href="../feed.xml" />`;
+    const result = parseFeedLinks(head, "https://example.com/blog/");
+    expect(result).not.toBeNull();
+    expect(result!.url).toBe("https://example.com/feed.xml");
+  });
+
+  it("handles absolute URLs in href", () => {
+    const head = `<link rel="alternate" type="application/rss+xml" href="https://cdn.example.com/feed.xml" />`;
+    const result = parseFeedLinks(head, "https://example.com");
+    expect(result).not.toBeNull();
+    expect(result!.url).toBe("https://cdn.example.com/feed.xml");
+  });
+});
+
+// ── getSourceMeta ──────────────────────────────────────────────────
+
+describe("getSourceMeta", () => {
+  it("parses valid JSON metadata", () => {
+    const source = {
+      metadata: '{"feedUrl":"https://example.com/feed.xml","feedType":"rss"}',
+    } as any;
+    const meta = getSourceMeta(source);
+    expect(meta.feedUrl).toBe("https://example.com/feed.xml");
+    expect(meta.feedType).toBe("rss");
+  });
+
+  it("returns empty object for null metadata", () => {
+    const source = { metadata: null } as any;
+    const meta = getSourceMeta(source);
+    expect(meta).toEqual({});
+  });
+
+  it("returns empty object for undefined metadata", () => {
+    const source = { metadata: undefined } as any;
+    const meta = getSourceMeta(source);
+    expect(meta).toEqual({});
+  });
+
+  it("returns empty object for invalid JSON", () => {
+    const source = { metadata: "not json at all" } as any;
+    const meta = getSourceMeta(source);
+    expect(meta).toEqual({});
+  });
+
+  it("returns empty object for empty string metadata", () => {
+    const source = { metadata: "" } as any;
+    const meta = getSourceMeta(source);
+    expect(meta).toEqual({});
+  });
+});
+
+// ── Categories on parsed items ──────────────────────────────────────
+
+describe("parseRss categories", () => {
+  it("captures <category> labels per item", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <title>Example</title>
+  <link>https://example.com/</link>
+  <item>
+    <title>Product launch</title>
+    <link>https://example.com/a</link>
+    <category><![CDATA[Product]]></category>
+    <category><![CDATA[API]]></category>
+    <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Customer story</title>
+    <link>https://example.com/b</link>
+    <category><![CDATA[B2B Story]]></category>
+    <pubDate>Mon, 02 Jan 2024 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Untagged post</title>
+    <link>https://example.com/c</link>
+    <pubDate>Mon, 03 Jan 2024 00:00:00 GMT</pubDate>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(3);
+    expect(releases[0].categories).toEqual(["Product", "API"]);
+    expect(releases[1].categories).toEqual(["B2B Story"]);
+    expect(releases[2].categories).toBeUndefined();
+  });
+});
+
+describe("parseJsonFeed categories", () => {
+  it("captures `tags` per item", () => {
+    const json = JSON.stringify({
+      version: "https://jsonfeed.org/version/1.1",
+      title: "Example",
+      items: [
+        { id: "1", title: "Tagged", url: "https://e.com/a", tags: ["Product", "API"] },
+        { id: "2", title: "Untagged", url: "https://e.com/b" },
+      ],
+    });
+    const releases = parseJsonFeed(json);
+    expect(releases[0].categories).toEqual(["Product", "API"]);
+    expect(releases[1].categories).toBeUndefined();
+  });
+});
+
+// ── Category allowlist filter ───────────────────────────────────────
+
+describe("filterByCategoryAllow", () => {
+  const items: RawRelease[] = [
+    { title: "Product post", content: "", categories: ["Product"] },
+    { title: "Customer story", content: "", categories: ["B2B Story"] },
+    { title: "API doc update", content: "", categories: ["API", "Product"] },
+    { title: "Uncategorized", content: "" },
+    { title: "Mixed-case match", content: "", categories: ["product"] },
+  ];
+
+  it("keeps items whose categories intersect the allowlist (case-insensitive)", () => {
+    const { kept, dropped } = filterByCategoryAllow(items, ["Product"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Product post",
+      "API doc update",
+      "Mixed-case match",
+    ]);
+    expect(dropped).toBe(2);
+  });
+
+  it("drops uncategorized items when an allowlist is set", () => {
+    const { kept, dropped } = filterByCategoryAllow(
+      [{ title: "Untagged", content: "" }],
+      ["Product"],
+    );
+    expect(kept).toHaveLength(0);
+    expect(dropped).toBe(1);
+  });
+
+  it("treats an empty allowlist as passthrough", () => {
+    const { kept, dropped } = filterByCategoryAllow(items, []);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+
+  it("supports multi-value allowlists with intersection semantics", () => {
+    const { kept, dropped } = filterByCategoryAllow(items, ["Product", "Release"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Product post",
+      "API doc update",
+      "Mixed-case match",
+    ]);
+    expect(dropped).toBe(2);
+  });
+});
+
+describe("filterByKeywordAllow", () => {
+  // Models the Discord blog feed: a mixed-topic feed with no <category> tags,
+  // where the changelog/patch-notes items are only distinguishable by the
+  // keyword appearing in the title or the URL slug.
+  const items: RawRelease[] = [
+    {
+      title: "Discord Patch Notes: May 4, 2026",
+      content: "",
+      url: "https://discord.com/blog/discord-patch-notes-may-4-2026",
+    },
+    {
+      title: "Discord Update - March 24, 2026 (Changelog)",
+      content: "",
+      url: "https://discord.com/blog/discord-update-march-24-2026-changelog",
+    },
+    {
+      title: "Celebrate Discord's 11th Birthday",
+      content: "",
+      url: "https://discord.com/blog/celebrate-discords-11th-birthday",
+    },
+    {
+      title: "Every Voice Call Is Now End-to-End Encrypted",
+      content: "",
+      url: "https://discord.com/blog/every-voice-and-video-call-is-now-e2ee",
+    },
+  ];
+
+  it("keeps items whose title or URL contains any keyword (case-insensitive)", () => {
+    const { kept, dropped } = filterByKeywordAllow(items, ["changelog", "patch-notes"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Discord Patch Notes: May 4, 2026",
+      "Discord Update - March 24, 2026 (Changelog)",
+    ]);
+    expect(dropped).toBe(2);
+  });
+
+  it("matches on the URL slug even when the title spaces the keyword differently", () => {
+    // Title says "Patch Notes" (space); only the URL has "patch-notes" (hyphen).
+    const { kept } = filterByKeywordAllow([items[0]!], ["patch-notes"]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("matches on the title when the URL is absent", () => {
+    const { kept } = filterByKeywordAllow(
+      [{ title: "Weekly Changelog", content: "" }],
+      ["changelog"],
+    );
+    expect(kept).toHaveLength(1);
+  });
+
+  it("drops items matching no keyword", () => {
+    const { kept, dropped } = filterByKeywordAllow(
+      [items[2]!, items[3]!],
+      ["changelog", "patch-notes"],
+    );
+    expect(kept).toHaveLength(0);
+    expect(dropped).toBe(2);
+  });
+
+  it("treats an empty allowlist as passthrough", () => {
+    const { kept, dropped } = filterByKeywordAllow(items, []);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+
+  it("ignores whitespace-only / empty keywords instead of matching (or dropping) everything", () => {
+    // A blank entry must not silently disable the filter (empty string matches
+    // everything) nor silently drop everything (whitespace matches nothing).
+    expect(filterByKeywordAllow(items, [""]).kept).toEqual(items);
+    expect(filterByKeywordAllow(items, ["   "]).kept).toEqual(items);
+  });
+
+  it("trims surrounding whitespace on keywords and skips blank entries", () => {
+    // Models a hand-typed "changelog, " → ["changelog", " "] or a stray space.
+    const { kept } = filterByKeywordAllow(items, [" ", "  changelog  "]);
+    expect(kept.map((i) => i.title)).toEqual(["Discord Update - March 24, 2026 (Changelog)"]);
+  });
+});
+
+describe("filterByUrlDeny", () => {
+  // Models the ClickHouse RSS feed, which publishes every post twice: the
+  // English original (/blog/gala) and a Japanese translation at a locale-
+  // suffixed URL (/blog/gala-jp). The translation shares no other dedup key
+  // with the original, so the URL suffix is the only reliable discriminator.
+  const items: RawRelease[] = [
+    { title: "Gala on AWS", content: "", url: "https://clickhouse.com/blog/gala" },
+    { title: "Gala (JP)", content: "", url: "https://clickhouse.com/blog/gala-jp" },
+    {
+      title: "ClickHouse Release 26.5",
+      content: "",
+      url: "https://clickhouse.com/blog/clickhouse-release-26-05",
+    },
+    // A legit English slug that contains "jp"/"japan" but does NOT end in -jp.
+    {
+      title: "ClickHouse Cloud now in Google Cloud Tokyo",
+      content: "",
+      url: "https://clickhouse.com/blog/clickhouse-gcp-japan-availability",
+    },
+  ];
+
+  it("drops items whose URL matches a deny pattern, keeps the rest", () => {
+    const { kept, dropped } = filterByUrlDeny(items, ["-jp$"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Gala on AWS",
+      "ClickHouse Release 26.5",
+      "ClickHouse Cloud now in Google Cloud Tokyo",
+    ]);
+    expect(dropped).toBe(1);
+  });
+
+  it("anchors with $ so a mid-slug 'jp'/'japan' is not dropped", () => {
+    // `-jp$` matches only the trailing locale suffix, not `-japan-availability`.
+    const { kept } = filterByUrlDeny([items[3]!], ["-jp$"]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("supports multiple locale patterns", () => {
+    const multi: RawRelease[] = [
+      { title: "en", content: "", url: "https://x.test/blog/a" },
+      { title: "jp", content: "", url: "https://x.test/blog/a-jp" },
+      { title: "de", content: "", url: "https://x.test/blog/a-de" },
+    ];
+    const { kept, dropped } = filterByUrlDeny(multi, ["-jp$", "-de$"]);
+    expect(kept.map((i) => i.title)).toEqual(["en"]);
+    expect(dropped).toBe(2);
+  });
+
+  it("matches case-insensitively", () => {
+    const { kept } = filterByUrlDeny(
+      [{ title: "JP", content: "", url: "https://x.test/blog/a-JP" }],
+      ["-jp$"],
+    );
+    expect(kept).toHaveLength(0);
+  });
+
+  it("keeps items with no URL (a deny rule only fires on a positive match)", () => {
+    const noUrl: RawRelease[] = [{ title: "No URL", content: "" }];
+    const { kept } = filterByUrlDeny(noUrl, ["-jp$"]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("treats an empty denylist as passthrough", () => {
+    const { kept, dropped } = filterByUrlDeny(items, []);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+
+  it("ignores whitespace-only / empty patterns instead of dropping everything", () => {
+    expect(filterByUrlDeny(items, [""]).kept).toEqual(items);
+    expect(filterByUrlDeny(items, ["   "]).kept).toEqual(items);
+  });
+
+  it("skips an uncompilable pattern instead of wiping the feed, still applying valid ones", () => {
+    // "[" is an unterminated character class — a bad rule must not drop everything.
+    const { kept, dropped } = filterByUrlDeny(items, ["[", "-jp$"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Gala on AWS",
+      "ClickHouse Release 26.5",
+      "ClickHouse Cloud now in Google Cloud Tokyo",
+    ]);
+    expect(dropped).toBe(1);
+  });
+
+  it("treats an all-invalid denylist as passthrough", () => {
+    const { kept, dropped } = filterByUrlDeny(items, ["["]);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+});
+
+describe("isUrlDenied", () => {
+  const deny = ["-jp$", "-de$"];
+
+  it("returns true when the URL matches a deny pattern", () => {
+    expect(isUrlDenied("https://clickhouse.com/blog/gala-jp", deny)).toBe(true);
+    expect(isUrlDenied("https://clickhouse.com/blog/gala-de", deny)).toBe(true);
+  });
+
+  it("returns false when the URL matches no pattern", () => {
+    expect(isUrlDenied("https://clickhouse.com/blog/gala", deny)).toBe(false);
+    // Anchored: a mid-slug 'jp' is not a match.
+    expect(isUrlDenied("https://clickhouse.com/blog/gcp-japan", deny)).toBe(false);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(isUrlDenied("https://x.test/blog/a-JP", ["-jp$"])).toBe(true);
+  });
+
+  it("returns false for an empty URL or an empty/all-invalid denylist", () => {
+    expect(isUrlDenied("", deny)).toBe(false);
+    expect(isUrlDenied("https://x.test/blog/a-jp", [])).toBe(false);
+    expect(isUrlDenied("https://x.test/blog/a-jp", ["["])).toBe(false);
+  });
+});
+
+describe("contentFromSummary flag", () => {
+  it("marks RSS items that fall back to <description>", () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel>
+      <item><title>Has body</title><link>https://x.test/a</link>
+        <content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Full body paragraph here.</p>]]></content:encoded>
+        <description>teaser</description></item>
+      <item><title>Summary only</title><link>https://x.test/b</link>
+        <description>just a teaser sentence</description></item>
+    </channel></rss>`;
+    const [withBody, summaryOnly] = parseRss(xml);
+    expect(withBody.contentFromSummary).toBe(false);
+    expect(summaryOnly.contentFromSummary).toBe(true);
+  });
+
+  it("marks JSON Feed items that fall back to summary", () => {
+    const json = JSON.stringify({
+      items: [
+        {
+          title: "Has body",
+          url: "https://x.test/a",
+          content_html: "<p>Full body here.</p>",
+          summary: "teaser",
+        },
+        { title: "Summary only", url: "https://x.test/b", summary: "just a teaser" },
+      ],
+    });
+    const [withBody, summaryOnly] = parseJsonFeed(json);
+    expect(withBody.contentFromSummary).toBe(false);
+    expect(summaryOnly.contentFromSummary).toBe(true);
+  });
+});
