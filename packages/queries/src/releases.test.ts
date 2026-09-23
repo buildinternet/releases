@@ -2,6 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import {
+  buildFeedCursor,
+  parseFeedCursorKey,
+  type FeedCursorKey,
+} from "@releases/core-internal/feed-cursor";
 import { findVisibleReleaseDetail, listLatestReleases } from "./releases.js";
 
 const DELETED_AT = "2026-01-01T00:00:00Z";
@@ -77,12 +82,25 @@ describe("release reads", () => {
       expect(rows.map((r) => r.id)).toEqual(["rel_cov", "rel_a2", "rel_a1"]);
     });
 
-    it("pages by (published_at, id) keyset", async () => {
+    it("pages from a feed cursor key", async () => {
       const rows = await listLatestReleases(tdb.db, {
         limit: 50,
-        after: { lastPublishedAt: "2026-05-02T00:00:00Z", lastId: "rel_a2" },
+        after: { publishedAt: "2026-05-02T00:00:00Z", fetchedAt: null, id: "rel_a2" },
       });
       expect(rows.map((r) => r.id)).toEqual(["rel_a1"]);
+    });
+
+    it("leaves content null unless includeContent", async () => {
+      expect((await listLatestReleases(tdb.db, { limit: 1 }))[0].content).toBeNull();
+      const [row] = await listLatestReleases(tdb.db, { limit: 1, includeContent: true });
+      expect(row.content).toBe("x");
+    });
+
+    it("counts coverage siblings and drops excluded source types", async () => {
+      const [a2] = await listLatestReleases(tdb.db, { limit: 1 });
+      expect(a2.coverageCount).toBe(1);
+      const none = await listLatestReleases(tdb.db, { limit: 50, excludeSourceTypes: ["feed"] });
+      expect(none).toEqual([]);
     });
   });
 
@@ -102,6 +120,70 @@ describe("release reads", () => {
     it("returns null for coverage-side releases and hidden sources", async () => {
       expect(await findVisibleReleaseDetail(tdb.db, "rel_cov")).toBeNull();
       expect(await findVisibleReleaseDetail(tdb.db, "rel_hidden")).toBeNull();
+    });
+  });
+
+  describe("listLatestReleases feed order", () => {
+    let odb: TestDatabase;
+    const P = "2026-06-01T00:00:00Z";
+
+    beforeAll(async () => {
+      odb = createTestDb();
+      await odb.db.insert(organizations).values({ id: "org_o", name: "O", slug: "o" });
+      await odb.db.insert(sources).values({
+        id: "src_o",
+        orgId: "org_o",
+        name: "o",
+        slug: "o",
+        type: "feed",
+        url: "https://example.com/o",
+      });
+      const row = (id: string, publishedAt: string | null, fetchedAt: string) => ({
+        id,
+        sourceId: "src_o",
+        title: id,
+        type: "feature" as const,
+        content: "x",
+        publishedAt,
+        fetchedAt,
+      });
+      await odb.db
+        .insert(releases)
+        .values([
+          row("rel_a", P, "2026-06-01T01:00:00Z"),
+          row("rel_b", P, "2026-06-01T02:00:00Z"),
+          row("rel_c", P, "2026-06-01T01:00:00Z"),
+          row("rel_y", null, "2026-06-01T02:00:00Z"),
+          row("rel_z", null, "2026-06-01T03:00:00Z"),
+        ]);
+    });
+
+    afterAll(() => odb.cleanup());
+
+    const ORDER = ["rel_b", "rel_c", "rel_a", "rel_z", "rel_y"];
+
+    it("sorts dated first, then published_at, fetched_at, id descending", async () => {
+      const rows = await listLatestReleases(odb.db, { limit: 50 });
+      expect(rows.map((r) => r.id)).toEqual(ORDER);
+    });
+
+    it("walks every row once through buildFeedCursor pages, across the undated tail", async () => {
+      const seen: string[] = [];
+      let after: FeedCursorKey | null = null;
+      for (let i = 0; i < 10; i++) {
+        const page = await listLatestReleases(odb.db, { limit: 2, after });
+        if (page.length === 0) break;
+        seen.push(...page.map((r) => r.id));
+        const last = page[page.length - 1];
+        after = parseFeedCursorKey(
+          buildFeedCursor({
+            published_at: last.publishedAt,
+            fetched_at: last.fetchedAt,
+            id: last.id,
+          }),
+        );
+      }
+      expect(seen).toEqual(ORDER);
     });
   });
 });

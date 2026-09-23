@@ -6,7 +6,20 @@
  * `sources_visible`, products from `products_active`, and releases under a
  * hidden or soft-deleted org are dropped from feeds.
  */
-import { and, desc, eq, gte, inArray, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import {
   organizations,
   organizationsActive,
@@ -17,6 +30,7 @@ import {
   sourcesVisible,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
+import type { FeedCursorKey } from "@releases/core-internal/feed-cursor";
 import type { AnyDb } from "@releases/lib/db";
 import { githubHandleSubquery } from "./sql-fragments.js";
 
@@ -72,17 +86,46 @@ export interface LatestReleasesQuery {
   includePrereleases?: boolean;
   /** Drop releases dated after this ISO instant (future-dated guardrail). */
   notAfter?: string;
-  /** Keyset position for `(published_at DESC, id DESC)` paging. */
-  after?: { lastPublishedAt: string | null; lastId: string } | null;
+  /** Drop releases whose source type is in this list. */
+  excludeSourceTypes?: string[];
+  /** Select `content` (MCP renders it; the REST feed doesn't ship it). */
+  includeContent?: boolean;
+  /**
+   * Keyset position from a `publishedAt|fetchedAt|id` feed cursor
+   * (`parseFeedCursorKey` in `@releases/core-internal/feed-cursor`).
+   */
+  after?: FeedCursorKey | null;
   limit: number;
 }
 
 /**
- * Cross-source latest-releases feed, newest first by `(published_at, id)`.
- * Visibility matches the API's `getLatestReleasesAcross`: hidden or
- * soft-deleted sources, soft-deleted products, and releases whose org is
- * hidden or soft-deleted are all excluded. An orphan source with no org row
- * still passes (org columns come back null), as in the API.
+ * Keyset predicate for the feed order (dated rows first, then
+ * `published_at, fetched_at, id` descending). Same rules as
+ * `feedCursorSql`: a dated cursor also admits every undated row; an undated
+ * cursor admits only undated rows.
+ */
+function afterFeedKey(r: typeof releases | typeof releasesVisible, key: FeedCursorKey) {
+  const { publishedAt: pub, fetchedAt: fet, id } = key;
+  const undated = isNull(r.publishedAt);
+  // Rows after the cursor among those sharing its published_at (or all
+  // undated rows, when the cursor is in the undated tail).
+  let tie: SQL | undefined;
+  if (fet && id) tie = or(lt(r.fetchedAt, fet), and(eq(r.fetchedAt, fet), lt(r.id, id)));
+  else if (id) tie = lt(r.id, id);
+
+  if (!pub) return and(undated, tie);
+  return or(undated, lt(r.publishedAt, pub), tie ? and(eq(r.publishedAt, pub), tie) : undefined);
+}
+
+/**
+ * Cross-source latest-releases feed, read by `GET /v1/releases/latest` and
+ * MCP `get_latest_releases`. Newest first: dated rows before undated, then
+ * `published_at, fetched_at, id` descending, the order every REST feed and
+ * `buildFeedCursor` use.
+ *
+ * Hidden or soft-deleted sources, soft-deleted products, and releases whose
+ * org is hidden or soft-deleted are all excluded. An orphan source with no
+ * org row still passes (org columns come back null).
  */
 export async function listLatestReleases(db: AnyDb, q: LatestReleasesQuery) {
   const r = q.includeCoverage ? releases : releasesVisible;
@@ -106,18 +149,10 @@ export async function listLatestReleases(db: AnyDb, q: LatestReleasesQuery) {
   if (q.until) conds.push(lte(r.publishedAt, q.until));
   if (q.minImportance !== undefined) conds.push(gte(r.importance, q.minImportance));
   if (q.kind) conds.push(sql`COALESCE(${s.kind}, ${p.kind}) = ${q.kind}`);
-  if (q.after) {
-    const { lastPublishedAt, lastId } = q.after;
-    conds.push(
-      lastPublishedAt
-        ? or(
-            lt(r.publishedAt, lastPublishedAt),
-            and(eq(r.publishedAt, lastPublishedAt), lt(r.id, lastId)),
-          )
-        : // Null-published releases sort to the tail; compare by id alone there.
-          lt(r.id, lastId),
-    );
+  if (q.excludeSourceTypes && q.excludeSourceTypes.length > 0) {
+    conds.push(notInArray(s.type, q.excludeSourceTypes as (typeof s.type._.data)[]));
   }
+  if (q.after) conds.push(afterFeedKey(r, q.after));
 
   return db
     .select({
@@ -125,30 +160,41 @@ export async function listLatestReleases(db: AnyDb, q: LatestReleasesQuery) {
       title: r.title,
       version: r.version,
       type: r.type,
-      content: r.content,
+      content: q.includeContent ? r.content : sql<string | null>`NULL`,
       summary: r.summary,
       importance: r.importance,
+      breaking: r.breaking,
       titleGenerated: r.titleGenerated,
       titleShort: r.titleShort,
       publishedAt: r.publishedAt,
+      fetchedAt: r.fetchedAt,
       url: r.url,
+      media: r.media,
       contentChars: r.contentChars,
       contentTokens: r.contentTokens,
+      coverageCount: sql<number>`(SELECT COUNT(*) FROM release_coverage WHERE canonical_id = ${r.id})`,
       sourceName: s.name,
       sourceSlug: s.slug,
       sourceType: s.type,
+      sourceKind: s.kind,
       orgName: o.name,
       orgSlug: o.slug,
       orgAvatarUrl: o.avatarUrl,
       orgGithubHandle: githubHandleSubquery(sql`${o.id}`),
       productName: p.name,
       productSlug: p.slug,
+      productKind: p.kind,
     })
     .from(r)
     .innerJoin(s, eq(r.sourceId, s.id))
     .leftJoin(p, eq(s.productId, p.id))
     .leftJoin(o, eq(s.orgId, o.id))
     .where(and(...conds))
-    .orderBy(desc(r.publishedAt), desc(r.id))
+    .orderBy(
+      sql`CASE WHEN ${r.publishedAt} IS NOT NULL THEN 0 ELSE 1 END`,
+      desc(r.publishedAt),
+      desc(r.fetchedAt),
+      desc(r.id),
+    )
     .limit(q.limit);
 }

@@ -52,6 +52,24 @@ describe("GET /v1/orgs/:slug — domain resolution", () => {
     expect(aliasBody.slug).toBe("acme");
   });
 
+  it("does not resolve a soft-deleted org by its domain alias", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({
+      id: "org_gone",
+      slug: "gone--org_gone",
+      name: "Gone",
+      domain: "gone.com",
+      deletedAt: "2026-01-01T00:00:00Z",
+    });
+    await db.insert(domainAliases).values({ orgId: "org_gone", domain: "gone.io" });
+    const fetch = createTestApp(db, [orgRoutes], { env: {} });
+
+    expect((await fetch(new Request("https://x.test/v1/orgs/gone.io"))).status).toBe(404);
+    expect((await fetch(new Request("https://x.test/v1/orgs/gone.io/sparklines"))).status).toBe(
+      404,
+    );
+  });
+
   it("records demand on a domain-shaped miss and still 404s", async () => {
     const db = createTestDb();
     const { executionCtx, drain } = makeExecutionCtx();

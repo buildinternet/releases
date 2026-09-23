@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { createDb } from "../src/db.js";
 import { getLatestReleasesAcross } from "../src/queries/releases";
 import { createSeededD1 } from "../../../tests/db-helper";
 import { orgRoutes } from "../src/routes/orgs.js";
@@ -53,7 +54,7 @@ function seedLatest(): Promise<D1Database> {
 describe("getLatestReleasesAcross — hidden-org filter", () => {
   it("excludes releases whose org is hidden", async () => {
     const d1 = await seedLatest();
-    const rows = await getLatestReleasesAcross(d1, { limit: 50 });
+    const rows = await getLatestReleasesAcross(createDb(d1), { limit: 50 });
     const ids = rows.map((r) => r.id);
     expect(ids).toContain("rel_visible");
     expect(ids).not.toContain("rel_hidden");
@@ -117,7 +118,7 @@ function seedSoftDeletedOrg(): Promise<D1Database> {
 describe("getLatestReleasesAcross — soft-deleted-org filter", () => {
   it("excludes releases whose org is soft-deleted", async () => {
     const d1 = await seedSoftDeletedOrg();
-    const rows = await getLatestReleasesAcross(d1, { limit: 50 });
+    const rows = await getLatestReleasesAcross(createDb(d1), { limit: 50 });
     const ids = rows.map((r) => r.id);
     expect(ids).toContain("rel_live");
     expect(ids).not.toContain("rel_gone");

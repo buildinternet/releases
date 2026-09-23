@@ -72,30 +72,28 @@ beforeEach(async () => {
 afterEach(() => testDb.cleanup());
 
 describe("getLatestReleasesAcross — since/until", () => {
-  const d1 = () => testDb.db as unknown as D1Database;
-
   it("returns all rows (including undated) with no window", async () => {
-    const ids = (await getLatestReleasesAcross(d1(), { limit: 50 })).map((r) => r.id);
+    const ids = (await getLatestReleasesAcross(testDb.db, { limit: 50 })).map((r) => r.id);
     expect(new Set(ids)).toEqual(new Set(["rel_jan", "rel_mar", "rel_may", "rel_undated"]));
   });
 
   it("`since` keeps rows at or after the bound and drops the undated row", async () => {
     const ids = (
-      await getLatestReleasesAcross(d1(), { since: "2026-02-01T00:00:00.000Z", limit: 50 })
+      await getLatestReleasesAcross(testDb.db, { since: "2026-02-01T00:00:00.000Z", limit: 50 })
     ).map((r) => r.id);
     expect(new Set(ids)).toEqual(new Set(["rel_mar", "rel_may"]));
   });
 
   it("`until` keeps rows at or before the bound and drops the undated row", async () => {
     const ids = (
-      await getLatestReleasesAcross(d1(), { until: "2026-04-01T00:00:00.000Z", limit: 50 })
+      await getLatestReleasesAcross(testDb.db, { until: "2026-04-01T00:00:00.000Z", limit: 50 })
     ).map((r) => r.id);
     expect(new Set(ids)).toEqual(new Set(["rel_jan", "rel_mar"]));
   });
 
   it("`since` + `until` bound both ends", async () => {
     const ids = (
-      await getLatestReleasesAcross(d1(), {
+      await getLatestReleasesAcross(testDb.db, {
         since: "2026-02-01T00:00:00.000Z",
         until: "2026-04-01T00:00:00.000Z",
         limit: 50,

@@ -192,7 +192,7 @@
       "name": "@buildinternet/releases-api-types",
       "version": "0.55.0",
       "dependencies": {
-        "@buildinternet/releases-core": "^0.31.0",
+        "@buildinternet/releases-core": "^0.31.1",
         "zod": "^4.4.3",
       },
     },
@@ -251,6 +251,7 @@
       "dependencies": {
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
+        "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },

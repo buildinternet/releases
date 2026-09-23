@@ -101,7 +101,6 @@ import {
   buildCursorMeta,
   buildPaginationMeta,
   decodeReleaseCursor,
-  encodeReleaseCursor,
   parseFeedLimit,
   parseMcpPagination,
   renderPageFooter,
@@ -738,6 +737,7 @@ export async function getLatestReleases(
     includePrereleases: params.include_prereleases === true,
     // See {@link getOrgReleasesFeed} for the future-dated guardrail rationale.
     notAfter: nowIso(),
+    includeContent: true,
     after,
     limit: limit + 1,
   });
@@ -748,9 +748,10 @@ export async function getLatestReleases(
   let nextCursor: string | null = null;
   if (hasMore && pageRows.length > 0) {
     const last = pageRows[pageRows.length - 1];
-    nextCursor = encodeReleaseCursor({
-      lastPublishedAt: last.publishedAt ?? null,
-      lastId: last.id,
+    nextCursor = buildFeedCursor({
+      published_at: last.publishedAt,
+      fetched_at: last.fetchedAt,
+      id: last.id,
     });
   }
 
@@ -788,7 +789,7 @@ export async function getLatestReleases(
         publishedAt: r.publishedAt,
         summary: r.summary,
         importance: r.importance,
-        content: r.content,
+        content: r.content ?? "",
         sourceName: r.sourceName,
         coordinate,
         orgName: r.orgName,

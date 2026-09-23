@@ -90,7 +90,7 @@ describe("GET /v1/releases/:id — breaking + migrationNotes (detail carries bot
 
 describe("latest feed — breaking only, never migrationNotes", () => {
   it("carries breaking on the item and never migrationNotes", async () => {
-    const rows = await getLatestReleasesAcross(testDb.db as unknown as D1Database, { limit: 50 });
+    const rows = await getLatestReleasesAcross(testDb.db, { limit: 50 });
     const items = rows.map((r) => mapLatestRowToReleaseItem(r, ""));
     const major = items.find((i) => i.id === "rel_major")!;
     const plain = items.find((i) => i.id === "rel_plain")!;

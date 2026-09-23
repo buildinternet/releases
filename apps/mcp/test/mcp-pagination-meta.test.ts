@@ -3,25 +3,35 @@ import {
   buildCursorMeta,
   buildSearchMeta,
   decodeReleaseCursor,
-  encodeReleaseCursor,
   parseFeedLimit,
 } from "../src/lib/pagination.js";
+import { toBase64Url } from "@buildinternet/releases-core/cursor";
 
-describe("encodeReleaseCursor / decodeReleaseCursor", () => {
-  it("round-trips a full (publishedAt, id) cursor", () => {
-    const enc = encodeReleaseCursor({
-      lastPublishedAt: "2025-01-01T00:00:00Z",
-      lastId: "rel_abc123",
+describe("decodeReleaseCursor", () => {
+  it("reads the shared publishedAt|fetchedAt|id feed cursor", () => {
+    expect(decodeReleaseCursor("2025-01-01T00:00:00Z|2025-01-02T00:00:00Z|rel_abc")).toEqual({
+      publishedAt: "2025-01-01T00:00:00Z",
+      fetchedAt: "2025-01-02T00:00:00Z",
+      id: "rel_abc",
     });
-    expect(decodeReleaseCursor(enc)).toEqual({
-      lastPublishedAt: "2025-01-01T00:00:00Z",
-      lastId: "rel_abc123",
+    expect(decodeReleaseCursor("|2025-01-02T00:00:00Z|rel_abc")).toEqual({
+      publishedAt: null,
+      fetchedAt: "2025-01-02T00:00:00Z",
+      id: "rel_abc",
     });
   });
 
-  it("round-trips a cursor with null publishedAt", () => {
-    const enc = encodeReleaseCursor({ lastPublishedAt: null, lastId: "rel_xyz" });
-    expect(decodeReleaseCursor(enc)).toEqual({ lastPublishedAt: null, lastId: "rel_xyz" });
+  it("still reads an old base64url publishedAt|id token as a 2-part cursor", () => {
+    expect(decodeReleaseCursor(toBase64Url("2025-01-01T00:00:00Z|rel_abc123"))).toEqual({
+      publishedAt: "2025-01-01T00:00:00Z",
+      fetchedAt: null,
+      id: "rel_abc123",
+    });
+    expect(decodeReleaseCursor(toBase64Url("|rel_xyz"))).toEqual({
+      publishedAt: null,
+      fetchedAt: null,
+      id: "rel_xyz",
+    });
   });
 
   it("returns null for an empty token", () => {
@@ -33,9 +43,7 @@ describe("encodeReleaseCursor / decodeReleaseCursor", () => {
   });
 
   it("returns null for a token missing the id half", () => {
-    // Encodes "2025-01-01T00:00:00Z|" — separator with empty id.
-    const broken = btoa("2025-01-01T00:00:00Z|").replace(/=+$/, "");
-    expect(decodeReleaseCursor(broken)).toBeNull();
+    expect(decodeReleaseCursor(toBase64Url("2025-01-01T00:00:00Z|"))).toBeNull();
   });
 });
 

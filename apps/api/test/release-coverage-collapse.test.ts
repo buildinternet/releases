@@ -8,41 +8,11 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import { sql } from "drizzle-orm";
-import {
-  createTestDb,
-  clearAllTables,
-  type TestDatabase,
-  type TestDb,
-} from "../../../tests/db-helper.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { getLatestReleasesAcross } from "../src/queries/releases.js";
 
 let testDatabase: TestDatabase;
-
-/**
- * Minimal D1Database shim around bun-sqlite (`.prepare().bind().all()`).
- * Cast to D1 at the call site — root tsconfig doesn't load @cloudflare/workers-types.
- */
-function asD1(db: TestDb): unknown {
-  const sqlite = (db as unknown as { $client: import("bun:sqlite").Database }).$client;
-  return {
-    prepare(query: string) {
-      return makeStatement(sqlite.prepare(query), []);
-    },
-  };
-}
-
-function makeStatement(stmt: import("bun:sqlite").Statement, bindings: unknown[]) {
-  return {
-    bind(...args: unknown[]) {
-      return makeStatement(stmt, [...bindings, ...args]);
-    },
-    all<T>() {
-      const results = stmt.all(...(bindings as never[])) as T[];
-      return Promise.resolve({ results, success: true, meta: {} });
-    },
-  };
-}
 
 beforeAll(() => {
   testDatabase = createTestDb();
@@ -101,7 +71,7 @@ async function seedCluster() {
 describe("getLatestReleasesAcross — coverage collapse", () => {
   it("hides coverage rows by default, keeping only the canonical release visible", async () => {
     await seedCluster();
-    const rows = await getLatestReleasesAcross(asD1(testDatabase.db) as never, { limit: 50 });
+    const rows = await getLatestReleasesAcross(testDatabase.db, { limit: 50 });
     const ids = rows.map((r) => r.id);
     expect(ids).toContain("rel_canon");
     expect(ids).not.toContain("rel_blog");
@@ -109,7 +79,7 @@ describe("getLatestReleasesAcross — coverage collapse", () => {
 
   it("returns both releases when includeCoverage is true", async () => {
     await seedCluster();
-    const rows = await getLatestReleasesAcross(asD1(testDatabase.db) as never, {
+    const rows = await getLatestReleasesAcross(testDatabase.db, {
       limit: 50,
       includeCoverage: true,
     });
@@ -120,13 +90,13 @@ describe("getLatestReleasesAcross — coverage collapse", () => {
 
   it("still collapses when scoped to a source", async () => {
     await seedCluster();
-    const scoped = await getLatestReleasesAcross(asD1(testDatabase.db) as never, {
+    const scoped = await getLatestReleasesAcross(testDatabase.db, {
       sourceId: "src_test",
       limit: 50,
     });
     expect(scoped.map((r) => r.id)).toEqual(["rel_canon"]);
 
-    const withCoverage = await getLatestReleasesAcross(asD1(testDatabase.db) as never, {
+    const withCoverage = await getLatestReleasesAcross(testDatabase.db, {
       sourceId: "src_test",
       limit: 50,
       includeCoverage: true,

@@ -1,5 +1,6 @@
+import { parseFeedCursorKey, type FeedCursorKey } from "@releases/core-internal/feed-cursor";
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
-import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
+import { fromBase64Url } from "@buildinternet/releases-core/cursor";
 import type { Kind } from "@buildinternet/releases-core/kinds";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { resolvePageWindow, type PageWindow } from "@releases/queries/pagination";
@@ -105,30 +106,26 @@ export function buildPaginationMeta(opts: {
 // ── Cursor-based pagination (feed-shaped surfaces) ────────────────────
 //
 // Append-only feeds (`get_latest_releases`) can't use page numbers — a new
-// release between page 1 and page 2 shifts the slice. Encode the last row's
-// (publishedAt, id) into an opaque token so continuation is stable.
+// release between page 1 and page 2 shifts the slice. They page on the
+// REST feeds' `publishedAt|fetchedAt|id` cursor (`buildFeedCursor` in
+// `@releases/core-internal/feed-cursor`).
 
 const DEFAULT_FEED_LIMIT = 50;
 const MAX_FEED_LIMIT = 200;
 
-export interface ReleaseCursorValue {
-  lastPublishedAt: string | null;
-  lastId: string;
-}
-
-export function encodeReleaseCursor(v: ReleaseCursorValue): string {
-  return toBase64Url(`${v.lastPublishedAt ?? ""}|${v.lastId}`);
-}
-
-export function decodeReleaseCursor(token: string): ReleaseCursorValue | null {
+/**
+ * Read a `get_latest_releases` cursor. Accepts the shared feed-cursor format
+ * and, for callers holding a token from before the switch, the old
+ * base64url `publishedAt|id` token (read as the legacy 2-part cursor).
+ * Unparseable input is null; the caller restarts at the head of the feed.
+ */
+export function decodeReleaseCursor(token: string): FeedCursorKey | null {
   if (!token) return null;
-  const raw = fromBase64Url(token);
-  if (!raw) return null;
-  const sep = raw.indexOf("|");
-  // Reject when there's no separator or the id half is empty.
-  if (sep < 0 || sep === raw.length - 1) return null;
-  const left = raw.slice(0, sep);
-  return { lastPublishedAt: left || null, lastId: raw.slice(sep + 1) };
+  if (!token.includes("|")) {
+    const legacy = fromBase64Url(token);
+    return legacy && legacy.includes("|") ? parseFeedCursorKey(legacy) : null;
+  }
+  return parseFeedCursorKey(token);
 }
 
 export function parseFeedLimit(limit: number | undefined): number {
