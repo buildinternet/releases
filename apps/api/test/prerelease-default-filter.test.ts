@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { getSourceActivityBuckets, getSourceReleasesPaginated } from "../src/queries/sources";
 import { getLatestReleasesAcross } from "../src/queries/releases";
-import { applyMigrations, makeD1Shim } from "../../../tests/db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { createTestDb } from "./setup";
 
 async function seed(db: ReturnType<typeof createTestDb>) {
@@ -114,10 +114,9 @@ describe("getSourceReleasesPaginated", () => {
   });
 });
 
-// `getLatestReleasesAcross` takes a raw D1Database (uses .prepare().bind()
-// directly), so we drop down to bun:sqlite + makeD1Shim like
-// `release-feed-future-dated.test.ts` rather than going through drizzle.
-async function seedD1(): Promise<D1Database> {
+// `getLatestReleasesAcross` reads through the drizzle query builder, so the
+// fixture hands it the bun:sqlite drizzle handle directly.
+async function seedD1() {
   const sqlite = new Database(":memory:");
   applyMigrations(sqlite);
   const db = drizzle(sqlite);
@@ -165,7 +164,7 @@ async function seedD1(): Promise<D1Database> {
       publishedAt: "2026-05-05T12:00:00.000Z",
     },
   ]);
-  return makeD1Shim(sqlite);
+  return db;
 }
 
 describe("getLatestReleasesAcross", () => {

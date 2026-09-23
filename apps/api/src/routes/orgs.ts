@@ -406,7 +406,7 @@ orgRoutes.get(
         .select({ org: organizations })
         .from(domainAliases)
         .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
-        .where(eq(domainAliases.domain, slug));
+        .where(and(eq(domainAliases.domain, slug), isNull(organizations.deletedAt)));
       if (alias) org = alias.org;
     }
     // Only treat the identifier as a candidate domain when it looks
@@ -2238,7 +2238,7 @@ orgRoutes.get(
         .select({ org: organizations })
         .from(domainAliases)
         .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
-        .where(eq(domainAliases.domain, slug));
+        .where(and(eq(domainAliases.domain, slug), isNull(organizations.deletedAt)));
       if (alias) org = alias.org;
     }
     if (!org) return respondError(c, new NotFoundError("Organization not found"));

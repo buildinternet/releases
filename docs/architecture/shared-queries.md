@@ -1,7 +1,7 @@
 # Shared read queries (`packages/queries`)
 
 Working doc and migration map for moving the MCP worker's inline reads onto the
-same query functions the API worker uses. Status: slices 1 and 2 landed;
+same query functions the API worker uses. Status: slices 1–5 landed;
 decisions D1–D9 resolved (MCP visibility now matches the API).
 
 ## Why
@@ -51,7 +51,8 @@ land in two or three places.
 | `collections`   | `findCollectionBySlug`, `countCollections`, `listCollectionsWhere`, `listCollectionMemberIds`, `getCollectionFullMembers`, `interleaveMembers`, `searchCollectionsDirect`, `findCollectionsByMemberOrgs`      | `queries/collections.ts` + `queries/search.ts` re-exports, collection routes, GraphQL | `list_collections`, `get_collection`, `get_collection_releases`, `search` |
 
 `apps/mcp/src/lib/pagination.ts` stays: it holds MCP-only rendering (markdown
-footer, `_meta.pagination`, the `get_latest_releases` cursor token, `_meta.search`).
+footer, `_meta.pagination`, `_meta.search`) and the `get_latest_releases`
+cursor decoder, which reads the shared feed cursor plus the old base64url token.
 Its parse and slice logic now delegates to the package.
 
 ## Migration map
@@ -69,7 +70,7 @@ filters or shape (API is the reference) · **mcp-only** = no API equivalent ·
 | `resolveSource` / `resolveProduct`, bare slug                                          | `/v1/lookups/{source,product}-by-slug`                                    | **done** | Enumeration is `listSourcesBySlug` / `listProductsBySlug` (D9). The API picks the oldest match, MCP throws `AmbiguousEntityError` (#1324): surface policy.                         |
 | `findOrg` (id / slug / domain / name / alias / handle UNION)                           | `orgWhere` (id / slug), `findOrgByDomain`                                 | **done** | `findOrgByAnyIdentifier` over `organizations_active` (D2). Hidden orgs still resolve.                                                                                              |
 | `resolveEntityToSourceIds` (product → source IDs, slug fan-out)                        | `?product=` expansion in `getOrgReleasesFeed`                             | drift    | MCP includes deleted and hidden sources in the ID list; downstream queries re-filter hidden but not deleted.                                                                       |
-| `get_latest_releases` main query                                                       | `getLatestReleasesAcross`, `getOrgReleasesFeed`                           | **done** | `listLatestReleases` (D3). API still runs its own raw-D1 copy; see remaining items.                                                                                                |
+| `get_latest_releases` main query                                                       | `getLatestReleasesAcross`, `getOrgReleasesFeed`                           | **done** | `listLatestReleases` (D3). `getLatestReleasesAcross` is now a snake_case wrapper over it.                                                                                          |
 | `get_latest_releases` org → source IDs                                                 | `LatestReleasesFilter.orgId` (`s.org_id = ?`)                             | **done** | Filters `s.org_id` in SQL, like the API.                                                                                                                                           |
 | `list_organizations`                                                                   | `getOrgsWithStats` + `countOrgsForList`                                   | **done** | `listOrgDirectoryPage` (D4). Broader `query` match and `platform` filter stay MCP-only.                                                                                            |
 | `get_organization` (accounts, tags, sources, products, aliases, overview, collections) | `GET /v1/orgs/:slug` handler (inline in `routes/orgs.ts`)                 | drift    | Products: MCP uses `products` + `EXISTS sources_visible`, API `products_active` + same EXISTS (deleted products leak on MCP). Org via `findOrgByAnyIdentifier`.                    |
@@ -129,15 +130,24 @@ ordering difference. All nine now match the API;
   soft-deleted org no longer resolves by bare slug. The ambiguity policy
   stays in MCP.
 
+Latest-releases slice (no D-number: the API is the side that changed, and its
+output is the same):
+
+- `GET /v1/releases/latest` and MCP `get_latest_releases` both run
+  `listLatestReleases`. The order is dated first, then `published_at`,
+  `fetched_at`, `id` descending, as in every REST feed.
+- MCP pages on the REST feed cursor (`publishedAt|fetchedAt|id`,
+  `buildFeedCursor`). Old base64url `publishedAt|id` tokens still decode as the
+  legacy 2-part cursor. The old MCP keyset re-admitted dated rows once paging
+  reached undated releases; the shared keyset keeps the undated tail closed.
+- `parseFeedCursorKey` (`core-internal/feed-cursor`) is the one cursor parser;
+  `feedCursorSql`, the API's raw-D1 `parseFeedCursor`, and
+  `listLatestReleases` all read through it.
+- `GET /v1/orgs/:slug` and `/orgs/:slug/sparklines` no longer resolve a
+  soft-deleted org through a domain alias.
+
 Remaining differences, not yet decided:
 
-- `get_latest_releases` cursor token differs from
-  `core-internal/feed-cursor`, and its ORDER BY lacks the API's `fetched_at`
-  tiebreak. The API's `getLatestReleasesAcross` (raw D1, extra columns) has not
-  moved onto `listLatestReleases`.
-- `GET /v1/orgs/:slug` resolves a domain alias against the base
-  `organizations` table, so a deleted org can still resolve by alias there.
-  MCP now excludes it.
 - `resolveEntityToSourceIds` and the `search` product scope still list deleted
   and hidden source IDs; downstream reads re-filter them.
 - `get_organization` products, `search` org candidates, and
@@ -145,6 +155,5 @@ Remaining differences, not yet decided:
 
 ## Next slices
 
-1. One latest-releases query and one cursor format for both workers.
-2. Org directory stats, `get_organization` products, `search` org candidates,
+1. Org directory stats, `get_organization` products, `search` org candidates,
    source detail.

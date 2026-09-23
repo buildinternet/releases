@@ -4,9 +4,9 @@
  * typed tool arguments) and renders its own envelope; the clamp-and-offset
  * math lives here so the two can't drift.
  *
- * Cursor pagination is not here yet: the REST feeds use
- * `@releases/core-internal/feed-cursor` and MCP `get_latest_releases` still has
- * its own token format. See docs/architecture/shared-queries.md.
+ * Feed cursors live in `@releases/core-internal/feed-cursor`
+ * (`buildFeedCursor` / `parseFeedCursorKey`), shared by the REST feeds and MCP
+ * `get_latest_releases`.
  */
 
 export interface PageWindow {

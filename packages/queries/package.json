@@ -18,6 +18,7 @@
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
+    "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "drizzle-orm": "^0.45.2"
   }

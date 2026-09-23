@@ -17,7 +17,7 @@ import {
   resolveR2Url,
 } from "@releases/rendering/media-url.js";
 import type { CollectionReleaseItem, MediaItem } from "@buildinternet/releases-api-types";
-import type { AggregateReleaseRow } from "@releases/core-internal/feed-cursor";
+import { parseFeedCursorKey, type AggregateReleaseRow } from "@releases/core-internal/feed-cursor";
 import type { createDb } from "./db.js";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
 
@@ -439,12 +439,12 @@ export function parseFeedCursor(cursorParam: string | null): {
   cursorWhere: string;
   cursorBindings: string[];
 } {
-  if (!cursorParam) return { cursorWhere: "", cursorBindings: [] };
-  const parts = cursorParam.split("|");
+  const key = parseFeedCursorKey(cursorParam);
+  if (!key) return { cursorWhere: "", cursorBindings: [] };
+  const { publishedAt: pub, fetchedAt: fet, id } = key;
 
-  if (parts.length === 3) {
-    const [pub, fet, id] = parts;
-    if (pub && fet && id) {
+  if (fet && id) {
+    if (pub) {
       return {
         cursorWhere:
           "AND (r.published_at IS NULL OR " +
@@ -454,19 +454,16 @@ export function parseFeedCursor(cursorParam: string | null): {
         cursorBindings: [pub, pub, fet, pub, fet, id],
       };
     }
-    if (!pub && fet && id) {
-      return {
-        cursorWhere:
-          "AND (r.published_at IS NULL AND " +
-          "((r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?)))",
-        cursorBindings: [fet, fet, id],
-      };
-    }
+    return {
+      cursorWhere:
+        "AND (r.published_at IS NULL AND " +
+        "((r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?)))",
+      cursorBindings: [fet, fet, id],
+    };
   }
 
-  if (parts.length === 2) {
-    const [pub, id] = parts;
-    if (pub && id) {
+  if (id) {
+    if (pub) {
       return {
         cursorWhere:
           "AND (r.published_at IS NULL OR " +
@@ -476,22 +473,16 @@ export function parseFeedCursor(cursorParam: string | null): {
     }
     // Legacy `|id` shape — no fetched_at to tie-break on; only reachable
     // from in-flight pre-#806 cursors.
-    if (!pub && id) {
-      return {
-        cursorWhere: "AND (r.published_at IS NULL AND r.id < ?)",
-        cursorBindings: [id],
-      };
-    }
-  }
-
-  if (parts.length === 1 && parts[0]) {
     return {
-      cursorWhere: "AND (r.published_at IS NULL OR r.published_at < ?)",
-      cursorBindings: [parts[0]],
+      cursorWhere: "AND (r.published_at IS NULL AND r.id < ?)",
+      cursorBindings: [id],
     };
   }
 
-  return { cursorWhere: "", cursorBindings: [] };
+  return {
+    cursorWhere: "AND (r.published_at IS NULL OR r.published_at < ?)",
+    cursorBindings: [pub!],
+  };
 }
 
 export function heatmapDateRange(): { from: string; to: string; toExclusive: string } {

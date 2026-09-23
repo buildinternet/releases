@@ -5,6 +5,7 @@ import { type Kind, isValidKind } from "@buildinternet/releases-core/kinds";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
+import { listLatestReleases } from "@releases/queries/releases";
 import type { AnyDb } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
 import { parseReleaseMedia } from "../utils.js";
@@ -73,96 +74,55 @@ export interface LatestReleasesFilter {
   limit: number;
 }
 
+/**
+ * `GET /v1/releases/latest` rows. The query is `listLatestReleases` from
+ * `@releases/queries/releases` (shared with MCP `get_latest_releases`); this
+ * wrapper keeps the snake_case row shape the REST mappers read.
+ */
 export async function getLatestReleasesAcross(
-  d1: D1Database,
+  db: AnyDb,
   f: LatestReleasesFilter,
 ): Promise<LatestReleaseRow[]> {
-  const releasesTable = f.includeCoverage ? "releases" : "releases_visible";
-  const wheres: string[] = [
-    "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
-    "(o.is_hidden = 0 OR o.is_hidden IS NULL)",
-    // Drop releases whose org is soft-deleted. A tombstoned org keeps its row
-    // (slug mangled to "<slug>--<id>") and its sources are normally tombstoned
-    // alongside it, but the two can diverge — the sweep-tombstones cron flags
-    // orgs that still have active children. `sources_active` already sheds
-    // tombstoned sources; this guards the org side. On a LEFT-join miss
-    // (genuine orphan source, no org row) `o.deleted_at` is NULL, so orphans
-    // still pass with a NULL org_slug exactly as before.
-    "(o.deleted_at IS NULL)",
-    "(r.suppressed IS NULL OR r.suppressed = 0)",
-  ];
-  // Matches the source-feed, org-feed, and MCP `get_latest_releases` defaults
-  // so every read surface returns the same canonical-only shape unless the
-  // caller opts in via `?include_prereleases=true`.
-  if (!f.includePrereleases) {
-    wheres.push("(r.prerelease IS NULL OR r.prerelease = 0)");
-  }
-  const bindings: (string | number)[] = [];
-
-  if (f.sourceId) {
-    wheres.push("s.id = ?");
-    bindings.push(f.sourceId);
-  } else if (f.orgId) {
-    wheres.push("s.org_id = ?");
-    bindings.push(f.orgId);
-  }
-
-  if (f.excludeSourceTypes && f.excludeSourceTypes.length > 0) {
-    const placeholders = f.excludeSourceTypes.map(() => "?").join(", ");
-    wheres.push(`s.type NOT IN (${placeholders})`);
-    bindings.push(...f.excludeSourceTypes);
-  }
-
-  // Time window on published_at — string comparison is correct for the ISO
-  // text column, and `>=`/`<=` naturally drop NULL-dated rows.
-  if (f.since) {
-    wheres.push("r.published_at >= ?");
-    bindings.push(f.since);
-  }
-  if (f.until) {
-    wheres.push("r.published_at <= ?");
-    bindings.push(f.until);
-  }
-  if (f.minImportance !== undefined) {
-    wheres.push("r.importance >= ?");
-    bindings.push(f.minImportance);
-  }
-
-  const whereSql = wheres.join(" AND ");
-  bindings.push(f.limit);
-
-  const stmt = d1
-    .prepare(
-      `
-    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking,
-           r.importance, r.type,
-           r.published_at, r.url, r.media,
-           r.content_chars, r.content_tokens,
-           s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
-           (SELECT handle FROM org_accounts
-              WHERE org_id = o.id AND platform = 'github'
-              ORDER BY created_at, id LIMIT 1) AS org_github_handle,
-           p.slug AS product_slug, p.name AS product_name,
-           s.kind AS source_kind, p.kind AS product_kind,
-           ${COVERAGE_COUNT_EXPR} AS coverage_count
-    FROM ${releasesTable} r
-    INNER JOIN sources_active s ON s.id = r.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
-    LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE ${whereSql}
-    ORDER BY
-      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
-      r.published_at DESC,
-      r.fetched_at DESC,
-      r.id DESC
-    LIMIT ?
-  `,
-    )
-    .bind(...bindings);
-
-  const { results } = await stmt.all<LatestReleaseRow>();
-  return results;
+  const rows = await listLatestReleases(db, {
+    sourceIds: f.sourceId ? [f.sourceId] : undefined,
+    orgId: f.sourceId ? undefined : f.orgId,
+    includeCoverage: f.includeCoverage,
+    includePrereleases: f.includePrereleases,
+    excludeSourceTypes: f.excludeSourceTypes,
+    since: f.since,
+    until: f.until,
+    minImportance: f.minImportance,
+    limit: f.limit,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    version: r.version,
+    title: r.title,
+    summary: r.summary,
+    title_generated: r.titleGenerated,
+    title_short: r.titleShort,
+    breaking: r.breaking,
+    importance: r.importance,
+    published_at: r.publishedAt,
+    fetched_at: r.fetchedAt,
+    url: r.url,
+    media: r.media,
+    source_slug: r.sourceSlug,
+    source_name: r.sourceName,
+    source_type: r.sourceType,
+    org_slug: r.orgSlug,
+    org_name: r.orgName,
+    org_avatar_url: r.orgAvatarUrl,
+    org_github_handle: r.orgGithubHandle,
+    product_slug: r.productSlug,
+    product_name: r.productName,
+    source_kind: r.sourceKind,
+    product_kind: r.productKind,
+    type: r.type,
+    coverage_count: r.coverageCount,
+    content_chars: r.contentChars,
+    content_tokens: r.contentTokens,
+  }));
 }
 
 // `releaseWebBase` (the WEB_BASE_URL → absolute-origin resolver) lives in

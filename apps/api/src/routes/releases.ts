@@ -313,7 +313,7 @@ releaseRoutes.get(
     const waitUntil = c.executionCtx?.waitUntil.bind(c.executionCtx);
 
     const compute = async () => {
-      const rows = await getLatestReleasesAcross(c.env.DB, {
+      const rows = await getLatestReleasesAcross(db, {
         sourceId,
         orgId,
         includeCoverage,

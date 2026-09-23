@@ -83,6 +83,43 @@ export function buildFeedCursor(last: {
 }
 
 /**
+ * Parsed sort key of a `publishedAt|fetchedAt|id` feed cursor. Every renderer
+ * of the keyset predicate (`feedCursorSql` here, the API's raw-D1
+ * `parseFeedCursor`, `listLatestReleases` in `@releases/queries`) reads the
+ * cursor through this one parser.
+ *
+ * Accepted shapes (anything else is null, and callers restart at the head):
+ * - `pub|fet|id` / `|fet|id` — the current 3-part format.
+ * - `pub|id` / `|id` — legacy 2-part (pre-#806), no `fetched_at` tie-break.
+ * - `pub` — legacy 1-part.
+ */
+export interface FeedCursorKey {
+  publishedAt: string | null;
+  fetchedAt: string | null;
+  id: string | null;
+}
+
+export function parseFeedCursorKey(cursorParam: string | null | undefined): FeedCursorKey | null {
+  if (!cursorParam) return null;
+  const parts = cursorParam.split("|");
+
+  if (parts.length === 3) {
+    const [pub, fet, id] = parts;
+    if (fet && id) return { publishedAt: pub || null, fetchedAt: fet, id };
+    return null;
+  }
+  if (parts.length === 2) {
+    const [pub, id] = parts;
+    if (id) return { publishedAt: pub || null, fetchedAt: null, id };
+    return null;
+  }
+  if (parts.length === 1 && parts[0]) {
+    return { publishedAt: parts[0], fetchedAt: null, id: null };
+  }
+  return null;
+}
+
+/**
  * Drizzle-flavored cursor parser scoped to alias `r` on the releases table.
  *
  * The ORDER BY puts non-null `published_at` rows before nulls (CASE on
@@ -99,32 +136,22 @@ export function buildFeedCursor(last: {
  * tie-break-on-id shape).
  */
 export function feedCursorSql(cursorParam: string | null): SQL {
-  if (!cursorParam) return sql``;
-  const parts = cursorParam.split("|");
+  const key = parseFeedCursorKey(cursorParam);
+  if (!key) return sql``;
+  const { publishedAt: pub, fetchedAt: fet, id } = key;
 
-  if (parts.length === 3) {
-    const [pub, fet, id] = parts;
-    if (pub && fet && id) {
-      return sql`AND (r.published_at IS NULL OR (r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`;
-    }
-    if (!pub && fet && id) {
-      return sql`AND (r.published_at IS NULL AND ((r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id})))`;
-    }
+  if (fet && id) {
+    return pub
+      ? sql`AND (r.published_at IS NULL OR (r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`
+      : sql`AND (r.published_at IS NULL AND ((r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id})))`;
   }
-
-  if (parts.length === 2) {
-    const [pub, id] = parts;
-    if (pub && id) {
-      return sql`AND (r.published_at IS NULL OR (r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`;
-    }
+  if (id) {
     // Legacy `|id` shape — no fetched_at to tie-break on, so accept any
     // null-published row whose id is smaller. Slightly weaker than the
     // 3-part shape; only reachable from in-flight pre-#806 cursors.
-    if (!pub && id) return sql`AND (r.published_at IS NULL AND r.id < ${id})`;
+    return pub
+      ? sql`AND (r.published_at IS NULL OR (r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`
+      : sql`AND (r.published_at IS NULL AND r.id < ${id})`;
   }
-
-  if (parts.length === 1 && parts[0]) {
-    return sql`AND (r.published_at IS NULL OR r.published_at < ${parts[0]})`;
-  }
-  return sql``;
+  return sql`AND (r.published_at IS NULL OR r.published_at < ${pub})`;
 }
