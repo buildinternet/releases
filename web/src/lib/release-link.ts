@@ -1,7 +1,14 @@
+import { EXTERNAL_UGC_REL } from "./sanitize";
+import { isHttpUrl } from "@releases/rendering/digest-sections";
+
 /** Minimal shape needed to pick a release row's default link target. */
 export interface ReleaseLinkInput {
   id?: string | null;
   url?: string | null;
+  /** Internal `/release/*` path (slugged), when the caller's data has it —
+   *  preferred over the bare `/release/<id>` fallback so the internal link
+   *  matches the canonical slugged URL. */
+  path?: string | null;
 }
 
 export interface ReleaseLinkTarget {
@@ -21,12 +28,40 @@ export interface ReleaseLinkTarget {
  * the default place a click lands. This also strips the main internal-link
  * paths crawlers used to discover tens of thousands of `/release/` URLs.
  *
- * Fallback order: upstream http(s) `url` → internal `/release/<id>` → null
- * (row renders an unlinked heading).
+ * Fallback order: upstream http(s) `url` → the slugged `/release/…` `path`
+ * when provided → bare `/release/<id>` → null (row renders an unlinked
+ * heading).
  */
 export function releaseLinkTarget(release: ReleaseLinkInput): ReleaseLinkTarget | null {
   const url = (release.url ?? "").trim();
-  if (/^https?:\/\//i.test(url)) return { href: url, external: true };
+  if (isHttpUrl(url)) return { href: url, external: true };
+  const path = (release.path ?? "").trim();
+  if (path.startsWith("/release/")) return { href: path, external: false };
   if (release.id) return { href: `/release/${release.id}`, external: false };
   return null;
 }
+
+/** Anchor props for a release link: {@link releaseLinkTarget}'s destination plus
+ *  `data-release-id`, so an upstream link still records which registry release
+ *  it stands for (analytics, scrapers, our own scripts). The data attribute is
+ *  inert for navigation and SEO. */
+export type ReleaseLinkProps = {
+  href: string;
+  target?: "_blank";
+  rel?: string;
+  "data-release-id"?: string;
+};
+
+export function releaseLinkProps(r: ReleaseLinkInput & { id: string }): ReleaseLinkProps;
+export function releaseLinkProps(r: ReleaseLinkInput): ReleaseLinkProps | null;
+export function releaseLinkProps(release: ReleaseLinkInput): ReleaseLinkProps | null {
+  const link = releaseLinkTarget(release);
+  if (!link) return null;
+  return {
+    href: link.href,
+    ...(link.external ? { target: "_blank" as const, rel: EXTERNAL_UGC_REL } : {}),
+    ...(release.id ? { "data-release-id": release.id } : {}),
+  };
+}
+
+export const isExternalReleaseLink = (p: ReleaseLinkProps) => p.target === "_blank";

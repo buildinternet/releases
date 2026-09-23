@@ -1,13 +1,14 @@
-import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { api, type RelatedCacheMode, type RelatedReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { clamp, stripMarkdown } from "@/lib/og-helpers";
 import { appRowInfoFromWire } from "@/lib/app-source";
+import { releaseLinkProps, type ReleaseLinkProps } from "@/lib/release-link";
 import { ImportanceMarker } from "./importance-marker";
 import { AppStoreIcon } from "./app-store-icon";
 import { AppPlatformCue } from "./app-platform-cue";
 import { ReleaseThumb } from "./release-thumb";
+import { ReleaseLink } from "./release-link";
 
 interface RelatedRailProps {
   anchorReleaseId: string | null;
@@ -128,7 +129,9 @@ interface ReleaseCardProps {
 // Exported for render tests (`related-rail.test.tsx`); the async `RelatedRail`
 // wrapper is not directly renderable in a unit test.
 export function ReleaseCard({ item }: ReleaseCardProps) {
-  const href = `/release/${item.id}`;
+  // Default click target: the upstream source URL when the release has one,
+  // the on-site /release/{id} page only as fallback (see release-link.ts).
+  const linkProps = releaseLinkProps(item);
   // Prefer the product name over the bare source/feed name when the release's
   // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
   const trailingName = item.source.productName ?? item.source.name;
@@ -136,7 +139,7 @@ export function ReleaseCard({ item }: ReleaseCardProps) {
   // no version / body / thumbnail — those carry little meaning for a routine app
   // update. `appStore` is only set for `appstore` sources. #mobile-app-release-cards
   const app = appRowInfoFromWire(item.source.appStore, trailingName);
-  if (app) return <AppReleaseCard item={item} href={href} app={app} />;
+  if (app) return <AppReleaseCard item={item} linkProps={linkProps} app={app} />;
 
   // Content-first: lead with the release title and demote the version to the
   // subtitle. Fall back to an AI-cleaned short title only when there's no
@@ -147,42 +150,45 @@ export function ReleaseCard({ item }: ReleaseCardProps) {
     ? item.version
     : item.titleShort?.trim() || item.titleGenerated?.trim() || null;
   const preview = releasePreview(item, subtitleText);
+  const cardContent = (
+    <>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <span className={HEADLINE_CLASS}>{heading}</span>
+          {item.publishedAt && (
+            <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
+              {formatDate(item.publishedAt)}
+            </span>
+          )}
+        </div>
+        {subtitleText && (
+          <div className="text-[12px] text-stone-600 dark:text-stone-400 line-clamp-1 mt-0.5">
+            {subtitleText}
+          </div>
+        )}
+        {preview && (
+          <p className="text-[12px] text-stone-500 dark:text-stone-400 mt-1 line-clamp-2 text-pretty">
+            {preview}
+          </p>
+        )}
+        <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
+          {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
+          <span className="line-clamp-1">{attributionLine(item.source.orgName, trailingName)}</span>
+        </div>
+      </div>
+      {item.thumbnail && (
+        <ReleaseThumb src={item.thumbnail.url} alt={item.thumbnail.alt ?? ""} size="md" />
+      )}
+    </>
+  );
   return (
     // Marker sits outside the card link so the HoverCard trigger isn't nested
     // inside an <a> (same rule as feed cards: flame sibling of title link).
     <div className={`${CARD_CLASS} items-start`}>
       <ImportanceMarker importance={item.importance} className="mt-0.5" />
-      <Link href={href} className="flex flex-1 gap-3 min-w-0 h-full">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <span className={HEADLINE_CLASS}>{heading}</span>
-            {item.publishedAt && (
-              <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
-                {formatDate(item.publishedAt)}
-              </span>
-            )}
-          </div>
-          {subtitleText && (
-            <div className="text-[12px] text-stone-600 dark:text-stone-400 line-clamp-1 mt-0.5">
-              {subtitleText}
-            </div>
-          )}
-          {preview && (
-            <p className="text-[12px] text-stone-500 dark:text-stone-400 mt-1 line-clamp-2 text-pretty">
-              {preview}
-            </p>
-          )}
-          <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
-            {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
-            <span className="line-clamp-1">
-              {attributionLine(item.source.orgName, trailingName)}
-            </span>
-          </div>
-        </div>
-        {item.thumbnail && (
-          <ReleaseThumb src={item.thumbnail.url} alt={item.thumbnail.alt ?? ""} size="md" />
-        )}
-      </Link>
+      <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full">
+        {cardContent}
+      </ReleaseLink>
     </div>
   );
 }
@@ -196,38 +202,43 @@ export function ReleaseCard({ item }: ReleaseCardProps) {
  */
 function AppReleaseCard({
   item,
-  href,
+  linkProps,
   app,
 }: {
   item: RelatedReleaseItem;
-  href: string;
+  linkProps: ReleaseLinkProps;
   app: { label: "iOS" | "macOS"; iconUrl: string | null; appName: string };
 }) {
+  const cardContent = (
+    <>
+      <AppStoreIcon iconUrl={app.iconUrl} appName={app.appName} size={40} className="mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <span className={HEADLINE_CLASS}>{app.appName}</span>
+          {item.publishedAt && (
+            <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
+              {formatDate(item.publishedAt)}
+            </span>
+          )}
+        </div>
+        <div className="text-[12px] mt-0.5">
+          <AppPlatformCue label={app.label} />
+        </div>
+        {item.source.orgName && (
+          <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
+            {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
+            <span className="line-clamp-1">{item.source.orgName}</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
   return (
     <div className={`${CARD_CLASS} items-start`}>
       <ImportanceMarker importance={item.importance} className="mt-0.5" />
-      <Link href={href} className="flex flex-1 gap-3 min-w-0 h-full items-start">
-        <AppStoreIcon iconUrl={app.iconUrl} appName={app.appName} size={40} className="mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <span className={HEADLINE_CLASS}>{app.appName}</span>
-            {item.publishedAt && (
-              <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums mt-px">
-                {formatDate(item.publishedAt)}
-              </span>
-            )}
-          </div>
-          <div className="text-[12px] mt-0.5">
-            <AppPlatformCue label={app.label} />
-          </div>
-          {item.source.orgName && (
-            <div className="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-stone-500 mt-1 min-w-0">
-              {item.source.orgAvatarUrl && <OrgAvatar url={item.source.orgAvatarUrl} />}
-              <span className="line-clamp-1">{item.source.orgName}</span>
-            </div>
-          )}
-        </div>
-      </Link>
+      <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full items-start">
+        {cardContent}
+      </ReleaseLink>
     </div>
   );
 }

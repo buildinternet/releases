@@ -62,3 +62,20 @@ describe("RelatedRail ReleaseCard — mobile-app variant", () => {
     expect(html).not.toContain("iOS app");
   });
 });
+
+describe("RelatedRail ReleaseCard — link target", () => {
+  it("links upstream in a new tab when the item has a url", () => {
+    const html = renderToStaticMarkup(
+      <ReleaseCard item={{ ...feedItem, url: "https://example.com/post" }} />,
+    );
+    expect(html).toContain('href="https://example.com/post"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain(`data-release-id="${feedItem.id}"`);
+  });
+
+  it("falls back to the release page without a url", () => {
+    const html = renderToStaticMarkup(<ReleaseCard item={{ ...feedItem, url: null }} />);
+    expect(html).toContain(`href="/release/${feedItem.id}"`);
+    expect(html).toContain(`data-release-id="${feedItem.id}"`);
+  });
+});

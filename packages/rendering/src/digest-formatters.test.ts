@@ -86,6 +86,33 @@ describe("collectionDigestToMarkdown", () => {
     expect(md).toInclude(`[Responses API](${BASE}/release/rel_a-responses-api)`);
     expect(md).toInclude(`canonical: ${BASE}/collections/frontier-ai-labs/digest/2026-07-06`);
   });
+
+  it("body links and the covered list point upstream when a url exists", () => {
+    const coveredTitle = "Responses API";
+    const upstreamId = "rel_012345678901234567890";
+    const digestWithUrls = detail({
+      body: `### OpenAI\n\nShipped the Responses API — see [x](/release/${upstreamId}-slug) for details.`,
+      releases: [
+        {
+          id: upstreamId,
+          title: coveredTitle,
+          path: `/release/${upstreamId}-responses-api`,
+          url: "https://example.com/up",
+          org: { slug: "openai", name: "OpenAI" },
+        },
+        {
+          id: "rel_b",
+          title: "Claude Code update",
+          path: "/release/rel_b-claude-code",
+          org: { slug: "anthropic", name: "Anthropic" },
+        },
+      ],
+    });
+    const md = collectionDigestToMarkdown(COLLECTION, digestWithUrls, { baseUrl: BASE });
+    expect(md).toContain("[x](https://example.com/up)");
+    expect(md).toContain("- [" + coveredTitle + "](https://example.com/up)");
+    expect(md).not.toContain("/release/" + upstreamId);
+  });
 });
 
 describe("collectionDigestsToAtom", () => {

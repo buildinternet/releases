@@ -27,7 +27,8 @@ import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
 import { PlayBadge } from "./play-badge";
 import { useLightboxImage, type LightboxEntry } from "./lightbox";
-import { releaseLinkTarget } from "@/lib/release-link";
+import { releaseLinkProps, isExternalReleaseLink } from "@/lib/release-link";
+import { ReleaseLink } from "./release-link";
 
 /** Release context shared by every previewable image in one feed row. */
 type RowMeta = Pick<
@@ -215,34 +216,21 @@ export function ReleaseListItem({
   // Default click target: the upstream source URL when the release has one,
   // the on-site /release/{id} page only as fallback (see release-link.ts).
   // The internal page stays reachable via "Read more →" and the lightbox.
-  const linkTarget = releaseLinkTarget(release);
+  const linkProps = releaseLinkProps(release);
 
   // Heading link shared by the App Store / video / standard row layouts.
   // stopPropagation keeps a heading click from also toggling the expandable
   // row wrappers (App Store / video rows).
   const headingLink = (children: ReactNode) => {
-    if (!linkTarget) return children;
-    if (linkTarget.external) {
-      return (
-        <a
-          href={linkTarget.href}
-          target="_blank"
-          rel={EXTERNAL_UGC_REL}
-          onClick={(e) => e.stopPropagation()}
-          className="hover:underline underline-offset-2"
-        >
-          {children}
-        </a>
-      );
-    }
+    if (!linkProps) return children;
     return (
-      <Link
-        href={linkTarget.href}
+      <ReleaseLink
+        linkProps={linkProps}
         onClick={(e) => e.stopPropagation()}
         className="hover:underline underline-offset-2"
       >
         {children}
-      </Link>
+      </ReleaseLink>
     );
   };
 
@@ -486,7 +474,7 @@ export function ReleaseListItem({
             <div className="flex items-baseline gap-1.5 mb-1">
               <ImportanceMarker importance={release.importance} />
               <h2 id={titleId} className={headingClasses}>
-                {linkTarget && !linkTarget.external && release.id ? (
+                {linkProps && !isExternalReleaseLink(linkProps) && release.id ? (
                   // View transition only makes sense for in-app navigation to
                   // the detail page; external titles open the source directly.
                   <ViewTransition name={`rel-${release.id}`} default="none">

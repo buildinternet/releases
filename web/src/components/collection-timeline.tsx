@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Fragment, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { etWeekStart, isDateKey } from "@buildinternet/releases-core/dates";
 import { OrgAvatar } from "./org-avatar";
 import { SourceTypeIcon } from "./source-type-icon";
 import { ClusterChip } from "./cluster-chip";
@@ -11,7 +12,10 @@ import {
   type CollectionMember,
   type CollectionMemberOrg,
   type CollectionDailySummary,
+  type CollectionWeeklyDigestListItem,
 } from "@/lib/api";
+import { weekBoundaries } from "@/lib/timeline-weeks";
+import { weekDividerLabel } from "@/lib/digest-format";
 import { type CollectionReleaseItemView } from "@/lib/release-view";
 import { ReleaseTitleLink } from "@/components/release-title-link";
 import { memberKey } from "@/lib/member-key";
@@ -19,6 +23,7 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
 import { Caret } from "./caret";
+import { DigestIcon } from "./digest-icons";
 import {
   FilterMenuCheckbox,
   FilterMenuRadio,
@@ -57,6 +62,36 @@ interface CollectionTimelineProps {
    * page omits it and the timeline renders fine without it.
    */
   summaryByDate?: Map<string, CollectionDailySummary>;
+  /**
+   * Weekly-digest data for the feed's week dividers and inline digest cards.
+   * Only the collection page passes this — when present, the feed renders a
+   * week divider before the first loaded day of each ET week, plus a digest
+   * card for weeks that have one. The category page omits it and the
+   * timeline renders exactly as before (no dividers, no digest cards). The
+   * four fields are always passed together or all omitted, so they're
+   * bundled into one prop rather than four independently-optional ones.
+   */
+  digestFeed?: {
+    /** Newest-first weekly digests keyed by their ET Monday `weekStart`. */
+    byWeek: Map<string, CollectionWeeklyDigestListItem>;
+    /**
+     * The `weekStart` already shown in full by the page's `LatestDigestHero`
+     * above the feed — that week's divider gets a compact one-line link
+     * instead of the full inline card, so the issue isn't rendered twice.
+     */
+    heroWeekStart: string | null;
+    /**
+     * Base path digest links append `/<weekStart>` to, e.g.
+     * `/collections/<slug>/digest`.
+     */
+    basePath: string;
+    /**
+     * ET Monday `weekStart` for "now" — computed once on the server page
+     * (not with `new Date()` here) so the "in progress" divider label agrees
+     * between SSR and hydration even right at a week rollover.
+     */
+    currentWeekStart: string | null;
+  };
 }
 
 function memberAvatar(m: CollectionMember) {
@@ -258,6 +293,7 @@ export function CollectionTimeline({
   initialCursor,
   members,
   summaryByDate,
+  digestFeed,
 }: CollectionTimelineProps) {
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
@@ -419,6 +455,23 @@ export function CollectionTimeline({
 
   const days = useMemo(() => groupByDay(releases), [releases]);
 
+  // First (newest) loaded day of each ET week → that week's Monday. Drives
+  // where the week dividers land; empty (and inert) on the category page,
+  // which never passes `digestFeed`.
+  const weekBoundariesMap = useMemo(() => weekBoundaries(days.map((d) => d.key)), [days]);
+  // Release count per ET week, summed over the currently loaded days only —
+  // the divider's count grows as more pages load, same as everything else in
+  // this infinite-scroll feed.
+  const weekReleaseCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const day of days) {
+      if (!isDateKey(day.key)) continue;
+      const week = etWeekStart(day.key);
+      counts.set(week, (counts.get(week) ?? 0) + day.releases.length);
+    }
+    return counts;
+  }, [days]);
+
   // Quiet chip chrome — one height, one weight. Active = filled stone (not a
   // second accent "All" competing with the type menu).
   const chipBase =
@@ -519,14 +572,35 @@ export function CollectionTimeline({
         </div>
       ) : (
         <div className="mt-2">
-          {days.map((day) => (
-            <DaySection
-              key={day.key}
-              day={day}
-              orgsBySlug={orgsBySlug}
-              summary={summaryByDate?.get(day.key) ?? null}
-            />
-          ))}
+          {days.map((day) => {
+            // Only set when this day opens a new ET week AND the page passed
+            // a digest feed to place — the category page passes none, so this
+            // (and everything below it) is a no-op there.
+            const weekStart = digestFeed ? weekBoundariesMap.get(day.key) : undefined;
+            const digest = digestFeed && weekStart ? digestFeed.byWeek.get(weekStart) : undefined;
+            return (
+              <Fragment key={day.key}>
+                {digestFeed && weekStart && (
+                  <WeekDivider
+                    weekStart={weekStart}
+                    releaseCount={weekReleaseCounts.get(weekStart) ?? 0}
+                    inProgress={weekStart === digestFeed.currentWeekStart}
+                  />
+                )}
+                {digestFeed && digest && weekStart === digestFeed.heroWeekStart && (
+                  <CompactDigestLink digest={digest} basePath={digestFeed.basePath} />
+                )}
+                {digestFeed && digest && weekStart !== digestFeed.heroWeekStart && (
+                  <InlineDigestCard digest={digest} basePath={digestFeed.basePath} />
+                )}
+                <DaySection
+                  day={day}
+                  orgsBySlug={orgsBySlug}
+                  summary={summaryByDate?.get(day.key) ?? null}
+                />
+              </Fragment>
+            );
+          })}
         </div>
       )}
 
@@ -721,6 +795,116 @@ function DaySection({
         ))}
       </div>
     </section>
+  );
+}
+
+// ── Week dividers + inline digests ──────────────────────────────
+//
+// Only rendered when the collection page passes `digestFeed` (see
+// `CollectionTimeline`'s render loop above) — the category page never does,
+// so none of this is reachable there. `.org-surface` tokens throughout,
+// matching `Collection-Hero.dc.html`'s feed half; the rest of this file
+// intentionally stays on stone Tailwind utilities (pre-existing timeline
+// chrome), but these three components sit only inside the collection page's
+// `.org-surface` wrapper, so the CSS variables always resolve.
+
+/** Marks the start of an ET week in the feed: a short mono label, the
+ *  release count for that week (or "in progress · digest Monday" for the
+ *  current, not-yet-digested week), and a rule filling the rest of the row. */
+export function WeekDivider({
+  weekStart,
+  releaseCount,
+  inProgress,
+}: {
+  weekStart: string;
+  releaseCount: number;
+  inProgress: boolean;
+}) {
+  return (
+    <div className="mt-9 flex items-center gap-3 first:mt-0">
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[var(--fg-2)] whitespace-nowrap">
+        {weekDividerLabel(weekStart)}
+      </span>
+      <span className="font-mono text-[11px] text-[var(--fg-3)] whitespace-nowrap">
+        {inProgress
+          ? "in progress · digest Monday"
+          : `${releaseCount} ${pluralReleases(releaseCount)}`}
+      </span>
+      <span aria-hidden className="h-px flex-1 bg-[var(--line)]" />
+    </div>
+  );
+}
+
+// Shared card tint for the two digest treatments below — a faint accent wash
+// so the digest reads as an editorial insert, not just another release card.
+const digestCardTint =
+  "bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] border-[color-mix(in_srgb,var(--accent)_22%,transparent)]";
+
+/** The hero's own week: a compact one-line link so the issue (already shown
+ *  in full by `LatestDigestHero` above the feed) isn't repeated in the
+ *  timeline. */
+export function CompactDigestLink({
+  digest,
+  basePath,
+}: {
+  digest: CollectionWeeklyDigestListItem;
+  basePath: string;
+}) {
+  return (
+    <Link
+      href={`${basePath}/${digest.weekStart}`}
+      className={`mt-3.5 flex h-12 items-center gap-3 rounded-[10px] border px-[18px] text-[var(--fg)] no-underline ${digestCardTint}`}
+    >
+      <DigestIcon className="shrink-0 text-[var(--accent)]" />
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--accent)] whitespace-nowrap">
+        Digest
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{digest.title}</span>
+      <span className="shrink-0 text-[13px] text-[var(--accent)]">Read →</span>
+    </Link>
+  );
+}
+
+/** A week with a digest, not the hero's: the full inline card — eyebrow,
+ *  title link, intro, "Read the digest →". List items carry no sections
+ *  (only `id`/`weekStart`/`title`/`intro`/`releaseCount`/`generatedAt`), so
+ *  unlike `LatestDigestHero`'s "In this issue" rail, there's nothing to list
+ *  here — showing sections would need a per-row body fetch, not worth it for
+ *  cards below the fold (revisit if wanted). */
+export function InlineDigestCard({
+  digest,
+  basePath,
+}: {
+  digest: CollectionWeeklyDigestListItem;
+  basePath: string;
+}) {
+  const href = `${basePath}/${digest.weekStart}`;
+  return (
+    <article
+      className={`mt-3.5 flex flex-col gap-2.5 rounded-xl border px-6 py-6 ${digestCardTint}`}
+    >
+      <div className="flex items-center gap-2">
+        <DigestIcon className="text-[var(--accent)]" />
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[var(--accent)]">
+          Weekly digest
+        </span>
+      </div>
+      <Link
+        href={href}
+        className="text-[21px] font-semibold leading-[1.3] tracking-tight text-[var(--fg)] no-underline hover:underline"
+      >
+        {digest.title}
+      </Link>
+      {digest.intro && (
+        <p className="text-[14px] leading-relaxed text-[var(--fg-2)]">{digest.intro}</p>
+      )}
+      <Link
+        href={href}
+        className="mt-0.5 text-[13px] font-medium text-[var(--accent)] no-underline hover:underline"
+      >
+        Read the digest →
+      </Link>
+    </article>
   );
 }
 

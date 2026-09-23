@@ -1,0 +1,40 @@
+query HomepageDigests {
+  latestWeeklyDigests {
+    collection {
+      slug
+      name
+      isFeatured
+    }
+    weekStart
+    title
+    intro
+    releaseCount
+    orgs {
+      slug
+      name
+      avatarUrl
+      githubHandle
+    }
+    sections {
+      heading
+      anchor
+      lede
+      releases {
+        id
+        title
+        url
+        path
+        org {
+          slug
+          name
+          avatarUrl
+          githubHandle
+        }
+        product {
+          slug
+          name
+        }
+      }
+    }
+  }
+}

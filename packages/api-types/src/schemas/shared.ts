@@ -206,8 +206,9 @@ export const OverviewCitationSchema = z.object({
   releaseId: z.string().nullable().optional(),
   /**
    * Canonical web URL of the on-registry release page for this source, when
-   * `releaseId` resolved (#1934). The Sources footer links here (internal,
-   * crawlable) in preference to the external `sourceUrl`.
+   * `releaseId` resolved (#1934). Kept for machine consumers; the web Sources
+   * footer links `sourceUrl` (the #2218 link policy — `/release/*` pages are
+   * noindexed).
    */
   releaseWebUrl: z.string().nullable().optional(),
   /**

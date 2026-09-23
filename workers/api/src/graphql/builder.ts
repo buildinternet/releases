@@ -4,11 +4,13 @@ import type {
   Pagination,
   CollectionMemberOrg as CollectionMemberOrgWire,
   CollectionMemberProduct as CollectionMemberProductWire,
+  DigestCoveredRelease,
   ProductParentOrg,
 } from "@buildinternet/releases-api-types";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import type { Notice } from "@buildinternet/releases-core/notice";
 import type { D1Db } from "../db.js";
+import type { LatestWeeklyDigest } from "../queries/collection-summaries.js";
 import type { Loaders, Org, Product, Release, Source } from "./loaders.js";
 
 export type GraphQLContext = {
@@ -135,6 +137,12 @@ export const builder = new SchemaBuilder<{
     EntityNotice: Notice;
     ReleaseSummaryItem: ReleaseSummaryItem;
     SourceSummaries: SourceSummaries;
+    WeeklyDigestPreview: LatestWeeklyDigest;
+    WeeklyDigestCollection: LatestWeeklyDigest["collection"];
+    WeeklyDigestSection: LatestWeeklyDigest["sections"][number];
+    DigestRelease: DigestCoveredRelease;
+    DigestReleaseOrg: DigestCoveredRelease["org"];
+    DigestReleaseProduct: NonNullable<DigestCoveredRelease["product"]>;
   };
   Scalars: {
     ID: { Input: string; Output: string };

@@ -21,6 +21,7 @@ import type {
   CollectionWeeklyDigestListItem,
   CollectionWeeklyDigestDetail,
 } from "@buildinternet/releases-api-types";
+import { rewriteDigestReleaseLinks, isHttpUrl } from "./digest-sections";
 
 // Re-export under the old names for any callers still using them
 export type FormatRelease = ReleaseItem;
@@ -856,8 +857,9 @@ export function collectionDigestToMarkdown(
     lines.push(digest.intro);
     lines.push("");
   }
+  const urlById = new Map(digest.releases.map((r) => [r.id, r.url ?? null]));
   if (digest.body?.trim()) {
-    lines.push(digest.body.trim());
+    lines.push(rewriteDigestReleaseLinks(digest.body.trim(), urlById));
     lines.push("");
   }
 
@@ -876,7 +878,12 @@ export function collectionDigestToMarkdown(
       lines.push(`### ${group.name}`);
       lines.push("");
       for (const r of group.items) {
-        const href = opts.baseUrl ? `${opts.baseUrl}${r.path}` : r.path;
+        const upstream = (r.url ?? "").trim();
+        const href = isHttpUrl(upstream)
+          ? upstream
+          : opts.baseUrl
+            ? `${opts.baseUrl}${r.path}`
+            : r.path;
         lines.push(`- [${r.title}](${href})`);
       }
       lines.push("");

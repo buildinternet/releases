@@ -9,11 +9,13 @@ import {
   HomepageOrgsStatsDocument,
   HomepageAllOrgsDocument,
   HomepageCollectionsDocument,
+  HomepageDigestsDocument,
 } from "@/lib/graphql/__generated__/graphql";
 import type {
   HomepageTickerQuery,
   HomepageOrgsStatsQuery,
   HomepageCollectionsQuery,
+  HomepageDigestsQuery,
 } from "@/lib/graphql/__generated__/graphql";
 import { ConveyorBackdrop } from "@/components/conveyor-backdrop";
 import { SiteNotice } from "@/components/site-notice";
@@ -25,6 +27,8 @@ import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 import { TerminalSession, type TerminalTab } from "@/components/terminal-session";
 import { SignupCta } from "@/components/signup-cta";
 import { AgentUseCases, AgentUseCasesJumpLink } from "@/components/agent-use-cases";
+import { DigestReel } from "@/components/digest-reel";
+import { toReelPreview, type ReelDigest } from "@/lib/digest-reel";
 import { formatStars } from "@/lib/format-stars";
 import {
   FeaturedCollections,
@@ -273,6 +277,7 @@ export default async function HomePage() {
   let orgsForTable: OrgListItem[] = [];
   let latest: TickerItem[] = [];
   let featuredCollections: HomeCollectionListItem[] = [];
+  let latestDigests: ReelDigest[] = [];
   try {
     // `orgsAndStats` folds stats + the featured-orgs page into one persisted
     // operation: in the REST version these two calls already shared fate
@@ -283,7 +288,7 @@ export default async function HomePage() {
     // collections degrades via `.catch(() => [])` (hidden promo block) —
     // folding either into `orgsAndStats` would make a failure there also
     // fail this now-combined query, breaking that independence.
-    const [tickerResult, orgsAndStatsResult, collectionsResult] = await Promise.all([
+    const [tickerResult, orgsAndStatsResult, collectionsResult, digestsResult] = await Promise.all([
       tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 40, exclude: ["github"] }), {
         route: "/",
         event: "homepage-ticker-fetch-failed",
@@ -302,6 +307,11 @@ export default async function HomePage() {
       graphqlRequest(HomepageCollectionsDocument, { featured: true }).catch(
         () => ({ collections: [] }) as HomepageCollectionsQuery,
       ),
+      // Digest reel is non-essential too — same fail-soft as collections: a
+      // hiccup hides the band instead of breaking the page.
+      graphqlRequest(HomepageDigestsDocument, {}).catch(
+        () => ({ latestWeeklyDigests: [] }) as HomepageDigestsQuery,
+      ),
     ]);
     // A misconfigured API base is a setup problem, not a degradable panel —
     // surface the setup page like every other route.
@@ -309,6 +319,7 @@ export default async function HomePage() {
     stats = orgsAndStatsResult.data?.stats;
     latest = tickerResult.data?.latestReleases.items ?? [];
     featuredCollections = collectionsResult.collections;
+    latestDigests = digestsResult.latestWeeklyDigests;
 
     // Fallback: if no orgs have been editorially featured yet (true on first
     // deploy), fall back to the regular org list so the home page never renders
@@ -464,6 +475,11 @@ export default async function HomePage() {
           </Link>
         </div>
       </div>
+      {latestDigests.length > 0 && (
+        <div className="mt-4">
+          <DigestReel preview={toReelPreview(latestDigests)} />
+        </div>
+      )}
       {/* Intro material lives below the changing content (ticker + tables):
           returning visitors get fresh releases first; the jump link under the
           demo carries first-timers down here. */}

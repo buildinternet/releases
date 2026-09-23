@@ -264,6 +264,10 @@ export async function generateWeeklyDigestForCollection(
     const substantiveCount = releases.filter(isSubstantiveRelease).length;
     if (substantiveCount < MIN_SUBSTANTIVE_RELEASES) return "skipped";
 
+    // Stored digest bodies keep internal /release/rel_<id> paths ON PURPOSE:
+    // they are the stable ids `parseDigestSections` reads each section's cited
+    // releases from. Renderers (web page, .md, homepage reel) swap them for the
+    // upstream url at read time via `rewriteDigestReleaseLinks`.
     const idToPath = new Map(
       releases.map((r) => [r.id, releasePath({ id: r.id, title: r.title })]),
     );
