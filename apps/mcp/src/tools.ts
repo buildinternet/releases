@@ -2,10 +2,9 @@
 // WebMCP in `apps/web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, isNull, or, lt, lte, gte, sql, asc, type SQL } from "drizzle-orm";
+import { eq, desc, and, isNull, or, sql, asc } from "drizzle-orm";
 import {
   sources,
-  releases,
   releasesVisible,
   organizations,
   organizationsActive,
@@ -60,7 +59,6 @@ import {
   type RawSourceHit,
 } from "@buildinternet/releases-api-types";
 import { parseNotice, formatNoticePointer } from "@buildinternet/releases-core/notice";
-import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import {
   buildFeedCursor,
   getCollectionReleasesFeed,
@@ -72,7 +70,18 @@ import {
   findSourceForOrgSlug,
 } from "@releases/queries/entities";
 import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
-import { githubHandleSubquery } from "@releases/queries/sql-fragments";
+import {
+  findOrgByAnyIdentifier,
+  type OrgLookupRow,
+  listOrgDirectoryPage,
+  orgHasVisibleRelease,
+} from "@releases/queries/orgs";
+import { findVisibleReleaseDetail, listLatestReleases } from "@releases/queries/releases";
+import {
+  listCatalogProducts,
+  listCatalogStandaloneSources,
+  listProductSources,
+} from "@releases/queries/catalog";
 import type { D1Db } from "./db.js";
 import {
   buildCursorMeta,
@@ -177,19 +186,6 @@ export interface ReleaseFeedStructured {
   /** Optional collection header used by `get_collection_releases`. */
   context?: { collection?: { slug: string; name: string } };
 }
-
-/**
- * Correlated EXISTS for "the outer-aliased `o` org has at least one visible
- * release." Used by `listOrganizations` and the unified `search` tool to
- * implement the empty-org filter (#746). Both call sites alias the orgs
- * table as `o`, so the alias is hard-coded inside the fragment.
- */
-const ORG_HAS_VISIBLE_RELEASE = sql`EXISTS (
-  SELECT 1
-  FROM sources_visible s2
-  JOIN releases_visible r2 ON r2.source_id = s2.id
-  WHERE s2.org_id = o.id
-)`;
 
 /**
  * Shared mapper for the release-feed UI. Callers normalize their column
@@ -319,38 +315,6 @@ function emptyListResult(opts: { message: string; pagination: McpPagination }): 
 }
 
 // ── Shared helpers ───────────────────────────────────────────────────
-
-async function findOrg(db: D1Db, identifier: string) {
-  const id = identifier.trim();
-  // Single query: org_ id, slug, domain, name (case-insensitive), domain alias, or account handle.
-  // PK lookup on o.id is an indexed fast-path; LIMIT 1 stops evaluation on first match.
-  const rows = await db.all<{
-    id: string;
-    name: string;
-    slug: string;
-    domain: string | null;
-    description: string | null;
-    category: string | null;
-    metadata: string | null;
-    tier: "stub" | "tracked";
-  }>(sql`
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata, o.tier
-    FROM organizations o
-    WHERE o.id = ${id} OR o.slug = ${id} OR o.domain = ${id} OR LOWER(o.name) = LOWER(${id})
-    UNION
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata, o.tier
-    FROM organizations o
-    JOIN domain_aliases da ON da.org_id = o.id
-    WHERE da.domain = ${id}
-    UNION
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata, o.tier
-    FROM organizations o
-    JOIN org_accounts oa ON oa.org_id = o.id
-    WHERE oa.handle = ${id}
-    LIMIT 1
-  `);
-  return rows.length > 0 ? rows[0] : null;
-}
 
 function formatReleaseTitle(r: { title: string; type: ReleaseType }): string {
   return r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
@@ -535,26 +499,17 @@ function toAmbiguousCandidates(
     .toSorted((a, b) => `${a.orgSlug}/${a.slug}`.localeCompare(`${b.orgSlug}/${b.slug}`));
 }
 
-/**
- * MCP entity resolution keeps soft-deleted rows resolvable (the pre-shared-layer
- * behavior). The API excludes them. Flip to the API default once decided —
- * docs/architecture/shared-queries.md (D1).
- */
-const MCP_RESOLVE_OPTS = { includeDeleted: true } as const;
-
 export async function resolveSource(db: D1Db, identifier: string) {
   const id = identifier.trim();
   // Typed-ID and `org/slug` branches share the API's resolvers
-  // (`@releases/queries/entities`). `includeDeleted: true` preserves this
-  // tool's historical behavior of resolving tombstoned rows — an open
-  // decision, see docs/architecture/shared-queries.md (D1).
+  // (`@releases/queries/entities`), so soft-deleted rows 404 here too.
   if (getEntityType(id) === "source") {
-    return findSourceById(db, id, MCP_RESOLVE_OPTS);
+    return findSourceById(db, id);
   }
 
   // org/slug coordinate form (e.g. "vercel/next-js")
   const coord = parseOrgSlugCoordinate(id);
-  if (coord) return findSourceForOrgSlug(db, coord.orgSlug, coord.slug, MCP_RESOLVE_OPTS);
+  if (coord) return findSourceForOrgSlug(db, coord.orgSlug, coord.slug);
 
   // Bare slug fallback. Source slugs are unique per-org but NOT globally
   // (#690), so enumerate every org's match instead of `.limit(1)`-ing onto an
@@ -568,7 +523,7 @@ export async function resolveSource(db: D1Db, identifier: string) {
     .select({ row: sources, orgSlug: organizations.slug })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(eq(sources.slug, id));
+    .where(and(eq(sources.slug, id), isNull(sources.deletedAt)));
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0].row;
   throw new AmbiguousEntityError("source", id, toAmbiguousCandidates(matches));
@@ -577,12 +532,12 @@ export async function resolveSource(db: D1Db, identifier: string) {
 export async function resolveProduct(db: D1Db, identifier: string) {
   const id = identifier.trim();
   if (getEntityType(id) === "product") {
-    return findProductById(db, id, MCP_RESOLVE_OPTS);
+    return findProductById(db, id);
   }
 
   // org/slug coordinate form (e.g. "vercel/nextjs")
   const coord = parseOrgSlugCoordinate(id);
-  if (coord) return findProductForOrgSlug(db, coord.orgSlug, coord.slug, MCP_RESOLVE_OPTS);
+  if (coord) return findProductForOrgSlug(db, coord.orgSlug, coord.slug);
 
   // Bare slug fallback — see resolveSource for the per-org ambiguity rationale
   // (#1324). 0 → null, 1 → resolve, >1 → throw with prod_… candidates.
@@ -590,7 +545,7 @@ export async function resolveProduct(db: D1Db, identifier: string) {
     .select({ row: products, orgSlug: organizations.slug })
     .from(products)
     .leftJoin(organizations, eq(products.orgId, organizations.id))
-    .where(eq(products.slug, id));
+    .where(and(eq(products.slug, id), isNull(products.deletedAt)));
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0].row;
   throw new AmbiguousEntityError("product", id, toAmbiguousCandidates(matches));
@@ -749,113 +704,37 @@ export async function getLatestReleases(
     productSourceIds = resolved;
   }
 
-  let orgSourceIds: string[] | undefined;
+  let orgId: string | undefined;
   if (params.organization) {
-    const org = await findOrg(db, params.organization);
+    const org = await findOrgByAnyIdentifier(db, params.organization);
     if (!org) return text(`No organization found matching "${params.organization}"`);
-    const orgSources = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(eq(sources.orgId, org.id));
-    orgSourceIds = orgSources.map((s) => s.id);
-    if (orgSourceIds.length === 0) return text("No sources found for this organization.");
-  }
-
-  // Default filters match the web/API read paths so MCP readers see the same canonical-only feed.
-  // releasesVisible already excludes suppressed + coverage rows; use base table only when
-  // the caller explicitly opts into coverage.
-  const releasesTable = includeCoverage ? releases : releasesVisible;
-  // See {@link getOrgReleasesFeed} for the future-dated guardrail rationale.
-  const cutoff = nowIso();
-  const conditions = [
-    sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
-    sql`(${releasesTable.suppressed} IS NULL OR ${releasesTable.suppressed} = 0)`,
-    or(lte(releasesTable.publishedAt, cutoff), isNull(releasesTable.publishedAt)),
-  ];
-  // Product filter: inArray covers single-source (src_… or one-source product)
-  // and multi-source products equally — mirrors the REST `?product=` expansion.
-  if (productSourceIds) conditions.push(inArray(releasesTable.sourceId, productSourceIds));
-  if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
-  if (params.type) conditions.push(eq(releasesTable.type, params.type));
-  // Time window on published_at. `gte`/`lte` against the ISO text column drop
-  // NULL-dated rows — an undated release can't be placed in a window.
-  if (window.since) conditions.push(gte(releasesTable.publishedAt, window.since));
-  if (window.until) conditions.push(lte(releasesTable.publishedAt, window.until));
-  // Importance floor — mirrors the REST `?minImportance=` predicate
-  // (`r.importance >= ?`) exactly: `gte` against a nullable column drops
-  // unscored (NULL) rows rather than treating them as passing.
-  if (minImportance.value !== undefined) {
-    conditions.push(gte(releasesTable.importance, minImportance.value));
-  }
-  // Content surface → resolve kind through source→product inheritance
-  // (`COALESCE(source.kind, product.kind)`), the same asymmetry the unified
-  // `search` tool and the `/v1/orgs/:slug/releases` feed apply. See AGENTS.md.
-  if (params.kind) {
-    conditions.push(sql`COALESCE(${sources.kind}, ${products.kind}) = ${params.kind}`);
-  }
-  // Default excludes prereleases (canaries / alphas / betas / RCs). Matches
-  // the web/API read paths and the `get_collection_releases` default.
-  if (!params.include_prereleases) {
-    conditions.push(sql`(${releasesTable.prerelease} IS NULL OR ${releasesTable.prerelease} = 0)`);
+    orgId = org.id;
   }
 
   // Cursor decode: silently ignore unparseable tokens rather than 400. The
   // feed is append-only and stable under cursor inserts, so a stale cursor
   // just gives the caller a fresh head of the feed.
-  if (params.cursor) {
-    const decoded = decodeReleaseCursor(params.cursor);
-    if (decoded) {
-      const cursorClause = decoded.lastPublishedAt
-        ? // Standard tuple comparison for (publishedAt DESC, id DESC) ordering.
-          or(
-            lt(releasesTable.publishedAt, decoded.lastPublishedAt),
-            and(
-              eq(releasesTable.publishedAt, decoded.lastPublishedAt),
-              lt(releasesTable.id, decoded.lastId),
-            ),
-          )
-        : // Null-published releases sort to the tail; compare by id alone there.
-          lt(releasesTable.id, decoded.lastId);
-      if (cursorClause) conditions.push(cursorClause);
-    }
-  }
+  const after = params.cursor ? decodeReleaseCursor(params.cursor) : null;
 
-  // Fetch limit+1 to detect hasMore without a separate COUNT query — feeds
-  // don't carry a totalItems anyway.
-  const rows = await db
-    .select({
-      id: releasesTable.id,
-      title: releasesTable.title,
-      version: releasesTable.version,
-      type: releasesTable.type,
-      content: releasesTable.content,
-      summary: releasesTable.summary,
-      importance: releasesTable.importance,
-      titleGenerated: releasesTable.titleGenerated,
-      titleShort: releasesTable.titleShort,
-      publishedAt: releasesTable.publishedAt,
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
-      sourceType: sources.type,
-      orgName: organizations.name,
-      orgSlug: organizations.slug,
-      orgAvatarUrl: organizations.avatarUrl,
-      orgGithubHandle: githubHandleSubquery(sql`${organizations.id}`),
-      productName: products.name,
-      productSlug: products.slug,
-      url: releasesTable.url,
-      contentChars: releasesTable.contentChars,
-      contentTokens: releasesTable.contentTokens,
-    })
-    .from(releasesTable)
-    .innerJoin(sources, eq(releasesTable.sourceId, sources.id))
-    // Left-joined for the kind-inheritance COALESCE; a null product_id (the
-    // common case) leaves products.kind null and the source's own kind stands.
-    .leftJoin(products, eq(sources.productId, products.id))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(...conditions))
-    .orderBy(desc(releasesTable.publishedAt), desc(releasesTable.id))
-    .limit(limit + 1);
+  // Shared with the API's visibility rules (`@releases/queries/releases`):
+  // hidden/deleted sources, deleted products, and hidden/deleted orgs drop
+  // out. Fetch limit+1 to detect hasMore without a COUNT — feeds don't carry
+  // a totalItems anyway.
+  const rows = await listLatestReleases(db, {
+    sourceIds: productSourceIds,
+    orgId,
+    type: params.type,
+    kind: params.kind,
+    since: window.since,
+    until: window.until,
+    minImportance: minImportance.value,
+    includeCoverage,
+    includePrereleases: params.include_prereleases === true,
+    // See {@link getOrgReleasesFeed} for the future-dated guardrail rationale.
+    notAfter: nowIso(),
+    after,
+    limit: limit + 1,
+  });
 
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
@@ -945,12 +824,6 @@ export async function listOrganizations(
 ): Promise<ToolResult> {
   const pagination = parseMcpPagination(params);
 
-  // The query/platform combinations diverge only in their FROM/WHERE clauses.
-  // Build them once and reuse the fragment for both the paged SELECT and the
-  // COUNT(*) so totals stay filter-aware. Filtered arms wrap with DISTINCT o.id
-  // because account/alias joins fan a single org into multiple rows; the
-  // unfiltered arm skips DISTINCT (it'd add a sort cost on the full table).
-  const q = params.query ?? null;
   // #746: default `false` — orgs with no indexed releases are stubs we hide
   // from the public catalog. Opt in via `include_empty: true` to see them.
   const includeEmpty = params.include_empty === true;
@@ -963,95 +836,16 @@ export async function listOrganizations(
     : undefined;
   const category = categoryResolved?.ok ? categoryResolved.slug : undefined;
 
-  // Stub orgs (#1947) have no visible releases but belong in the directory
-  // (coverage breadth is the product), so the empty-org filter keeps them.
-  // The stub branch has no release/source join to implicitly gate soft-deleted
-  // rows the way ORG_HAS_VISIBLE_RELEASE does, so guard it explicitly — a
-  // tombstoned stub must not surface in the directory.
-  const visibleOrStub = sql`(${ORG_HAS_VISIBLE_RELEASE} OR (o.tier = 'stub' AND o.deleted_at IS NULL))`;
-
-  let fromWhere = sql`FROM organizations o`;
-  let distinct = false;
-  if (q && params.platform) {
-    distinct = true;
-    fromWhere = sql`
-      FROM organizations o
-      LEFT JOIN domain_aliases da ON da.org_id = o.id
-      JOIN org_accounts oa ON oa.org_id = o.id
-      WHERE (${likeContains(sql`o.name`, q)}
-        OR ${likeContains(sql`o.slug`, q)}
-        OR ${likeContains(sql`o.domain`, q)}
-        OR ${likeContains(sql`da.domain`, q)}
-        OR ${likeContains(sql`oa.handle`, q)})
-        AND oa.platform = ${params.platform}
-    `;
-  } else if (q) {
-    distinct = true;
-    // The OR list is wrapped so `AND <empty-org filter>` below binds to the
-    // whole match group instead of just the trailing `oa.handle` clause.
-    fromWhere = sql`
-      FROM organizations o
-      LEFT JOIN domain_aliases da ON da.org_id = o.id
-      LEFT JOIN org_accounts oa ON oa.org_id = o.id
-      WHERE (${likeContains(sql`o.name`, q)}
-        OR ${likeContains(sql`o.slug`, q)}
-        OR ${likeContains(sql`o.domain`, q)}
-        OR ${likeContains(sql`da.domain`, q)}
-        OR ${likeContains(sql`oa.handle`, q)})
-    `;
-  } else if (params.platform) {
-    distinct = true;
-    fromWhere = sql`
-      FROM organizations o
-      JOIN org_accounts oa ON oa.org_id = o.id
-      WHERE oa.platform = ${params.platform}
-    `;
-  }
-
-  // The empty-org filter is independent of q/platform — when active it adds
-  // a correlated EXISTS check so rows fan-out from account/alias joins still
-  // de-duplicate naturally through the outer DISTINCT (or COUNT(DISTINCT)
-  // in the count branch). When the base query has no WHERE clause (the
-  // un-distinct no-q/no-platform branch), the filter needs to lead with
-  // `WHERE` instead of `AND`.
-  const havingFrag = includeEmpty ? sql`` : sql`AND ${visibleOrStub}`;
-  // Category filter is independent — appended after the empty-org fragment.
-  // The `AND` connector is always correct here because filteredFromWhere always
-  // contains a WHERE by the time categoryFrag is appended (either from the
-  // q/platform branches above or from the no-distinct arm below). The only
-  // exception is the un-distinct+includeEmpty arm where no WHERE exists yet —
-  // that arm's filteredFromWhere is built specially below.
-  const categoryFrag = category ? sql`AND o.category = ${category}` : sql``;
-  let filteredFromWhere: SQL<unknown>;
-  if (!distinct && !includeEmpty && category) {
-    // No WHERE yet from q/platform, no empty-org filter — category must lead.
-    filteredFromWhere = sql`FROM organizations o WHERE ${visibleOrStub} ${categoryFrag}`;
-  } else if (!distinct && !includeEmpty) {
-    filteredFromWhere = sql`FROM organizations o WHERE ${visibleOrStub}`;
-  } else if (!distinct && includeEmpty && category) {
-    // No WHERE yet from q/platform, empty-org filter off — category must lead.
-    filteredFromWhere = sql`FROM organizations o WHERE o.category = ${category}`;
-  } else {
-    filteredFromWhere = sql`${fromWhere} ${havingFrag} ${categoryFrag}`;
-  }
-
-  const distinctKw = distinct ? sql`DISTINCT` : sql``;
-  type Row = { name: string; slug: string; domain: string | null; tier: "stub" | "tracked" };
-  const [rows, totalRow] = await Promise.all([
-    db.all<Row>(sql`
-      SELECT ${distinctKw} o.name, o.slug, o.domain, o.tier
-      ${filteredFromWhere}
-      ORDER BY o.name, o.slug
-      LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
-    `),
-    distinct
-      ? db.all<{ n: number }>(
-          sql`SELECT COUNT(*) as n FROM (SELECT DISTINCT o.id ${filteredFromWhere})`,
-        )
-      : db.all<{ n: number }>(sql`SELECT COUNT(*) as n ${filteredFromWhere}`),
-  ]);
-
-  const totalItems = Number(totalRow[0]?.n ?? 0);
+  // Hidden and soft-deleted orgs never list, matching the API directory. The
+  // broader query match (domain, alias, handle) and `platform` are MCP-only.
+  const { rows, total: totalItems } = await listOrgDirectoryPage(db, {
+    query: params.query,
+    platform: params.platform,
+    category,
+    includeEmpty,
+    limit: pagination.pageSize,
+    offset: pagination.offset,
+  });
   if (totalItems === 0) return emptyListResult({ message: "No organizations found.", pagination });
 
   const body = rows
@@ -1079,7 +873,7 @@ export async function getOrganization(
   db: D1Db,
   params: { identifier: string; include_overview?: boolean },
 ): Promise<ToolResult> {
-  const org = await findOrg(db, params.identifier);
+  const org = await findOrgByAnyIdentifier(db, params.identifier);
   if (!org) return text(`No organization found matching "${params.identifier}"`);
   const includeOverview = params.include_overview === true;
 
@@ -1353,45 +1147,14 @@ export async function getRelease(
 ): Promise<ToolResult> {
   const id = normalizeReleaseId(params.id);
 
-  const rows = await db
-    .select({
-      id: releases.id,
-      title: releases.title,
-      version: releases.version,
-      type: releases.type,
-      content: releases.content,
-      summary: releases.summary,
-      importance: releases.importance,
-      titleGenerated: releases.titleGenerated,
-      titleShort: releases.titleShort,
-      publishedAt: releases.publishedAt,
-      url: releases.url,
-      suppressed: releases.suppressed,
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
-      sourceType: sources.type,
-      orgName: organizations.name,
-      orgSlug: organizations.slug,
-      orgAvatarUrl: organizations.avatarUrl,
-      orgGithubHandle: githubHandleSubquery(sql`${organizations.id}`),
-      productName: products.name,
-      productSlug: products.slug,
-    })
-    .from(releases)
-    .leftJoin(sources, eq(releases.sourceId, sources.id))
-    .leftJoin(products, eq(sources.productId, products.id))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(
-      and(
-        eq(releases.id, id),
-        isNull(sources.deletedAt),
-        or(eq(sources.isHidden, false), isNull(sources.isHidden)),
-      ),
-    )
-    .limit(1);
-
-  const r = rows[0];
-  if (!r || r.suppressed) return text(`No release found matching "${params.id}"`);
+  // Same read as `GET /v1/releases/:id` (`@releases/queries/releases`):
+  // suppressed and coverage-side releases, and releases whose source is
+  // missing, hidden, or deleted, are not found. Deleted org/product parents
+  // come back with null names.
+  const detail = await findVisibleReleaseDetail(db, id);
+  if (!detail) return text(`No release found matching "${params.id}"`);
+  const { release, ...parents } = detail;
+  const r = { ...release, ...parents };
 
   const body = r.content && r.content.length > 0 ? r.content : (r.summary ?? "");
 
@@ -1595,16 +1358,8 @@ async function renderProductDetail(
       .from(organizations)
       .where(eq(organizations.id, product.orgId))
       .limit(1),
-    db
-      .select({
-        slug: sources.slug,
-        name: sources.name,
-        type: sources.type,
-        url: sources.url,
-        lastFetchedAt: sources.lastFetchedAt,
-      })
-      .from(sources)
-      .where(eq(sources.productId, product.id)),
+    // Hidden and deleted sources drop out, as in `GET /v1/products/:id`.
+    listProductSources(db, product.id),
     db
       .select({ name: tags.name })
       .from(productTags)
@@ -1664,58 +1419,19 @@ export async function listCatalog(
 
   let orgId: string | undefined;
   if (params.organization) {
-    const org = await findOrg(db, params.organization);
+    const org = await findOrgByAnyIdentifier(db, params.organization);
     if (!org) return text(`No organization found matching "${params.organization}"`);
     orgId = org.id;
   }
 
   // Catalog surface → match each row's OWN kind (no source→product
   // inheritance), the list-side of the asymmetry documented in AGENTS.md.
-  // Products and standalone sources are two separate queries, so each gets its
-  // own WHERE composed from the org scope + the optional kind filter.
-  const productConds: SQL[] = [];
-  if (orgId) productConds.push(sql`p.org_id = ${orgId}`);
-  if (params.kind) productConds.push(sql`p.kind = ${params.kind}`);
-  const productWhere = productConds.length
-    ? sql`WHERE ${sql.join(productConds, sql` AND `)}`
-    : sql``;
-
+  // Deleted products, hidden or deleted sources, and children of deleted orgs
+  // drop out (`@releases/queries/catalog`), as in `GET /v1/orgs/:slug/catalog`.
+  const filter = { orgId, kind: params.kind };
   const [productRows, orphanSourceRows] = await Promise.all([
-    db.all<{
-      slug: string;
-      name: string;
-      url: string | null;
-      description: string | null;
-      category: string | null;
-      orgSlug: string | null;
-      orgName: string | null;
-    }>(sql`
-      SELECT p.slug, p.name, p.url, p.description, p.category,
-             o.slug as orgSlug, o.name as orgName
-      FROM products p
-      LEFT JOIN organizations o ON o.id = p.org_id
-      ${productWhere}
-      ORDER BY p.name, p.slug
-    `),
-    db.all<{
-      slug: string;
-      name: string;
-      type: SourceType;
-      url: string | null;
-      lastFetchedAt: string | null;
-      orgSlug: string | null;
-      orgName: string | null;
-    }>(sql`
-      SELECT s.slug, s.name, s.type, s.url, s.last_fetched_at as lastFetchedAt,
-             o.slug as orgSlug, o.name as orgName
-      FROM sources s
-      LEFT JOIN organizations o ON o.id = s.org_id
-      WHERE s.product_id IS NULL
-        AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-        ${orgId ? sql`AND s.org_id = ${orgId}` : sql``}
-        ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
-      ORDER BY s.name, s.slug
-    `),
+    listCatalogProducts(db, filter),
+    listCatalogStandaloneSources(db, filter),
   ]);
 
   const entries: CatalogEntry[] = [
@@ -1929,9 +1645,9 @@ export async function search(
     return embedConfigP;
   };
 
-  let orgScope: Awaited<ReturnType<typeof findOrg>> = null;
+  let orgScope: OrgLookupRow | null = null;
   if (params.organization) {
-    orgScope = await findOrg(db, params.organization);
+    orgScope = await findOrgByAnyIdentifier(db, params.organization);
     if (!orgScope) {
       return {
         result: text(`No organization found matching "${params.organization}"`),
@@ -1940,7 +1656,7 @@ export async function search(
     }
   }
   // `domain` is the normalized-input form of `organization`. It's its own
-  // param so callers don't have to feel out which kinds of strings findOrg
+  // param so callers don't have to feel out which kinds of strings findOrgByAnyIdentifier
   // accepts — pass `https://vercel.com/`, get the same scope as `vercel`.
   // When both are passed, `domain` is additive: it has to agree with the
   // org already resolved, otherwise we treat it as a contradiction.
@@ -1954,7 +1670,7 @@ export async function search(
         counts: empty,
       };
     }
-    const resolved = await findOrg(db, normalized);
+    const resolved = await findOrgByAnyIdentifier(db, normalized);
     if (!resolved) {
       return {
         result: text(`No organization owns the domain \`${normalized}\` in this registry.`),
@@ -2078,7 +1794,7 @@ export async function search(
             WHERE (${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
               OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)}
               OR ${likeContains(sql`o.category`, q)})
-              ${includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`}
+              ${includeEmpty ? sql`` : sql`AND ${orgHasVisibleRelease}`}
             GROUP BY o.id
             ORDER BY o.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
           `);

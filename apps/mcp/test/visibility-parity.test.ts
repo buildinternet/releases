@@ -1,0 +1,277 @@
+/**
+ * MCP read visibility matches the API (docs/architecture/shared-queries.md,
+ * D1–D6). One fixture holds a live row next to a soft-deleted, hidden, or
+ * coverage-side sibling for each case; every test asserts the sibling stays
+ * out of MCP output (and, for D2, that a hidden org still resolves).
+ */
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { sql } from "drizzle-orm";
+import {
+  domainAliases,
+  organizations,
+  orgAccounts,
+  products,
+  releases,
+  sources,
+} from "@buildinternet/releases-core/schema";
+import { releaseCoverage } from "@releases/core-internal/schema-coverage";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper";
+import type { D1Db } from "../src/db";
+import {
+  getCatalogEntry,
+  getLatestReleases,
+  getOrganization,
+  getRelease,
+  listCatalog,
+  listOrganizations,
+} from "../src/tools";
+
+const WEB = "https://releases.sh";
+const DELETED_AT = "2026-01-01T00:00:00Z";
+const PUBLISHED = "2026-05-01T00:00:00Z";
+
+let tdb: TestDatabase;
+let db: D1Db;
+
+function textOf(res: { content: [{ text: string }] }): string {
+  return res.content[0].text;
+}
+
+function src(id: string, orgId: string, extra: Partial<typeof sources.$inferInsert> = {}) {
+  const slug = id.replace(/^src_/, "").replaceAll("_", "-");
+  return {
+    id,
+    orgId,
+    name: `Source ${slug}`,
+    slug,
+    type: "feed" as const,
+    url: `https://example.com/${slug}`,
+    ...extra,
+  };
+}
+
+function rel(id: string, sourceId: string, extra: Partial<typeof releases.$inferInsert> = {}) {
+  return {
+    id,
+    sourceId,
+    title: `Release ${id}`,
+    type: "feature" as const,
+    content: `Body of ${id}`,
+    publishedAt: PUBLISHED,
+    url: `https://example.com/${id}`,
+    ...extra,
+  };
+}
+
+beforeAll(async () => {
+  tdb = createTestDb();
+  db = tdb.db as unknown as D1Db;
+
+  await tdb.db.insert(organizations).values([
+    { id: "org_live", name: "Live Co", slug: "live", domain: "live.example.com" },
+    { id: "org_hidden", name: "Hidden Co", slug: "hidden", isHidden: true },
+    {
+      id: "org_gone",
+      name: "Gone Co",
+      slug: "gone--org_gone",
+      domain: "gone.example.com",
+      deletedAt: DELETED_AT,
+    },
+  ]);
+  await tdb.db
+    .insert(domainAliases)
+    .values({ domain: "gone-alias.example.com", orgId: "org_gone" });
+  await tdb.db
+    .insert(orgAccounts)
+    .values({ id: "oa_gone", orgId: "org_gone", platform: "github", handle: "gone-gh" });
+
+  await tdb.db.insert(products).values([
+    { id: "prod_live", name: "Live App", slug: "app", orgId: "org_live" },
+    {
+      id: "prod_dead",
+      name: "Dead App",
+      slug: "dead-app",
+      orgId: "org_live",
+      deletedAt: DELETED_AT,
+    },
+  ]);
+
+  await tdb.db
+    .insert(sources)
+    .values([
+      src("src_live", "org_live", { productId: "prod_live" }),
+      src("src_live_hidden", "org_live", { productId: "prod_live", isHidden: true }),
+      src("src_live_dead", "org_live", { productId: "prod_live", deletedAt: DELETED_AT }),
+      src("src_standalone", "org_live"),
+      src("src_standalone_dead", "org_live", { deletedAt: DELETED_AT }),
+      src("src_under_dead_product", "org_live", { productId: "prod_dead" }),
+      src("src_hidden_org", "org_hidden"),
+      src("src_gone_org", "org_gone"),
+    ]);
+
+  await tdb.db
+    .insert(releases)
+    .values([
+      rel("rel_live", "src_live"),
+      rel("rel_canonical", "src_live"),
+      rel("rel_coverage", "src_live"),
+      rel("rel_dead_product", "src_under_dead_product"),
+      rel("rel_hidden_org", "src_hidden_org"),
+      rel("rel_gone_org", "src_gone_org"),
+      rel("rel_standalone", "src_standalone"),
+    ]);
+  await tdb.db
+    .insert(releaseCoverage)
+    .values({ coverageId: "rel_coverage", canonicalId: "rel_canonical", decidedBy: "test" });
+
+  // A release whose source row is gone (FK off to plant the orphan).
+  tdb.db.run(sql`PRAGMA foreign_keys = OFF`);
+  await tdb.db.insert(releases).values(rel("rel_orphan", "src_missing"));
+  tdb.db.run(sql`PRAGMA foreign_keys = ON`);
+});
+
+afterAll(() => tdb.cleanup());
+
+describe("D1: soft-deleted sources and products don't resolve", () => {
+  it("typed source ID of a deleted source is not found", async () => {
+    const out = textOf(await getCatalogEntry(db, { identifier: "src_live_dead" }));
+    expect(out).toContain("No source found");
+  });
+
+  it("typed product ID of a deleted product is not found", async () => {
+    const out = textOf(await getCatalogEntry(db, { identifier: "prod_dead" }));
+    expect(out).toContain("No product found");
+  });
+
+  it("org/slug coordinate of a deleted product or source is not found", async () => {
+    expect(textOf(await getCatalogEntry(db, { identifier: "live/dead-app" }))).toContain(
+      "No catalog entry found",
+    );
+    expect(textOf(await getCatalogEntry(db, { identifier: "live/live-dead" }))).toContain(
+      "No catalog entry found",
+    );
+  });
+
+  it("a live product still resolves", async () => {
+    expect(textOf(await getCatalogEntry(db, { identifier: "prod_live" }))).toContain(
+      "**Product: Live App**",
+    );
+  });
+});
+
+describe("D2: findOrg skips deleted orgs on every key, keeps hidden ones", () => {
+  for (const key of [
+    "org_gone",
+    "gone--org_gone",
+    "Gone Co",
+    "gone.example.com",
+    "gone-alias.example.com",
+    "gone-gh",
+  ]) {
+    it(`does not resolve a deleted org by "${key}"`, async () => {
+      const out = textOf(await getOrganization(db, { identifier: key }));
+      expect(out).toContain("No organization found");
+    });
+  }
+
+  it("resolves a hidden org by direct lookup", async () => {
+    const out = textOf(await getOrganization(db, { identifier: "hidden" }));
+    expect(out).toContain("Hidden Co");
+    expect(out).not.toContain("No organization found");
+  });
+});
+
+describe("D3: get_latest_releases drops releases under hidden or deleted orgs", () => {
+  it("omits hidden-org and deleted-org releases from the global feed", async () => {
+    const res = await getLatestReleases(db, { limit: 50 }, WEB);
+    const ids = (res.structuredContent as { releases: { id: string }[] }).releases.map((r) => r.id);
+    expect(ids).toContain("rel_live");
+    expect(ids).not.toContain("rel_hidden_org");
+    expect(ids).not.toContain("rel_gone_org");
+    expect(ids).not.toContain("rel_coverage");
+  });
+
+  it("reads products_active: a deleted product's name is not attached", async () => {
+    const res = await getLatestReleases(db, { limit: 50 }, WEB);
+    const row = (
+      res.structuredContent as { releases: { id: string; product: unknown }[] }
+    ).releases.find((r) => r.id === "rel_dead_product");
+    expect(row).toBeDefined();
+    expect(row!.product).toBeNull();
+  });
+
+  it("an org-scoped feed for a hidden org is empty, like the API", async () => {
+    const res = await getLatestReleases(db, { organization: "hidden", limit: 50 }, WEB);
+    // The API drops hidden-org releases from the latest feed even when scoped.
+    expect(textOf(res)).toBe("No releases found.");
+  });
+});
+
+describe("D4: list_organizations omits hidden and deleted orgs", () => {
+  it("default listing", async () => {
+    const out = textOf(await listOrganizations(db, {}));
+    expect(out).toContain("Live Co");
+    expect(out).not.toContain("Hidden Co");
+    expect(out).not.toContain("Gone Co");
+  });
+
+  it("query that matches a hidden or deleted org by domain, alias, or handle", async () => {
+    for (const query of ["hidden", "gone", "gone-alias", "gone-gh"]) {
+      const out = textOf(await listOrganizations(db, { query, include_empty: true }));
+      expect(out).toBe("No organizations found.");
+    }
+  });
+
+  it("platform filter still works", async () => {
+    const out = textOf(await listOrganizations(db, { platform: "github", include_empty: true }));
+    expect(out).toBe("No organizations found.");
+  });
+});
+
+describe("D5: get_release matches GET /v1/releases/:id", () => {
+  it("coverage-side release is not found", async () => {
+    const out = textOf(await getRelease(db, { id: "rel_coverage" }, WEB));
+    expect(out).toContain("No release found");
+  });
+
+  it("release with a missing source row is not found", async () => {
+    const out = textOf(await getRelease(db, { id: "rel_orphan" }, WEB));
+    expect(out).toContain("No release found");
+  });
+
+  it("deleted parent org or product comes back null", async () => {
+    const gone = await getRelease(db, { id: "rel_gone_org" }, WEB);
+    expect((gone.structuredContent as { org: unknown }).org).toBeNull();
+    const deadProduct = await getRelease(db, { id: "rel_dead_product" }, WEB);
+    expect((deadProduct.structuredContent as { product: unknown }).product).toBeNull();
+  });
+
+  it("canonical release still resolves", async () => {
+    const res = await getRelease(db, { id: "rel_canonical" }, WEB);
+    expect((res.structuredContent as { id: string }).id).toBe("rel_canonical");
+  });
+});
+
+describe("D6: catalog and product detail omit deleted and hidden children", () => {
+  it("list_catalog skips deleted products and deleted standalone sources", async () => {
+    const out = textOf(await listCatalog(db, { organization: "live" }));
+    expect(out).toContain("Live App");
+    expect(out).toContain("Source standalone");
+    expect(out).not.toContain("Dead App");
+    expect(out).not.toContain("Source standalone-dead");
+    // A source under a deleted product stays listed as standalone.
+    expect(out).toContain("Source under-dead-product");
+  });
+
+  it("list_catalog without an org skips children of deleted orgs", async () => {
+    const out = textOf(await listCatalog(db, { limit: 200 }));
+    expect(out).not.toContain("Source gone-org");
+  });
+
+  it("product detail lists only visible sources", async () => {
+    const out = textOf(await getCatalogEntry(db, { identifier: "prod_live" }));
+    expect(out).toContain("Source live");
+    expect(out).not.toContain("Source live-hidden");
+    expect(out).not.toContain("Source live-dead");
+  });
+});

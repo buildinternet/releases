@@ -3,9 +3,8 @@
  * org-scoped (`org/slug`) lookup paths shared by the API and MCP workers.
  *
  * Every predicate excludes soft-deleted rows by default (#666). Pass
- * `{ includeDeleted: true }` for admin paths that need tombstones (hard-purge
- * DELETE, restore) — and, for now, for the MCP resolvers, which historically
- * did not filter tombstones. See docs/architecture/shared-queries.md (D1).
+ * `{ includeDeleted: true }` only for admin paths that need tombstones
+ * (hard-purge DELETE, restore). The MCP resolvers use the default.
  *
  * Bare-slug resolution is deliberately NOT here: the API rejects bare slugs on
  * legacy paths (`BareSlugRejected`, #698) and the MCP enumerates cross-org
