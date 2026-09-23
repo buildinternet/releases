@@ -3,7 +3,6 @@
   "apps": {
     "apps/web": { "name": "releases" },
     "apps/api": { "name": "api.releases" },
-    "apps/mcp": { "name": "mcp.releases" },
-    "apps/discovery": { "name": "discovery.releases" }
+    "apps/mcp": { "name": "mcp.releases" }
   }
 }

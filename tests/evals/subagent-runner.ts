@@ -130,18 +130,7 @@ function prepSummary(useJudge: boolean) {
   // it into a buildGraderPrompt artifact and hands that to the shared
   // rubric-grader agent — the same judge + artifact shape as overview/metered.
   const rubricText = useJudge
-    ? readFileSync(
-        join(
-          import.meta.dir,
-          "..",
-          "..",
-          "packages",
-          "agent-shared",
-          "rubrics",
-          "release-summary.md",
-        ),
-        "utf8",
-      )
+    ? readFileSync(join(import.meta.dir, "rubrics", "release-summary.md"), "utf8")
     : null;
 
   const cases = fixtures.map((f) => {

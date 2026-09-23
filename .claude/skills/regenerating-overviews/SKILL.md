@@ -283,7 +283,7 @@ curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/json" \
 
 Real incidents have come from sub-agents quietly working around upstream errors:
 
-- **`releases admin source fetch` errors** (non-zero exit, `--wait` surfacing managed-agents errors, etc.) → STOP. Surface the error to the parent. Do NOT regenerate from older `overview inputs` data — the result will be stale and the operator can't tell. The `--wait` flag added in CLI v0.10 makes this exit non-zero; trust the exit code.
+- **`releases admin source fetch` errors** (non-zero exit, `--wait` surfacing update-workflow errors, etc.) → STOP. Surface the error to the parent. Do NOT regenerate from older `overview inputs` data — the result will be stale and the operator can't tell. The `--wait` flag added in CLI v0.10 makes this exit non-zero; trust the exit code.
 - **`overview inputs` empty when you expect content** → likely the fetch never ran or hit a hidden source list. Surface, don't paper over.
 - **`overview inputs` truncated** (the stdout was capped because the payload is huge — see step 1) → STOP. Re-read with `--max-content-chars 1000`. Generating from the visible head of a truncated payload silently drops most of the release window, producing a partial overview the operator can't distinguish from a complete one — exactly what happened to `sentry` and `wordpress` in the 2026-05-25 sweep before they were redone from a full read.
 - **Provider API thoughts** ("let me just call Anthropic directly with `ANTHROPIC_API_KEY`") → no. The only AI surface is the parent harness running this skill. Never read `.env`. Never read secrets of any kind. Never invoke provider SDKs directly. The model call described in step 2 is the parent's job, not a sub-agent's.
@@ -291,6 +291,6 @@ Real incidents have come from sub-agents quietly working around upstream errors:
 
 ## Composing With Other Skills
 
-- **`maintaining-orgs`** dispatches sub-agents that each run this skill for one org, and fronts the **`update-overviews` dynamic Workflow** that wraps the whole batch sweep deterministically (select → fetch → generate → lint + cite → upsert). Generation runs as local sub-agents, so it avoids the metered Anthropic Batch API path; the one cost is a managed-agent `source fetch` for orgs flagged `needsFetch` (scrape/agent sources — feed/github fetches are free). See that skill → _Sweep via Workflow_ for batch patterns and the full cost contract.
+- **`maintaining-orgs`** dispatches sub-agents that each run this skill for one org, and fronts the **`update-overviews` dynamic Workflow** that wraps the whole batch sweep deterministically (select → fetch → generate → lint + cite → upsert). Generation runs as local sub-agents, so it avoids the metered Anthropic Batch API path; the one cost is a `source fetch` update-workflow run for orgs flagged `needsFetch` (scrape/agent sources — feed/github fetches are free). See that skill → _Sweep via Workflow_ for batch patterns and the full cost contract.
 - **`parsing-changelogs`** is the upstream pipeline — if releases are missing from `selected`, fetching may not have run. Suggest the operator run `releases admin source fetch …` first, then re-invoke this skill.
 - **`managing-sources`** is the right place to look if `sources` is empty or every source is hidden/paused.

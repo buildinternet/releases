@@ -20,15 +20,7 @@ export function collectionSummaryFixturesDir(): string {
 
 /** Absolute path to the Tier-2 grading rubric. */
 export function collectionSummaryRubricPath(): string {
-  return join(
-    import.meta.dir,
-    "..",
-    "..",
-    "packages",
-    "agent-shared",
-    "rubrics",
-    "collection-summary.md",
-  );
+  return join(import.meta.dir, "rubrics", "collection-summary.md");
 }
 
 export function loadCollectionSummaryFixtures(

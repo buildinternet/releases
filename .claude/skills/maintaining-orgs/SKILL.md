@@ -266,7 +266,7 @@ Summary table format (`Window` is the effective window used — 30d by default, 
 
 A batch refresh makes real prod mutations (`overview update`, `source fetch`) and spends money on managed fetch sessions and sub-agent generation — exactly the kind of work that should leave a durable, cost-aware trail. Write that trail to the per-user `~/.releases/work/` workspace so the run is auditable after the transcript scrolls away. The workspace is in the home dir (not CWD) so it's the same whether you run from the monorepo or the `releases-cli` checkout. Full layout and templates: **`docs/architecture/maintenance-workspace.md`**.
 
-> **Local Claude Code only.** This assumes a persistent local filesystem. A managed-agent session runs in an ephemeral sandbox whose disk is discarded on teardown — skip run-recording there until the workspace can be synced to durable storage (see the doc's "Local Claude Code only" note). This skill is local-driven today, so that's the normal case.
+> **Local Claude Code only.** This assumes a persistent local filesystem. This skill is local-driven — run it from a local Claude Code session with a persistent filesystem, not an ephemeral one.
 
 Skip this for a single-org spot check — it's for batch sweeps. At the start of a batch, start a run so the CLI auto-captures the mechanical evidence:
 

@@ -139,34 +139,31 @@ personalized feeds, webhooks, and email digests.
 
 ## What's in this repo
 
-| Path              | What                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| `apps/api/`       | Hono API on Cloudflare D1 — the authoritative data plane                                      |
-| `apps/mcp/`       | Remote MCP server at `agents.releases.sh` (alias `mcp.releases.sh`)                           |
-| `apps/discovery/` | Durable-Object agent-session orchestrator                                                     |
-| `apps/webhooks/`  | Signs + delivers `release.created` events (HMAC-SHA256, retry/DLQ) — [docs](docs/webhooks.md) |
-| `apps/web/`       | Next.js frontend, deploys on Vercel                                                           |
-| `packages/`       | Shared code — `core` + `api-types` publish to npm; the rest are private workspaces            |
-| `managed-agents/` | Managed-agent YAML definitions + harness (prompts/tools: `packages/agent-shared/`)            |
-| `.claude/`        | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
+| Path             | What                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `apps/api/`      | Hono API on Cloudflare D1 — the authoritative data plane                                      |
+| `apps/mcp/`      | Remote MCP server at `agents.releases.sh` (alias `mcp.releases.sh`)                           |
+| `apps/webhooks/` | Signs + delivers `release.created` events (HMAC-SHA256, retry/DLQ) — [docs](docs/webhooks.md) |
+| `apps/web/`      | Next.js frontend, deploys on Vercel                                                           |
+| `packages/`      | Shared code — `core` + `api-types` publish to npm; the rest are private workspaces            |
+| `.claude/`       | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
 
 How it fits together:
 
 - **Storage** — Cloudflare D1 (FTS5 + Vectorize). The API worker is the sole data plane.
 - **Ingest** — adapters for GitHub Releases, RSS/Atom/JSON feeds, and a browser-rendering fallback for feed-less pages (`packages/adapters/`). The crawler signs outbound fetches (RFC 9421) as a Cloudflare Verified Bot.
 - **AI** — changelog parsing, summarization, grouping, and org overviews run in the API worker as direct Anthropic SDK calls.
-- **Agents** — discovery + worker run as Anthropic-hosted managed agents; definitions auto-deploy on merge when their source changes.
 
 ## Contributor mental model
 
 This repo has four kinds of code:
 
-| Area               | Paths                                                                         | What to know                                                                                                                 |
-| ------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Product surfaces   | `apps/api/`, `apps/mcp/`, `apps/webhooks/`, `apps/web/`                       | The API worker is the data plane. Web, MCP, CLI, and webhooks read from or route through it.                                 |
-| Shared packages    | `packages/core/`, `packages/api-types/`, private `packages/*`                 | `core` owns schema and pure helpers; `api-types` owns wire shapes. Change these first when shared contracts move.            |
-| Hosted operations  | `apps/discovery/`, `managed-agents/`, `.claude/skills/`, `.claude/workflows/` | These power the canonical releases.sh ingest and operator loop. Some paths need hosted credentials, but local work does not. |
-| Historical context | `docs/architecture/`, `docs/plans/`, `docs/superpowers/`                      | Architecture docs are maintained references. Plans and specs are point-in-time design history.                               |
+| Area               | Paths                                                         | What to know                                                                                                                 |
+| ------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Product surfaces   | `apps/api/`, `apps/mcp/`, `apps/webhooks/`, `apps/web/`       | The API worker is the data plane. Web, MCP, CLI, and webhooks read from or route through it.                                 |
+| Shared packages    | `packages/core/`, `packages/api-types/`, private `packages/*` | `core` owns schema and pure helpers; `api-types` owns wire shapes. Change these first when shared contracts move.            |
+| Hosted operations  | `.claude/skills/`, `.claude/workflows/`                       | These power the canonical releases.sh ingest and operator loop. Some paths need hosted credentials, but local work does not. |
+| Historical context | `docs/architecture/`, `docs/plans/`, `docs/superpowers/`      | Architecture docs are maintained references. Plans and specs are point-in-time design history.                               |
 
 For normal contributions, start with `bun run bootstrap`, `bun run check`, and
 `bun run test`. You do not need production Cloudflare, Anthropic, Vercel, email, or

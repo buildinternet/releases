@@ -1,26 +1,30 @@
 /**
- * When Cloudflare Browser Rendering returns a Managed Challenge interstitial
- * (its datacenter egress fails the challenge), scrapeFetch must short-circuit
- * to a distinct `blocked` / `bot_challenge` signal instead of running extraction
- * on the interstitial and logging `no_change`. See issue #1171.
+ * When a crawl-enabled scrape source times out (Cloudflare `/crawl` throws a
+ * `CrawlTimeoutError` after 300s) or otherwise errors, scrapeFetch must
+ * short-circuit to a distinct `crawl_timeout` fetch-log status instead of
+ * falling through to the index render → incremental → 0 new → a misleading
+ * `no_change`. Mirrors the `blocked` short-circuit from #1171. See issue #1341.
  *
- * Uses the REAL isCloudflareChallengePage detector — it lives in its own
- * module (@releases/adapters/cf-challenge), which we deliberately do NOT mock,
- * so this exercises true detection while only the impure markdown fetch
- * (@releases/adapters/cloudflare) is stubbed.
+ * The crawl primitives are stubbed via `mock.module` (same pattern as the other
+ * scrape-fetch integration tests in this dir): `pollCrawlResults` throws a real
+ * `CrawlTimeoutError`, and the Cloudflare index render is stubbed to null so a
+ * (buggy) fall-through would log `error: no content` — provably distinct from
+ * the `crawl_timeout` status we assert.
  */
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
-import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { CrawlTimeoutError } from "@releases/lib/errors";
+import { restoreGlobalFetch } from "../global-fetch";
 
 const mockSource = {
-  id: "src_test",
+  id: "src_crawl",
   orgId: "org_test",
-  slug: "chatgpt-release-notes",
-  url: "https://help.openai.com/en/articles/6825453-chatgpt-release-notes",
+  slug: "product-updates",
+  url: "https://beehiiv.com/product-updates",
   type: "scrape" as const,
-  name: "ChatGPT release notes",
-  metadata: null,
+  name: "beehiiv product updates",
+  // crawl-enabled, per-post index — the exact shape from the #1341 repro.
+  metadata: JSON.stringify({ crawlEnabled: true, crawlIncludePathPrefix: "/p/" }),
   feedUrl: null,
   feedType: null,
   feedEtag: null,
@@ -30,21 +34,18 @@ const mockSource = {
   consecutiveNoChange: 0,
 };
 
-// A rendered Cloudflare Managed Challenge interstitial as Browser Rendering's
-// /markdown converter would hand it back.
-const CHALLENGE_MARKDOWN =
-  "# Just a moment...\n\nhelp.openai.com\n\nVerifying you are human. This may take a few seconds.\n\nhelp.openai.com needs to review the security of your connection before proceeding.\n\nPerformance & security by Cloudflare";
-
 mock.module("@releases/adapters/cloudflare", () => ({
-  fetchCloudflareMarkdown: async () => CHALLENGE_MARKDOWN,
-  // scrape-fetch statically imports this for the render:false fallback (#1298);
-  // BR returns the challenge page here (non-null), so the fallback never runs.
+  // Index render returns nothing — if the crawl error wrongly fell through,
+  // this path would log `error` ("no content"), not `crawl_timeout`.
+  fetchCloudflareMarkdown: async () => null,
   fetchCloudflareMarkdownFast: async () => null,
 }));
 
 mock.module("@releases/adapters/crawl", () => ({
-  startCrawl: async () => "job_stub",
-  pollCrawlResults: async () => [],
+  startCrawl: async () => "job_timeout",
+  pollCrawlResults: async () => {
+    throw new CrawlTimeoutError("job_timeout", 300_000);
+  },
 }));
 
 mock.module("@releases/adapters/user-agent", () => ({
@@ -89,11 +90,11 @@ function buildApiFetcher() {
   };
 }
 
-describe("scrapeFetch Cloudflare challenge detection", () => {
+describe("scrapeFetch crawl-timeout short-circuit", () => {
   beforeEach(() => {
     capturedFetchLogPayloads = [];
     // probeUpstreamStatus hits globalThis.fetch; keep it hermetic and "not gone"
-    // so we reach the markdown stage.
+    // so we reach the crawl stage.
     globalThis.fetch = (async () => new Response("", { status: 200 })) as unknown as typeof fetch;
   });
 
@@ -101,7 +102,7 @@ describe("scrapeFetch Cloudflare challenge detection", () => {
     restoreGlobalFetch();
   });
 
-  it("short-circuits to a blocked/bot_challenge signal on a challenge interstitial", async () => {
+  it("writes crawl_timeout (not no_change) when the crawl throws a timeout", async () => {
     const { scrapeFetch } = await import("@releases/adapters/scrape-fetch");
     const result = await scrapeFetch(
       {
@@ -111,13 +112,21 @@ describe("scrapeFetch Cloudflare challenge detection", () => {
         apiFetcher: buildApiFetcher(),
         apiKey: "rel_key",
       },
-      "src_test",
+      "src_crawl",
     );
 
-    expect(result).toMatch(/^Blocked \[bot_challenge\]:/);
-    expect(capturedFetchLogPayloads.length).toBeGreaterThan(0);
-    const log = capturedFetchLogPayloads[capturedFetchLogPayloads.length - 1]!;
-    expect(log.status).toBe("blocked");
-    expect(log.errorCategory).toBe("bot_challenge");
+    expect(result).toMatch(/^Degraded \[crawl_timeout\]:/);
+
+    // Exactly one fetch-log write on the short-circuit — an accidental
+    // double-write (e.g. a stray no_change before the timeout) would fail here.
+    expect(capturedFetchLogPayloads).toHaveLength(1);
+    const log = capturedFetchLogPayloads[0]!;
+    expect(log.status).toBe("crawl_timeout");
+    expect(log.errorCategory).toBe("infra");
+    expect(log.error).toMatch(/timed out/);
+
+    // The whole point of #1341: the timeout must NOT be masked as a healthy no-op.
+    expect(capturedFetchLogPayloads.some((p) => p.status === "no_change")).toBe(false);
+    expect(capturedFetchLogPayloads.some((p) => p.status === "success")).toBe(false);
   });
 });

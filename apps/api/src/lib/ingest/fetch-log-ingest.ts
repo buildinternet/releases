@@ -27,7 +27,7 @@ import { InternalError } from "@releases/lib/releases-error";
 
 // ── Auto-backoff for non-converging scrape/agent fetches (#1851) ──────────
 //
-// The scrape/agent extraction path (discovery worker) is the only writer of
+// The scrape/agent extraction path (`DeterministicUpdateWorkflow`) is the only writer of
 // this endpoint. Unlike the feed/GitHub poll path (`cron/poll-fetch.ts`), it
 // never bumped `sources.consecutive_errors` or set `next_fetch_after` on
 // failure — so a source whose extraction deterministically fails (e.g. a crawl
@@ -68,7 +68,7 @@ const UNPRODUCTIVE_DRAIN_PAUSE_AFTER = 5;
 /**
  * Whether a recorded fetch outcome is a deterministic, non-self-resolving
  * failure that warrants error backoff. Pure so it can be unit-tested without a
- * DB. `errorCategory` comes from the discovery worker's `CategorizedError`.
+ * DB. `errorCategory` comes from the extraction path's `CategorizedError`.
  */
 export function shouldBackoffScrapeFailure(errorCategory: unknown): boolean {
   return typeof errorCategory === "string" && BACKOFF_ERROR_CATEGORIES.has(errorCategory);

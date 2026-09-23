@@ -26,13 +26,6 @@
       "autoPort": false
     },
     {
-      "name": "discovery",
-      "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "preview:discovery"],
-      "port": 8789,
-      "autoPort": false
-    },
-    {
       "name": "web-prod-api",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "preview:web"],

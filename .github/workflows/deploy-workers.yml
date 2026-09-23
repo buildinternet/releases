@@ -8,9 +8,9 @@ on:
       worker:
         description: Which worker to deploy (manual run)
         type: choice
-        options: [all, api, mcp, discovery, webhooks]
+        options: [all, api, mcp, webhooks]
         default: all
-      # Target environment for a manual run. On push:main, the api/mcp/discovery
+      # Target environment for a manual run. On push:main, the api/mcp
       # jobs fan out to BOTH prod and staging via matrix (webhooks + the MCP
       # registry remain prod-only). Constrained to a choice so the value is one
       # of production|staging; shell steps reference it through env: to keep
@@ -41,7 +41,6 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       mcp: ${{ steps.filter.outputs.mcp }}
       mcp_registry: ${{ steps.filter.outputs.mcp_registry }}
-      discovery: ${{ steps.filter.outputs.discovery }}
       webhooks: ${{ steps.filter.outputs.webhooks }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -70,10 +69,6 @@ jobs:
             mcp_registry:
               - 'apps/mcp/server.json'
               - '.github/workflows/deploy-workers.yml'
-            discovery:
-              - *shared
-              - 'apps/discovery/**'
-              - 'src/**'
             webhooks:
               - *shared
               - 'apps/webhooks/**'
@@ -156,37 +151,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
         run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config apps/mcp/wrangler.jsonc
-
-  deploy-discovery:
-    name: Deploy discovery worker (${{ matrix.environment }})
-    needs: changes
-    if: |
-      (github.event_name == 'push' && needs.changes.outputs.discovery == 'true') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'discovery'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production", "staging"]') }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: bun install --frozen-lockfile
-      - name: Install discovery worker deps
-        working-directory: apps/discovery
-        run: bun install --frozen-lockfile
-      - name: Deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
-        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config apps/discovery/wrangler.jsonc
 
   deploy-webhooks:
     name: Deploy webhooks worker

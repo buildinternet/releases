@@ -258,9 +258,9 @@ Marketing classifier, release summary, and overview are all wired. The marketing
 and summary Workflows mirror `gradeBinary` / `gradeStructural` inline (Tier-1).
 Overview runs via the Agent tool, pairing the real `gradeOverviewStructural`
 (Tier-1) with the generic `rubric-grader` Sonnet judge against
-`packages/agent-shared/rubrics/overview.md` (Tier-2); its citation-integrity check is
+`tests/evals/rubrics/overview.md` (Tier-2); its citation-integrity check is
 metered-only. The summary `--judge` tier now dispatches that _same_
-`rubric-grader` against `packages/agent-shared/rubrics/release-summary.md`, fed the same
+`rubric-grader` against `tests/evals/rubrics/release-summary.md`, fed the same
 `buildGraderPrompt` artifact (Tier-2) — one judge, not a per-eval one.
 
 **Marketing has no Tier-2.** It is a binary classifier graded by `gradeBinary`

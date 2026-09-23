@@ -10,7 +10,6 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import playbookRoutes from "../src/routes/playbook.js";
 import { taxonomyRoutes } from "../src/routes/taxonomy.js";
-import { errataRoutes } from "../src/routes/errata.js";
 import { organizations, knowledgePages, categories } from "@buildinternet/releases-core/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -167,64 +166,5 @@ describe("PATCH /v1/categories/:slug (validateJson)", () => {
   test("404 when slug isn't a canonical category", async () => {
     const res = await patch("not-a-category", { name: "Whatever" });
     expect(res.status).toBe(404);
-  });
-});
-
-describe("PUT /v1/errata/:orgId (validateJson)", () => {
-  async function put(
-    orgId: string,
-    body: unknown,
-    extra: Record<string, unknown> = {},
-  ): Promise<Response> {
-    return errataRoutes.request(
-      `/errata/${orgId}`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: typeof body === "string" ? body : JSON.stringify(body),
-      },
-      makeEnv(extra),
-    );
-  }
-
-  test("400 bad_request when orgId lacks the org_ prefix", async () => {
-    // Validator passes (content is fine); handler rejects the orgId shape.
-    const res = await put("acme", { content: "foo" }, { MEMORY_STORE_ERRATA_ID: "store_x" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
-    expect(body.error.code).toBe("bad_request");
-    expect(body.error.message).toContain("org_");
-  });
-
-  test("400 bad_request when content is missing", async () => {
-    const res = await put("org_acme", {}, { MEMORY_STORE_ERRATA_ID: "store_x" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string; message: string } };
-    expect(body.error.code).toBe("validation_failed");
-    expect(body.error.message.toLowerCase()).toContain("content");
-  });
-
-  test("400 bad_request when content is empty string", async () => {
-    const res = await put("org_acme", { content: "" }, { MEMORY_STORE_ERRATA_ID: "store_x" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("validation_failed");
-  });
-
-  test("400 payload_too_large when content exceeds the byte cap", async () => {
-    // 100_001 ASCII chars = 100_001 UTF-8 bytes — crosses MAX_CONTENT_BYTES.
-    // Route-level normalization: payload_too_large is 413 -> 400 (see design spec).
-    const oversize = "x".repeat(100_001);
-    const res = await put("org_acme", { content: oversize }, { MEMORY_STORE_ERRATA_ID: "store_x" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string; message: string } };
-    expect(body.error.code).toBe("payload_too_large");
-  });
-
-  test("500 internal_error when MEMORY_STORE_ERRATA_ID is unset", async () => {
-    const res = await put("org_acme", { content: "valid" }, {});
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("internal_error");
   });
 });

@@ -13,7 +13,7 @@ const STDOUT_MAX_LINES = 1000;
  * string to a raw session list. Pure so it can be unit-tested without a DO.
  *
  * `recent_minutes=N` keeps any session that is currently `running` OR was last
- * updated within the last N minutes. This is what lets the discovery worker
+ * updated within the last N minutes. This is what lets update dispatch
  * dedup against retries fired after a session has already finished — see #656.
  * It deliberately does NOT compose with `status=` (callers should pick one),
  * but if both are passed `status` filters first then `recent_minutes` further
@@ -59,7 +59,7 @@ export interface SessionState {
    * Stable org identity (org_…). Preferred dedup key over the free-form
    * `company` label when the caller has it — the `/update` and
    * `startManagedFetchSession` paths both carry it, the legacy `/onboard`
-   * paths don't. See `checkUpdateSessionDedup` in the discovery worker.
+   * paths don't.
    */
   orgId?: string;
   type: "onboard" | "update";
@@ -195,7 +195,7 @@ export class StatusHub extends DurableObject {
 
     // HTTP endpoint: get sessions, with optional ?status=running&type=onboard filtering.
     // ?recent_minutes=N additionally includes finished sessions whose lastUpdatedAt
-    // is within the window — used by the discovery worker to dedup against retries
+    // is within the window — used by update dispatch to dedup against retries
     // that fire after the original session has already transitioned. See #656.
     if (request.method === "GET" && url.pathname === "/sessions") {
       const response = buildSessionListResponse(

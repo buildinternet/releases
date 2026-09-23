@@ -1,6 +1,6 @@
 # Contributing
 
-Build, run, deploy, and operate the monorepo behind [releases.sh](https://releases.sh) — the API worker, MCP server, web frontend, discovery agents, and shared packages. The user-facing CLI lives separately in [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) and ships through npm + Homebrew; this repo talks to the world over HTTP.
+Build, run, deploy, and operate the monorepo behind [releases.sh](https://releases.sh) — the API worker, MCP server, web frontend, and shared packages. The user-facing CLI lives separately in [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) and ships through npm + Homebrew; this repo talks to the world over HTTP.
 
 The conventions below cover the shape of changes so PRs stay easy to review and the published packages (`@buildinternet/releases-core`, `@buildinternet/releases-api-types`, `@buildinternet/releases-lib/logger`) behave consistently for the OSS CLI.
 
@@ -8,9 +8,9 @@ The conventions below cover the shape of changes so PRs stay easy to review and 
 
 The repo is designed so contribution never requires access to the production infrastructure:
 
-- **No external accounts:** `bun install`, `bun run check`, and `bun run test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `apps/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` / `preview:discovery` scripts are the plain-port fallback if you'd rather skip portless.
+- **No external accounts:** `bun install`, `bun run check`, and `bun run test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `apps/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` scripts are the plain-port fallback if you'd rather skip portless.
 - **Bring your own keys (feature-scoped):** `ANTHROPIC_API_KEY` for the AI passes (summaries, classification, extraction), `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` (any Cloudflare account) for Browser Rendering scrape fetches, `VOYAGE_API_KEY` for semantic search.
-- **Hosted-only (not reproducible by design):** managed-agent discovery, email, Firecrawl, and the account-scoped bindings in each `wrangler.jsonc` — see [deploy-coupling.md](docs/architecture/deploy-coupling.md) for the fork inventory.
+- **Hosted-only (not reproducible by design):** email, Firecrawl, and the account-scoped bindings in each `wrangler.jsonc` — see [deploy-coupling.md](docs/architecture/deploy-coupling.md) for the fork inventory.
 
 ## Setup
 
@@ -33,7 +33,7 @@ The monorepo no longer ships a local CLI. If you need `releases <cmd>` while wor
 
 Everything under `.claude/` auto-loads on a trusted clone with no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the repo-local commands in `.claude/commands/`, and the hosted MCP tools from the repo-root `.mcp.json`.
 
-On top of that, the repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. If you operate/maintain sources, also install the `releases-admin` plugin (operator playbooks + discovery/worker agents) from the same marketplace:
+On top of that, the repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. If you operate/maintain sources, also install the `releases-admin` plugin (operator playbooks) from the same marketplace:
 
 ```
 /plugin install releases-admin@releases
@@ -58,13 +58,12 @@ Copy `.env.example` to `.env` and fill in:
 bun run db:migrate:local     # apply D1 migrations (required before first dev:api run)
 bun run dev:web              # Next.js frontend on :3000
 bun run dev:api              # API worker on :8787 (local D1)
-bun run dev:discovery        # Discovery worker locally
 bun run dev:mcp              # MCP worker locally
 ```
 
 Point the web frontend at the local API worker by setting `RELEASES_API_URL=http://localhost:8787` in `apps/web/.env.local`.
 
-`wrangler dev` does not pull from Cloudflare's Secrets Store, so endpoints that read bound secrets will fail locally unless you create the worker's `.dev.vars` with the values you need. Each worker ships a checked-in `.dev.vars.example` template (`apps/{api,mcp,discovery,webhooks}/`); copy to `.dev.vars` and fill in. The real files are gitignored.
+`wrangler dev` does not pull from Cloudflare's Secrets Store, so endpoints that read bound secrets will fail locally unless you create the worker's `.dev.vars` with the values you need. Each worker ships a checked-in `.dev.vars.example` template (`apps/{api,mcp,webhooks}/`); copy to `.dev.vars` and fill in. The real files are gitignored.
 
 ## Checks
 
@@ -91,7 +90,7 @@ bun test --watch             # re-run on file changes
 
 Tests live next to the code they cover:
 
-- `apps/api/test/`, `apps/mcp/test/`, `apps/discovery/test/`, `apps/webhooks/test/`: per-app suites.
+- `apps/api/test/`, `apps/mcp/test/`, `apps/webhooks/test/`: per-app suites.
 - `apps/web/src/**/*.test.ts` and `packages/*/src/**/*.test.ts`: colocated with the module under test.
 - `tests/`: shared helpers and fixtures, tests for root `scripts/` and `actions/`, and tests that import from more than one app.
 
@@ -117,7 +116,7 @@ npx tsc --noEmit --project tests/tsconfig.json
 
 ## Evals
 
-Eval suites measure the quality of AI-powered features — changelog parsing, source evaluation, and agent discovery. They call real AI models and are not part of the normal test run.
+Eval suites measure the quality of AI-powered features — changelog parsing and source evaluation. They call real AI models and are not part of the normal test run.
 
 ```bash
 bun run eval:evaluation      # URL evaluation evals (~30 sec, no API key needed)
@@ -129,26 +128,16 @@ Parsing + discovery evals used to live in this repo but followed the CLI into [b
 
 ## Deployment
 
-Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt, fans out across `production` and `staging`, and runs `wrangler d1 migrations apply` against each environment's DB before the new code starts serving (so additive schema lands first). Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `packages/agent-shared/src/agent-tools.ts`, the `packages/agent-shared/src/*-prompt.ts` builders, `packages/core/src/categories.ts`, `managed-agents/*.environment.yaml`, `.claude/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys.
+Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt, fans out across `production` and `staging`, and runs `wrangler d1 migrations apply` against each environment's DB before the new code starts serving (so additive schema lands first). The workflow exposes `workflow_dispatch` for manual redeploys.
 
 To deploy manually from the project root, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (Bun autoloads it) and run:
 
 ```bash
-bun run deploy               # deploy all workers (API + Discovery + MCP)
+bun run deploy               # deploy all workers (API + MCP)
 bun run deploy:api           # deploy API worker only
-bun run deploy:discovery     # deploy Discovery worker only
 bun run deploy:mcp           # deploy MCP worker only
-bun run deploy:agents            # sync both managed agents (discovery + worker)
-bun run deploy:agents:discovery  # sync discovery agent only (Sonnet)
-bun run deploy:agents:worker     # sync worker agent only (Haiku)
-bun run deploy:skills            # sync skills only (SKILL.md files)
-bun run deploy:agents --dry-run  # preview agent changes without pushing
 bun run db:migrate:remote    # apply D1 migrations to production (rarely needed — auto-applied on deploy)
 ```
-
-The discovery worker runs **managed agents** (Anthropic-hosted). Sessions are Durable Objects that stream events from the Anthropic API via typed executor tools.
-
-Agent tools, system prompts, and skills auto-deploy on merges to `main` — `deploy-managed-agents.yml` watches the five paths listed above and pushes prompt + tools + skills + model to both Anthropic-hosted agents. For local iteration, `bun run deploy:agents` does the same push on demand (requires `ANTHROPIC_API_KEY`); use `deploy:agents:discovery` or `deploy:agents:worker` for single-agent deploys, or `-- --env staging` for staging. Agent IDs and skill mappings are stored in `scripts/agent-skills.json`.
 
 ## Database tools
 
@@ -175,7 +164,7 @@ chore(api-types): publish 0.9.0 with collection write types
 
 A few project-specific things to keep in mind:
 
-- **Workers and managed agents auto-deploy from `main` on merge** — every PR ships to production the moment it lands. Treat reviews accordingly.
+- **Workers auto-deploy from `main` on merge** — every PR ships to production the moment it lands. Treat reviews accordingly.
 - **Schema changes land in `packages/core/` first**, not under `apps/api/migrations/`. The OSS CLI consumes `@buildinternet/releases-core` from npm, so the shared schema is the source of truth.
 - **Wire-protocol changes** (request/response shapes the API serves) land in `packages/api-types/` first. Additive by default — renames or removals go through a one-minor-version deprecation alias before the field disappears.
 - **Drizzle migrations are mandatory** for any new table or column. Schema-only changes that skip the migration crash local DBs on the next `db:migrate:local`.

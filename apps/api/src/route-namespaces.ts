@@ -79,7 +79,6 @@ export const adminRoutes = [
   "admin/emails",
   // Operator preview + match-quality summary (#2304, #2312).
   "admin/semantic-alerts",
-  "errata",
   "webhooks",
   "workflows",
   "tokens",

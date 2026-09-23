@@ -717,8 +717,8 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
   ) {
     // Render dry-run probe (#1528): a client-rendered scrape source's steady-
     // state fetch renders the index via Browser Rendering. `?dryRun=true` here
-    // renders it once and reports candidate-link count WITHOUT the managed-agent
-    // extraction loop — the cheap "is the render seeing releases or an empty
+    // renders it once and reports candidate-link count WITHOUT the extraction
+    // loop — the cheap "is the render seeing releases or an empty
     // shell?" check onboarding previously couldn't answer.
     const result = await renderCheckOne(db, src, {
       CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
@@ -903,9 +903,10 @@ sourceRoutes.post(
 
 // ── Persist a raw page snapshot (#1283) ──
 //
-// Universal raw capture for the steady-state scrape path. The discovery worker
-// has no D1/R2, so after it acquires the markdown body it POSTs it here (behind
-// the `raw-snapshot-capture-enabled` flag) and the API worker content-addresses
+// Universal raw capture for the steady-state scrape path. The scrape fetch
+// persists through HTTP (injected API fetcher), so after it acquires the
+// markdown body it POSTs it here (behind the `raw-snapshot-capture-enabled`
+// flag) and this handler content-addresses
 // it into `released-raw` + a `source_raw_snapshots` pointer row. Captured bodies
 // feed cheap re-extraction (`POST /v1/workflows/reextract-source`, #1284) when
 // extraction logic improves — no re-scrape, no Firecrawl credits.
@@ -917,7 +918,7 @@ const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
   const src = await resolveSourceFromContext(c, db);
   if (!src) return respondError(c, new NotFoundError("Source not found"));
   // Scrape-only: snapshots are produced by (and re-extractable from) the scrape
-  // path. The discovery worker only POSTs here for scrape sources; the guard
+  // path. The scrape fetch only POSTs here for scrape sources; the guard
   // keeps the endpoint scoped and matches backfill/reextract-source.
   if (src.type !== "scrape") {
     return respondError(

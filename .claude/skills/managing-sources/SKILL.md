@@ -187,16 +187,16 @@ Three different shapes of information end up needing a home during onboarding an
 | Shape of fact                                                                                                                                                                                                                         | Home                                                                                                                                                 | Read by                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Target-shaped, durable, org-specific (DOM hooks, IP blocks, repo splits, monorepo patterns, version format, scope decisions).                                                                                                         | **Playbook** — `manage_playbook(action=update_notes)`.                                                                                               | Every future fetch agent for this org.                       |
-| Org-specific raw observation, possibly noisy or single-session (a redirect chain you saw, a candidate URL you probed, a quirk you suspect but haven't confirmed).                                                                     | **`releases-errata` memory store**, `/orgs/<org_id>/observations.md` for resolved orgs, `/discovery/global.md` for cross-org / pre-resolution notes. | Future discovery and fetch agents in managed-agent sessions. |
-| Harness-shaped or adapter-shaped — any fact that's true about _our_ code, MCP tool, or fetcher rather than the target. ("Adapter X errors with Y", "MCP tool Z arrived as custom_tool_use", "fetch returns 0 even with feedUrl set"). | **`releases-tool-notes` memory store**, `/tools/<tool>.md`, `/mcp/<server>/<tool>.md`, `/harness/notes.md`.                                          | Future managed-agent sessions across all orgs.               |
+| Org-specific raw observation, possibly noisy or single-session (a redirect chain you saw, a candidate URL you probed, a quirk you suspect but haven't confirmed).                                                                     | Nowhere durable. Mention it in your run report if it matters; otherwise drop it.                                                                     | The operator reading the report.                             |
+| Harness-shaped or adapter-shaped — any fact that's true about _our_ code, MCP tool, or fetcher rather than the target. ("Adapter X errors with Y", "MCP tool Z arrived as custom_tool_use", "fetch returns 0 even with feedUrl set"). | A GitHub issue in the monorepo if it's a real bug; otherwise the run report.                                                                         | Maintainers.                                                 |
 
-If you have memory stores attached, log to the right store and **leave the playbook out of it**. If you don't (e.g. local Claude Code sub-agents), drop facts that don't pass the playbook keep test — don't relocate them into the playbook just because there's nowhere else to put them.
+The errata and tool-notes memory stores went away with the managed agents. Drop facts that don't pass the playbook keep test — don't relocate them into the playbook just because there's nowhere else to put them.
 
 #### The keep test
 
 Before you write a sentence in the playbook, ask: **would a brand-new fetch agent six months from now, fetching this org from a clean harness, still need this fact?**
 
-If yes — keep it. If no — drop it (or, in a managed-agent session, route it to errata or tool-notes).
+If yes — keep it. If no — drop it.
 
 | Keep                                                                                                                           | Drop                                                                                                                                           |
 | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -240,7 +240,7 @@ Only include traps that pass the keep test. Good traps name a property of the **
 - **Challenge-blocked render:** the changelog sits behind a Cloudflare Managed Challenge our Browser Rendering can't clear — retrying render returns the challenge shell, never content. Route the source through Firecrawl monitoring (`metadata.firecrawl`) or pause it with the blocker recorded.
 - **Don't re-discover:** include disabled sources with this label so future runs don't re-evaluate them.
 
-Do not include adapter or harness bugs ("feed returns 'Missing feedType in metadata'") — route to `releases-tool-notes`. Do not include onboarding-time errors not tied to a target property. Do not include future engineering work the agent thinks should happen.
+Do not include adapter or harness bugs ("feed returns 'Missing feedType in metadata'") — file them. Do not include onboarding-time errors not tied to a target property. Do not include future engineering work the agent thinks should happen.
 
 **`### Coverage`** — Two to four sentences. Which sources are canonical, what's covered, what's intentionally skipped (with a one-clause reason — "blog feed is site-wide marketing", "mobile SDKs live under a different org"). Optionally a short cadence summary if it varies meaningfully across sources.
 
@@ -258,13 +258,11 @@ Do **not** list "missing" sources as a to-do. If a surface isn't worth tracking,
 
 It's fine to write a short trap that records a real, durable target property even if you couldn't fully exploit it during onboarding — for example, "the API changelog is a static HTML page with no feed; rely on scrape" or "developer changelog URL returned 404 — re-check on next visit." That's target-shaped.
 
-It is **not** fine to write "fetch returned an error during onboarding so we paused it." That's session-shaped and adapter-shaped. If a source is failing for reasons you can't attribute to the target, pause the source without an explanation in the playbook body — the source's own state already records that it's paused. In a managed-agent session, log the underlying tool error to `releases-tool-notes`.
+It is **not** fine to write "fetch returned an error during onboarding so we paused it." That's session-shaped and adapter-shaped. If a source is failing for reasons you can't attribute to the target, pause the source without an explanation in the playbook body — the source's own state already records that it's paused. If you have memory-store tools attached, log the underlying tool error to `releases-tool-notes`.
 
 #### Reading first
 
 Always call `manage_playbook(action=get)` before writing. Preserve durable trap entries from prior runs. If you're rewriting a section, fold prior facts that still pass the keep test into the new draft instead of dropping them.
-
-In a managed-agent session, also read `releases-errata` `/orgs/<org_id>/observations.md` (and `/discovery/global.md` if it predates the org being resolved) before writing. Some of those observations may have stabilized into facts worth promoting into the playbook; others are still hints and stay in errata.
 
 ### Levels of playbook quality
 

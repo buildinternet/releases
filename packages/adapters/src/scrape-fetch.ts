@@ -1,5 +1,5 @@
 /**
- * Extraction entry point for the discovery worker.
+ * Extraction entry point for the scrape/agent update-dispatch path.
  *
  * Routes on `source.type`:
  *   - `scrape`   → markdown URL (if set) OR Cloudflare Browser Rendering →
@@ -95,7 +95,7 @@ export interface ScrapeEnv {
   extractModel?: string;
   /**
    * `true` to capture the scraped markdown body as a raw snapshot (#1283).
-   * The discovery worker has no D1/R2, so `runScrapePath` POSTs the body to the
+   * Callers without D1/R2 access have `runScrapePath` POST the body to the
    * API worker's raw-snapshot endpoint for later re-extraction (#1284).
    * Resolved per session from the `raw-snapshot-capture-enabled` flag.
    */
@@ -104,7 +104,7 @@ export interface ScrapeEnv {
   signedFetch?: typeof fetch;
   /**
    * Persistence seam (#1946 phase 4). Defaults to `httpPersister(env)` — the
-   * API-worker-backed path used by the discovery worker (no D1/R2 access) and
+   * API-worker-backed path used by callers without D1/R2 access and
    * everything else that doesn't inject one. A direct-DB persister can be
    * supplied by callers that have D1 access, skipping the HTTP round-trip.
    */
@@ -500,15 +500,15 @@ async function runAgentPath(
 }
 
 /**
- * Best-effort raw-snapshot capture (#1283). The discovery worker has no D1/R2,
- * so it POSTs the scraped body to the API worker, which content-addresses it
+ * Best-effort raw-snapshot capture (#1283). Callers without D1/R2 access
+ * POST the scraped body to the API worker, which content-addresses it
  * into `released-raw` (dedup on unchanged bodies) for later re-extraction
  * (#1284). Gated by `env.captureRawSnapshots` (the `raw-snapshot-capture-enabled`
  * flag, resolved once per session). Never throws — a capture failure must not
  * abort the extraction it precedes.
  *
  * Retained as a thin wrapper over `httpPersister(env).captureRawSnapshot` for
- * back-compat — `apps/discovery`'s tests import this directly by name.
+ * back-compat with existing callers that import this directly by name.
  * Callers inside this file go through the resolved `persister` instead (which
  * may be a non-HTTP implementation).
  */

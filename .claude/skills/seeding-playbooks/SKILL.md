@@ -1,6 +1,6 @@
 ---
 name: seeding-playbooks
-description: Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Currently wired up for Claude Code's Agent tool; the managed-agent fleet supports sub-agents too and the pattern can be adapted, but isn't wired up there yet.
+description: Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Wired up for Claude Code's Agent tool, run locally.
 ---
 
 # Seeding Playbooks
@@ -15,7 +15,7 @@ Global skills teach general patterns; per-source `parseInstructions` teach sourc
 
 Write notes as instructions to an LLM, not as human documentation. Imperative voice ("Set version=null", "Parse `<h2>` as version boundaries"), concrete examples from real data, and only observations that change future fetch behavior.
 
-**Currently a local-Claude-Code skill.** The dispatch pattern below uses Claude Code's Agent tool — that's what's actually wired up. Managed agents (discovery worker, Haiku worker) _can_ spawn sub-agents in principle, but the harness, prompt scaffolding, and rate-limit accounting for managed sub-agent dispatch in this repo haven't been built yet. If/when that gets wired up, the prompts and dispatch shape in this skill port directly.
+**A local-Claude-Code skill.** The dispatch pattern below uses Claude Code's Agent tool, run locally — there is no remote managed-agent fleet in this repo to deploy it to. Onboarding and fetch dispatch for orgs/sources goes through the `local-ingest` skill or `releases admin org|source create` instead.
 
 ## When to Use
 
@@ -216,7 +216,7 @@ for (const org of orgs) {
 
 A batch run makes real prod mutations across many orgs. Leave a durable, cost-aware trail in the per-user `~/.releases/work/` workspace so the work is auditable after the transcript scrolls away — don't let it evaporate into the conversation. The workspace is in the home dir (not CWD) so the trail is the same whether you run from the monorepo or the `releases-cli` checkout. Full layout and templates: **`docs/architecture/maintenance-workspace.md`**.
 
-> **Local Claude Code only.** This assumes a persistent local filesystem. A managed-agent session runs in an ephemeral sandbox whose disk is discarded on teardown — skip run-recording there until the workspace can be synced to durable storage (see the doc's "Local Claude Code only" note). The dispatch pattern in this skill is local-driven today, so this is the normal case.
+> **Local Claude Code only.** This assumes a persistent local filesystem. The dispatch pattern in this skill is local-driven — run it from a local Claude Code session with a persistent filesystem, not an ephemeral one.
 
 At the start of a batch, start a run so the CLI's mutation log points at it:
 

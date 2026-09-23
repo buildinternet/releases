@@ -92,7 +92,7 @@ const TAGS = [
     description:
       "Signed-in account preferences. Session cookie or user Bearer (`relu_` / OAuth JWT). Semantic alerts store interests only — matching is a later phase.",
   },
-  { name: "Sessions", description: "Managed-agent discovery sessions." },
+  { name: "Sessions", description: "Update-run sessions (status hub)." },
 ];
 
 export function mountOpenApi(v1: Hono<Env>) {
