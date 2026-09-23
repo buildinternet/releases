@@ -147,7 +147,7 @@ personalized feeds, webhooks, and email digests.
 | `apps/webhooks/`  | Signs + delivers `release.created` events (HMAC-SHA256, retry/DLQ) — [docs](docs/webhooks.md) |
 | `apps/web/`       | Next.js frontend, deploys on Vercel                                                           |
 | `packages/`       | Shared code — `core` + `api-types` publish to npm; the rest are private workspaces            |
-| `managed-agents/` | Managed-agents discovery + worker definitions and harness (prompt builder + shared types)     |
+| `managed-agents/` | Managed-agent YAML definitions + harness (prompts/tools: `packages/agent-shared/`)            |
 | `.claude/`        | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
 
 How it fits together:

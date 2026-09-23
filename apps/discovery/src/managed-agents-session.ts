@@ -19,10 +19,10 @@ import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
 } from "@releases/lib/ma-rate-limit.js";
-import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
-import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
-import { buildOnboardTaskMessage } from "@releases/shared/onboard-task-message.js";
-import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
+import { createTypedExecutor, handleCustomToolUse } from "@releases/agent-shared/agent-tools";
+import { buildDiscoverySystemPrompt } from "@releases/agent-shared/discovery-prompt";
+import { buildOnboardTaskMessage } from "@releases/agent-shared/onboard-task-message";
+import { buildMemoryStoreResources } from "@releases/agent-shared/memory-store-attach";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "@releases/adapters/scrape-fetch";
 import { scrapeFetchErrorCategory } from "@releases/adapters/deterministic-update";

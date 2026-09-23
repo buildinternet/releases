@@ -24,9 +24,8 @@ export function collectionSummaryRubricPath(): string {
     import.meta.dir,
     "..",
     "..",
-    "managed-agents",
-    "src",
-    "shared",
+    "packages",
+    "agent-shared",
     "rubrics",
     "collection-summary.md",
   );

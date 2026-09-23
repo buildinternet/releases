@@ -21,7 +21,7 @@ apps/
   discovery/      source onboarding (Cloudflare Worker)
   webhooks/       webhook delivery queue consumer (Cloudflare Worker)
 packages/         shared code: published @buildinternet/releases-* and private @releases/*
-managed-agents/   managed-agent definitions + harness
+managed-agents/   managed-agent YAML definitions + harness
 actions/          GitHub Actions (publish-changelog)
 skills/           published agent skills
 scripts/          operational + maintenance scripts
@@ -59,14 +59,15 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 - `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table), `release-content` (Haiku 4.5 summarization for `title_generated` / `title_short` / `summary` — shared by `scripts/generate-release-content.ts` and the ingest-time hook), `marketing-classifier` (Haiku 4.5 binary verdict on whether a feed item is real product news vs. marketing — used by `fetchOne` when `metadata.marketingFilter` is set). Worker-safe; caller passes the Anthropic client.
 - `packages/rendering/` → imported as **`@releases/rendering/*`**. Atom feed helpers, markdown/JSON formatters, and media URL helpers.
 - `packages/search/` → imported as **`@releases/search/*`**. Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
+- `packages/agent-shared/` → imported as **`@releases/agent-shared/*`**. Managed-agent prompt builders, typed tools (`agent-tools`), onboard/memory-store helpers, and grader rubrics (`rubrics/*.md`, read from disk by the evals).
 - `packages/lib/` — slim private utilities (`config`, `errors`, `source-edit`, Anthropic client/error helpers, managed-agent rate limits, `anthropic-pricing` for list-price cost estimates on managed-agent sessions, `spend-cap` daily-spend KV gate, `session-error-classify`). `logger` is published as `@buildinternet/releases-lib/logger`.
 
 ## Managed-agents harness (`managed-agents/`)
 
-The `managed-agents/` directory holds both the deployed agent definitions (`*.agent.yaml`, `*.environment.yaml`) and the harness code that drives them, under `managed-agents/src/`:
+The `managed-agents/` directory holds the deployed agent definitions (`*.agent.yaml`, `*.environment.yaml`) and the harness code under `managed-agents/src/agent/`:
 
 - `managed-agents/src/agent/` — the harness itself (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `discovery.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`apps/discovery/`) is the only production entrypoint.
-- `managed-agents/src/shared/` — prompts, typed tools (`agent-tools.ts`), and grader rubrics (`rubrics/*.md`) shared by the harness, the discovery worker, and the eval suite. Imported by workers as `@releases/shared/*` (a bundler/tsconfig alias, not a workspace package).
+- The prompts, typed tools, and grader rubrics the harness, discovery worker, and evals share live in `packages/agent-shared/` (`@releases/agent-shared/*`). The YAML is rendered from them: `bun scripts/render-managed-agents.ts` (CI `--check` fails on drift).
 
 The `release_coverage` schema lives with the rest of the DB-coupled internals in `packages/core-internal/src/schema-coverage.ts` (imported as `@releases/core-internal/schema-coverage`), not at the repo root.
 

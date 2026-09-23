@@ -33,9 +33,8 @@ export function weeklyDigestRubricPath(): string {
     import.meta.dir,
     "..",
     "..",
-    "managed-agents",
-    "src",
-    "shared",
+    "packages",
+    "agent-shared",
     "rubrics",
     "weekly-digest.md",
   );

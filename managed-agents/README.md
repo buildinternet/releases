@@ -20,17 +20,19 @@ definition with a flag: staging agents and skills are distinct resources
 (display title suffixed `(staging)`) so iteration there never affects
 production. See [AGENTS.md](../AGENTS.md) for the staging environment details.
 
-### Harness code (`src/`)
+### Harness code (`src/agent/`)
 
 - `src/agent/managed-discovery.ts` — the harness that drives a discovery session
 - `src/agent/discovery.ts` — discovery prompt builder + shared types
-- `src/shared/agent-tools.ts` — typed tools available to the agents
-- `src/shared/coordinator-prompt.ts`, `discovery-prompt.ts`, `worker-prompt.ts` — prompt builders
-- `src/shared/onboard-task-message.ts`, `parse-args.ts`, `memory-store-attach.ts` — supporting harness utilities
-- `src/shared/rubrics/*.md` — grader rubrics (`breaking.md`, `collection-summary.md`, `overview.md`, `release-summary.md`)
 
-`src/shared/*` is imported by workers as `@releases/shared/*` and is shared
-across the harness, the discovery worker, and the eval suite.
+### Prompts, tools, and rubrics
+
+The prompt builders, typed tools (`AGENT_TOOLS`), onboard/memory-store helpers,
+and grader rubrics live in [`packages/agent-shared/`](../packages/agent-shared/README.md),
+imported as `@releases/agent-shared/*` by the harness, the discovery worker, the
+render/sync scripts, and the eval suite. The `*.agent.yaml` files above are
+rendered from them with `bun scripts/render-managed-agents.ts`; CI fails if the
+committed YAML drifts.
 
 ## Docs
 

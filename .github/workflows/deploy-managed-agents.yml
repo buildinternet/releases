@@ -9,10 +9,10 @@ on:
   push:
     branches: [main]
     paths:
-      - managed-agents/src/shared/agent-tools.ts
-      - managed-agents/src/shared/worker-prompt.ts
-      - managed-agents/src/shared/discovery-prompt.ts
-      - managed-agents/src/shared/coordinator-prompt.ts
+      - packages/agent-shared/src/agent-tools.ts
+      - packages/agent-shared/src/worker-prompt.ts
+      - packages/agent-shared/src/discovery-prompt.ts
+      - packages/agent-shared/src/coordinator-prompt.ts
       - .claude/skills/**
       - scripts/sync-agent-skills.ts
       # CATEGORIES is embedded verbatim in every agent's system prompt, so a

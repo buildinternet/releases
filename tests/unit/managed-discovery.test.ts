@@ -1,9 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
-import { parseArgs } from "../../managed-agents/src/shared/parse-args.js";
-import { buildDiscoverySystemPrompt } from "../../managed-agents/src/shared/discovery-prompt.js";
-import { buildWorkerSystemPrompt } from "../../managed-agents/src/shared/worker-prompt.js";
+import { parseArgs } from "@releases/agent-shared/parse-args";
+import { buildDiscoverySystemPrompt } from "@releases/agent-shared/discovery-prompt";
+import { buildWorkerSystemPrompt } from "@releases/agent-shared/worker-prompt";
 import {
   classifyProviderSessionError,
   isRetriesExhaustedIdle,

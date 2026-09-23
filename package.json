@@ -114,6 +114,7 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@releases/adapters": "workspace:*",
+    "@releases/agent-shared": "workspace:*",
     "@releases/ai-internal": "workspace:*",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",

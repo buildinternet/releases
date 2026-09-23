@@ -5,7 +5,7 @@
  * and a typed dispatcher that maps tool calls directly to REST API endpoints.
  *
  * Shared between:
- * - CLI path (src/agent/managed-discovery.ts)
+ * - CLI path (managed-agents/src/agent/managed-discovery.ts)
  * - Worker path (apps/discovery/src/managed-agents-session.ts)
  */
 

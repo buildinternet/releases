@@ -3,7 +3,7 @@
  * `discovery` field to the PATCH API endpoint (#1317).
  */
 import { describe, it, expect } from "bun:test";
-import { createTypedExecutor } from "../../managed-agents/src/shared/agent-tools.js";
+import { createTypedExecutor } from "@releases/agent-shared/agent-tools";
 
 interface RecordedRequest {
   method: string;
