@@ -33,8 +33,9 @@ export async function GET(
     const baseUrl = getBaseUrl(request);
     return markdownResponse(overviewToMarkdown(overview, { baseUrl, orgSlug }), {
       cache: "dynamic",
-      // The overview content also renders on the org page; consolidate there.
-      canonical: `${baseUrl}/${orgSlug}`,
+      // Match the HTML overview page, which self-canonicals to `/:org/overview`.
+      // Pointing elsewhere sends Google conflicting canonical signals.
+      canonical: `${baseUrl}/${orgSlug}/overview`,
     });
   }
 

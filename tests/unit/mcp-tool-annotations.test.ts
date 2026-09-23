@@ -43,10 +43,11 @@ describe("MCP tool annotations", () => {
 
   // The per-user follows tools (#1520) mutate the caller's account, so they are
   // NOT read-only. They're still listed in tools/list (gating is at call time via
-  // the user credential), so the surface includes them.
-  const MUTATION_TOOLS = new Set(["follow", "unfollow"]);
+  // the user credential), so the surface includes them. `manage_webhook`
+  // (#1678, #2326) is the same story — a per-user/per-workspace write.
+  const MUTATION_TOOLS = new Set(["follow", "unfollow", "manage_webhook"]);
 
-  it("exposes the full tool surface (read-only catalog + per-user follows)", () => {
+  it("exposes the full tool surface (read-only catalog + per-user follows + webhooks)", () => {
     const names = tools.map((t) => t.name).toSorted();
     expect(names).toEqual([
       "follow",
@@ -61,7 +62,9 @@ describe("MCP tool annotations", () => {
       "list_collections",
       "list_follows",
       "list_organizations",
+      "list_webhooks",
       "lookup_domain",
+      "manage_webhook",
       "search",
       "unfollow",
       "whats_changed",
@@ -81,7 +84,7 @@ describe("MCP tool annotations", () => {
   });
 
   it("marks the follows mutation tools as non-read-only but idempotent", () => {
-    for (const name of MUTATION_TOOLS) {
+    for (const name of ["follow", "unfollow"]) {
       const tool = tools.find((t) => t.name === name);
       expect(tool, `expected ${name} in tools list`).toBeDefined();
       expect(tool!.annotations?.readOnlyHint).toBe(false);
@@ -91,6 +94,26 @@ describe("MCP tool annotations", () => {
       expect(tool!.annotations?.title).toBeString();
       expect(tool!.title).toBeString();
     }
+  });
+
+  it("marks manage_webhook as a non-read-only, destructive, open-world write", () => {
+    const tool = tools.find((t) => t.name === "manage_webhook");
+    expect(tool, "expected manage_webhook in tools list").toBeDefined();
+    expect(tool!.annotations?.readOnlyHint).toBe(false);
+    expect(tool!.annotations?.destructiveHint).toBe(true);
+    expect(tool!.annotations?.idempotentHint).toBe(false);
+    expect(tool!.annotations?.openWorldHint).toBe(true);
+    expect(tool!.annotations?.title).toBeString();
+    expect(tool!.title).toBeString();
+  });
+
+  it("marks list_webhooks as a read-only tool", () => {
+    const tool = tools.find((t) => t.name === "list_webhooks");
+    expect(tool, "expected list_webhooks in tools list").toBeDefined();
+    expect(tool!.annotations?.readOnlyHint).toBe(true);
+    expect(tool!.annotations?.destructiveHint).toBe(false);
+    expect(tool!.annotations?.idempotentHint).toBe(true);
+    expect(tool!.annotations?.openWorldHint).toBe(false);
   });
 
   it("advertises an MCP App UI for the release-feed tools", () => {
