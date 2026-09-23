@@ -9,14 +9,7 @@ import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
-import { releaseIdFromPath, isHttpUrl } from "@releases/rendering/digest-sections";
-import {
-  EXTERNAL_UGC_REL,
-  isFragmentHref,
-  isInternalHref,
-  isSafeHref,
-  isSafeImgSrc,
-} from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
 import type { WithBodyHtml } from "@/lib/release-view";
 
 /**
@@ -48,6 +41,13 @@ import type { WithBodyHtml } from "@/lib/release-view";
  * The `"server-only"` import makes any accidental client import a build error —
  * the point being to keep this module (and thus shiki + the unified stack) out
  * of the browser bundle.
+ *
+ * This module covers the GENERIC concerns shared by every release/changelog
+ * body render (heading demotion, image variant, default link safety). The
+ * weekly-digest page has its own additional concerns (heading ids, release-
+ * link rewriting) layered on top as a second rehype pass in
+ * {@link file://./render-digest-body.ts}, which reuses `rehypeReleaseBody`
+ * (exported below) rather than duplicating it.
  */
 
 /** `"full"` keeps sanitized inline images (App Store / video rows whose expanded
@@ -70,38 +70,25 @@ const IMG_CLASS =
 /** Heading demotion levels — same meaning as `markdownComponents.demoteHeadings`. */
 export type DemoteHeadings = 0 | 1 | 2;
 
-type RehypeBodyOpts = {
+export type RehypeBodyOpts = {
   variant: BodyVariant;
   /** Default `2` (card/changelog pipeline). Digests use `0` so `###` stays h3. */
   demoteHeadings?: DemoteHeadings;
-  /** When set, headings get an `id` derived from their text (digest section anchors). */
-  headingIds?: (text: string) => string;
-  /** When set, `headingIds` only runs for headings whose SOURCE level (before
-   *  `demoteHeadings`) equals this — e.g. `3` so only markdown `###` headings
-   *  get an id, keeping DOM ids in sync with `parseDigestSections`, which
-   *  only slugs `###` sections. Other heading levels get no id. Unset ⇒ every
-   *  level gets one (unchanged default behavior). */
-  headingIdLevel?: number;
-  /** When set, `<a href="/release/rel_…">` links are tagged `data-release-id` and,
-   *  when the map has an http(s) upstream url for that id, rewritten to open the
-   *  upstream link in a new tab (mirrors `releaseLinkTarget()`). */
-  releaseLinks?: ReadonlyMap<string, string | null>;
 };
-
-/** Flattens a hast node's text content (used to derive heading ids). */
-function hastText(node: any): string {
-  if (node.type === "text") return node.value ?? "";
-  return (node.children ?? []).map(hastText).join("");
-}
 
 /**
  * rehype transform reproducing the `markdownComponents` element overrides:
  * optional heading demotion (cards own their h2 → demote 2), sanitize/strip
  * images per variant, and unwrap unsafe links while marking safe ones as
  * external UGC.
+ *
+ * Exported so {@link file://./render-digest-body.ts} can layer its own
+ * digest-only rehype pass (heading ids, release-link rewriting) AFTER this one
+ * runs, rather than reimplementing heading demotion / image sanitizing /
+ * default link handling.
  */
-function rehypeReleaseBody(opts: RehypeBodyOpts) {
-  const { variant, demoteHeadings = 2, headingIds, headingIdLevel, releaseLinks } = opts;
+export function rehypeReleaseBody(opts: RehypeBodyOpts) {
+  const { variant, demoteHeadings = 2 } = opts;
   return (tree: any) => {
     visit(tree, "element", (node: any, index: any, parent: any) => {
       const tag = node.tagName as string;
@@ -111,10 +98,6 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
         const sourceLevel = Number(heading[1]);
         if (demoteHeadings > 0) {
           node.tagName = `h${Math.min(sourceLevel + demoteHeadings, 6)}`;
-        }
-        if (headingIds && (headingIdLevel === undefined || sourceLevel === headingIdLevel)) {
-          const text = hastText(node).trim();
-          if (text) node.properties = { ...node.properties, id: headingIds(text) };
         }
         return;
       }
@@ -138,29 +121,6 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
           parent.children.splice(index, 1, ...node.children);
           return index;
         }
-        const releaseId = releaseLinks ? releaseIdFromPath(href) : null;
-        if (releaseLinks && releaseId) {
-          const upstream = (releaseLinks.get(releaseId) ?? "").trim();
-          if (isHttpUrl(upstream)) {
-            node.properties = {
-              ...node.properties,
-              href: upstream,
-              target: "_blank",
-              rel: EXTERNAL_UGC_REL,
-              dataReleaseId: releaseId,
-            };
-          } else {
-            node.properties = { ...node.properties, dataReleaseId: releaseId };
-          }
-          return;
-        }
-        // Same-origin app paths stay in-document: no new tab, no UGC rel. Only
-        // for callers that opted into release-link handling (digest pages) —
-        // other callers (release/changelog bodies) render scraped/vendor
-        // content that isn't guaranteed to have gone through
-        // `rewriteRelativeLinks`, so a root-relative href there keeps the
-        // default new-tab + external-UGC treatment.
-        if (releaseLinks && isInternalHref(href)) return;
         // Same-page fragment links stay in-document — no new tab, no external rel.
         if (isFragmentHref(href)) return;
         node.properties = { ...node.properties, target: "_blank", rel: EXTERNAL_UGC_REL };
@@ -177,30 +137,18 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
  * ({@link file://./render-changelog-html.ts}) can render full changelog slices
  * through the exact same stack, keeping shiki + react-markdown off those routes'
  * client bundles (#1919). Default demotion is `2` (card body / changelog); pass
- * `demoteHeadings: 0` for standalone pages whose h1 is already outside the body
- * (collection digests).
+ * `demoteHeadings: 0` for standalone pages whose h1 is already outside the body.
  */
 export function renderBodyMarkdownToHtml(
   content: string,
   variant: BodyVariant,
-  opts?: {
-    demoteHeadings?: DemoteHeadings;
-    headingIds?: (text: string) => string;
-    headingIdLevel?: number;
-    releaseLinks?: ReadonlyMap<string, string | null>;
-  },
+  opts?: { demoteHeadings?: DemoteHeadings },
 ): string {
   return unified()
     .use(remarkParse)
     .use(remarkPlugins)
     .use(remarkRehype)
-    .use(rehypeReleaseBody, {
-      variant,
-      demoteHeadings: opts?.demoteHeadings ?? 2,
-      headingIds: opts?.headingIds,
-      headingIdLevel: opts?.headingIdLevel,
-      releaseLinks: opts?.releaseLinks,
-    })
+    .use(rehypeReleaseBody, { variant, demoteHeadings: opts?.demoteHeadings ?? 2 })
     .use([rehypeShikiPlugin])
     .use(rehypeStringify)
     .processSync(content)
