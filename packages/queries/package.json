@@ -11,6 +11,7 @@
     "./entities": "./src/entities.ts",
     "./orgs": "./src/orgs.ts",
     "./pagination": "./src/pagination.ts",
+    "./release-locations": "./src/release-locations.ts",
     "./releases": "./src/releases.ts",
     "./sql-fragments": "./src/sql-fragments.ts"
   },

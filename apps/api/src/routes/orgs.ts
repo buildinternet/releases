@@ -41,7 +41,7 @@ import {
   type StubProductInput,
 } from "../lib/well-known/stub.js";
 import { promoteStubOrg } from "../lib/well-known/promote.js";
-import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
+import { loadReleaseLocations } from "@releases/queries/release-locations";
 import { buildOrgManifest } from "../lib/well-known/export-manifest.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";

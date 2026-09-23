@@ -19,7 +19,7 @@ import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
-import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
+import { loadReleaseLocations } from "@releases/queries/release-locations";
 import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/search/lookup-related-org.js";
 import { readNegCache, writeNegCache } from "../lib/search/lookup-neg-cache.js";
 import { createDb } from "../db.js";
