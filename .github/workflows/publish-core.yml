@@ -50,15 +50,11 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # apps/mcp and apps/webhooks are excluded from
-      # the root workspace and carry their own bun.lock — the root install
-      # doesn't populate their node_modules, but the root `bun run test` below
-      # includes their suites (mirrors ci.yml).
+      # apps/mcp is excluded from the root workspace and carries its own
+      # bun.lock — the root install doesn't populate its node_modules, but the
+      # root `bun run test` below includes its suite (mirrors ci.yml).
       - name: Install apps/mcp deps
         working-directory: apps/mcp
-        run: bun install --frozen-lockfile
-      - name: Install apps/webhooks deps
-        working-directory: apps/webhooks
         run: bun install --frozen-lockfile
 
       - name: Type-check

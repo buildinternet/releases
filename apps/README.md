@@ -7,10 +7,9 @@ Deployable applications.
 | `web/`      | `releases-web`        | Next.js frontend — public registry UI + account   | `releases.sh` (Vercel)                     | Root workspace             |
 | `api/`      | `releases-api`        | REST API, Hono + D1, cron/Workflow ingest         | `api.releases.sh` (Cloudflare Worker)      | Root workspace             |
 | `mcp/`      | `releases-mcp-worker` | Remote MCP server, scope-enforced AI tool surface | `agents.releases.sh` (Cloudflare Worker)   | Carved out, own `bun.lock` |
-| `webhooks/` | `releases-webhooks`   | Queue consumer for webhook + Slack/email fan-out  | Internal Cloudflare Worker, no public host | Carved out, own `bun.lock` |
+| `webhooks/` | `releases-webhooks`   | Queue consumer for webhook + Slack/email fan-out  | Internal Cloudflare Worker, no public host | Root workspace             |
 
-`mcp/` and `webhooks/` are excluded from the root workspace on
-purpose — see [AGENTS.md → Workspaces and carved-out
+`mcp/` is excluded from the root workspace on purpose — see [AGENTS.md → Workspaces and carved-out
 packages](../AGENTS.md#workspaces-and-carved-out-packages).
 
 ## Dev commands
