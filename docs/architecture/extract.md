@@ -104,7 +104,7 @@ Rollups come from two places, neither of them new:
 
 Structured stderr logs (`@buildinternet/releases-lib/logger`) emit one `info` line per extraction with mode, rounds, tool chars, cache read/write tokens, and entry count; one `warn` on fallback with the reason.
 
-- **`ai_usage` log event (one-shot tier only, issue #2166)** — the same `{ component: "ai", event: "ai_usage", lane, provider, model, input, output, cacheCreate, cacheRead }` shape the other AI-SDK lanes emit (`apps/api/src/lib/text-model.ts`'s `withLaneUsageLogging`), tagged `lane: "extract-oneshot"`. This is what makes the one-shot tier's real routing (OpenRouter vs. Anthropic fallback) visible in Axiom — the `usage_log` D1 columns above record token counts but not which provider served them.
+- **`ai_usage` log event (one-shot tier only, issue #2166)** — the same `{ component: "ai", event: "ai_usage", lane, provider, model, input, output, cacheCreate, cacheRead }` shape the other AI-SDK lanes emit (`apps/api/src/lib/ai/text-model.ts`'s `withLaneUsageLogging`), tagged `lane: "extract-oneshot"`. This is what makes the one-shot tier's real routing (OpenRouter vs. Anthropic fallback) visible in Axiom — the `usage_log` D1 columns above record token counts but not which provider served them.
 
 ## Rollout
 

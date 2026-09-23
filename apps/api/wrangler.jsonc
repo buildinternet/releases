@@ -52,7 +52,7 @@
     // LISTING_SELF_SERVE_ENABLED because promotion creates live fetching
     // sources (real spend); off by default until the flow has been validated.
     "LISTING_SELF_SERVE_PROMOTION_ENABLED": "false",
-    // Email notifications (see src/lib/email.ts + src/lib/notifications.ts).
+    // Email notifications (see src/lib/email/email.ts + src/lib/email/notifications.ts).
     // Recipient must be verified in Cloudflare Email Routing; sender domain
     // (releases.sh) must have Email Routing enabled.
     "EMAIL_NOTIFY_ENABLED": "true",

@@ -8,8 +8,11 @@ import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { scanStaleFirecrawlSources, type FirecrawlStalenessEnv } from "./firecrawl-staleness.js";
 import { scanStaleSources, type SourceStalenessEnv } from "./source-staleness.js";
 import { scanProviderHealth, type ProviderHealthEnv } from "./provider-health.js";
-import { buildStalenessDigestEmail, countNeedsAttention } from "../lib/staleness-digest-email.js";
-import { sendEmail, type EmailEnv } from "../lib/email.js";
+import {
+  buildStalenessDigestEmail,
+  countNeedsAttention,
+} from "../lib/email/staleness-digest-email.js";
+import { sendEmail, type EmailEnv } from "../lib/email/email.js";
 
 export type SendStalenessDigestEnv = SourceStalenessEnv &
   FirecrawlStalenessEnv &

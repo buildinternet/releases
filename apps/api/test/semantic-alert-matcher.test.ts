@@ -5,7 +5,7 @@ import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { user } from "../src/db/schema-auth.js";
 import { userFollows } from "../src/db/schema-follows.js";
 import { semanticAlerts } from "../src/db/schema-semantic-alerts.js";
-import { matchSemanticAlertsForUser } from "../src/lib/semantic-alert-matcher.js";
+import { matchSemanticAlertsForUser } from "../src/semantic-alerts/semantic-alert-matcher.js";
 
 const QUERY = "Slack integrations with B2B software";
 

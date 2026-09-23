@@ -18,8 +18,8 @@ import { searchQueries, SEARCH_SURFACES } from "@buildinternet/releases-core/sch
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
-import { buildBotCondition, getTopSearchQueries } from "../lib/search-queries-top.js";
-import type { BotsMode } from "../lib/search-queries-top.js";
+import { buildBotCondition, getTopSearchQueries } from "../lib/search/search-queries-top.js";
+import type { BotsMode } from "../lib/search/search-queries-top.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError } from "@releases/lib/releases-error";
 

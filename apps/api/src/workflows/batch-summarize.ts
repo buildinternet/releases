@@ -47,7 +47,7 @@ import {
   type TerminalBatchStatus,
 } from "@releases/core-internal/batch-run";
 import { fetchEligibleReleases } from "@releases/core-internal/eligibility";
-import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/ai/anthropic.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 // ── Types ─────────────────────────────────────────────────────────────────────

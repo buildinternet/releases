@@ -43,9 +43,9 @@ import {
 
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
-import { userIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { userIdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
-import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { idempotentPostOpenApi } from "../lib/idempotency/idempotency-openapi.js";
 import { errorResponse } from "../lib/openapi-error.js";
 import {
   UnauthorizedError,

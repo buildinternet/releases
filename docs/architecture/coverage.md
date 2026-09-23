@@ -10,7 +10,7 @@ Coverage is managed through the API worker. Routes in `apps/api/src/routes/relea
 - `POST /v1/releases/:id/coverage` — link coverage items to a canonical release (admin-auth).
 - `DELETE /v1/releases/:id/coverage` — unlink `:id` from its cluster (admin-auth; idempotent, returns `{ unlinked: false }` when it wasn't in one).
 
-Ingest-time grouping is deterministic code, not an agent: the changesets clusterer (`apps/api/src/lib/cluster-cascades.ts`, writing `decided_by = "system:changesets"`) links version-cascade coverage as releases land, and the retier only ever touches its own `system:changesets` rows — human/agent decisions are never clobbered. The `grouping-releases` skill (`.claude/skills/grouping-releases/`) is a **local Claude Code operator skill**, not part of the managed-agent bundle: it carries the judgment rubric for manual/batch curation (which co-published releases cover one launch, which item leads) and persists decisions through the coverage routes above with a `human:`/`agent:`-prefixed `decidedBy`. Bulk re-clustering over a historical window is not exposed as a first-class admin endpoint — run the skill over an explicit org + date window instead.
+Ingest-time grouping is deterministic code, not an agent: the changesets clusterer (`apps/api/src/lib/ingest/cluster-cascades.ts`, writing `decided_by = "system:changesets"`) links version-cascade coverage as releases land, and the retier only ever touches its own `system:changesets` rows — human/agent decisions are never clobbered. The `grouping-releases` skill (`.claude/skills/grouping-releases/`) is a **local Claude Code operator skill**, not part of the managed-agent bundle: it carries the judgment rubric for manual/batch curation (which co-published releases cover one launch, which item leads) and persists decisions through the coverage routes above with a `human:`/`agent:`-prefixed `decidedBy`. Bulk re-clustering over a historical window is not exposed as a first-class admin endpoint — run the skill over an explicit org + date window instead.
 
 ## Read-path behavior
 
@@ -28,7 +28,7 @@ Admin API: `GET /v1/admin/cron-runs{,/:id}`.
 
 ### Email notifications
 
-A cron can send a summary email via Cloudflare Email Routing (`send_email` binding) by calling `sendCronReport(env, report)` after finalizing its run row — one report per run, regardless of status. The subject prefixes `[degraded]` / `[failed]` / `[aborted]` so inbox filters can surface failures without parsing the body. Implementation is generic (`apps/api/src/lib/{email,cron-report,notifications}.ts`).
+A cron can send a summary email via Cloudflare Email Routing (`send_email` binding) by calling `sendCronReport(env, report)` after finalizing its run row — one report per run, regardless of status. The subject prefixes `[degraded]` / `[failed]` / `[aborted]` so inbox filters can surface failures without parsing the body. Implementation is generic (`apps/api/src/lib/email/{email,cron-report,notifications}.ts`).
 
 Configuration (all in `apps/api/wrangler.jsonc` under `vars`):
 

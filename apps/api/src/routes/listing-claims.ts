@@ -33,7 +33,7 @@ import { normalizeListingDomain } from "../lib/listing/validate.js";
 import { resolveDomainOrg } from "../lib/well-known/stub.js";
 import { verifyDomainControl } from "../lib/listing/claim-verify.js";
 import { promoteStubOrg, type PromoteStubResult } from "../lib/well-known/promote.js";
-import { onClaimVerified } from "../lib/claim-verified-email.js";
+import { onClaimVerified } from "../lib/email/claim-verified-email.js";
 import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 import { requireListingEnabled } from "./listing.js";

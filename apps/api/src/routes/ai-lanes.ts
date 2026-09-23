@@ -15,7 +15,7 @@
  * THE NON-NEGOTIABLE CONSTRAINT: model resolution goes through the exact same
  * seam production ingest uses — `buildFetchOneEnv(c.env)` (see
  * `../workflows/_fetch-env.js`) feeding the matching `resolve*Model` from
- * `../lib/text-model.js`. A hand-built env here would defeat the entire point
+ * `../lib/ai/text-model.js`. A hand-built env here would defeat the entire point
  * of the endpoint (see issue #2171 — a hand-built env literal on the manual
  * source-fetch path forwarded zero AI-lane keys and caused three weeks of
  * silent misrouting + a six-day outage). `resolveTextModel` wraps the returned
@@ -51,18 +51,18 @@ import {
   resolveMarketingModel,
   resolveSummarizeModel,
   resolveArticleExtractModel,
-} from "../lib/text-model.js";
+} from "../lib/ai/text-model.js";
 import {
   classifyMarketing,
   type MarketingClassifierInput,
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
-import { writeClassificationPoint } from "../lib/classification-schema.js";
-import { loadMarketingThreshold } from "../lib/marketing-classifier-settings.js";
+import { writeClassificationPoint } from "../lib/classification/classification-schema.js";
+import { loadMarketingThreshold } from "../lib/classification/marketing-classifier-settings.js";
 import {
   marketingClassificationInput,
   type MarketingClassificationRecord,
-} from "../lib/classification-points.js";
+} from "../lib/classification/classification-points.js";
 import {
   summarizeRelease,
   type SummarizeReleaseInput,
@@ -77,7 +77,7 @@ type Lane = (typeof LANES)[number];
 /** Lane name used both as the `resolve*Model` `generationName` (production
  *  ai_usage/telemetry attribution) and as the `lane` field on the
  *  `provider-quota-exhausted` log event. Keep these in sync with
- *  `../lib/text-model.ts`'s `resolveTextModel` call sites. */
+ *  `../lib/ai/text-model.ts`'s `resolveTextModel` call sites. */
 const GENERATION_NAME: Record<Lane, string> = {
   marketing: "marketing-classifier",
   summarize: "summarize-release",
@@ -118,7 +118,7 @@ interface ResolvedSource {
   orgSlug: string | null;
   /** Parent product's name, when the source is bound to one. Threaded into the
    *  summarize lane's prompt exactly as production ingest does — see the
-   *  `leftJoin(products, …)` in `../lib/ingest-steps.ts`. Null is a normal
+   *  `leftJoin(products, …)` in `../lib/ingest/ingest-steps.ts`. Null is a normal
    *  value (most sources have no product); what matters is that it reflects
    *  the DB rather than being hardcoded. */
   productName: string | null;
@@ -157,7 +157,7 @@ async function loadSource(
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    // Same join production ingest uses (`lib/ingest-steps.ts`) — the product
+    // Same join production ingest uses (`lib/ingest/ingest-steps.ts`) — the product
     // hangs off the source, not the release.
     .leftJoin(products, eq(products.id, sources.productId))
     .where(eq(sources.id, sourceId));
@@ -179,7 +179,7 @@ function parseSourceMeta(metadata: string | null): SourceMetadata {
 }
 
 /** Anthropic reports no cost on `TextModelUsage`; derive a list-price estimate
- *  the same way `../lib/text-model.ts`'s `laneCost` does for the production
+ *  the same way `../lib/ai/text-model.ts`'s `laneCost` does for the production
  *  ai_usage log. OpenRouter's `costUsd` already rides the usage object. */
 function resolveCostUsd(
   provider: string,

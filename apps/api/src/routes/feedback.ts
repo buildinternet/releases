@@ -19,13 +19,13 @@ import {
 import { newFeedbackId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
-import { notifyFeedback } from "../lib/feedback-email.js";
+import { notifyFeedback } from "../lib/email/feedback-email.js";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { respondError } from "../lib/error-response.js";
-import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { anonymousIdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
-import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { idempotentPostOpenApi } from "../lib/idempotency/idempotency-openapi.js";
 import { errorResponse } from "../lib/openapi-error.js";
 import {
   ValidationError,

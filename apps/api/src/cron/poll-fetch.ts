@@ -36,7 +36,7 @@ import {
   mapListingToRawReleases,
 } from "@releases/adapters/appstore";
 import { fetchHelpCenter } from "@releases/adapters/helpcenter";
-import { refreshAppStoreListing } from "../lib/appstore-materialize.js";
+import { refreshAppStoreListing } from "../lib/sources/appstore-materialize.js";
 import { fetchAndParseVideoFeed, resolveVideoProvider } from "@releases/adapters/video";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
 import { FeedHttpError, isTransientFeedHttpStatus } from "@releases/lib/errors";
@@ -54,9 +54,12 @@ import { CHANGELOG_MAX_FILES, truncateToByteCap } from "@releases/adapters/githu
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
-import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
-import { startDeterministicUpdate, type UpdateDispatchEnv } from "../lib/update-dispatch.js";
-import { notifyOrgDrain } from "../lib/org-drain-notify.js";
+import { selectExistingReleaseKeys } from "../lib/ingest/title-dedup.js";
+import {
+  startDeterministicUpdate,
+  type UpdateDispatchEnv,
+} from "../lib/sources/update-dispatch.js";
+import { notifyOrgDrain } from "../lib/sources/org-drain-notify.js";
 import type { OrgActor } from "../org-actor.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
@@ -65,7 +68,7 @@ import {
   processMediaForR2,
   selectExistingReleaseUrls,
   type MediaTransformBinding,
-} from "../lib/media-ingest.js";
+} from "../lib/media/media-ingest.js";
 import {
   embedAndUpsertChangelogFile,
   type EmbeddedChunk,
@@ -86,7 +89,7 @@ import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { notifyWebRevalidate, type WebRevalidateEnv } from "../lib/web-revalidate.js";
-import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
+import { clusterAndPersistCascades } from "../lib/ingest/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { logSwallowed } from "../lib/log-swallowed.js";
@@ -101,17 +104,17 @@ import {
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
 import { splitModelId } from "@releases/ai-internal/text-model";
-import { resolveMarketingModel, type TextModelEnv } from "../lib/text-model.js";
-import { loadMarketingThreshold } from "../lib/marketing-classifier-settings.js";
+import { resolveMarketingModel, type TextModelEnv } from "../lib/ai/text-model.js";
+import { loadMarketingThreshold } from "../lib/classification/marketing-classifier-settings.js";
 import {
   writeClassificationPoint,
   type ClassificationDataset,
-} from "../lib/classification-schema.js";
+} from "../lib/classification/classification-schema.js";
 import {
   marketingClassificationInput,
   pointsForInserted,
   type MarketingClassificationRecord,
-} from "../lib/classification-points.js";
+} from "../lib/classification/classification-points.js";
 import { assessFeedDepth, DEFAULT_FEED_THIN_CHARS } from "@releases/adapters/feed-depth";
 import {
   enrichNewThinItems,

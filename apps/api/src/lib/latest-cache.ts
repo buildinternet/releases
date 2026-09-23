@@ -20,7 +20,7 @@ export const LATEST_CACHE_TAG = "latest";
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
   // Plain-string read overload so the binding also satisfies the spend-cap /
-  // kill-switch reads in lib/update-dispatch.ts (`SpendCapKv`). KVNamespace
+  // kill-switch reads in lib/sources/update-dispatch.ts (`SpendCapKv`). KVNamespace
   // implements both overloads.
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;

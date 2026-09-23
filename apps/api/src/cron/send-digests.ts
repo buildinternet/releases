@@ -10,7 +10,7 @@ import {
   mapLatestRowToReleaseItem,
   releaseWebBase,
 } from "../queries/releases.js";
-import { sendDigestEmail, type DigestEmailEnv } from "../lib/digest-email.js";
+import { sendDigestEmail, type DigestEmailEnv } from "../lib/email/digest-email.js";
 import { parsePositiveInt } from "./feed-enrich.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 import { sendDigestBatch } from "../queues/enqueue-release-fanout.js";

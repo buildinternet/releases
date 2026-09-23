@@ -24,7 +24,7 @@
  */
 import { describe, it, expect } from "bun:test";
 import { buildFetchOneEnv, type WorkflowFetchEnv } from "../src/workflows/_fetch-env.js";
-import { resolveArticleExtractModel } from "../src/lib/text-model.js";
+import { resolveArticleExtractModel } from "../src/lib/ai/text-model.js";
 import type { Env } from "../src/index.js";
 
 const secret = (value: string) => ({ get: async () => value });

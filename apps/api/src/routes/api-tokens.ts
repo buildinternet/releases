@@ -23,9 +23,9 @@ import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError, UnauthorizedError, NotFoundError } from "@releases/lib/releases-error";
-import { authenticatedIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { authenticatedIdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
-import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { idempotentPostOpenApi } from "../lib/idempotency/idempotency-openapi.js";
 import { errorResponse } from "../lib/openapi-error.js";
 
 export const apiTokenRoutes = new Hono<Env>();

@@ -31,9 +31,9 @@ import {
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
-import { resolveOverviewModel } from "../lib/text-model.js";
+import { resolveOverviewModel } from "../lib/ai/text-model.js";
 import { regenerateOverviewChunk, type RegenChunkResult } from "../cron/overview-regen.js";
-import type { TextModelEnv } from "../lib/text-model.js";
+import type { TextModelEnv } from "../lib/ai/text-model.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

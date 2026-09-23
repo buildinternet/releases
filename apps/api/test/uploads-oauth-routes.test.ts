@@ -5,15 +5,15 @@ import { createTestDb, type TestDb } from "./setup.js";
 import { user, authOrganization, authMember } from "../src/db/schema-auth.js";
 import { workspaceIntegrations } from "../src/db/schema-integrations.js";
 import { workspaceIntegrationHandlers } from "../src/routes/workspace-integrations.js";
-import { decryptOAuthSecret } from "../src/lib/oauth-token-crypto.js";
+import { decryptOAuthSecret } from "../src/lib/integrations/oauth-token-crypto.js";
 import {
   ensureFreshUploadsAccessToken,
   refreshStoredUploadsGrant,
-} from "../src/lib/uploads-oauth-tokens.js";
+} from "../src/lib/integrations/uploads-oauth-tokens.js";
 import {
   resolveUploadsOAuthConfig,
   uploadsWorkspaceFromAccessToken,
-} from "../src/lib/uploads-oauth.js";
+} from "../src/lib/integrations/uploads-oauth.js";
 import type { Env } from "../src/index.js";
 
 function encodeJwtSegment(value: unknown): string {

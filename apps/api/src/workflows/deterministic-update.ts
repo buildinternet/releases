@@ -7,7 +7,7 @@
  * is a plain `scrapeFetch` loop — no coordinator, no Anthropic session — so it
  * now runs as an API-worker workflow, one `step.do` per source. Dispatch (kill
  * switch, spend cap, per-source lock, StatusHub session:start) happens in
- * `lib/update-dispatch.ts` before the instance is created.
+ * `lib/sources/update-dispatch.ts` before the instance is created.
  *
  * Behavior parity with the retired discovery path:
  *   - `scrapeFetch` still persists through the HTTP API surface — via the
@@ -36,19 +36,19 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret, getSecretWithFallback, type SecretBinding } from "@releases/lib/secrets";
 import { createDb } from "../db.js";
-import { d1ScrapePersister } from "../lib/d1-scrape-persister.js";
-import type { TextModelEnv } from "../lib/text-model.js";
+import { d1ScrapePersister } from "../lib/ingest/d1-scrape-persister.js";
+import type { TextModelEnv } from "../lib/ai/text-model.js";
 import {
   runContentAndEmbedSteps,
   runInvalidateLatestCacheStep,
   resolveFetchEnv,
-} from "../lib/ingest-steps.js";
+} from "../lib/ingest/ingest-steps.js";
 import type { PollAndFetchWorkflowEnv } from "./poll-and-fetch.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
-import { releaseSourceLocks } from "../lib/source-lock.js";
-import { notifyUpdateStatusHub } from "../lib/update-dispatch.js";
-import type { MediaTransformBinding } from "../lib/media-ingest.js";
-import { effectiveLaneModel } from "../lib/ai-lane-models.js";
+import { releaseSourceLocks } from "../lib/sources/source-lock.js";
+import { notifyUpdateStatusHub } from "../lib/sources/update-dispatch.js";
+import type { MediaTransformBinding } from "../lib/media/media-ingest.js";
+import { effectiveLaneModel } from "../lib/ai/ai-lane-models.js";
 
 export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
   /**

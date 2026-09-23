@@ -8,7 +8,7 @@ import {
   withinRecommendationAckBudget,
   withinRecommendationAddedBudget,
   withinRecommendationNotifyBudget,
-} from "../src/lib/recommendation-email.js";
+} from "../src/lib/email/recommendation-email.js";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "./setup";
 

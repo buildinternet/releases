@@ -5,7 +5,7 @@ import {
   EMAIL_SAMPLE_CATALOG,
   renderEmailSample,
   sendEmailSample,
-} from "../src/lib/email-samples.js";
+} from "../src/lib/email/email-samples.js";
 
 const BASE = "http://test";
 

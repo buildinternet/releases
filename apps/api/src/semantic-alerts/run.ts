@@ -33,7 +33,7 @@ import {
   listSemanticAlertCandidates,
   type SemanticAlertCandidateRow,
 } from "../queries/semantic-alerts.js";
-import { sendSemanticAlertEmail } from "../lib/semantic-alert-email.js";
+import { sendSemanticAlertEmail } from "../lib/email/semantic-alert-email.js";
 import type { AuthEmailEnv } from "../auth/email.js";
 import type { DeliveryMessage } from "../webhooks/types.js";
 import { writeSemanticAlertPoint, type SemanticAlertDataset } from "./analytics.js";

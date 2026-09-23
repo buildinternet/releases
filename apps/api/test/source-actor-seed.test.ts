@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { seedJitterMs, SEED_JITTER_WINDOW_MS } from "../src/lib/source-actor-seed.js";
+import { seedJitterMs, SEED_JITTER_WINDOW_MS } from "../src/lib/sources/source-actor-seed.js";
 
 describe("seedJitterMs", () => {
   it("is within the window and deterministic", () => {

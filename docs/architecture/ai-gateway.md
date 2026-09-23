@@ -48,7 +48,7 @@ Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens a
 
 ## Shared helper
 
-Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `apps/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `apps/api/src/lib/ai/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
 
 Two routing modes:
 
@@ -64,7 +64,7 @@ Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) a
 Worker-side AI SDK calls (`generateText` in extract, cheap-call lanes, org overviews) emit **agent-aware spans** into Workers Observability when:
 
 1. `observability.traces.enabled` is on in wrangler (already set for api/mcp/discovery/webhooks, exporting to `axiom-traces`), and
-2. the API worker registers `createAISDKTelemetry()` from `agents/observability/ai` (`apps/api/src/lib/agent-tracing.ts`, invoked from the model resolvers; re-evaluated per call so Flagship flips take effect mid-isolate).
+2. the API worker registers `createAISDKTelemetry()` from `agents/observability/ai` (`apps/api/src/lib/ai/agent-tracing.ts`, invoked from the model resolvers; re-evaluated per call so Flagship flips take effect mid-isolate).
 
 Each call tags a lane via AI SDK v7 `telemetry.functionId` + `runtimeContext` (`@releases/adapters/agent-telemetry`, re-exported as `@releases/ai-internal/agent-telemetry`):
 
@@ -103,7 +103,7 @@ This keeps observability entirely within Cloudflare (no new third-party account,
 
 There is deliberately **no transport-selector flag**: the protocol decides the proxy, so a call is never double-hopped, and CF-AI-Gateway-fronting-OpenRouter is not adopted.
 
-**Layer 2 — Provider selection (the switch).** A single Flagship flag, `openrouter-enabled`, governs every secondary lane on the `TextModel` seam (marketing classifier, live summarizer, feed-enrichment article extractor, …). ON moves each lane that ALSO has an OpenRouter model var configured (e.g. `MARKETING_CLASSIFIER_MODEL`, `FEED_ENRICH_MODEL`) onto OpenRouter at runtime; OFF returns them all to Anthropic. A lane with an empty model var stays on Anthropic regardless (fail-open), so per-lane control is just "set the model var or leave it empty" — there are no per-lane flags. Implemented in `apps/api/src/lib/text-model.ts` (`resolveTextModel`), which builds an AI SDK `LanguageModel` per provider (`lane-model`) and wraps it as a `TextModel` via `aisdkTextModel` (`generateText`).
+**Layer 2 — Provider selection (the switch).** A single Flagship flag, `openrouter-enabled`, governs every secondary lane on the `TextModel` seam (marketing classifier, live summarizer, feed-enrichment article extractor, …). ON moves each lane that ALSO has an OpenRouter model var configured (e.g. `MARKETING_CLASSIFIER_MODEL`, `FEED_ENRICH_MODEL`) onto OpenRouter at runtime; OFF returns them all to Anthropic. A lane with an empty model var stays on Anthropic regardless (fail-open), so per-lane control is just "set the model var or leave it empty" — there are no per-lane flags. Implemented in `apps/api/src/lib/ai/text-model.ts` (`resolveTextModel`), which builds an AI SDK `LanguageModel` per provider (`lane-model`) and wraps it as a `TextModel` via `aisdkTextModel` (`generateText`).
 
 **Unified usage view.** `resolveTextModel` wraps every resolved model in `withUsageLogging`, emitting one `ai_usage` `logEvent` per call: `provider`, `model`, `lane`, `environment`, token counts, and `costUsd` (provider-reported for OpenRouter; derived via `@releases/lib/anthropic-pricing` for Anthropic). These ride in the existing `releases-cloudflare-logs` Axiom dataset as the `ai_usage` event — **no new dataset**. Query example: `["releases-cloudflare-logs"] | where ["event"] == "ai_usage" | summarize sum(toreal(costUsd)) by ["lane"], ["provider"]`. The daily batch summarize/overview workflows are **not** on this seam — they call the Anthropic Message Batches API directly and price via `estimateCost()`. That is correct because there is no OpenRouter Batches equivalent, so batch spend is always Anthropic; a future OpenRouter batch path is the one place this assumption would need revisiting.
 

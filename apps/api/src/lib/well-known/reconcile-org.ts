@@ -5,7 +5,7 @@ import {
   type ReleasesJsonDomain,
 } from "@buildinternet/releases-api-types";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
-import { ingestOrgAvatar } from "../avatar-ingest.js";
+import { ingestOrgAvatar } from "../media/avatar-ingest.js";
 import { getOrCreateTagsD1 } from "../../utils.js";
 import { createDb } from "../../db.js";
 import { logEvent } from "@releases/lib/log-event";

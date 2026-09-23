@@ -15,7 +15,7 @@ import {
   SEMANTIC_ALERT_DEMO_TITLE_PREFIX,
   generateDemoReleases,
   runSemanticAlertPreview,
-} from "../src/lib/semantic-alert-demo.js";
+} from "../src/semantic-alerts/semantic-alert-demo.js";
 import type { D1Db } from "../src/db.js";
 
 const BASE = "http://test";

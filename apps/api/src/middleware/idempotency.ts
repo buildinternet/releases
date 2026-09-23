@@ -14,15 +14,15 @@ import {
   decryptIdempotencyBody,
   encryptIdempotencyBody,
   validateIdempotencyEncryptionKey,
-} from "../lib/idempotency-crypto.js";
-import type { IdempotencyPrincipal } from "../lib/idempotency-principal.js";
+} from "../lib/idempotency/idempotency-crypto.js";
+import type { IdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import {
   claimIdempotency,
   completeIdempotency,
   isGuardActive,
   releaseIdempotency,
   retainIdempotency,
-} from "../lib/idempotency-store.js";
+} from "../lib/idempotency/idempotency-store.js";
 import { respondError } from "../lib/error-response.js";
 import { parseJsonBodyCapped, readJsonBodyCapped } from "../lib/json-body.js";
 

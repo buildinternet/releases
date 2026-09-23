@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildSemanticAlertEmail } from "../src/lib/semantic-alert-email.js";
+import { buildSemanticAlertEmail } from "../src/lib/email/semantic-alert-email.js";
 
 const manageUrl = "https://releases.sh/account/notifications";
 const releaseUrl = "https://releases.sh/release/rel_sample-slack-for-finance-teams";

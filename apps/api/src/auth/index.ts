@@ -43,7 +43,7 @@ import {
   restrictAuthorizationCodeValue,
 } from "./oauth-grant-scopes.js";
 import { ensureActiveWorkspace, isOrgOwnerOrAdmin } from "./workspace.js";
-import { preserveCustomAvatarOnUpdate } from "../lib/avatar-ingest.js";
+import { preserveCustomAvatarOnUpdate } from "../lib/media/avatar-ingest.js";
 import { kvRateLimitStorage } from "./rate-limit-kv.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";

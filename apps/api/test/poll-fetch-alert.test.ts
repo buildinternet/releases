@@ -3,7 +3,7 @@ import {
   formatPollFetchAlert,
   type PollFetchFailure,
   type PollFetchSourceDetail,
-} from "../src/lib/poll-fetch-alert.js";
+} from "../src/lib/email/poll-fetch-alert.js";
 
 const SCHEDULED = 1_700_000_000_000; // 2023-11-14T22:13:20.000Z
 

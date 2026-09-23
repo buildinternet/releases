@@ -12,7 +12,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations, createTestDb, type TestDatabase } from "../db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { queryDueSources } from "../../apps/api/src/cron/poll-fetch";
-import { queryCandidates } from "../../apps/api/src/lib/drain-candidates";
+import { queryCandidates } from "../../apps/api/src/lib/sources/drain-candidates";
 import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 

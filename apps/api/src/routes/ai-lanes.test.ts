@@ -20,10 +20,10 @@ import { createTestDb, clearAllTables, type TestDatabase } from "../../../../tes
 import { organizations, sources, releases, products } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 import { aiLaneRoutes } from "./ai-lanes.js";
-import { clearAiLaneModelCache } from "../lib/ai-lane-models.js";
+import { clearAiLaneModelCache } from "../lib/ai/ai-lane-models.js";
 import { respondError } from "../lib/error-response.js";
 import { marketingDecisionResponse } from "../../../../tests/marketing-decision-fixture";
-import type { ClassificationDataPoint } from "../lib/classification-schema.js";
+import type { ClassificationDataPoint } from "../lib/classification/classification-schema.js";
 
 let testDatabase: TestDatabase;
 let fetchApi: (req: Request) => Response | Promise<Response>;
@@ -431,7 +431,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
   it("threads the source's product name into the summarize input", async () => {
     // Regression: `productName` was hardcoded to null, so the summarize prompt
     // silently omitted the `Product:` line that production ingest emits (see
-    // the leftJoin in lib/ingest-steps.ts). A release WITHOUT a product
+    // the leftJoin in lib/ingest/ingest-steps.ts). A release WITHOUT a product
     // legitimately yields null — the bug was yielding null regardless of the DB.
     await testDatabase.db.insert(products).values({
       id: "prd_1",

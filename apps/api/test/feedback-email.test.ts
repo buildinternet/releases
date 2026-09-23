@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { formatFeedbackEmail, withinNotifyBudget } from "../src/lib/feedback-email.js";
+import { formatFeedbackEmail, withinNotifyBudget } from "../src/lib/email/feedback-email.js";
 import type { Feedback } from "@buildinternet/releases-core/schema";
 
 function fakeKv(initial: Record<string, string> = {}) {

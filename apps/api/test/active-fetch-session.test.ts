@@ -1,5 +1,8 @@
 import { describe, it, expect } from "bun:test";
-import { getActiveFetchSession, getActiveSessionRaw } from "../src/lib/active-fetch-session.js";
+import {
+  getActiveFetchSession,
+  getActiveSessionRaw,
+} from "../src/lib/sources/active-fetch-session.js";
 
 /**
  * Build a fake StatusHub stub routing on request path:

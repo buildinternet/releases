@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { avatarRejectToError, ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
+import { avatarRejectToError, ingestAvatarFromBuffer } from "../lib/media/avatar-ingest.js";
 import {
   mergeWorkspaceMetadata,
   normalizeProfilePatch,

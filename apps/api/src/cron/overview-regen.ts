@@ -21,7 +21,7 @@ import {
   type GenerateOverviewOptions,
   type OverviewRequestInput,
 } from "@releases/ai-internal/overview-content";
-import type { ResolvedOverviewModel } from "../lib/text-model";
+import type { ResolvedOverviewModel } from "../lib/ai/text-model";
 import { logEvent } from "@releases/lib/log-event";
 
 export interface RegenChunkResult {
