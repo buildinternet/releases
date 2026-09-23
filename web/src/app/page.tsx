@@ -476,7 +476,7 @@ export default async function HomePage() {
         </div>
       </div>
       {latestDigests.length > 0 && (
-        <div className="mt-4">
+        <div className="mt-4 mb-12 sm:mb-16">
           <DigestReel preview={toReelPreview(latestDigests)} />
         </div>
       )}
