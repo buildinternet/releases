@@ -47,7 +47,7 @@ import {
   requireWorkspaceManager,
   requireWorkspaceMember,
   workspaceGateError,
-} from "../lib/workspaces/workspace-access.js";
+} from "../lib/workspace-access.js";
 
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";

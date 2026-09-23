@@ -2,7 +2,7 @@
  * Workspace (Better Auth organization) profile fields stored in `organization.metadata`
  * as JSON. Distinct from the registry `organizations` table.
  */
-import { isPrivateOrLocalHost } from "../media/avatar-ingest.js";
+import { isPrivateOrLocalHost } from "./media/avatar-ingest.js";
 
 export type WorkspaceProfileFields = {
   websiteUrl: string | null;

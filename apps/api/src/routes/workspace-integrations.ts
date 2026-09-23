@@ -13,13 +13,13 @@ import {
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { workspaceIntegrations } from "../db/schema-integrations.js";
-import { encryptOAuthSecret, decryptOAuthSecret } from "../lib/workspaces/oauth-token-crypto.js";
-import { persistUploadsTokenGrant } from "../lib/workspaces/uploads-oauth-tokens.js";
+import { encryptOAuthSecret, decryptOAuthSecret } from "../lib/integrations/oauth-token-crypto.js";
+import { persistUploadsTokenGrant } from "../lib/integrations/uploads-oauth-tokens.js";
 import {
   codeChallengeS256,
   generateCodeVerifier,
   generateOAuthState,
-} from "../lib/workspaces/pkce.js";
+} from "../lib/integrations/pkce.js";
 import {
   UPLOADS_OAUTH_PENDING_TTL_MS,
   UPLOADS_OAUTH_PROVIDER,
@@ -29,12 +29,12 @@ import {
   revokeUploadsToken,
   uploadsOAuthConfigured,
   uploadsOAuthRedirectUri,
-} from "../lib/workspaces/uploads-oauth.js";
+} from "../lib/integrations/uploads-oauth.js";
 import {
   requireWorkspaceManager,
   requireWorkspaceMember,
   workspaceGateError,
-} from "../lib/workspaces/workspace-access.js";
+} from "../lib/workspace-access.js";
 import { validateJson } from "../lib/validate.js";
 import { respondError } from "../lib/error-response.js";
 import type { Env } from "../index.js";

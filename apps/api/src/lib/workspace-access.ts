@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { authMember, authOrganization } from "../../db/schema-auth.js";
-import type { createDb } from "../../db.js";
+import { authMember, authOrganization } from "../db/schema-auth.js";
+import type { createDb } from "../db.js";
 import { ForbiddenError, NotFoundError, type ReleasesError } from "@releases/lib/releases-error";
 
 const MANAGER_ROLES = new Set(["owner", "admin"]);

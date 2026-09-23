@@ -5,7 +5,7 @@ import {
   normalizeProfilePatch,
   normalizeProfileUrl,
   parseWorkspaceProfile,
-} from "../src/lib/workspaces/workspace-profile.js";
+} from "../src/lib/workspace-profile.js";
 
 test("parseWorkspaceProfile reads stored JSON fields", () => {
   expect(

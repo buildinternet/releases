@@ -6,14 +6,14 @@ import {
   mergeWorkspaceMetadata,
   normalizeProfilePatch,
   parseWorkspaceProfile,
-} from "../lib/workspaces/workspace-profile.js";
+} from "../lib/workspace-profile.js";
 import { validateJson } from "../lib/validate.js";
 import { authOrganization, authMember } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import { PatchWorkspaceProfileBodySchema } from "@buildinternet/releases-api-types";
 import { requireFollowsPrincipal } from "../middleware/auth.js";
 import { respondError } from "../lib/error-response.js";
-import { requireWorkspaceManager, workspaceGateError } from "../lib/workspaces/workspace-access.js";
+import { requireWorkspaceManager, workspaceGateError } from "../lib/workspace-access.js";
 import { workspaceIntegrationHandlers } from "./workspace-integrations.js";
 import { workspaceWebhookHandlers } from "./workspace-webhooks.js";
 import {

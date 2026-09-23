@@ -6,7 +6,7 @@ import { authOrganization } from "./schema-auth.js";
  *
  * Worker-local schema island — user-tenancy data the OSS CLI has no business
  * with, same split as `schema-follows.ts`. Tokens are AES-256-GCM encrypted
- * before insert (see `lib/workspaces/oauth-token-crypto.ts`); this table never stores
+ * before insert (see `lib/integrations/oauth-token-crypto.ts`); this table never stores
  * plaintext access/refresh tokens or the PKCE verifier.
  *
  * Paired migrations: 20260915183000_add_workspace_integrations.sql,
