@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { jitterMsForSource } from "../../workers/api/src/workflows/poll-and-fetch";
+import { jitterMsForSource } from "../../apps/api/src/workflows/poll-and-fetch";
 
 describe("jitterMsForSource", () => {
   it("returns a value within [0, windowMs)", () => {

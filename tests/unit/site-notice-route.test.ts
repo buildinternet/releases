@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { siteNoticeRoutes } from "../../workers/api/src/routes/site-notice.js";
-import { getStoredSiteNotice } from "../../workers/api/src/queries/site-settings.js";
+import { siteNoticeRoutes } from "../../apps/api/src/routes/site-notice.js";
+import { getStoredSiteNotice } from "../../apps/api/src/queries/site-settings.js";
 
 let testDb: TestDatabase;
 

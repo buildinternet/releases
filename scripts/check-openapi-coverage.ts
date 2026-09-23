@@ -14,9 +14,9 @@
  */
 import { Hono } from "hono";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { publicReadRoutes, publicWriteRoutes } from "../workers/api/src/route-namespaces.js";
-import { mountV1Routes } from "../workers/api/src/v1-routes.js";
-import type { Env } from "../workers/api/src/index.js";
+import { publicReadRoutes, publicWriteRoutes } from "../apps/api/src/route-namespaces.js";
+import { mountV1Routes } from "../apps/api/src/v1-routes.js";
+import type { Env } from "../apps/api/src/index.js";
 
 /**
  * `METHOD /hono-style/path` tuples that are knowingly undocumented today.
@@ -28,7 +28,7 @@ const ALLOWLIST = new Set<string>([
   // the spec on staging/local but are intentionally suppressed on production.
   // The coverage script always generates the spec with ENVIRONMENT=production,
   // so they appear as holes here even though they have describeRoute(). See
-  // workers/api/src/openapi.ts for the `hideInProduction` helper.
+  // apps/api/src/openapi.ts for the `hideInProduction` helper.
   "GET /orgs/:slug/activity",
   "GET /orgs/:slug/heatmap",
   "GET /orgs/:slug/sparklines",
@@ -210,7 +210,7 @@ const staleAllowlist = [...ALLOWLIST].filter((entry) => !registeredKeys.has(entr
 if (holes.length > 0) {
   logger.error(`OpenAPI coverage gate: ${holes.length} undocumented public-read route(s).`);
   logger.error("");
-  logger.error("Either add describeRoute(...) in the corresponding workers/api/src/routes/");
+  logger.error("Either add describeRoute(...) in the corresponding apps/api/src/routes/");
   logger.error("file, or add an explicit ALLOWLIST entry in");
   logger.error("scripts/check-openapi-coverage.ts with a rationale comment.");
   logger.error("");

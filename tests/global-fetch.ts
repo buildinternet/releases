@@ -10,7 +10,7 @@
  * intermittent, ordering-dependent CI flake (#1553).
  *
  * The fix: capture the pristine fetch exactly once, in the test preload
- * (`workers/api/test/setup.ts`) — which runs before any test module body, so no
+ * (`apps/api/test/setup.ts`) — which runs before any test module body, so no
  * mock can be installed yet. Every test restores to *that* reference, so a mock
  * can never leak across files. This module reads that captured reference.
  */

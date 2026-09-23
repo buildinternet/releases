@@ -95,7 +95,7 @@ describe("parseReleaseParam", () => {
 });
 
 describe("bare/stale-slug params resolve to the current canonical (#2072)", () => {
-  // web/src/app/release/[id]/page.tsx no longer 308s a non-canonical segment
+  // apps/web/src/app/release/[id]/page.tsx no longer 308s a non-canonical segment
   // to `releasePath(release)` — it renders in place and relies on
   // `<link rel="canonical">` (set from this same computation) to consolidate.
   // This proves the piece that makes that safe: no matter which of the three

@@ -5,7 +5,7 @@ import { sanitizeVersion } from "@releases/adapters/extract/shared";
 // in the `version` field instead of omitting it. The web frontend promotes
 // any non-null version into the heading slot, so a placeholder leaks all the
 // way to the UI. The batch insert endpoint at
-// `workers/api/src/routes/sources.ts` calls `sanitizeVersion` to drop these
+// `apps/api/src/routes/sources.ts` calls `sanitizeVersion` to drop these
 // before they hit the DB — these tests pin the contract that handler relies on.
 describe("sanitizeVersion", () => {
   const placeholders = [

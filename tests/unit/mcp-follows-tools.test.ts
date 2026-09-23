@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
+import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
 
 /**
  * The per-user follows tools (#1520) proxy through the API worker's `/v1/me/*`

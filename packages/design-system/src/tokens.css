@@ -7,7 +7,7 @@
  *
  * Consumed in two places:
  *   - packages/design-system/src/styles.css  — standalone card renderer + claude.ai/design
- *   - web/src/app/globals.css                — the web app (via @import "@releases/design-system/tokens.css")
+ *   - apps/web/src/app/globals.css                — the web app (via @import "@releases/design-system/tokens.css")
  *
  * NOTE: `--font-jetbrains-mono` is intentionally NOT here — it is set by the
  * `@font-face` block in styles.css (for the standalone renderer which self-hosts

@@ -3,7 +3,7 @@ import {
   API_PERMISSION_RESOURCE,
   scopeToPermissions,
   apiScopesFromPermissions,
-} from "../../workers/api/src/auth/api-key-scope.js";
+} from "../../apps/api/src/auth/api-key-scope.js";
 import { scopeSatisfies } from "@buildinternet/releases-core/api-token";
 
 describe("scopeToPermissions", () => {

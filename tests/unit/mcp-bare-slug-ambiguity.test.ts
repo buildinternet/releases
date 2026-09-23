@@ -17,7 +17,7 @@ import {
   resolveProduct,
   AmbiguousEntityError,
   ambiguousEntityToolResult,
-} from "../../workers/mcp/src/tools.js";
+} from "../../apps/mcp/src/tools.js";
 
 let testDb: TestDatabase;
 

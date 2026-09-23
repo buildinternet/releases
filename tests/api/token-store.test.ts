@@ -27,7 +27,7 @@ describe("api_tokens schema", () => {
   });
 });
 
-import { verifyApiToken, touchLastUsed } from "../../workers/api/src/middleware/token-store.js";
+import { verifyApiToken, touchLastUsed } from "../../apps/api/src/middleware/token-store.js";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
 async function seedToken(

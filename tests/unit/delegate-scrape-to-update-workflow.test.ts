@@ -5,7 +5,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import {
   delegateScrapeToUpdateWorkflow,
   type FetchOneEnv,
-} from "../../workers/api/src/cron/poll-fetch.js";
+} from "../../apps/api/src/cron/poll-fetch.js";
 import type { drizzle as drizzleD1 } from "drizzle-orm/d1";
 
 // The poll-fetch helpers are typed against the D1 drizzle binding because

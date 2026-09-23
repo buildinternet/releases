@@ -2,8 +2,8 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { eq, and } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { organizations, sources, knowledgePages } from "@buildinternet/releases-core/schema";
-import { regeneratePlaybook } from "../../workers/api/src/playbook-regen.js";
-import type { D1Db } from "../../workers/api/src/db.js";
+import { regeneratePlaybook } from "../../apps/api/src/playbook-regen.js";
+import type { D1Db } from "../../apps/api/src/db.js";
 
 const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;
 

@@ -10,7 +10,7 @@
  */
 
 const ROOT_RESERVED = [
-  // --- Existing Next.js app routes (web/src/app/*) ---
+  // --- Existing Next.js app routes (apps/web/src/app/*) ---
   "api",
   "docs",
   "release",

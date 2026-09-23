@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { sendAlert, type AlertEnv } from "../../workers/api/src/lib/send-alert.js";
+import { sendAlert, type AlertEnv } from "../../apps/api/src/lib/send-alert.js";
 
 // Stand-in for the Cloudflare email binding. Real send goes through
 // `cloudflare:email`, which lazy-imports inside `email.ts` — these tests

@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, it, expect } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../workers/api/src/routes/products.js";
+import { productRoutes } from "../../apps/api/src/routes/products.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { makeCaller, makeJsonCaller } from "./route-test-helpers.js";
 

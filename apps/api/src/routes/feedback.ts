@@ -1,0 +1,230 @@
+/**
+ * Open, unauthenticated POST /v1/feedback — mirrors /v1/telemetry but carries
+ * intentional free text. Persists to D1 and fires a best-effort email via
+ * waitUntil. Because it's open + free-text + email-amplifying, it carries its
+ * own defenses: a body-size cap, a per-IP rate limiter (kill switch defaults
+ * ON), and control-character stripping so stored text can't inject terminal
+ * escapes when displayed (operator CLI / future web). The notification email
+ * is volume-capped separately in feedback-email.ts.
+ */
+import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
+import { eq } from "drizzle-orm";
+import {
+  feedback,
+  FEEDBACK_TYPES,
+  FEEDBACK_STATUSES,
+  TELEMETRY_CLIENT_KINDS,
+} from "@buildinternet/releases-core/schema";
+import { newFeedbackId } from "@buildinternet/releases-core/id";
+import { createDb } from "../db.js";
+import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
+import { notifyFeedback } from "../lib/feedback-email.js";
+import type { Env } from "../index.js";
+import { FLAGS, flag } from "@releases/lib/flags";
+import { respondError } from "../lib/error-response.js";
+import { anonymousIdempotencyPrincipal } from "../lib/idempotency-principal.js";
+import { idempotentPost } from "../middleware/idempotency.js";
+import { idempotentPostOpenApi } from "../lib/idempotency-openapi.js";
+import { errorResponse } from "../lib/openapi-error.js";
+import {
+  ValidationError,
+  ServiceUnavailableError,
+  RateLimitedError,
+  NotFoundError,
+} from "@releases/lib/releases-error";
+
+export const feedbackRoutes = new Hono<Env>();
+
+const MIN_MESSAGE = 5;
+const MAX_MESSAGE = 4000;
+const MAX_CONTACT = 200;
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+
+// Matches the test-injection pattern in apps/api/src/routes/admin-cron-runs.ts;
+// real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
+function getDb(c: any): ReturnType<typeof createDb> {
+  return c.get("db") ?? createDb(c.env.DB);
+}
+
+function coerceType(v: unknown): string {
+  return typeof v === "string" && (FEEDBACK_TYPES as readonly string[]).includes(v) ? v : "general";
+}
+
+function coerceClientKind(v: unknown): string {
+  return typeof v === "string" && (TELEMETRY_CLIENT_KINDS as readonly string[]).includes(v)
+    ? v
+    : "external";
+}
+
+const feedbackPostOpenApi = idempotentPostOpenApi({
+  tags: ["Feedback"],
+  summary: "Submit product feedback",
+  successStatus: 202,
+  successDescription: "Accepted feedback identifier.",
+});
+
+feedbackRoutes.post(
+  "/feedback",
+  describeRoute({
+    ...feedbackPostOpenApi,
+    responses: {
+      ...feedbackPostOpenApi.responses,
+      400: errorResponse("Missing/invalid JSON body, or message shorter than the minimum length"),
+      429: errorResponse("Rate limited"),
+      503: errorResponse(
+        "Feedback intake disabled (kill switch), or idempotency storage/response replay is temporarily unavailable",
+      ),
+    },
+  }),
+  async (c) => {
+    if (await flag(c.env.FLAGS, c.env.FEEDBACK_DISABLED, FLAGS.feedbackDisabled)) {
+      return respondError(c, new ServiceUnavailableError());
+    }
+
+    const limiter =
+      c.env.FEEDBACK_RATE_LIMIT_ENABLED !== "false" ? c.env.FEEDBACK_RATE_LIMITER : undefined;
+    if (limiter) {
+      const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+      const { success } = await limiter.limit({ key: `feedback:${ip}` });
+      if (!success) {
+        c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+        return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
+      }
+    }
+
+    return idempotentPost(c, {
+      principal: anonymousIdempotencyPrincipal(),
+      body: "json",
+      preclaim: async (parsed) => {
+        if (typeof parsed !== "object" || parsed === null) {
+          return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
+        }
+        const body = parsed as Record<string, unknown>;
+        const rawMessage = sanitizeString(body.message, MAX_MESSAGE);
+        const message = rawMessage ? stripControl(rawMessage).trim() : null;
+        if (!message || message.length < MIN_MESSAGE) {
+          return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
+        }
+
+        const rawContact = sanitizeString(body.contact, MAX_CONTACT);
+        return {
+          message,
+          contact: rawContact ? stripControl(rawContact).trim() || null : null,
+          type: coerceType(body.type),
+          cliVersion: sanitizeText(body.cliVersion, 32),
+          clientKind: coerceClientKind(body.clientKind),
+          anonId: sanitizeText(body.anonId, 64),
+          os: sanitizeText(body.os, 64),
+          arch: sanitizeText(body.arch, 64),
+          runtime: sanitizeText(body.runtime, 64),
+          surface: sanitizeText(body.surface, 32) ?? "cli",
+        };
+      },
+      execute: async (input) => {
+        const row = {
+          id: newFeedbackId(),
+          createdAt: Date.now(),
+          ...input,
+          status: "new",
+          archived: false,
+        };
+        await getDb(c).insert(feedback).values(row);
+        c.executionCtx.waitUntil(notifyFeedback(c.env, row));
+        return c.json({ ok: true, id: row.id }, 202);
+      },
+    });
+  },
+);
+
+// ── Triage write-path (admin-gated) ──
+//
+// The POST above is open + unauthenticated. Everything under /feedback/:id is
+// admin-only — the gate is wired in index.ts (`/feedback/*` → authMiddleware),
+// mirroring how the read-back at /v1/admin/feedback is protected. These live on
+// the canonical resource path (not a new /v1/admin/* CRUD endpoint) per the
+// route conventions in AGENTS.md / #494.
+
+/**
+ * PATCH /v1/feedback/:id — partial update of the triage state. Accepts any of:
+ *   - `status`: one of FEEDBACK_STATUSES (`new` | `triaged` | `closed`).
+ *   - `archived`: boolean. `true` hides the row from the default admin read
+ *     path (soft removal, reversible); `false` restores it.
+ * At least one field must be present and valid. Returns the updated row, or 404
+ * if no feedback matches the id.
+ */
+feedbackRoutes.patch("/feedback/:id", async (c) => {
+  const id = c.req.param("id");
+
+  let parsed: unknown;
+  try {
+    parsed = await c.req.json();
+  } catch {
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
+  }
+  const body = parsed as Record<string, unknown>;
+
+  const update: { status?: string; archived?: boolean } = {};
+
+  if (body.status !== undefined) {
+    if (
+      typeof body.status !== "string" ||
+      !(FEEDBACK_STATUSES as readonly string[]).includes(body.status)
+    ) {
+      return respondError(
+        c,
+        new ValidationError(`status must be one of: ${FEEDBACK_STATUSES.join(", ")}`, {
+          code: "bad_request",
+        }),
+      );
+    }
+    update.status = body.status;
+  }
+
+  if (body.archived !== undefined) {
+    if (typeof body.archived !== "boolean") {
+      return respondError(
+        c,
+        new ValidationError("archived must be a boolean", { code: "bad_request" }),
+      );
+    }
+    update.archived = body.archived;
+  }
+
+  if (update.status === undefined && update.archived === undefined) {
+    return respondError(
+      c,
+      new ValidationError("provide status and/or archived", { code: "bad_request" }),
+    );
+  }
+
+  const db = getDb(c);
+  const [updated] = await db.update(feedback).set(update).where(eq(feedback.id, id)).returning();
+
+  if (!updated) return respondError(c, new NotFoundError("Feedback not found"));
+
+  return c.json(updated);
+});
+
+/**
+ * DELETE /v1/feedback/:id — hard delete. Removes the row entirely; use this for
+ * genuine junk (spam, smoke-test rows). For reversible removal that keeps an
+ * audit trail, archive via PATCH instead. Returns `{ deleted: true, id }`, or
+ * 404 if no feedback matches the id.
+ */
+feedbackRoutes.delete("/feedback/:id", async (c) => {
+  const id = c.req.param("id");
+  const db = getDb(c);
+
+  const [deleted] = await db
+    .delete(feedback)
+    .where(eq(feedback.id, id))
+    .returning({ id: feedback.id });
+
+  if (!deleted) return respondError(c, new NotFoundError("Feedback not found"));
+
+  return c.json({ deleted: true, id: deleted.id });
+});

@@ -13,7 +13,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
 import { applyMigrations } from "../db-helper";
 import { organizations } from "@buildinternet/releases-core/schema";
-import overview from "../../workers/api/src/routes/overview";
+import overview from "../../apps/api/src/routes/overview";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

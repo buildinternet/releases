@@ -2,7 +2,7 @@
  * Embed + upsert helper for release rows.
  *
  * Called as a side effect on write paths (see src/db/queries.ts#insertReleases
- * and workers/api/src/routes/sources.ts batch insert). Default contract:
+ * and apps/api/src/routes/sources.ts batch insert). Default contract:
  *
  *   **Embedding failure MUST NEVER fail the write.**
  *

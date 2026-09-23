@@ -16,11 +16,11 @@ import {
   type JWTVerifyGetKey,
   type CryptoKey,
 } from "jose";
-import { resolveMcpAuth, machineTokenIdForUsage } from "../../workers/mcp/src/auth.js";
-import type { Env } from "../../workers/mcp/src/mcp-agent.js";
+import { resolveMcpAuth, machineTokenIdForUsage } from "../../apps/mcp/src/auth.js";
+import type { Env } from "../../apps/mcp/src/mcp-agent.js";
 
 // The AS's canonical issuer = Better Auth base URL incl. the /api/auth basePath
-// (matches token `iss` + DEFAULT_OAUTH_ISSUER in workers/mcp/src/auth.ts).
+// (matches token `iss` + DEFAULT_OAUTH_ISSUER in apps/mcp/src/auth.ts).
 const ISSUER = "https://api.releases.sh/api/auth";
 const AUDIENCE = "https://mcp.releases.sh";
 

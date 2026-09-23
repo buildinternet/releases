@@ -4,7 +4,7 @@ The Releases changelog-discovery agents — deployed Anthropic managed-agent
 definitions plus the harness that drives them. Discovery runs as a Sonnet
 coordinator delegating to Haiku workers to find, evaluate, and onboard
 changelog sources; the production entrypoint is the discovery worker
-(`workers/discovery/`).
+(`apps/discovery/`).
 
 ## Layout
 

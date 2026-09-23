@@ -132,7 +132,7 @@ async function runOneShot(
         },
         { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
       );
-      // Mirrors the other lanes' `ai_usage` event (workers/api/src/lib/text-model.ts's
+      // Mirrors the other lanes' `ai_usage` event (apps/api/src/lib/text-model.ts's
       // `withLaneUsageLogging` and `overviewUsageSink`) so Axiom shows the one-shot
       // tier's routing — previously invisible since extract only logged to the
       // `usage_log` D1 table.

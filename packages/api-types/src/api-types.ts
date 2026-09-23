@@ -1770,7 +1770,7 @@ export type TagDetail = z.infer<typeof TagDetailSchema>;
 /**
  * Aggregated release feed row for a category rollup — same wire shape as
  * `CollectionReleaseItem` (both surfaces use `formatAggregateReleaseRow` in
- * `workers/api/src/utils.ts`). Aliased rather than duplicated so renderers
+ * `apps/api/src/utils.ts`). Aliased rather than duplicated so renderers
  * can treat them as one.
  */
 export type CategoryReleaseItem = CollectionReleaseItem;

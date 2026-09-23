@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
+import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
 import { applyMigrations, makeD1Shim } from "../db-helper.js";
 
 // Minimal stub response returned by the mock API binding.
@@ -125,7 +125,7 @@ describe("MCP lookup gate", () => {
         RELEASES_API_KEY: { get: async () => "root-secret" },
       } as Env;
       // A relu_-metered caller reaches createServer with write scope but token=null
-      // (set in workers/mcp/src/auth.ts → resolveUserKey). maybeLookup must fall
+      // (set in apps/mcp/src/auth.ts → resolveUserKey). maybeLookup must fall
       // back to the root key, NOT forward a relu_ key (which the API would meter).
       await callSearchTool(env, "search", "acme/some-sdk", {
         authScopes: ["write"],

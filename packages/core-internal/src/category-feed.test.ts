@@ -4,7 +4,7 @@ import { organizations, sources, releases, products } from "@buildinternet/relea
 import { getCategoryReleasesFeed } from "./category-feed.js";
 import { buildFeedCursor } from "./collection-feed.js";
 import { recomputeReleaseEffectiveCategoryForOrg } from "./effective-category.js";
-import type { D1Db } from "../../../workers/api/src/db.js";
+import type { D1Db } from "../../../apps/api/src/db.js";
 
 const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;
 

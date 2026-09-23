@@ -1,0 +1,720 @@
+/**
+ * Integration coverage for the per-source marketing classifier.
+ *
+ * A `feed` source carrying `metadata.marketingFilter = true` should run each
+ * newly-parsed item through the classifier and insert items it tags as
+ * marketing with `suppressed = true` and `suppressedReason` of the form
+ * `marketing_classifier:<slug>`. Non-marketing items insert visibly. The
+ * suppressed IDs should be excluded from `insertedIds` on the result so the
+ * downstream publish + embed steps skip them.
+ *
+ * When `marketingFilter` is unset, the classifier never runs (no Anthropic
+ * call) and all rows insert visibly.
+ *
+ * Why we stub `@releases/adapters/feed.js` via `mock.module` instead of
+ * mocking `globalThis.fetch` at the test boundary: `apps/api/test/fetch-log.test.ts`
+ * already registers a process-global `mock.module` for the same path with a
+ * stub that returns `releases: []` by default. Bun applies that stub for every
+ * subsequently-evaluated test file in the same run, so any test below it that
+ * tries to drive `fetchAndParseFeed` through a real HTTP call gets an empty
+ * array regardless of what `globalThis.fetch` does. The fix is to register our
+ * own override at this file's module-load with a per-test state hook.
+ */
+import { describe, it, expect, mock, beforeEach, afterEach, spyOn } from "bun:test";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { eq } from "drizzle-orm";
+import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
+import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import type { RawRelease } from "@releases/adapters/types";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { clearAiLaneModelCache } from "../src/lib/ai-lane-models.js";
+import { marketingDecisionResponse } from "../../../tests/marketing-decision-fixture";
+import type { ClassificationDataPoint } from "../src/lib/classification-schema.js";
+
+// ── feed-adapter stub ───────────────────────────────────────────────────────
+//
+// Per-test state for what `fetchAndParseFeed` should return. Reset in
+// beforeEach so a prior test can't leak data into the next.
+
+let nextFeedReleases: RawRelease[] = [];
+const feedFetchCalls: Array<{ feedUrl: string }> = [];
+
+// Spread the real adapter so exports the fetch path imports transitively
+// (e.g. extractMediaFromMarkdown) resolve to their real implementations; only
+// the entry points this test controls are overridden below (#1391).
+//
+// Bun's `mock.module` is process-global and irreversible (AGENTS.md) — once we
+// register this stub it applies to every later-evaluated test file. So we
+// deliberately do NOT override the github-override-path helpers
+// (`getSourceMeta`, `isGitHubFetched`, `effectiveGitHubUrl`,
+// `synthesizeReleaseUrl`): `...actualFeed` supplies the real, template-faithful
+// implementations, and leaking a hand-rolled copy into the real-feed override
+// test (poll-fetch-github-override.test.ts) is exactly what produced the
+// deterministic CI flake in #1565.
+const actualFeed = await import("@releases/adapters/feed.js");
+
+mock.module("@releases/adapters/feed.js", () => ({
+  ...actualFeed,
+  FEED_4XX_INVALIDATE_THRESHOLD: 5,
+  CLEARED_FEED_FIELDS: {
+    feedUrl: undefined,
+    feedType: undefined,
+    feedEtag: undefined,
+    feedLastModified: undefined,
+  },
+  // Change-detector helpers — not exercised by the marketing-filter tests but
+  // poll-fetch.ts imports them, so they have to resolve to functions.
+  headCheckUrl: async () => ({ status: "changed" as const }),
+  bodyHashCheck: async () => ({ status: "unchanged" as const, responseMs: 0 }),
+  filterByCategoryAllow: (items: RawRelease[]) => ({ kept: items, dropped: 0 }),
+  // The actual stub — returns canned RawRelease data from per-test state and
+  // captures the call shape for assertions.
+  fetchAndParseFeed: async (feedUrl: string) => {
+    feedFetchCalls.push({ feedUrl });
+    return {
+      releases: nextFeedReleases,
+      etag: undefined,
+      lastModified: undefined,
+      contentLength: undefined,
+    };
+  },
+}));
+
+// fetchOne must be imported AFTER mock.module is registered so its
+// `@releases/adapters/feed.js` import resolves to the stub.
+const { fetchOne } = await import("../src/cron/poll-fetch.js");
+
+// ── Anthropic mock (globalThis.fetch) ───────────────────────────────────────
+//
+// The classifier issues real HTTP calls through the Anthropic SDK, which uses
+// `globalThis.fetch`. We intercept only the Anthropic origin to keep the test
+// hermetic — the feed origin never gets hit because the adapter is stubbed
+// above.
+
+type FetchHandler = (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>;
+const requestedUrls: string[] = [];
+
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+function installFetch(handler: FetchHandler) {
+  requestedUrls.length = 0;
+  (globalThis as { fetch: typeof fetch }).fetch = (async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    requestedUrls.push(urlOf(input));
+    return await handler(input, init);
+  }) as typeof fetch;
+}
+
+function restoreFetch() {
+  restoreGlobalFetch();
+}
+
+function anthropicJson(verdict: { marketing: boolean; reason: string }): Response {
+  return new Response(
+    JSON.stringify({
+      id: "msg_test",
+      type: "message",
+      role: "assistant",
+      model: "claude-haiku-4-5",
+      content: [
+        {
+          type: "text",
+          text: `<marketing>${verdict.marketing}</marketing><reason>${verdict.reason}</reason>`,
+        },
+      ],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 50,
+        output_tokens: 8,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+// ── canned feed items ───────────────────────────────────────────────────────
+//
+// One obvious case study and one product release. Shipped as RawRelease
+// objects directly because the upstream RSS parser is stubbed out.
+
+const ITEMS_FOR_CLASSIFICATION: RawRelease[] = [
+  {
+    title: "How TestCo migrated from Postgres to ClickHouse",
+    content: "How TestCo cut analytics query times by 100x with ClickHouse.",
+    url: "https://clickhouse.com/blog/testco",
+    publishedAt: new Date("2026-05-18T09:31:37.000Z"),
+    isBreaking: false,
+    media: [],
+  },
+  {
+    title: "ClickHouse Release 26.4",
+    content: "Native AI functions, faster joins, Arrow Flight SQL.",
+    url: "https://clickhouse.com/blog/clickhouse-release-26-04",
+    publishedAt: new Date("2026-05-17T08:00:00.000Z"),
+    version: "26.4",
+    isBreaking: false,
+    media: [],
+  },
+];
+
+// ── DB helpers ───────────────────────────────────────────────────────────────
+
+function mkDb() {
+  const sqlite = new Database(":memory:");
+  const rawDb = drizzle(sqlite);
+  applyMigrations(sqlite);
+  return ensureBatchShim(rawDb);
+}
+
+async function seedFeedSource(db: ReturnType<typeof mkDb>, metadata: Record<string, unknown>) {
+  await db
+    .insert(organizations)
+    .values({ id: "org_ch", slug: "clickhouse", name: "ClickHouse", category: "database" });
+  await db.insert(sources).values({
+    id: "src_ch_blog",
+    orgId: "org_ch",
+    slug: "clickhouse-blog",
+    name: "ClickHouse Blog",
+    type: "feed",
+    url: "https://clickhouse.com/blog",
+    metadata: JSON.stringify(metadata),
+  });
+}
+
+// Stub env. The Anthropic key is a fake secret binding — only present when the
+// test wants the classifier to actually fire. Embed bindings stay undefined so
+// the inline embed step is a no-op (the assertion is about insert state, not
+// vector writes).
+function makeEnv(opts: { withAnthropic: boolean; points?: ClassificationDataPoint[] }): unknown {
+  return {
+    GITHUB_TOKEN: undefined,
+    RELEASES_INDEX: undefined,
+    CHANGELOG_CHUNKS_INDEX: undefined,
+    ANTHROPIC_API_KEY: opts.withAnthropic ? { get: async () => "sk-ant-test-key" } : undefined,
+    ...(opts.points
+      ? {
+          ENVIRONMENT: "production",
+          RELEASE_CLASSIFICATIONS_AE: {
+            writeDataPoint(point: ClassificationDataPoint) {
+              opts.points!.push(point);
+            },
+          },
+        }
+      : {}),
+  };
+}
+
+// ── tests ────────────────────────────────────────────────────────────────────
+
+describe("fetchOne — metadata.marketingFilter", () => {
+  for (const [choice, probability, suppressed, status] of [
+    ["case_study", 0.8, true, 200],
+    ["case_study", 0.64, false, 200],
+    ["real_product_news", 1, false, 200],
+    ["unclear_other", 1, false, 200],
+    ["invented", 1, false, 200],
+    ["case_study", 1, false, 500],
+  ] as const) {
+    it(`ingests JEV ${choice} at ${probability} with HTTP ${status} safely`, async () => {
+      clearAiLaneModelCache();
+      nextFeedReleases = [ITEMS_FOR_CLASSIFICATION[0]];
+      installFetch(() => Response.json(marketingDecisionResponse(choice, probability), { status }));
+      const db = mkDb();
+      await seedFeedSource(db, {
+        feedUrl: "https://clickhouse.com/rss.xml",
+        feedType: "rss",
+        marketingFilter: true,
+      });
+      const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+      const result = await fetchOne(db as never, src, {
+        OPENROUTER_ENABLED: "true",
+        OPENROUTER_API_KEY: { get: async () => "test-or" },
+        MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+      } as never);
+      const [row] = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+      expect(result.status).toBe("success");
+      expect(requestedUrls).toEqual(["https://openrouter.ai/api/alpha/decisions"]);
+      expect(row.suppressed).toBe(suppressed);
+      expect(row.suppressedReason).toBe(suppressed ? "marketing_classifier:case_study" : null);
+      expect(result.insertedIds).toHaveLength(suppressed ? 0 : 1);
+    });
+  }
+
+  beforeEach(() => {
+    feedFetchCalls.length = 0;
+    nextFeedReleases = ITEMS_FOR_CLASSIFICATION;
+  });
+  afterEach(() => {
+    restoreFetch();
+  });
+
+  it("does not call the classifier when marketingFilter is unset", async () => {
+    let anthropicCalls = 0;
+    installFetch((input) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        anthropicCalls++;
+        return anthropicJson({ marketing: true, reason: "case_study" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      // marketingFilter intentionally unset
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(feedFetchCalls.length).toBe(1);
+    expect(feedFetchCalls[0].feedUrl).toBe("https://clickhouse.com/rss.xml");
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(2);
+    expect(anthropicCalls).toBe(0);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows.every((r) => r.suppressed === false)).toBe(true);
+  });
+
+  it("suppresses marketing items at insert and lets product news through", async () => {
+    installFetch((input, init) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        const bodyText = init?.body as string | undefined;
+        if (bodyText?.includes("How TestCo migrated")) {
+          return anthropicJson({ marketing: true, reason: "case_study" });
+        }
+        return anthropicJson({ marketing: false, reason: "not_marketing" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(2);
+    expect(result.insertedIds?.length).toBe(1);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    const byUrl = new Map(rows.map((r) => [r.url, r]));
+
+    const marketingRow = byUrl.get("https://clickhouse.com/blog/testco");
+    expect(marketingRow?.suppressed).toBe(true);
+    expect(marketingRow?.suppressedReason).toBe("marketing_classifier:case_study");
+
+    const productRow = byUrl.get("https://clickhouse.com/blog/clickhouse-release-26-04");
+    expect(productRow?.suppressed).toBe(false);
+    expect(productRow?.suppressedReason).toBeNull();
+
+    expect(result.insertedIds?.[0]).toBe(productRow?.id);
+  });
+
+  it("counts only genuinely-new items against the per-fire cap", async () => {
+    // Regression for the cap counting the full feed window: feeds re-list their
+    // whole window every fetch (dbt-blog returns 25, ClickHouse 200), so a cap
+    // checked against `rawReleases.length` trips on every fire and the
+    // classifier never runs. Only items not already in the DB should count.
+    let anthropicCalls = 0;
+    installFetch((input, init) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        anthropicCalls++;
+        const bodyText = init?.body as string | undefined;
+        if (bodyText?.includes("How NewCo migrated")) {
+          return anthropicJson({ marketing: true, reason: "case_study" });
+        }
+        return anthropicJson({ marketing: false, reason: "not_marketing" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+
+    // Pre-seed 20 already-ingested rows whose URLs the feed will re-list.
+    const existingUrls = Array.from(
+      { length: 20 },
+      (_, i) => `https://clickhouse.com/blog/existing-${i}`,
+    );
+    await db.insert(releases).values(
+      existingUrls.map((u, i) => ({
+        sourceId: "src_ch_blog",
+        title: `Existing post ${i}`,
+        content: "Already in the database.",
+        url: u,
+      })),
+    );
+
+    // Feed re-lists all 20 existing URLs plus one genuinely-new marketing item.
+    // 21 total > cap (20); only the 1 new item should be classified.
+    nextFeedReleases = [
+      ...existingUrls.map((u, i) => ({
+        title: `Existing post ${i}`,
+        content: "Already in the database.",
+        url: u,
+        publishedAt: new Date("2026-05-01T00:00:00.000Z"),
+        isBreaking: false,
+        media: [],
+      })),
+      {
+        title: "How NewCo migrated to ClickHouse",
+        content: "How NewCo cut analytics query times by 100x with ClickHouse.",
+        url: "https://clickhouse.com/blog/newco",
+        publishedAt: new Date("2026-05-20T00:00:00.000Z"),
+        isBreaking: false,
+        media: [],
+      },
+    ];
+
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(result.status).toBe("success");
+    // Only the new row is inserted; the 20 existing collide and are skipped.
+    expect(result.releasesInserted).toBe(1);
+    // Classifier ran on exactly the one new item, not the whole feed window.
+    expect(anthropicCalls).toBe(1);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    const newRow = rows.find((r) => r.url === "https://clickhouse.com/blog/newco");
+    expect(newRow?.suppressed).toBe(true);
+    expect(newRow?.suppressedReason).toBe("marketing_classifier:case_study");
+    // Suppressed-at-insert row stays out of insertedIds.
+    expect(result.insertedIds?.length).toBe(0);
+  });
+
+  it("still trips the cap when more than the cap's worth of items are genuinely new", async () => {
+    // The cap is retained as a cost backstop — but on the new-item set, not the
+    // re-listed feed window. A burst of >20 brand-new items skips classification
+    // and inserts visibly for operator backfill.
+    let anthropicCalls = 0;
+    installFetch((input) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        anthropicCalls++;
+        return anthropicJson({ marketing: true, reason: "case_study" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+
+    nextFeedReleases = Array.from({ length: 21 }, (_, i) => ({
+      title: `Brand-new post ${i}`,
+      content: "Never seen before.",
+      url: `https://clickhouse.com/blog/fresh-${i}`,
+      publishedAt: new Date("2026-05-20T00:00:00.000Z"),
+      isBreaking: false,
+      media: [],
+    }));
+
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(21);
+    expect(anthropicCalls).toBe(0);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows.every((r) => r.suppressed === false)).toBe(true);
+  });
+
+  it("fails open when the classifier throws — inserts everything visibly", async () => {
+    installFetch((input) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        // Garbage response forces parseMarketingVerdict to throw.
+        return new Response(
+          JSON.stringify({
+            id: "msg_test",
+            type: "message",
+            role: "assistant",
+            model: "claude-haiku-4-5",
+            content: [{ type: "text", text: "this is not the format we asked for" }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 50, output_tokens: 8 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(2);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows.every((r) => r.suppressed === false)).toBe(true);
+  });
+
+  // #2168 item 5d: a provider quota/billing shutoff must not blend into the
+  // ordinary "classifier failed" noise — it needs its own alertable event, the
+  // same way the Firecrawl ingest path already gets one. The lane must stay
+  // fail-open: fetchOne still succeeds and inserts everything visibly.
+  it("emits provider-quota-exhausted and still fails open when the classifier hits a quota shutoff", async () => {
+    let errorSpy: ReturnType<typeof spyOn> | undefined;
+    try {
+      errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
+
+      installFetch((input) => {
+        const url = urlOf(input);
+        if (url.includes("api.anthropic.com")) {
+          return new Response(
+            JSON.stringify({
+              type: "error",
+              error: {
+                type: "rate_limit_error",
+                message:
+                  "You have reached your specified API usage limits. You will regain access on 2026-08-01 at 00:00 UTC.",
+              },
+            }),
+            { status: 429, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      });
+
+      const db = mkDb();
+      await seedFeedSource(db, {
+        feedUrl: "https://clickhouse.com/rss.xml",
+        feedType: "rss",
+        marketingFilter: true,
+      });
+      const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+      // Fail-open: same disposition as an ordinary classifier failure — every
+      // item inserts visibly, ingest itself never breaks.
+      expect(result.status).toBe("success");
+      expect(result.releasesInserted).toBe(2);
+      const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+      expect(rows.every((r) => r.suppressed === false)).toBe(true);
+
+      const quotaLines = errorSpy.mock.calls
+        .map((call: unknown[]) => call[0] as string)
+        .filter(
+          (line: string) => typeof line === "string" && line.includes("provider-quota-exhausted"),
+        )
+        .map((line: string) => JSON.parse(line));
+      expect(quotaLines.length).toBeGreaterThan(0);
+      const payload = quotaLines[0];
+      expect(payload.component).toBe("cron-poll-fetch");
+      expect(payload.lane).toBe("marketing-classifier");
+      expect(payload.sourceSlug).toBe("clickhouse-blog");
+      expect(payload.regainAccessAt).toBe("2026-08-01T00:00:00.000Z");
+      expect(payload.providerMessage).toMatch(/reached your specified API usage limits/);
+    } finally {
+      errorSpy?.mockRestore();
+    }
+  });
+
+  it("records suppressed and kept inserts, and skips a url that already exists", async () => {
+    installFetch((input, init) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        const bodyText = init?.body as string | undefined;
+        if (bodyText?.includes("How TestCo migrated")) {
+          return anthropicJson({ marketing: true, reason: "case_study" });
+        }
+        return anthropicJson({ marketing: false, reason: "not_marketing" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    await db.insert(releases).values({
+      id: "rel_existing",
+      sourceId: "src_ch_blog",
+      title: "ClickHouse Release 26.4",
+      content: "Already stored.",
+      url: "https://clickhouse.com/blog/clickhouse-release-26-04",
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(1);
+    expect(points).toHaveLength(1);
+    const point = points[0]!;
+    expect(point.blobs[2]).toBe("ingest");
+    expect(point.blobs[8]).toBe("case_study");
+    expect(point.blobs[9]).toBe("suppressed");
+    expect(point.blobs[4]).toMatch(/^rel_/);
+    expect(point.blobs[4]).not.toBe("rel_existing");
+    expect(point.indexes.join(" ") + point.blobs.join(" ")).not.toContain("TestCo");
+    expect(point.blobs.join(" ")).not.toContain("http");
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    const marketingRow = rows.find((row) => row.url === "https://clickhouse.com/blog/testco");
+    expect(marketingRow?.suppressed).toBe(true);
+    expect(point.blobs[4]).toBe(marketingRow?.id ?? "");
+  });
+
+  it("records a kept insert for a non-marketing item", async () => {
+    installFetch(() => anthropicJson({ marketing: false, reason: "not_marketing" }));
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    nextFeedReleases = [ITEMS_FOR_CLASSIFICATION[1]!];
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.insertedIds).toHaveLength(1);
+    expect(points).toHaveLength(1);
+    expect(points[0]?.blobs[8]).toBe("not_marketing");
+    expect(points[0]?.blobs[9]).toBe("kept");
+    expect(points[0]?.blobs[10]).toBe("unspecified");
+    expect(points[0]?.blobs[4]).toBe(result.insertedIds?.[0] ?? "");
+    expect(points[0]?.blobs[4]).toMatch(/^rel_/);
+  });
+
+  it("records failed when classify throws and still inserts the release visibly", async () => {
+    installFetch((input) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        return new Response(
+          JSON.stringify({
+            id: "msg_test",
+            type: "message",
+            role: "assistant",
+            model: "claude-haiku-4-5",
+            content: [{ type: "text", text: "this is not the format we asked for" }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 50, output_tokens: 8 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    nextFeedReleases = [ITEMS_FOR_CLASSIFICATION[0]!];
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(1);
+    expect(result.insertedIds).toHaveLength(1);
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows.every((row) => row.suppressed === false)).toBe(true);
+    expect(points).toHaveLength(1);
+    const flat = [...(points[0]?.indexes ?? []), ...(points[0]?.blobs ?? [])].join("\n");
+    expect(points[0]?.blobs[9]).toBe("failed");
+    expect(points[0]?.blobs[12]).toBe("classify_error");
+    expect(points[0]?.blobs[8]).toBe("");
+    expect(points[0]?.blobs[4]).toMatch(/^rel_/);
+    expect(points[0]?.doubles[0]).toBe(-1);
+    expect(points[0]?.doubles[4]).toBe(-1);
+    expect(points[0]?.doubles[6]).toBeGreaterThanOrEqual(0);
+    expect(flat).not.toContain("format");
+    expect(flat).not.toContain("TestCo");
+  });
+
+  it("does not write a point on a dry run", async () => {
+    installFetch(() => anthropicJson({ marketing: true, reason: "case_study" }));
+    const points: ClassificationDataPoint[] = [];
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+
+    const result = await fetchOne(
+      db as never,
+      src,
+      makeEnv({ withAnthropic: true, points }) as never,
+      {
+        dryRun: true,
+      },
+    );
+
+    expect(result.status).toBe("dry_run");
+    expect(points).toHaveLength(0);
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows).toHaveLength(0);
+  });
+});

@@ -1,0 +1,180 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "releases-mcp",
+  "main": "src/index.ts",
+  "alias": {
+    "bun:sqlite": "./src/stubs/bun-sqlite.ts",
+    "drizzle-orm": "../../node_modules/drizzle-orm",
+  },
+  "compatibility_date": "2026-03-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+    },
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+    },
+  },
+  "vars": {
+    "USER_API_KEYS_ENABLED": "false",
+    "MEDIA_ORIGIN": "https://media.releases.sh",
+    // Web origin for building slugged canonical `webUrl` fields (#1906).
+    "WEB_BASE_URL": "https://releases.sh",
+    // Rate limiting: account + anonymous ride RATE_LIMIT_ENABLED; machine rides TOKEN_RATE_LIMIT_ENABLED.
+    // Default: account/anon OFF (same as API worker until production ramp); machine ON.
+    "RATE_LIMIT_ENABLED": "false",
+    "TOKEN_RATE_LIMIT_ENABLED": "true",
+    // "Sign in with Releases" OAuth resource-server verification (#1483). The AS
+    // issuer (Better Auth base URL incl. the /api/auth basePath — matches the
+    // discovery `issuer` + token `iss`; the JWKS host is derived origin-relative)
+    // and this worker's expected token audience.
+    "OAUTH_JWT_ISSUER": "https://api.releases.sh/api/auth",
+    "OAUTH_JWT_AUDIENCE": "https://mcp.releases.sh",
+    // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
+    // requested at 512 dims via output_dimension to match the Vectorize indexes).
+    "EMBEDDING_PROVIDER": "voyage",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "released-db",
+      "database_id": "73be1562-d900-4e25-a62b-650ab74488b7",
+    },
+  ],
+  // Cloudflare Flagship feature flags. Prod and staging each have their own
+  // app; absence in local dev is safe — flag() falls back to the wrangler var.
+  "flagship": [{ "binding": "FLAGS", "app_id": "2cf02390-e39a-477a-91c1-571d07b987ef" }],
+  // Vectorize indexes for semantic search. Same indexes as the API worker — MCP
+  // only reads from them. Provision via scripts/create-vectorize-indexes.sh.
+  "vectorize": [
+    { "binding": "RELEASES_INDEX", "index_name": "releases-v1" },
+    { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
+    { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" },
+  ],
+  // Cloudflare native rate-limit bindings (three rungs: anonymous / account / machine).
+  // `namespace_id` is a developer-chosen integer, ACCOUNT-scoped: bindings that share an
+  // id share counters across every worker on the account, so each limiter needs its own.
+  // Nothing is provisioned in the dashboard — these values are final. Allocation
+  // convention: api = 100x, mcp = 200x, webhooks = 300x.
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "PUBLIC_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "2001",
+        "simple": { "limit": 120, "period": 60 },
+      },
+      {
+        "name": "USER_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "2006",
+        "simple": { "limit": 300, "period": 60 },
+      },
+      {
+        "name": "TOKEN_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "2002",
+        "simple": { "limit": 600, "period": 60 },
+      },
+    ],
+  },
+  // Shared with the API worker — identical key shape so hits from either warm the other.
+  "kv_namespaces": [
+    {
+      "binding": "EMBED_CACHE",
+      "id": "93b87ae5e253445cabbaaa7a71264915",
+      "preview_id": "7737ccafd37a43fc9d2365c9a2d7ebca",
+    },
+  ],
+  "services": [{ "binding": "API", "service": "releases-api" }],
+  // Dual host: agents.releases.sh is the advertised public URL;
+  // mcp.releases.sh stays bound so existing clients keep working.
+  "routes": [
+    { "pattern": "agents.releases.sh", "custom_domain": true },
+    { "pattern": "mcp.releases.sh", "custom_domain": true },
+  ],
+  // Secrets are managed in Cloudflare's Secrets Store. VOYAGE_API_KEY is
+  // required for semantic search — the embed path no-ops if it's missing.
+  // RELEASED_API_KEY lets the lookup-fallback (`maybeLookup` in mcp-agent.ts)
+  // present a Bearer to the API worker's admin-gated /v1/lookups route.
+  "secrets_store_secrets": [
+    {
+      "binding": "VOYAGE_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "VOYAGER_API_KEY",
+    },
+    {
+      "binding": "RELEASED_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASED_API_KEY",
+    },
+    {
+      "binding": "RELEASES_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASES_API_KEY",
+    },
+  ],
+  // ── Staging environment ──────────────────────────────────────────────
+  // Deployed as `releases-mcp-staging` at mcp-staging.releases.sh. Points
+  // at the staging D1 (released-db-staging); Vectorize is omitted so
+  // semantic MCP tools degrade to lexical.
+  // Interim access gate: `STAGING_ACCESS_KEY` (see apps/mcp/src/index.ts)
+  // rejects any request missing the `X-Releases-Staging-Key` header. CF Access
+  // is still the long-term plan — see issue #444.
+  "env": {
+    "staging": {
+      "name": "releases-mcp-staging",
+      "routes": [{ "pattern": "mcp-staging.releases.sh", "custom_domain": true }],
+      "vars": {
+        "USER_API_KEYS_ENABLED": "false",
+        "MEDIA_ORIGIN": "https://media.releases.sh",
+        "WEB_BASE_URL": "https://releases.sh",
+        "EMBEDDING_PROVIDER": "voyage",
+        // OAuth resource-server verification (#1483) — staging AS issuer (incl.
+        // /api/auth basePath, matching token `iss`) + this worker's audience.
+        "OAUTH_JWT_ISSUER": "https://api-staging.releases.sh/api/auth",
+        "OAUTH_JWT_AUDIENCE": "https://mcp-staging.releases.sh",
+        // Staging-only: emit X-Robots-Tag: noindex and serve a deny-all
+        // /robots.txt. Belt-and-suspenders against crawling.
+        "INDEXING_DISABLED": "true",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "released-db-staging",
+          "database_id": "68d44939-feab-4fcb-8f4f-19778ca1dee8",
+        },
+      ],
+      // Flagship staging app (separate from prod so flag states are isolated).
+      "flagship": [{ "binding": "FLAGS", "app_id": "548a95f1-4f8c-402d-8aa2-1b861523d377" }],
+      "services": [{ "binding": "API", "service": "releases-api-staging" }],
+      "kv_namespaces": [{ "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" }],
+      "secrets_store_secrets": [
+        {
+          "binding": "VOYAGE_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "VOYAGER_API_KEY",
+        },
+        {
+          "binding": "STAGING_ACCESS_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "STAGING_ACCESS_KEY",
+        },
+        {
+          "binding": "RELEASED_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASED_API_KEY",
+        },
+        {
+          "binding": "RELEASES_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASES_API_KEY",
+        },
+      ],
+    },
+  },
+}

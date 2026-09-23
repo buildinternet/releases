@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "bun:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
+import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
 
 /**
  * Stub Env wired so that `createServer()` can initialize without touching D1,

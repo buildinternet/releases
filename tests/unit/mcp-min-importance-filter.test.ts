@@ -9,7 +9,7 @@
  * REST route). `whats_changed` proxies to `GET /v1/whats-changed`, which
  * doesn't carry `importance` — so the tool does a small direct D1 lookup
  * keyed by `(source_id, version)` to attach scores before filtering/
- * rendering. See `workers/mcp/src/whats-changed-tool.ts` for the rationale.
+ * rendering. See `apps/mcp/src/whats-changed-tool.ts` for the rationale.
  */
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -22,8 +22,8 @@ import { organizations, sources, releases } from "@buildinternet/releases-core/s
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { getLatestReleases } from "../../workers/mcp/src/tools.js";
-import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
+import { getLatestReleases } from "../../apps/mcp/src/tools.js";
+import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
 
 const TOKEN = "importancefilter";
 

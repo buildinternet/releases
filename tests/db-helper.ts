@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "fs";
 import * as schema from "@buildinternet/releases-core/schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(__dirname, "..", "workers", "api", "migrations");
+const MIGRATIONS_DIR = join(__dirname, "..", "apps", "api", "migrations");
 
 export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -17,7 +17,7 @@ export interface TestDatabase {
 }
 
 /**
- * Apply every .sql file under workers/api/migrations/ in sorted filename
+ * Apply every .sql file under apps/api/migrations/ in sorted filename
  * order to the given sqlite database. Matches what `wrangler d1 migrations
  * apply` does in prod. After the squashed baseline this is usually one file;
  * any forward-delta migrations land in the same directory.

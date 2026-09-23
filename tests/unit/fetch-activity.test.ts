@@ -8,7 +8,7 @@ import {
   parseExcludeStatuses,
   resolveActivityWindow,
   MAX_ACTIVITY_BUCKETS,
-} from "../../workers/api/src/routes/fetch-activity";
+} from "../../apps/api/src/routes/fetch-activity";
 
 describe("floorToBucket", () => {
   it("floors to hour UTC", () => {

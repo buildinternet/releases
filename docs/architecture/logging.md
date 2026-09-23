@@ -8,7 +8,7 @@ Logging splits by runtime. Pick the helper by where the code runs, not by what i
 
 ## Worker code
 
-`workers/api/`, `workers/mcp/`, `workers/discovery/`, and `workers/webhooks/` emit structured JSON via `logEvent()` from `@releases/lib/log-event` (worker-safe; no `fs` imports).
+`apps/api/`, `apps/mcp/`, `apps/discovery/`, and `apps/webhooks/` emit structured JSON via `logEvent()` from `@releases/lib/log-event` (worker-safe; no `fs` imports).
 
 - **Payload shape.** Workers Logs indexes the top-level keys of JSON-stringified `console.*` lines as filterable fields, so payloads carry `component` (e.g. `"poll-fetch-workflow"`, `"search-log"`) and `event` (kebab-case, e.g. `"no-change-detected"`, `"insert-failed"`) as top-level keys, plus arbitrary context (`sourceSlug`, `err`, request id, workflow instance id, …).
 - **Severity.** Set by which `console.*` function the helper invokes — `logEvent("info"|"warn"|"error", {...})` dispatches to `console.log` / `console.warn` / `console.error`, which is what Workers Logs reads for the level field. **Don't** put `level` in the payload.
@@ -20,7 +20,7 @@ New worker code MUST use `logEvent`; existing plain-string `console.*` call site
 
 ## Auth audit events (`component: "auth"`)
 
-Human-auth business actions are emitted as `logEvent` audit records (`workers/api/src/auth/audit.ts`, #1427) — security/audit telemetry distinct from `telemetry_events` (PII-clean CLI contract) and `search_queries`. PII is minimal: the **user id**, never the email, the session token, or password material; client IPs are **truncated** by `redactIp` (IPv4 → `/24`, IPv6 → `/48`) before they reach the log sink.
+Human-auth business actions are emitted as `logEvent` audit records (`apps/api/src/auth/audit.ts`, #1427) — security/audit telemetry distinct from `telemetry_events` (PII-clean CLI contract) and `search_queries`. PII is minimal: the **user id**, never the email, the session token, or password material; client IPs are **truncated** by `redactIp` (IPv4 → `/24`, IPv6 → `/48`) before they reach the log sink.
 
 | `event`                    | severity | fields         | where it's wired                                                                              |
 | -------------------------- | -------- | -------------- | --------------------------------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ Human-auth business actions are emitted as `logEvent` audit records (`workers/ap
 
 `sign-in-failure` is logged at the **HTTP response layer**, not via an internal hook: a rate-limit rejection (429) short-circuits in Better Auth's router before any hook runs, so the response (path + status) is the only place all failure modes are observable. `reason` is derived from status alone — `429 → rate-limited`, `403 → unverified`, `401 → invalid-credentials`. `invalid-credentials` deliberately covers **both** a wrong password and an unknown email: Better Auth returns the same generic error for both (account-enumeration protection), so they're indistinguishable — and the _logged_ reason stays internal anyway, the user-facing response is always generic.
 
-The email-delivery hooks (`email-sent`, `email-no-binding`, `email-send-failed`, `secret-unresolved`) share the same `component: "auth"` (`workers/api/src/auth/email.ts`). The root-key admin routes emit `role-changed` (`workers/api/src/routes/admin-users.ts`) and `oauth-client-{created,updated,deleted,secret-rotated}` (`workers/api/src/routes/admin-oauth.ts`) under the same component — but via `logEvent` directly, so they carry no `environment` field (unlike the `makeAuthAudit` events above).
+The email-delivery hooks (`email-sent`, `email-no-binding`, `email-send-failed`, `secret-unresolved`) share the same `component: "auth"` (`apps/api/src/auth/email.ts`). The root-key admin routes emit `role-changed` (`apps/api/src/routes/admin-users.ts`) and `oauth-client-{created,updated,deleted,secret-rotated}` (`apps/api/src/routes/admin-oauth.ts`) under the same component — but via `logEvent` directly, so they carry no `environment` field (unlike the `makeAuthAudit` events above).
 
 Alerting on these (sign-in-failure spike, rate-limited surge, admin-action occurrence) is wired through three **live** Axiom monitors — IDs, APL, thresholds, and response steps live in [docs/runbooks/auth-audit-monitors.md](../runbooks/auth-audit-monitors.md) (#1432). Monitor write goes through either the Axiom management API (`AXIOM_MGMT_TOKEN`) or the Axiom MCP's `createMonitor` / `updateMonitor`.
 

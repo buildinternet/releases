@@ -1,0 +1,28 @@
+import path from "node:path";
+import { describe, expect, it } from "bun:test";
+
+// The docs manifest this route pulls sections from resolves markdown content
+// relative to `process.cwd()` (`apps/web/src/content/...`) once, at module-load
+// time — which only holds when the process cwd is `apps/web/` (true for `next
+// dev`/`next build`, and for `bun test` invoked from inside `apps/web/`, but not
+// for the root multi-dir `bun test tests/ apps/web/ ...` invocation). Pin the cwd
+// just long enough to import the route module, then restore it, so this test
+// resolves content correctly regardless of where the runner was launched
+// from without disturbing cwd-sensitive tests elsewhere in the same process.
+const originalCwd = process.cwd();
+if (path.basename(originalCwd) !== "web") process.chdir(path.join(originalCwd, "apps", "web"));
+const { GET } = await import("./route.js");
+if (process.cwd() !== originalCwd) process.chdir(originalCwd);
+
+describe("GET /llms.txt", () => {
+  it("serves the site map with machine-readable endpoints", async () => {
+    const res = GET();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    const body = await res.text();
+    expect(body).toMatch(/^# /);
+    expect(body).toContain("## When to use");
+    expect(body).toContain("https://api.releases.sh/v1");
+    expect(body).toContain("https://agents.releases.sh/mcp");
+  });
+});

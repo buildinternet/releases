@@ -52,7 +52,7 @@ const CODE_SPAN_PLACEHOLDER = "";
 /**
  * Strips inline markdown down to its display text, matching how rehype
  * flattens a rendered heading/paragraph to plain text (`hastText` in
- * web/src/lib/render-digest-body.ts): images drop, links keep only their
+ * apps/web/src/lib/render-digest-body.ts): images drop, links keep only their
  * text, code spans keep only their content, emphasis markers drop.
  *
  * Code span contents are swapped for placeholders *before* emphasis is
@@ -130,7 +130,7 @@ export function releaseIdFromPath(href: string): string | null {
 
 /** Replace `](/release/rel_…)` link targets with the release's upstream url
  *  when it has an http(s) one; otherwise leave the internal fallback. Mirrors
- *  `releaseLinkTarget()` in web/src/lib/release-link.ts. */
+ *  `releaseLinkTarget()` in apps/web/src/lib/release-link.ts. */
 export function rewriteDigestReleaseLinks(
   body: string,
   urlById: ReadonlyMap<string, string | null | undefined>,

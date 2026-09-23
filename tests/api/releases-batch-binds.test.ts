@@ -17,7 +17,7 @@ import {
   CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
   RELEASE_COVERAGE_INSERT_CHUNK_SIZE,
   ENTITY_TAG_INSERT_CHUNK_SIZE,
-} from "../../workers/api/src/lib/d1-limits.js";
+} from "../../apps/api/src/lib/d1-limits.js";
 
 // D1 rejects any prepared statement that binds more than D1_MAX_BINDINGS
 // parameters. These tests use Drizzle's .toSQL() to count the placeholders
@@ -32,7 +32,7 @@ import {
 const db = drizzle(new Database(":memory:"));
 
 // Mirrors the heaviest production payload (the sources batch path —
-// workers/api/src/routes/sources.ts) so the budget assertion tracks the
+// apps/api/src/routes/sources.ts) so the budget assertion tracks the
 // largest binding shape the chunk-size constant must cover.
 const mockRow = (i: number) => ({
   sourceId: "src_x",

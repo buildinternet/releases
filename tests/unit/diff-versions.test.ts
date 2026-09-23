@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { diffVersions } from "../../web/src/lib/cadence";
+import { diffVersions } from "../../apps/web/src/lib/cadence";
 
 describe("diffVersions", () => {
   it("splits at the dot boundary on a patch bump", () => {

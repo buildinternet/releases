@@ -102,10 +102,10 @@ The same actions are on **Admin → Semantic alerts** (`/admin/semantic-alerts`)
 
 ## Code
 
-- Schema + migrations: `workers/api/src/db/schema-semantic-alerts.ts`, `workers/api/migrations/20260922020000_add_semantic_alerts.sql`, `workers/api/migrations/20260922030000_semantic_alert_matches.sql`, `workers/api/migrations/20260922200000_semantic_alert_matches_alert_created_idx.sql`
-- Routes: `workers/api/src/routes/me-semantic-alerts.ts`
-- Matcher: `packages/ai/src/semantic-alert-match.ts`, `workers/api/src/semantic-alerts/run.ts` (hooked from `workers/api/src/events/publish.ts`), `workers/api/src/lib/semantic-alert-matcher.ts` (admin preview seam)
+- Schema + migrations: `apps/api/src/db/schema-semantic-alerts.ts`, `apps/api/migrations/20260922020000_add_semantic_alerts.sql`, `apps/api/migrations/20260922030000_semantic_alert_matches.sql`, `apps/api/migrations/20260922200000_semantic_alert_matches_alert_created_idx.sql`
+- Routes: `apps/api/src/routes/me-semantic-alerts.ts`
+- Matcher: `packages/ai/src/semantic-alert-match.ts`, `apps/api/src/semantic-alerts/run.ts` (hooked from `apps/api/src/events/publish.ts`), `apps/api/src/lib/semantic-alert-matcher.ts` (admin preview seam)
 - Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, `SemanticAlertActivity` on list rows, threshold and cap constants)
-- Web: `web/src/components/semantic-alerts-section.tsx` on the notifications panel
-- Admin preview: `workers/api/src/routes/admin-semantic-alerts.ts`, `workers/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
-- Admin quality summary: `workers/api/src/lib/semantic-alert-summary.ts`, `GET /v1/admin/semantic-alerts/summary`
+- Web: `apps/web/src/components/semantic-alerts-section.tsx` on the notifications panel
+- Admin preview: `apps/api/src/routes/admin-semantic-alerts.ts`, `apps/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
+- Admin quality summary: `apps/api/src/lib/semantic-alert-summary.ts`, `GET /v1/admin/semantic-alerts/summary`

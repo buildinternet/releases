@@ -12,8 +12,8 @@ import {
   resolveMcpAuth,
   isMeteredMcpMethod,
   machineTokenIdForUsage,
-} from "../../workers/mcp/src/auth.js";
-import type { Env } from "../../workers/mcp/src/mcp-agent.js";
+} from "../../apps/mcp/src/auth.js";
+import type { Env } from "../../apps/mcp/src/mcp-agent.js";
 
 const mockSecret = (v: string) => ({ get: () => Promise.resolve(v) });
 

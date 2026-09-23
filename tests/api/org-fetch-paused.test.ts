@@ -11,9 +11,9 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations, createTestDb, type TestDatabase } from "../db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { queryDueSources } from "../../workers/api/src/cron/poll-fetch";
-import { queryCandidates } from "../../workers/api/src/lib/drain-candidates";
-import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
+import { queryDueSources } from "../../apps/api/src/cron/poll-fetch";
+import { queryCandidates } from "../../apps/api/src/lib/drain-candidates";
+import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 
 // ── queryDueSources ──────────────────────────────────────────────────────────

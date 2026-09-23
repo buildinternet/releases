@@ -252,7 +252,7 @@ export async function runManagedDiscovery(
       });
     })();
 
-  // Mirror the worker fix in workers/discovery/src/managed-agents-session.ts:
+  // Mirror the worker fix in apps/discovery/src/managed-agents-session.ts:
   // explicit baseURL bypasses ANTHROPIC_BASE_URL env (which the SDK auto-reads
   // and which can point at AI Gateway). The gateway buffers SSE-over-GET, so
   // any session that uses events.stream() would deadlock if routed through it.
@@ -401,7 +401,7 @@ export async function runManagedDiscovery(
     // Archive in the finally so timeout-abort paths leave the Anthropic
     // session in a clean state — without this, a stalled tool call locks
     // subsequent retries with a 400 ("waiting on responses to events …").
-    // See #632. Mirrored by workers/discovery/src/managed-agents-session.ts.
+    // See #632. Mirrored by apps/discovery/src/managed-agents-session.ts.
     try {
       await client.beta.sessions.archive(session.id);
     } catch {

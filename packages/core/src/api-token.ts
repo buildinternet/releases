@@ -148,7 +148,7 @@ export function isDigestTokenShaped(raw: string): boolean {
  * Wire prefix for Better Auth-issued, user-owned API keys. Distinct from the
  * machine-lane `API_TOKEN_PREFIX` (`relk_`) so the auth middleware routes a
  * presented credential to exactly one verifier. Set as the plugin's
- * `defaultPrefix` in workers/api/src/auth/index.ts.
+ * `defaultPrefix` in apps/api/src/auth/index.ts.
  */
 export const USER_API_KEY_PREFIX = "relu_";
 
@@ -160,7 +160,7 @@ export function isUserApiKeyShaped(raw: string): boolean {
 /**
  * The single OAuth client id permitted to run the device-authorization flow
  * (RFC 8628) that backs `releases login`. The CLI sends this as `client_id`; the
- * API worker's `validateClient` allow-list (workers/api/src/auth/index.ts) rejects
+ * API worker's `validateClient` allow-list (apps/api/src/auth/index.ts) rejects
  * anything else (fail closed). A public, non-secret identifier — it lives here so
  * the OSS CLI and the worker share ONE source of truth instead of hard-coding it
  * on each side and silently drifting.

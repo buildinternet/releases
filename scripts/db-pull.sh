@@ -8,7 +8,7 @@
 # Flow:
 #   1. `wrangler d1 export --remote --no-schema` on prod → temp dump.sql
 #   2. compare exported core-table counts with the existing local DB
-#   3. wipe workers/api/.wrangler/state/v3/d1 and re-apply every migration
+#   3. wipe apps/api/.wrangler/state/v3/d1 and re-apply every migration
 #   4. import the dump into the rebuilt local sqlite file
 #
 # The export runs before the wipe so a failed export leaves the local DB intact.
@@ -25,7 +25,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-D1_STATE_DIR="workers/api/.wrangler/state/v3/d1"
+D1_STATE_DIR="apps/api/.wrangler/state/v3/d1"
 DUMP_FILE="$(mktemp -t releases-d1-export-XXXXXX)"
 SHRINKAGE_THRESHOLD_PERCENT="${DB_SHRINKAGE_THRESHOLD_PERCENT:-10}"
 trap 'rm -f "${DUMP_FILE}"' EXIT
@@ -48,7 +48,7 @@ for table in "${TABLES[@]}"; do
 done
 
 wrangler d1 export released-db --remote --no-schema "${TABLE_ARGS[@]}" \
-  --output "${DUMP_FILE}" --config workers/api/wrangler.jsonc
+  --output "${DUMP_FILE}" --config apps/api/wrangler.jsonc
 
 # Compare with the current local content before removing any D1 state. A fresh
 # checkout has no target baseline, so there is nothing to shrink and the guard

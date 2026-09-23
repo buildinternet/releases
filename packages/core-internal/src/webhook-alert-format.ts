@@ -10,7 +10,7 @@
  * No DB or `cloudflare:*` imports — the webhooks worker does the lookup and
  * passes the resolved shapes in, so this stays unit-testable.
  *
- * Lives in core-internal, not in `workers/webhooks`, because the API worker's
+ * Lives in core-internal, not in `apps/webhooks`, because the API worker's
  * admin email preview (`email-samples.ts`) has to render these two alerts too.
  * It previously rebuilt them by hand from a "keep this in step" comment, and
  * they drifted — different lane, different blocks, different footer — so the

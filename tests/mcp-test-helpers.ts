@@ -1,7 +1,7 @@
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import { Client } from "@modelcontextprotocol/client";
 import type { TestDatabase } from "./db-helper.js";
-import type { D1Db } from "../workers/mcp/src/db.js";
+import type { D1Db } from "../apps/mcp/src/db.js";
 
 /** MCP code paths are DB-shape agnostic; bun:sqlite fixtures satisfy the drizzle query surface. */
 export function asD1(db: TestDatabase["db"]): D1Db {
@@ -12,7 +12,7 @@ export function asD1(db: TestDatabase["db"]): D1Db {
  * Boot an `McpServer`, call `register(server, ...rest)` against it, and link
  * it to an MCP `Client` via an in-memory transport pair.
  *
- * `workers/mcp` is excluded from the root workspaces and installs its own
+ * `apps/mcp` is excluded from the root workspaces and installs its own
  * copy of `@modelcontextprotocol/server`, so the `McpServer` class from this
  * test's copy is nominally distinct from the one the worker's `register*`
  * helpers were typed against. This helper bridges the two with an internal

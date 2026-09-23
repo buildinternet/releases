@@ -2,7 +2,7 @@
  * Smoke tests for the /v1/related/* routes.
  *
  * These exercise the request-parsing and graceful-degradation paths of
- * `workers/api/src/routes/related.ts` — the bits that don't require a
+ * `apps/api/src/routes/related.ts` — the bits that don't require a
  * real D1 + Vectorize pair. End-to-end coverage lives in the CLI suite
  * (when the routes are wired into the remote client) and in staging
  * smoke tests against the deployed worker.
@@ -10,7 +10,7 @@
 
 import { describe, test, expect } from "bun:test";
 import { Hono } from "hono";
-import { relatedRoutes } from "../../workers/api/src/routes/related.js";
+import { relatedRoutes } from "../../apps/api/src/routes/related.js";
 
 // Minimal env shape: the degraded paths never touch DB, so we can pass
 // a dummy D1 binding and a missing Vectorize binding and assert the

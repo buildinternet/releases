@@ -13,8 +13,8 @@ import {
   isProtectedResourceMetadataPath,
   protectedResourceMetadataResponse,
   PROTECTED_RESOURCE_PATH,
-} from "../../workers/mcp/src/well-known.js";
-import type { Env } from "../../workers/mcp/src/mcp-agent.js";
+} from "../../apps/mcp/src/well-known.js";
+import type { Env } from "../../apps/mcp/src/mcp-agent.js";
 
 function env(overrides: Partial<Env> = {}): Env {
   return { ...overrides } as unknown as Env;

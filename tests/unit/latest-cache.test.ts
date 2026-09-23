@@ -8,7 +8,7 @@ import {
   ALLOWLISTED_CACHE_KEYS,
   isCacheableLatestRequest,
   type LatestCacheBinding,
-} from "../../workers/api/src/lib/latest-cache.js";
+} from "../../apps/api/src/lib/latest-cache.js";
 
 interface PutCall {
   key: string;
@@ -382,7 +382,7 @@ describe("invalidateLatestCache", () => {
     expect(kv.delete).toHaveBeenCalledWith("latest:v2:count=10");
     expect(kv.delete).toHaveBeenCalledWith("latest:v2:count=20&exclude=github");
     // 2 REST shapes + 1 GraphQL homepage hash (from purgeKeysForHomepageTicker
-    // in workers/api/src/graphql/persisted.ts).
+    // in apps/api/src/graphql/persisted.ts).
     expect(kv.delete).toHaveBeenCalledTimes(3);
     expect(logs.filter((l) => l.component === "invalidation" && l.event === "purged")).toHaveLength(
       3,

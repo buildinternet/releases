@@ -4,11 +4,8 @@ import {
   withStagingHeader,
   withDiscoveryIdentity,
   directApiFetcher,
-} from "../../workers/discovery/src/fetch-wrappers";
-import {
-  DISCOVERY_USER_AGENT,
-  DISCOVERY_REQUESTED_WITH,
-} from "../../workers/discovery/src/identity";
+} from "../../apps/discovery/src/fetch-wrappers";
+import { DISCOVERY_USER_AGENT, DISCOVERY_REQUESTED_WITH } from "../../apps/discovery/src/identity";
 import { restoreGlobalFetch } from "../global-fetch";
 
 /**

@@ -4,9 +4,9 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { sources, organizations, knowledgePages } from "@buildinternet/releases-core/schema";
 import { applyMigrations, ensureBatchShim } from "../db-helper";
-import { workflowFailures } from "../../workers/api/src/db/schema-workflow-failures";
-import { OnboardSourceWorkflow } from "../../workers/api/src/workflows/onboard-source";
-import type { OnboardSourceWorkflowEnv } from "../../workers/api/src/workflows/onboard-source";
+import { workflowFailures } from "../../apps/api/src/db/schema-workflow-failures";
+import { OnboardSourceWorkflow } from "../../apps/api/src/workflows/onboard-source";
+import type { OnboardSourceWorkflowEnv } from "../../apps/api/src/workflows/onboard-source";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
 import { restoreGlobalFetch } from "../global-fetch";
 

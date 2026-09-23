@@ -6,7 +6,7 @@
  *
  * Shared between:
  * - CLI path (src/agent/managed-discovery.ts)
- * - Worker path (workers/discovery/src/managed-agents-session.ts)
+ * - Worker path (apps/discovery/src/managed-agents-session.ts)
  */
 
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
@@ -124,7 +124,7 @@ export const MCP_SERVER_NAME = "releases";
  *
  * Must match the `mcp_server_url` on the vault credential exactly — the
  * platform pairs agent → credential by URL, not by `mcp_server_name`. The
- * MCP transport endpoint is `/mcp` (see `workers/mcp/src/index.ts`); the
+ * MCP transport endpoint is `/mcp` (see `apps/mcp/src/index.ts`); the
  * bare host serves a landing page only.
  */
 export const MCP_SERVER_URL = {
@@ -562,7 +562,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
             // need an org context) is reached when the agent already has an
             // ID. Slugs go through the slug branch where org-membership
             // gets enforced. The check is intentionally local — pulling in
-            // workers/api/utils.ts isProductId would cross package boundaries.
+            // apps/api/utils.ts isProductId would cross package boundaries.
             const productRef = String(input.product);
             if (productRef.startsWith("prod_")) body.productId = productRef;
             else body.productSlug = productRef;

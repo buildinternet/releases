@@ -6,7 +6,7 @@
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
+import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
 import { organizations, tags, orgTags } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 

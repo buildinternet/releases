@@ -13,12 +13,12 @@ import { applyMigrations, ensureBatchShim } from "../db-helper";
 import {
   PollAndFetchWorkflow,
   generateContentForReleases,
-} from "../../workers/api/src/workflows/poll-and-fetch";
-import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/poll-and-fetch";
+} from "../../apps/api/src/workflows/poll-and-fetch";
+import type { PollAndFetchWorkflowEnv } from "../../apps/api/src/workflows/poll-and-fetch";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
 import { restoreGlobalFetch } from "../global-fetch";
-import { CACHEABLE_DEFAULT_SHAPES } from "../../workers/api/src/lib/latest-cache";
-import { purgeKeysForHomepageTicker } from "../../workers/api/src/graphql/persisted";
+import { CACHEABLE_DEFAULT_SHAPES } from "../../apps/api/src/lib/latest-cache";
+import { purgeKeysForHomepageTicker } from "../../apps/api/src/graphql/persisted";
 
 // One logical invalidation deletes one KV key per cacheable REST shape plus
 // one per persisted-cached GraphQL hash (today: just the homepage ticker).

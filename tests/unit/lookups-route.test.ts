@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { lookupRoutes } from "../../workers/api/src/routes/lookups.js";
+import { lookupRoutes } from "../../apps/api/src/routes/lookups.js";
 import {
   domainAliases,
   organizations,

@@ -19,7 +19,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { search } from "../../workers/mcp/src/tools.js";
+import { search } from "../../apps/mcp/src/tools.js";
 
 let testDb: TestDatabase;
 

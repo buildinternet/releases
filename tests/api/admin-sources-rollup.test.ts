@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
 import { applyMigrations } from "../db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { adminSourcesRoutes } from "../../workers/api/src/routes/admin-sources";
+import { adminSourcesRoutes } from "../../apps/api/src/routes/admin-sources";
 import type { OrgsRollupResponse } from "@buildinternet/releases-api-types";
 
 const DAY_MS = 86400_000;

@@ -11,8 +11,8 @@ import { organizations, products, sources, releases } from "@buildinternet/relea
 import { newOrgId, newProductId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { search } from "../../workers/mcp/src/tools.js";
-import type { HybridSearchEnv } from "../../workers/mcp/src/lib/search-hybrid.js";
+import { search } from "../../apps/mcp/src/tools.js";
+import type { HybridSearchEnv } from "../../apps/mcp/src/lib/search-hybrid.js";
 
 /** No Vectorize/embedder → hybrid/semantic degrade to lexical. */
 const minimalEnv: HybridSearchEnv = {};

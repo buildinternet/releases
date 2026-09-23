@@ -2,8 +2,8 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { cronRuns } from "../../workers/api/src/db/schema-cron";
-import { D1_MAX_BINDINGS } from "../../workers/api/src/lib/d1-limits";
+import { cronRuns } from "../../apps/api/src/db/schema-cron";
+import { D1_MAX_BINDINGS } from "../../apps/api/src/lib/d1-limits";
 
 const db = drizzle(new Database(":memory:"));
 

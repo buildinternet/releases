@@ -1,6 +1,6 @@
 /**
  * Pure ranking helpers behind the related-content rails
- * (workers/api/src/related-ranking.ts). Covers content-quality
+ * (apps/api/src/related-ranking.ts). Covers content-quality
  * classification (the hard-exclude / soft-down-weight split), the recency
  * decay multiplier, and the composed per-release rank used to order the
  * `/v1/related/releases` response server-side.
@@ -13,7 +13,7 @@ import {
   RELATED_RECENCY_HALF_LIFE_DAYS,
   RELATED_UNDATED_PENALTY,
   RELATED_GLOBAL_MIN_RANK,
-} from "../../workers/api/src/related-ranking.js";
+} from "../../apps/api/src/related-ranking.js";
 
 const DAY_MS = 86_400_000;
 

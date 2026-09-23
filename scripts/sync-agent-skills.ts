@@ -187,10 +187,7 @@ function getApiKey(): string {
 
 function readWranglerVar(varName: string): string | null {
   try {
-    const wrangler = readFileSync(
-      resolve(PROJECT_ROOT, "workers/discovery/wrangler.jsonc"),
-      "utf8",
-    );
+    const wrangler = readFileSync(resolve(PROJECT_ROOT, "apps/discovery/wrangler.jsonc"), "utf8");
     const match = wrangler.match(new RegExp(`"${varName}":\\s*"([^"]+)"`));
     if (match) return match[1];
   } catch {
@@ -215,9 +212,7 @@ function getAgentId(env: DeployEnv, config: SkillConfig | null): string {
   }
   const id = process.env.ANTHROPIC_AGENT_ID ?? readWranglerVar("ANTHROPIC_AGENT_ID");
   if (!id) {
-    throw new Error(
-      "ANTHROPIC_AGENT_ID not found. Set it in env or workers/discovery/wrangler.jsonc",
-    );
+    throw new Error("ANTHROPIC_AGENT_ID not found. Set it in env or apps/discovery/wrangler.jsonc");
   }
   return id;
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
 
 const { wantsMarkdown, markdownResponse, varyOnAccept } =
-  (await import("../../workers/api/src/middleware/content-negotiation.js")) as any;
+  (await import("../../apps/api/src/middleware/content-negotiation.js")) as any;
 
 // ---------------------------------------------------------------------------
 // wantsMarkdown

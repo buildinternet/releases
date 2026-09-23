@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
+import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
 import { applyMigrations, makeD1Shim } from "../db-helper.js";
 
 let sqlite: Database;

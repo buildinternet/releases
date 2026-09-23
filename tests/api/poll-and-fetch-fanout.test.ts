@@ -75,13 +75,13 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
     db = drizzle(sqlite);
   });
 
-  // Reimplementation kept in sync with `workers/api/src/index.ts`. Binding-absent
+  // Reimplementation kept in sync with `apps/api/src/index.ts`. Binding-absent
   // returns without seeding; otherwise every due source is `ensureScheduled` in
   // bounded waves.
   async function heartbeatReplica(actor: ReturnType<typeof mkFakeActorNamespace> | null) {
-    const { queryDueSources } = await import("../../workers/api/src/cron/poll-fetch");
+    const { queryDueSources } = await import("../../apps/api/src/cron/poll-fetch");
     const { queryUnmanagedActiveSources } =
-      await import("../../workers/api/src/queries/unmanaged-source-actors");
+      await import("../../apps/api/src/queries/unmanaged-source-actors");
     const now = new Date();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dueAll = await queryDueSources(db as any, now, { changeDetectEnabled: true });

@@ -14,7 +14,7 @@ import {
   mediaAssets,
   webhookSubscriptions,
 } from "@buildinternet/releases-core/schema";
-import { adminOrgDependentsRoutes } from "../../workers/api/src/routes/admin-org-dependents";
+import { adminOrgDependentsRoutes } from "../../apps/api/src/routes/admin-org-dependents";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

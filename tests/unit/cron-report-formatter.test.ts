@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { formatCronReport, type CronReport } from "../../workers/api/src/lib/cron-report";
+import { formatCronReport, type CronReport } from "../../apps/api/src/lib/cron-report";
 
 const baseReport: CronReport = {
   cronName: "scrape-agent-sweep",

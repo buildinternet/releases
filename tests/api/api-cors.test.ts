@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
-import { apiCorsMiddleware, isTrustedCorsOrigin } from "../../workers/api/src/auth/index.js";
+import { apiCorsMiddleware, isTrustedCorsOrigin } from "../../apps/api/src/auth/index.js";
 
 /** Mirrors index.ts: one origin-based CORS middleware on every path. */
 function makeApp() {

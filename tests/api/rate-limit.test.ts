@@ -14,7 +14,7 @@ import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-t
 
 type EdgeLimiter = { limit(o: { key: string }): Promise<{ success: boolean }> };
 const { publicRateLimitMiddleware, selectAuthEdgeLimiter, edgeRateLimitIpKey } =
-  (await import("../../workers/api/src/middleware/rate-limit.js")) as unknown as {
+  (await import("../../apps/api/src/middleware/rate-limit.js")) as unknown as {
     publicRateLimitMiddleware: MiddlewareHandler;
     selectAuthEdgeLimiter: (
       method: string,
@@ -453,7 +453,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
 // ---------------------------------------------------------------------------
 
 const { validateAccountCredential } =
-  (await import("../../workers/api/src/middleware/auth.js")) as unknown as {
+  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
     validateAccountCredential: (
       c: any,
       presented: string,

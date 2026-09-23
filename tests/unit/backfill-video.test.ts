@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { runVideoBackfill } from "../../workers/api/src/lib/media-backfill.js";
+import { runVideoBackfill } from "../../apps/api/src/lib/media-backfill.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 

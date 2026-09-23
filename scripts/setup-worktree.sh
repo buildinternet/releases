@@ -47,7 +47,7 @@ else
 fi
 
 copy_if_missing .env
-copy_if_missing web/.env.local
-copy_if_missing workers/api/.dev.vars
+copy_if_missing apps/web/.env.local
+copy_if_missing apps/api/.dev.vars
 
 echo "==> setup complete"

@@ -15,7 +15,7 @@
 # Requirements:
 #   - wrangler authenticated (`wrangler whoami`) with access to the
 #     Build Internet account (or CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID set)
-#   - run from the repo root or workers/api/
+#   - run from the repo root or apps/api/
 #
 # Usage:
 #   ./scripts/sync-staging-db.sh
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_DIR="${REPO_ROOT}/workers/api"
+API_DIR="${REPO_ROOT}/apps/api"
 WORK_DIR="$(mktemp -d -t releases-sync-XXXXXX)"
 DUMP_FILE="${WORK_DIR}/prod-dump.sql"
 WIPE_FILE="${WORK_DIR}/wipe.sql"

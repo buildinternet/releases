@@ -12,7 +12,7 @@
 import { eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 // Relative import instead of the package alias so this file resolves correctly
-// in both production (workers/api picks up packages/core via workspace) and in
+// in both production (apps/api picks up packages/core via workspace) and in
 // bun test runs where the workspace symlink points to the main-branch
 // packages/core (which may not yet have the new exports from a worktree).
 import { batchRuns } from "../../core/src/schema.js";

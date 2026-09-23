@@ -277,7 +277,7 @@ value.
 
 ## Public docs
 
-The owner-facing version lives at `/docs/listing` (`web/src/content/docs/listing.md`), linked
+The owner-facing version lives at `/docs/listing` (`apps/web/src/content/docs/listing.md`), linked
 from `/submit`. Keep that page in sync when schema or reconciliation rules change; this file
 stays the engineering reference.
 
@@ -295,7 +295,7 @@ platforms' own link-verification:
 These files exist for machine consumption, so probing them carries no crawl-consent ambiguity.
 The same SSRF-screened, size/time-capped `fetchReleasesJson` applies. Pure parsers live in
 `@releases/adapters/app-links` (`parseAppSiteAssociation` / `parseAssetLinks` — defensive, never
-throw); the orchestrator is `workers/api/src/lib/well-known/mobile-apps.ts`.
+throw); the orchestrator is `apps/api/src/lib/well-known/mobile-apps.ts`.
 
 - **iOS:** each declared bundle ID is resolved to its App Store listing via the iTunes Lookup
   API's `bundleId=` parameter (`resolveAppStoreByBundleId`), then landed as a **paused, hidden**
@@ -315,7 +315,7 @@ throw); the orchestrator is `workers/api/src/lib/well-known/mobile-apps.ts`.
 > source is genuinely invisible on public reads. Public release/product/org/search paths and the
 > embeddings candidate queries filter `sources.is_hidden = 0` (join `sources_visible`, not
 > `sources_active`); a product whose sources are all hidden does not surface. Regression coverage:
-> `workers/api/test/hidden-source-containment.test.ts`.
+> `apps/api/test/hidden-source-containment.test.ts`.
 
 Triggers:
 
@@ -409,7 +409,7 @@ can reach:
 - **DNS TXT** — a record at `_releases-challenge.{domain}` whose value is the token, checked via
   Cloudflare DoH JSON (`cloudflare-dns.com/dns-query`, `accept: application/dns-json`).
 
-**Either passes.** `verifyDomainControl` (`workers/api/src/lib/listing/claim-verify.ts`) always
+**Either passes.** `verifyDomainControl` (`apps/api/src/lib/listing/claim-verify.ts`) always
 checks both mechanisms — well-known first — and verifies iff either comes back `ok`; `method` is
 stamped to whichever passed. The well-known fetch reuses the manifest-fetch guards (HTTPS-only,
 `isPrivateOrLocalHost` SSRF screen, size cap, 5s timeout).
@@ -436,7 +436,7 @@ A verified owner promotes their claimed stub straight to `tracked`, no curator r
 
 - `POST /v1/listing/promote { domain }` — requires a user principal AND a `verified` `org_claims`
   row for the caller on the resolved org (`ForbiddenError`/403 otherwise — "verified ownership
-  claim required"). Runs the existing `promoteStubOrg` (`workers/api/src/lib/well-known/promote.ts`,
+  claim required"). Runs the existing `promoteStubOrg` (`apps/api/src/lib/well-known/promote.ts`,
   #1958) exactly as the admin promote route does: atomic `promoting_at` claim (409 on contention),
   tier-1 locators (feed/github/appstore) probed into live sources, tier-2 (bare url/file) landed
   paused for curator review, locators stamped with the source they became, org flipped to
@@ -465,7 +465,7 @@ binding verify already uses, just a distinct key prefix.
 **Auth.** Same user-principal gate as claim/verify/list — root and `relk_` machine tokens don't
 carry a claim, so they keep using the admin `POST /v1/orgs/:slug/promote` route instead.
 
-**Web.** The claim panel (`web/src/components/org/claim-panel.tsx`) loads capabilities first.
+**Web.** The claim panel (`apps/web/src/components/org/claim-panel.tsx`) loads capabilities first.
 Verified + promotion off → waiting copy, no Enable-tracking button. Verified + promotion on →
 locator eligibility preview (tier-1 live vs tier-2 queued, same classification as materialize) and
 the promote CTA (hidden when the org has no declared locations). Success renders the

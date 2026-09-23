@@ -187,7 +187,7 @@ export async function fetchAppStore(source: Source): Promise<RawRelease[]> {
  * against null/missing/malformed metadata — an appstore source with
  * unparseable metadata still yields `{ platform: "ios", iconUrl: null }` so the
  * UI degrades to a generic app row. Mirrors the web-side `getAppInfo`
- * (web/src/lib/app-source.ts) and feeds the wire `AppStoreSourceInfoSchema`.
+ * (apps/web/src/lib/app-source.ts) and feeds the wire `AppStoreSourceInfoSchema`.
  */
 export function appStoreSourceInfo(
   type: string,

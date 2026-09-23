@@ -6,7 +6,7 @@ import {
   applyExtractedContent,
   selectEnrichCandidates,
   type EnrichCandidateRow,
-} from "../../workers/api/src/lib/enrich-apply.js";
+} from "../../apps/api/src/lib/enrich-apply.js";
 
 let tdb: TestDatabase;
 beforeAll(() => {

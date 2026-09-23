@@ -27,7 +27,7 @@ The fields are the same whether you're generating for the first time or rewritin
 
 ## Prompt is canonical in code, not in this skill
 
-The system prompt and all parsing rules live in `packages/ai/src/release-content.ts`. Read it directly; do **not** paraphrase it back into the user message. The same module is consumed by the ingest worker (`workers/api/src/workflows/poll-and-fetch.ts`), the backfill script (`scripts/generate-release-content.ts`, OpenRouter by default), and this skill, so any drift between local-agent output and ingest-time output starts there.
+The system prompt and all parsing rules live in `packages/ai/src/release-content.ts`. Read it directly; do **not** paraphrase it back into the user message. The same module is consumed by the ingest worker (`apps/api/src/workflows/poll-and-fetch.ts`), the backfill script (`scripts/generate-release-content.ts`, OpenRouter by default), and this skill, so any drift between local-agent output and ingest-time output starts there.
 
 Re-export from that file:
 
@@ -57,7 +57,7 @@ D1 is remote-only in this repo. The script uses `wrangler d1 execute … --comma
 
 ```bash
 # Missing-short rows for one or more orgs, past N days
-bunx wrangler d1 execute released-db --remote --config workers/api/wrangler.jsonc \
+bunx wrangler d1 execute released-db --remote --config apps/api/wrangler.jsonc \
   --command "
     SELECT r.id, r.title, r.version, r.url, r.content,
            o.slug AS org_slug, s.name AS source_name, p.name AS product_name

@@ -41,8 +41,8 @@ observed and pass it as `?since=<seq>` on reconnect.
 
 Callers of `publishReleaseEvents` after the D1 commit:
 
-- `POST /v1/sources/:slug/releases/batch` (primary CLI fetch path) — `workers/api/src/routes/sources.ts`, via `ctx.waitUntil`
-- Hourly cron `fetchOne` — `workers/api/src/cron/poll-fetch.ts`
+- `POST /v1/sources/:slug/releases/batch` (primary CLI fetch path) — `apps/api/src/routes/sources.ts`, via `ctx.waitUntil`
+- Hourly cron `fetchOne` — `apps/api/src/cron/poll-fetch.ts`
 - `POST /v1/admin/semantic-alerts/preview` — same `runBatchIngestEffects` helper, awaited. Synthetic rows only. See [semantic-alerts.md](semantic-alerts.md).
 
 `publishReleaseEvents` is fire-and-forget: any hub failure is logged and
@@ -59,7 +59,7 @@ new event; clients dedupe by `release.id`.
   `/releases/*`, which is also covered by `publicReadAuthMiddleware`,
   `publicRateLimitMiddleware`, and `dbHealthCheck`. Rate limiting is now a
   tiered, multi-gate system (`selectTierLimiters` in
-  `workers/api/src/middleware/rate-limit.ts`) rather than a single switch:
+  `apps/api/src/middleware/rate-limit.ts`) rather than a single switch:
   `RATE_LIMIT_ENABLED` gates only the anonymous/account tier, alongside
   independent gates (`TOKEN_RATE_LIMIT_ENABLED`, `AUTH_EDGE_RATE_LIMIT_ENABLED`,
   …). Wherever a limiter tier is active, `/v1/releases/stream` will count
@@ -87,16 +87,16 @@ on disconnect. Implemented in the OSS CLI at
 [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)
 (`src/cli/commands/tail.ts`).
 
-### Webhooks (`workers/webhooks`)
+### Webhooks (`apps/webhooks`)
 
 Per-subscription HTTPS POST consumer. The publisher in
-`workers/api/src/events/publish.ts` calls `fanoutWebhooks`
+`apps/api/src/events/publish.ts` calls `fanoutWebhooks`
 (`queues/enqueue-release-fanout.ts`) alongside the `ReleaseHub` publish;
 that enqueues onto the release-fanout queue, whose consumer
 (`queues/release-fanout-consumer.ts`) calls `expandAndEnqueue`
 (`webhooks/expand-and-enqueue.ts`) to match subscriptions and enqueue
 per-subscription `webhook-delivery` messages (with an inline fallback when
-the fan-out queue send fails). The `workers/webhooks` consumer Worker then
+the fan-out queue send fails). The `apps/webhooks` consumer Worker then
 drains `webhook-delivery`, signs payloads, retries on transient failures,
 and DLQs on retry exhaustion. Fan-out matches org-scoped subscriptions by `(orgId, sourceId)`
 and follows-scoped self-serve subscriptions by the owner's live
@@ -106,7 +106,7 @@ and follows-scoped self-serve subscriptions by the owner's live
 ### KV cache invalidation (`invalidateLatestCache`)
 
 In-process consumer. Alongside the two `publishReleaseEvents` sites we
-call `invalidateLatestCache` (`workers/api/src/lib/latest-cache.ts`) to
+call `invalidateLatestCache` (`apps/api/src/lib/latest-cache.ts`) to
 purge the cached `/v1/releases/latest` default shape
 (`latest:v1:count=10`). Gated behind `INVALIDATION_ENABLED`; ships `"false"`
 in shadow-log mode, flipped to `"true"` after a parity-check week.

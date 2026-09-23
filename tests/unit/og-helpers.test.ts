@@ -9,7 +9,7 @@ import {
   isHeroImageResponse,
   isJunkMediaUrl,
   stripMarkdown,
-} from "../../web/src/lib/og-helpers";
+} from "../../apps/web/src/lib/og-helpers";
 
 describe("clamp", () => {
   it("returns input unchanged when under the limit", () => {

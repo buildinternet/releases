@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { partitionSdkSources, sdkPreview, SDK_GROUP_MIN } from "../../web/src/lib/sdk-grouping";
+import {
+  partitionSdkSources,
+  sdkPreview,
+  SDK_GROUP_MIN,
+} from "../../apps/web/src/lib/sdk-grouping";
 
 type S = {
   slug: string;

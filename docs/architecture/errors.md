@@ -19,13 +19,13 @@ Every non-2xx response from the API uses one wire shape — a nested envelope �
 
 ## Producers
 
-- **API worker** — routes `throw new <Subclass>(...)` (or `return respondError(c, err)`). `respondError` (`workers/api/src/lib/error-response.ts`) is the single boundary serializer, registered as `onError`/`notFound`. Cascade: typed `ReleasesError` → `toWire()`; `BareSlugRejected` → validation + `{entity}`; Hono `HTTPException` (status + headers preserved, fail-closed on 5xx); classified D1 error → diagnostic in `details`; else generic `InternalError` (real message logged, never sent).
-- **Discovery worker** — its own envelope builder (`workers/discovery/src/error-response.ts`, same taxonomy via zod-free core).
+- **API worker** — routes `throw new <Subclass>(...)` (or `return respondError(c, err)`). `respondError` (`apps/api/src/lib/error-response.ts`) is the single boundary serializer, registered as `onError`/`notFound`. Cascade: typed `ReleasesError` → `toWire()`; `BareSlugRejected` → validation + `{entity}`; Hono `HTTPException` (status + headers preserved, fail-closed on 5xx); classified D1 error → diagnostic in `details`; else generic `InternalError` (real message logged, never sent).
+- **Discovery worker** — its own envelope builder (`apps/discovery/src/error-response.ts`, same taxonomy via zod-free core).
 - **MCP** — shares the zod-free taxonomy only, never the api-types zod schema (pinned-zod tripwire).
 
 ## Consumers
 
-- **Web** — `web/src/lib/api.ts` decodes the nested envelope; the `/submit` proxy (`web/src/app/api/recommendations/route.ts`) flattens it to its local flat vocab.
+- **Web** — `apps/web/src/lib/api.ts` decodes the nested envelope; the `/submit` proxy (`apps/web/src/app/api/recommendations/route.ts`) flattens it to its local flat vocab.
 - **CLI** — `releases-cli` `src/lib/errors.ts` reads `error.message`.
 - Both currently **inline** an equivalent decoder rather than importing the published `decodeApiError` — the pinned api-types predates the errors module and web can't runtime-import the api-types barrel under Next's bundler (#1840).
 
@@ -51,7 +51,7 @@ opted-in `413` / `too_large` contract documented above.
 
 ## Known gaps
 
-- Auth middleware/guards (`workers/api/src/middleware/auth.ts`, `auth/oauth-self-service-guard.ts`) still emit the legacy flat shape — deliberately outside Phase 3's `routes/**` scope (#1839).
+- Auth middleware/guards (`apps/api/src/middleware/auth.ts`, `auth/oauth-self-service-guard.ts`) still emit the legacy flat shape — deliberately outside Phase 3's `routes/**` scope (#1839).
 - `respondError`'s `HTTPException` branch types an off-map 4xx (e.g. 422) as `internal` while preserving the status — dead surface today, zero 422 producers (#1841).
 
-Public-facing consumer reference (types + common codes): [web `/docs/api/errors`](../../web/src/content/docs/api/errors.md). Design rationale: `docs/superpowers/specs/2026-07-02-standardized-errors-design.md`.
+Public-facing consumer reference (types + common codes): [web `/docs/api/errors`](../../apps/web/src/content/docs/api/errors.md). Design rationale: `docs/superpowers/specs/2026-07-02-standardized-errors-design.md`.

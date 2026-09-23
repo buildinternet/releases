@@ -4,7 +4,7 @@
  * carrying a real `CollectionWeekInput` (full, unselected release list for
  * one ET calendar week) captured read-only from prod D1 via the same
  * visibility joins as `getCollectionWeekReleases`
- * (workers/api/src/queries/collection-summaries.ts) — see
+ * (apps/api/src/queries/collection-summaries.ts) — see
  * `.context/2026-07-11-seo-ws3-digest-model-eval.md` for the capture query
  * and the six chosen (collection, week) cells.
  *

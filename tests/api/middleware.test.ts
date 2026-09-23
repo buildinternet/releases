@@ -5,12 +5,11 @@ import { Hono, type MiddlewareHandler } from "hono";
 // perfectly align with a standalone Hono<Env> generic.  We cast to the general
 // MiddlewareHandler so the test-only Hono app accepts them without pulling in
 // the full Cloudflare Workers type surface.
-const { authMiddleware } =
-  (await import("../../workers/api/src/middleware/auth.js")) as unknown as {
-    authMiddleware: MiddlewareHandler;
-  };
+const { authMiddleware } = (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
+  authMiddleware: MiddlewareHandler;
+};
 
-const { cacheControl } = (await import("../../workers/api/src/middleware/cache.js")) as unknown as {
+const { cacheControl } = (await import("../../apps/api/src/middleware/cache.js")) as unknown as {
   cacheControl: (
     maxAge: number,
     options?: { staleWhileRevalidate?: number; isPublic?: boolean },
@@ -18,7 +17,7 @@ const { cacheControl } = (await import("../../workers/api/src/middleware/cache.j
 };
 
 const { stagingAccessGate } =
-  (await import("../../workers/api/src/middleware/staging-access.js")) as unknown as {
+  (await import("../../apps/api/src/middleware/staging-access.js")) as unknown as {
     stagingAccessGate: () => MiddlewareHandler;
   };
 

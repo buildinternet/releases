@@ -18,8 +18,8 @@
  * don't open a new one:
  *
  * - `packages/search/src/releases-fts.ts` (`searchReleasesFts` — API + MCP lexical)
- * - `workers/api/src/queries/orgs.ts`
- * - `workers/api/src/queries/sources.ts`
+ * - `apps/api/src/queries/orgs.ts`
+ * - `apps/api/src/queries/sources.ts`
  * - `packages/search/src/hybrid-search-worker.ts` (hybrid RRF ID-only leg)
  *
  * Full seam map + future Postgres/`LexicalSearch` notes:

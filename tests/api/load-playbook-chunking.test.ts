@@ -3,8 +3,8 @@ import { applyMigrations } from "../db-helper";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { organizations, knowledgePages } from "@buildinternet/releases-core/schema";
-import { loadPlaybookNotesForSources } from "../../workers/api/src/cron/poll-fetch.js";
-import { RELEASES_ID_IN_CHUNK_SIZE } from "../../workers/api/src/lib/d1-limits.js";
+import { loadPlaybookNotesForSources } from "../../apps/api/src/cron/poll-fetch.js";
+import { RELEASES_ID_IN_CHUNK_SIZE } from "../../apps/api/src/lib/d1-limits.js";
 
 // Regression: the helper used to pass every distinct orgId in one IN clause,
 // so a working set with > D1_MAX_BINDINGS distinct orgs would 500 against D1.

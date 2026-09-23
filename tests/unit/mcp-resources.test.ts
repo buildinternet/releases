@@ -3,7 +3,7 @@ import { organizations, products, sources } from "@buildinternet/releases-core/s
 import { newOrgId, newProductId, newSourceId } from "@buildinternet/releases-core/id";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
 import { asD1, createMcpTestClient } from "../mcp-test-helpers.js";
-import { registerResources } from "../../workers/mcp/src/resources.js";
+import { registerResources } from "../../apps/mcp/src/resources.js";
 
 const linkResources = (db: TestDatabase["db"]) =>
   createMcpTestClient(registerResources, asD1(db), "");

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { scopeErrorText } from "../../workers/mcp/src/scope-error.js";
+import { scopeErrorText } from "../../apps/mcp/src/scope-error.js";
 
 describe("scopeErrorText", () => {
   it("names both the relk_ machine lane and the relu_ user lane", () => {
