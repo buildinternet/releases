@@ -52,7 +52,7 @@ const CODE_SPAN_PLACEHOLDER = "";
 /**
  * Strips inline markdown down to its display text, matching how rehype
  * flattens a rendered heading/paragraph to plain text (`hastText` in
- * web/src/lib/render-release-body.ts): images drop, links keep only their
+ * web/src/lib/render-digest-body.ts): images drop, links keep only their
  * text, code spans keep only their content, emphasis markers drop.
  *
  * Code span contents are swapped for placeholders *before* emphasis is
