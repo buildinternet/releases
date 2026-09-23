@@ -33,7 +33,7 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Get playbook            | `releases admin playbook <org>`                                                                                                     | `manage_playbook` action "get" with organization                                                                                                                                                                            |
 | Update playbook notes   | `releases admin playbook <org> --notes-file <path>` (use `-` for stdin)                                                             | `manage_playbook` action "update_notes" with organization, notes                                                                                                                                                            |
 
-Valid categories (pass to `manage_org`/`manage_product`): see the enum in those tool descriptions or your system prompt.
+Valid categories (for `--category` on org and product commands): `releases categories`.
 
 ## Listing Sources
 
@@ -45,7 +45,7 @@ Search for existing sources with optional filters:
 - **category** — filter by category
 - **has_feed** — only sources with a discovered feed URL
 
-Use `--json` (CLI) for structured output. Typed tools always return JSON.
+Use `--json` for structured output.
 
 ## Adding Sources
 
@@ -123,7 +123,7 @@ Adding or editing an org, product, or source triggers an entity embedding into t
 
 ## Removing Sources
 
-When removing discovery results, also ignore the URL to prevent re-discovery. In CLI: `releases admin source delete <slug> --ignore --reason "..."`. With typed tools: call `manage_source` action "remove" then `exclude_url` action "ignore".
+When removing discovery results, also ignore the URL to prevent re-discovery: `releases admin source delete <slug> --ignore --reason "..."`.
 
 ## Ignored URLs (org-scoped)
 
@@ -138,7 +138,7 @@ For spam domains and known-bad URLs that should never be added for any org. Use 
 After adding a source, validate it:
 
 1. **Add the source** — provide name and URL
-2. **Fetch** — trigger a fetch (CLI: `--dry-run` for preview, then real fetch; typed tools: `manage_source` action "fetch")
+2. **Fetch** — trigger a fetch (`releases admin source fetch <slug> --dry-run` for preview, then the real fetch)
 3. **Check results** — get latest releases and verify they have titles, dates, content
 4. **If bad:** remove the source and ignore the URL
 5. **If good:** the source is ready for production fetches
@@ -153,15 +153,13 @@ An org can have one source marked as its **primary changelog** — the main, com
 - Adding a supplementary or secondary source to an existing org (an engineering blog, a per-product changelog, an RSS feed alongside an already-primary page) — **do not** set `is_primary`. Leave the existing primary alone.
 - The task prompt doesn't mention "primary" or similar — default to not setting it.
 
-When it does apply, set it on the `add` call in one step, not via a follow-up edit:
+When it does apply, set it on the create call in one step, not via a follow-up update:
 
 ```
-manage_source(action="add", name="Changelog", url="https://example.com/changelog", organization="example-corp", is_primary=true)
+releases admin source create "Changelog" --url https://example.com/changelog --org example-corp --primary
 ```
 
-The same applies on CLI: pass `--primary` to `releases admin source create`, not a follow-up `source update`.
-
-Use `releases admin source create --primary` or `manage_source(action="add", ..., is_primary=true)` when adding the source in the current onboarding flow; reserve `releases admin source update --primary` or `manage_source(action="edit", is_primary=true)` for promoting a source that already existed before this session.
+Use `releases admin source create --primary` when adding the source in the current onboarding flow; reserve `releases admin source update --primary` for promoting a source that already existed before this session.
 
 That promotion path is only for sources added in an earlier session — never in the same flow as the add.
 
@@ -174,7 +172,7 @@ Each playbook has two layers:
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
 - **Agent notes** — free-form markdown that you fully control. This is the most important part of the playbook. Write it like a skill an agent will follow — imperative, action-oriented, concise — not like human documentation.
 
-**Always read the playbook before fetching or working with an org's sources.** Typed tool: `manage_playbook` action "get" with organization param. CLI: `releases admin playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the playbook before fetching or working with an org's sources:** `releases admin playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
 ### Writing good agent notes
 
@@ -262,7 +260,7 @@ It is **not** fine to write "fetch returned an error during onboarding so we pau
 
 #### Reading first
 
-Always call `manage_playbook(action=get)` before writing. Preserve durable trap entries from prior runs. If you're rewriting a section, fold prior facts that still pass the keep test into the new draft instead of dropping them.
+Always run `releases admin playbook <org>` before writing. Preserve durable trap entries from prior runs. If you're rewriting a section, fold prior facts that still pass the keep test into the new draft instead of dropping them.
 
 ### Levels of playbook quality
 
@@ -280,7 +278,7 @@ Use the verified approach for high-value orgs, when onboarding new orgs with scr
 
 Write notes during onboarding after you've fetched and validated sources. Update them when you discover new quirks or when source behavior changes. If notes are empty or stale, write them before doing fetch work — future agents (including yourself in later sessions) will benefit.
 
-**Updating notes:** Use `manage_playbook` action "update_notes" with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
+**Updating notes:** `releases admin playbook <org> --notes-file <path>` (or `-` for stdin) with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
 
 **Frontmatter (typed config):** If the existing notes begin with a YAML frontmatter fence (`---` lines at the very top), preserve that block verbatim when you update. It carries typed configuration that cron code reads directly — e.g. `fetchQuirks` per-source change-detector hints. Write your markdown _below_ the closing `---`. Example:
 
@@ -301,7 +299,7 @@ Only edit the fence when a source's fetch behavior genuinely changes (e.g. you v
 
 Pick `body-hash-filtered` when the page is SSR (Next.js / Vercel / Astro) and the raw body hash churns per-request (hydration tokens, chunk URLs, nonces) but the article markup is stable. The detector strips `<script>`, `<style>`, `<link>`, `<meta>`, and HTML comments before hashing. If `body-hash` already works, leave it — `body-hash-filtered` is for cases that would otherwise be tagged `unreliable` and lean on the daily force-drain cron.
 
-**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `manage_source` action "edit" with metadata — the header updates automatically.
+**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `releases admin source update <identifier> --metadata-set key=value` — the header updates automatically.
 
 **Product context:** Playbooks group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the playbook calls these out as "Organization-Level Sources" with a note about which products they may cover.
 
@@ -327,8 +325,8 @@ The on-demand lookup endpoint (`POST /v1/lookups`) can materialize a hidden sour
 If you encounter a source with `discovery = 'on_demand'` during an agent task:
 
 - Do not re-add it — it already exists (you'd get a slug collision).
-- To promote it to a fully indexed curated source: `manage_source` action "edit" with `discovery: 'curated'` and flip `isHidden` to false. Also edit the name if it was auto-generated from the coordinate.
-- The org created alongside the source may also be `discovery = 'on_demand'`. Promote it with `manage_org` action "edit" with `discovery: 'curated'`.
+- To promote it to a fully indexed curated source: `releases admin source update <identifier> --discovery curated`, then un-hide it with `PATCH /v1/sources/:id { "isHidden": false }` (no CLI flag yet). Also fix the name (`--name`) if it was auto-generated from the coordinate.
+- The org created alongside the source may also be `discovery = 'on_demand'`. Promote it with `releases admin org update <slug> --discovery curated`.
 
 ## Self-Serve Listing Triage
 
@@ -343,7 +341,7 @@ Owners can activate a stub for their own domain via the anonymous self-serve lan
 The AASA/assetlinks scan (`docs/architecture/well-known-config.md` → Mobile-app discovery) lands a domain's iOS apps as **paused, hidden** `appstore` candidates (`discovery: "on_demand"`, `isHidden: true`, `fetchPriority: "paused"`) — deliberately off every public surface until reviewed, because app-site associations routinely include third-party apps (SSO/wallet integrations). Reviewing a candidate:
 
 1. Confirm the app actually belongs to the org (open the App Store listing; check the seller name) — the association file alone is not proof of ownership.
-2. To go live: `manage_source` action "edit" (or `releases admin source update`) flipping `fetchPriority` to `normal`, `isHidden` to false, and `discovery` to `curated`; fix the auto-derived name per the naming rules above.
+2. To go live: `releases admin source update <identifier> --priority normal --discovery curated --name "<name>"` (naming rules above), then `PATCH /v1/sources/:id { "isHidden": false }` to un-hide it.
 3. Third-party or irrelevant app → leave it paused+hidden (the posture is the containment) or delete the row.
 4. Android package names are only an internal hint (`org.metadata.discoveredApps`) — there is no Play Store source type; don't try to materialize one.
 
