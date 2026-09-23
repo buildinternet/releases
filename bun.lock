@@ -15,6 +15,7 @@
         "@modelcontextprotocol/server": "^2.0.0",
         "@openrouter/ai-sdk-provider": "^3.1.0",
         "@releases/adapters": "workspace:*",
+        "@releases/agent-shared": "workspace:*",
         "@releases/ai-internal": "workspace:*",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
@@ -161,6 +162,15 @@
       "devDependencies": {
         "@mendable/firecrawl-js": "^4.32.0",
         "@types/turndown": "^5.0.6",
+      },
+    },
+    "packages/agent-shared": {
+      "name": "@releases/agent-shared",
+      "version": "0.0.0",
+      "dependencies": {
+        "@buildinternet/releases-core": "workspace:*",
+        "@releases/ai-internal": "workspace:*",
+        "@releases/lib": "workspace:*",
       },
     },
     "packages/ai": {
@@ -1028,6 +1038,8 @@
     "@pothos/plugin-dataloader": ["@pothos/plugin-dataloader@4.4.5", "", { "peerDependencies": { "@pothos/core": "*", "dataloader": "2", "graphql": "^16.10.0 || ^17.0.0" } }, "sha512-G4vM+2ddLu7GkrklQLHgV1uLRKRpwaiGK4K+ggA+DG1kNL//rkG1ManKZJUYEqdh2GmVdcReQr8TSaTZMYPx6A=="],
 
     "@releases/adapters": ["@releases/adapters@workspace:packages/adapters"],
+
+    "@releases/agent-shared": ["@releases/agent-shared@workspace:packages/agent-shared"],
 
     "@releases/ai-internal": ["@releases/ai-internal@workspace:packages/ai"],
 

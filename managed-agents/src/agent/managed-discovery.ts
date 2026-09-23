@@ -16,15 +16,15 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { buildDiscoveryPrompt } from "./discovery.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./discovery.js";
-import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
+import { buildDiscoverySystemPrompt } from "@releases/agent-shared/discovery-prompt";
 import {
   AGENT_TOOLS,
   buildMcpServerDefinition,
   buildMcpToolset,
   createTypedExecutor,
   handleCustomToolUse,
-} from "../shared/agent-tools.js";
-import { buildMemoryStoreResources } from "../shared/memory-store-attach.js";
+} from "@releases/agent-shared/agent-tools";
+import { buildMemoryStoreResources } from "@releases/agent-shared/memory-store-attach";
 
 // ── Cached IDs ────────────────────────────────────────────────────
 

@@ -37,14 +37,14 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
-import { buildDiscoverySystemPrompt } from "../managed-agents/src/shared/discovery-prompt.js";
-import { buildWorkerSystemPrompt } from "../managed-agents/src/shared/worker-prompt.js";
-import { buildCoordinatorSystemPrompt } from "../managed-agents/src/shared/coordinator-prompt.js";
+import { buildDiscoverySystemPrompt } from "@releases/agent-shared/discovery-prompt";
+import { buildWorkerSystemPrompt } from "@releases/agent-shared/worker-prompt";
+import { buildCoordinatorSystemPrompt } from "@releases/agent-shared/coordinator-prompt";
 import {
   AGENT_TOOLS,
   buildMcpServerDefinition,
   buildMcpToolset,
-} from "../managed-agents/src/shared/agent-tools.js";
+} from "@releases/agent-shared/agent-tools";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { fetchWithRetry } from "./fetch-retry.js";
 
