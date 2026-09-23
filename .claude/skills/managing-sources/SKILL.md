@@ -325,7 +325,7 @@ The on-demand lookup endpoint (`POST /v1/lookups`) can materialize a hidden sour
 If you encounter a source with `discovery = 'on_demand'` during an agent task:
 
 - Do not re-add it — it already exists (you'd get a slug collision).
-- To promote it to a fully indexed curated source: `releases admin source update <identifier> --discovery curated`, then un-hide it with `PATCH /v1/sources/:id { "isHidden": false }` (no CLI flag yet). Also fix the name (`--name`) if it was auto-generated from the coordinate.
+- To promote it to a fully indexed curated source: `releases admin source update <identifier> --discovery curated --enable` (`--enable` clears `isHidden`). Also fix the name (`--name`) if it was auto-generated from the coordinate.
 - The org created alongside the source may also be `discovery = 'on_demand'`. Promote it with `releases admin org update <slug> --discovery curated`.
 
 ## Self-Serve Listing Triage
@@ -341,7 +341,7 @@ Owners can activate a stub for their own domain via the anonymous self-serve lan
 The AASA/assetlinks scan (`docs/architecture/well-known-config.md` → Mobile-app discovery) lands a domain's iOS apps as **paused, hidden** `appstore` candidates (`discovery: "on_demand"`, `isHidden: true`, `fetchPriority: "paused"`) — deliberately off every public surface until reviewed, because app-site associations routinely include third-party apps (SSO/wallet integrations). Reviewing a candidate:
 
 1. Confirm the app actually belongs to the org (open the App Store listing; check the seller name) — the association file alone is not proof of ownership.
-2. To go live: `releases admin source update <identifier> --priority normal --discovery curated --name "<name>"` (naming rules above), then `PATCH /v1/sources/:id { "isHidden": false }` to un-hide it.
+2. To go live: `releases admin source update <identifier> --priority normal --discovery curated --enable --name "<name>"` (naming rules above; `--enable` clears `isHidden`).
 3. Third-party or irrelevant app → leave it paused+hidden (the posture is the containment) or delete the row.
 4. Android package names are only an internal hint (`org.metadata.discoveredApps`) — there is no Play Store source type; don't try to materialize one.
 
