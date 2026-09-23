@@ -20,7 +20,7 @@ import {
   type FetchLog,
   type NewFetchLog,
 } from "@buildinternet/releases-core/schema";
-import type { D1Db } from "../db.js";
+import type { D1Db } from "../../db.js";
 import { classifyDbError, dbErrorToWireCode } from "@releases/lib/db-errors";
 import { logEvent } from "@releases/lib/log-event";
 import { InternalError } from "@releases/lib/releases-error";

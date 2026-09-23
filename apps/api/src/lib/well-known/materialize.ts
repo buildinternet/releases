@@ -25,8 +25,8 @@ import {
   stripUoParam,
 } from "@releases/adapters/appstore";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
-import { buildAppStoreMeta } from "../appstore-materialize.js";
-import { isPrivateOrLocalHost } from "../avatar-ingest.js";
+import { buildAppStoreMeta } from "../sources/appstore-materialize.js";
+import { isPrivateOrLocalHost } from "../media/avatar-ingest.js";
 import type { createDb } from "../../db.js";
 import { configHash, mergeSelfDeclaredMetadata, parseSelfDeclared } from "./self-declared.js";
 

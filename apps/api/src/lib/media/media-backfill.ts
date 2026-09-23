@@ -10,7 +10,7 @@
  * mirror (`processMediaForR2`) and writes the stamped media JSON back.
  *
  * Pairs with the `POST /v1/workflows/backfill-media` route. Sibling of
- * `lib/source-backfill.ts`.
+ * `lib/ingest/source-backfill.ts`.
  */
 import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
@@ -22,7 +22,7 @@ import {
 import { isGifUrl } from "@releases/adapters/media-classify.js";
 import { detectInlineVideos, VIDEO_EMBED_HOST_HINTS } from "@releases/rendering/video-embed.js";
 import { processMediaForR2, type MediaTransformBinding } from "./media-ingest.js";
-import type { createDb } from "../db.js";
+import type { createDb } from "../../db.js";
 
 export const MEDIA_BACKFILL_DEFAULT_LIMIT = 50;
 export const MEDIA_BACKFILL_MAX_LIMIT = 200;

@@ -39,7 +39,7 @@ import {
   type ClassificationDisposition,
   type ClassificationOrigin,
 } from "./classification-schema.js";
-import { resolveCloudflareAeCredentials } from "../webhooks/shared.js";
+import { resolveCloudflareAeCredentials } from "../../webhooks/shared.js";
 import { loadMarketingThreshold } from "./marketing-classifier-settings.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;

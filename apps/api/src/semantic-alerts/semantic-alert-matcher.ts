@@ -16,7 +16,7 @@ import type { NoulBatchModel } from "@releases/ai-internal/decision-model";
 import type { D1Db } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
 import { semanticAlerts } from "../db/schema-semantic-alerts.js";
-import { resolveSemanticAlertModel, type SemanticAlertModelEnv } from "../semantic-alerts/model.js";
+import { resolveSemanticAlertModel, type SemanticAlertModelEnv } from "./model.js";
 
 /**
  * One alert scored against one release. `probability` is the JEV selected-choice

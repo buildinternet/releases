@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildDigestEmail, sendDigestEmail } from "../src/lib/digest-email.js";
+import { buildDigestEmail, sendDigestEmail } from "../src/lib/email/digest-email.js";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 
 function rel(over: Partial<ReleaseLatestItem>): ReleaseLatestItem {

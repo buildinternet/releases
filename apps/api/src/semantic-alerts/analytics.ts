@@ -16,7 +16,7 @@ import {
   classificationEnvironment,
   nonNegativeOrAbsent,
   unitOrAbsent,
-} from "../lib/classification-schema.js";
+} from "../lib/classification/classification-schema.js";
 
 const SCHEMA_VERSION = "1";
 const NO_SOURCE_INDEX = "none";

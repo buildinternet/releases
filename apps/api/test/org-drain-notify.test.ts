@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
-import { notifyOrgDrain } from "../src/lib/org-drain-notify.js";
+import { notifyOrgDrain } from "../src/lib/sources/org-drain-notify.js";
 import type { OrgActor } from "../src/org-actor.js";
 
 function mkNamespace(ensure: (orgId: string) => Promise<void>): DurableObjectNamespace<OrgActor> {

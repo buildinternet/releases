@@ -45,7 +45,7 @@ Ingest is automatic on writes and never blocks them. The release batch insert, o
 
 `embedAndUpsertChangelogFile` (`packages/search/src/embed-changelog-pipeline.ts`) writes D1 first with `vectorId = null`, then upserts to Vectorize, then runs a second D1 batch (`setChunkVectorIds` in `apps/api/src/cron/poll-fetch.ts`) to set `vectorId` once Vectorize confirms. The two D1 phases are exposed as separate caller callbacks (`onDiff` and `onVectorsCommitted`) so the pipeline stays driver-agnostic.
 
-Why D1-first: writing Vectorize first leaves a window where vectors are live in Vectorize with no `source_changelog_chunks` row pointing at them. Search hydration joins on `scc.vector_id` (`apps/api/src/lib/search-hybrid.ts`), so those vectors silently drop out of results. D1-first means any failure between INSERT and Vectorize upsert leaves chunks with `vectorId = null` — which is exactly what the embed-changelogs backfill route already detects (`SUM(CASE WHEN vector_id IS NULL THEN 1 ELSE 0 END)`). Recovery is automatic on the next backfill run, and idempotent because `buildVectorId` is content-addressed.
+Why D1-first: writing Vectorize first leaves a window where vectors are live in Vectorize with no `source_changelog_chunks` row pointing at them. Search hydration joins on `scc.vector_id` (`apps/api/src/lib/search/search-hybrid.ts`), so those vectors silently drop out of results. D1-first means any failure between INSERT and Vectorize upsert leaves chunks with `vectorId = null` — which is exactly what the embed-changelogs backfill route already detects (`SUM(CASE WHEN vector_id IS NULL THEN 1 ELSE 0 END)`). Recovery is automatic on the next backfill run, and idempotent because `buildVectorId` is content-addressed.
 
 Vectorize-side orphans (vectors with no D1 row) can still happen in two narrow cases — Vectorize upsert succeeded then the worker died before `onVectorsCommitted`, or the file changed before backfill ran — but they cannot manifest as phantom hits because hydration filters them out at the join. They cost storage only.
 
@@ -102,7 +102,7 @@ Optional KV binding `EMBED_CACHE` (both workers) caches single-query embeddings 
 ## File map
 
 - Shared RRF + provider abstraction: `packages/search/src/vector-search.ts`, `packages/search/src/embeddings.ts`
-- Worker hybrid orchestrators: `apps/api/src/lib/search-hybrid.ts`, `apps/mcp/src/lib/search-hybrid.ts`
+- Worker hybrid orchestrators: `apps/api/src/lib/search/search-hybrid.ts`, `apps/mcp/src/lib/search-hybrid.ts`
 - Ingest helpers: `packages/search/src/embed-releases.ts`, `packages/search/src/embed-entities.ts`, `packages/search/src/embed-changelog-pipeline.ts`
 - Backfill CLI: `releases admin embed status|releases|entities|changelogs` — lives in the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli), `src/cli/commands/admin/embed.ts`)
 - Status route: `apps/api/src/routes/admin-embed-status.ts` (`GET /v1/admin/embed/status`)

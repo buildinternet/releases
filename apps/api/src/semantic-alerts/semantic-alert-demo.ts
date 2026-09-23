@@ -36,13 +36,13 @@ import { logEvent } from "@releases/lib/log-event";
 import type { D1Db } from "../db.js";
 import { user } from "../db/schema-auth.js";
 import { addFollow } from "../queries/follows.js";
-import { RELEASES_ID_IN_CHUNK_SIZE } from "./d1-limits.js";
+import { RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import {
   ingestReleaseBatch,
   runBatchIngestEffects,
   type BatchEffectsEnv,
   type BatchIngestEnv,
-} from "./release-batch-ingest.js";
+} from "../lib/ingest/release-batch-ingest.js";
 import {
   matchSemanticAlertsForUser,
   type SemanticAlertMatchHit,

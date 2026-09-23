@@ -25,19 +25,19 @@ import {
   readSummaryCache,
   SUMMARY_CACHE_KV_TTL_SECONDS,
   summaryCacheEntry,
-} from "../lib/classification-query.js";
-import { classificationDatasetName } from "../lib/classification-schema.js";
+} from "../lib/classification/classification-query.js";
+import { classificationDatasetName } from "../lib/classification/classification-schema.js";
 import {
   fetchSemanticAlertSummary,
   semanticAlertSummaryCacheKey,
   semanticAlertSummaryCacheMaterial,
-} from "../lib/semantic-alert-summary.js";
+} from "../semantic-alerts/semantic-alert-summary.js";
 import {
   SEMANTIC_ALERT_DEMO_DEFAULT_COUNT,
   SEMANTIC_ALERT_DEMO_MAX_COUNT,
   purgeSemanticAlertDemoReleases,
   runSemanticAlertPreview,
-} from "../lib/semantic-alert-demo.js";
+} from "../semantic-alerts/semantic-alert-demo.js";
 
 export const adminSemanticAlertsRoutes = new Hono<Env>();
 

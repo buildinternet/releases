@@ -1,10 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
-import type { createDb } from "../db.js";
+import type { createDb } from "../../db.js";
 import { organizationsActive, sources, sourcesActive } from "@buildinternet/releases-core/schema";
 import { newSourceId } from "@buildinternet/releases-core/id";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { matchVideoUrl, fetchAndParseVideoFeed } from "@releases/adapters/video";
-import { ingestRawReleases, type FetchOneEnv } from "../cron/poll-fetch.js";
+import { ingestRawReleases, type FetchOneEnv } from "../../cron/poll-fetch.js";
 
 export interface MaterializeVideoParams {
   url: string;

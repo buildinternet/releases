@@ -9,7 +9,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
-import type { MediaTransformBinding } from "../lib/media-ingest.js";
+import type { MediaTransformBinding } from "../lib/media/media-ingest.js";
 import {
   runMediaBackfill,
   runVideoBackfill,
@@ -23,7 +23,7 @@ import {
   type MediaBackfillReport,
   type VideoBackfillReport,
   type GifBackfillReport,
-} from "../lib/media-backfill.js";
+} from "../lib/media/media-backfill.js";
 
 export type MediaBackfillKind = "media" | "video" | "gif";
 

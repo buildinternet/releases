@@ -14,7 +14,7 @@ import {
   CLASSIFICATION_ORIGINS,
   CLASSIFICATION_RETENTION_DAYS,
   classificationDatasetName,
-} from "./classification-schema.js";
+} from "../lib/classification/classification-schema.js";
 import {
   aeTimestampToIso,
   countOf,
@@ -29,7 +29,7 @@ import {
   summaryCacheMaterial,
   type AeRow,
   type ValidatedSummary,
-} from "./classification-query.js";
+} from "../lib/classification/classification-query.js";
 
 export const SEMANTIC_ALERT_SUMMARY_CACHE_PREFIX = "semantic-alert-summary:v1:";
 export const SEMANTIC_ALERT_COST_LANE = "semantic-alert-match";

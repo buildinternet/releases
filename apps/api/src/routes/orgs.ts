@@ -31,7 +31,7 @@ import {
   ReleasesJsonDomainSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
-import { avatarRejectToError, ingestOrgAvatar } from "../lib/avatar-ingest.js";
+import { avatarRejectToError, ingestOrgAvatar } from "../lib/media/avatar-ingest.js";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
 import { discoverMobileApps } from "../lib/well-known/mobile-apps.js";
 import {
@@ -89,7 +89,7 @@ import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/re
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { recomputeReleaseEffectiveCategoryForOrg } from "@releases/core-internal/effective-category";
-import { parseSourceTypesLenient } from "../lib/source-types.js";
+import { parseSourceTypesLenient } from "../lib/sources/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
@@ -137,7 +137,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
-import { seedSourceActors } from "../lib/source-actor-schedule.js";
+import { seedSourceActors } from "../lib/sources/source-actor-schedule.js";
 import { respondError } from "../lib/error-response.js";
 import {
   NotFoundError,

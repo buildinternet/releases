@@ -1,7 +1,7 @@
 /**
  * MCP-worker re-exports for the shared search-query log helpers in
  * `@releases/search/log-search`. The API worker re-exports the same module
- * from `apps/api/src/lib/log-search.ts`. Existing callers and tests
+ * from `apps/api/src/lib/search/log-search.ts`. Existing callers and tests
  * continue to import from this path.
  */
 export {

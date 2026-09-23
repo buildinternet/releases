@@ -6,7 +6,7 @@
  */
 import { logEvent } from "@releases/lib/log-event";
 import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
-import type { AuthEmailBinding, AuthEmailEnv } from "../auth/email.js";
+import type { AuthEmailBinding, AuthEmailEnv } from "../../auth/email.js";
 
 const DEFAULT_FROM = "noreply@releases.sh";
 const DEFAULT_FROM_NAME = "Releases Index";

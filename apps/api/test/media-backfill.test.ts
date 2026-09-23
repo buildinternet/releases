@@ -8,8 +8,8 @@ import {
   runMediaBackfill,
   runGifTranscodeBackfill,
   runJunkMediaPurge,
-} from "../src/lib/media-backfill";
-import type { MediaTransformBinding } from "../src/lib/media-ingest";
+} from "../src/lib/media/media-backfill";
+import type { MediaTransformBinding } from "../src/lib/media/media-ingest";
 
 /**
  * `runMediaBackfill` re-mirrors third-party release images to R2 for rows stored

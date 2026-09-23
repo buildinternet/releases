@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { OrgActor, type OrgActorEnv } from "../src/org-actor.js";
-import { DRAIN_COOLDOWN_MS } from "../src/lib/drain-candidates.js";
+import { DRAIN_COOLDOWN_MS } from "../src/lib/sources/drain-candidates.js";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

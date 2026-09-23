@@ -13,8 +13,8 @@
  */
 import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
-import type { D1Db } from "../db.js";
-import { regeneratePlaybook } from "../playbook-regen.js";
+import type { D1Db } from "../../db.js";
+import { regeneratePlaybook } from "../../playbook-regen.js";
 
 export interface CompleteSourceFetchOptions {
   /** When provided, the playbook regen is handed off instead of awaited inline (e.g. `ExecutionContext#waitUntil`). */

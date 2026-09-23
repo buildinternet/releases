@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { sourceRawSnapshots } from "@buildinternet/releases-core/schema";
-import type { createDb } from "../db.js";
+import type { createDb } from "../../db.js";
 
 interface R2Like {
   put(key: string, value: ArrayBuffer | string): Promise<unknown>;

@@ -1,5 +1,5 @@
 import type { ClaimCheckOutcome } from "@buildinternet/releases-api-types";
-import { isPrivateOrLocalHost } from "../avatar-ingest.js";
+import { isPrivateOrLocalHost } from "../media/avatar-ingest.js";
 
 export type { ClaimCheckOutcome };
 

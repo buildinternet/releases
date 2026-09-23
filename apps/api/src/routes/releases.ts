@@ -31,7 +31,7 @@ import {
   mapLatestRowToReleaseItem,
   releaseWebBase,
 } from "../queries/releases.js";
-import { parseExcludeSourceTypes } from "../lib/source-types.js";
+import { parseExcludeSourceTypes } from "../lib/sources/source-types.js";
 import {
   buildLatestCacheKey,
   isCacheableLatestRequest,

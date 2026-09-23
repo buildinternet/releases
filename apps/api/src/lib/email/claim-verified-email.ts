@@ -8,7 +8,7 @@
 import { logEvent } from "@releases/lib/log-event";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { renderEmail } from "@releases/rendering/email-shell";
-import { sendAuthEmail, type AuthEmailEnv } from "../auth/email.js";
+import { sendAuthEmail, type AuthEmailEnv } from "../../auth/email.js";
 import { sendEmail, type EmailEnv } from "./email.js";
 
 export type ClaimVerifyMethod = "well-known" | "dns-txt";

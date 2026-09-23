@@ -1,6 +1,6 @@
 import { and, eq, lte, sql } from "drizzle-orm";
 import { idempotencyRecords } from "@buildinternet/releases-core/schema";
-import { createDb } from "../db.js";
+import { createDb } from "../../db.js";
 
 export type IdempotencyState = "processing" | "completed";
 

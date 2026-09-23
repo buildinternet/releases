@@ -27,7 +27,7 @@
 import { eq, inArray, count } from "drizzle-orm";
 import { releases, organizations, type ReleaseType } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
-import type { D1Db } from "../db.js";
+import type { D1Db } from "../../db.js";
 import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
 import { fetchEffectiveCategoryBySourceIds } from "@releases/core-internal/effective-category";
 import { inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
@@ -38,24 +38,24 @@ import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
 import { getSourceMeta, filterByUrlDeny } from "@releases/adapters/feed.js";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "./title-dedup.js";
-import { processMediaForR2, selectExistingReleaseUrls } from "./media-ingest.js";
+import { processMediaForR2, selectExistingReleaseUrls } from "../media/media-ingest.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
-import { normalizeMediaBind } from "./media-bind.js";
-import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "./d1-limits.js";
+import { normalizeMediaBind } from "../media/media-bind.js";
+import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../d1-limits.js";
 import { clusterAndPersistCascades } from "./cluster-cascades.js";
-import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
-import { publishReleaseEvents, type PublishEnv } from "../events/publish.js";
-import type { InsertedReleaseRow } from "../events/build-event.js";
-import { notifyWebRevalidate, type WebRevalidateEnv } from "./web-revalidate.js";
-import { resolveOrgSlug, resolveProductSlug } from "./slug-lookups.js";
+import { invalidateLatestCache, type InvalidationEnv } from "../latest-cache.js";
+import { publishReleaseEvents, type PublishEnv } from "../../events/publish.js";
+import type { InsertedReleaseRow } from "../../events/build-event.js";
+import { notifyWebRevalidate, type WebRevalidateEnv } from "../web-revalidate.js";
+import { resolveOrgSlug, resolveProductSlug } from "../slug-lookups.js";
 import { buildEmbedConfig, type EmbedEnv } from "@releases/search/embed-config.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
-import type { MediaTransformBinding } from "./media-ingest.js";
+import type { MediaTransformBinding } from "../media/media-ingest.js";
 import { generateContentForReleases } from "./ingest-steps.js";
-import type { TextModelEnv } from "./text-model.js";
+import type { TextModelEnv } from "../ai/text-model.js";
 
 /**
  * Shape-coerce media via {@link normalizeMediaBind}, then rewrite each item's
@@ -108,7 +108,7 @@ export interface BatchIngestResult {
 
 /**
  * Env slice used by `ingestReleaseBatch`. Kept in sync with the API worker's
- * `Env.Bindings` (see `../index.ts`) the same way `InvalidationEnv` /
+ * `Env.Bindings` (see `../../index.ts`) the same way `InvalidationEnv` /
  * `PublishEnv` / `WebRevalidateEnv` are.
  */
 export interface BatchIngestEnv {
@@ -242,7 +242,7 @@ export async function ingestReleaseBatch(
   }
 
   // D1 caps prepared statements at 100 bound parameters — see
-  // `./d1-limits.ts` for the math behind the chunk size.
+  // `../d1-limits.ts` for the math behind the chunk size.
   let inserted = 0;
   const publishRows: InsertedReleaseRow[] = [];
   // Parallel collection of fresh rows-with-content for changesets
@@ -527,7 +527,7 @@ async function generateThenEmbed(
   try {
     // Load the rows back so we have full content, category, and (when
     // generate just ran) the new summary. Chunk the IN clause for D1's
-    // 100 bind-param cap — see `./d1-limits.ts`.
+    // 100 bind-param cap — see `../d1-limits.ts`.
     const [orgRow] = src.orgId
       ? await db
           .select({ category: organizations.category })
@@ -579,7 +579,7 @@ async function generateThenEmbed(
         if (ids.length === 0) return;
         // Mark the rows as embedded. D1's 100 bind-param cap means
         // the embeddedAt SET + N IN-clause ids must total ≤100, so
-        // we chunk IDs — see `./d1-limits.ts`.
+        // we chunk IDs — see `../d1-limits.ts`.
         const now = new Date().toISOString();
         for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
           const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);

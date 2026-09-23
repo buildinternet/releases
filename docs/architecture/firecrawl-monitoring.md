@@ -28,7 +28,7 @@ sequenceDiagram
 
 ## Monitor lifecycle (admin)
 
-`POST /v1/sources/:slug/firecrawl/sync` — body `{ enabled: boolean, schedule?, proxy?: "auto"|"basic"|"stealth"|"enhanced", goal?, target?: "scrape"|"crawl" }`. Takes a typed `src_…` ID (via `resolveSourceFromContext`), admin-gated through `publicReadAuthMiddleware`'s non-SAFE_METHODS branch, hidden from the prod OpenAPI spec. Enabling creates the monitor; disabling deletes it. Implemented in `apps/api/src/routes/firecrawl.ts` + `apps/api/src/lib/firecrawl-sync.ts`.
+`POST /v1/sources/:slug/firecrawl/sync` — body `{ enabled: boolean, schedule?, proxy?: "auto"|"basic"|"stealth"|"enhanced", goal?, target?: "scrape"|"crawl" }`. Takes a typed `src_…` ID (via `resolveSourceFromContext`), admin-gated through `publicReadAuthMiddleware`'s non-SAFE_METHODS branch, hidden from the prod OpenAPI spec. Enabling creates the monitor; disabling deletes it. Implemented in `apps/api/src/routes/firecrawl.ts` + `apps/api/src/lib/ingest/firecrawl-sync.ts`.
 
 `deriveMonitorSpec` is a pure, reconcile-safe spec builder:
 
@@ -186,7 +186,7 @@ A client-rendered scrape source (e.g. Harvey's `/release-notes`, whose cards are
 
 Firecrawl-owned sources are excluded (covered by `scanStaleFirecrawlSources`). Emits `warn`-level `stale-source` events on the `source-staleness` component; no DB mutation, no cost, no feature flag.
 
-**Operator digest (`cron/send-staleness-digest.ts`).** The same `0 4 * * *` tick runs `sendStalenessDigest` after both scans. It reuses each scan's `entries[]` output, builds a combined text+HTML rollup (`lib/staleness-digest-email.ts`), and sends via the `SEND_EMAIL` binding (`EMAIL_NOTIFY_TO`) when `firstParty + firecrawl > 0`. Empty rollups log `staleness-digest/skipped-empty` and send nothing — quiet days stay quiet. Preview the template from `/admin/emails` (`operator.staleness-digest` sample) or send a fabricated test via `POST /v1/admin/emails/test`.
+**Operator digest (`cron/send-staleness-digest.ts`).** The same `0 4 * * *` tick runs `sendStalenessDigest` after both scans. It reuses each scan's `entries[]` output, builds a combined text+HTML rollup (`lib/email/staleness-digest-email.ts`), and sends via the `SEND_EMAIL` binding (`EMAIL_NOTIFY_TO`) when `firstParty + firecrawl > 0`. Empty rollups log `staleness-digest/skipped-empty` and send nothing — quiet days stay quiet. Preview the template from `/admin/emails` (`operator.staleness-digest` sample) or send a fabricated test via `POST /v1/admin/emails/test`.
 
 **Render dry-run probe (`renderCheckOne`, route `POST /v1/sources/:id/fetch?dryRun=true`).** For a client-rendered scrape source (`crawlEnabled` or `renderRequired`), the probe renders the index once via Cloudflare Browser Rendering (`fetchCloudflareMarkdown`, `networkidle2`) and reports how many distinct same-origin candidate links the rendered page exposes — **without** the managed-agent extraction loop (no Haiku/Sonnet, no discovery-worker session). A populated index reads as "dozens of candidates"; a broken empty-shell render reads as `rendered: false` / ~0. Writes a `dry_run` `fetch_log` row for observability but never mutates source state or inserts releases. The cheap "can the cron's render actually see releases here?" check onboarding previously had no way to answer. CLI: `releases source fetch <source> --dry-run` (single source; feed/GitHub sources fall back to reporting candidate releases parsed).
 

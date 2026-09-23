@@ -9,7 +9,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
 import { renderEmail } from "@releases/rendering/email-shell";
-import { sendAuthEmail, type AuthEmailEnv } from "../auth/email.js";
+import { sendAuthEmail, type AuthEmailEnv } from "../../auth/email.js";
 import { sendEmail, type EmailEnv } from "./email.js";
 
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;

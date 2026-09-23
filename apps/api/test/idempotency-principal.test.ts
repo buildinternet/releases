@@ -3,7 +3,7 @@ import {
   anonymousIdempotencyPrincipal,
   authenticatedIdempotencyPrincipal,
   userIdempotencyPrincipal,
-} from "../src/lib/idempotency-principal.js";
+} from "../src/lib/idempotency/idempotency-principal.js";
 import type { AuthContext } from "../src/middleware/auth.js";
 
 describe("idempotency principals", () => {

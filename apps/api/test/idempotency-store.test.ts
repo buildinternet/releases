@@ -8,7 +8,7 @@ import {
   releaseIdempotency,
   retainIdempotency,
   sweepExpiredIdempotency,
-} from "../src/lib/idempotency-store";
+} from "../src/lib/idempotency/idempotency-store";
 
 const BASE = {
   principalHash: "p".repeat(64),

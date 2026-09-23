@@ -28,7 +28,7 @@ import {
   parseBoolParam,
   parseLimitParam,
 } from "../utils.js";
-import { parseSourceTypesLenient } from "../lib/source-types.js";
+import { parseSourceTypesLenient } from "../lib/sources/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { categoryReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";

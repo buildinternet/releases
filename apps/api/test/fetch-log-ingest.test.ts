@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, fetchLog } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../src/db.js";
-import { ingestFetchLog } from "../src/lib/fetch-log-ingest.js";
+import { ingestFetchLog } from "../src/lib/ingest/fetch-log-ingest.js";
 
 // Direct (non-HTTP) coverage of the extracted ingest core (#1946 phase 4, task
 // 4) — the route-level backoff/convergence behavior is already covered by

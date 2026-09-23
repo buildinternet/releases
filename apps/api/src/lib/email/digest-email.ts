@@ -2,7 +2,7 @@ import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { resolveSourceKind } from "@buildinternet/releases-core/kinds";
 import { logEvent } from "@releases/lib/log-event";
 import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
-import type { AuthEmailBinding } from "../auth/email.js";
+import type { AuthEmailBinding } from "../../auth/email.js";
 
 export interface DigestEmailEnv {
   AUTH_EMAIL?: AuthEmailBinding;

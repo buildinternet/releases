@@ -1,9 +1,9 @@
 /**
  * Admin digest for first-party + Firecrawl source staleness scans.
  */
-import type { FirecrawlStaleEntry } from "../cron/firecrawl-staleness.js";
-import type { StaleSourceEntry } from "../cron/source-staleness.js";
-import type { ProviderHealthEntry } from "../cron/provider-health.js";
+import type { FirecrawlStaleEntry } from "../../cron/firecrawl-staleness.js";
+import type { StaleSourceEntry } from "../../cron/source-staleness.js";
+import type { ProviderHealthEntry } from "../../cron/provider-health.js";
 import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type StalenessDigestInput = {

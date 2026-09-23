@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { createTestDb } from "../../../../tests/db-helper.js";
-import { putStoredAiLaneModels } from "../queries/site-settings.js";
+import { createTestDb } from "../../../../../tests/db-helper.js";
+import { putStoredAiLaneModels } from "../../queries/site-settings.js";
 import { clearAiLaneModelCache } from "./ai-lane-models.js";
 import {
   resolveArticleExtractModel,
@@ -12,7 +12,7 @@ import {
 import type { FlagshipBinding } from "@releases/lib/flags";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { classifyMarketing } from "@releases/ai-internal/marketing-classifier";
-import { marketingDecisionResponse } from "../../../../tests/marketing-decision-fixture";
+import { marketingDecisionResponse } from "../../../../../tests/marketing-decision-fixture";
 
 /** Flagship stub: `true`/`false` = present key with that value; absent key echoes the default. */
 function flagsBinding(values: Record<string, boolean>): FlagshipBinding {

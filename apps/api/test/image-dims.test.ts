@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { sniffImageDimensions } from "../src/lib/image-dims";
+import { sniffImageDimensions } from "../src/lib/media/image-dims";
 
 const png = (w: number, h: number) =>
   Uint8Array.from([

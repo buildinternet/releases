@@ -6,7 +6,7 @@
  * route does not duplicate that write path.
  *
  * Modeled on `routes/ai-models.ts` (same admin gate, same site_settings
- * overlay pattern via `lib/marketing-classifier-settings.ts`).
+ * overlay pattern via `lib/classification/marketing-classifier-settings.ts`).
  */
 import { Hono } from "hono";
 import { MarketingClassifierThresholdPutSchema } from "@buildinternet/releases-api-types";
@@ -18,7 +18,7 @@ import { createDb } from "../db.js";
 import { isValidBearerAuth, resolveAuthIdentity } from "../middleware/auth.js";
 import { validateJson } from "../lib/validate.js";
 import { respondError } from "../lib/error-response.js";
-import { clearMarketingThresholdCache } from "../lib/marketing-classifier-settings.js";
+import { clearMarketingThresholdCache } from "../lib/classification/marketing-classifier-settings.js";
 import {
   getStoredMarketingThreshold,
   putStoredMarketingThreshold,

@@ -32,11 +32,11 @@
  * call this function; do not hand-roll the literal.
  */
 import { getSecret } from "@releases/lib/secrets";
-import type { MediaTransformBinding } from "../lib/media-ingest.js";
-import type { ClassificationDataset } from "../lib/classification-schema.js";
+import type { MediaTransformBinding } from "../lib/media/media-ingest.js";
+import type { ClassificationDataset } from "../lib/classification/classification-schema.js";
 import type { FetchOneEnv } from "../cron/poll-fetch.js";
-import type { AnthropicEnv } from "../lib/anthropic.js";
-import type { TextModelEnv } from "../lib/text-model.js";
+import type { AnthropicEnv } from "../lib/ai/anthropic.js";
+import type { TextModelEnv } from "../lib/ai/text-model.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
 

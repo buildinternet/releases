@@ -1,6 +1,6 @@
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { organizationsPublic, sourcesActive } from "@buildinternet/releases-core/schema";
-import type { createDb } from "../db.js";
+import type { createDb } from "../../db.js";
 
 type Db = ReturnType<typeof createDb>;
 

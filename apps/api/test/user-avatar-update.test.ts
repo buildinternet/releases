@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { preserveCustomAvatarOnUpdate } from "../src/lib/avatar-ingest.js";
+import { preserveCustomAvatarOnUpdate } from "../src/lib/media/avatar-ingest.js";
 
 test("preserveCustomAvatarOnUpdate strips provider image when a hosted avatar exists", () => {
   const res = preserveCustomAvatarOnUpdate(

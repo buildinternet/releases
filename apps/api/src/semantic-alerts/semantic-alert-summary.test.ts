@@ -2,13 +2,16 @@ import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
 import { SemanticAlertSummarySchema } from "@buildinternet/releases-api-types";
 import { ValidationError } from "@releases/lib/releases-error";
-import { DATASET_PRODUCTION, DATASET_STAGING } from "./classification-schema.js";
+import {
+  DATASET_PRODUCTION,
+  DATASET_STAGING,
+} from "../lib/classification/classification-schema.js";
 import {
   parseSummaryQuery,
   readSummaryCache,
   summaryCacheEntry,
   type ValidatedSummary,
-} from "./classification-query.js";
+} from "../lib/classification/classification-query.js";
 import { adminSemanticAlertsRoutes } from "../routes/admin-semantic-alerts.js";
 import {
   buildSemanticAlertSummaryStatements,

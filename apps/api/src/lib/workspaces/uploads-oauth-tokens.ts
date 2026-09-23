@@ -6,8 +6,8 @@
  * `refresh_token` grant when `offline_access` minted a refresh token.
  */
 import { eq } from "drizzle-orm";
-import type { AnyDb } from "../db.js";
-import { workspaceIntegrations, type WorkspaceIntegration } from "../db/schema-integrations.js";
+import type { AnyDb } from "../../db.js";
+import { workspaceIntegrations, type WorkspaceIntegration } from "../../db/schema-integrations.js";
 import { decryptOAuthSecret, encryptOAuthSecret } from "./oauth-token-crypto.js";
 import {
   UPLOADS_OAUTH_PROVIDER,

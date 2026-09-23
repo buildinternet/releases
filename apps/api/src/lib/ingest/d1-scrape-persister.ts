@@ -8,8 +8,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { releases, sources, type Source } from "@buildinternet/releases-core/schema";
 import type { ScrapePersister } from "@releases/adapters/scrape-persister";
 import { logEvent } from "@releases/lib/log-event";
-import type { D1Db } from "../db.js";
-import { findSourceForOrgSlug, sourceById, sourceMatchByIdOrSlug } from "../utils.js";
+import type { D1Db } from "../../db.js";
+import { findSourceForOrgSlug, sourceById, sourceMatchByIdOrSlug } from "../../utils.js";
 import {
   ingestReleaseBatch,
   runBatchIngestEffects,
@@ -17,7 +17,7 @@ import {
   type BatchIngestEnv,
 } from "./release-batch-ingest.js";
 import { ingestFetchLog, type FetchLogEnv } from "./fetch-log-ingest.js";
-import { completeSourceFetch } from "./source-fetch-complete.js";
+import { completeSourceFetch } from "../sources/source-fetch-complete.js";
 import { saveRawSnapshot } from "./raw-snapshot.js";
 
 export interface D1PersisterEnv extends BatchIngestEnv, BatchEffectsEnv, FetchLogEnv {

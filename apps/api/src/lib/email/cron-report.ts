@@ -3,8 +3,8 @@
  * sender so tests (which run outside the Workers runtime) can import it
  * without pulling in the `cloudflare:email` module.
  */
-import type { FinalizeRunParams } from "../db/cron-runs-dao.js";
-import type { TopSearchRow } from "./search-queries-top.js";
+import type { FinalizeRunParams } from "../../db/cron-runs-dao.js";
+import type { TopSearchRow } from "../search/search-queries-top.js";
 import {
   renderEmail,
   subjectNames,

@@ -20,11 +20,11 @@ import type { FirecrawlClient } from "@releases/adapters/firecrawl.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
-import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
-import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
+import { getAnthropicKey, resolveGatewayOpts } from "../lib/ai/anthropic.js";
+import { resolveExtractAiSdkModel } from "../lib/ai/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { planWindowOffsets } from "../lib/firecrawl-extract.js";
-import { logUsage } from "../lib/usage-log.js";
+import { planWindowOffsets } from "../lib/ingest/firecrawl-extract.js";
+import { logUsage } from "../lib/ai/usage-log.js";
 import {
   sliceChangelog,
   DEFAULT_CHANGELOG_SLICE_TOKENS,
@@ -35,8 +35,8 @@ import {
   CLOUDFLARE_SYSTEM_PROMPT,
   type ExtractDeps,
 } from "@releases/adapters/extract";
-import { saveRawSnapshot, loadRawSnapshot } from "../lib/raw-snapshot.js";
-import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
+import { saveRawSnapshot, loadRawSnapshot } from "../lib/ingest/raw-snapshot.js";
+import { selectExistingReleaseKeys } from "../lib/ingest/title-dedup.js";
 import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
@@ -52,7 +52,7 @@ import {
   dateRange,
   type BackfillBodyVia,
   type SourceBackfillReport,
-} from "../lib/source-backfill.js";
+} from "../lib/ingest/source-backfill.js";
 
 // Haiku at temperature 0 — cheap + deterministic for structured extraction.
 const BACKFILL_EXTRACT_MODEL = "claude-haiku-4-5-20251001";

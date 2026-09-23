@@ -12,7 +12,7 @@ import {
   sendAuthEmail,
   verifyEmailTemplate,
   type AuthEmailEnv,
-} from "../auth/email.js";
+} from "../../auth/email.js";
 import { buildDigestEmail } from "./digest-email.js";
 import { buildSemanticAlertEmail } from "./semantic-alert-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
@@ -26,7 +26,7 @@ import {
   formatRecommendationAddedEmail,
   formatRecommendationEmail,
 } from "./recommendation-email.js";
-import { buildNoResultsAlert } from "./search-no-results.js";
+import { buildNoResultsAlert } from "../search/search-no-results.js";
 import { formatCronCrashAlert } from "./send-alert.js";
 import {
   formatAutoDisableAlert,

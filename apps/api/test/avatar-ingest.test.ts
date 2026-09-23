@@ -6,7 +6,7 @@ import {
   isHostedAvatarUrl,
   isPrivateOrLocalHost,
   type AvatarRejectStatus,
-} from "../src/lib/avatar-ingest";
+} from "../src/lib/media/avatar-ingest";
 
 // Minimal PNG: the IHDR header is all the sniffer reads; pad to `bytes` total so
 // the byte-size gate sees a realistic size.

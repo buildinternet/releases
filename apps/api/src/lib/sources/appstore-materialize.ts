@@ -29,7 +29,7 @@ import {
   type EffectiveCategoryDb,
 } from "@releases/core-internal/effective-category";
 import { logEvent } from "@releases/lib/log-event";
-import type { createDb } from "../db.js";
+import type { createDb } from "../../db.js";
 
 type Db = ReturnType<typeof drizzle>;
 

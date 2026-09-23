@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createTestDb, type TestDatabase } from "../../../../tests/db-helper.js";
-import { putStoredAiLaneModels } from "../queries/site-settings.js";
+import { createTestDb, type TestDatabase } from "../../../../../tests/db-helper.js";
+import { putStoredAiLaneModels } from "../../queries/site-settings.js";
 import {
   clearAiLaneModelCache,
   effectiveLaneModel,

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { mediaAssets, organizations, releases, sources } from "@buildinternet/releases-core/schema";
-import { createTestDb } from "../../../../tests/db-helper.js";
-import { createDb } from "../db.js";
+import { createTestDb } from "../../../../../tests/db-helper.js";
+import { createDb } from "../../db.js";
 import {
   MEDIA_MAX_BYTES,
   processMediaForR2,

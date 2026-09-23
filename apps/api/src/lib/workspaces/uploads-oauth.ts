@@ -8,7 +8,7 @@
  * Gated on the encryption key resolving — absence is the off switch (no flag).
  */
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
-import { isTrustedCorsOrigin } from "../auth/index.js";
+import { isTrustedCorsOrigin } from "../../auth/index.js";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 
 export const UPLOADS_OAUTH_CALLBACK_PATH = "/integrations/uploads/callback";

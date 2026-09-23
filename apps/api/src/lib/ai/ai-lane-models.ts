@@ -13,8 +13,8 @@ import {
   type AiLaneModels,
 } from "@releases/core-internal/ai-lane-models";
 import type { OpenRouterCatalogModel } from "@buildinternet/releases-api-types";
-import { createDb, type AnyDb } from "../db.js";
-import { getStoredAiLaneModels } from "../queries/site-settings.js";
+import { createDb, type AnyDb } from "../../db.js";
+import { getStoredAiLaneModels } from "../../queries/site-settings.js";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 

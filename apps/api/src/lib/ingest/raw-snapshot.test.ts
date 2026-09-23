@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import { eq } from "drizzle-orm";
 import { organizations, sources, sourceRawSnapshots } from "@buildinternet/releases-core/schema";
-import { createTestDb } from "../../../../tests/db-helper.js";
-import { createDb } from "../db.js";
+import { createTestDb } from "../../../../../tests/db-helper.js";
+import { createDb } from "../../db.js";
 import { saveRawSnapshot, loadRawSnapshot } from "./raw-snapshot.js";
 
 function fakeR2() {

@@ -5,14 +5,16 @@ import { idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { ServiceUnavailableError, ValidationError } from "@releases/lib/releases-error";
 import { createTestDb, type TestDb } from "../../../tests/db-helper";
 import type { Env } from "../src/index";
-import type { IdempotencyPrincipal } from "../src/lib/idempotency-principal";
+import type { IdempotencyPrincipal } from "../src/lib/idempotency/idempotency-principal";
 import { respondError } from "../src/lib/error-response";
 import { idempotentPost } from "../src/middleware/idempotency";
 
 const RAW_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const VALID_IDEMPOTENCY_KEY = "request-key-0001";
 
-type StoreDb = Parameters<typeof import("../src/lib/idempotency-store").claimIdempotency>[0];
+type StoreDb = Parameters<
+  typeof import("../src/lib/idempotency/idempotency-store").claimIdempotency
+>[0];
 
 interface HarnessOptions {
   body?: "json" | "empty";

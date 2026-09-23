@@ -55,8 +55,8 @@ import {
   recordBatchFinalize,
 } from "@releases/core-internal/batch-run";
 import type { FlagshipBinding } from "@releases/lib/flags";
-import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
-import { logUsage } from "../lib/usage-log.js";
+import { getAnthropicKey, resolveGatewayOpts } from "../lib/ai/anthropic.js";
+import { logUsage } from "../lib/ai/usage-log.js";
 import { parsePositiveInt, nextEnrichmentMetadata } from "../cron/feed-enrich.js";
 import {
   selectEnrichCandidates,
@@ -65,8 +65,8 @@ import {
   BATCH_ENRICH_DEFAULT_LIMIT,
   BATCH_ENRICH_MAX_LIMIT,
   type EnrichCandidateRow,
-} from "../lib/enrich-apply.js";
-import { saveRawSnapshot, loadRawSnapshot } from "../lib/raw-snapshot.js";
+} from "../lib/ingest/enrich-apply.js";
+import { saveRawSnapshot, loadRawSnapshot } from "../lib/ingest/raw-snapshot.js";
 import { generateContentForReleases, type PollAndFetchWorkflowEnv } from "./poll-and-fetch.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────

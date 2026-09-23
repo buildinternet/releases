@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, knowledgePages } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../src/db.js";
-import { completeSourceFetch } from "../src/lib/source-fetch-complete.js";
+import { completeSourceFetch } from "../src/lib/sources/source-fetch-complete.js";
 
 // Direct coverage of the extracted fetch-completion write (#1946 phase 4, task
 // 5) — mirrors the narrow field set `PATCH /sources/:id` writes for this

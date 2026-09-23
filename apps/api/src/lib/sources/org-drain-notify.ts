@@ -17,7 +17,7 @@
 
 import { logEvent } from "@releases/lib/log-event";
 import { withDoRetry } from "@releases/lib/do-retry";
-import type { OrgActor } from "../org-actor.js";
+import type { OrgActor } from "../../org-actor.js";
 
 export async function notifyOrgDrain(
   orgActor: DurableObjectNamespace<OrgActor> | undefined,

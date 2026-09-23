@@ -1,4 +1,4 @@
-import type { AuthContext } from "../middleware/auth.js";
+import type { AuthContext } from "../../middleware/auth.js";
 
 export type IdempotencyPrincipal =
   | { namespace: "user"; id: string }

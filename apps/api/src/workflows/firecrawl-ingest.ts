@@ -21,12 +21,12 @@ import type { RawRelease } from "@releases/adapters/types.js";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { FirecrawlError } from "@releases/lib/errors";
-import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
-import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
+import { getAnthropicKey, resolveGatewayOpts } from "../lib/ai/anthropic.js";
+import { resolveExtractAiSdkModel } from "../lib/ai/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
-import { logUsage } from "../lib/usage-log.js";
-import { saveRawSnapshot } from "../lib/raw-snapshot.js";
+import { extractFirecrawlMarkdown } from "../lib/ingest/firecrawl-extract.js";
+import { logUsage } from "../lib/ai/usage-log.js";
+import { saveRawSnapshot } from "../lib/ingest/raw-snapshot.js";
 import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { ingestRawReleases, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
@@ -35,7 +35,7 @@ import {
   resolveFetchEnv,
   runContentAndEmbedSteps,
   runInvalidateLatestCacheStep,
-} from "../lib/ingest-steps.js";
+} from "../lib/ingest/ingest-steps.js";
 import type { PollAndFetchWorkflowEnv } from "./poll-and-fetch.js";
 
 // Model for Firecrawl extraction. Matches the standard cron ingest model
@@ -326,7 +326,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
       });
 
       // ── Steps 5a/5b/5c: post-insert side-effects (only when new rows landed) ──
-      // Shared with the poll path via lib/ingest-steps so the two can't drift
+      // Shared with the poll path via lib/ingest/ingest-steps so the two can't drift
       // (the drift these helpers close was fixed in #1955): generate-content runs
       // BEFORE embed-releases (don't embed the AI headline; land content_* before
       // release-event observers), then the latest-cache is purged. Same step

@@ -1,7 +1,7 @@
 import { clusterChangesets, type ClusterInput } from "@releases/core-internal/changesets-cluster";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { logEvent } from "@releases/lib/log-event";
-import { RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "./d1-limits.js";
+import { RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "../d1-limits.js";
 
 /**
  * Schema-agnostic db handle — this helper only inserts into one specific

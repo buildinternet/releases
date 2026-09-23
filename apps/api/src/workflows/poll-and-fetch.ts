@@ -40,10 +40,10 @@ import {
   generateContentForReleases,
   runContentAndEmbedSteps,
   runInvalidateLatestCacheStep,
-} from "../lib/ingest-steps.js";
+} from "../lib/ingest/ingest-steps.js";
 // Back-compat re-exports: existing importers (backfill-source, batch-enrich,
 // routes/workflows, tests) still import these shared primitives from this
-// module. Their canonical home is now lib/ingest-steps.ts (#1946 phase 3).
+// module. Their canonical home is now lib/ingest/ingest-steps.ts (#1946 phase 3).
 export {
   RETRY_POLL,
   RETRY_FETCH,
@@ -52,10 +52,10 @@ export {
   resolveFetchEnv,
   generateContentForReleases,
 };
-import { type AnthropicEnv } from "../lib/anthropic.js";
-import { type TextModelEnv } from "../lib/text-model.js";
+import { type AnthropicEnv } from "../lib/ai/anthropic.js";
+import { type TextModelEnv } from "../lib/ai/text-model.js";
 import { type WebRevalidateEnv } from "../lib/web-revalidate.js";
-import type { ClassificationDataset } from "../lib/classification-schema.js";
+import type { ClassificationDataset } from "../lib/classification/classification-schema.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 
 /**
@@ -370,7 +370,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       const insertedIds = fetchResult.insertedIds ?? [];
 
       // generate-content → embed-releases, in that order (shared with the
-      // firecrawl webhook path via lib/ingest-steps so the two can't drift —
+      // firecrawl webhook path via lib/ingest/ingest-steps so the two can't drift —
       // see #1955/#1946). `onStep` keeps `currentStep` accurate for the
       // failure-context row.
       await runContentAndEmbedSteps(step, { db, env, source, insertedIds, fetchEnv }, (name) => {
@@ -401,7 +401,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       }
 
       // Purge latest-cache when we actually inserted rows (shared with the
-      // firecrawl path via lib/ingest-steps). Per-source invalidation replaces
+      // firecrawl path via lib/ingest/ingest-steps). Per-source invalidation replaces
       // the cron-aggregated call (see #486) — KV writes are cheap + idempotent.
       await runInvalidateLatestCacheStep(
         step,

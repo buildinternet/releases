@@ -31,13 +31,13 @@ import { inArray } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "./db.js";
-import { seedJitterMs } from "./lib/source-actor-seed.js";
-import { queryCandidates } from "./lib/drain-candidates.js";
+import { seedJitterMs } from "./lib/sources/source-actor-seed.js";
+import { queryCandidates } from "./lib/sources/drain-candidates.js";
 import {
   startDeterministicUpdate,
   MAX_UPDATE_SOURCES,
   type UpdateDispatchEnv,
-} from "./lib/update-dispatch.js";
+} from "./lib/sources/update-dispatch.js";
 
 const ORG_ID_KEY = "orgId";
 

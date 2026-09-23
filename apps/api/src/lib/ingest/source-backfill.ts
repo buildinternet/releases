@@ -1,7 +1,7 @@
 import type { RawRelease } from "@releases/adapters/types.js";
 // Type-only: erased at compile time, so this does NOT pull poll-fetch's runtime
 // deps into the route module's import graph.
-import type { IngestResult } from "../cron/poll-fetch.js";
+import type { IngestResult } from "../../cron/poll-fetch.js";
 
 export type BackfillBodyVia = "supplied" | "firecrawl" | "fetch" | "snapshot";
 

@@ -17,16 +17,16 @@ import {
   runJunkMediaPurge,
   JUNK_PURGE_DEFAULT_LIMIT,
   JUNK_PURGE_MAX_LIMIT,
-} from "../lib/media-backfill.js";
+} from "../lib/media/media-backfill.js";
 import {
   enrichFeedItem,
   buildEnrichDeps,
   parsePositiveInt,
   type EnrichResult,
 } from "../cron/feed-enrich.js";
-import { sendEmail } from "../lib/email.js";
-import { sendEmailSample } from "../lib/email-samples.js";
-import type { CronReportStatus } from "../lib/cron-report.js";
+import { sendEmail } from "../lib/email/email.js";
+import { sendEmailSample } from "../lib/email/email-samples.js";
+import type { CronReportStatus } from "../lib/email/cron-report.js";
 import { createDb, type AnyDb } from "../db.js";
 import {
   organizations,
@@ -51,7 +51,7 @@ import {
   etWeekStart,
 } from "@buildinternet/releases-core/dates";
 import { sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
-import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
+import { getAnthropicKey, resolveGatewayOpts } from "../lib/ai/anthropic.js";
 import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/search/embed-releases.js";
 import {
   embedAndUpsertEntities,
@@ -70,7 +70,10 @@ import { logEvent } from "@releases/lib/log-event";
 import { flag, FLAGS } from "@releases/lib/flags";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
-import { clusterAndPersistCascades, DECIDED_BY_CHANGESETS } from "../lib/cluster-cascades.js";
+import {
+  clusterAndPersistCascades,
+  DECIDED_BY_CHANGESETS,
+} from "../lib/ingest/cluster-cascades.js";
 import { clusterChangesets } from "@releases/core-internal/changesets-cluster";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
@@ -80,7 +83,7 @@ import {
   selectEnrichCandidates,
   BATCH_ENRICH_DEFAULT_LIMIT,
   BATCH_ENRICH_MAX_LIMIT,
-} from "../lib/enrich-apply.js";
+} from "../lib/ingest/enrich-apply.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { getSourceMeta, htmlToMarkdown } from "@releases/adapters/feed.js";
@@ -90,11 +93,14 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { getSecret } from "@releases/lib/secrets";
 import { FirecrawlError } from "@releases/lib/errors";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { extractChangelogAllWindows, extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
-import { processMediaForR2 } from "../lib/media-ingest.js";
+import {
+  extractChangelogAllWindows,
+  extractFirecrawlMarkdown,
+} from "../lib/ingest/firecrawl-extract.js";
+import { processMediaForR2 } from "../lib/media/media-ingest.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
-import { logUsage } from "../lib/usage-log.js";
-import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
+import { logUsage } from "../lib/ai/usage-log.js";
+import { selectExistingReleaseKeys } from "../lib/ingest/title-dedup.js";
 import {
   runSourceBackfill,
   effectiveBackfillWindows,
@@ -103,8 +109,8 @@ import {
   type SourceBackfillDeps,
   type SourceBackfillExtractResult,
   type SourceBackfillReport,
-} from "../lib/source-backfill.js";
-import { loadRawSnapshot } from "../lib/raw-snapshot.js";
+} from "../lib/ingest/source-backfill.js";
+import { loadRawSnapshot } from "../lib/ingest/raw-snapshot.js";
 import {
   generateCollectionSummariesForDay,
   generateCollectionWeeklyDigestsForWeek,
@@ -115,7 +121,7 @@ import {
 import {
   resolveCollectionSummaryModel,
   resolveCollectionWeeklyDigestModel,
-} from "../lib/text-model.js";
+} from "../lib/ai/text-model.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { workflowInstanceStatus, workflowInstanceTerminate } from "../lib/workflow-instance.js";
 import { respondError } from "../lib/error-response.js";
@@ -128,8 +134,8 @@ import {
   ServiceUnavailableError,
   InternalError,
 } from "@releases/lib/releases-error";
-import { startDeterministicUpdate } from "../lib/update-dispatch.js";
-import { seedSourceActors } from "../lib/source-actor-schedule.js";
+import { startDeterministicUpdate } from "../lib/sources/update-dispatch.js";
+import { seedSourceActors } from "../lib/sources/source-actor-schedule.js";
 import { queryUnmanagedActiveSources } from "../queries/unmanaged-source-actors.js";
 import type { MediaBackfillKind } from "../workflows/media-backfill.js";
 import type { Context } from "hono";

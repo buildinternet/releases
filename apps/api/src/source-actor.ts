@@ -29,8 +29,8 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
 import { logEvent } from "@releases/lib/log-event";
-import { seedJitterMs } from "./lib/source-actor-seed.js";
-import { notifyOrgDrain } from "./lib/org-drain-notify.js";
+import { seedJitterMs } from "./lib/sources/source-actor-seed.js";
+import { notifyOrgDrain } from "./lib/sources/org-drain-notify.js";
 
 /**
  * In-flight guard window. A fired workflow (poll + fetch + content + embed +

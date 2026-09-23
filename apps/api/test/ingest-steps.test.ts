@@ -1,5 +1,5 @@
 /**
- * Unit tests for the shared post-insert step helpers (lib/ingest-steps.ts,
+ * Unit tests for the shared post-insert step helpers (lib/ingest/ingest-steps.ts,
  * #1946 phase 3). Both the poll path and the firecrawl webhook path delegate
  * their post-insert side-effect chain here, so locking the emitted `step.do`
  * names + order + gating in one place is what keeps the two workflows from
@@ -24,7 +24,10 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { WorkflowStep } from "cloudflare:workers";
 import type { FetchOneEnv } from "../src/cron/poll-fetch.js";
-import { runContentAndEmbedSteps, runInvalidateLatestCacheStep } from "../src/lib/ingest-steps.js";
+import {
+  runContentAndEmbedSteps,
+  runInvalidateLatestCacheStep,
+} from "../src/lib/ingest/ingest-steps.js";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

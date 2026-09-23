@@ -35,7 +35,7 @@ import {
 } from "@releases/ai-internal/collection-weekly-digest";
 // Anthropic baseline = the shared summarize-lane model (the weekly-digest lane
 // reuses the SUMMARIZE_MODEL config + this Haiku fallback, not a bespoke one —
-// see resolveCollectionWeeklyDigestModel in apps/api/src/lib/text-model.ts).
+// see resolveCollectionWeeklyDigestModel in apps/api/src/lib/ai/text-model.ts).
 import { MODEL as DIGEST_MODEL } from "@releases/ai-internal/release-content";
 import type { TextModel, TextModelUsage } from "@releases/ai-internal/text-model";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";

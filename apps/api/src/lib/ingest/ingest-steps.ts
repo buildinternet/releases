@@ -38,15 +38,15 @@ import {
   isValidKind,
 } from "@buildinternet/releases-core/kinds";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
-import { embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
-import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
-import { invalidateLatestCache, type InvalidationEnv } from "./latest-cache.js";
-import { resolveSummarizeModel, type TextModelEnv } from "./text-model.js";
-import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "./d1-limits.js";
-import { logUsage } from "./usage-log.js";
+import { embedReleasesForSource, type FetchOneEnv } from "../../cron/poll-fetch.js";
+import { buildFetchOneEnv } from "../../workflows/_fetch-env.js";
+import { invalidateLatestCache, type InvalidationEnv } from "../latest-cache.js";
+import { resolveSummarizeModel, type TextModelEnv } from "../ai/text-model.js";
+import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "../d1-limits.js";
+import { logUsage } from "../ai/usage-log.js";
 // Type-only — erased at compile, so no runtime import cycle with the workflow
 // module that imports the values below from here.
-import type { PollAndFetchWorkflowEnv } from "../workflows/poll-and-fetch.js";
+import type { PollAndFetchWorkflowEnv } from "../../workflows/poll-and-fetch.js";
 
 /**
  * Retry policies. Embed is the critical failure mode the poll workflow exists to

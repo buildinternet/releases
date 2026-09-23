@@ -1,5 +1,5 @@
 import type { DescribeRouteOptions } from "hono-openapi";
-import { ERROR_ENVELOPE_SCHEMA } from "./openapi-error.js";
+import { ERROR_ENVELOPE_SCHEMA } from "../openapi-error.js";
 
 const RETENTION_DESCRIPTION =
   "Optional idempotency key. Reuse the same key only for an identical request; successful responses are replayable for 24 hours.";
