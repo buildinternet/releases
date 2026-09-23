@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.31.1
+
+### Patch Changes
+
+- 3c77106: `etDayKey` and the other Eastern-Time helpers in `dates` build their `Intl.DateTimeFormat` instances on first use instead of at import. Output is unchanged; importing the module no longer loads ICU time-zone data.
+
 ## 0.31.0
 
 ### Minor Changes

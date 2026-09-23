@@ -1,5 +1,16 @@
 # @buildinternet/releases-api-types
 
+## 0.55.0
+
+### Minor Changes
+
+- 6a5353f: Digest detail sections carry an optional `releases` array (the section's cited releases, resolved server-side), and the detail schema also describes the new `GET /v1/collections/:slug/digests/latest` route.
+
+### Patch Changes
+
+- Updated dependencies [3c77106]
+  - @buildinternet/releases-core@0.31.1
+
 ## 0.54.0
 
 ### Minor Changes
