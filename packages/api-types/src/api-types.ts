@@ -1270,6 +1270,46 @@ export interface TestUserWebhookResponse {
   eventId: string;
 }
 
+// ── Workspace webhooks ──
+
+/** Workspace member role (Better Auth `member.role`, not `user.role`). */
+export type WorkspaceMemberRole = "owner" | "admin" | "member";
+
+/**
+ * A workspace-owned webhook subscription row (no signing secret). Workspace
+ * webhooks are org-scoped only; there is no workspace follows scope.
+ */
+export interface WorkspaceWebhookSubscription extends Omit<
+  UserWebhookSubscription,
+  "userId" | "scope"
+> {
+  workspaceId: string;
+  scope: "org";
+}
+
+/** List item returned by GET /v1/workspaces/:workspaceId/webhooks. */
+export interface WorkspaceWebhookListItem extends Omit<UserWebhookListItem, "scope"> {
+  workspaceId: string;
+  scope: "org";
+}
+
+/** GET /v1/workspaces/:workspaceId/webhooks response. */
+export interface WorkspaceWebhookListResponse {
+  subscriptions: WorkspaceWebhookListItem[];
+  /** The caller's role in the workspace. */
+  role: WorkspaceMemberRole;
+  /** True for owners and admins: create, edit, rotate, and delete. Members can view and test. */
+  canManage: boolean;
+}
+
+/** POST /v1/workspaces/:workspaceId/webhooks response — signing key shown once (omitted for slack/discord). */
+export interface CreateWorkspaceWebhookResponse
+  extends WorkspaceWebhookSubscription, UserWebhookDeliveryHealth {
+  orgSlug: string | null;
+  orgName: string | null;
+  signingKey?: string;
+}
+
 /** One Analytics Engine delivery-attempt row from GET …/webhooks/:id/deliveries. */
 export interface WebhookDeliveryRow {
   timestamp?: string;
@@ -1391,6 +1431,24 @@ export interface NotificationSettingsResponse {
 export interface DeveloperSettingsResponse {
   webhooks: UserWebhookListItem[];
   apiKeys: UserApiKey[] | null;
+}
+
+/** GET /v1/me/workspaces — one row per workspace the caller belongs to. */
+export interface MeWorkspace {
+  /** Better Auth organization id. */
+  id: string;
+  name: string;
+  slug: string;
+  logo: string | null;
+  /** Workspace membership role (`member.role`, not `user.role`). */
+  role: WorkspaceMemberRole;
+  /** The caller's active workspace (see docs/architecture/workspaces.md). */
+  active: boolean;
+  createdAt: string;
+}
+
+export interface MeWorkspacesResponse {
+  workspaces: MeWorkspace[];
 }
 
 // ── Search ──

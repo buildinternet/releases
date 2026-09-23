@@ -11,6 +11,13 @@ const {
   rotateWebhookSecret,
   testWebhook,
   listWebhookDeliveries,
+  listWorkspaceWebhooks,
+  createWorkspaceWebhook,
+  updateWorkspaceWebhook,
+  deleteWorkspaceWebhook,
+  rotateWorkspaceWebhookSecret,
+  testWorkspaceWebhook,
+  listWorkspaceWebhookDeliveries,
 } = await import("./webhooks.js");
 
 type Call = { url: string; init?: RequestInit };
@@ -95,5 +102,69 @@ describe("webhooks client", () => {
     const rows = await listWebhookDeliveries("whk_8", { limit: 10 });
     expect(rows?.[0]?.event_id).toBe("evt_1");
     expect(calls[0]!.url).toContain("limit=10");
+  });
+});
+
+describe("workspace webhooks client (#2324)", () => {
+  const WORKSPACE_ID = "ws_abc123";
+
+  it("lists against the workspace base path, with credentials", async () => {
+    mockFetch({ subscriptions: [], role: "owner", canManage: true });
+    const res = await listWorkspaceWebhooks(WORKSPACE_ID);
+    expect(res.role).toBe("owner");
+    expect(res.canManage).toBe(true);
+    expect(calls[0]!.url).toBe(`https://api.test/v1/workspaces/${WORKSPACE_ID}/webhooks`);
+    expect(calls[0]!.init?.credentials).toBe("include");
+  });
+
+  it("creates org-scoped via POST to the workspace path", async () => {
+    mockFetch({ id: "whk_ws1", workspaceId: WORKSPACE_ID, scope: "org", signingKey: "abc" });
+    const created = await createWorkspaceWebhook(WORKSPACE_ID, {
+      url: "https://ex.com/h",
+      orgSlug: "vercel",
+    });
+    expect(created.signingKey).toBe("abc");
+    expect(calls[0]!.url).toBe(`https://api.test/v1/workspaces/${WORKSPACE_ID}/webhooks`);
+    expect(calls[0]!.init?.method).toBe("POST");
+    expect(JSON.parse(calls[0]!.init?.body as string)).toEqual({
+      url: "https://ex.com/h",
+      orgSlug: "vercel",
+    });
+  });
+
+  it("patches via PATCH to the workspace path", async () => {
+    mockFetch({ id: "whk_ws2", enabled: false });
+    await updateWorkspaceWebhook(WORKSPACE_ID, "whk_ws2", { enabled: false });
+    expect(calls[0]!.url).toBe(`https://api.test/v1/workspaces/${WORKSPACE_ID}/webhooks/whk_ws2`);
+    expect(calls[0]!.init?.method).toBe("PATCH");
+  });
+
+  it("deletes via DELETE to the workspace path", async () => {
+    mockFetch(null, true, 204);
+    await deleteWorkspaceWebhook(WORKSPACE_ID, "whk_ws3");
+    expect(calls[0]!.url).toBe(`https://api.test/v1/workspaces/${WORKSPACE_ID}/webhooks/whk_ws3`);
+    expect(calls[0]!.init?.method).toBe("DELETE");
+  });
+
+  it("rotates the signing key via the workspace path", async () => {
+    mockFetch({ signingKey: "newkey", secretVersion: 2 });
+    const out = await rotateWorkspaceWebhookSecret(WORKSPACE_ID, "whk_ws4");
+    expect(out.signingKey).toBe("newkey");
+    expect(calls[0]!.url).toContain(
+      `/v1/workspaces/${WORKSPACE_ID}/webhooks/whk_ws4/rotate-secret`,
+    );
+  });
+
+  it("sends a test via the workspace path", async () => {
+    mockFetch({ enqueued: true, eventId: "evt_ws1" });
+    const out = await testWorkspaceWebhook(WORKSPACE_ID, "whk_ws5");
+    expect(out.eventId).toBe("evt_ws1");
+    expect(calls[0]!.url).toContain(`/v1/workspaces/${WORKSPACE_ID}/webhooks/whk_ws5/test`);
+  });
+
+  it("lists deliveries and maps 501 to null on the workspace path", async () => {
+    mockFetch({ error: "deliveries_unavailable" }, false, 501);
+    expect(await listWorkspaceWebhookDeliveries(WORKSPACE_ID, "whk_ws6")).toBeNull();
+    expect(calls[0]!.url).toContain(`/v1/workspaces/${WORKSPACE_ID}/webhooks/whk_ws6/deliveries`);
   });
 });

@@ -4,7 +4,7 @@
  * workspace membership role (owner/admin/member), NOT the Better Auth `user.role` that
  * drives the OAuth scope ceiling. See docs/architecture/workspaces.md.
  */
-export type WorkspaceRole = "owner" | "admin" | "member";
+import type { WorkspaceMemberRole } from "@buildinternet/releases-api-types";
 
 const MANAGER_ROLES = new Set<string>(["owner", "admin"]);
 
@@ -17,7 +17,7 @@ export function isManager(role: string | null | undefined): boolean {
  * The role a member/admin would be toggled to in the one-click role switch. Owners are
  * not toggled in v1 (no ownership transfer) → null; unknown roles → null.
  */
-export function roleToggleTarget(role: string): WorkspaceRole | null {
+export function roleToggleTarget(role: string): WorkspaceMemberRole | null {
   if (role === "member") return "admin";
   if (role === "admin") return "member";
   return null;

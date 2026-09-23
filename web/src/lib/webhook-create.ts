@@ -46,6 +46,15 @@ export function orgWebhookCreatePath(orgSlug: string): string {
 }
 
 /**
+ * Signed-in deep-link into the workspace webhooks page (#2324), prefilled for
+ * one org. Workspace webhooks are org-scoped only, so there's no `scope` param.
+ */
+export function orgWorkspaceWebhookCreatePath(orgSlug: string): string {
+  const qs = new URLSearchParams({ org: orgSlug });
+  return `/account/workspace-webhooks?${qs.toString()}#add-webhook`;
+}
+
+/**
  * Sign-in redirect that preserves org prefill. Hash is omitted — fragments
  * do not survive the server-side post-auth redirect.
  */
