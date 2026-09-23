@@ -7,6 +7,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { sql } from "drizzle-orm";
 import {
+  collections,
+  collectionMembers,
   domainAliases,
   organizations,
   orgAccounts,
@@ -19,6 +21,8 @@ import { createTestDb, type TestDatabase } from "../../../tests/db-helper";
 import type { D1Db } from "../src/db";
 import {
   getCatalogEntry,
+  getCollection,
+  getCollectionReleases,
   getLatestReleases,
   getOrganization,
   getRelease,
@@ -70,6 +74,7 @@ beforeAll(async () => {
   await tdb.db.insert(organizations).values([
     { id: "org_live", name: "Live Co", slug: "live", domain: "live.example.com" },
     { id: "org_hidden", name: "Hidden Co", slug: "hidden", isHidden: true },
+    { id: "org_stub", name: "Stub Co", slug: "stub", discovery: "on_demand" },
     {
       id: "org_gone",
       name: "Gone Co",
@@ -94,6 +99,7 @@ beforeAll(async () => {
       orgId: "org_live",
       deletedAt: DELETED_AT,
     },
+    { id: "prod_stub", name: "Stub App", slug: "stub-app", orgId: "org_stub" },
   ]);
 
   await tdb.db
@@ -107,6 +113,7 @@ beforeAll(async () => {
       src("src_under_dead_product", "org_live", { productId: "prod_dead" }),
       src("src_hidden_org", "org_hidden"),
       src("src_gone_org", "org_gone"),
+      src("src_stub_product", "org_stub", { productId: "prod_stub" }),
     ]);
 
   await tdb.db
@@ -119,10 +126,22 @@ beforeAll(async () => {
       rel("rel_hidden_org", "src_hidden_org"),
       rel("rel_gone_org", "src_gone_org"),
       rel("rel_standalone", "src_standalone"),
+      rel("rel_stub_product", "src_stub_product"),
     ]);
   await tdb.db
     .insert(releaseCoverage)
     .values({ coverageId: "rel_coverage", canonicalId: "rel_canonical", decidedBy: "test" });
+
+  // One collection holding a member of every visibility class.
+  await tdb.db.insert(collections).values({ id: "col_mix", slug: "mix", name: "Mix" });
+  await tdb.db.insert(collectionMembers).values([
+    { collectionId: "col_mix", orgId: "org_live" },
+    { collectionId: "col_mix", orgId: "org_gone" },
+    { collectionId: "col_mix", orgId: "org_stub" },
+    { collectionId: "col_mix", productId: "prod_live" },
+    { collectionId: "col_mix", productId: "prod_dead" },
+    { collectionId: "col_mix", productId: "prod_stub" },
+  ]);
 
   // A release whose source row is gone (FK off to plant the orphan).
   tdb.db.run(sql`PRAGMA foreign_keys = OFF`);
@@ -273,5 +292,26 @@ describe("D6: catalog and product detail omit deleted and hidden children", () =
     expect(out).toContain("Source live");
     expect(out).not.toContain("Source live-hidden");
     expect(out).not.toContain("Source live-dead");
+  });
+});
+
+describe("D7: collection members and releases match GET /v1/collections/:slug", () => {
+  it("get_collection lists members through organizations_public and products_active", async () => {
+    const out = textOf(await getCollection(db, { slug: "mix" }));
+    expect(out).toContain("Members (2 members)");
+    expect(out).toContain("**Live Co** (live)");
+    expect(out).toContain("**Live App** (product · Live Co / app)");
+    expect(out).not.toContain("Gone Co");
+    expect(out).not.toContain("Stub");
+    expect(out).not.toContain("Dead App");
+  });
+
+  it("get_collection_releases drops a product whose parent org is on_demand", async () => {
+    const res = await getCollectionReleases(db, { slug: "mix", limit: 50 }, WEB);
+    const ids = (res.structuredContent as { releases: { id: string }[] }).releases.map((r) => r.id);
+    expect(ids).toContain("rel_live");
+    expect(ids).toContain("rel_standalone");
+    expect(ids).not.toContain("rel_stub_product");
+    expect(ids).not.toContain("rel_gone_org");
   });
 });

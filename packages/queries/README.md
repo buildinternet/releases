@@ -22,12 +22,13 @@ Imported as `@releases/queries/<subpath>`.
 | `orgs`          | Org lookup by any identifier (skips deleted, keeps hidden) and the org directory page.        |
 | `releases`      | Release detail (`releases_visible` + visible source) and the cross-source latest feed.        |
 | `catalog`       | Product source lists and catalog listings (active products, visible sources).                 |
+| `collections`   | Collection row, visible member lists and IDs, member counts, and the two search paths.        |
 
 ## Consumers
 
 - `apps/api`: re-exported from `src/utils.ts`, `src/queries/shared.ts`,
-  `src/queries/search.ts`, and `src/lib/pagination.ts`, so older import paths
-  still work.
+  `src/queries/search.ts`, `src/queries/collections.ts`, and
+  `src/lib/pagination.ts`, so older import paths still work.
 - `apps/mcp` (carved out of the root workspaces): resolved through `tsconfig`
   `paths` (`@releases/queries/*` → `../../packages/queries/src/*`) and the root
   `node_modules` symlink at bundle time.

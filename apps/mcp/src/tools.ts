@@ -82,6 +82,15 @@ import {
   listCatalogStandaloneSources,
   listProductSources,
 } from "@releases/queries/catalog";
+import {
+  countCollections,
+  findCollectionBySlug,
+  findCollectionsByMemberOrgs,
+  getCollectionFullMembers,
+  listCollectionMemberIds,
+  listCollectionsWhere,
+  searchCollectionsDirect,
+} from "@releases/queries/collections";
 import type { D1Db } from "./db.js";
 import {
   buildCursorMeta,
@@ -1904,37 +1913,8 @@ export async function search(
   // hand), and direct vector match (hybrid/semantic only). Final assembly
   // uses `mergeCollectionHits` from api-types so the MCP surface and
   // `/v1/search` stay in lockstep.
-  type DirectRow = {
-    slug: string;
-    name: string;
-    description: string | null;
-    memberCount: number;
-  };
-  const memberCountSubquery = sql<number>`(
-    SELECT COUNT(*) FROM collection_members cm
-    INNER JOIN organizations_public op ON op.id = cm.org_id
-    WHERE cm.collection_id = c.id
-  )`;
   const collectionsDirectP: Promise<SearchCollectionHit[]> = wanted.has("collections")
-    ? (async () => {
-        const rows = await db.all<DirectRow>(sql`
-          SELECT c.slug, c.name, c.description,
-                 ${memberCountSubquery} as memberCount
-          FROM collections c
-          WHERE ${likeContains(sql`c.name`, q)}
-             OR ${likeContains(sql`c.slug`, q)}
-             OR ${likeContains(sql`c.description`, q)}
-          ORDER BY c.name
-          LIMIT ${limit}
-        `);
-        return rows.map((r) => ({
-          slug: r.slug,
-          name: r.name,
-          description: r.description,
-          memberCount: Number(r.memberCount),
-          via: "direct" as const,
-        }));
-      })()
+    ? searchCollectionsDirect(db, q, limit)
     : Promise.resolve([]);
 
   // Vector match shares ENTITIES_INDEX with orgs/products/sources; filtered
@@ -2053,49 +2033,13 @@ export async function search(
   // per matched org), and clipping there would drop valid collections and
   // truncate `matchedOrgSlugs` lists. Dedupe by collection slug first, then
   // apply `limit` to the deduped set.
-  let memberRollups: SearchCollectionHit[] = [];
-  if (wanted.has("collections") && matchedOrgs.length > 0) {
-    type RawRow = {
-      slug: string;
-      name: string;
-      description: string | null;
-      memberCount: number;
-      matchedOrgSlug: string;
-    };
-    const orgSlugList = matchedOrgs.map((o) => o.slug);
-    const memberRows = await db.all<RawRow>(sql`
-      SELECT c.slug, c.name, c.description,
-             (SELECT COUNT(*) FROM collection_members cm2
-              INNER JOIN organizations_public op2 ON op2.id = cm2.org_id
-              WHERE cm2.collection_id = c.id) as memberCount,
-             op.slug as matchedOrgSlug
-      FROM collections c
-      INNER JOIN collection_members cm ON cm.collection_id = c.id
-      INNER JOIN organizations_public op ON op.id = cm.org_id
-      WHERE op.slug IN (${sql.join(
-        orgSlugList.map((s) => sql`${s}`),
-        sql`, `,
-      )})
-      ORDER BY c.name, op.slug
-    `);
-    const byCollection = new Map<string, SearchCollectionHit>();
-    for (const r of memberRows) {
-      const existing = byCollection.get(r.slug);
-      if (existing) {
-        existing.matchedOrgSlugs!.push(r.matchedOrgSlug);
-      } else {
-        byCollection.set(r.slug, {
-          slug: r.slug,
-          name: r.name,
-          description: r.description,
-          memberCount: Number(r.memberCount),
-          via: "member",
-          matchedOrgSlugs: [r.matchedOrgSlug],
-        });
-      }
-    }
-    memberRollups = [...byCollection.values()].slice(0, limit);
-  }
+  const memberRollups: SearchCollectionHit[] = wanted.has("collections")
+    ? await findCollectionsByMemberOrgs(
+        db,
+        matchedOrgs.map((o) => o.slug),
+        limit,
+      )
+    : [];
 
   const collectionsHits = mergeCollectionHits(
     collectionsDirect,
@@ -2237,37 +2181,17 @@ export async function search(
 export async function listCollections(db: D1Db, params: McpPaginationInput): Promise<ToolResult> {
   const pagination = parseMcpPagination(params);
 
-  type Row = {
-    slug: string;
-    name: string;
-    description: string | null;
-    memberCount: number;
-  };
-
   // `totalItems` counts every collection row; per-row `memberCount` only
   // counts visible members (joined through organizationsPublic). The two
   // counts measure different things on purpose — the total is for pagination,
   // the per-row count is for display.
-  const [totalRow, rows] = await Promise.all([
-    db.all<{ n: number }>(sql`SELECT COUNT(*) as n FROM ${collections}`),
-    db.all<Row>(sql`
-      SELECT c.slug, c.name, c.description,
-        (
-          (SELECT COUNT(*) FROM ${collectionMembers} cm
-            INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
-            WHERE cm.collection_id = c.id)
-          +
-          (SELECT COUNT(*) FROM ${collectionMembers} cm
-            INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
-            INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
-            WHERE cm.collection_id = c.id)
-        ) AS memberCount
-      FROM ${collections} c
-      ORDER BY c.name
-      LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
-    `),
+  const [totalItems, rows] = await Promise.all([
+    countCollections(db),
+    listCollectionsWhere(db, undefined, {
+      limit: pagination.pageSize,
+      offset: pagination.offset,
+    }),
   ]);
-  const totalItems = Number(totalRow[0]?.n ?? 0);
   if (totalItems === 0) {
     return emptyListResult({
       message: "No collections yet.",
@@ -2278,7 +2202,7 @@ export async function listCollections(db: D1Db, params: McpPaginationInput): Pro
   const body = rows
     .map((r) => {
       const descLine = r.description ? `\n  ${r.description}` : "";
-      const noun = Number(r.memberCount) === 1 ? "member" : "members";
+      const noun = r.memberCount === 1 ? "member" : "members";
       return `**${r.name}**\n  Slug: ${r.slug} | ${r.memberCount} ${noun}${descLine}`;
     })
     .join("\n\n");
@@ -2294,69 +2218,23 @@ export async function listCollections(db: D1Db, params: McpPaginationInput): Pro
 
 export async function getCollection(db: D1Db, params: { slug: string }): Promise<ToolResult> {
   const slug = params.slug.trim();
-  const [collection] = await db
-    .select({
-      id: collections.id,
-      slug: collections.slug,
-      name: collections.name,
-      description: collections.description,
-    })
-    .from(collections)
-    .where(eq(collections.slug, slug));
+  const collection = await findCollectionBySlug(db, slug);
   if (!collection) return text(`No collection found with slug "${slug}".`);
 
-  // Match the REST endpoint: org members joined through organizationsPublic
-  // and product members through productsActive so hidden / soft-deleted rows
-  // don't leak. Both kinds are interleaved by (position, name) for display.
-  const [orgs, productMembers] = await Promise.all([
-    db
-      .select({
-        position: collectionMembers.position,
-        slug: organizationsPublic.slug,
-        name: organizationsPublic.name,
-        domain: organizationsPublic.domain,
-        description: organizationsPublic.description,
-      })
-      .from(collectionMembers)
-      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-      .where(eq(collectionMembers.collectionId, collection.id))
-      .orderBy(collectionMembers.position, organizationsPublic.name),
-    db
-      .select({
-        position: collectionMembers.position,
-        productSlug: productsActive.slug,
-        productName: productsActive.name,
-        productDescription: productsActive.description,
-        orgSlug: organizationsPublic.slug,
-        orgName: organizationsPublic.name,
-      })
-      .from(collectionMembers)
-      .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-      .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
-      .where(eq(collectionMembers.collectionId, collection.id))
-      .orderBy(collectionMembers.position, productsActive.name),
-  ]);
-
-  type MemberLine = { position: number; sort: string; line: string; sub?: string };
-  const items: MemberLine[] = [];
-  for (const o of orgs) {
-    const tail = o.domain ? ` — ${o.domain}` : "";
-    items.push({
-      position: o.position,
-      sort: o.name,
-      line: `- **${o.name}** (${o.slug})${tail}`,
-      sub: o.description ?? undefined,
-    });
-  }
-  for (const p of productMembers) {
-    items.push({
-      position: p.position,
-      sort: p.productName,
-      line: `- **${p.productName}** (product · ${p.orgName} / ${p.productSlug})`,
-      sub: p.productDescription ?? undefined,
-    });
-  }
-  items.sort((a, b) => a.position - b.position || a.sort.localeCompare(b.sort));
+  // Same member list as `GET /v1/collections/:slug`: orgs through
+  // organizationsPublic, products through productsActive + a visible parent
+  // org, interleaved by (position, name, slug).
+  const members = await getCollectionFullMembers(db, collection.id);
+  const items = members.map((m) => {
+    if (m.kind === "org") {
+      const tail = m.domain ? ` — ${m.domain}` : "";
+      return { line: `- **${m.name}** (${m.slug})${tail}`, sub: m.description ?? undefined };
+    }
+    return {
+      line: `- **${m.name}** (product · ${m.org.name} / ${m.slug})`,
+      sub: m.description ?? undefined,
+    };
+  });
 
   const lines: string[] = [];
   lines.push(`**Collection: ${collection.name}**`);
@@ -2389,27 +2267,13 @@ export async function getCollectionReleases(
   const slug = params.slug.trim();
   const limit = parseFeedLimit(params.limit ?? 20);
 
-  const [collection] = await db
-    .select({ id: collections.id, name: collections.name })
-    .from(collections)
-    .where(eq(collections.slug, slug));
+  const collection = await findCollectionBySlug(db, slug);
   if (!collection) return text(`No collection found with slug "${slug}".`);
 
   // Visible org + product members only (matches the REST surface).
-  const [orgRows, productRows] = await Promise.all([
-    db
-      .select({ orgId: organizationsPublic.id })
-      .from(collectionMembers)
-      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-      .where(eq(collectionMembers.collectionId, collection.id)),
-    db
-      .select({ productId: productsActive.id })
-      .from(collectionMembers)
-      .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-      .where(eq(collectionMembers.collectionId, collection.id)),
-  ]);
-  const orgIds = orgRows.map((m) => m.orgId);
-  const productIds = productRows.map((m) => m.productId);
+  const memberIds = await listCollectionMemberIds(db, collection.id);
+  const orgIds = memberIds.orgs.map((m) => m.orgId);
+  const productIds = memberIds.products.map((m) => m.productId);
 
   if (orgIds.length === 0 && productIds.length === 0) {
     return {

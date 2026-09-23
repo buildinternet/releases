@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./catalog": "./src/catalog.ts",
+    "./collections": "./src/collections.ts",
     "./domain-lookup": "./src/domain-lookup.ts",
     "./entities": "./src/entities.ts",
     "./orgs": "./src/orgs.ts",
@@ -14,6 +15,7 @@
     "./sql-fragments": "./src/sql-fragments.ts"
   },
   "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/lib": "workspace:*",
     "drizzle-orm": "^0.45.2"
