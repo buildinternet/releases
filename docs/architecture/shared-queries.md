@@ -2,7 +2,7 @@
 
 Working doc and migration map for moving the MCP worker's inline reads onto the
 same query functions the API worker uses. Status: slices 1 and 2 landed;
-decisions D1–D7 resolved (MCP visibility now matches the API).
+decisions D1–D8 resolved (MCP visibility now matches the API).
 
 ## Why
 
@@ -73,7 +73,7 @@ filters or shape (API is the reference) · **mcp-only** = no API equivalent ·
 | `get_latest_releases` org → source IDs                                                 | `LatestReleasesFilter.orgId` (`s.org_id = ?`)                             | **done** | Filters `s.org_id` in SQL, like the API.                                                                                                                                                   |
 | `list_organizations`                                                                   | `getOrgsWithStats` + `countOrgsForList`                                   | **done** | `listOrgDirectoryPage` (D4). Broader `query` match and `platform` filter stay MCP-only.                                                                                                    |
 | `get_organization` (accounts, tags, sources, products, aliases, overview, collections) | `GET /v1/orgs/:slug` handler (inline in `routes/orgs.ts`)                 | drift    | Products: MCP uses `products` + `EXISTS sources_visible`, API `products_active` + same EXISTS (deleted products leak on MCP). Org via `findOrgByAnyIdentifier`.                            |
-| `get_organization` / `lookup_domain` stub release locations                            | `loadReleaseLocations` (`lib/well-known/read-locations.ts`)               | drift    | Same filter; MCP orders `canonical DESC, match_key`, API `match_key` only. Easy next slice.                                                                                                |
+| `get_organization` / `lookup_domain` stub release locations                            | `loadReleaseLocations`                                                    | **done** | `listReleaseLocationRows` / `loadReleaseLocations` (D8), one ORDER BY in SQL.                                                                                                              |
 | `get_release`                                                                          | `GET /v1/releases/:id` handler (`routes/sources.ts`)                      | **done** | `findVisibleReleaseDetail`, used by both (D5).                                                                                                                                             |
 | `renderSourceDetail` (org, product, release count, changelog files)                    | `GET /v1/sources/:id`, `/changelog` route                                 | drift    | Org and product name lookups use base tables (deleted parents still named). Changelog file queries match the API.                                                                          |
 | `renderProductDetail` (org, sources, tags)                                             | `GET /v1/products/:id`                                                    | **done** | Source list via `listProductSources`, used by both (D6). Org and tag lookups still inline.                                                                                                 |
@@ -95,9 +95,9 @@ filters or shape (API is the reference) · **mcp-only** = no API equivalent ·
 
 ## Resolved decisions
 
-D1–D7 were places where MCP returned rows the API hides. All seven now match
-the API; `apps/mcp/test/visibility-parity.test.ts` holds a regression test for
-each.
+D1–D7 were places where MCP returned rows the API hides; D8 was an ordering
+difference. All eight now match the API;
+`apps/mcp/test/visibility-parity.test.ts` holds a regression test for each.
 
 - **D1.** `MCP_RESOLVE_OPTS` is gone: soft-deleted sources and products no
   longer resolve by typed ID, `org/slug`, or bare slug.
@@ -119,6 +119,10 @@ each.
   releases, matching `GET /v1/collections/:slug/releases`. Note that
   `organizations_public` keeps hidden orgs, so a hidden org is still a visible
   collection member on both surfaces.
+- **D8.** Stub release locations → `@releases/queries/release-locations`:
+  both workers read `ORDER BY canonical DESC, match_key` in SQL. The API used
+  to sort `match_key` in SQL and hoist canonical rows in JS, so its output is
+  unchanged.
 
 Remaining differences, not yet decided:
 
@@ -136,8 +140,7 @@ Remaining differences, not yet decided:
 
 ## Next slices
 
-1. Release locations: move `loadReleaseLocations`, pick one ORDER BY.
-2. Bare-slug enumerate → `entities`.
-3. One latest-releases query and one cursor format for both workers.
-4. Org directory stats, `get_organization` products, `search` org candidates,
+1. Bare-slug enumerate → `entities`.
+2. One latest-releases query and one cursor format for both workers.
+3. Org directory stats, `get_organization` products, `search` org candidates,
    source detail.

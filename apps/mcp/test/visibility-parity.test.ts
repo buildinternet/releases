@@ -1,6 +1,6 @@
 /**
  * MCP read visibility matches the API (docs/architecture/shared-queries.md,
- * D1–D6). One fixture holds a live row next to a soft-deleted, hidden, or
+ * D1–D8). One fixture holds a live row next to a soft-deleted, hidden, or
  * coverage-side sibling for each case; every test asserts the sibling stays
  * out of MCP output (and, for D2, that a hidden org still resolves).
  */
@@ -13,10 +13,12 @@ import {
   organizations,
   orgAccounts,
   products,
+  releaseLocations,
   releases,
   sources,
 } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage";
+import { loadReleaseLocations } from "@releases/queries/release-locations";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper";
 import type { D1Db } from "../src/db";
 import {
@@ -75,6 +77,7 @@ beforeAll(async () => {
     { id: "org_live", name: "Live Co", slug: "live", domain: "live.example.com" },
     { id: "org_hidden", name: "Hidden Co", slug: "hidden", isHidden: true },
     { id: "org_stub", name: "Stub Co", slug: "stub", discovery: "on_demand" },
+    { id: "org_tier_stub", name: "Tier Stub", slug: "tier-stub", tier: "stub" },
     {
       id: "org_gone",
       name: "Gone Co",
@@ -142,6 +145,26 @@ beforeAll(async () => {
     { collectionId: "col_mix", productId: "prod_dead" },
     { collectionId: "col_mix", productId: "prod_stub" },
   ]);
+
+  // Declared locations on a stub: a canonical row that sorts last by
+  // match_key, and a soft-deleted one.
+  await tdb.db.insert(releaseLocations).values(
+    [
+      ["loc_a", "https://a.example.com", false, null],
+      ["loc_z", "https://z.example.com", true, null],
+      ["loc_gone", "https://gone.example.com", false, DELETED_AT],
+    ].map(([id, url, canonical, deletedAt]) => ({
+      id: id as string,
+      orgId: "org_tier_stub",
+      url: url as string,
+      canonical: canonical as boolean,
+      basis: "declared" as const,
+      matchKey: `url:${url}`,
+      createdAt: PUBLISHED,
+      updatedAt: PUBLISHED,
+      deletedAt: deletedAt as string | null,
+    })),
+  );
 
   // A release whose source row is gone (FK off to plant the orphan).
   tdb.db.run(sql`PRAGMA foreign_keys = OFF`);
@@ -313,5 +336,17 @@ describe("D7: collection members and releases match GET /v1/collections/:slug", 
     expect(ids).toContain("rel_standalone");
     expect(ids).not.toContain("rel_stub_product");
     expect(ids).not.toContain("rel_gone_org");
+  });
+});
+
+describe("D8: stub release locations match the API's order", () => {
+  it("get_organization lists locations in the same order as GET /v1/orgs/:slug", async () => {
+    const out = textOf(await getOrganization(db, { identifier: "tier-stub" }));
+    const apiOrder = (await loadReleaseLocations(db, "org_tier_stub")).map((l) => l.url!);
+    expect(apiOrder).toEqual(["https://z.example.com", "https://a.example.com"]);
+    const mcpOrder = apiOrder.map((u) => out.indexOf(u));
+    expect(mcpOrder.every((i) => i >= 0)).toBe(true);
+    expect(mcpOrder).toEqual([...mcpOrder].sort((a, b) => a - b));
+    expect(out).not.toContain("gone.example.com");
   });
 });

@@ -16,7 +16,6 @@ import {
   products,
   productTags,
   domainAliases,
-  releaseLocations,
   sourceChangelogFiles,
   knowledgePages,
   collections,
@@ -77,6 +76,10 @@ import {
   orgHasVisibleRelease,
 } from "@releases/queries/orgs";
 import { findVisibleReleaseDetail, listLatestReleases } from "@releases/queries/releases";
+import {
+  listReleaseLocationRows,
+  type ReleaseLocationRow,
+} from "@releases/queries/release-locations";
 import {
   listCatalogProducts,
   listCatalogStandaloneSources,
@@ -330,7 +333,7 @@ function formatReleaseTitle(r: { title: string; type: ReleaseType }): string {
 }
 
 /** One declared release location (#1947) rendered for the stub read surface. */
-function formatLocationLine(row: typeof releaseLocations.$inferSelect): string {
+function formatLocationLine(row: ReleaseLocationRow): string {
   const kind = row.feed
     ? "feed"
     : row.github
@@ -1032,11 +1035,7 @@ export async function getOrganization(
     }
   } else if (org.tier === "stub") {
     // A stub has no sources by design — its declared locations are the answer.
-    const locations = await db
-      .select()
-      .from(releaseLocations)
-      .where(and(eq(releaseLocations.orgId, org.id), isNull(releaseLocations.deletedAt)))
-      .orderBy(desc(releaseLocations.canonical), asc(releaseLocations.matchKey));
+    const locations = await listReleaseLocationRows(db, org.id);
     lines.push("");
     if (locations.length > 0) {
       lines.push("Declared release locations (not yet processed):");
@@ -1092,11 +1091,7 @@ export async function lookupDomain(db: D1Db, params: { domain: string }): Promis
     if (orgRow.category) lines.push(`Category: ${orgRow.category}`);
     if (orgRow.description) lines.push(orgRow.description);
     if (orgRow.tier === "stub") {
-      const locations = await db
-        .select()
-        .from(releaseLocations)
-        .where(and(eq(releaseLocations.orgId, orgRow.id), isNull(releaseLocations.deletedAt)))
-        .orderBy(desc(releaseLocations.canonical), asc(releaseLocations.matchKey));
+      const locations = await listReleaseLocationRows(db, orgRow.id);
       lines.push(
         "",
         "Status: stub — not yet processed. Release info is published at these locations:",

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { parseNotice } from "@buildinternet/releases-core/notice";
 import { builder } from "../builder.js";
 import { OrgDiscoveryEnum, OrgStatusEnum } from "./enums.js";
-import { loadReleaseLocations } from "../../lib/well-known/read-locations.js";
+import { loadReleaseLocations } from "@releases/queries/release-locations";
 import { listCollectionsWhere } from "../../queries/collections.js";
 import { collectionFromListItem } from "../collection-parent.js";
 
