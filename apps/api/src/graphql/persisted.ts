@@ -17,11 +17,6 @@
  * cached. The route handler stamps the X-Releases-Graphql-Admin sentinel
  * after stripping any client-supplied copy.
  */
-import {
-  defaultExtractPersistedOperationId,
-  usePersistedOperations,
-  type ExtractPersistedOperationId,
-} from "@graphql-yoga/plugin-persisted-operations";
 import { logEvent } from "@releases/lib/log-event";
 import type { LatestCacheBinding } from "../lib/latest-cache.js";
 // The codegen output ships under apps/web/. The API trusts web's manifest because
@@ -53,6 +48,11 @@ const MANIFEST: Record<string, string> = Object.fromEntries(
     doc,
   ]),
 );
+
+/** The persisted document for a bare sha256 hash, or null when unknown. */
+export function getPersistedOperation(hash: string): string | null {
+  return MANIFEST[hash] ?? null;
+}
 
 // Operation-name → hash lookup, built once at module load. Used by
 // CACHEABLE_HASHES and by purge helpers below — pre-building avoids
@@ -108,7 +108,7 @@ export const GRAPHQL_CACHE_TTL_SECONDS = 300;
 // reuse the type so any future widening (e.g. metadata, list) lands once.
 export type GraphqlCacheBinding = LatestCacheBinding;
 
-function isAdminRequest(req: Request): boolean {
+export function isAdminRequest(req: Request): boolean {
   return req.headers.get(GRAPHQL_ADMIN_HEADER) === "1";
 }
 
@@ -130,26 +130,6 @@ function cacheKeyFor(
   if (!kv || !body.hash || !CACHEABLE_HASHES.has(body.hash)) return null;
   if (isAdminRequest(request)) return null;
   return buildGraphqlCacheKey(body.hash, body.variables);
-}
-
-/**
- * Yoga plugin enforcing persisted operations. Non-admin callers must send a
- * known hash; admin callers (sentinel header set) may send arbitrary
- * documents (GraphiQL playground, ad-hoc debugging).
- */
-export function persistedOperationsPlugin() {
-  // Custom extractor: skip lookup for admin requests sending raw documents,
-  // so they pass through untouched. The plugin's own logic handles the
-  // hash-bearing case for everyone else.
-  const extract: ExtractPersistedOperationId = (params, request, context) => {
-    if (isAdminRequest(request) && typeof params.query === "string") return null;
-    return defaultExtractPersistedOperationId(params, request, context);
-  };
-  return usePersistedOperations({
-    extractPersistedOperationId: extract,
-    allowArbitraryOperations: (request) => isAdminRequest(request),
-    getPersistedOperation: (hash) => MANIFEST[hash] ?? null,
-  });
 }
 
 /**

@@ -1,42 +1,22 @@
-import { createYoga } from "graphql-yoga";
 import { Hono } from "hono";
-import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
-import { createLoaders } from "./loaders.js";
 import {
   CACHEABLE_HASHES,
   GRAPHQL_ADMIN_HEADER,
   lookupCached,
-  persistedOperationsPlugin,
   storeIfCacheable,
 } from "./persisted.js";
-import { hardeningPlugins } from "./plugins.js";
-import { schema } from "./schema.js";
-import type { GraphQLContext } from "./builder.js";
 
-type GraphQLServerContext = { env: Env["Bindings"]; isAdmin: boolean };
-
-// Single Yoga instance per worker isolate. Context factory runs per request,
-// so loaders + db handle are still scoped correctly.
-const yoga = createYoga<GraphQLServerContext>({
-  schema,
-  // Yoga uses this for self-references (GraphiQL fetch URL, error links). The
-  // Hono mount path is the source of truth — change both together.
-  graphqlEndpoint: "/v1/graphql",
-  graphiql: (_req, { env }) => env.ENVIRONMENT !== "production",
-  context: ({ env, isAdmin }): GraphQLContext => {
-    const db = createDb(env.DB);
-    return {
-      db,
-      loaders: createLoaders(db),
-      isAdmin,
-      mediaOrigin: env.MEDIA_ORIGIN ?? "",
-    };
-  },
-  landingPage: false,
-  plugins: [...hardeningPlugins<GraphQLServerContext>(), persistedOperationsPlugin()],
-});
+// The Yoga server (graphql-yoga, the Pothos schema build, the hardening and
+// persisted-operations plugins) is imported on the first /v1/graphql request
+// and memoized for the isolate. Building it at module scope ran on every
+// isolate start and counted against the worker's script-startup CPU limit.
+let yogaModule: Promise<typeof import("./yoga.js")> | undefined;
+function loadYoga(): Promise<typeof import("./yoga.js")> {
+  yogaModule ??= import("./yoga.js");
+  return yogaModule;
+}
 
 export const graphqlRoutes = new Hono<Env>();
 
@@ -57,6 +37,7 @@ graphqlRoutes.all("/graphql", async (c) => {
   // GraphiQL pings (GET, no body) skip cache + body parsing entirely.
   if (c.req.method !== "POST") {
     const passthrough = new Request(c.req.raw, { headers });
+    const { yoga } = await loadYoga();
     return yoga.fetch(passthrough, { env: c.env, isAdmin });
   }
 
@@ -73,6 +54,7 @@ graphqlRoutes.all("/graphql", async (c) => {
   const cached = await lookupCached(c.env.LATEST_CACHE, augmented, parsedBody);
   if (cached) return cached;
 
+  const { yoga } = await loadYoga();
   const response = await yoga.fetch(augmented, { env: c.env, isAdmin });
 
   // Skip the response-body read entirely unless the hash is in the cache
