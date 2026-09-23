@@ -25,7 +25,7 @@ import {
   buildLaneStates,
   clearAiLaneModelCache,
   fetchOpenRouterCatalog,
-} from "../lib/ai-lane-models.js";
+} from "../lib/ai/ai-lane-models.js";
 import { getStoredAiLaneModels, putStoredAiLaneModels } from "../queries/site-settings.js";
 
 export const aiModelRoutes = new Hono<Env>();

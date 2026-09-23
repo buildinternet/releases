@@ -20,8 +20,8 @@ import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate"
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
 import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
-import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/lookup-related-org.js";
-import { readNegCache, writeNegCache } from "../lib/lookup-neg-cache.js";
+import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/search/lookup-related-org.js";
+import { readNegCache, writeNegCache } from "../lib/search/lookup-neg-cache.js";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";

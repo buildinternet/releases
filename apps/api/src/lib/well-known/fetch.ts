@@ -1,5 +1,5 @@
 import { WEB_BOT_AUTH_USER_AGENT } from "@buildinternet/releases-core/web-bot-auth";
-import { isPrivateOrLocalHost } from "../avatar-ingest.js";
+import { isPrivateOrLocalHost } from "../media/avatar-ingest.js";
 
 const TIMEOUT_MS = 5_000;
 const MAX_BYTES = 64 * 1024;

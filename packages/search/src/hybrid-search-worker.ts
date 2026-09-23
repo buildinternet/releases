@@ -1,6 +1,6 @@
 /**
  * Worker-side hybrid search helper. Single source of truth for the API
- * and MCP workers — both `apps/api/src/lib/search-hybrid.ts` and
+ * and MCP workers — both `apps/api/src/lib/search/search-hybrid.ts` and
  * `apps/mcp/src/lib/search-hybrid.ts` are thin re-export adapters
  * that wire in their local `buildEmbedConfig`.
  *

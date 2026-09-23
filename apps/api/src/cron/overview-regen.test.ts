@@ -18,7 +18,7 @@ import { createTestDb } from "../../../../tests/db-helper";
 import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModel } from "ai";
 import { regenerateOverviewChunk } from "./overview-regen";
-import type { ResolvedOverviewModel } from "../lib/text-model";
+import type { ResolvedOverviewModel } from "../lib/ai/text-model";
 import type { OverviewCandidate } from "@releases/core-internal/overview-eligibility";
 
 // ── Fake model ────────────────────────────────────────────────────────────────

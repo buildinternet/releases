@@ -29,7 +29,10 @@ import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { errorResponse } from "../lib/openapi-error.js";
-import { recommendationRegistryUrl, sendRecommendationAdded } from "../lib/recommendation-email.js";
+import {
+  recommendationRegistryUrl,
+  sendRecommendationAdded,
+} from "../lib/email/recommendation-email.js";
 import { validateJson } from "../lib/validate.js";
 import { findSourceForOrgSlug, orgWhere } from "../utils.js";
 

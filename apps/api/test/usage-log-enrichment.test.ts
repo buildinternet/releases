@@ -211,7 +211,7 @@ describe("usage_log — feed enrichment (enrich-extract)", () => {
 
 describe("usage_log — firecrawl extract (firecrawl-extract)", () => {
   it("extractChangelogAllWindows calls logUsageFn with operation=firecrawl-extract per window", async () => {
-    const { extractChangelogAllWindows } = await import("../src/lib/firecrawl-extract.js");
+    const { extractChangelogAllWindows } = await import("../src/lib/ingest/firecrawl-extract.js");
 
     const loggedEntries: Array<{
       operation: string;

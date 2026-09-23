@@ -4,7 +4,7 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { createTestDb, type TestDatabase } from "../../../../tests/db-helper.js";
 import { adminMarketingClassifierRoutes } from "./admin-marketing-classifier.js";
 import { putStoredMarketingThreshold } from "../queries/site-settings.js";
-import { clearMarketingThresholdCache } from "../lib/marketing-classifier-settings.js";
+import { clearMarketingThresholdCache } from "../lib/classification/marketing-classifier-settings.js";
 
 let h: TestDatabase;
 

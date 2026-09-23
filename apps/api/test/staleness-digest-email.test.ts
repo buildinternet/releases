@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   buildStalenessDigestEmail,
   countNeedsAttention,
-} from "../src/lib/staleness-digest-email.js";
+} from "../src/lib/email/staleness-digest-email.js";
 import type { StaleSourceEntry } from "../src/cron/source-staleness.js";
 import type { ProviderHealthEntry } from "../src/cron/provider-health.js";
 

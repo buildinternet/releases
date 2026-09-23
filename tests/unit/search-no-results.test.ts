@@ -10,7 +10,7 @@ import {
   formatNoResultsAlertBody,
   getNoResultsStats,
   parseThresholds,
-} from "../../apps/api/src/lib/search-no-results";
+} from "../../apps/api/src/lib/search/search-no-results";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

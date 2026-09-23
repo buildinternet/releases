@@ -117,7 +117,7 @@ markup ships correct and dormant.
 ## Previewing
 
 `/admin/emails` renders and test-sends every message from
-`EMAIL_SAMPLE_CATALOG` (`apps/api/src/lib/email-samples.ts`). Adding a
+`EMAIL_SAMPLE_CATALOG` (`apps/api/src/lib/email/email-samples.ts`). Adding a
 message means adding a sample there; the catalog is what makes the whole surface
 reviewable in one place.
 

@@ -14,7 +14,7 @@ import { Hono } from "hono";
 import { ReleasesError, ValidationError } from "@releases/lib/releases-error";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
-import { classificationDatasetName } from "../lib/classification-schema.js";
+import { classificationDatasetName } from "../lib/classification/classification-schema.js";
 import {
   SUMMARY_CACHE_KV_TTL_SECONDS,
   fetchClassificationRecent,
@@ -25,7 +25,7 @@ import {
   summaryCacheEntry,
   summaryCacheKey,
   summaryCacheMaterial,
-} from "../lib/classification-query.js";
+} from "../lib/classification/classification-query.js";
 import { respondError } from "../lib/error-response.js";
 
 export const adminClassificationsRoutes = new Hono<Env>();

@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { resolveRelatedOrg } from "../../apps/api/src/lib/lookup-related-org.js";
+import { resolveRelatedOrg } from "../../apps/api/src/lib/search/lookup-related-org.js";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../../apps/api/src/db.js";
 

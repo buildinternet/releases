@@ -15,7 +15,7 @@ import {
   resolveCollectionSummaryModel,
   resolveCollectionWeeklyDigestModel,
   type TextModelEnv,
-} from "../lib/text-model.js";
+} from "../lib/ai/text-model.js";
 import {
   collectionSummaryCatchupDates,
   collectionWeeklyDigestCatchupWeeks,

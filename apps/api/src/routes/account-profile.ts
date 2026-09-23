@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { avatarRejectToError, ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
+import { avatarRejectToError, ingestAvatarFromBuffer } from "../lib/media/avatar-ingest.js";
 import { user } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";

@@ -40,7 +40,7 @@ import {
   buildCollectionWeeklyDigestDetail,
 } from "../queries/collection-summaries.js";
 import { githubHandleSubquery } from "../queries/shared.js";
-import { parseSourceTypesLenient } from "../lib/source-types.js";
+import { parseSourceTypesLenient } from "../lib/sources/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";

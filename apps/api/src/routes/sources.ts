@@ -110,8 +110,8 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { authMiddleware, isValidBearerAuth } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
-import { processMediaForR2 } from "../lib/media-ingest.js";
-import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
+import { processMediaForR2 } from "../lib/media/media-ingest.js";
+import { saveRawSnapshot, type RawFormat } from "../lib/ingest/raw-snapshot.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { fetchOne, renderCheckOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched, isUrlDenied } from "@releases/adapters/feed.js";
@@ -148,20 +148,20 @@ import {
   buildGenerateContentDeps,
   GENERATE_CONTENT_MAX_LIMIT,
 } from "./workflows.js";
-import { ingestReleaseBatch, runBatchIngestEffects } from "../lib/release-batch-ingest.js";
+import { ingestReleaseBatch, runBatchIngestEffects } from "../lib/ingest/release-batch-ingest.js";
 import { logEvent } from "@releases/lib/log-event";
 import { withDoRetry } from "@releases/lib/do-retry";
-import { ensureSourceActorScheduled } from "../lib/source-actor-schedule.js";
+import { ensureSourceActorScheduled } from "../lib/sources/source-actor-schedule.js";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
-import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
-import { getActiveSessionRaw } from "../lib/active-fetch-session.js";
-import { materializeVideoSource } from "../lib/video-materialize.js";
+import { materializeAppStoreSource } from "../lib/sources/appstore-materialize.js";
+import { getActiveSessionRaw } from "../lib/sources/active-fetch-session.js";
+import { materializeVideoSource } from "../lib/sources/video-materialize.js";
 import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
-import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
+import { selectExistingReleaseKeys } from "../lib/ingest/title-dedup.js";
 import { respondError } from "../lib/error-response.js";
 import {
   ConflictError,

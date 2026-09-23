@@ -1,0 +1,5 @@
+-- Marker migration: no DDL.
+-- apps/api/src/db/schema-integrations.ts changed only in a code comment (the
+-- path to the OAuth token crypto helper moved to lib/integrations/ in the
+-- apps/api lib reorganization). The CI schema-pairing gate requires a migration
+-- for any schema-file edit; this file satisfies it without changing the schema.

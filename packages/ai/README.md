@@ -1,5 +1,7 @@
 # @releases/ai-internal
 
+**Scope:** AI helpers for the ingest and content pipelines — source evaluation, extraction, classification, and content generation. Worker-safe; the caller always supplies the Anthropic client. Fetch/adapter logic lives in `adapters`; generic Anthropic client construction and pricing live in `lib`.
+
 AI helpers for the Releases ingest and content pipelines — source evaluation, extraction, classification, and content generation. Worker-safe; the caller supplies the Anthropic client.
 
 ## Exports

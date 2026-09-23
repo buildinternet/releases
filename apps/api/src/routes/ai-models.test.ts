@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { createTestDb, type TestDatabase } from "../../../../tests/db-helper.js";
 import { aiModelRoutes } from "./ai-models.js";
 import { putStoredAiLaneModels } from "../queries/site-settings.js";
-import { clearAiLaneModelCache } from "../lib/ai-lane-models.js";
+import { clearAiLaneModelCache } from "../lib/ai/ai-lane-models.js";
 
 let h: TestDatabase;
 const originalFetch = globalThis.fetch;

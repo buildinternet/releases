@@ -21,7 +21,7 @@ import { organizations, sources, releases, fetchLog } from "@buildinternet/relea
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { MappedEntry } from "@releases/adapters/extract";
 import { httpPersister, type ScrapePersister } from "@releases/adapters/scrape-persister";
-import { d1ScrapePersister, type D1PersisterEnv } from "../src/lib/d1-scrape-persister.js";
+import { d1ScrapePersister, type D1PersisterEnv } from "../src/lib/ingest/d1-scrape-persister.js";
 import type { D1Db } from "../src/db.js";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { fetchLogRoutes } from "../src/routes/fetch-log.js";

@@ -1,5 +1,7 @@
 # @releases/lib
 
+**Scope:** small, cross-app platform helpers with proven duplication only — not a general dumping ground for anything without an obvious home. It has drifted into a grab bag of AI/Anthropic helpers, runtime/platform helpers, and auth helpers; that drift is debt, not a model to extend. Domain logic — Anthropic client wiring beyond a bare constructor, OAuth/auth verification, search/entity matching, source-edit inference — belongs in a domain package (`ai`, `adapters`, `search`, …) or stays in the app that owns it. Before adding something here, check whether it is a true cross-runtime platform primitive (logging dispatch, feature flags, secrets resolution, error classification) rather than domain logic that should live closer to its domain.
+
 Slim private utilities shared by the workers and scripts in this monorepo.
 
 ## Exports

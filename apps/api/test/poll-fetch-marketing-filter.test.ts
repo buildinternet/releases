@@ -28,9 +28,9 @@ import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
-import { clearAiLaneModelCache } from "../src/lib/ai-lane-models.js";
+import { clearAiLaneModelCache } from "../src/lib/ai/ai-lane-models.js";
 import { marketingDecisionResponse } from "../../../tests/marketing-decision-fixture";
-import type { ClassificationDataPoint } from "../src/lib/classification-schema.js";
+import type { ClassificationDataPoint } from "../src/lib/classification/classification-schema.js";
 
 // ── feed-adapter stub ───────────────────────────────────────────────────────
 //

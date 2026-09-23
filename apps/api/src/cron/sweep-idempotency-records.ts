@@ -10,7 +10,7 @@ import { idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
-import { sweepExpiredIdempotency } from "../lib/idempotency-store.js";
+import { sweepExpiredIdempotency } from "../lib/idempotency/idempotency-store.js";
 
 export const CRON_NAME = "sweep-idempotency-records";
 export const SWEEP_LIMIT = 500;

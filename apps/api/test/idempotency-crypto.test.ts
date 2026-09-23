@@ -3,7 +3,7 @@ import {
   decryptIdempotencyBody,
   encryptIdempotencyBody,
   type ResponseBinding,
-} from "../src/lib/idempotency-crypto";
+} from "../src/lib/idempotency/idempotency-crypto";
 
 const RAW_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const OTHER_RAW_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";

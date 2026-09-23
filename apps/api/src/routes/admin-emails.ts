@@ -4,7 +4,11 @@
  */
 import { Hono } from "hono";
 import { logEvent } from "@releases/lib/log-event";
-import { EMAIL_SAMPLE_CATALOG, isEmailSampleId, sendEmailSample } from "../lib/email-samples.js";
+import {
+  EMAIL_SAMPLE_CATALOG,
+  isEmailSampleId,
+  sendEmailSample,
+} from "../lib/email/email-samples.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError } from "@releases/lib/releases-error";

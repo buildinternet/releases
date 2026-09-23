@@ -1,5 +1,7 @@
 # @releases/core-internal
 
+**Scope:** DB-coupled and worker-only helpers shared across this monorepo's workers, for things the thin OSS CLI doesn't need. Pure runtime-neutral helpers that the CLI does need belong in `core` instead; wire types belong in `api-types`.
+
 DB-coupled and worker-only helpers shared across the monorepo's workers — the counterpart to the published `@buildinternet/releases-core` for things the thin OSS CLI doesn't need.
 
 ## Exports

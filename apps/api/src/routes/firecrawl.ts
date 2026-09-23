@@ -15,10 +15,10 @@ import { validateJson } from "../lib/validate.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { hideInProduction } from "../openapi.js";
 import { errorResponse } from "../lib/openapi-error.js";
-import { syncFirecrawlMonitor } from "../lib/firecrawl-sync.js";
+import { syncFirecrawlMonitor } from "../lib/ingest/firecrawl-sync.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
-import { ensureSourceActorScheduled } from "../lib/source-actor-schedule.js";
+import { ensureSourceActorScheduled } from "../lib/sources/source-actor-schedule.js";
 import {
   NotFoundError,
   UnauthorizedError,

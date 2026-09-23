@@ -5,7 +5,7 @@ import {
   MODEL,
   buildArticleInput,
 } from "@releases/ai-internal/article-extract";
-import { buildEnrichBatchRequests } from "../../apps/api/src/lib/enrich-apply.js";
+import { buildEnrichBatchRequests } from "../../apps/api/src/lib/ingest/enrich-apply.js";
 
 describe("buildEnrichBatchRequests", () => {
   it("builds one extractArticle request per item, keyed by releaseId", () => {

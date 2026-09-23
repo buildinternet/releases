@@ -8,7 +8,7 @@ import {
 import { resolveAppStoreByBundleId } from "@releases/adapters/appstore";
 import { logEvent } from "@releases/lib/log-event";
 import { fetchReleasesJson } from "./fetch.js";
-import { materializeAppStoreSource } from "../appstore-materialize.js";
+import { materializeAppStoreSource } from "../sources/appstore-materialize.js";
 import type { createDb } from "../../db.js";
 
 type Db = ReturnType<typeof createDb>;

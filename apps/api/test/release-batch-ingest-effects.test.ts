@@ -19,7 +19,7 @@ import {
   type BatchEffectsEnv,
   type BatchEmbedRow,
   type BatchIngestResult,
-} from "../src/lib/release-batch-ingest.js";
+} from "../src/lib/ingest/release-batch-ingest.js";
 import type { D1Db } from "../src/db.js";
 import { createTestDb, type TestDb } from "./setup";
 

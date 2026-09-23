@@ -37,7 +37,7 @@ import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { queryUnmanagedActiveSources } from "./queries/unmanaged-source-actors.js";
-import { seedSourceActors } from "./lib/source-actor-schedule.js";
+import { seedSourceActors } from "./lib/sources/source-actor-schedule.js";
 import { buildFetchOneEnv } from "./workflows/_fetch-env.js";
 import { createDb } from "./db.js";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
@@ -55,7 +55,7 @@ import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
 import { handleQueueBatch } from "./queues/handler.js";
 import { runCollectionSummaries } from "./cron/collection-summaries.js";
-import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/send-alert.js";
+import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/email/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -115,7 +115,7 @@ export type Env = {
      * stored verbatim. NOTE: deliberately a different binding NAME from the R2
      * bucket `MEDIA` above (`env.MEDIA` is the bucket; this is the transformer).
      */
-    MEDIA_TRANSFORM?: import("./lib/media-ingest.js").MediaTransformBinding;
+    MEDIA_TRANSFORM?: import("./lib/media/media-ingest.js").MediaTransformBinding;
     /** GIF→MP4 ingest-transcode kill switch (#1368); default off. */
     MEDIA_GIF_TRANSCODE_ENABLED?: string;
     /** Raw page snapshots for durable backfill (#1281); pointer in source_raw_snapshots. */
@@ -158,7 +158,7 @@ export type Env = {
     MEDIA_BACKFILL_WORKFLOW?: Workflow;
     /**
      * Deterministic scrape/agent update runs (#1946): one instance per drain /
-     * manual update batch, dispatched via `lib/update-dispatch.ts` from
+     * manual update batch, dispatched via `lib/sources/update-dispatch.ts` from
      * OrgActor, POST /v1/workflows/update, and the poll-fetch crawl-feed
      * delegation. Replaced the discovery worker's `/update` session path.
      */
@@ -257,7 +257,7 @@ export type Env = {
     };
     // Max feedback notification emails per rolling hour (default 20). Caps the
     // inbox-bomb amplification of the open endpoint; overflow rows are still
-    // stored. See lib/feedback-email.ts.
+    // stored. See lib/email/feedback-email.ts.
     FEEDBACK_NOTIFY_MAX_PER_HOUR?: string;
     // Optional KV namespace caching single-query embeddings on the search
     // path (see packages/search/src/embedding-cache.ts). Absent → every cold search
@@ -270,7 +270,7 @@ export type Env = {
     // src/lib/latest-cache.ts invalidateLatestCache). Ships "false"; flipped
     // to "true" after a parity-logging week.
     INVALIDATION_ENABLED?: string;
-    // Email notifications (see src/lib/email.ts). SEND_EMAIL is the Cloudflare
+    // Email notifications (see src/lib/email/email.ts). SEND_EMAIL is the Cloudflare
     // Email Routing send binding; absent → email notifications no-op.
     SEND_EMAIL?: { send(message: unknown): Promise<void> };
     EMAIL_NOTIFY_ENABLED?: string;
@@ -288,7 +288,7 @@ export type Env = {
     ADMIN_BASE_URL?: string;
     // Optional KV namespace for Tier-1 alert dedup (1h TTL per subject).
     // Reuses an existing KV binding — no new resource needed.
-    // See src/lib/send-alert.ts.
+    // See src/lib/email/send-alert.ts.
     ALERT_DEDUP_KV?: KVNamespace;
     // Staging-only kill switch — see middleware/indexing.ts.
     INDEXING_DISABLED?: string;
@@ -305,7 +305,7 @@ export type Env = {
     MOBILE_DISCOVERY_MAX_PER_RUN?: string;
     MOBILE_DISCOVERY_MAX_APPS_PER_ORG?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
-    // `search_queries`. Default off → logging on. See apps/api/src/lib/log-search.ts.
+    // `search_queries`. Default off → logging on. See apps/api/src/lib/search/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
     // Retention window for `search_queries` rows. Rows older than this many days
     // are deleted by the nightly 05:00 UTC sweep. Default 90.

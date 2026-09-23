@@ -35,7 +35,7 @@ import {
   resolveCollectionSummaryModel,
   resolveCollectionWeeklyDigestModel,
   type TextModelEnv,
-} from "../lib/text-model.js";
+} from "../lib/ai/text-model.js";
 
 export interface CollectionSummariesEnv extends TextModelEnv, WebRevalidateEnv {
   DB: D1Database;

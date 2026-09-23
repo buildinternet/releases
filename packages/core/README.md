@@ -1,5 +1,7 @@
 # @buildinternet/releases-core
 
+**Scope:** pure, runtime-neutral helpers shared by this monorepo and the OSS CLI — schema, categories, dates, slicing, IDs/slugs, tokens, CLI contracts. Nothing DB-coupled beyond schema definitions and nothing worker-only lives here — that goes in `core-internal`.
+
 Pure helpers shared by the Releases registry and the [Releases CLI](https://github.com/buildinternet/releases-cli) — schema, categories, slicing, IDs, slugs, tokens, CLI contracts.
 
 ## Exports

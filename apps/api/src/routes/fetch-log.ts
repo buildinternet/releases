@@ -4,13 +4,13 @@ import { createDb } from "../db.js";
 import { fetchLog, sources } from "@buildinternet/releases-core/schema";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { getStatusHub, sourceMatchByIdOrSlug } from "../utils.js";
-import { getActiveFetchSession } from "../lib/active-fetch-session.js";
+import { getActiveFetchSession } from "../lib/sources/active-fetch-session.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, ReleasesError, InternalError } from "@releases/lib/releases-error";
-import { ingestFetchLog } from "../lib/fetch-log-ingest.js";
+import { ingestFetchLog } from "../lib/ingest/fetch-log-ingest.js";
 
-export { shouldBackoffScrapeFailure, failureBackoffHours } from "../lib/fetch-log-ingest.js";
+export { shouldBackoffScrapeFailure, failureBackoffHours } from "../lib/ingest/fetch-log-ingest.js";
 
 export const fetchLogRoutes = new Hono<Env>();
 

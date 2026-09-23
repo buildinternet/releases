@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
-import { materializeVideoSource } from "../src/lib/video-materialize.js";
+import { materializeVideoSource } from "../src/lib/sources/video-materialize.js";
 
 const FIXTURE = readFileSync(
   join(import.meta.dir, "../../../packages/adapters/test/fixtures/youtube-playlist.xml"),
