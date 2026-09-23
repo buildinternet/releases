@@ -2,17 +2,17 @@ import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
 import type { Kind } from "@buildinternet/releases-core/kinds";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
+import { resolvePageWindow, type PageWindow } from "@releases/queries/pagination";
 
 export interface McpPaginationInput {
   page?: number;
   limit?: number;
 }
 
-export interface McpPagination {
-  page: number;
-  pageSize: number;
-  offset: number;
-}
+// Page window shape + clamp math are shared with the REST list routes
+// (`@releases/queries/pagination`); this module keeps the MCP-only rendering
+// (markdown footer, `_meta` payloads, cursor token, search meta).
+export type McpPagination = PageWindow;
 
 // Mirrors `Pagination` from `@buildinternet/releases-core/cli-contracts` with
 // `totalItems` / `totalPages` required (we always pass a backend total in) and
@@ -38,22 +38,10 @@ export function parseMcpPagination(
   input: McpPaginationInput,
   opts: { defaultPageSize?: number; maxPageSize?: number } = {},
 ): McpPagination {
-  const maxPageSize = opts.maxPageSize ?? MAX_LIMIT;
-  const defaultPageSize = Math.min(opts.defaultPageSize ?? DEFAULT_LIMIT, maxPageSize);
-
-  const rawLimit = input.limit;
-  const pageSize =
-    typeof rawLimit === "number" && Number.isFinite(rawLimit) && rawLimit > 0
-      ? Math.min(Math.floor(rawLimit), maxPageSize)
-      : defaultPageSize;
-
-  const rawPage = input.page;
-  const page =
-    typeof rawPage === "number" && Number.isFinite(rawPage) && rawPage > 0
-      ? Math.floor(rawPage)
-      : 1;
-
-  return { page, pageSize, offset: (page - 1) * pageSize };
+  return resolvePageWindow(input, {
+    defaultPageSize: opts.defaultPageSize ?? DEFAULT_LIMIT,
+    maxPageSize: opts.maxPageSize ?? MAX_LIMIT,
+  });
 }
 
 // Returns the markdown footer line(s) when the caller might want to keep
@@ -85,9 +73,7 @@ export function renderPageFooter(opts: {
   return `Page ${pagination.page} of ${totalPages} · Showing ${returned} of ${totalItems} ${noun}.${nextHint}`;
 }
 
-export function slicePage<T>(items: T[], pagination: McpPagination): T[] {
-  return items.slice(pagination.offset, pagination.offset + pagination.pageSize);
-}
+export { slicePage } from "@releases/queries/pagination";
 
 // Build the `_meta.pagination` payload for a list_* tool result. Always
 // populates `totalPages` (caller passes a real total) and adds `nextPage`

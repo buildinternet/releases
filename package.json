@@ -118,6 +118,7 @@
     "@releases/ai-internal": "workspace:*",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
+    "@releases/queries": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@releases/search": "workspace:*",
     "ai": "^7.0.103",

@@ -65,6 +65,14 @@ import {
   buildFeedCursor,
   getCollectionReleasesFeed,
 } from "@releases/core-internal/collection-feed";
+import {
+  findProductById,
+  findProductForOrgSlug,
+  findSourceById,
+  findSourceForOrgSlug,
+} from "@releases/queries/entities";
+import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
+import { githubHandleSubquery } from "@releases/queries/sql-fragments";
 import type { D1Db } from "./db.js";
 import {
   buildCursorMeta,
@@ -527,29 +535,26 @@ function toAmbiguousCandidates(
     .toSorted((a, b) => `${a.orgSlug}/${a.slug}`.localeCompare(`${b.orgSlug}/${b.slug}`));
 }
 
+/**
+ * MCP entity resolution keeps soft-deleted rows resolvable (the pre-shared-layer
+ * behavior). The API excludes them. Flip to the API default once decided —
+ * docs/architecture/shared-queries.md (D1).
+ */
+const MCP_RESOLVE_OPTS = { includeDeleted: true } as const;
+
 export async function resolveSource(db: D1Db, identifier: string) {
   const id = identifier.trim();
+  // Typed-ID and `org/slug` branches share the API's resolvers
+  // (`@releases/queries/entities`). `includeDeleted: true` preserves this
+  // tool's historical behavior of resolving tombstoned rows — an open
+  // decision, see docs/architecture/shared-queries.md (D1).
   if (getEntityType(id) === "source") {
-    const rows = await db.select().from(sources).where(eq(sources.id, id)).limit(1);
-    return rows.length > 0 ? rows[0] : null;
+    return findSourceById(db, id, MCP_RESOLVE_OPTS);
   }
 
   // org/slug coordinate form (e.g. "vercel/next-js")
   const coord = parseOrgSlugCoordinate(id);
-  if (coord) {
-    const org = await db
-      .select({ id: organizations.id })
-      .from(organizations)
-      .where(eq(organizations.slug, coord.orgSlug))
-      .limit(1);
-    if (org.length === 0) return null;
-    const rows = await db
-      .select()
-      .from(sources)
-      .where(and(eq(sources.slug, coord.slug), eq(sources.orgId, org[0].id)))
-      .limit(1);
-    return rows.length > 0 ? rows[0] : null;
-  }
+  if (coord) return findSourceForOrgSlug(db, coord.orgSlug, coord.slug, MCP_RESOLVE_OPTS);
 
   // Bare slug fallback. Source slugs are unique per-org but NOT globally
   // (#690), so enumerate every org's match instead of `.limit(1)`-ing onto an
@@ -572,26 +577,12 @@ export async function resolveSource(db: D1Db, identifier: string) {
 export async function resolveProduct(db: D1Db, identifier: string) {
   const id = identifier.trim();
   if (getEntityType(id) === "product") {
-    const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
-    return rows.length > 0 ? rows[0] : null;
+    return findProductById(db, id, MCP_RESOLVE_OPTS);
   }
 
   // org/slug coordinate form (e.g. "vercel/nextjs")
   const coord = parseOrgSlugCoordinate(id);
-  if (coord) {
-    const org = await db
-      .select({ id: organizations.id })
-      .from(organizations)
-      .where(eq(organizations.slug, coord.orgSlug))
-      .limit(1);
-    if (org.length === 0) return null;
-    const rows = await db
-      .select()
-      .from(products)
-      .where(and(eq(products.slug, coord.slug), eq(products.orgId, org[0].id)))
-      .limit(1);
-    return rows.length > 0 ? rows[0] : null;
-  }
+  if (coord) return findProductForOrgSlug(db, coord.orgSlug, coord.slug, MCP_RESOLVE_OPTS);
 
   // Bare slug fallback — see resolveSource for the per-org ambiguity rationale
   // (#1324). 0 → null, 1 → resolve, >1 → throw with prod_… candidates.
@@ -849,11 +840,7 @@ export async function getLatestReleases(
       orgName: organizations.name,
       orgSlug: organizations.slug,
       orgAvatarUrl: organizations.avatarUrl,
-      orgGithubHandle: sql<string | null>`(
-        SELECT handle FROM org_accounts
-          WHERE org_id = ${organizations.id} AND platform = 'github'
-          ORDER BY created_at, id LIMIT 1
-      )`,
+      orgGithubHandle: githubHandleSubquery(sql`${organizations.id}`),
       productName: products.name,
       productSlug: products.slug,
       url: releasesTable.url,
@@ -1280,39 +1267,10 @@ export async function lookupDomain(db: D1Db, params: { domain: string }): Promis
     );
   }
 
-  const [orgRow] = await db
-    .select({
-      id: organizationsActive.id,
-      slug: organizationsActive.slug,
-      name: organizationsActive.name,
-      domain: organizationsActive.domain,
-      description: organizationsActive.description,
-      category: organizationsActive.category,
-      tier: organizationsActive.tier,
-      matchedVia: sql<
-        "primary" | "alias"
-      >`CASE WHEN ${organizationsActive.domain} = ${domain} THEN 'primary' ELSE 'alias' END`,
-    })
-    .from(organizationsActive)
-    .leftJoin(domainAliases, eq(domainAliases.orgId, organizationsActive.id))
-    .where(or(eq(organizationsActive.domain, domain), eq(domainAliases.domain, domain)))
-    .orderBy(asc(organizationsActive.createdAt), asc(organizationsActive.id))
-    .limit(1);
-
-  const productRows = await db
-    .select({
-      id: productsActive.id,
-      slug: productsActive.slug,
-      name: productsActive.name,
-      orgSlug: organizationsActive.slug,
-      orgName: organizationsActive.name,
-      category: productsActive.category,
-    })
-    .from(productsActive)
-    .innerJoin(domainAliases, eq(domainAliases.productId, productsActive.id))
-    .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
-    .where(eq(domainAliases.domain, domain))
-    .orderBy(asc(productsActive.name), asc(productsActive.id));
+  const [orgRow, productRows] = await Promise.all([
+    findOrgByDomain(db, domain),
+    findProductsByDomain(db, domain),
+  ]);
 
   if (!orgRow && productRows.length === 0) {
     return text(`No org or product owns the domain \`${domain}\` in this registry.`);
@@ -1415,11 +1373,7 @@ export async function getRelease(
       orgName: organizations.name,
       orgSlug: organizations.slug,
       orgAvatarUrl: organizations.avatarUrl,
-      orgGithubHandle: sql<string | null>`(
-        SELECT handle FROM org_accounts
-          WHERE org_id = ${organizations.id} AND platform = 'github'
-          ORDER BY created_at, id LIMIT 1
-      )`,
+      orgGithubHandle: githubHandleSubquery(sql`${organizations.id}`),
       productName: products.name,
       productSlug: products.slug,
     })

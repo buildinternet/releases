@@ -1,7 +1,5 @@
-import { asc, eq, inArray, or, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
-  domainAliases,
-  organizationsActive,
   organizationsPublic,
   collections,
   collectionMembers,
@@ -10,6 +8,9 @@ import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
+// Domain → org resolution lives in the shared read layer (packages/queries) so
+// MCP `lookup_domain` runs the same query. Re-exported for existing importers.
+export { findOrgByDomain, type OrgByDomainRow } from "@releases/queries/domain-lookup";
 // Lexical FTS lives in @releases/search so MCP and API share one MATCH site.
 // Re-export the row type + helper for existing route/test import paths.
 export {
@@ -342,17 +343,6 @@ export async function searchReleasesFromMatchedEntities(
  * Row shape returned by `findOrgByDomain`. `matchedVia` distinguishes a hit
  * on `organizations.domain` from a hit via `domain_aliases`.
  */
-export interface OrgByDomainRow {
-  id: string;
-  slug: string;
-  name: string;
-  domain: string | null;
-  description: string | null;
-  category: string | null;
-  avatarUrl: string | null;
-  tier: "stub" | "tracked";
-  matchedVia: "primary" | "alias";
-}
 
 // ── Collection search helpers ─────────────────────────────────────────
 //
@@ -535,33 +525,4 @@ export async function attachCollectionPreviews(
     const previewMembers = previewBySlug.get(h.slug);
     return previewMembers && previewMembers.length > 0 ? { ...h, previewMembers } : h;
   });
-}
-
-/**
- * Resolve a (pre-normalized) domain to its owning org. Single LEFT JOIN
- * against `domain_aliases` handles both primary and alias matches in one
- * round-trip; both columns are uniquely indexed so a single hit is
- * dispositive. Returns `null` when no row matches.
- */
-export async function findOrgByDomain(db: D1Db, domain: string): Promise<OrgByDomainRow | null> {
-  const [row] = await db
-    .select({
-      id: organizationsActive.id,
-      slug: organizationsActive.slug,
-      name: organizationsActive.name,
-      domain: organizationsActive.domain,
-      description: organizationsActive.description,
-      category: organizationsActive.category,
-      avatarUrl: organizationsActive.avatarUrl,
-      tier: organizationsActive.tier,
-      matchedVia: sql<
-        "primary" | "alias"
-      >`CASE WHEN ${organizationsActive.domain} = ${domain} THEN 'primary' ELSE 'alias' END`,
-    })
-    .from(organizationsActive)
-    .leftJoin(domainAliases, eq(domainAliases.orgId, organizationsActive.id))
-    .where(or(eq(organizationsActive.domain, domain), eq(domainAliases.domain, domain)))
-    .orderBy(asc(organizationsActive.createdAt), asc(organizationsActive.id))
-    .limit(1);
-  return row ?? null;
 }

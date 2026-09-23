@@ -3,32 +3,30 @@ import {
   computePagination,
   type ListResponse,
 } from "@buildinternet/releases-core/cli-contracts";
+import { resolvePageWindow, type PageWindow } from "@releases/queries/pagination";
 
-export interface ListPaginationParams {
-  page: number;
-  pageSize: number;
-  offset: number;
-}
+export type ListPaginationParams = PageWindow;
 
+/**
+ * Parse `?page` / `?limit` into a page window. The clamp math is shared with
+ * the MCP `list_*` tools via `@releases/queries/pagination`.
+ */
 export function parseListPagination(
   params: URLSearchParams,
   opts: { defaultPageSize?: number; maxPageSize?: number } = {},
 ): ListPaginationParams {
-  const maxPageSize = opts.maxPageSize ?? DEFAULT_PAGE_SIZE;
-  const defaultPageSize = Math.min(opts.defaultPageSize ?? DEFAULT_PAGE_SIZE, maxPageSize);
-
-  const rawLimit = parseInt(params.get("limit") ?? String(defaultPageSize), 10);
-  const pageSize =
-    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, maxPageSize) : defaultPageSize;
-
-  const rawPage = parseInt(params.get("page") ?? "1", 10);
-  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
-
-  return {
-    page,
-    pageSize,
-    offset: (page - 1) * pageSize,
-  };
+  const limit = params.get("limit");
+  const page = params.get("page");
+  return resolvePageWindow(
+    {
+      limit: limit === null ? undefined : parseInt(limit, 10),
+      page: page === null ? undefined : parseInt(page, 10),
+    },
+    {
+      defaultPageSize: opts.defaultPageSize ?? DEFAULT_PAGE_SIZE,
+      maxPageSize: opts.maxPageSize ?? DEFAULT_PAGE_SIZE,
+    },
+  );
 }
 
 export function buildListResponse<T>(
@@ -47,9 +45,7 @@ export function buildListResponse<T>(
   };
 }
 
-export function slicePage<T>(items: T[], pagination: ListPaginationParams): T[] {
-  return items.slice(pagination.offset, pagination.offset + pagination.pageSize);
-}
+export { slicePage } from "@releases/queries/pagination";
 
 /**
  * Wrap a bare `?limit`-bounded result set in the canonical `ListResponse<T>`

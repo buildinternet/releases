@@ -1,0 +1,18 @@
+{
+  "name": "@releases/queries",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./domain-lookup": "./src/domain-lookup.ts",
+    "./entities": "./src/entities.ts",
+    "./pagination": "./src/pagination.ts",
+    "./sql-fragments": "./src/sql-fragments.ts"
+  },
+  "dependencies": {
+    "@buildinternet/releases-core": "workspace:*",
+    "@releases/lib": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  }
+}
