@@ -131,16 +131,13 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # apps/discovery, apps/mcp, and apps/webhooks are excluded
+      # apps/mcp and apps/webhooks are excluded
       # from the root workspace and carry their own bun.lock — the root
       # install above doesn't populate their node_modules, so per-worker
       # tsc + deploy both need a local install. These steps also catch
       # stale per-worker lockfiles at PR time (previously a separate set
       # of steps at the end of this job; folded in so we don't install
       # twice).
-      - name: Install apps/discovery deps
-        working-directory: apps/discovery
-        run: bun install --frozen-lockfile
       - name: Install apps/mcp deps
         working-directory: apps/mcp
         run: bun install --frozen-lockfile
@@ -226,13 +223,6 @@ jobs:
         # route is missing describeRoute(...) and isn't on the script's
         # ALLOWLIST. Sub-second pure-JS check; no network, D1, or Wrangler.
         run: bun scripts/check-openapi-coverage.ts
-
-      - name: Verify managed-agent YAML is up to date
-        # Re-renders the committed managed-agents/*.agent.yaml from the prompt
-        # builders, AGENT_TOOLS, and skill IDs, and fails if any file drifted.
-        # Pure codegen — no network or API calls. Regenerate locally with:
-        #   bun scripts/render-managed-agents.ts
-        run: bun scripts/render-managed-agents.ts --check
 
       - name: Run tests
         run: bun run test

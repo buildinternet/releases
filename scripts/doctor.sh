@@ -129,7 +129,7 @@ else
     "cp apps/api/.dev.vars.example apps/api/.dev.vars  (or: bun run bootstrap)"
 fi
 
-for w in mcp discovery webhooks; do
+for w in mcp webhooks; do
   if [ -f "$ROOT/apps/$w/.dev.vars" ]; then
     pass "apps/$w/.dev.vars present"
   else

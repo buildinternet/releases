@@ -2,8 +2,8 @@
 
 Everything here is Apache-2.0 and runnable locally for contribution. The
 canonical [releases.sh](https://releases.sh) deployment pins Cloudflare resource
-IDs, custom domains, Anthropic managed-agent resources, and observability sinks
-in `apps/{api,mcp,discovery,webhooks}/wrangler.jsonc`.
+IDs, custom domains, and observability sinks
+in `apps/{api,mcp,webhooks}/wrangler.jsonc`.
 
 This doc is what a **fork or self-hoster** must replace. It inventories account-scoped bindings; it does not parameterize them. For local setup, see [CONTRIBUTING.md](../../CONTRIBUTING.md). Staging mirrors prod with different IDs — [AGENTS.md → Staging](../../AGENTS.md#staging).
 
@@ -19,14 +19,14 @@ Most contributors never need this inventory; self-hosters do.
 
 ## What works locally
 
-| Surface                                                   | Without prod bindings | Degrades to                                      |
-| --------------------------------------------------------- | --------------------- | ------------------------------------------------ |
-| Tests, `check`, `dev:api` + local D1                      | Yes                   | Full contributor path; FTS search; cron off      |
-| `dev:web` / `dev:mcp`                                     | Yes                   | UI + MCP against your laptop                     |
-| Semantic search                                           | Partial               | FTS when Vectorize or `VOYAGE_API_KEY` is absent |
-| Managed agents, email, Firecrawl, webhooks worker, Stripe | No                    | Needs the bindings below                         |
+| Surface                                   | Without prod bindings | Degrades to                                      |
+| ----------------------------------------- | --------------------- | ------------------------------------------------ |
+| Tests, `check`, `dev:api` + local D1      | Yes                   | Full contributor path; FTS search; cron off      |
+| `dev:web` / `dev:mcp`                     | Yes                   | UI + MCP against your laptop                     |
+| Semantic search                           | Partial               | FTS when Vectorize or `VOYAGE_API_KEY` is absent |
+| Email, Firecrawl, webhooks worker, Stripe | No                    | Needs the bindings below                         |
 
-**Rule of thumb:** third-party control planes (Anthropic agents, Firecrawl, Stripe, Axiom) and outbound email are infrastructure-bound. D1 reads/writes through the API worker are reproducible once you provision your own D1 + workers.
+**Rule of thumb:** third-party control planes (Firecrawl, Stripe, Axiom) and outbound email are infrastructure-bound. D1 reads/writes through the API worker are reproducible once you provision your own D1 + workers.
 
 ## Replacement checklist
 
@@ -40,9 +40,7 @@ Most contributors never need this inventory; self-hosters do.
    the value in a vars or environment file. See [idempotency.md](idempotency.md).
 4. Run `./scripts/create-vectorize-indexes.sh`, then `bun run db:migrate:remote`,
    then `bun run deploy`.
-5. Deploy managed agents with `bun run deploy:agents` if you are using the
-   hosted discovery flow.
-6. Point Vercel or your web host at the new API, then re-register OAuth, MCP,
+5. Point Vercel or your web host at the new API, then re-register OAuth, MCP,
    and inbound webhooks for your domains.
 
 ## Full binding inventory
@@ -54,13 +52,13 @@ Replace these values in a fork.
 
 | Resource                             | Prod identifier                                                         | Workers                                                          |
 | ------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| D1 `released-db`                     | `73be1562-d900-4e25-a62b-650ab74488b7`                                  | api, mcp, discovery, webhooks                                    |
-| D1 staging                           | `68d44939-feab-4fcb-8f4f-19778ca1dee8`                                  | api-staging, mcp-staging, discovery-staging                      |
+| D1 `released-db`                     | `73be1562-d900-4e25-a62b-650ab74488b7`                                  | api, mcp, webhooks                                               |
+| D1 staging                           | `68d44939-feab-4fcb-8f4f-19778ca1dee8`                                  | api-staging, mcp-staging                                         |
 | Secrets Store                        | `store_id` `a887a71cab084105b79706df23380723`                           | all bound secrets                                                |
-| Flagship prod                        | `2cf02390-e39a-477a-91c1-571d07b987ef`                                  | api, mcp, discovery                                              |
-| Flagship staging                     | `548a95f1-4f8c-402d-8aa2-1b861523d377`                                  | api-staging, mcp-staging, discovery-staging                      |
+| Flagship prod                        | `2cf02390-e39a-477a-91c1-571d07b987ef`                                  | api, mcp                                                         |
+| Flagship staging                     | `548a95f1-4f8c-402d-8aa2-1b861523d377`                                  | api-staging, mcp-staging                                         |
 | KV `EMBED_CACHE`                     | `93b87ae5e253445cabbaaa7a71264915`                                      | api, mcp                                                         |
-| KV `LATEST_CACHE` / `ALERT_DEDUP_KV` | `178c70f9abd940478d5b5a053bf123bb`                                      | api, discovery                                                   |
+| KV `LATEST_CACHE` / `ALERT_DEDUP_KV` | `178c70f9abd940478d5b5a053bf123bb`                                      | api                                                              |
 | KV `CREDENTIAL_CACHE`                | `bae0fa6a594448d483176fe90a9a0479`                                      | api                                                              |
 | KV `AUTH_RATE_LIMIT_KV`              | `1d1c229b6a71483ab9517bf316e4a7b4`                                      | api                                                              |
 | R2 `released-media` / `released-raw` | bucket names                                                            | api                                                              |
@@ -69,7 +67,7 @@ Replace these values in a fork.
 | Analytics Engine                     | dataset `webhook_deliveries`                                            | webhooks                                                         |
 | Rate limiters                        | `namespace_id` integers (api **100x**, mcp **200x**, webhooks **300x**) | see wrangler `unsafe.bindings`                                   |
 | Custom domains                       | `api` / `mcp` / `webhooks.releases.sh` (+ `*-staging` hosts)            | routes in wrangler                                               |
-| Service bindings                     | `releases-api`, `releases-discovery` worker names                       | api, mcp, discovery                                              |
+| Service bindings                     | `releases-api` worker name (mcp binds it; api self-binds it)            | api, mcp                                                         |
 | Axiom sinks                          | `axiom-logs`, `axiom-traces`                                            | all workers (observability block)                                |
 
 Unbound optional bindings fail open: no `MEDIA` R2 → third-party media URLs stored verbatim; no Vectorize → FTS; no rate-limit binding → limiter no-ops.
@@ -82,32 +80,13 @@ Values live in the dashboard, never in git. Forks provision their own store and 
 
 Workspace uploads.sh connect reuses `IDEMPOTENCY_ENCRYPTION_KEY` (already bound). Public client id `releases-sh` is hardcoded — no new secret and no dashboard client-id var. See [uploads-oauth.md](uploads-oauth.md).
 
-Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api + discovery; unset → direct Anthropic. Local dev: `apps/{api,mcp,discovery,webhooks}/.dev.vars.example`.
+Classic worker secret (not in Secrets Store): `ANTHROPIC_BASE_URL` — account-scoped AI Gateway URL on api; unset → direct Anthropic. Local dev: `apps/{api,mcp,webhooks}/.dev.vars.example`.
 
 ### URL vars and email
 
-Must match your hostnames: `API_BASE_URL`, `BETTER_AUTH_URL`, `WEB_BASE_URL`, `MEDIA_ORIGIN`, `OAUTH_JWT_{ISSUER,AUDIENCE}`, `OAUTH_RESOURCE_AUDIENCES`, `RELEASES_API_URL` (discovery).
+Must match your hostnames: `API_BASE_URL`, `BETTER_AUTH_URL`, `WEB_BASE_URL`, `MEDIA_ORIGIN`, `OAUTH_JWT_{ISSUER,AUDIENCE}`, `OAUTH_RESOURCE_AUDIENCES`.
 
 Operator alerts: `EMAIL_NOTIFY_TO` (`admin@releases.sh`), `EMAIL_FROM`, `AUTH_EMAIL_FROM`, `DIGEST_EMAIL_FROM` — sender domains must be verified in Cloudflare Email Routing/Sending.
-
-### Anthropic managed agents (prod)
-
-Provisioned via `bun run deploy:agents` / `scripts/sync-agent-skills.ts`. IDs in `apps/discovery/wrangler.jsonc`:
-
-| Var                              | Value                               |
-| -------------------------------- | ----------------------------------- |
-| `ANTHROPIC_AGENT_ID`             | `agent_011CZtWpasPtsYjF3aysf2ZH`    |
-| `ANTHROPIC_COORDINATOR_AGENT_ID` | `agent_011Can9iMPcPuLy3oEgjGCs6`    |
-| `ANTHROPIC_ENVIRONMENT_ID`       | `env_01Tq7S8F2FK1KBz68NMje2RU`      |
-| `ANTHROPIC_VAULT_ID`             | `vlt_011CZvFkwFPgCkGqRqP87AKB`      |
-| `MEMORY_STORE_ERRATA_ID`         | `memstore_012MKStcUM7QxW9qPCLQtwwt` |
-| `MEMORY_STORE_TOOL_NOTES_ID`     | `memstore_01Jc5WAiqp4fwSJUmjR2excj` |
-
-Staging uses a separate agent/env/vault/memstore set in `[env.staging]`. API worker binds `MEMORY_STORE_ERRATA_ID` only.
-
-### Container image retention (retired)
-
-The discovery worker no longer declares a Cloudflare container. Its `Sandbox` container backed the original Agent SDK discovery path, which #386 replaced with Managed Agents sessions; the binding lingered unused until #2317 removed it, along with `apps/discovery/Dockerfile`, the content-hash image pin (#2261), and the registry prune script (#2260). The `Sandbox` Durable Object class is deleted via a `deleted_classes` migration in both environments (prod `v5`, staging `v3`), so a fork or self-host of the discovery worker needs no container registry, Docker, or container-app quota.
 
 ### Outside wrangler
 

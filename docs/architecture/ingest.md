@@ -67,7 +67,7 @@ Capped at `FEED_ENRICH_MAX_PER_FIRE` (default 10) per source per fire; fail-open
 
 Operator backfill of already-stored thin rows: `POST /v1/workflows/enrich-feed-content { sourceId|sourceSlug, limit?, dryRun? }` (admin-gated, dry-run by default) — nulls `summary` / `titleGenerated` / `titleShort` / `embeddedAt` and re-runs `generateContentForReleases`.
 
-Render escalation needs `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` bound on the API worker (reused from the discovery worker's Secrets Store); absent them, enrichment degrades to the cheap path. Spec: `docs/superpowers/specs/2026-05-21-feed-content-enrichment-design.md`.
+Render escalation needs `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` bound on the API worker's Secrets Store; absent them, enrichment degrades to the cheap path. Spec: `docs/superpowers/specs/2026-05-21-feed-content-enrichment-design.md`.
 
 ## GitHub Action ingest
 

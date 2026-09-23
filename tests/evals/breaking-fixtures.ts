@@ -19,7 +19,7 @@ export interface BreakingFixture {
 
 /** Absolute path to the grading rubric (shared with the prompt's intent). */
 export function breakingRubricPath(): string {
-  return join(import.meta.dir, "..", "..", "packages", "agent-shared", "rubrics", "breaking.md");
+  return join(import.meta.dir, "rubrics", "breaking.md");
 }
 
 const base = { orgSlug: "acme", productName: null, url: null } as const;

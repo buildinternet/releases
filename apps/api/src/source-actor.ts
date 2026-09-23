@@ -55,11 +55,11 @@ const SOURCE_ID_KEY = "sourceId";
 
 /**
  * Per-source MA-delegation lock (#1780 Box 1 / #1814). Replaces the KV
- * `ma:active:src:{id}` lock: the mutex that stops two managed-agent sessions
- * running for the same source at once now lives in this DO's storage instead of
- * the shared `LATEST_CACHE` KV namespace. The discovery worker (cross-script
- * `SOURCE_ACTOR` binding) checks/acquires around minting a session and releases
- * in its completion `finally`, exactly where the KV lock used to sit.
+ * `ma:active:src:{id}` lock: the mutex that stops two update runs for the same
+ * source at once now lives in this DO's storage instead of the shared
+ * `LATEST_CACHE` KV namespace. `startDeterministicUpdate` checks/acquires
+ * around minting a run and the workflow releases in its completion `finally`,
+ * exactly where the KV lock used to sit.
  */
 const SCRAPE_LOCK_KEY = "scrapeLock";
 
@@ -179,7 +179,7 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
    * `sessionId` with a fresh 15-min deadline and returns `{ acquired: true }`
    * ONLY when the source was free. When a live lease is already held it does NOT
    * overwrite — it returns `{ acquired: false, sessionId: <current owner> }` so
-   * the discovery worker rejects the delegation *before* minting a duplicate
+   * the dispatcher rejects the delegation *before* minting a duplicate
    * session. A lease past its `expiresAt` is treated as free and reclaimed (the
    * lazy-expiry backstop for a session that died before releasing).
    */
@@ -216,8 +216,8 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
    * MA-delegation lock — conditional release. Clears the lease only when
    * `sessionId` still owns it, so a session whose lease already expired and was
    * re-claimed by a newer owner can't delete the newer lease (the DO-atomic
-   * version of the KV "read owner, delete iff mine" release in
-   * `managed-agents-session.ts`). No-op when the lease is absent or foreign.
+   * version of the KV "read owner, delete iff mine" release the update workflow
+   * used to do). No-op when the lease is absent or foreign.
    */
   async releaseScrapeLock(sourceId: string, sessionId: string): Promise<void> {
     const lock = await this.ctx.storage.get<ScrapeLock>(SCRAPE_LOCK_KEY);

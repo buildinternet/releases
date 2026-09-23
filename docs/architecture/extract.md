@@ -111,7 +111,7 @@ Structured stderr logs (`@buildinternet/releases-lib/logger`) emit one `info` li
 `EXTRACT_TOOLLOOP_ENABLED=false` by default, so flipping the branch on main is a no-op until the flag is set in a worker env. Two knobs for progressive rollout:
 
 - **Per-source override** — set `source.metadata.extractStrategy = "toolloop"` to force the tool-loop tier for a specific source regardless of the env flag. Useful for eval/debug against known large bodies (PostHog, Turborepo, vercel-cli) before flipping the global default.
-- **Global default** — set `EXTRACT_TOOLLOOP_ENABLED=true` in `apps/discovery/wrangler.jsonc` to enable for all sources whose body exceeds 50K tokens.
+- **Global default** — set `EXTRACT_TOOLLOOP_ENABLED=true` in `apps/api/wrangler.jsonc` to enable for all sources whose body exceeds 50K tokens.
 
 The AI Gateway dashboard surfaces cost/token deltas per call; SQL rollups on `usage_log` answer "what fraction of calls fell back" and "median `tool_rounds` for bodies > 100K".
 

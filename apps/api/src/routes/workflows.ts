@@ -874,28 +874,6 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
   });
 });
 
-// ── Discovery triggers ────────────────────────────────────────────────────────
-//
-// Kick off onboard / update sessions on the discovery worker. Session reads go
-// through `/v1/sessions/:id` — no separate status endpoint here.
-
-async function proxyToDiscovery(c: Context<Env>, path: string, body: string): Promise<Response> {
-  if (!c.env.DISCOVERY_WORKER) {
-    return respondError(c, new ServiceUnavailableError("Discovery worker not configured"));
-  }
-  // Service bindings require a full URL; the host is ignored.
-  return c.env.DISCOVERY_WORKER.fetch(
-    new Request(`https://discovery${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: c.req.header("Authorization") ?? "",
-      },
-      body,
-    }),
-  );
-}
-
 // ── POST /workflows/cluster-changesets ───────────────────────────────────────
 // Backfill changesets-cascade coverage links for releases that pre-date the
 // ingest-time clusterer or arrived split across batches. Scoped by source or
@@ -1302,14 +1280,10 @@ workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) =>
   }
 });
 
-workflowsRoutes.post("/workflows/discover", async (c) => {
-  const body = await c.req.text();
-  const res = await proxyToDiscovery(c, "/onboard", body);
-  return new Response(res.body, { status: res.status, headers: res.headers });
-});
-
-// Deterministic update runs no longer proxy to discovery (#1946): dispatch is
-// the shared `startDeterministicUpdate` gate (kill switch → spend cap →
+// ── Update triggers ───────────────────────────────────────────────────────────
+//
+// Session reads go through `/v1/sessions/:id` — no separate status endpoint
+// here. Dispatch is the shared `startDeterministicUpdate` gate (kill switch → spend cap →
 // per-source lock) and execution is the DETERMINISTIC_UPDATE workflow in this
 // worker. The wire contract is unchanged: 202 {sessionId, status: "running",
 // sourceIdentifiers}, 400 validation, 409 + Retry-After on lock contention,

@@ -7,7 +7,6 @@ Optional Cloudflare AI Gateway proxy in front of every direct Anthropic SDK call
 Covered when `ANTHROPIC_BASE_URL` is set:
 
 - `apps/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
-- `apps/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
 - `scripts/generate-release-content.ts` — operational backfill / regenerate tool (#1474)
 - `scripts/smoke-toolloop.ts` — one-off tool-loop smoke test (#1474)
@@ -15,8 +14,6 @@ Covered when `ANTHROPIC_BASE_URL` is set:
 Not covered (by design):
 
 - **Voyage embeddings.** Gateway's supported-provider list excludes Voyage; embedding calls go direct. Behavior unchanged.
-- **Managed-agent internal loop.** Tool use, skill loading, and sub-agent fanout run inside Anthropic's managed-agents environment on their infra. We only proxy non-streaming SDK calls we originate. Per-tool-call attribution stays in the Anthropic console.
-- **Managed-agents session events stream/send + sessions.create + memory store CRUD.** AI Gateway buffers SSE-over-GET responses until the upstream connection closes (#547), which deadlocks `client.beta.sessions.events.stream(...)` because the agent never receives the initial `user.message`. The managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`) also isn't part of the gateway's documented Anthropic provider scope, so non-Messages paths fall back to authenticated pass-through and reject when the cf-aig-authorization header is missing in some constructor sites (#545). The constructors in `apps/discovery/src/managed-agents-session.ts`, `apps/api/src/routes/errata.ts`, and `managed-agents/src/agent/managed-discovery.ts` (legacy CLI) bypass the gateway by explicitly passing `baseURL: "https://api.anthropic.com"` to the SDK constructor — this overrides the `ANTHROPIC_BASE_URL` env var that the SDK auto-reads, which would otherwise route the call through the gateway. Cost telemetry for session inference still surfaces in the Anthropic console.
 
 ## Configuration
 
@@ -32,17 +29,16 @@ echo "https://gateway.ai.cloudflare.com/v1/<account-id>/releases/anthropic" \
   | bunx wrangler secret put ANTHROPIC_BASE_URL --config apps/api/wrangler.jsonc
 echo "https://gateway.ai.cloudflare.com/v1/<account-id>/releases-staging/anthropic" \
   | bunx wrangler secret put ANTHROPIC_BASE_URL --env staging --config apps/api/wrangler.jsonc
-# …and the same pair for apps/discovery/wrangler.jsonc
 ```
 
 Bind `AI_GATEWAY_TOKEN` through `secrets_store_secrets` if authenticated mode is enabled. Rollback: `wrangler secret delete ANTHROPIC_BASE_URL` (calls fall back to direct Anthropic; no redeploy needed beyond the secret change).
 
 **Current deploy state.** Both environments run through the gateway in authenticated mode:
 
-| Env        | Gateway ID         | Secret Store key           | Workers             |
-| ---------- | ------------------ | -------------------------- | ------------------- |
-| Production | `releases`         | `AI_GATEWAY_TOKEN`         | api, mcp, discovery |
-| Staging    | `releases-staging` | `AI_GATEWAY_TOKEN_STAGING` | api, mcp, discovery |
+| Env        | Gateway ID         | Secret Store key           | Workers  |
+| ---------- | ------------------ | -------------------------- | -------- |
+| Production | `releases`         | `AI_GATEWAY_TOKEN`         | api, mcp |
+| Staging    | `releases-staging` | `AI_GATEWAY_TOKEN_STAGING` | api, mcp |
 
 Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens are kept separate purely for operational hygiene — they aren't an isolation boundary.
 
@@ -53,7 +49,7 @@ Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packa
 Two routing modes:
 
 - **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. This is the default for Messages-API call sites listed under Scope above.
-- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call sites listed under "Not covered" above (`apps/discovery/src/managed-agents-session.ts`, `apps/api/src/routes/errata.ts`, `managed-agents/src/agent/managed-discovery.ts`). New code should follow this pattern any time it touches the managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`).
+- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call site listed under "Not covered" above (`apps/api/src/routes/errata.ts`). New code should follow this pattern any time it touches the memory-store API surface (`/v1/memory_stores/*`).
 
 ## What this PR does not configure
 
@@ -63,7 +59,7 @@ Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) a
 
 Worker-side AI SDK calls (`generateText` in extract, cheap-call lanes, org overviews) emit **agent-aware spans** into Workers Observability when:
 
-1. `observability.traces.enabled` is on in wrangler (already set for api/mcp/discovery/webhooks, exporting to `axiom-traces`), and
+1. `observability.traces.enabled` is on in wrangler (already set for api/mcp/webhooks, exporting to `axiom-traces`), and
 2. the API worker registers `createAISDKTelemetry()` from `agents/observability/ai` (`apps/api/src/lib/ai/agent-tracing.ts`, invoked from the model resolvers; re-evaluated per call so Flagship flips take effect mid-isolate).
 
 Each call tags a lane via AI SDK v7 `telemetry.functionId` + `runtimeContext` (`@releases/adapters/agent-telemetry`, re-exported as `@releases/ai-internal/agent-telemetry`):
@@ -77,7 +73,7 @@ Each call tags a lane via AI SDK v7 `telemetry.functionId` + `runtimeContext` (`
 
 **Payload recording** (message + tool args/results for session replay) is gated by Flagship kill switch **`agent-trace-payloads-enabled`** (default **off**; wrangler fallback `AGENT_TRACE_PAYLOADS_ENABLED`). Leave it off — release bodies already live in D1 and payload spans burn observability events. Flip on briefly when debugging a bad tool call / model decision in the Agents dashboard, then flip off. Create the key in **both** Flagship apps (`releases-platform` + `releases-platform-staging`) per the feature-flag convention.
 
-Inspect traces in the [Agents dashboard](https://dash.cloudflare.com/?to=/:account/agents) (session replay + waterfall) or the existing Axiom OTLP destination. **Anthropic managed agents** (discovery/worker sessions) do **not** appear here — they run on Anthropic infra; their cost stays on StatusHub / the Anthropic console / AI Gateway as before. Agent tracing is free while in beta; after 2026-10-01 it rides Workers Observability event pricing.
+Inspect traces in the [Agents dashboard](https://dash.cloudflare.com/?to=/:account/agents) (session replay + waterfall) or the existing Axiom OTLP destination. Agent tracing is free while in beta; after 2026-10-01 it rides Workers Observability event pricing.
 
 ## OpenRouter Broadcast observability
 
@@ -95,11 +91,10 @@ This keeps observability entirely within Cloudflare (no new third-party account,
 
 ## Routing policy + the OpenRouter provider switch
 
-**Layer 1 — Transport (fixed rule, not a flag).** Every non-managed-agent call traverses exactly one proxy, chosen by protocol — never two in series:
+**Layer 1 — Transport (fixed rule, not a flag).** Every call traverses exactly one proxy, chosen by protocol — never two in series:
 
 - Anthropic-protocol calls → CF AI Gateway (base-URL passthrough; preserves prompt caching).
 - OpenRouter calls → OpenRouter directly.
-- Managed-agents session/memory surface → direct to Anthropic (see "Not covered" above).
 
 There is deliberately **no transport-selector flag**: the protocol decides the proxy, so a call is never double-hopped, and CF-AI-Gateway-fronting-OpenRouter is not adopted.
 

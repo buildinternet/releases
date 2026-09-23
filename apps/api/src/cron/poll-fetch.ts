@@ -739,8 +739,8 @@ export interface FetchOneEnv extends WebRevalidateEnv, TextModelEnv, UpdateDispa
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   DB?: D1Database;
   // Feed content enrichment. Kill switch + cap as strings (Workers env vars are
-  // strings). CF creds are bound from the same Secrets Store entries the
-  // discovery worker uses; absent => render escalation is skipped.
+  // strings). CF creds come from the Secrets Store; absent => render
+  // escalation is skipped.
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;
   FEED_THIN_CHARS?: string;
@@ -1041,8 +1041,8 @@ export function extractCandidateLinks(markdown: string, baseUrl: string): string
 /**
  * Render dry-run probe (#1528). Renders a client-rendered scrape source's index
  * once via Cloudflare Browser Rendering and reports how many candidate release
- * links the rendered page exposes — WITHOUT the managed-agent extraction loop
- * (no Haiku/Sonnet, no discovery-worker session). The cheap "can the cron's
+ * links the rendered page exposes — WITHOUT the extraction loop (no
+ * Haiku/Sonnet, no update run). The cheap "can the cron's
  * render actually see releases here, or is it hitting an empty JS shell?" check
  * that onboarding a `renderRequired` source previously had no way to answer.
  *
@@ -1764,8 +1764,8 @@ export async function fetchOne(
     /**
      * Skip the `delegateScrapeToUpdateWorkflow` branch even when the source would
      * normally qualify for crawl delegation. Set by the `POST /v1/sources/:id/fetch`
-     * route when the caller is a managed-agent session (detected via the
-     * `X-Releases-MA-Session` request header). Without this guard the session
+     * route when the caller is an update run (detected via the
+     * `X-Releases-MA-Session` request header). Without this guard the run
      * would re-enter its own session-start path and self-collide on the
      * per-source KV lock from #1058. See #1061.
      */

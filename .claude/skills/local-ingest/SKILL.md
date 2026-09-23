@@ -9,7 +9,7 @@ Onboard a changelog **without dispatching the remote fetch path.** The remote pa
 
 **Core principle: the agent is the extractor.** You fetch, you parse, you structure the records, and you POST them to the batch endpoint, which does a plain idempotent upsert with **no AI on insert**. The remote extraction loop never runs.
 
-**Local Claude Code only.** This skill uses the `Agent` tool for sub-agent fan-out and assumes a persistent local filesystem and the CLI's `RELEASES_API_*` env. It sits alongside `seeding-playbooks` as a local-only operator skill — it is **not** deployed to the managed-agent fleet.
+**Local Claude Code only.** This skill uses the `Agent` tool for sub-agent fan-out and assumes a persistent local filesystem and the CLI's `RELEASES_API_*` env. It sits alongside `seeding-playbooks` as a local-only operator skill.
 
 ## Cost contract
 

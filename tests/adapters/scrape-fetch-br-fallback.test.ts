@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
-import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { restoreGlobalFetch } from "../global-fetch";
 
 const BR_EMPTY_ERROR = "Cloudflare Browser Rendering returned no content";
 

@@ -113,7 +113,7 @@ bun install
 step "Scaffolding env files (non-destructive)"
 scaffold "$ROOT/.env.example" "$ROOT/.env"
 scaffold "$ROOT/apps/web/.env.example" "$ROOT/apps/web/.env.local"
-for w in api mcp discovery webhooks; do
+for w in api mcp webhooks; do
   scaffold "$ROOT/apps/$w/.dev.vars.example" "$ROOT/apps/$w/.dev.vars"
 done
 

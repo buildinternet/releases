@@ -180,7 +180,7 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
     nextFeedReleases = SUMMARY_ONLY_ITEMS;
   });
 
-  it("delegates to DISCOVERY_WORKER when skipDelegation is absent", async () => {
+  it("delegates to the update workflow when skipDelegation is absent", async () => {
     const db = mkDb();
     await seedScrapeSource(db, {
       feedUrl: "https://notion.so/feed.xml",

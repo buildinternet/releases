@@ -181,14 +181,6 @@ export type Env = {
     EXTRACT_TOOLLOOP_ENABLED?: string;
     RAW_SNAPSHOT_CAPTURE_ENABLED?: string;
     FORCE_DRAIN_STALE_HOURS?: string;
-    /**
-     * Service binding to the discovery worker, used for onboarding sessions
-     * (`POST /v1/workflows/discover` proxy + org-create onboarding). Update
-     * dispatch no longer crosses this boundary (#1946).
-     */
-    DISCOVERY_WORKER?: {
-      fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-    };
     ANTHROPIC_API_KEY?: SecretBinding;
     // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
     // SDK calls from this worker route through the gateway for observability,
@@ -323,8 +315,6 @@ export type Env = {
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
     // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
     STAGING_ACCESS_KEY?: SecretBinding;
-    // Errata memory store ID — destination for POST /v1/errata/:orgId. See #537.
-    MEMORY_STORE_ERRATA_ID?: string;
     // Public web base URL — used by the web revalidate ping and by email/OAuth
     // link building. Defaults to https://releases.sh when unset.
     WEB_BASE_URL?: string;

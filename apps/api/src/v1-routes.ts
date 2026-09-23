@@ -49,7 +49,6 @@ import { adminDigestRoutes } from "./routes/admin-digest.js";
 import { adminEmailsRoutes } from "./routes/admin-emails.js";
 import { adminSemanticAlertsRoutes } from "./routes/admin-semantic-alerts.js";
 import { adminOauthRoutes } from "./routes/admin-oauth.js";
-import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
@@ -120,7 +119,6 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", adminEmailsRoutes);
   v1.route("/", adminSemanticAlertsRoutes);
   v1.route("/", adminOauthRoutes);
-  v1.route("/", errataRoutes);
   v1.route("/", webhooksRoutes);
   v1.route("/", workflowsRoutes);
   v1.route("/", telemetryRoutes);

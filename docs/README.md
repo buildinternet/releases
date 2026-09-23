@@ -10,10 +10,10 @@ Releases tracks what software vendors ship. The pipeline, end to end:
 
 1. **Sources** describe where a vendor publishes changes — a GitHub repo, an RSS feed, a web page we scrape, an App Store listing. Each source has a fetch adapter matching its type.
 2. **Ingest** runs on Cloudflare cron/Workflow schedules: fetch each due source, detect what's new, extract structured release records (AI-assisted for messy pages), dedupe, and insert into D1. Cheap AI passes run at insert time — generated titles and summaries, a marketing-vs-product classifier, thin-feed enrichment.
-3. **Hard cases get agents.** Pages without feeds are handled by Anthropic managed agents (a Sonnet "discovery" agent for judgment calls, a Haiku "worker" agent for mechanical fetches); pages behind anti-bot challenges go through Firecrawl.
+3. **Hard cases get agents.** A local Claude Code session onboards or backfills a source it can't parse deterministically — see [agents.md](architecture/agents.md); pages behind anti-bot challenges go through Firecrawl.
 4. **Serving:** the API worker exposes everything over public REST; the MCP worker gives AI agents the same data as tools; the web frontend renders it for people; webhooks and a WebSocket stream push new releases out in real time; hybrid lexical + vector search sits across all of it.
 
-The one structural rule to internalize: **the API worker is the only data plane.** The CLI (in a [separate repo](https://github.com/buildinternet/releases-cli)), the web app, the MCP server, and the agents are all clients of it.
+The one structural rule to internalize: **the API worker is the only data plane.** The CLI (in a [separate repo](https://github.com/buildinternet/releases-cli)), the web app, the MCP server, and any local agent session are all clients of it.
 
 ## Start here, by task
 
@@ -28,7 +28,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 | Change a D1 table                               | [remote-mode.md → Migrations](architecture/remote-mode.md#migrations), and remember schema ships to the CLI via [cli-distribution.md](architecture/cli-distribution.md)                                                |
 | Touch DB construction / think about Postgres    | [storage-portability.md](architecture/storage-portability.md) — `createDb`, entity-ID invariant, FTS ownership, capability map, SQLite-dialect seams                                                                   |
 | Touch search or embeddings                      | [semantic-search.md](architecture/semantic-search.md)                                                                                                                                                                  |
-| Work on the managed agents or skills            | [agents.md](architecture/agents.md)                                                                                                                                                                                    |
+| Work on agent skills or local ingest workflows  | [agents.md](architecture/agents.md)                                                                                                                                                                                    |
 | Add a web feature                               | [web.md](architecture/web.md)                                                                                                                                                                                          |
 | Onboard a tricky source                         | [local-ingest.md](architecture/local-ingest.md) (local, no agent bill), [firecrawl-monitoring.md](architecture/firecrawl-monitoring.md) (challenge-blocked pages)                                                      |
 | Reach for a feature flag                        | [feature-flags.md](architecture/feature-flags.md) — but read the "be judicious" convention in AGENTS.md first; the default is no flag                                                                                  |
@@ -63,7 +63,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 
 ### Agents
 
-- **[agents.md](architecture/agents.md)** — the discovery/worker managed agents: how they deploy, the MCP-vs-custom-tool split (reads are public, writes run inside the trust boundary), skills vs per-org playbooks, and the `.claude/` integration.
+- **[agents.md](architecture/agents.md)** — how local Claude Code agents onboard and maintain orgs: skills vs per-org playbooks, local backfill/overview Workflows, the evals, and the onboarding API surface. No remote agent harness runs in this repo.
 - **[local-ingest.md](architecture/local-ingest.md)** — onboarding or backfilling a source from local Claude Code instead of dispatching a managed agent, gated by a fail-closed robots.txt/Content-Signal preflight.
 - **[maintenance-workspace.md](architecture/maintenance-workspace.md)** — the `~/.releases/work/` convention that gives agent-driven prod maintenance a durable audit trail.
 

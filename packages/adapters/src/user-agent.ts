@@ -5,8 +5,8 @@
  * cron fetch paths so that site operators see one consistent string and can
  * allowlist or contact us.
  *
- * Not used for our own service-to-service traffic — web→API and
- * discovery→API use `releases-web` / `releases-discovery-worker` instead so
- * they're distinguishable from outbound scraping in Cloudflare Analytics.
+ * Not used for our own service-to-service traffic — web→API uses
+ * `releases-web` instead so it's distinguishable from outbound scraping in
+ * Cloudflare Analytics.
  */
 export { WEB_BOT_AUTH_USER_AGENT as RELEASES_BOT_UA } from "@buildinternet/releases-core/web-bot-auth";

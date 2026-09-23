@@ -28,16 +28,16 @@ Imported as `@releases/adapters/<subpath>`.
 | `media-classify`       | Media-type classification by URL extension (GIF detection).                                      |
 | `firecrawl`            | Firecrawl monitor API client (create/update/poll monitors).                                      |
 | `firecrawl-diff`       | Reduces a Firecrawl unified diff to just the added content.                                      |
-| `extract`              | AI-driven changelog extraction strategies, shared by the CLI and discovery worker.               |
+| `extract`              | AI-driven changelog extraction strategies, shared by the CLI and the API worker.                 |
 | `extract/shared`       | Pure extraction helpers (version sanitization, tagged-entry parsing).                            |
 | `extract/types`        | Types for the extract package (`ExtractedEntry`, `KnownRelease`, deps interfaces).               |
 | `extract/aisdk`        | AI SDK large-body tool-loop (`extractWithToolsAiSdk`) — OpenRouter or Anthropic.                 |
 | `lane-model`           | Shared AI-SDK `LanguageModel` builders for cheap-call lanes and structured-output (overview).    |
 | `github-probe`         | Lightweight GitHub repo probe (exists / has-releases / has-changelog).                           |
-| `scrape-fetch`         | Extraction entry point for the discovery worker; routes `scrape`/`agent` sources.                |
+| `scrape-fetch`         | Extraction entry point for the API worker's update path; routes `scrape`/`agent` sources.        |
 | `scrape-persister`     | Persistence seam for `scrapeFetch` (release insert, fetch-log, source updates).                  |
 | `extract-deps-worker`  | Worker-side `ExtractDeps` wiring the Anthropic client, secrets, and playbook assembly.           |
-| `playbook-block`       | Two-tier playbook markdown assembly for the discovery worker.                                    |
+| `playbook-block`       | Two-tier playbook markdown assembly for the update path.                                         |
 | `deterministic-update` | Deterministic per-source fetch→extract update loop, no Managed-Agents session.                   |
 
 **Private, workspace-only — not published to npm.**

@@ -22,13 +22,13 @@
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
 import { sha256Hex } from "@releases/core-internal/hash";
-import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { restoreGlobalFetch } from "../global-fetch";
 // Import the two crawl-branch dependencies scrape-fetch.ts actually exercises
 // (mapEntries, CRAWL_SYSTEM_PROMPT) from their concrete submodule rather than
 // the `@releases/adapters/extract` barrel, since that barrel is the specifier
 // being mocked below — re-entering it from inside the mock factory (e.g. via
 // a dynamic `import()` of the barrel) breaks module resolution.
-import { mapEntries, CRAWL_SYSTEM_PROMPT } from "../../../packages/adapters/src/extract/shared.js";
+import { mapEntries, CRAWL_SYSTEM_PROMPT } from "../../packages/adapters/src/extract/shared.js";
 
 const PAGE_URL = "https://harvey.ai/release-notes/2026-06-01";
 const PAGE_MARKDOWN = "# 2026-06-01\n\nSome release content.";

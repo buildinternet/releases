@@ -76,18 +76,7 @@ async function main() {
   })!.model;
   console.error(`model under test: ${summaryModel.id}`);
   const rubric = useJudge
-    ? readFileSync(
-        join(
-          import.meta.dir,
-          "..",
-          "..",
-          "packages",
-          "agent-shared",
-          "rubrics",
-          "release-summary.md",
-        ),
-        "utf8",
-      )
+    ? readFileSync(join(import.meta.dir, "rubrics", "release-summary.md"), "utf8")
     : "";
   // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.

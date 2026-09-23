@@ -29,15 +29,7 @@ export function weeklyDigestFixturesDir(): string {
 
 /** Absolute path to the Tier-2 grading rubric. */
 export function weeklyDigestRubricPath(): string {
-  return join(
-    import.meta.dir,
-    "..",
-    "..",
-    "packages",
-    "agent-shared",
-    "rubrics",
-    "weekly-digest.md",
-  );
+  return join(import.meta.dir, "rubrics", "weekly-digest.md");
 }
 
 export function loadWeeklyDigestFixtures(

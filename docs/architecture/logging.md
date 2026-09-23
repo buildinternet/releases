@@ -4,11 +4,11 @@ Logging splits by runtime. Pick the helper by where the code runs, not by what i
 
 ## CLI + runtime-neutral packages
 
-`packages/adapters/`, `packages/ai/`, `packages/lib/`, `scripts/`, `tests/evals/`, and `managed-agents/src/agent/` log via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`). The logger writes to stderr **and** persists per-day files under `~/.releases/logs/` — that's the whole point of using it, and it only makes sense in a Node/Bun runtime.
+`packages/adapters/`, `packages/ai/`, `packages/lib/`, `scripts/`, and `tests/evals/` log via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`). The logger writes to stderr **and** persists per-day files under `~/.releases/logs/` — that's the whole point of using it, and it only makes sense in a Node/Bun runtime.
 
 ## Worker code
 
-`apps/api/`, `apps/mcp/`, `apps/discovery/`, and `apps/webhooks/` emit structured JSON via `logEvent()` from `@releases/lib/log-event` (worker-safe; no `fs` imports).
+`apps/api/`, `apps/mcp/`, and `apps/webhooks/` emit structured JSON via `logEvent()` from `@releases/lib/log-event` (worker-safe; no `fs` imports).
 
 - **Payload shape.** Workers Logs indexes the top-level keys of JSON-stringified `console.*` lines as filterable fields, so payloads carry `component` (e.g. `"poll-fetch-workflow"`, `"search-log"`) and `event` (kebab-case, e.g. `"no-change-detected"`, `"insert-failed"`) as top-level keys, plus arbitrary context (`sourceSlug`, `err`, request id, workflow instance id, …).
 - **Severity.** Set by which `console.*` function the helper invokes — `logEvent("info"|"warn"|"error", {...})` dispatches to `console.log` / `console.warn` / `console.error`, which is what Workers Logs reads for the level field. **Don't** put `level` in the payload.

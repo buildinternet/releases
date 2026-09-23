@@ -18,10 +18,10 @@
  * `runIncrementalExtraction` / `extractFromBody` are stubbed via
  * `mock.module("@releases/adapters/extract")` — the same pattern already used
  * by the sibling scrape-fetch-*.test.ts files in this directory (this test
- * group runs discovery/tests/web/mcp/webhooks in one `bun test` process per
+ * group runs tests/web/mcp/webhooks in one `bun test` process per
  * AGENTS.md; apps/api is isolated separately specifically because of this
  * kind of module-mock leak risk, so this mock must stay confined to
- * apps/discovery — never used from a test importing the barrel for real).
+ * tests/adapters — never used from a test importing the barrel for real).
  *
  * `extract-deps-worker.ts` is left REAL (not mocked): its content-hash repo
  * methods (`peekContentHash`/`commitContentHash`) are thin `apiFetcher.fetch`
@@ -37,12 +37,12 @@
  */
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
-import { restoreGlobalFetch } from "../../../tests/global-fetch";
+import { restoreGlobalFetch } from "../global-fetch";
 import {
   mapEntries,
   CLOUDFLARE_SYSTEM_PROMPT,
   CRAWL_SYSTEM_PROMPT,
-} from "../../../packages/adapters/src/extract/shared.js";
+} from "../../packages/adapters/src/extract/shared.js";
 // Passed through (not stubbed) in the `@releases/adapters/extract` mock
 // below — `extract-deps-worker.ts` (real, unmocked) imports these from the
 // barrel unconditionally on every `buildWorkerExtractDeps` call, regardless
@@ -50,8 +50,8 @@ import {
 // barrel export other test files in this same `bun test` process rely on can
 // leak past this file (module mocks aren't file-scoped) — see
 // reference_bun_mockmodule_monorepo_leak.md.
-import { resolveToolLoopAiSdkModel } from "../../../packages/adapters/src/extract/resolve-tool-loop-model.js";
-import { buildOpenRouterExtractModel } from "../../../packages/adapters/src/extract/openrouter-model.js";
+import { resolveToolLoopAiSdkModel } from "../../packages/adapters/src/extract/resolve-tool-loop-model.js";
+import { buildOpenRouterExtractModel } from "../../packages/adapters/src/extract/openrouter-model.js";
 
 const mockSource = {
   id: "src_test",
