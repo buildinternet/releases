@@ -1,5 +1,7 @@
 # @releases/agent-shared
 
+**Scope:** managed-agent prompts, typed tools, and grader rubrics shared by the discovery worker, the managed-agents harness, the render/sync scripts, and the eval suite. The harness runtime itself lives in `managed-agents/src/agent/`, not here.
+
 Managed-agent prompts, typed tools, and grader rubrics. Shared by the discovery worker (`apps/discovery`), the managed-agents harness (`managed-agents/src/agent/`), the agent render/sync scripts, and the eval suite.
 
 ## Exports

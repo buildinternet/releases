@@ -29,6 +29,8 @@ tests/            cross-package tests, fixtures, evals
 docs/             architecture docs, runbooks, plans
 ```
 
+Per-directory details: [apps/README.md](apps/README.md) and [packages/README.md](packages/README.md).
+
 ## Commands
 
 - Lint + format + type-check: `bun run check` (oxlint with `typeCheck` via `oxlint-tsgolint`, then `oxfmt --check`)

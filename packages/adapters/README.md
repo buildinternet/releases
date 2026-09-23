@@ -1,5 +1,7 @@
 # @releases/adapters
 
+**Scope:** fetch-adapter primitives, the per-source adapters, and the shared scrape/agent extraction orchestration — pure and worker-safe. AI-driven content generation (summarization, classification) lives in `ai-internal`; persistence beyond the injected fetcher seam belongs to the caller.
+
 Fetch-adapter primitives and the per-source adapters (GitHub, Cloudflare render, crawl, feed, App Store, Firecrawl), plus the shared scrape/agent extraction orchestration. All pure / worker-safe.
 
 ## Exports

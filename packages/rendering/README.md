@@ -1,5 +1,7 @@
 # @releases/rendering
 
+**Scope:** output formatting — Atom feed helpers, markdown/JSON formatters, and media URL handling. Fetching and AI generation of the content being rendered live elsewhere (`adapters`, `ai-internal`).
+
 Atom feed helpers, markdown/JSON formatters, and media URL helpers.
 
 ## Exports
