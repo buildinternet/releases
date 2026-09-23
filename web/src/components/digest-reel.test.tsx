@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toReelPreview, type ReelDigest } from "@/lib/digest-reel";
 import { DigestReel } from "./digest-reel.tsx";
-import { DigestSectionPreview, focusIsInside } from "./digest-reel-section.tsx";
+import {
+  DigestSectionPreview,
+  distinctOrgProducts,
+  focusIsInside,
+} from "./digest-reel-section.tsx";
 
 const org = (slug: string, name: string) => ({ slug, name, avatarUrl: null, githubHandle: null });
 const openai = org("openai", "OpenAI");
@@ -224,5 +228,18 @@ describe("focusIsInside", () => {
   it("is true only when the active element is inside the container", () => {
     expect(focusIsInside(container(true), {} as Node)).toBe(true);
     expect(focusIsInside(container(false), {} as Node)).toBe(false);
+  });
+});
+
+describe("distinctOrgProducts", () => {
+  it("keeps one product per org, first-seen order", () => {
+    const cf = { slug: "cloudflare" };
+    const vercel = { slug: "vercel" };
+    const products = [
+      { key: "workers", org: cf },
+      { key: "vercel", org: vercel },
+      { key: "magic-transit", org: cf },
+    ];
+    expect(distinctOrgProducts(products).map((p) => p.key)).toEqual(["workers", "vercel"]);
   });
 });

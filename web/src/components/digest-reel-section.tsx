@@ -22,6 +22,15 @@ export function focusIsInside(
   return !!container && !!active && container.contains(active);
 }
 
+/** One entry per org, first-seen order — a row's avatar stack. Products from
+ *  the same org share its logo, so repeating it adds nothing. */
+export function distinctOrgProducts<T extends { org: { slug: string } }>(
+  products: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  return products.filter((p) => !seen.has(p.org.slug) && !!seen.add(p.org.slug));
+}
+
 /**
  * One "In this issue" row: an internal link to the section's anchor on the
  * digest page (same tab, no ↗). On md+ a hover/focus card previews the
@@ -77,9 +86,9 @@ export function DigestSectionRow({
         </span>
         <span className="min-w-0 flex-1 truncate">{section.heading}</span>
         <span className="flex pr-1" title={products.map((p) => p.name).join(", ")}>
-          {products.map((p) => (
+          {distinctOrgProducts(products).map((p) => (
             <span
-              key={p.key}
+              key={p.org.slug}
               className="-mr-1 rounded-full ring-[1.5px] ring-white dark:ring-stone-900"
             >
               <OrgAvatar
