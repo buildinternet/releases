@@ -33,6 +33,8 @@ export interface RawSearchReleaseRow {
   version: string | null;
   title: string;
   summary: string;
+  /** The release's upstream source URL, when it has one. */
+  url: string | null;
   /**
    * Raw markdown with media URLs not yet rewritten through MEDIA_ORIGIN.
    * Absent unless the caller passed `includeContent: true` — list hits ship
@@ -130,6 +132,7 @@ export async function searchReleasesFts(
            o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
            r.version, r.title,
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.url as url,
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.breaking as breaking,

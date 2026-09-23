@@ -44,3 +44,42 @@ describe("toLookupPayload thumbnail derivation", () => {
     expect(toLookupPayload(null, origin)).toBeNull();
   });
 });
+
+describe("toLookupPayload url forwarding (#2330)", () => {
+  const origin = "https://media.releases.sh";
+
+  it("forwards the release's upstream url", () => {
+    const lookup = {
+      status: "existing",
+      source: null,
+      relatedOrg: null,
+      releases: [
+        {
+          id: "rel_1",
+          version: "1.0.0",
+          title: "Big launch",
+          publishedAt: "2026-05-01T00:00:00.000Z",
+          url: "https://acme.test/releases/1",
+          media: "[]",
+        },
+      ],
+    } as unknown as Parameters<typeof toLookupPayload>[0];
+
+    expect(toLookupPayload(lookup, origin)?.releases?.[0]?.url).toBe(
+      "https://acme.test/releases/1",
+    );
+  });
+
+  it("yields null url when the release row has none", () => {
+    const lookup = {
+      status: "existing",
+      source: null,
+      relatedOrg: null,
+      releases: [
+        { id: "rel_2", version: null, title: "No url", publishedAt: null, url: null, media: "[]" },
+      ],
+    } as unknown as Parameters<typeof toLookupPayload>[0];
+
+    expect(toLookupPayload(lookup, origin)?.releases?.[0]?.url ?? null).toBeNull();
+  });
+});
