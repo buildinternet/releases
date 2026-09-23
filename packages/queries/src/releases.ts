@@ -154,47 +154,46 @@ export async function listLatestReleases(db: AnyDb, q: LatestReleasesQuery) {
   }
   if (q.after) conds.push(afterFeedKey(r, q.after));
 
-  return db
-    .select({
-      id: r.id,
-      title: r.title,
-      version: r.version,
-      type: r.type,
-      content: q.includeContent ? r.content : sql<string | null>`NULL`,
-      summary: r.summary,
-      importance: r.importance,
-      breaking: r.breaking,
-      titleGenerated: r.titleGenerated,
-      titleShort: r.titleShort,
-      publishedAt: r.publishedAt,
-      fetchedAt: r.fetchedAt,
-      url: r.url,
-      media: r.media,
-      contentChars: r.contentChars,
-      contentTokens: r.contentTokens,
-      coverageCount: sql<number>`(SELECT COUNT(*) FROM release_coverage WHERE canonical_id = ${r.id})`,
-      sourceName: s.name,
-      sourceSlug: s.slug,
-      sourceType: s.type,
-      sourceKind: s.kind,
-      orgName: o.name,
-      orgSlug: o.slug,
-      orgAvatarUrl: o.avatarUrl,
-      orgGithubHandle: githubHandleSubquery(sql`${o.id}`),
-      productName: p.name,
-      productSlug: p.slug,
-      productKind: p.kind,
-    })
-    .from(r)
-    .innerJoin(s, eq(r.sourceId, s.id))
-    .leftJoin(p, eq(s.productId, p.id))
-    .leftJoin(o, eq(s.orgId, o.id))
-    .where(and(...conds))
-    .orderBy(
-      sql`CASE WHEN ${r.publishedAt} IS NOT NULL THEN 0 ELSE 1 END`,
-      desc(r.publishedAt),
-      desc(r.fetchedAt),
-      desc(r.id),
-    )
-    .limit(q.limit);
+  return (
+    db
+      .select({
+        id: r.id,
+        title: r.title,
+        version: r.version,
+        type: r.type,
+        content: q.includeContent ? r.content : sql<string | null>`NULL`,
+        summary: r.summary,
+        importance: r.importance,
+        breaking: r.breaking,
+        titleGenerated: r.titleGenerated,
+        titleShort: r.titleShort,
+        publishedAt: r.publishedAt,
+        fetchedAt: r.fetchedAt,
+        url: r.url,
+        media: r.media,
+        contentChars: r.contentChars,
+        contentTokens: r.contentTokens,
+        coverageCount: sql<number>`(SELECT COUNT(*) FROM release_coverage WHERE canonical_id = ${r.id})`,
+        sourceName: s.name,
+        sourceSlug: s.slug,
+        sourceType: s.type,
+        sourceKind: s.kind,
+        orgName: o.name,
+        orgSlug: o.slug,
+        orgAvatarUrl: o.avatarUrl,
+        orgGithubHandle: githubHandleSubquery(sql`${o.id}`),
+        productName: p.name,
+        productSlug: p.slug,
+        productKind: p.kind,
+      })
+      .from(r)
+      .innerJoin(s, eq(r.sourceId, s.id))
+      .leftJoin(p, eq(s.productId, p.id))
+      .leftJoin(o, eq(s.orgId, o.id))
+      .where(and(...conds))
+      // SQLite sorts NULL lowest, so DESC already puts undated rows last — the
+      // same order as the REST feeds' explicit `CASE WHEN … IS NOT NULL` key.
+      .orderBy(desc(r.publishedAt), desc(r.fetchedAt), desc(r.id))
+      .limit(q.limit)
+  );
 }
