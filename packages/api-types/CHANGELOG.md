@@ -1,5 +1,12 @@
 # @buildinternet/releases-api-types
 
+## 0.54.0
+
+### Minor Changes
+
+- ccc6d44: Digest covered releases carry the upstream `url`, `product`, and org avatar; digest detail adds parsed `sections`.
+- 6caef4b: Search and lookup release hits carry the upstream `url`.
+
 ## 0.53.0
 
 ### Minor Changes
