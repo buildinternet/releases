@@ -425,6 +425,43 @@ describe("generateCollectionWeeklyDigest", () => {
     expect(model.calls()).toBe(2);
   });
 
+  test("retries when the model call throws (e.g. a provider timeout)", async () => {
+    let calls = 0;
+    const users: string[] = [];
+    const model: TextModel = {
+      id: "test:model",
+      async complete({ user }) {
+        users.push(user);
+        if (calls++ === 0) throw new Error("The operation was aborted due to timeout");
+        return { text: goodRaw, usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 } };
+      },
+    };
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+      new Map([["rel_1", "/release/rel_1"]]),
+    );
+    expect(result.attempts).toBe(2);
+    expect(result.releaseIds).toEqual(["rel_1"]);
+    expect(users[1]).toContain("model call failed: The operation was aborted due to timeout");
+  });
+
+  test("throws after two failed model calls", async () => {
+    const model: TextModel = {
+      id: "test:model",
+      async complete() {
+        throw new Error("upstream 503");
+      },
+    };
+    await expect(
+      generateCollectionWeeklyDigest(
+        model,
+        { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+        new Map([["rel_1", "/release/rel_1"]]),
+      ),
+    ).rejects.toThrow(/model call failed: upstream 503/);
+  });
+
   test("retries on a parse failure and succeeds on the second attempt", async () => {
     const model = sequencedModel(["no tags at all", goodRaw]);
     const result = await generateCollectionWeeklyDigest(

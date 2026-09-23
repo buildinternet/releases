@@ -263,14 +263,14 @@ describe("resolveSummarizeModel — model var is the per-lane gate", () => {
     expect(model?.id.startsWith("openrouter:")).toBe(true);
   });
 
-  it("on the OpenRouter path, disables reasoning and excludes GMICloud (#1633)", async () => {
+  it("on the OpenRouter path, disables reasoning and excludes slow or unreliable DeepSeek providers (#1633)", async () => {
     const env = baseEnv({
       FLAGS: flagsBinding({ "openrouter-enabled": true }),
       SUMMARIZE_MODEL: "deepseek/deepseek-v4.1-flash",
     });
     const body = await captureOpenRouterBody(resolveSummarizeModel, env);
     expect(body.reasoning).toEqual({ enabled: false });
-    expect(body.provider).toEqual({ ignore: ["gmicloud"] });
+    expect(body.provider).toEqual({ ignore: ["gmicloud", "open-inference", "dekallm"] });
   });
 
   it("uses a site_settings overlay over the wrangler SUMMARIZE_MODEL", async () => {

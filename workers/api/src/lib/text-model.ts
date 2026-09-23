@@ -94,13 +94,29 @@ const APP_TITLE = "Releases";
 const SUMMARIZE_REASONING: OpenRouterReasoning = { enabled: false };
 
 /**
- * Provider-routing preference for the summarize lanes: never route to GMICloud,
- * whose latency for DeepSeek is an outlier vs. other providers (#1633). This
- * composes with (does not replace) any account-level "Ignored Providers" set in
- * the OpenRouter dashboard — the union is excluded — so the exclusion can also be
- * managed dashboard-side without removing this line.
+ * Provider-routing preference for the summarize lanes: never route to providers
+ * that are outliers for DeepSeek.
+ * - `gmicloud`: latency outlier (#1633).
+ * - `open-inference`: ~5 tokens/s vs. 29-120 for the rest, so a ~1.5K-token
+ *   weekly digest takes ~300s. It is also the cheapest listing, so OpenRouter's
+ *   price-weighted default routes to it often (2 of 10 digest calls in a
+ *   2026-09-23 sample).
+ * - `dekallm`: lowest uptime of the listed providers (~86%).
+ * This composes with (does not replace) any account-level "Ignored Providers"
+ * set in the OpenRouter dashboard — the union is excluded — so the exclusion can
+ * also be managed dashboard-side without removing this line.
  */
-const SUMMARIZE_PROVIDER: OpenRouterProviderPrefs = { ignore: ["gmicloud"] };
+const SUMMARIZE_PROVIDER: OpenRouterProviderPrefs = {
+  ignore: ["gmicloud", "open-inference", "dekallm"],
+};
+
+/**
+ * Per-call timeout for the weekly-digest lane. The transport otherwise waits
+ * as long as the provider takes, and one stalled call held a whole backfill
+ * request for 20+ minutes. A healthy provider returns a digest in 5-35s; a
+ * timed-out attempt counts as a failed attempt and gets the lane's one retry.
+ */
+const WEEKLY_DIGEST_TIMEOUT_MS = 120_000;
 
 /** Anthropic reports no cost; derive a list-price estimate. OpenRouter reports its own via usage.costUsd. */
 function laneCost(provider: string, model: string, usage: TextModelUsage): number | undefined {
@@ -347,6 +363,7 @@ export function resolveCollectionWeeklyDigestModel(env: TextModelEnv): Promise<T
     generationName: "collection-weekly-digest",
     reasoning: SUMMARIZE_REASONING,
     provider: SUMMARIZE_PROVIDER,
+    timeoutMs: WEEKLY_DIGEST_TIMEOUT_MS,
   });
 }
 
