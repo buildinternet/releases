@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
-import { eq, and, inArray, isNull, sql, asc } from "drizzle-orm";
+import { eq, and, inArray, isNull, asc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   collections,
@@ -44,7 +44,6 @@ import {
   getLatestCollectionWeeklyDigest,
   buildCollectionWeeklyDigestDetail,
 } from "../queries/collection-summaries.js";
-import { githubHandleSubquery } from "../queries/shared.js";
 import { parseSourceTypesLenient } from "../lib/sources/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -68,11 +67,9 @@ import type {
   CollectionDetail,
   CollectionMember,
   CollectionMemberOrg,
-  CollectionMemberProduct,
   CollectionReleaseItem,
   CollectionRow,
   CollectionMemberInput,
-  ProductParentOrg,
   ResolvedCollectionMember,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
@@ -327,94 +324,6 @@ async function resolveMembersBatch(
 function resolvedToWire(r: ResolvedRef, position: number): ResolvedCollectionMember {
   if (r.kind === "org") return { kind: "org", orgId: r.orgId, position };
   return { kind: "product", productId: r.productId, position };
-}
-
-// ── Read-side shaping ────────────────────────────────────────────────────
-
-type OrgMemberRow = {
-  position: number;
-  slug: string;
-  name: string;
-  domain: string | null;
-  avatarUrl: string | null;
-  description: string | null;
-  githubHandle: string | null;
-};
-
-type ProductMemberRow = {
-  position: number;
-  productSlug: string;
-  productName: string;
-  productDescription: string | null;
-  parentOrgSlug: string;
-  parentOrgName: string;
-  parentOrgDomain: string | null;
-  parentOrgAvatarUrl: string | null;
-  parentOrgGithubHandle: string | null;
-};
-
-function orgRowToWire(r: OrgMemberRow): CollectionMemberOrg & { kind: "org" } {
-  return {
-    kind: "org",
-    slug: r.slug,
-    name: r.name,
-    domain: r.domain,
-    avatarUrl: r.avatarUrl,
-    githubHandle: r.githubHandle,
-    description: r.description,
-  };
-}
-
-function productRowToWire(r: ProductMemberRow): CollectionMemberProduct & { kind: "product" } {
-  const org: ProductParentOrg = {
-    slug: r.parentOrgSlug,
-    name: r.parentOrgName,
-    domain: r.parentOrgDomain,
-    avatarUrl: r.parentOrgAvatarUrl,
-    githubHandle: r.parentOrgGithubHandle,
-  };
-  return {
-    kind: "product",
-    slug: r.productSlug,
-    name: r.productName,
-    description: r.productDescription,
-    org,
-  };
-}
-
-/** Byte-wise (code-unit) compare — matches SQLite's default BINARY collation,
- *  unlike `localeCompare`, so the JS merge order agrees with the windowed SQL
- *  `ORDER BY position, name, slug`. See `interleaveMembers`. */
-function binCompare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function interleaveMembers(
-  orgs: OrgMemberRow[],
-  productsRows: ProductMemberRow[],
-): CollectionMember[] {
-  type Item = { position: number; sort: string; tie: string; value: CollectionMember };
-  const items: Item[] = [];
-  for (const r of orgs) {
-    items.push({ position: r.position, sort: r.name, tie: r.slug, value: orgRowToWire(r) });
-  }
-  for (const r of productsRows) {
-    items.push({
-      position: r.position,
-      sort: r.productName,
-      tie: r.productSlug,
-      value: productRowToWire(r),
-    });
-  }
-  // Order MUST match the SQL window order (position, name, slug) — same
-  // collation (BINARY, via binCompare) and the same stable slug tiebreak — so
-  // the windowed preview fetch (top-PREVIEW_FETCH per kind) provably contains
-  // the global top-PREVIEW_LIMIT after the merge. The slug tiebreak also makes
-  // same-(position,name) members deterministic (org names aren't unique).
-  items.sort(
-    (a, b) => a.position - b.position || binCompare(a.sort, b.sort) || binCompare(a.tie, b.tie),
-  );
-  return items.map((i) => i.value);
 }
 
 function parseSlugSet(raw: string | undefined): Set<string> | null {
