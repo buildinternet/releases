@@ -7,6 +7,7 @@ import {
   parseWeeklyDigest,
   resolveReleasePlaceholders,
   selectWeeklyDigestReleases,
+  versionAnchors,
   type CollectionWeekInput,
   type WeeklyDigestRelease,
 } from "./collection-weekly-digest";
@@ -124,7 +125,56 @@ describe("buildCollectionWeekBlock", () => {
 
   test("ends with the link-requirement reminder", () => {
     const block = buildCollectionWeekBlock(input, selectWeeklyDigestReleases(input.releases));
-    expect(block.trimEnd().endsWith("A body with no (rel:...) links is invalid.")).toBe(true);
+    const last = block.trimEnd().split("\n").at(-1)!;
+    expect(last).toStartWith("REMINDER:");
+    expect(last).toContain("A body with no (rel:...) links is invalid.");
+    expect(last).toContain("never a version number or date");
+  });
+
+  test("groups a product's releases under one header, in first-appearance order", () => {
+    // Importance-first selection interleaves products; the block must not.
+    const releases = [
+      release({ id: "rel_cc1", title: "v2.1.275", importance: 4 }),
+      release({ id: "rel_dv", org: "Cognition", product: "Devin", title: "Sep 18" }),
+      release({ id: "rel_cc2", title: "v2.1.274" }),
+      release({ id: "rel_cc3", title: "v2.1.276" }),
+    ];
+    const block = buildCollectionWeekBlock(
+      { ...input, releases },
+      selectWeeklyDigestReleases(releases),
+    );
+    const lines = block.split("\n");
+    const ccHeader = lines.indexOf("Anthropic / Claude Code (3 releases):");
+    const dvHeader = lines.indexOf("Cognition / Devin (1 release):");
+    expect(ccHeader).toBeGreaterThan(-1);
+    expect(dvHeader).toBeGreaterThan(ccHeader);
+    const idx = (id: string) => lines.findIndex((l) => l.includes(`[${id}]`));
+    // All three Claude Code lines sit between its header and Devin's.
+    for (const id of ["rel_cc1", "rel_cc2", "rel_cc3"]) {
+      expect(idx(id)).toBeGreaterThan(ccHeader);
+      expect(idx(id)).toBeLessThan(dvHeader);
+    }
+    expect(idx("rel_dv")).toBeGreaterThan(dvHeader);
+  });
+});
+
+describe("versionAnchors", () => {
+  test("flags anchors carrying a full version number", () => {
+    const body =
+      "[v2.1.275](rel:rel_a) fixed caching. [2.1.274](rel:rel_b) tackled retries. " +
+      "[Claude Code 1.0.0-beta.2](rel:rel_c) landed.";
+    expect(versionAnchors(body)).toEqual(["v2.1.275", "2.1.274", "Claude Code 1.0.0-beta.2"]);
+  });
+
+  test("allows change-named anchors and two-part major versions", () => {
+    const body =
+      "[restored memory files no longer break caching](rel:rel_a), " +
+      "[Next.js 16](rel:rel_b), and [Node 22.11 support](rel:rel_c).";
+    expect(versionAnchors(body)).toEqual([]);
+  });
+
+  test("ignores versions in prose outside link anchors", () => {
+    expect(versionAnchors("Pin below 2.1.276. [The proxy fix](rel:rel_a) ships next.")).toEqual([]);
   });
 });
 
@@ -251,6 +301,32 @@ describe("generateCollectionWeeklyDigest", () => {
     expect(result.body).not.toContain("ghost](");
     // usage summed across both attempts
     expect(result.usage.input).toBe(20);
+  });
+
+  test("retries on version-number anchors and tells the model why", async () => {
+    const versionedRaw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[v2.1.275](rel:rel_1) fixed caching.</body>" +
+      "<releases>rel_1</releases>";
+    const users: string[] = [];
+    let i = 0;
+    const model: TextModel = {
+      id: "test:model",
+      async complete({ user }) {
+        users.push(user);
+        const text = i++ === 0 ? versionedRaw : goodRaw;
+        return { text, usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 } };
+      },
+    };
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+      new Map([["rel_1", "/release/rel_1"]]),
+    );
+    expect(result.attempts).toBe(2);
+    expect(result.body).toContain("[Claude Code](/release/rel_1)");
+    expect(users[0]).not.toContain("previous draft was rejected");
+    expect(users[1]).toContain('version-number link anchors: "v2.1.275"');
   });
 
   test("accepts a soft-only attempt as fallback when the retry is no better", async () => {

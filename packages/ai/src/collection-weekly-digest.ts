@@ -120,18 +120,26 @@ export const SYSTEM_PROMPT = `You write a weekly digest — a short editorial ro
 Output exactly one <title>...</title> tag, then one <intro>...</intro> tag, then one <body>...</body> tag, then one <releases>...</releases> tag, in that order. Output nothing before, between, or after these tags.
 </output_structure>
 
+<consolidate_by_product>
+Write about products, not releases. The input groups releases by product. When a product shipped several releases in the week, tell its week as ONE account: say it shipped a handful of updates, then describe what changed across all of them, grouped by what the changes do. NEVER walk through a product's releases one version at a time. "v2.1.275 fixed X. 2.1.274 tackled Y. 2.1.276 patched a 2.1.275 regression." is WRONG. "Claude Code shipped eight updates, most of them fixes: [restored memory files no longer break prompt caching](rel:rel_A), [sessions stuck on a bad tool call now repair themselves](rel:rel_B), and [proxy users got a quick patch for a request error](rel:rel_C)." is RIGHT.
+
+Narrating the sequence is the same recap in different words: "the prior release had already…", "an earlier release fixed…", "the following release…", "that release also…" are all WRONG. The order a product's releases shipped within the week almost never matters to the reader; describe what the product does now. Write "Claude Code also fixed…", not "a later release fixed…".
+
+Version numbers and dates are never the subject of a sentence and never link anchor text: not "2.1.274 tackled…", not "v2.1.278 made…", not "Devin's September 18 release". Name a version only when the version itself is the news — a major release like "Next.js 16", or one broken release readers need to skip — and even then lead with the change. The page lists every cited release, with its exact version, below the digest, so the prose does not need to carry them.
+</consolidate_by_product>
+
 <title_format>
-An editorial headline naming the theme of the week — not "Week of July 6 digest" and not a list of product names. When several products shipped the same KIND of change, name that theme. When one release clearly dominates, lead with it. Sentence case, no trailing punctuation, no quotation marks, no markdown. Target 40-90 characters.
+An editorial headline naming the theme of the week — not "Week of July 6 digest" and not a list of product names. When several products shipped the same KIND of change, name that theme. When one release clearly dominates, lead with it. No version numbers. Sentence case, no trailing punctuation, no quotation marks, no markdown. Target 40-90 characters.
 </title_format>
 
 <intro_format>
-One to two sentences: the lede, naming the week's most significant development(s) concretely. This doubles as the page's meta description, so it must stand alone without the body. No markdown, no opening filler ("This week"), no marketing language.
+One to two sentences: the lede, naming the week's most significant development(s) concretely — by product and change, not by version number. This doubles as the page's meta description, so it must stand alone without the body. No markdown, no opening filler ("This week"), no marketing language.
 </intro_format>
 
 <body_format>
 300-600 words of markdown, organized into 2-4 thematic sections with ### headings (not "Overview" / "Releases" — name the actual themes, e.g. "### Faster local development" or "### Security hardening across the SDKs"). Write narrative prose: what shipped, why it matters to a developer using these tools, and connections between releases when there are any — NOT a bullet-per-release dump. Weight by impact: the biggest story of the week gets the most space; routine churn across many small releases gets a compact mention or is folded into a supporting sentence, not enumerated.
 
-Inline release links are REQUIRED, not optional: every release you discuss must carry a link at its first mention, and a body with no links is invalid. The link form is [anchor text](rel:<id>) where <id> is the release's id copied VERBATIM from the square brackets in the input — the entire string including its "rel_" prefix, never shortened or re-cased. Example: for the input line "- [rel_abc123XYZexample0000] Acme / CLI: Faster builds", write [Acme's faster builds](rel:rel_abc123XYZexample0000). The anchor text is natural prose (the product name or the change, never "here" or "this release"). Only use ids from the input — never invent one. Do not use any other markdown link form.
+Inline release links are REQUIRED, not optional: every release you discuss must carry a link at its first mention, and a body with no links is invalid. The link form is [anchor text](rel:<id>) where <id> is the release's id copied VERBATIM from the square brackets in the input — the entire string including its "rel_" prefix, never shortened or re-cased. Example: for the input line "- [rel_abc123XYZexample0000] Acme / CLI: Faster builds", write [Acme's faster builds](rel:rel_abc123XYZexample0000). The anchor text is natural prose naming the change or the product — never a version number, a date, "here", or "this release". One sentence may carry several links, one per change it names. Only use ids from the input — never invent one. Do not use any other markdown link form.
 
 Skip pure noise (dependency bumps, internal tooling, checksum-only releases) unless it's part of a broader theme worth naming.
 </body_format>
@@ -157,8 +165,10 @@ export function buildCollectionWeekBlock(
     omittedImportantCount?: number;
   },
 ): string {
-  const lines = selection.selected.map((r) => {
-    const label = r.product && r.product !== r.org ? `${r.org} / ${r.product}` : r.org;
+  const labelOf = (r: WeeklyDigestRelease) =>
+    r.product && r.product !== r.org ? `${r.org} / ${r.product}` : r.org;
+  const renderRelease = (r: WeeklyDigestRelease) => {
+    const label = labelOf(r);
     const tail = r.summary ? ` — ${r.summary}` : "";
     // Importance must be visible in the input: the generation gate requires
     // every importance>=4 release to be discussed + linked, which the model
@@ -181,7 +191,23 @@ export function buildCollectionWeekBlock(
       .map((l) => `    ${l}`)
       .join("\n");
     return `${head}\n${indented}`;
-  });
+  };
+  // Group by product so a product's week reads as one unit. The selection is
+  // importance-first, so interleaved per-release lines led the model to recap
+  // a busy CLI version by version. Groups keep first-appearance order, which
+  // puts the product with the week's most important release first.
+  const groups = new Map<string, WeeklyDigestRelease[]>();
+  for (const r of selection.selected) {
+    const label = labelOf(r);
+    const group = groups.get(label);
+    if (group) group.push(r);
+    else groups.set(label, [r]);
+  }
+  const lines = [...groups].flatMap(([label, rs]) => [
+    "",
+    `${label} (${rs.length} release${rs.length === 1 ? "" : "s"}):`,
+    ...rs.map(renderRelease),
+  ]);
   const omittedImportant = selection.omittedImportantCount ?? 0;
   const omittedNote =
     selection.omittedCount > 0
@@ -198,14 +224,15 @@ export function buildCollectionWeekBlock(
   return [
     `Collection: ${input.collectionName}`,
     `Week starting (ET Monday): ${input.weekStart}`,
-    `Releases (${selection.selected.length}):`,
+    `Releases (${selection.selected.length}), grouped by product:`,
     ...lines,
+    "",
     ...omittedNote,
-    // Trailing restatement of the two hard requirements: on heavy weeks the
-    // rules at the top of the system prompt are dozens of excerpts away, and
+    // Trailing restatement of the hard requirements: on heavy weeks the rules
+    // at the top of the system prompt are dozens of excerpts away, and
     // long-context adherence measurably drops (0-link outputs in the launch
     // backfill happened only on the largest inputs).
-    `REMINDER: link every release you discuss as [anchor text](rel:<id>) using ids copied verbatim from the list above, and make sure every release marked "MUST be discussed and linked" is covered. A body with no (rel:...) links is invalid.`,
+    `REMINDER: link every release you discuss as [anchor text](rel:<id>) using ids copied verbatim from the list above, and make sure every release marked "MUST be discussed and linked" is covered. A body with no (rel:...) links is invalid. Tell each product's week as one account of what changed, not a version-by-version recap — anchor text names the change, never a version number or date.`,
   ].join("\n");
 }
 
@@ -275,15 +302,35 @@ function rawPlaceholderIds(body: string): string[] {
   return ids;
 }
 
+/** A three-part version token (`v2.1.275`, `2.1.274`, `1.0.0-beta.2`). */
+const VERSION_TOKEN_RE = /\bv?\d+\.\d+\.\d+/i;
+
+/**
+ * Link anchors in a raw body that carry a full version number — the
+ * version-by-version recap the prompt forbids ("[2.1.274](rel:…) tackled…").
+ * Two-part names like "Next.js 16" or "Node 22.11" are left alone: a major
+ * version can legitimately be the news.
+ */
+export function versionAnchors(body: string): string[] {
+  const anchors: string[] = [];
+  const re = /\[([^\]]*)\]\(rel:[A-Za-z0-9_-]+\)/g;
+  for (let m = re.exec(body); m !== null; m = re.exec(body)) {
+    if (VERSION_TOKEN_RE.test(m[1]!)) anchors.push(m[1]!);
+  }
+  return anchors;
+}
+
 /**
  * Validate one generation attempt (eval-derived: fabricated ids and dropped
  * importance>=4 coverage were the two real failure modes of the chosen lane).
  *
  * - `hard` failures make the attempt unusable: too few links surviving
  *   resolution, or an importance>=4 release left uncited. Never accepted.
- * - `soft` failures (fabricated ids) trigger a retry, but the attempt is
- *   still shippable — `resolveReleasePlaceholders` drops unknown ids to
- *   plain text, so the page degrades to slightly link-poorer, not broken.
+ * - `soft` failures trigger a retry, but the attempt is still shippable:
+ *   fabricated ids (`resolveReleasePlaceholders` drops them to plain text,
+ *   so the page degrades to slightly link-poorer, not broken) and
+ *   version-number anchor text (reads as a changelog recap, but every claim
+ *   and link still holds).
  */
 export function validateWeeklyDigestAttempt(
   rawBody: string,
@@ -302,7 +349,14 @@ export function validateWeeklyDigestAttempt(
   } else if (uncited.length > 0) {
     hard = `importance>=4 releases uncited: ${uncited.map((r) => r.id).join(", ")}`;
   }
-  const soft = fabricated.length > 0 ? `fabricated release ids: ${fabricated.join(", ")}` : null;
+  const versioned = versionAnchors(rawBody);
+  const softReasons = [
+    fabricated.length > 0 ? `fabricated release ids: ${fabricated.join(", ")}` : null,
+    versioned.length > 0
+      ? `version-number link anchors: ${versioned.map((a) => `"${a}"`).join(", ")}`
+      : null,
+  ].filter((s): s is string => s !== null);
+  const soft = softReasons.length > 0 ? softReasons.join("; ") : null;
   return { hard, soft };
 }
 
@@ -333,9 +387,14 @@ export async function generateCollectionWeeklyDigest(
   let lastFailure = "no attempts ran";
 
   for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+    // A retry names what the previous draft got wrong; an identical re-ask
+    // mostly reproduces the same mistake.
     const { text, usage } = await model.complete({
       system: SYSTEM_PROMPT,
-      user,
+      user:
+        attempt === 1
+          ? user
+          : `${user}\n\nYour previous draft was rejected (${lastFailure}). Write a new draft that fixes this.`,
       maxTokens: MAX_OUTPUT_TOKENS,
       cacheSystem: true,
     });

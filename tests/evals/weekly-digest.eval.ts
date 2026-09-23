@@ -29,6 +29,7 @@ import {
   resolveReleasePlaceholders,
   selectWeeklyDigestReleases,
   SYSTEM_PROMPT,
+  versionAnchors,
   type CollectionWeekInput,
 } from "@releases/ai-internal/collection-weekly-digest";
 // Anthropic baseline = the shared summarize-lane model (the weekly-digest lane
@@ -245,6 +246,13 @@ function gradeWeeklyDigest(
     actual:
       missingHighImportance.length === 0 ? "clean" : `missing ${missingHighImportance.join(",")}`,
   });
+  const versioned = versionAnchors(bodyRaw);
+  fields.push({
+    field: "link discipline: no version-number anchor text",
+    passed: versioned.length === 0,
+    expected: "anchors name the change, not the version",
+    actual: versioned.length === 0 ? "clean" : versioned.join(", "),
+  });
 
   // ── leakage + banned words ──
   const allTexts: Array<[string, string]> = [
@@ -320,7 +328,8 @@ function fakeDigestModel(fixture: WeeklyDigestFixture): TextModel {
     "### Canned dry-run section one",
     "",
     ...allCited.map(
-      (r) => `${r.org} shipped [${r.title}](rel:${r.id}), a change worth a full sentence of prose.`,
+      (r, i) =>
+        `${r.org} shipped [canned change ${i + 1}](rel:${r.id}), a change worth a full sentence of prose.`,
     ),
     "",
     "### Canned dry-run section two",
