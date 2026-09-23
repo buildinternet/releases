@@ -26,6 +26,7 @@ import {
   buildCollectionWeekBlock,
   MAX_OUTPUT_TOKENS,
   parseWeeklyDigest,
+  resolvePlaceholderId,
   resolveReleasePlaceholders,
   selectWeeklyDigestReleases,
   SYSTEM_PROMPT,
@@ -202,9 +203,12 @@ function gradeWeeklyDigest(
   });
 
   // ── link discipline (hard gate) ──
+  // Production repairs a dropped `rel_` prefix (resolvePlaceholderId), so the
+  // link checks below count a repairable id as the release it resolves to.
+  const fixtureIdMap = new Map([...fixtureIds].map((id) => [id, id]));
   const placeholderIds: string[] = [];
   for (const m of bodyRaw.matchAll(REL_PLACEHOLDER_RE)) {
-    placeholderIds.push(m[2]);
+    placeholderIds.push(resolvePlaceholderId(m[2], fixtureIdMap) ?? m[2]);
   }
   fields.push({
     field: "link discipline: at least 3 placeholders",

@@ -121,9 +121,11 @@ Output exactly one <title>...</title> tag, then one <intro>...</intro> tag, then
 </output_structure>
 
 <consolidate_by_product>
-Write about products, not releases. The input groups releases by product. When a product shipped several releases in the week, tell its week as ONE account: say it shipped a handful of updates, then describe what changed across all of them, grouped by what the changes do. NEVER walk through a product's releases one version at a time. "v2.1.275 fixed X. 2.1.274 tackled Y. 2.1.276 patched a 2.1.275 regression." is WRONG. "Claude Code shipped eight updates, most of them fixes: [restored memory files no longer break prompt caching](rel:rel_A), [sessions stuck on a bad tool call now repair themselves](rel:rel_B), and [proxy users got a quick patch for a request error](rel:rel_C)." is RIGHT.
+Write about products, not releases. The input groups releases by product. When a product shipped several releases in the week — a CLI, SDK, or app cutting several versions — tell its week as ONE account: say it shipped a handful of updates, then describe what changed across all of them, grouped by what the changes do. (A news feed or company blog is different: its posts are separate announcements, and each can be its own story.) NEVER walk through a product's releases one version at a time. "v2.1.275 fixed X. 2.1.274 tackled Y. 2.1.276 patched a 2.1.275 regression." is WRONG. "Claude Code shipped eight updates, most of them fixes: [restored memory files no longer break prompt caching](rel:rel_A), [sessions stuck on a bad tool call now repair themselves](rel:rel_B), and [proxy users got a quick patch for a request error](rel:rel_C)." is RIGHT.
 
-Narrating the sequence is the same recap in different words: "the prior release had already…", "an earlier release fixed…", "the following release…", "that release also…" are all WRONG. The order a product's releases shipped within the week almost never matters to the reader; describe what the product does now. Write "Claude Code also fixed…", not "a later release fixed…".
+The product is the subject of every sentence, never a release. "The same release adds…", "that release also…", "the prior release had already…", "a later patch fixed…" all make a release the subject — the same recap in different words — and are WRONG. Write "pnpm also added…" or "Claude Code also fixed…". The order a product's releases shipped within the week almost never matters to the reader; describe what the product does now.
+
+Consolidating changes the prose, not the coverage: every release marked "MUST be discussed and linked" still gets its own link, on the phrase naming its change, inside that product's account.
 
 Version numbers and dates are never the subject of a sentence and never link anchor text: not "2.1.274 tackled…", not "v2.1.278 made…", not "Devin's September 18 release". Name a version only when the version itself is the news — a major release like "Next.js 16", or one broken release readers need to skip — and even then lead with the change. The page lists every cited release, with its exact version, below the digest, so the prose does not need to carry them.
 </consolidate_by_product>
@@ -232,8 +234,19 @@ export function buildCollectionWeekBlock(
     // at the top of the system prompt are dozens of excerpts away, and
     // long-context adherence measurably drops (0-link outputs in the launch
     // backfill happened only on the largest inputs).
-    `REMINDER: link every release you discuss as [anchor text](rel:<id>) using ids copied verbatim from the list above, and make sure every release marked "MUST be discussed and linked" is covered. A body with no (rel:...) links is invalid. Tell each product's week as one account of what changed, not a version-by-version recap — anchor text names the change, never a version number or date.`,
+    `REMINDER: link every release you discuss as [anchor text](rel:<id>) using ids copied verbatim from the list above, and make sure every release marked "MUST be discussed and linked" is covered. A body with no (rel:...) links is invalid. Tell each product's week as one account of what changed, with the product (never a release) as the subject — anchor text names the change, never a version number or date.`,
   ].join("\n");
+}
+
+/**
+ * Map a placeholder id to a provided release id. Models occasionally drop the
+ * `rel_` prefix (`rel:t067…` for `rel_t067…`); that is repaired only when the
+ * prefixed id is in the provided set, so nothing outside it ever resolves.
+ */
+export function resolvePlaceholderId(id: string, idToPath: Map<string, string>): string | null {
+  if (idToPath.has(id)) return id;
+  const prefixed = `rel_${id}`;
+  return idToPath.has(prefixed) ? prefixed : null;
 }
 
 /**
@@ -255,11 +268,11 @@ export function resolveReleasePlaceholders(
   );
   const resolvedIds = new Set<string>();
   const re = /\[([^\]]*)\]\(rel:([A-Za-z0-9_-]+)\)/g;
-  const resolvedBody = stripped.replace(re, (full, anchor: string, id: string) => {
-    const path = idToPath.get(id);
-    if (!path) return anchor; // unknown id — drop the link, keep the text
+  const resolvedBody = stripped.replace(re, (_full, anchor: string, rawId: string) => {
+    const id = resolvePlaceholderId(rawId, idToPath);
+    if (!id) return anchor; // unknown id — drop the link, keep the text
     resolvedIds.add(id);
-    return `[${anchor}](${path})`;
+    return `[${anchor}](${idToPath.get(id)!})`;
   });
   return { body: resolvedBody, releaseIds: [...resolvedIds] };
 }
@@ -338,7 +351,9 @@ export function validateWeeklyDigestAttempt(
   selected: WeeklyDigestRelease[],
   idToPath: Map<string, string>,
 ): { hard: string | null; soft: string | null } {
-  const fabricated = [...new Set(rawPlaceholderIds(rawBody))].filter((id) => !idToPath.has(id));
+  const fabricated = [...new Set(rawPlaceholderIds(rawBody))].filter(
+    (id) => resolvePlaceholderId(id, idToPath) === null,
+  );
   const minLinks = Math.min(3, selected.length);
   const cited = new Set(resolvedIds);
   const uncited = selected.filter((r) => (r.importance ?? 0) >= 4 && !cited.has(r.id));
@@ -429,7 +444,9 @@ export async function generateCollectionWeeklyDigest(
 
     if (!verdict.hard && !verdict.soft) return result;
     if (!verdict.hard) fallback = result; // shippable — bad links already dropped
-    lastFailure = verdict.hard ?? verdict.soft ?? "unknown validation failure";
+    // Report every reason, so a retry can fix a hard and a soft failure at once.
+    lastFailure =
+      [verdict.hard, verdict.soft].filter(Boolean).join("; ") || "unknown validation failure";
   }
 
   if (fallback) {

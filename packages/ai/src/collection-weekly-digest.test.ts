@@ -5,6 +5,7 @@ import {
   isSubstantiveRelease,
   MAX_RELEASES,
   parseWeeklyDigest,
+  resolvePlaceholderId,
   resolveReleasePlaceholders,
   selectWeeklyDigestReleases,
   versionAnchors,
@@ -158,6 +159,20 @@ describe("buildCollectionWeekBlock", () => {
   });
 });
 
+describe("resolvePlaceholderId", () => {
+  const idToPath = new Map([["rel_abc123", "/release/rel_abc123"]]);
+
+  test("returns an exact id and repairs a missing rel_ prefix", () => {
+    expect(resolvePlaceholderId("rel_abc123", idToPath)).toBe("rel_abc123");
+    expect(resolvePlaceholderId("abc123", idToPath)).toBe("rel_abc123");
+  });
+
+  test("never resolves an id outside the provided set", () => {
+    expect(resolvePlaceholderId("rel_ghost", idToPath)).toBeNull();
+    expect(resolvePlaceholderId("ghost", idToPath)).toBeNull();
+  });
+});
+
 describe("versionAnchors", () => {
   test("flags anchors carrying a full version number", () => {
     const body =
@@ -301,6 +316,22 @@ describe("generateCollectionWeeklyDigest", () => {
     expect(result.body).not.toContain("ghost](");
     // usage summed across both attempts
     expect(result.usage.input).toBe(20);
+  });
+
+  test("repairs a dropped rel_ prefix without a retry", async () => {
+    const raw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[Claude Code](rel:abc123) shipped something.</body>" +
+      "<releases>abc123</releases>";
+    const model = sequencedModel([raw]);
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_abc123" })] },
+      new Map([["rel_abc123", "/release/rel_abc123"]]),
+    );
+    expect(model.calls()).toBe(1);
+    expect(result.releaseIds).toEqual(["rel_abc123"]);
+    expect(result.body).toBe("[Claude Code](/release/rel_abc123) shipped something.");
   });
 
   test("retries on version-number anchors and tells the model why", async () => {

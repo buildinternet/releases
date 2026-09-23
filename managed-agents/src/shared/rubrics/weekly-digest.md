@@ -55,8 +55,9 @@ inputs do not state.
   of what changed across them ("Claude Code shipped eight updates, mostly
   fixes: …"), not walked through version by version. Version numbers and
   dates are not the subjects of sentences or the link text ("2.1.274 tackled…",
-  "Devin's September 18 release"), and the prose does not narrate release
-  order ("the prior release…", "a later release fixed…"). A version appears
+  "Devin's September 18 release"). The product, not a release, is the
+  subject ("the same release adds…", "the prior release…", and "a later
+  patch fixed…" all fail). A version appears
   only when it is itself the news — a major release, or one broken release
   readers should skip. A body that recaps a product release by release, by
   version number or by sequence, fails this criterion.
