@@ -1,10 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { eq } from "drizzle-orm";
-import { cronRuns } from "../../apps/api/src/db/schema-cron";
-import { insertRunningRow, finalizeRunRow } from "../../apps/api/src/db/cron-runs-dao";
+import { cronRuns } from "../src/db/schema-cron";
+import { insertRunningRow, finalizeRunRow } from "../src/db/cron-runs-dao";
 
 function makeDb() {
   const sqlite = new Database(":memory:");

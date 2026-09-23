@@ -5,8 +5,8 @@
  *   - POST /v1/sources/:slug/content-hash    → SourceContentHashBodySchema
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { sourceRoutes } from "../src/routes/sources.js";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 

@@ -10,13 +10,9 @@
 
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from "bun:test";
 import { eq, isNull } from "drizzle-orm";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
-import {
-  orgWhere,
-  sourceMatchByIdOrSlug,
-  productMatchByIdOrSlug,
-} from "../../apps/api/src/utils.js";
+import { orgWhere, sourceMatchByIdOrSlug, productMatchByIdOrSlug } from "../src/utils.js";
 
 let tdb: TestDatabase;
 

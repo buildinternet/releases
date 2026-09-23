@@ -8,9 +8,9 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { adminSourcesRoutes } from "../../apps/api/src/routes/admin-sources";
+import { adminSourcesRoutes } from "../src/routes/admin-sources";
 import type { OrgsRollupResponse } from "@buildinternet/releases-api-types";
 
 const DAY_MS = 86400_000;

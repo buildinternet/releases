@@ -1,13 +1,13 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { searchRoutes } from "../../apps/api/src/routes/search.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { searchRoutes } from "../src/routes/search.js";
 import {
   domainAliases,
   organizations,
   releases,
   sources,
 } from "@buildinternet/releases-core/schema";
-import { restoreGlobalFetch } from "../global-fetch";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 let testDb: TestDatabase;
 

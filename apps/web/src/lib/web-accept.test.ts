@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { negotiate, parseAccept } from "../../apps/web/src/lib/accept";
+import { negotiate, parseAccept } from "./accept";
 
 describe("parseAccept", () => {
   it("treats missing header as */*", () => {

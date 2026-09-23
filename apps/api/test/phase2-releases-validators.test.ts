@@ -9,9 +9,9 @@
  *   - POST   /v1/releases/batch-suppress   (sources.ts)
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { releaseRoutes } from "../../apps/api/src/routes/releases.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { releaseRoutes } from "../src/routes/releases.js";
+import { sourceRoutes } from "../src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { eq } from "drizzle-orm";

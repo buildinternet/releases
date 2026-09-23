@@ -9,11 +9,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations, createTestDb, type TestDatabase } from "../db-helper";
+import { applyMigrations, createTestDb, type TestDatabase } from "../../../tests/db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { queryDueSources } from "../../apps/api/src/cron/poll-fetch";
-import { queryCandidates } from "../../apps/api/src/lib/sources/drain-candidates";
-import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
+import { queryDueSources } from "../src/cron/poll-fetch";
+import { queryCandidates } from "../src/lib/sources/drain-candidates";
+import { orgRoutes } from "../src/routes/orgs.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 
 // ── queryDueSources ──────────────────────────────────────────────────────────

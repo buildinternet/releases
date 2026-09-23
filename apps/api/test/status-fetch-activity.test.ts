@@ -122,7 +122,9 @@ describe("GET /v1/status/fetch-activity", () => {
     expect(h10!.orgCount).toBe(1);
     expect(h10!.topOrgs.map((o) => o.slug)).toEqual(["acme"]);
     // Facepile skips the org_accounts join for cost; avatar_url is enough.
-    expect(h10!.topOrgs[0]!.avatarUrl).toBe("https://example.com/a.png");
+    expect((h10!.topOrgs[0] as unknown as { avatarUrl: string }).avatarUrl).toBe(
+      "https://example.com/a.png",
+    );
 
     expect(h11!.success).toBe(1);
     expect(h11!.error).toBe(1);

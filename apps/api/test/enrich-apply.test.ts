@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import {
   applyExtractedContent,
   selectEnrichCandidates,
   type EnrichCandidateRow,
-} from "../../apps/api/src/lib/ingest/enrich-apply.js";
+} from "../src/lib/ingest/enrich-apply.js";
 
 let tdb: TestDatabase;
 beforeAll(() => {

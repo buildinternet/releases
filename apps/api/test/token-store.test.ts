@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 
@@ -27,7 +27,7 @@ describe("api_tokens schema", () => {
   });
 });
 
-import { verifyApiToken, touchLastUsed } from "../../apps/api/src/middleware/token-store.js";
+import { verifyApiToken, touchLastUsed } from "../src/middleware/token-store.js";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
 async function seedToken(
@@ -56,7 +56,7 @@ describe("verifyApiToken", () => {
       id: "tok_ok",
       scopes: JSON.stringify(["read", "write"]),
     });
-    const res = await verifyApiToken(h.db, token);
+    const res = await verifyApiToken(h.db as never, token);
     expect(res).toEqual({
       ok: true,
       tokenId: "tok_ok",
@@ -69,13 +69,13 @@ describe("verifyApiToken", () => {
     h = createTestDb();
     await seedToken(h.db, { id: "tok_ws" });
     const other = generateApiToken();
-    const res = await verifyApiToken(h.db, other.token); // unknown lookupId
+    const res = await verifyApiToken(h.db as never, other.token); // unknown lookupId
     expect(res.ok).toBe(false);
   });
 
   it("rejects a malformed token", async () => {
     h = createTestDb();
-    const res = await verifyApiToken(h.db, "relk_not_a_real_token");
+    const res = await verifyApiToken(h.db as never, "relk_not_a_real_token");
     expect(res.ok).toBe(false);
   });
 
@@ -86,7 +86,7 @@ describe("verifyApiToken", () => {
     // false branch on an existing row. Byte-identical in shape to the
     // unknown-lookupId rejection.
     const probe = `relk_${lookupId}_${generateApiToken().secret}`;
-    const res = await verifyApiToken(h.db, probe);
+    const res = await verifyApiToken(h.db as never, probe);
     expect(res.ok).toBe(false);
   });
 
@@ -95,19 +95,19 @@ describe("verifyApiToken", () => {
     // Malformed JSON, non-array, and an empty array all collapse to no scopes —
     // a healthy token never has that, so it must be denied (not admitted powerless).
     const bad = await seedToken(h.db, { id: "tok_badjson", scopes: "not-json" });
-    expect((await verifyApiToken(h.db, bad.token)).ok).toBe(false);
+    expect((await verifyApiToken(h.db as never, bad.token)).ok).toBe(false);
 
     const nullScopes = await seedToken(h.db, { id: "tok_nullscopes", scopes: "null" });
-    expect((await verifyApiToken(h.db, nullScopes.token)).ok).toBe(false);
+    expect((await verifyApiToken(h.db as never, nullScopes.token)).ok).toBe(false);
 
     const emptyArr = await seedToken(h.db, { id: "tok_emptyscopes", scopes: "[]" });
-    expect((await verifyApiToken(h.db, emptyArr.token)).ok).toBe(false);
+    expect((await verifyApiToken(h.db as never, emptyArr.token)).ok).toBe(false);
   });
 
   it("rejects a revoked token", async () => {
     h = createTestDb();
     const { token } = await seedToken(h.db, { id: "tok_rev", active: false });
-    const res = await verifyApiToken(h.db, token);
+    const res = await verifyApiToken(h.db as never, token);
     expect(res.ok).toBe(false);
   });
 
@@ -118,7 +118,7 @@ describe("verifyApiToken", () => {
       active: true,
       revokedAt: new Date().toISOString(),
     });
-    const res = await verifyApiToken(h.db, token);
+    const res = await verifyApiToken(h.db as never, token);
     expect(res.ok).toBe(false);
   });
 
@@ -128,7 +128,7 @@ describe("verifyApiToken", () => {
       id: "tok_exp",
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
-    const res = await verifyApiToken(h.db, token);
+    const res = await verifyApiToken(h.db as never, token);
     expect(res.ok).toBe(false);
   });
 
@@ -138,7 +138,7 @@ describe("verifyApiToken", () => {
       id: "tok_future",
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
-    const res = await verifyApiToken(h.db, token);
+    const res = await verifyApiToken(h.db as never, token);
     expect(res.ok).toBe(true);
   });
 });
@@ -147,7 +147,7 @@ describe("touchLastUsed", () => {
   it("sets last_used_at when null", async () => {
     h = createTestDb();
     await seedToken(h.db, { id: "tok_touch" });
-    await touchLastUsed(h.db, "tok_touch");
+    await touchLastUsed(h.db as never, "tok_touch");
     const row = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_touch")).get();
     expect(row?.lastUsedAt).toBeTruthy();
   });
@@ -159,7 +159,7 @@ describe("touchLastUsed", () => {
       lastUsedAt: new Date(Date.now() - 5_000).toISOString(),
     });
     const before = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_throttle")).get();
-    await touchLastUsed(h.db, "tok_throttle");
+    await touchLastUsed(h.db as never, "tok_throttle");
     const after = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_throttle")).get();
     expect(after?.lastUsedAt).toBe(before?.lastUsedAt);
   });
@@ -171,7 +171,7 @@ describe("touchLastUsed", () => {
       lastUsedAt: new Date(Date.now() - 70_000).toISOString(),
     });
     const before = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_stale")).get();
-    await touchLastUsed(h.db, "tok_stale");
+    await touchLastUsed(h.db as never, "tok_stale");
     const after = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_stale")).get();
     expect(after?.lastUsedAt).not.toBe(before?.lastUsedAt);
   });

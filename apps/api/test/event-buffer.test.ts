@@ -5,8 +5,8 @@ import {
   currentSeq,
   oldestSeq,
   type EventStore,
-} from "../../apps/api/src/events/buffer.js";
-import type { ReleaseEventPayload } from "../../apps/api/src/events/types.js";
+} from "../src/events/buffer.js";
+import type { ReleaseEventPayload } from "../src/events/types.js";
 
 function makeStore(): EventStore {
   const map = new Map<string, unknown>();
@@ -44,7 +44,7 @@ function payload(id: string): ReleaseEventPayload {
     titleGenerated: null,
     titleShort: null,
     media: [],
-  };
+  } as unknown as ReleaseEventPayload;
 }
 
 describe("appendEvent", () => {

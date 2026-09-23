@@ -1,13 +1,12 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono, type MiddlewareHandler } from "hono";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
-const { tokensAuthMiddleware } =
-  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
-    tokensAuthMiddleware: MiddlewareHandler;
-  };
+const { tokensAuthMiddleware } = (await import("../src/middleware/auth.js")) as unknown as {
+  tokensAuthMiddleware: MiddlewareHandler;
+};
 
 function mockSecret(value: string) {
   return { get: () => Promise.resolve(value) };

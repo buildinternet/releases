@@ -5,7 +5,7 @@ import {
   decodeReleaseCursor,
   encodeReleaseCursor,
   parseFeedLimit,
-} from "../../apps/mcp/src/lib/pagination.js";
+} from "../src/lib/pagination.js";
 
 describe("encodeReleaseCursor / decodeReleaseCursor", () => {
   it("round-trips a full (publishedAt, id) cursor", () => {

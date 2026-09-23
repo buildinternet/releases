@@ -18,10 +18,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from "bun:test";
-import { buildFeedCursor, parseFeedCursor } from "../../apps/api/src/utils.js";
-import { getCollectionReleasesFeed } from "../../apps/api/src/queries/orgs.js";
-import type { D1Db } from "../../apps/api/src/db.js";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { buildFeedCursor, parseFeedCursor } from "../src/utils.js";
+import { getCollectionReleasesFeed } from "../src/queries/orgs.js";
+import type { D1Db } from "../src/db.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 
 const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;

@@ -1,13 +1,13 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { fetchLog, organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Session } from "@buildinternet/releases-api-types";
 import {
   applyFetchLogOverlay,
   applyFetchLogOverlaySingle,
-} from "../../apps/api/src/lib/session-fetch-log-overlay";
+} from "../src/lib/session-fetch-log-overlay";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

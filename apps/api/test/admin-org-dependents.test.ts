@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import {
   organizations,
   sources,
@@ -14,7 +14,7 @@ import {
   mediaAssets,
   webhookSubscriptions,
 } from "@buildinternet/releases-core/schema";
-import { adminOrgDependentsRoutes } from "../../apps/api/src/routes/admin-org-dependents";
+import { adminOrgDependentsRoutes } from "../src/routes/admin-org-dependents";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

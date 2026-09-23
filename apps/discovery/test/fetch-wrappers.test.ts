@@ -4,9 +4,9 @@ import {
   withStagingHeader,
   withDiscoveryIdentity,
   directApiFetcher,
-} from "../../apps/discovery/src/fetch-wrappers";
-import { DISCOVERY_USER_AGENT, DISCOVERY_REQUESTED_WITH } from "../../apps/discovery/src/identity";
-import { restoreGlobalFetch } from "../global-fetch";
+} from "../src/fetch-wrappers";
+import { DISCOVERY_USER_AGENT, DISCOVERY_REQUESTED_WITH } from "../src/identity";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 /**
  * Regression tests for #550. The wrappers must NOT forward the original `init`

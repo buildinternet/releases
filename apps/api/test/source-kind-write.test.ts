@@ -4,9 +4,9 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../apps/api/src/routes/products.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { productRoutes } from "../src/routes/products.js";
+import { sourceRoutes } from "../src/routes/sources.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;
@@ -95,7 +95,7 @@ describe("kind on write paths", () => {
       kind: "framework",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as Record<string, unknown>;
+    const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("validation_failed");
   });
 

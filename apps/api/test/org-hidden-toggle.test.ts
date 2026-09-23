@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { applyMigrations, createTestDb, type TestDatabase } from "../db-helper";
+import { applyMigrations, createTestDb, type TestDatabase } from "../../../tests/db-helper";
 import { organizations } from "@buildinternet/releases-core/schema";
-import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
+import { orgRoutes } from "../src/routes/orgs.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 
 describe("organizations.is_hidden column", () => {

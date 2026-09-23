@@ -8,7 +8,8 @@ import {
   ALLOWLISTED_CACHE_KEYS,
   isCacheableLatestRequest,
   type LatestCacheBinding,
-} from "../../apps/api/src/lib/latest-cache.js";
+  type NormalizedLatestParams,
+} from "../src/lib/latest-cache.js";
 
 interface PutCall {
   key: string;
@@ -32,7 +33,7 @@ function makeKv(initial: Record<string, unknown> = {}): {
     gets,
     puts,
     kv: {
-      async get(key, _type) {
+      async get(key: string, _type?: "json") {
         gets.push(key);
         const raw = store.get(key);
         return raw === undefined ? null : JSON.parse(raw);
@@ -113,7 +114,7 @@ describe("isCacheableLatestRequest", () => {
       since: normalized.since,
       until: normalized.until,
     });
-    return isCacheableLatestRequest(key, normalized);
+    return isCacheableLatestRequest(key, normalized as NormalizedLatestParams);
   }
 
   it("caches the default unfiltered request", () => {
@@ -167,11 +168,14 @@ describe("isCacheableLatestRequest", () => {
       since: undefined,
       until: undefined,
     };
-    expect(isCacheableLatestRequest(allowlistedKey, params)).toBe(false);
+    expect(
+      isCacheableLatestRequest(allowlistedKey, params as unknown as NormalizedLatestParams),
+    ).toBe(false);
 
     const withAdded: ReadonlySet<string> = new Set([allowlistedKey]);
     const wouldCache =
-      withAdded.has(allowlistedKey) || isCacheableLatestRequest(allowlistedKey, params);
+      withAdded.has(allowlistedKey) ||
+      isCacheableLatestRequest(allowlistedKey, params as unknown as NormalizedLatestParams);
     expect(wouldCache).toBe(true);
   });
 

@@ -3,14 +3,14 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import {
   organizations,
   sources,
   releases,
   knowledgePageCitations,
 } from "@buildinternet/releases-core/schema";
-import overview from "../../apps/api/src/routes/overview";
+import overview from "../src/routes/overview";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -123,7 +123,10 @@ describe("POST/GET /v1/orgs/:slug/overview citations", () => {
       ],
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, citations: 2 });
+    expect(await res.json<{ ok: boolean; citations: number }>()).toEqual({
+      ok: true,
+      citations: 2,
+    });
 
     const get = await getOverview();
     const body = (await get.json()) as { citations: Array<Record<string, unknown>> };

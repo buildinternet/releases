@@ -14,10 +14,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { runHybridSearch } from "../../apps/mcp/src/lib/search-hybrid.js";
-import type { HybridSearchEnv } from "../../apps/mcp/src/lib/search-hybrid.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { runHybridSearch } from "../src/lib/search-hybrid.js";
+import type { HybridSearchEnv } from "../src/lib/search-hybrid.js";
 
 /** Minimal env — no Vectorize or embedding provider, so hybrid/semantic degrade to lexical. */
 const minimalEnv: HybridSearchEnv = {};

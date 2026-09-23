@@ -6,10 +6,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { runHybridSearch } from "../../apps/mcp/src/lib/search-hybrid.js";
-import type { HybridSearchEnv } from "../../apps/mcp/src/lib/search-hybrid.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { runHybridSearch } from "../src/lib/search-hybrid.js";
+import type { HybridSearchEnv } from "../src/lib/search-hybrid.js";
 
 const minimalEnv: HybridSearchEnv = {};
 const BODY = "full markdown body that must not ship on list hits by default";

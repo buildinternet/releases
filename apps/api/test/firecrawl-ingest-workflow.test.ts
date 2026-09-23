@@ -3,11 +3,11 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { sources, organizations, releases, fetchLog } from "@buildinternet/releases-core/schema";
-import { applyMigrations, ensureBatchShim } from "../db-helper";
+import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import {
   FirecrawlIngestWorkflow,
   type FirecrawlIngestEnv,
-} from "../../apps/api/src/workflows/firecrawl-ingest";
+} from "../src/workflows/firecrawl-ingest";
 import { mkFakeStep } from "./_workflow-test-helpers";
 import { FirecrawlError } from "@releases/lib/errors";
 

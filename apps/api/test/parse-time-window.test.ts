@@ -6,7 +6,7 @@
  * silent empty set).
  */
 import { describe, it, expect } from "bun:test";
-import { parseTimeWindow } from "../../apps/api/src/utils.js";
+import { parseTimeWindow } from "../src/utils.js";
 
 describe("parseTimeWindow", () => {
   it("resolves both bounds to canonical ISO", () => {

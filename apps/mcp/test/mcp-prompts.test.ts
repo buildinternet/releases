@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import { organizations, products } from "@buildinternet/releases-core/schema";
 import { newOrgId, newProductId } from "@buildinternet/releases-core/id";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { asD1, createMcpTestClient } from "../mcp-test-helpers.js";
-import { registerPrompts } from "../../apps/mcp/src/prompts.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1, createMcpTestClient } from "../../../tests/mcp-test-helpers.js";
+import { registerPrompts } from "../src/prompts.js";
 
 const linkPrompts = (db: TestDatabase["db"]) => createMcpTestClient(registerPrompts, asD1(db));
 

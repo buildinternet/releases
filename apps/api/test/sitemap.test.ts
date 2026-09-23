@@ -5,7 +5,7 @@
 
 import { describe, test, expect, beforeEach, afterAll, beforeAll } from "bun:test";
 import { Hono } from "hono";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import {
   organizations,
   sources,
@@ -13,7 +13,7 @@ import {
   releases,
   collections,
 } from "@buildinternet/releases-core/schema";
-import { sitemapRoutes } from "../../apps/api/src/routes/sitemap.js";
+import { sitemapRoutes } from "../src/routes/sitemap.js";
 
 let testDatabase: TestDatabase;
 let app: Hono;
@@ -30,6 +30,7 @@ type SitemapResponse = {
   }[];
   products: { orgSlug: string; slug: string }[];
   collections: { slug: string; updatedAt: string }[];
+  digests: { collectionSlug: string; weekStart: string; generatedAt: string | null }[];
 };
 
 async function callSitemap(): Promise<SitemapResponse> {

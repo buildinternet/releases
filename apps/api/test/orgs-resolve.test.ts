@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, it, expect } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../apps/api/src/routes/products.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { productRoutes } from "../src/routes/products.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeCaller, makeJsonCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;
@@ -55,7 +55,7 @@ describe("GET /v1/orgs/:org/resolve/:slug", () => {
     await seed();
     const res = await call("/orgs/vercel/resolve/turborepo");
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { kind: string; product: { slug: string } };
     expect(body.kind).toBe("product");
     expect(body.product.slug).toBe("turborepo");
   });
@@ -64,7 +64,7 @@ describe("GET /v1/orgs/:org/resolve/:slug", () => {
     await seed();
     const res = await call("/orgs/vercel/resolve/vercel-docs");
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { kind: string; source: { slug: string } };
     expect(body.kind).toBe("source");
     expect(body.source.slug).toBe("vercel-docs");
   });
@@ -105,7 +105,7 @@ describe("POST /v1/products shadow guard", () => {
       orgSlug: "acme",
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = (await res.json()) as { slug: string; warning?: string };
     expect(body.slug).toBe("acme-cli");
     expect(body.warning).toContain("shadow");
   });
@@ -123,7 +123,7 @@ describe("POST /v1/products shadow guard", () => {
       orgSlug: "beta",
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = (await res.json()) as { warning?: string };
     expect(body.warning).toBeUndefined();
   });
 });

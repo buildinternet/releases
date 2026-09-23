@@ -4,7 +4,7 @@ import {
   notifyWebRevalidatePaths,
   type WebRevalidateEnv,
   type RevalidateableSource,
-} from "../../apps/api/src/lib/web-revalidate.js";
+} from "../src/lib/web-revalidate.js";
 
 const SECRET_VALUE = "shared-revalidate-secret";
 const SECRET = {

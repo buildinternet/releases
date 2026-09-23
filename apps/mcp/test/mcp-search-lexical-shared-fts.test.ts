@@ -13,9 +13,9 @@ import { organizations, products, sources, releases } from "@buildinternet/relea
 import { newOrgId, newProductId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { searchReleasesFts } from "@releases/search/releases-fts.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { search } from "../../apps/mcp/src/tools.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { search } from "../src/tools.js";
 
 let testDb: TestDatabase;
 

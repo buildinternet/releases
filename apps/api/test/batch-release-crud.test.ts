@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
+import { sourceRoutes } from "../src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 
 let testDb: TestDatabase;
@@ -97,7 +97,7 @@ describe("DELETE /releases/batch", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ deleted: 2 });
+    expect(await res.json<{ deleted: number }>()).toEqual({ deleted: 2 });
 
     const rows = await testDb.db.select().from(releases);
     expect(rows).toHaveLength(0);
@@ -115,7 +115,7 @@ describe("DELETE /releases/batch", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ deleted: 0 });
+    expect(await res.json<{ deleted: number }>()).toEqual({ deleted: 0 });
   });
 
   it("400 when releaseIds is empty", async () => {
@@ -154,7 +154,7 @@ describe("POST /releases/batch-suppress", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ updated: 1 });
+    expect(await res.json<{ updated: number }>()).toEqual({ updated: 1 });
 
     const [row] = await testDb.db.select().from(releases).where(eq(releases.id, "rel_a"));
     expect(row?.suppressed).toBe(true);
@@ -179,7 +179,7 @@ describe("POST /releases/batch-suppress", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ updated: 1 });
+    expect(await res.json<{ updated: number }>()).toEqual({ updated: 1 });
 
     const [row] = await testDb.db.select().from(releases).where(eq(releases.id, "rel_a"));
     expect(row?.suppressed).toBe(false);
@@ -226,7 +226,7 @@ describe("POST /releases/batch-suppress", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ updated: 0 });
+    expect(await res.json<{ updated: number }>()).toEqual({ updated: 0 });
     expect(waitUntilCalls).toHaveLength(0);
     expect(kv.delete).not.toHaveBeenCalled();
   });

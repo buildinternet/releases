@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
+import { createServer, type Env } from "../src/mcp-agent.js";
 
 /**
  * The per-user/per-workspace webhook tools (#1678, #2326) proxy through the

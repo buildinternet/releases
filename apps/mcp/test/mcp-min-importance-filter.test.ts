@@ -1,7 +1,7 @@
 /**
  * `minImportance` filter on the MCP `get_latest_releases` and `whats_changed`
  * tools (#2098). Mirrors the REST `?minImportance=` contract exercised in
- * `tests/api/release-importance-filter.test.ts`: integer 1–5, inclusive at
+ * `apps/api/test/release-importance-filter.test.ts`: integer 1–5, inclusive at
  * the floor, unscored (`null`) rows never pass, out-of-range/non-integer
  * input is rejected rather than silently falling through.
  *
@@ -20,10 +20,10 @@ import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { getLatestReleases } from "../../apps/mcp/src/tools.js";
-import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { getLatestReleases } from "../src/tools.js";
+import { createServer, type Env } from "../src/mcp-agent.js";
 
 const TOKEN = "importancefilter";
 

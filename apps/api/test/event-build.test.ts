@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildReleaseEventPayloads } from "../../apps/api/src/events/build-event.js";
+import { buildReleaseEventPayloads } from "../src/events/build-event.js";
 
 describe("buildReleaseEventPayloads", () => {
   it("maps inserted rows + source context to the wire shape", () => {

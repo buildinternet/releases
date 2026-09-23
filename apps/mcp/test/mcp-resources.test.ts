@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { newOrgId, newProductId, newSourceId } from "@buildinternet/releases-core/id";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { asD1, createMcpTestClient } from "../mcp-test-helpers.js";
-import { registerResources } from "../../apps/mcp/src/resources.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1, createMcpTestClient } from "../../../tests/mcp-test-helpers.js";
+import { registerResources } from "../src/resources.js";
 
 const linkResources = (db: TestDatabase["db"]) =>
   createMcpTestClient(registerResources, asD1(db), "");

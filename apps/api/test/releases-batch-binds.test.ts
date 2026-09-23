@@ -17,7 +17,7 @@ import {
   CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
   RELEASE_COVERAGE_INSERT_CHUNK_SIZE,
   ENTITY_TAG_INSERT_CHUNK_SIZE,
-} from "../../apps/api/src/lib/d1-limits.js";
+} from "../src/lib/d1-limits.js";
 
 // D1 rejects any prepared statement that binds more than D1_MAX_BINDINGS
 // parameters. These tests use Drizzle's .toSQL() to count the placeholders

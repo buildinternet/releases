@@ -1,9 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
-import { queryCandidates } from "../../apps/api/src/lib/sources/drain-candidates";
+import { queryCandidates } from "../src/lib/sources/drain-candidates";
 
 function seed() {
   const sqlite = new Database(":memory:");

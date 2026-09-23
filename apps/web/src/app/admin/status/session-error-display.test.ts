@@ -5,7 +5,7 @@ import {
   isIncidentResolved,
   INCIDENT_RESOLVED_AFTER_MS,
   type ClassifiedSession,
-} from "../../apps/web/src/app/admin/status/session-error-display";
+} from "./session-error-display";
 
 const baseError: ClassifiedSession = {
   status: "error",

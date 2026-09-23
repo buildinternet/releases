@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import {
   organizations,
   sources,
@@ -17,7 +17,7 @@ import {
   countSourcesForList,
   getSourcesWithStats,
   SOURCE_STALE_DAYS,
-} from "../../apps/api/src/queries/sources.js";
+} from "../src/queries/sources.js";
 
 let tdb: TestDatabase;
 

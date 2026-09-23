@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
 const { authMiddleware, publicReadAuthMiddleware, isValidBearerAuth } =
-  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
+  (await import("../src/middleware/auth.js")) as unknown as {
     authMiddleware: MiddlewareHandler;
     publicReadAuthMiddleware: MiddlewareHandler;
     isValidBearerAuth: (c: Context) => Promise<boolean>;

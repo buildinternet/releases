@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
@@ -9,10 +9,9 @@ type AuthIdentity =
   | { kind: "token"; tokenId: string; scopes: string[]; machinePrincipalType?: string }
   | null;
 
-const { resolveAuthIdentity } =
-  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
-    resolveAuthIdentity: (c: unknown) => Promise<AuthIdentity>;
-  };
+const { resolveAuthIdentity } = (await import("../src/middleware/auth.js")) as unknown as {
+  resolveAuthIdentity: (c: unknown) => Promise<AuthIdentity>;
+};
 
 function mockSecret(value: string) {
   return { get: () => Promise.resolve(value) };

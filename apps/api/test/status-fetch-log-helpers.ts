@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { Hono } from "hono";
-import { statusRoutes } from "../../apps/api/src/routes/status";
+import { statusRoutes } from "../src/routes/status";
 
 export function mkDb() {
   const sqlite = new Database(":memory:");

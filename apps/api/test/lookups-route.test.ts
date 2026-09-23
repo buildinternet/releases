@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { lookupRoutes } from "../../apps/api/src/routes/lookups.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { lookupRoutes } from "../src/routes/lookups.js";
 import {
   domainAliases,
   organizations,
@@ -9,7 +9,7 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
-import { restoreGlobalFetch } from "../global-fetch";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 let testDb: TestDatabase;
 

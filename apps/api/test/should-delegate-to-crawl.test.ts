@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
 import type { SourceMetadata } from "@releases/adapters/feed";
-import { shouldDelegateToCrawl } from "../../apps/api/src/cron/poll-fetch.js";
+import { shouldDelegateToCrawl } from "../src/cron/poll-fetch.js";
 
 /**
  * The decision function gates the new "summary-only feed → discovery crawl"

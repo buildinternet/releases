@@ -24,7 +24,7 @@ import {
   resolveCrawlIncludePatterns,
   type CrawlDeps,
 } from "@releases/adapters/scrape-fetch";
-import { restoreGlobalFetch } from "../global-fetch";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 // ── Fixtures ────────────────────────────────────────────────────────
 
@@ -448,7 +448,7 @@ describe("acquireCrawlMarkdown", () => {
 // Direct unit tests for startCrawl itself. We mock `fetch` via a simple
 // wrapper so we can inspect the request body without hitting Cloudflare.
 
-import { startCrawl } from "../../packages/adapters/src/crawl";
+import { startCrawl } from "./crawl";
 
 interface CapturedRequest {
   url: string;

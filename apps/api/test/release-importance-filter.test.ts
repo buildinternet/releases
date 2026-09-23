@@ -11,8 +11,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { releaseRoutes } from "../../apps/api/src/routes/releases.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { releaseRoutes } from "../src/routes/releases.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;

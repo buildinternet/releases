@@ -1,6 +1,6 @@
 /**
  * Unit-tests the pure product + source entry builder that backs the web
- * sitemap. Mirrors the `bun:test` style of `tests/unit/sitemap.test.ts`, but
+ * sitemap. Mirrors the `bun:test` style of `apps/api/test/sitemap.test.ts`, but
  * exercises the #1190 product-first / shadow-routing logic directly off a
  * hand-built `SitemapPayload` (no network / Next.js default export).
  */

@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import * as schema from "@buildinternet/releases-core/schema";
 import { releases } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 
 // Behavioral coverage for RELEASE_URL_UPSERT's media backfill (Lever C). A
 // crawl source whose large body tripped the extraction guardrail stored its

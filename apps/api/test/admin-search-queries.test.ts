@@ -2,9 +2,9 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { searchQueries } from "@buildinternet/releases-core/schema";
-import { adminSearchQueriesRoutes } from "../../apps/api/src/routes/admin-search-queries";
+import { adminSearchQueriesRoutes } from "../src/routes/admin-search-queries";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

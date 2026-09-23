@@ -17,9 +17,9 @@ import {
   sources,
   releases,
 } from "@buildinternet/releases-core/schema";
-import { releaseRoutes } from "../../apps/api/src/routes/releases.js";
-import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { releaseRoutes } from "../src/routes/releases.js";
+import { orgRoutes } from "../src/routes/orgs.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;

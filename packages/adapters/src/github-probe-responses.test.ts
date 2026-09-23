@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach, mock } from "bun:test";
-import { probeRepo } from "../../packages/adapters/src/github-probe.js";
-import { restoreGlobalFetch } from "../global-fetch";
+import { probeRepo } from "./github-probe.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const TOKEN = "test-token";
 const env = { GITHUB_TOKEN: TOKEN } as { GITHUB_TOKEN?: string };

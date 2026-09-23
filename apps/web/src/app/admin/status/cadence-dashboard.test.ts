@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { describeCadence } from "../../apps/web/src/app/admin/status/cadence-helpers";
+import { describeCadence } from "./cadence-helpers";
 
 describe("describeCadence", () => {
   it("renders an em-dash placeholder when signal is missing", () => {

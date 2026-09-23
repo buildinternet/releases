@@ -5,11 +5,8 @@ import {
   PermissionDeniedError,
   RateLimitError,
 } from "@anthropic-ai/sdk";
-import {
-  anthropicErrorHttpStatus,
-  classifyAnthropicError,
-} from "../../packages/lib/src/anthropic-errors";
-import { fakeAnthropicError } from "../anthropic-errors-helper";
+import { anthropicErrorHttpStatus, classifyAnthropicError } from "./anthropic-errors";
+import { fakeAnthropicError } from "../../../tests/anthropic-errors-helper";
 
 describe("classifyAnthropicError", () => {
   it("returns kind=other for non-SDK values", () => {

@@ -3,8 +3,8 @@
  * dropped its hand-rolled body parser in favor of `validateJson(schema)`.
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { productRoutes } from "../../apps/api/src/routes/products.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { productRoutes } from "../src/routes/products.js";
 import { organizations, products, productTags, tags } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 

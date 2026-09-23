@@ -15,7 +15,7 @@ import {
   generateContentForReleases,
 } from "../../apps/api/src/workflows/poll-and-fetch";
 import type { PollAndFetchWorkflowEnv } from "../../apps/api/src/workflows/poll-and-fetch";
-import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
+import { mkFakeStep, mkFetch, mkVectorize } from "../../apps/api/test/_workflow-test-helpers";
 import { restoreGlobalFetch } from "../global-fetch";
 import { CACHEABLE_DEFAULT_SHAPES } from "../../apps/api/src/lib/latest-cache";
 import { purgeKeysForHomepageTicker } from "../../apps/api/src/graphql/persisted";

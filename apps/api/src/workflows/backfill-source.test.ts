@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { sources, organizations, releases } from "@buildinternet/releases-core/schema";
 import { applyMigrations, ensureBatchShim } from "../../../../tests/db-helper.js";
 import { BackfillSourceWorkflow, type BackfillSourceEnv } from "./backfill-source.js";
-import { mkFakeStep } from "../../../../tests/api/_workflow-test-helpers.js";
+import { mkFakeStep } from "../../test/_workflow-test-helpers.js";
 import type { RawRelease } from "@releases/adapters/types.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 

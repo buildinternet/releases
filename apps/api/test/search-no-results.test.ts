@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import { searchQueries } from "@buildinternet/releases-core/schema";
 import {
   DEFAULT_MIN_VOLUME,
@@ -10,7 +10,7 @@ import {
   formatNoResultsAlertBody,
   getNoResultsStats,
   parseThresholds,
-} from "../../apps/api/src/lib/search/search-no-results";
+} from "../src/lib/search/search-no-results";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

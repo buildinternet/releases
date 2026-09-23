@@ -2,7 +2,7 @@
 // derived from this limit and the per-row bind count Drizzle emits for each
 // statement shape. Changing the schema (adding columns to `releases`) or the
 // Drizzle insert shape means recomputing these — the bind-budget invariant
-// tests in tests/api/releases-batch-binds.test.ts fail loudly when a bump
+// tests in apps/api/test/releases-batch-binds.test.ts fail loudly when a bump
 // would push a statement past the cap.
 //
 // Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) and

@@ -3,7 +3,7 @@ import {
   buildChangelogResponse,
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { eq } from "drizzle-orm";
 import {
   organizations,

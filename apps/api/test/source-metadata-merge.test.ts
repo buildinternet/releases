@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { mergeSourceMetadata } from "../../apps/api/src/routes/sources.js";
+import { mergeSourceMetadata } from "../src/routes/sources.js";
 
 describe("mergeSourceMetadata", () => {
   it("returns the patch when existing is null", () => {

@@ -1,15 +1,12 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { createAuth } from "../../apps/api/src/auth/index.js";
-import {
-  publicReadAuthMiddleware,
-  resolveAuthIdentity,
-} from "../../apps/api/src/middleware/auth.js";
-import { user, apikey } from "../../apps/api/src/db/schema-auth.js";
-import { scopeToPermissions } from "../../apps/api/src/auth/api-key-scope.js";
-import type { Env } from "../../apps/api/src/index.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { createAuth } from "../src/auth/index.js";
+import { publicReadAuthMiddleware, resolveAuthIdentity } from "../src/middleware/auth.js";
+import { user, apikey } from "../src/db/schema-auth.js";
+import { scopeToPermissions } from "../src/auth/api-key-scope.js";
+import type { Env } from "../src/index.js";
 
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());

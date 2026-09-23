@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { cronRuns } from "../../apps/api/src/db/schema-cron";
+import { cronRuns } from "../src/db/schema-cron";
 import { mkDb, mkApp } from "./admin-cron-runs-helpers";
 
 describe("GET /admin/cron-runs", () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 
 /**
  * Covers the SourceActor re-seed heartbeat in `fanOutPollAndFetch` (#1776): every
@@ -79,9 +79,8 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
   // returns without seeding; otherwise every due source is `ensureScheduled` in
   // bounded waves.
   async function heartbeatReplica(actor: ReturnType<typeof mkFakeActorNamespace> | null) {
-    const { queryDueSources } = await import("../../apps/api/src/cron/poll-fetch");
-    const { queryUnmanagedActiveSources } =
-      await import("../../apps/api/src/queries/unmanaged-source-actors");
+    const { queryDueSources } = await import("../src/cron/poll-fetch");
+    const { queryUnmanagedActiveSources } = await import("../src/queries/unmanaged-source-actors");
     const now = new Date();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dueAll = await queryDueSources(db as any, now, { changeDetectEnabled: true });

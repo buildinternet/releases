@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { runEnrichBackfill } from "../../apps/api/src/routes/workflows.js";
+import { runEnrichBackfill } from "../src/routes/workflows.js";
 
 let tdb: TestDatabase;
 beforeAll(() => {

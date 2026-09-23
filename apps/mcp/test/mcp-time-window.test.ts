@@ -11,9 +11,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { search, getLatestReleases } from "../../apps/mcp/src/tools.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { search, getLatestReleases } from "../src/tools.js";
 
 const TOKEN = "chronowindow";
 let testDb: TestDatabase;

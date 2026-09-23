@@ -51,7 +51,7 @@ Next.js's `opengraph-image.tsx` file convention (one per route segment, cascadin
 
 `renderOgImage` picks the bleed variant (blurred hero + dark overlay) when `heroImage` is a non-null data URI, else the text-only card; `renderOgImageSplit` is exported but currently unused (kept as a ready template for future variants). `resolveHeroImage` fetches candidate media, rejects tiny thumbnails via URL markers + content-type/size bounds (`isJunkMediaUrl` + `isHeroImageResponse`), and returns a base64 data URI. `resolveAvatarUrl` prefers `org.avatarUrl` and falls back to `github.com/{handle}.png` (redirect resolved server-side for Satori).
 
-Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 24h of CDN hits; static routes (`/`, `/docs/*`) render at build. Tests in `tests/unit/og-helpers.test.ts`.
+Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 24h of CDN hits; static routes (`/`, `/docs/*`) render at build. Tests in `apps/web/src/lib/og-helpers.test.ts`.
 
 ## ISR revalidation
 

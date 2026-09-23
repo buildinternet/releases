@@ -10,14 +10,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { newOrgId, newProductId, newSourceId } from "@buildinternet/releases-core/id";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
 import {
   resolveSource,
   resolveProduct,
   AmbiguousEntityError,
   ambiguousEntityToolResult,
-} from "../../apps/mcp/src/tools.js";
+} from "../src/tools.js";
 
 let testDb: TestDatabase;
 

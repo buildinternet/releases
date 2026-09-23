@@ -7,7 +7,7 @@ import { applyMigrations, ensureBatchShim } from "../db-helper";
 import { workflowFailures } from "../../apps/api/src/db/schema-workflow-failures";
 import { OnboardSourceWorkflow } from "../../apps/api/src/workflows/onboard-source";
 import type { OnboardSourceWorkflowEnv } from "../../apps/api/src/workflows/onboard-source";
-import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
+import { mkFakeStep, mkFetch, mkVectorize } from "../../apps/api/test/_workflow-test-helpers";
 import { restoreGlobalFetch } from "../global-fetch";
 
 function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {}) {

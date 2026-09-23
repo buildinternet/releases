@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { sourceRoutes } from "../src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
-import { restoreGlobalFetch } from "../global-fetch";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 /**
  * Part 1 — manual media editing via PATCH /v1/releases/:id { media: [...] }.

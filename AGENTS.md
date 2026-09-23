@@ -25,7 +25,7 @@ managed-agents/   managed-agent YAML definitions + harness
 actions/          GitHub Actions (publish-changelog)
 skills/           published agent skills
 scripts/          operational + maintenance scripts
-tests/            cross-package tests, fixtures, evals
+tests/            shared test helpers, fixtures, evals, cross-app tests (app tests live in apps/*/test)
 docs/             architecture docs, runbooks, plans
 ```
 

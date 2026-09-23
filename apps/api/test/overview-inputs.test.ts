@@ -2,15 +2,15 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import {
   organizations,
   sources,
   releases,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
-import overviewInputs from "../../apps/api/src/routes/overview-inputs";
-import { newKnowledgePageId } from "../../apps/api/src/utils";
+import overviewInputs from "../src/routes/overview-inputs";
+import { newKnowledgePageId } from "../src/utils";
 
 function mkDb() {
   const sqlite = new Database(":memory:");

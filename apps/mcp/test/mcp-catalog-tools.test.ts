@@ -16,8 +16,8 @@ import {
   newKnowledgePageId,
   newSourceChangelogFileId,
 } from "@buildinternet/releases-core/id";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
 import {
   listCatalog,
   getCatalogEntry,
@@ -26,7 +26,7 @@ import {
   listOrganizations,
   lookupDomain,
   search,
-} from "../../apps/mcp/src/tools.js";
+} from "../src/tools.js";
 import { domainAliases } from "@buildinternet/releases-core/schema";
 
 function resultText(r: { content: Array<{ type: string; text?: string }> }): string {

@@ -1,8 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import {
-  evaluateFetchPending,
-  STUCK_AFTER_MS,
-} from "../../apps/web/src/app/admin/status/source-fetch-status";
+import { evaluateFetchPending, STUCK_AFTER_MS } from "./source-fetch-status";
 
 /**
  * Covers the badge logic for the /status Sources tab. The pre-#STUCK behavior

@@ -3,8 +3,8 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
-import { applyMigrations } from "../db-helper";
-import { adminClassificationsRoutes } from "../../apps/api/src/routes/admin-classifications";
+import { applyMigrations } from "../../../tests/db-helper";
+import { adminClassificationsRoutes } from "../src/routes/admin-classifications";
 
 const AFTER = "2026-09-14T00:00:00.000Z";
 const BEFORE = "2026-09-21T00:00:00.000Z";
@@ -47,7 +47,7 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 function summaryFetch(calls: Array<{ url: string; sql: string; authorization: string | null }>) {
-  const fetchImpl: typeof fetch = async (input, init) => {
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const sql = String(init?.body ?? "");
     const headers = new Headers(init?.headers);
     calls.push({
@@ -95,7 +95,7 @@ function summaryFetch(calls: Array<{ url: string; sql: string; authorization: st
       { disposition: "failed", samples: 2, cost_usd: 0 },
       { disposition: "skipped", samples: 3, cost_usd: 0 },
     ]);
-  };
+  }) as unknown as typeof fetch;
   return fetchImpl;
 }
 
@@ -104,10 +104,10 @@ describe("GET /admin/classifications/summary", () => {
 
   it("returns 503 when Analytics Engine credentials are missing", async () => {
     let called = false;
-    const request = mkApp(mkDb(), {}, async () => {
+    const request = mkApp(mkDb(), {}, (async () => {
       called = true;
       return jsonResponse([]);
-    });
+    }) as unknown as typeof fetch);
     const res = await request(path);
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: { code: string; type: string } };
@@ -119,10 +119,10 @@ describe("GET /admin/classifications/summary", () => {
   it("returns 502 when Analytics Engine responds 500 and does not cache it", async () => {
     const kv = memoryKv();
     let calls = 0;
-    const request = mkApp(mkDb(), creds({ LATEST_CACHE: kv }), async () => {
+    const request = mkApp(mkDb(), creds({ LATEST_CACHE: kv }), (async () => {
       calls += 1;
       return new Response("nope", { status: 500 });
-    });
+    }) as unknown as typeof fetch);
     const first = await request(path);
     expect(first.status).toBe(502);
     const body = (await first.json()) as {
@@ -247,10 +247,10 @@ describe("GET /admin/classifications/summary", () => {
 
   it("rejects an injected origin before querying", async () => {
     let called = false;
-    const request = mkApp(mkDb(), creds(), async () => {
+    const request = mkApp(mkDb(), creds(), (async () => {
       called = true;
       return jsonResponse([]);
-    });
+    }) as unknown as typeof fetch);
     const res = await request(
       `/admin/classifications/summary?origin=${encodeURIComponent("ingest' OR 1=1")}`,
     );
@@ -292,7 +292,7 @@ describe("GET /admin/classifications/recent", () => {
     ]);
 
     const calls: string[] = [];
-    const request = mkApp(db, creds(), async (_input, init) => {
+    const request = mkApp(db, creds(), (async (_input: RequestInfo | URL, init?: RequestInit) => {
       const sql = String(init?.body ?? "");
       calls.push(sql);
       return jsonResponse([
@@ -345,7 +345,7 @@ describe("GET /admin/classifications/recent", () => {
           duration_ms: -1,
         },
       ]);
-    });
+    }) as unknown as typeof fetch);
 
     const res = await request(
       `/admin/classifications/recent?after=${encodeURIComponent(AFTER)}&before=${encodeURIComponent(BEFORE)}`,
@@ -388,10 +388,10 @@ describe("GET /admin/classifications/recent", () => {
 
   it("rejects a non-numeric limit", async () => {
     let called = false;
-    const request = mkApp(mkDb(), creds(), async () => {
+    const request = mkApp(mkDb(), creds(), (async () => {
       called = true;
       return jsonResponse([]);
-    });
+    }) as unknown as typeof fetch);
     const res = await request("/admin/classifications/recent?limit=1;%20DROP");
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };

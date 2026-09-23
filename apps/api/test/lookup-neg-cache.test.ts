@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { readNegCache, writeNegCache } from "../../apps/api/src/lib/search/lookup-neg-cache.js";
+import { readNegCache, writeNegCache } from "../src/lib/search/lookup-neg-cache.js";
 
 interface FakeKv {
   store: Map<string, { value: string; expirationTtl?: number }>;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { cronRuns } from "../../apps/api/src/db/schema-cron";
+import { cronRuns } from "../src/db/schema-cron";
 import { fetchLog, organizations, sources } from "@buildinternet/releases-core/schema";
 import { mkDb, mkApp } from "./admin-cron-runs-helpers";
 

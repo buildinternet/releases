@@ -8,13 +8,13 @@ import {
   type JWTVerifyGetKey,
   type CryptoKey,
 } from "jose";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
 type EdgeLimiter = { limit(o: { key: string }): Promise<{ success: boolean }> };
 const { publicRateLimitMiddleware, selectAuthEdgeLimiter, edgeRateLimitIpKey } =
-  (await import("../../apps/api/src/middleware/rate-limit.js")) as unknown as {
+  (await import("../src/middleware/rate-limit.js")) as unknown as {
     publicRateLimitMiddleware: MiddlewareHandler;
     selectAuthEdgeLimiter: (
       method: string,
@@ -452,13 +452,12 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
 // validateAccountCredential — flag-gated relu_ tier validation
 // ---------------------------------------------------------------------------
 
-const { validateAccountCredential } =
-  (await import("../../apps/api/src/middleware/auth.js")) as unknown as {
-    validateAccountCredential: (
-      c: any,
-      presented: string,
-    ) => Promise<{ valid: boolean; userId?: string }>;
-  };
+const { validateAccountCredential } = (await import("../src/middleware/auth.js")) as unknown as {
+  validateAccountCredential: (
+    c: any,
+    presented: string,
+  ) => Promise<{ valid: boolean; userId?: string }>;
+};
 
 const fakeBetterAuth = (result: {
   valid: boolean;
@@ -508,7 +507,10 @@ describe("validateAccountCredential", () => {
       { headers: { authorization: "Bearer relu_abc" } },
       { USER_API_KEYS_ENABLED: "true", API_TOKENS_DISABLED: "false" },
     );
-    expect(await res.json()).toEqual({ valid: true, userId: "user_42" });
+    expect(await res.json<{ valid: boolean; userId: string }>()).toEqual({
+      valid: true,
+      userId: "user_42",
+    });
   });
 
   it("resolves to {valid:false} when the user-keys flag is off (relu_ dark)", async () => {
@@ -521,7 +523,7 @@ describe("validateAccountCredential", () => {
       { headers: { authorization: "Bearer relu_abc" } },
       { USER_API_KEYS_ENABLED: "false", API_TOKENS_DISABLED: "false" },
     );
-    expect(await res.json()).toEqual({ valid: false });
+    expect(await res.json<{ valid: boolean }>()).toEqual({ valid: false });
   });
 
   it("resolves a junk relu_-shaped string to {valid:false}", async () => {
@@ -534,7 +536,7 @@ describe("validateAccountCredential", () => {
       { headers: { authorization: "Bearer relu_junk" } },
       { USER_API_KEYS_ENABLED: "true", API_TOKENS_DISABLED: "false" },
     );
-    expect(await res.json()).toEqual({ valid: false });
+    expect(await res.json<{ valid: boolean }>()).toEqual({ valid: false });
   });
 
   // Task 4 review: API_TOKENS_DISABLED kill switch must refuse even with a
@@ -550,7 +552,7 @@ describe("validateAccountCredential", () => {
       { headers: { authorization: "Bearer relu_abc" } },
       { USER_API_KEYS_ENABLED: "true", API_TOKENS_DISABLED: "true" },
     );
-    expect(await res.json()).toEqual({ valid: false });
+    expect(await res.json<{ valid: boolean }>()).toEqual({ valid: false });
   });
 });
 

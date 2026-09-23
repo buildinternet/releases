@@ -1,18 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase, type TestDb } from "../db-helper";
+import { createTestDb, type TestDatabase, type TestDb } from "../../../tests/db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
-import {
-  delegateScrapeToUpdateWorkflow,
-  type FetchOneEnv,
-} from "../../apps/api/src/cron/poll-fetch.js";
-import type { drizzle as drizzleD1 } from "drizzle-orm/d1";
+import { delegateScrapeToUpdateWorkflow, type FetchOneEnv } from "../src/cron/poll-fetch.js";
+import type { D1Db } from "../src/db.js";
 
 // The poll-fetch helpers are typed against the D1 drizzle binding because
 // that's how they run in production. In tests we drive them with a bun:sqlite
 // drizzle instance (shape-compatible at the call sites we exercise) and cast
 // at the boundary.
-type D1Drizzle = ReturnType<typeof drizzleD1>;
+type D1Drizzle = D1Db;
 
 /**
  * `delegateScrapeToUpdateWorkflow` is the summary-only feed → deterministic

@@ -8,9 +8,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { sql, eq, and } from "drizzle-orm";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { countSourcesForList } from "../../apps/api/src/queries/sources.js";
+import { countSourcesForList } from "../src/queries/sources.js";
 
 let tdb: TestDatabase;
 

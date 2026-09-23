@@ -5,15 +5,11 @@
  * managed agent authenticate to staging with a Bearer token.
  */
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
-import {
-  resolveMcpAuth,
-  isMeteredMcpMethod,
-  machineTokenIdForUsage,
-} from "../../apps/mcp/src/auth.js";
-import type { Env } from "../../apps/mcp/src/mcp-agent.js";
+import { resolveMcpAuth, isMeteredMcpMethod, machineTokenIdForUsage } from "../src/auth.js";
+import type { Env } from "../src/mcp-agent.js";
 
 const mockSecret = (v: string) => ({ get: () => Promise.resolve(v) });
 

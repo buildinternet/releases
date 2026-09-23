@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { user } from "../../apps/api/src/db/schema-auth.js";
-import { apikey } from "../../apps/api/src/db/schema-auth.js";
-import { userApiKeyHandlers } from "../../apps/api/src/routes/user-api-keys.js";
-import type { Env } from "../../apps/api/src/index.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { user } from "../src/db/schema-auth.js";
+import { apikey } from "../src/db/schema-auth.js";
+import { userApiKeyHandlers } from "../src/routes/user-api-keys.js";
+import type { Env } from "../src/index.js";
 
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());

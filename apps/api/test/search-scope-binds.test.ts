@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE } from "../../apps/api/src/lib/d1-limits.js";
+import { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE } from "../src/lib/d1-limits.js";
 
 // The product-scoped search path (`?product=` → `sourceIds`) inlines up to
 // IN_ARRAY_CHUNK_SIZE source ids in an `IN (...)` list (see `sourceIdInList` in

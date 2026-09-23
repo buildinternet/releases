@@ -5,8 +5,8 @@ import {
   parsePositiveInt,
   type EnrichDeps,
   enrichNewThinItems,
-} from "../../apps/api/src/cron/feed-enrich.js";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+} from "../src/cron/feed-enrich.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 
 const noop = (() => {}) as unknown as EnrichDeps["logEvent"];
@@ -18,7 +18,7 @@ function htmlResponse(body: string): Response {
 function baseDeps(over: Partial<EnrichDeps>): EnrichDeps {
   return {
     thinChars: 600,
-    fetchImpl: async () => htmlResponse("<p>shell</p>"),
+    fetchImpl: (async () => htmlResponse("<p>shell</p>")) as unknown as typeof fetch,
     extractArticleFn: async () => ({ content: "", media: [] }),
     renderFn: null,
     logEvent: noop,
@@ -31,7 +31,7 @@ const item = { url: "https://x.test/a", title: "A", summary: "one line teaser" }
 describe("enrichFeedItem", () => {
   it("accepts the cheap path when content clears the bar", async () => {
     const deps = baseDeps({
-      fetchImpl: async () => htmlResponse("<article>full</article>"),
+      fetchImpl: (async () => htmlResponse("<article>full</article>")) as unknown as typeof fetch,
       extractArticleFn: async () => ({
         content: "x".repeat(800),
         media: [{ type: "image", url: "https://x.test/i.png" }],
@@ -47,10 +47,10 @@ describe("enrichFeedItem", () => {
   it("passes an abort signal to the cheap-path fetch (timeout guard)", async () => {
     let seenSignal: unknown;
     const deps = baseDeps({
-      fetchImpl: async (_url: string | URL | Request, init?: RequestInit) => {
+      fetchImpl: (async (_url: string | URL | Request, init?: RequestInit) => {
         seenSignal = init?.signal;
         return htmlResponse("<article>full</article>");
-      },
+      }) as unknown as typeof fetch,
       extractArticleFn: async () => ({ content: "x".repeat(800), media: [] }),
     });
     await enrichFeedItem(item, deps);
@@ -84,10 +84,10 @@ describe("enrichFeedItem", () => {
   it("skips a bad-shape URL without fetching", async () => {
     let fetched = 0;
     const deps = baseDeps({
-      fetchImpl: async () => {
+      fetchImpl: (async () => {
         fetched++;
         return htmlResponse("<article>full</article>");
-      },
+      }) as unknown as typeof fetch,
       extractArticleFn: async () => ({ content: "x".repeat(800), media: [] }),
     });
     const anchored = { ...item, url: "https://x.test/docs/changelog#march-2026" };
@@ -98,9 +98,9 @@ describe("enrichFeedItem", () => {
 
   it("fails open on a thrown fetch error", async () => {
     const deps = baseDeps({
-      fetchImpl: async () => {
+      fetchImpl: (async () => {
         throw new Error("network");
-      },
+      }) as unknown as typeof fetch,
       renderFn: null,
     });
     const res = await enrichFeedItem(item, deps);

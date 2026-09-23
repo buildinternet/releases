@@ -6,9 +6,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
-import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { orgRoutes } from "../src/routes/orgs.js";
+import { sourceRoutes } from "../src/routes/sources.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeJsonCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;

@@ -10,7 +10,7 @@
 
 import { describe, test, expect } from "bun:test";
 import { Hono } from "hono";
-import { relatedRoutes } from "../../apps/api/src/routes/related.js";
+import { relatedRoutes } from "../src/routes/related.js";
 
 // Minimal env shape: the degraded paths never touch DB, so we can pass
 // a dummy D1 binding and a missing Vectorize binding and assert the
@@ -29,7 +29,7 @@ function call(path: string, env: Record<string, unknown> = {}): Promise<Response
     RELEASES_INDEX: undefined,
     ENTITIES_INDEX: undefined,
     ...env,
-  });
+  }) as Promise<Response>;
 }
 
 describe("GET /related/releases", () => {

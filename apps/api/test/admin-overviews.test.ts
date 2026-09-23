@@ -2,15 +2,15 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Hono } from "hono";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations } from "../../../tests/db-helper";
 import {
   organizations,
   sources,
   releases,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
-import { adminOverviewsRoutes } from "../../apps/api/src/routes/admin-overviews";
-import { newKnowledgePageId } from "../../apps/api/src/utils";
+import { adminOverviewsRoutes } from "../src/routes/admin-overviews";
+import { newKnowledgePageId } from "../src/utils";
 import type {
   OverviewManifestResponse,
   OverviewManifestRow,

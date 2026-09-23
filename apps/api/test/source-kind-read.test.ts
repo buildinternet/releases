@@ -4,10 +4,10 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
-import { productRoutes } from "../../apps/api/src/routes/products.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
-import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { productRoutes } from "../src/routes/products.js";
+import { sourceRoutes } from "../src/routes/sources.js";
+import { orgRoutes } from "../src/routes/orgs.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;

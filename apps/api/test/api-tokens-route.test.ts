@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { apiTokenRoutes } from "../../apps/api/src/routes/api-tokens.js";
-import type { AuthContext } from "../../apps/api/src/middleware/auth.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { apiTokenRoutes } from "../src/routes/api-tokens.js";
+import type { AuthContext } from "../src/middleware/auth.js";
+import type { Env } from "../src/index.js";
 import { apiTokens, idempotencyRecords } from "@buildinternet/releases-core/schema";
 import { parseApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 import { eq } from "drizzle-orm";
@@ -27,7 +28,7 @@ function call(db: TestDatabase["db"], idempotencySecret: string | null = IDEMPOT
       ...(idempotencySecret === null
         ? {}
         : { IDEMPOTENCY_ENCRYPTION_KEY: { get: async () => idempotencySecret } }),
-    } as Env["Bindings"]);
+    } as unknown as Env["Bindings"]);
 }
 
 describe("POST /v1/tokens", () => {

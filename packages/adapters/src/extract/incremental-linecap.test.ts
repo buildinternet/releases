@@ -14,12 +14,8 @@
 import { describe, it, expect } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Source } from "@buildinternet/releases-core/schema";
-import { runIncrementalExtraction } from "../../packages/adapters/src/extract/run-incremental.js";
-import type {
-  ExtractDeps,
-  ExtractLogger,
-  KnownRelease,
-} from "../../packages/adapters/src/extract/types.js";
+import { runIncrementalExtraction } from "./run-incremental.js";
+import type { ExtractDeps, ExtractLogger, KnownRelease } from "./types.js";
 
 // ── Fixtures ────────────────────────────────────────────────────────
 

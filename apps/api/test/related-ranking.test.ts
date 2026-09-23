@@ -13,7 +13,7 @@ import {
   RELATED_RECENCY_HALF_LIFE_DAYS,
   RELATED_UNDATED_PENALTY,
   RELATED_GLOBAL_MIN_RANK,
-} from "../../apps/api/src/related-ranking.js";
+} from "../src/related-ranking.js";
 
 const DAY_MS = 86_400_000;
 

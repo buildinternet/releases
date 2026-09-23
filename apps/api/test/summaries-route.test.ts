@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import summariesRoutes from "../../apps/api/src/routes/summaries.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import summariesRoutes from "../src/routes/summaries.js";
 import { organizations, sources, releaseSummaries } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 
@@ -58,7 +58,7 @@ describe("POST /v1/sources/:slug/summaries (validator pilot)", () => {
       windowDays: 30,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json<{ ok: boolean }>()).toEqual({ ok: true });
 
     const rows = await testDb.db
       .select()

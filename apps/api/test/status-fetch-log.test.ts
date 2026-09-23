@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { sources, organizations, fetchLog } from "@buildinternet/releases-core/schema";
-import { decodeCursor } from "../../apps/api/src/routes/fetch-log-cursor";
+import { decodeCursor } from "../src/routes/fetch-log-cursor";
 import { mkDb, mkApp } from "./status-fetch-log-helpers";
 
 type Envelope = {

@@ -9,10 +9,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { newOrgId, newProductId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { search } from "../../apps/mcp/src/tools.js";
-import type { HybridSearchEnv } from "../../apps/mcp/src/lib/search-hybrid.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { search } from "../src/tools.js";
+import type { HybridSearchEnv } from "../src/lib/search-hybrid.js";
 
 /** No Vectorize/embedder → hybrid/semantic degrade to lexical. */
 const minimalEnv: HybridSearchEnv = {};

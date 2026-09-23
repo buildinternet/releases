@@ -16,9 +16,9 @@ import {
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { asD1 } from "../mcp-test-helpers.js";
-import { getLatestReleases, getCollectionReleases } from "../../apps/mcp/src/tools.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { asD1 } from "../../../tests/mcp-test-helpers.js";
+import { getLatestReleases, getCollectionReleases } from "../src/tools.js";
 
 interface FeedRow {
   id: string;

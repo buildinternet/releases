@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { siteNoticeRoutes } from "../../apps/api/src/routes/site-notice.js";
-import { getStoredSiteNotice } from "../../apps/api/src/queries/site-settings.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { siteNoticeRoutes } from "../src/routes/site-notice.js";
+import { getStoredSiteNotice } from "../src/queries/site-settings.js";
 
 let testDb: TestDatabase;
 
@@ -62,7 +62,7 @@ describe("GET /v1/site-notice", () => {
   test("returns null when unset", async () => {
     const res = await get(makeEnv());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ notice: null });
+    expect(await res.json<{ notice: null }>()).toEqual({ notice: null });
   });
 
   test("returns the active notice to the public", async () => {
@@ -75,7 +75,7 @@ describe("GET /v1/site-notice", () => {
 
   test("hides an inactive notice from the public but shows it to an admin", async () => {
     await put(makeEnv(), { ...NOTICE, active: false }, ROOT);
-    expect(await (await get(makeEnv())).json()).toEqual({ notice: null });
+    expect(await (await get(makeEnv())).json<{ notice: null }>()).toEqual({ notice: null });
     const adminRes = await get(makeEnv(), ROOT);
     const body = (await adminRes.json()) as { notice: { active: boolean } | null };
     expect(body.notice?.active).toBe(false);

@@ -11,8 +11,8 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createServer, type Env } from "../../apps/mcp/src/mcp-agent.js";
-import { applyMigrations, makeD1Shim } from "../db-helper.js";
+import { createServer, type Env } from "../src/mcp-agent.js";
+import { applyMigrations, makeD1Shim } from "../../../tests/db-helper.js";
 
 // Minimal stub response returned by the mock API binding.
 const STUB_LOOKUP = { status: "not_found", relatedOrg: null };

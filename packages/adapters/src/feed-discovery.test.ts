@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "bun:test";
-import { discoverFeed } from "../../packages/adapters/src/feed";
-import { restoreGlobalFetch } from "../global-fetch";
+import { discoverFeed } from "./feed";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 afterEach(restoreGlobalFetch);
 

@@ -5,8 +5,8 @@
  * runtime-state checks still run in the handler.
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { orgRoutes } from "../../apps/api/src/routes/orgs.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { orgRoutes } from "../src/routes/orgs.js";
 import { organizations, tags, orgTags } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 

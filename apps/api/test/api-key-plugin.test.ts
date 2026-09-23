@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { apikey, user } from "../../apps/api/src/db/schema-auth.js";
-import { createAuth } from "../../apps/api/src/auth/index.js";
-import { scopeToPermissions } from "../../apps/api/src/auth/api-key-scope.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import { apikey, user } from "../src/db/schema-auth.js";
+import { createAuth } from "../src/auth/index.js";
+import { scopeToPermissions } from "../src/auth/api-key-scope.js";
 
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());

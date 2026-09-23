@@ -7,10 +7,10 @@
  * and that runtime-state checks still run in the handler.
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import playbookRoutes from "../../apps/api/src/routes/playbook.js";
-import { taxonomyRoutes } from "../../apps/api/src/routes/taxonomy.js";
-import { errataRoutes } from "../../apps/api/src/routes/errata.js";
+import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
+import playbookRoutes from "../src/routes/playbook.js";
+import { taxonomyRoutes } from "../src/routes/taxonomy.js";
+import { errataRoutes } from "../src/routes/errata.js";
 import { organizations, knowledgePages, categories } from "@buildinternet/releases-core/schema";
 import { eq, and } from "drizzle-orm";
 

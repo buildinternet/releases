@@ -9,8 +9,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { sourceRoutes } from "../../apps/api/src/routes/sources.js";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
+import { sourceRoutes } from "../src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 
 let testDb: TestDatabase;
