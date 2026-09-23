@@ -1,11 +1,13 @@
-import { eq, inArray, and, isNull } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import {
-  tags,
-  sources,
-  organizations,
-  products,
-  domainAliases,
-} from "@buildinternet/releases-core/schema";
+  findProductById,
+  findProductForOrgSlug,
+  findSourceById,
+  findSourceForOrgSlug,
+  isProductId,
+  isSourceId,
+} from "@releases/queries/entities";
+import { tags, domainAliases } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { resolveDateParam } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
@@ -107,101 +109,21 @@ export function firstImageThumbnail(
   return first.alt ? { url, alt: first.alt } : { url };
 }
 
-/**
- * Resolve a source by ID (`src_` prefix). Id-only — the slug branch lives
- * in `sourceMatchByIdOrSlug` (legacy fallback) or `findSourceForOrgSlug`
- * (org-scoped). Excludes soft-deleted rows by default (#666); pass
- * `{ includeDeleted: true }` for admin paths that need to see tombstones
- * (hard-purge DELETE, restore).
- */
-export function sourceById(id: string, opts?: { includeDeleted?: boolean }) {
-  const match = eq(sources.id, id);
-  return opts?.includeDeleted ? match : and(match, isNull(sources.deletedAt));
-}
-
-/**
- * Resolve an org by ID (`org_` prefix) or slug. Orgs stay globally addressable
- * by slug — `organizations.slug` keeps its global UNIQUE (only sources and
- * products were demoted to per-org uniqueness in #690 Phase C).
- */
-export function orgWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
-  const match = identifier.startsWith("org_")
-    ? eq(organizations.id, identifier)
-    : eq(organizations.slug, identifier);
-  return opts?.includeDeleted ? match : and(match, isNull(organizations.deletedAt));
-}
-
-/** Resolve a product by ID (`prod_` prefix). Id-only — see `sourceById`. */
-export function productById(id: string, opts?: { includeDeleted?: boolean }) {
-  const match = eq(products.id, id);
-  return opts?.includeDeleted ? match : and(match, isNull(products.deletedAt));
-}
-
-/** True if the string looks like a `src_…` source ID. */
-export function isSourceId(s: string): boolean {
-  return s.startsWith("src_");
-}
-
-/** True if the string looks like a `prod_…` product ID. */
-export function isProductId(s: string): boolean {
-  return s.startsWith("prod_");
-}
-
-/**
- * Legacy "either id or slug" matcher for internal callers that admin
- * tooling and worker triggers still depend on. Prefer `sourceById` plus
- * `findSourceForOrgSlug` in new code — the slug branch is unambiguous
- * today (no cross-org collisions on prod) but degrades to "first row
- * wins by rowid" if collisions ever appear. Passing through here is a
- * deliberate carve-out documented at each call site.
- */
-export function sourceMatchByIdOrSlug(idOrSlug: string, opts?: { includeDeleted?: boolean }) {
-  const match = isSourceId(idOrSlug) ? eq(sources.id, idOrSlug) : eq(sources.slug, idOrSlug);
-  return opts?.includeDeleted ? match : and(match, isNull(sources.deletedAt));
-}
-
-/** Sibling of `sourceMatchByIdOrSlug` for products. */
-export function productMatchByIdOrSlug(idOrSlug: string, opts?: { includeDeleted?: boolean }) {
-  const match = isProductId(idOrSlug) ? eq(products.id, idOrSlug) : eq(products.slug, idOrSlug);
-  return opts?.includeDeleted ? match : and(match, isNull(products.deletedAt));
-}
-
-/**
- * Resolve a source within an org (#690). The org segment accepts an ID
- * (`org_…`) or a slug (orgs stay globally addressable). The source segment
- * accepts an ID (`src_…`) or a slug; per-org slug uniqueness from #690
- * Phase C is what makes the slug branch unambiguous here.
- */
-export async function findSourceForOrgSlug(
-  db: ReturnType<typeof createDb>,
-  orgIdOrSlug: string,
-  sourceIdOrSlug: string,
-  opts?: { includeDeleted?: boolean },
-) {
-  const rows = await db
-    .select({ source: sources })
-    .from(sources)
-    .innerJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(orgWhere(orgIdOrSlug, opts), sourceMatchByIdOrSlug(sourceIdOrSlug, opts)))
-    .limit(1);
-  return rows[0]?.source ?? null;
-}
-
-/** Sibling of `findSourceForOrgSlug` for products. */
-export async function findProductForOrgSlug(
-  db: ReturnType<typeof createDb>,
-  orgIdOrSlug: string,
-  productIdOrSlug: string,
-  opts?: { includeDeleted?: boolean },
-) {
-  const rows = await db
-    .select({ product: products })
-    .from(products)
-    .innerJoin(organizations, eq(products.orgId, organizations.id))
-    .where(and(orgWhere(orgIdOrSlug, opts), productMatchByIdOrSlug(productIdOrSlug, opts)))
-    .limit(1);
-  return rows[0]?.product ?? null;
-}
+// Entity resolution predicates + org-scoped finders live in the shared read
+// layer so the MCP worker resolves entities through the same code
+// (docs/architecture/shared-queries.md). Re-exported for the existing import
+// sites across routes, GraphQL, and tests.
+export {
+  sourceById,
+  orgWhere,
+  productById,
+  isSourceId,
+  isProductId,
+  sourceMatchByIdOrSlug,
+  productMatchByIdOrSlug,
+  findSourceForOrgSlug,
+  findProductForOrgSlug,
+} from "@releases/queries/entities";
 
 /**
  * Thrown by `resolveSourceFromContext` / `resolveProductFromContext` when a
@@ -253,8 +175,7 @@ export async function resolveSourceFromContext(
   if (!isSourceId(bare)) {
     throw new BareSlugRejected("source", bare);
   }
-  const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(bare, opts)).limit(1);
-  return row ?? null;
+  return findSourceById(db, bare, opts);
 }
 
 /** Sibling of `resolveSourceFromContext` for products. Same flip applies. */
@@ -273,8 +194,7 @@ export async function resolveProductFromContext(
   if (!isProductId(bare)) {
     throw new BareSlugRejected("product", bare);
   }
-  const [row] = await db.select().from(products).where(productMatchByIdOrSlug(bare, opts)).limit(1);
-  return row ?? null;
+  return findProductById(db, bare, opts);
 }
 
 /**

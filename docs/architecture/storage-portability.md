@@ -242,6 +242,8 @@ The forcing function is concrete: a paying self-hoster, an OSS PR, or a D1 ceili
   - **Repository layer:** new query code goes through `apps/api/src/queries/*`,
     not inline into route handlers, crons, or workflows. Prefer extending an
     existing query module over a sixth raw-SQL island (especially for search/FTS).
+    Reads the MCP worker also needs go in `packages/queries` instead
+    ([shared-queries.md](shared-queries.md)).
   - **Dialect hygiene on new code:** prefer ISO `text` timestamps; avoid new
     ad-hoc `json_extract` / integer-boolean predicates outside helpers; never
     hardcode bind-list sizes — use `@buildinternet/releases-core/d1-limits`.

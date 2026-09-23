@@ -1,12 +1,6 @@
-import { asc, desc, sql, type Column, type SQL } from "drizzle-orm";
-
-/**
- * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
- * to the bottom regardless of direction. Callers append their own tiebreakers.
- */
-export function nullsLastOrderBy(col: Column, dir: "asc" | "desc"): SQL[] {
-  return [sql`${col} IS NULL`, dir === "asc" ? asc(col) : desc(col)];
-}
+// Reusable SQL fragments live in the shared read layer (packages/queries) so
+// the MCP worker builds the same subqueries. Re-exported for existing callers.
+export { nullsLastOrderBy, githubHandleSubquery } from "@releases/queries/sql-fragments";
 
 /** Common row type for source list items with release stats */
 export type SourceWithStats = {
@@ -31,17 +25,6 @@ export type SourceWithStats = {
   kind: string | null;
   metadata: string | null;
 };
-
-// Correlated subquery used to pick a single deterministic github handle per
-// org so a multi-handle org doesn't fan out the JOIN. `org_accounts` only
-// enforces UNIQUE(platform, handle) globally — not per (org, platform).
-export function githubHandleSubquery(orgIdExpr: ReturnType<typeof sql>) {
-  return sql<string | null>`(
-    SELECT handle FROM org_accounts
-    WHERE org_id = ${orgIdExpr} AND platform = 'github'
-    ORDER BY created_at, id LIMIT 1
-  )`;
-}
 
 /** Common row type for org list items */
 export type OrgListRow = {

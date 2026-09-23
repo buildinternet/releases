@@ -3,7 +3,6 @@ import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
-  domainAliases,
   organizations,
   organizationsActive,
   productsActive,
@@ -19,7 +18,7 @@ import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
-import { findOrgByDomain } from "../queries/search.js";
+import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
 import { loadReleaseLocations } from "../lib/well-known/read-locations.js";
 import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/search/lookup-related-org.js";
 import { readNegCache, writeNegCache } from "../lib/search/lookup-neg-cache.js";
@@ -754,21 +753,7 @@ lookupRoutes.get(
     const db = createDb(c.env.DB);
     let [orgRow, productRows] = await Promise.all([
       findOrgByDomain(db, domain),
-      db
-        .select({
-          id: productsActive.id,
-          slug: productsActive.slug,
-          name: productsActive.name,
-          orgId: productsActive.orgId,
-          orgSlug: organizationsActive.slug,
-          orgName: organizationsActive.name,
-          category: productsActive.category,
-        })
-        .from(productsActive)
-        .innerJoin(domainAliases, eq(domainAliases.productId, productsActive.id))
-        .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
-        .where(eq(domainAliases.domain, domain))
-        .orderBy(asc(productsActive.name), asc(productsActive.id)),
+      findProductsByDomain(db, domain),
     ]);
 
     if (!orgRow && productRows.length === 0) {
