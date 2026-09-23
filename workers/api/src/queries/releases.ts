@@ -6,8 +6,10 @@ import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
+import { createDb } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
 import { parseReleaseMedia } from "../utils.js";
+import { loadOrgGithubHandles } from "./shared.js";
 
 export type LatestReleaseRow = {
   id: string;
@@ -139,10 +141,7 @@ export async function getLatestReleasesAcross(
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
-           (SELECT handle FROM org_accounts
-              WHERE org_id = o.id AND platform = 'github'
-              ORDER BY created_at, id LIMIT 1) AS org_github_handle,
+           o.id AS org_id, o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
            p.slug AS product_slug, p.name AS product_name,
            s.kind AS source_kind, p.kind AS product_kind,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
@@ -161,8 +160,22 @@ export async function getLatestReleasesAcross(
     )
     .bind(...bindings);
 
-  const { results } = await stmt.all<LatestReleaseRow>();
-  return results;
+  const { results } = await stmt.all<
+    Omit<LatestReleaseRow, "org_github_handle"> & {
+      org_id: string | null;
+    }
+  >();
+
+  // Batched in one chunked lookup instead of a correlated per-row subquery.
+  // Backed by idx_org_accounts_org_platform (#1800).
+  const githubHandles = await loadOrgGithubHandles(
+    createDb(d1),
+    results.map((r) => r.org_id).filter((id): id is string => id != null),
+  );
+  return results.map(({ org_id, ...rest }) => ({
+    ...rest,
+    org_github_handle: org_id ? (githubHandles.get(org_id) ?? null) : null,
+  }));
 }
 
 // `releaseWebBase` (the WEB_BASE_URL → absolute-origin resolver) lives in

@@ -1,4 +1,5 @@
 import { eq, sql, type SQL } from "drizzle-orm";
+import { loadOrgGithubHandles } from "./shared.js";
 import {
   collections,
   collectionMembers,
@@ -205,21 +206,18 @@ export async function getCollectionsList(
     db.all<{
       collectionSlug: string;
       position: number;
+      orgId: string;
       slug: string;
       name: string;
       domain: string | null;
       avatarUrl: string | null;
       description: string | null;
-      githubHandle: string | null;
     }>(sql`
-      SELECT collectionSlug, position, slug, name, domain, avatarUrl, description, githubHandle
+      SELECT collectionSlug, position, orgId, slug, name, domain, avatarUrl, description
       FROM (
         SELECT c.slug AS collectionSlug, cm.position AS position,
-               op.slug AS slug, op.name AS name, op.domain AS domain,
+               op.id AS orgId, op.slug AS slug, op.name AS name, op.domain AS domain,
                op.avatar_url AS avatarUrl, op.description AS description,
-               (SELECT handle FROM org_accounts
-                  WHERE org_id = op.id AND platform = 'github'
-                  ORDER BY created_at, id LIMIT 1) AS githubHandle,
                ROW_NUMBER() OVER (
                  PARTITION BY cm.collection_id ORDER BY cm.position, op.name, op.slug
                ) AS rn
@@ -234,6 +232,7 @@ export async function getCollectionsList(
     db.all<{
       collectionSlug: string;
       position: number;
+      parentOrgId: string;
       productSlug: string;
       productName: string;
       productDescription: string | null;
@@ -241,20 +240,15 @@ export async function getCollectionsList(
       parentOrgName: string;
       parentOrgDomain: string | null;
       parentOrgAvatarUrl: string | null;
-      parentOrgGithubHandle: string | null;
     }>(sql`
-      SELECT collectionSlug, position, productSlug, productName, productDescription,
-             parentOrgSlug, parentOrgName, parentOrgDomain, parentOrgAvatarUrl,
-             parentOrgGithubHandle
+      SELECT collectionSlug, position, parentOrgId, productSlug, productName, productDescription,
+             parentOrgSlug, parentOrgName, parentOrgDomain, parentOrgAvatarUrl
       FROM (
         SELECT c.slug AS collectionSlug, cm.position AS position,
                pa.slug AS productSlug, pa.name AS productName,
                pa.description AS productDescription,
-               op.slug AS parentOrgSlug, op.name AS parentOrgName,
+               op.id AS parentOrgId, op.slug AS parentOrgSlug, op.name AS parentOrgName,
                op.domain AS parentOrgDomain, op.avatar_url AS parentOrgAvatarUrl,
-               (SELECT handle FROM org_accounts
-                  WHERE org_id = op.id AND platform = 'github'
-                  ORDER BY created_at, id LIMIT 1) AS parentOrgGithubHandle,
                ROW_NUMBER() OVER (
                  PARTITION BY cm.collection_id ORDER BY cm.position, pa.name, pa.slug
                ) AS rn
@@ -267,6 +261,12 @@ export async function getCollectionsList(
     `),
   ]);
 
+  // Batched in one chunked lookup instead of a correlated per-row subquery.
+  const githubHandles = await loadOrgGithubHandles(db, [
+    ...orgMemberRows.map((r) => r.orgId),
+    ...productMemberRows.map((r) => r.parentOrgId),
+  ]);
+
   const orgsBySlug = new Map<string, OrgMemberRow[]>();
   for (const r of orgMemberRows) {
     const arr = orgsBySlug.get(r.collectionSlug) ?? [];
@@ -277,7 +277,7 @@ export async function getCollectionsList(
       domain: r.domain,
       avatarUrl: r.avatarUrl,
       description: r.description,
-      githubHandle: r.githubHandle,
+      githubHandle: githubHandles.get(r.orgId) ?? null,
     });
     orgsBySlug.set(r.collectionSlug, arr);
   }
@@ -293,7 +293,7 @@ export async function getCollectionsList(
       parentOrgName: r.parentOrgName,
       parentOrgDomain: r.parentOrgDomain,
       parentOrgAvatarUrl: r.parentOrgAvatarUrl,
-      parentOrgGithubHandle: r.parentOrgGithubHandle,
+      parentOrgGithubHandle: githubHandles.get(r.parentOrgId) ?? null,
     });
     productsBySlug.set(r.collectionSlug, arr);
   }
@@ -336,28 +336,40 @@ export async function getCollectionFullMembers(
   db: D1Db,
   collectionId: string,
 ): Promise<CollectionMember[]> {
-  const [orgsList, productsList] = await Promise.all([
-    db.all<OrgMemberRow>(sql`
+  const [orgsRaw, productsRaw] = await Promise.all([
+    db.all<{
+      position: number;
+      orgId: string;
+      slug: string;
+      name: string;
+      domain: string | null;
+      avatarUrl: string | null;
+      description: string | null;
+    }>(sql`
       SELECT cm.position AS position,
-             op.slug AS slug, op.name AS name, op.domain AS domain,
-             op.avatar_url AS avatarUrl, op.description AS description,
-             (SELECT handle FROM org_accounts
-                WHERE org_id = op.id AND platform = 'github'
-                ORDER BY created_at, id LIMIT 1) AS githubHandle
+             op.id AS orgId, op.slug AS slug, op.name AS name, op.domain AS domain,
+             op.avatar_url AS avatarUrl, op.description AS description
       FROM ${collectionMembers} cm
       INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
       WHERE cm.collection_id = ${collectionId}
       ORDER BY cm.position, op.name, op.slug
     `),
-    db.all<ProductMemberRow>(sql`
+    db.all<{
+      position: number;
+      parentOrgId: string;
+      productSlug: string;
+      productName: string;
+      productDescription: string | null;
+      parentOrgSlug: string;
+      parentOrgName: string;
+      parentOrgDomain: string | null;
+      parentOrgAvatarUrl: string | null;
+    }>(sql`
       SELECT cm.position AS position,
              pa.slug AS productSlug, pa.name AS productName,
              pa.description AS productDescription,
-             op.slug AS parentOrgSlug, op.name AS parentOrgName,
-             op.domain AS parentOrgDomain, op.avatar_url AS parentOrgAvatarUrl,
-             (SELECT handle FROM org_accounts
-                WHERE org_id = op.id AND platform = 'github'
-                ORDER BY created_at, id LIMIT 1) AS parentOrgGithubHandle
+             op.id AS parentOrgId, op.slug AS parentOrgSlug, op.name AS parentOrgName,
+             op.domain AS parentOrgDomain, op.avatar_url AS parentOrgAvatarUrl
       FROM ${collectionMembers} cm
       INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
       INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
@@ -365,5 +377,31 @@ export async function getCollectionFullMembers(
       ORDER BY cm.position, pa.name, pa.slug
     `),
   ]);
+
+  // Batched in one chunked lookup instead of a correlated per-row subquery.
+  const githubHandles = await loadOrgGithubHandles(db, [
+    ...orgsRaw.map((r) => r.orgId),
+    ...productsRaw.map((r) => r.parentOrgId),
+  ]);
+  const orgsList: OrgMemberRow[] = orgsRaw.map((r) => ({
+    position: r.position,
+    slug: r.slug,
+    name: r.name,
+    domain: r.domain,
+    avatarUrl: r.avatarUrl,
+    description: r.description,
+    githubHandle: githubHandles.get(r.orgId) ?? null,
+  }));
+  const productsList: ProductMemberRow[] = productsRaw.map((r) => ({
+    position: r.position,
+    productSlug: r.productSlug,
+    productName: r.productName,
+    productDescription: r.productDescription,
+    parentOrgSlug: r.parentOrgSlug,
+    parentOrgName: r.parentOrgName,
+    parentOrgDomain: r.parentOrgDomain,
+    parentOrgAvatarUrl: r.parentOrgAvatarUrl,
+    parentOrgGithubHandle: githubHandles.get(r.parentOrgId) ?? null,
+  }));
   return interleaveMembers(orgsList, productsList);
 }

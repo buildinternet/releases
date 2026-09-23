@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
-import { eq, and, inArray, isNull, sql, asc } from "drizzle-orm";
+import { eq, and, inArray, isNull, asc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   collections,
@@ -38,7 +38,7 @@ import {
   getCollectionWeeklyDigest,
   resolveDigestCoveredReleases,
 } from "../queries/collection-summaries.js";
-import { githubHandleSubquery } from "../queries/shared.js";
+import { loadOrgGithubHandles } from "../queries/shared.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -501,16 +501,16 @@ collectionRoutes.get(
       return respondError(c, new NotFoundError("Collection not found"));
     }
 
-    const [orgsList, productsList] = await Promise.all([
+    const [orgsListRaw, productsListRaw] = await Promise.all([
       db
         .select({
           position: collectionMembers.position,
+          orgId: organizationsPublic.id,
           slug: organizationsPublic.slug,
           name: organizationsPublic.name,
           domain: organizationsPublic.domain,
           avatarUrl: organizationsPublic.avatarUrl,
           description: organizationsPublic.description,
-          githubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
         })
         .from(collectionMembers)
         .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
@@ -519,6 +519,7 @@ collectionRoutes.get(
       db
         .select({
           position: collectionMembers.position,
+          parentOrgId: organizationsPublic.id,
           productSlug: productsActive.slug,
           productName: productsActive.name,
           productDescription: productsActive.description,
@@ -526,7 +527,6 @@ collectionRoutes.get(
           parentOrgName: organizationsPublic.name,
           parentOrgDomain: organizationsPublic.domain,
           parentOrgAvatarUrl: organizationsPublic.avatarUrl,
-          parentOrgGithubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
         })
         .from(collectionMembers)
         .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
@@ -534,6 +534,32 @@ collectionRoutes.get(
         .where(eq(collectionMembers.collectionId, collection.id))
         .orderBy(collectionMembers.position, productsActive.name),
     ]);
+
+    // Batched in one chunked lookup instead of a correlated per-row subquery.
+    const githubHandles = await loadOrgGithubHandles(db, [
+      ...orgsListRaw.map((o) => o.orgId),
+      ...productsListRaw.map((p) => p.parentOrgId),
+    ]);
+    const orgsList: OrgMemberRow[] = orgsListRaw.map((r) => ({
+      position: r.position,
+      slug: r.slug,
+      name: r.name,
+      domain: r.domain,
+      avatarUrl: r.avatarUrl,
+      description: r.description,
+      githubHandle: githubHandles.get(r.orgId) ?? null,
+    }));
+    const productsList: ProductMemberRow[] = productsListRaw.map((r) => ({
+      position: r.position,
+      productSlug: r.productSlug,
+      productName: r.productName,
+      productDescription: r.productDescription,
+      parentOrgSlug: r.parentOrgSlug,
+      parentOrgName: r.parentOrgName,
+      parentOrgDomain: r.parentOrgDomain,
+      parentOrgAvatarUrl: r.parentOrgAvatarUrl,
+      parentOrgGithubHandle: githubHandles.get(r.parentOrgId) ?? null,
+    }));
 
     const members = interleaveMembers(orgsList, productsList);
     // Legacy `orgs` field — org-kind members only, without the `kind` discriminator.

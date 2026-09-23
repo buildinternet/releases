@@ -7,6 +7,7 @@ import {
   collectionMembers,
   collectionWeeklyDigests,
   organizations,
+  orgAccounts,
   products,
   releases,
   sources,
@@ -289,6 +290,40 @@ describe("resolveDigestCoveredReleases", () => {
     });
     expect(out[0]).toMatchObject({ url: null, product: null });
     expect(out[0].path.startsWith("/release/rel_e")).toBe(true);
+  });
+
+  test("resolves each release's org github handle via the batched lookup, earliest account wins", async () => {
+    const { db } = createTestDb();
+    await seedOrgSource(db, { orgId: "org_gh", sourceId: "src_gh" });
+    await db.insert(orgAccounts).values([
+      {
+        id: "acct_gh_new",
+        orgId: "org_gh",
+        platform: "github",
+        handle: "newer-handle",
+        createdAt: "2026-06-05T00:00:00.000Z",
+      },
+      {
+        id: "acct_gh_old",
+        orgId: "org_gh",
+        platform: "github",
+        handle: "older-handle",
+        createdAt: "2020-06-30T00:00:00.000Z",
+      },
+    ]);
+    await db.insert(releases).values([
+      {
+        id: "rel_gh",
+        sourceId: "src_gh",
+        title: "GH",
+        content: "b",
+        publishedAt: "2026-09-15T00:00:00.000Z",
+      },
+    ]);
+
+    const out = await resolveDigestCoveredReleases(db, ["rel_gh"]);
+
+    expect(out[0].org.githubHandle).toBe("older-handle");
   });
 });
 

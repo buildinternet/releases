@@ -11,7 +11,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import type { Env } from "../index.js";
 import { getStatusHub, parseEnumParam, parseSortDir } from "../utils.js";
-import { nullsLastOrderBy } from "../queries/shared.js";
+import { nullsLastOrderBy, loadOrgGithubHandles } from "../queries/shared.js";
 import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";
 import {
   describeFetchPlan,
@@ -113,17 +113,11 @@ statusRoutes.get("/status/fetch-log", async (c) => {
       sessionId: fetchLog.sessionId,
       sourceName: sources.name,
       sourceSlug: sources.slug,
+      orgId: organizations.id,
       orgName: organizations.name,
       orgSlug: organizations.slug,
       // Status chart drill facepile — same fields OrgAvatar uses on the web.
       orgAvatarUrl: organizations.avatarUrl,
-      // Correlated handle for github.com/<handle>.png fallback when avatar_url is null.
-      // Backed by idx_org_accounts_org_platform (#1800).
-      orgGithubHandle: sql<string | null>`(
-        SELECT handle FROM org_accounts
-        WHERE org_id = ${organizations.id} AND platform = 'github'
-        ORDER BY created_at, id LIMIT 1
-      )`.mapWith((v) => (v == null ? null : String(v))),
       releasesFound: fetchLog.releasesFound,
       releasesInserted: fetchLog.releasesInserted,
       durationMs: fetchLog.durationMs,
@@ -140,8 +134,33 @@ statusRoutes.get("/status/fetch-log", async (c) => {
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
-  const entries = hasMore ? rows.slice(0, limit) : rows;
-  const last = entries[entries.length - 1];
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const last = pageRows[pageRows.length - 1];
+
+  // Batched in one chunked lookup instead of a correlated per-row subquery.
+  // Backed by idx_org_accounts_org_platform (#1800).
+  const githubHandles = await loadOrgGithubHandles(
+    db,
+    pageRows.map((r) => r.orgId).filter((id): id is string => id != null),
+  );
+  const entries = pageRows.map((r) => ({
+    id: r.id,
+    sourceId: r.sourceId,
+    sessionId: r.sessionId,
+    sourceName: r.sourceName,
+    sourceSlug: r.sourceSlug,
+    orgName: r.orgName,
+    orgSlug: r.orgSlug,
+    orgAvatarUrl: r.orgAvatarUrl,
+    orgGithubHandle: r.orgId ? (githubHandles.get(r.orgId) ?? null) : null,
+    releasesFound: r.releasesFound,
+    releasesInserted: r.releasesInserted,
+    durationMs: r.durationMs,
+    status: r.status,
+    error: r.error,
+    rawContent: r.rawContent,
+    createdAt: r.createdAt,
+  }));
   const nextCursor =
     useCursor && hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
 

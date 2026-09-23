@@ -1,4 +1,6 @@
-import { asc, desc, sql, type Column, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type Column, type SQL } from "drizzle-orm";
+import { orgAccounts } from "@buildinternet/releases-core/schema";
+import type { AnyDb } from "../db.js";
 
 /**
  * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
@@ -32,15 +34,49 @@ export type SourceWithStats = {
   metadata: string | null;
 };
 
-// Correlated subquery used to pick a single deterministic github handle per
-// org so a multi-handle org doesn't fan out the JOIN. `org_accounts` only
-// enforces UNIQUE(platform, handle) globally — not per (org, platform).
-export function githubHandleSubquery(orgIdExpr: ReturnType<typeof sql>) {
-  return sql<string | null>`(
-    SELECT handle FROM org_accounts
-    WHERE org_id = ${orgIdExpr} AND platform = 'github'
-    ORDER BY created_at, id LIMIT 1
-  )`;
+// D1 caps prepared statements at 100 bound params; chunk `inArray` lookups at 90.
+const ORG_ID_CHUNK = 90;
+
+/**
+ * Batched replacement for a correlated per-row github-handle lookup: loads the
+ * earliest-created (ties broken by `id`) github `org_accounts.handle` for each
+ * of the given org ids in one or more chunked `IN` queries, instead of a
+ * scalar subquery re-run once per result row. `org_accounts` only enforces
+ * UNIQUE(platform, handle) globally -- not per (org, platform) -- so a
+ * multi-handle org needs this same deterministic tiebreak.
+ *
+ * Callers: run the main query selecting plain org id columns, collect the
+ * distinct org ids across the result rows, call this once, then map
+ * `githubHandle` from the returned `Map` (absent key -> no github account,
+ * map to `null`). Backed by `idx_org_accounts_org_platform (org_id, platform)`.
+ */
+export async function loadOrgGithubHandles(
+  db: AnyDb,
+  orgIds: readonly string[],
+): Promise<Map<string, string>> {
+  const uniqueIds = [...new Set(orgIds)];
+  if (uniqueIds.length === 0) return new Map();
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueIds.length; i += ORG_ID_CHUNK) {
+    chunks.push(uniqueIds.slice(i, i + ORG_ID_CHUNK));
+  }
+
+  const rowsByChunk = await Promise.all(
+    chunks.map((idChunk) =>
+      db
+        .select({ orgId: orgAccounts.orgId, handle: orgAccounts.handle })
+        .from(orgAccounts)
+        .where(and(inArray(orgAccounts.orgId, idChunk), eq(orgAccounts.platform, "github")))
+        .orderBy(asc(orgAccounts.createdAt), asc(orgAccounts.id)),
+    ),
+  );
+
+  const handles = new Map<string, string>();
+  for (const row of rowsByChunk.flat()) {
+    if (!handles.has(row.orgId)) handles.set(row.orgId, row.handle);
+  }
+  return handles;
 }
 
 /** Common row type for org list items */

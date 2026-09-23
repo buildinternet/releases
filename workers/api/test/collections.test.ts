@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { eq } from "drizzle-orm";
 import {
   organizations,
+  orgAccounts,
   sources,
   releases,
   products,
@@ -234,6 +235,35 @@ describe("collections", () => {
     // Hidden Lab is filtered out by organizations_public; the remaining two
     // come back in position order.
     expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["anthropic", "openai"]);
+  });
+
+  it("resolves each member org's github handle via the batched lookup, earliest account wins", async () => {
+    const db = mkDb();
+    await seed(db);
+    await db.insert(orgAccounts).values([
+      {
+        id: "acct_anth_new",
+        orgId: "org_anth",
+        platform: "github",
+        handle: "newer-handle",
+        createdAt: "2026-06-05T00:00:00.000Z",
+      },
+      {
+        id: "acct_anth_old",
+        orgId: "org_anth",
+        platform: "github",
+        handle: "older-handle",
+        createdAt: "2020-06-30T00:00:00.000Z",
+      },
+    ]);
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const anthropic = body.orgs.find((o: { slug: string }) => o.slug === "anthropic");
+    expect(anthropic.githubHandle).toBe("older-handle");
+    const openai = body.orgs.find((o: { slug: string }) => o.slug === "openai");
+    expect(openai.githubHandle).toBeNull();
   });
 
   it("404s on unknown collection", async () => {

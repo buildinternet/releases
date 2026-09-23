@@ -15,7 +15,7 @@ import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { releasePath } from "@buildinternet/releases-core/release-slug";
 import { parseDigestSections, type ParsedDigestSection } from "@releases/rendering/digest-sections";
 import type { AnyDb } from "../db.js";
-import { githubHandleSubquery } from "./shared.js";
+import { loadOrgGithubHandles } from "./shared.js";
 import type { CollectionDayRelease } from "@releases/ai-internal/collection-summary";
 import type { WeeklyDigestRelease } from "@releases/ai-internal/collection-weekly-digest";
 import type {
@@ -431,10 +431,10 @@ export async function resolveDigestCoveredReleases(
           version: releasesVisible.version,
           importance: releasesVisible.importance,
           url: releasesVisible.url,
+          orgId: organizationsPublic.id,
           orgSlug: organizationsPublic.slug,
           orgName: organizationsPublic.name,
           orgAvatarUrl: organizationsPublic.avatarUrl,
-          orgGithubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
           productSlug: productsActive.slug,
           productName: productsActive.name,
         })
@@ -447,7 +447,12 @@ export async function resolveDigestCoveredReleases(
         .where(inArray(releasesVisible.id, idChunk)),
     ),
   );
-  const byId = new Map(rowsByChunk.flat().map((r) => [r.id, r]));
+  const allRows = rowsByChunk.flat();
+  const byId = new Map(allRows.map((r) => [r.id, r]));
+  const githubHandles = await loadOrgGithubHandles(
+    db,
+    allRows.map((r) => r.orgId),
+  );
 
   return releaseIds.flatMap((id) => {
     const r = byId.get(id);
@@ -468,7 +473,7 @@ export async function resolveDigestCoveredReleases(
           slug: r.orgSlug,
           name: r.orgName,
           avatarUrl: r.orgAvatarUrl ?? null,
-          githubHandle: r.orgGithubHandle ?? null,
+          githubHandle: githubHandles.get(r.orgId) ?? null,
         },
         product:
           r.productSlug && r.productName ? { slug: r.productSlug, name: r.productName } : null,
