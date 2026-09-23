@@ -78,6 +78,7 @@
   "workspaces": [
     "apps/api",
     "apps/web",
+    "apps/webhooks",
     "packages/*"
   ],
   "catalog": {

@@ -131,18 +131,12 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # apps/mcp and apps/webhooks are excluded
-      # from the root workspace and carry their own bun.lock — the root
-      # install above doesn't populate their node_modules, so per-worker
-      # tsc + deploy both need a local install. These steps also catch
-      # stale per-worker lockfiles at PR time (previously a separate set
-      # of steps at the end of this job; folded in so we don't install
-      # twice).
+      # apps/mcp is excluded from the root workspace and carries its own
+      # bun.lock — the root install above doesn't populate its node_modules,
+      # so per-worker tsc + deploy both need a local install. This step also
+      # catches a stale lockfile at PR time.
       - name: Install apps/mcp deps
         working-directory: apps/mcp
-        run: bun install --frozen-lockfile
-      - name: Install apps/webhooks deps
-        working-directory: apps/webhooks
         run: bun install --frozen-lockfile
 
       # apps/mcp is excluded from the root oxlint type-check (carved-out

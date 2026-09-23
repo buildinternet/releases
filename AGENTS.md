@@ -44,7 +44,7 @@ Running the four `dev:*` services behind portless, fresh-worktree bootstrap, wor
 
 ## Workspaces and carved-out packages
 
-Root `package.json` declares `apps/api`, `apps/web`, and `packages/*` as workspaces. `apps/mcp/` and `apps/webhooks/` are intentionally excluded — wrangler manages their dependencies independently, and each has its own `bun.lock`.
+Root `package.json` declares `apps/api`, `apps/web`, `apps/webhooks`, and `packages/*` as workspaces. `apps/mcp/` is intentionally excluded — it pins zod to the MCP SDK's nested copy, so it carries its own `bun.lock` and needs its own `bun install`.
 
 The root `test` script is `bun test packages/ && bun test tests/ apps/web/ apps/mcp apps/webhooks && bun test apps/api`, so `apps/api` runs in its **own `bun test` process**, after the rest. This is deliberate isolation, not a style choice: bun's `mock.module()` is process-global, keyed by resolved module, and **not restorable per-specifier** (`mock.restore()` doesn't undo it, and re-mocking with the real impl is impossible — every import of the path resolves to the mock). The scrape-fetch tests that `mock.module("@releases/adapters/cloudflare", …)` at module scope (now in `tests/adapters/`) stub the same path `apps/api`'s `render-check` tests import for real — an ordering-dependent flake if they ran in the same process. Splitting `apps/api` into a separate process makes the leak structurally impossible. **Keep `tests/adapters/` (and mcp/webhooks) in the root-cwd multi-dir invocation** — that's where their module mocks resolve against the single root-workspace copy of `@releases/adapters` the source uses. Isolating `apps/api` (rather than `tests/adapters/`) is what keeps both sides resolving correctly.
 

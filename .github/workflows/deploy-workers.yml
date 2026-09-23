@@ -172,11 +172,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: bun install --frozen-lockfile
-      # apps/webhooks is intentionally excluded from root workspaces (cloudflare:workers
-      # imports break Bun's eager workspace resolution). Install its deps locally.
-      - name: Install webhooks worker deps
-        working-directory: apps/webhooks
-        run: bun install --frozen-lockfile
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
