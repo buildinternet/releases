@@ -18,6 +18,7 @@ import {
   getCollectionDayReleases,
   resolveDigestCoveredReleases,
   listLatestWeeklyDigests,
+  hydrateDigestSections,
 } from "./collection-summaries";
 
 describe("collection_daily_summaries schema", () => {
@@ -289,6 +290,35 @@ describe("resolveDigestCoveredReleases", () => {
     });
     expect(out[0]).toMatchObject({ url: null, product: null });
     expect(out[0].path.startsWith("/release/rel_e")).toBe(true);
+  });
+});
+
+const coveredRelease = (id: string) => ({
+  id,
+  title: id,
+  path: `/release/${id}`,
+  url: null,
+  org: { slug: "o", name: "O", avatarUrl: null, githubHandle: null },
+  product: null,
+  importance: null,
+});
+
+describe("hydrateDigestSections", () => {
+  test("resolves each section's ids in order, dropping ids missing from the lookup", () => {
+    const byId = new Map([
+      ["r1", coveredRelease("r1")],
+      ["r2", coveredRelease("r2")],
+    ]);
+    const out = hydrateDigestSections(
+      [
+        { heading: "A", anchor: "a", lede: "", releaseIds: ["r2", "gone", "r1"] },
+        { heading: "B", anchor: "b", lede: "", releaseIds: [] },
+      ],
+      byId,
+    );
+    expect(out[0].releases.map((r) => r.id)).toEqual(["r2", "r1"]);
+    expect(out[0].releaseIds).toEqual(["r2", "gone", "r1"]);
+    expect(out[1].releases).toEqual([]);
   });
 });
 

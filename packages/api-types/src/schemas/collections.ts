@@ -302,9 +302,16 @@ export const DigestSectionSchema = z.object({
   lede: z.string(),
   /** Cited release ids in first-seen order; resolve against the detail's `releases`. */
   releaseIds: z.array(z.string()),
+  /**
+   * The section's cited releases, resolved server-side in `releaseIds` order.
+   * Ids that no longer resolve are dropped, so `releases.length` can be less
+   * than `releaseIds.length`. Optional for older servers.
+   */
+  releases: z.array(DigestCoveredReleaseSchema).optional(),
 });
 
-/** Full row returned by `GET /v1/collections/:slug/digests/:weekStart`. */
+/** Full row returned by `GET /v1/collections/:slug/digests/:weekStart` and
+ *  `GET /v1/collections/:slug/digests/latest`. */
 export const CollectionWeeklyDigestDetailSchema = z.object({
   id: z.string(),
   weekStart: z.string(),

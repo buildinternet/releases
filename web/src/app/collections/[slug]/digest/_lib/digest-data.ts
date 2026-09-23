@@ -66,6 +66,26 @@ export const getRecentDigests = cache(
   },
 );
 
+/**
+ * Newest digest's full detail (body, sections with hydrated releases) in one
+ * call, so the collection page can fetch it in parallel with the list rather
+ * than after it. Fails soft to `null` — the page just drops the hero. That
+ * also covers an API deploy that predates `/digests/latest` (the old
+ * `:weekStart` handler answers `latest` with a 400). Non-404 errors are logged.
+ */
+export const getLatestDigestDetail = cache(
+  async (slug: string): Promise<CollectionWeeklyDigestDetail | null> => {
+    try {
+      return await api.collectionLatestWeeklyDigest(slug);
+    } catch (err) {
+      if (!(err instanceof ApiNotFoundError)) {
+        console.error(`getLatestDigestDetail(${slug}) failed`, err);
+      }
+      return null;
+    }
+  },
+);
+
 /** Latest digest, or `null` when none. Thin wrapper over {@link getRecentDigests}. */
 export const getLatestDigest = cache(
   async (slug: string): Promise<CollectionWeeklyDigestListItem | null> => {

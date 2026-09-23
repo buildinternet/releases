@@ -10,6 +10,27 @@ const org = (slug: string, name: string) => ({
   githubHandle: null,
 });
 
+const covered: CollectionWeeklyDigestDetail["releases"] = [
+  {
+    id: "r1",
+    title: "Codex voice",
+    path: "/release/r1",
+    url: null,
+    org: org("openai", "OpenAI"),
+    product: { slug: "codex", name: "Codex" },
+    importance: null,
+  },
+  {
+    id: "r2",
+    title: "Devin voice",
+    path: "/release/r2",
+    url: null,
+    org: org("cognition", "Cognition"),
+    product: { slug: "devin", name: "Devin" },
+    importance: null,
+  },
+];
+
 const baseDigest: CollectionWeeklyDigestDetail = {
   id: "dig_1",
   weekStart: "2026-09-14",
@@ -19,32 +40,14 @@ const baseDigest: CollectionWeeklyDigestDetail = {
   releaseIds: ["r1", "r2"],
   releaseCount: 13,
   generatedAt: "2026-09-15T00:00:00Z",
-  releases: [
-    {
-      id: "r1",
-      title: "Codex voice",
-      path: "/release/r1",
-      url: null,
-      org: org("openai", "OpenAI"),
-      product: { slug: "codex", name: "Codex" },
-      importance: null,
-    },
-    {
-      id: "r2",
-      title: "Devin voice",
-      path: "/release/r2",
-      url: null,
-      org: org("cognition", "Cognition"),
-      product: { slug: "devin", name: "Devin" },
-      importance: null,
-    },
-  ],
+  releases: covered,
   sections: [
     {
       heading: "Agents learn to talk",
       anchor: "agents-learn-to-talk",
       lede: "Voice sessions everywhere.",
       releaseIds: ["r1", "r2"],
+      releases: covered,
     },
   ],
 };
@@ -112,7 +115,7 @@ describe("LatestDigestHero", () => {
     expect(html).toContain('href="/collections/coding-agents/digest"');
   });
 
-  test("per-section count reflects only ids resolved in the covered-releases list", () => {
+  test("per-section count reflects the section's resolved releases, not its raw ids", () => {
     const digestWithUnresolvedId: CollectionWeeklyDigestDetail = {
       ...baseDigest,
       sections: [
@@ -120,9 +123,10 @@ describe("LatestDigestHero", () => {
           heading: "Agents learn to talk",
           anchor: "agents-learn-to-talk",
           lede: "Voice sessions everywhere.",
-          // "r3" isn't in `digest.releases` (e.g. suppressed after the
-          // digest was generated) — the shown count should still be 2, not 3.
+          // "r3" didn't resolve server-side (e.g. suppressed after the
+          // digest was generated) — the shown count should be 2, not 3.
           releaseIds: ["r1", "r2", "r3"],
+          releases: covered,
         },
       ],
     };
@@ -133,6 +137,19 @@ describe("LatestDigestHero", () => {
     // Word-boundary check: `digest.releaseCount` is 13, and "13 releases
     // covered" legitimately contains the substring "3 releases".
     expect(html).not.toMatch(/\b3 releases\b/);
+  });
+
+  test("a section without hydrated releases (older server) renders no products", () => {
+    const digestUnhydrated: CollectionWeeklyDigestDetail = {
+      ...baseDigest,
+      sections: [{ ...baseDigest.sections![0], releases: undefined }],
+    };
+    const html = renderToStaticMarkup(
+      <LatestDigestHero slug="coding-agents" digest={digestUnhydrated} earlier={[]} />,
+    );
+    expect(html).toContain("Agents learn to talk");
+    expect(html).not.toContain("Codex");
+    expect(html).toContain("0 releases");
   });
 
   test('no "In this issue" column when sections is undefined', () => {

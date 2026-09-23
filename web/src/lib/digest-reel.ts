@@ -1,4 +1,3 @@
-import type { DigestCoveredRelease, DigestSection } from "@buildinternet/releases-api-types";
 import type { HomepageDigestsQuery } from "@/lib/graphql/__generated__/graphql";
 
 export type ReelDigest = HomepageDigestsQuery["latestWeeklyDigests"][number];
@@ -24,38 +23,26 @@ export function splitDigestReel(digests: ReelDigest[], cardCount = 6) {
   return { cards: sorted.slice(0, cardCount), more: sorted.slice(cardCount) };
 }
 
-/** Dedupe rule shared by {@link sectionProducts} and
- *  {@link sectionProductsFromDetail}: distinct products a set of releases
- *  covers (by product slug, falling back to the org for product-less
- *  releases), labelled with the product name when there is one. Each
- *  carries its org for the avatar. First-seen order. */
-function productsFromReleases<TOrg extends { slug: string; name: string }>(
-  releases: readonly { product?: { slug: string; name: string } | null; org: TOrg }[],
-): { key: string; name: string; org: TOrg }[] {
-  const out = new Map<string, { key: string; name: string; org: TOrg }>();
-  for (const r of releases) {
+/** One distinct product a section covers, with its org for the avatar. */
+export interface SectionProduct<TOrg> {
+  key: string;
+  name: string;
+  org: TOrg;
+}
+
+/** Distinct products a section covers (by product slug, falling back to the
+ *  org for product-less releases), labelled with the product name when there
+ *  is one. First-seen order. Takes any section with hydrated `releases` —
+ *  the GraphQL reel's and the REST digest detail's alike. */
+export function sectionProducts<TOrg extends { slug: string; name: string }>(section: {
+  releases: readonly { product?: { slug: string; name: string } | null; org: TOrg }[];
+}): SectionProduct<TOrg>[] {
+  const out = new Map<string, SectionProduct<TOrg>>();
+  for (const r of section.releases) {
     const key = r.product?.slug ?? `org:${r.org.slug}`;
     if (!out.has(key)) out.set(key, { key, name: r.product?.name ?? r.org.name, org: r.org });
   }
   return [...out.values()];
-}
-
-/** Distinct products a section covers — see {@link productsFromReleases}. */
-export function sectionProducts(section: ReelSection) {
-  return productsFromReleases(section.releases);
-}
-
-/** Same dedupe rule as {@link sectionProducts}, but resolves a REST
- *  `CollectionWeeklyDigestDetail`'s `DigestSection.releaseIds` against a
- *  `releases` lookup map instead of a GraphQL section's embedded releases. */
-export function sectionProductsFromDetail(
-  section: DigestSection,
-  byId: Map<string, DigestCoveredRelease>,
-) {
-  const releases = section.releaseIds
-    .map((id) => byId.get(id))
-    .filter((r): r is DigestCoveredRelease => !!r);
-  return productsFromReleases(releases);
 }
 
 /** Internal link to a digest issue, optionally deep-linked to a section. */
@@ -79,7 +66,7 @@ export function digestHref(
 /** One product chip in a card section's row/hover-card — the full deduped
  *  list (uncapped), so the client's "+N" count (past `HOVER_PRODUCTS`) stays
  *  right. */
-export type ReelCardProduct = ReturnType<typeof sectionProducts>[number];
+export type ReelCardProduct = SectionProduct<ReelOrg>;
 
 export interface ReelCardSection {
   heading: string;

@@ -171,6 +171,7 @@ describe("GET /v1/collections/:slug/digests/:weekStart", () => {
         anchor: "highlights",
         lede: "Anthropic shipped Claude 4.7 and Claude 4.6.",
         releaseIds: [],
+        releases: [],
       },
     ]);
   });
@@ -204,5 +205,121 @@ describe("GET /v1/collections/:slug/digests/:weekStart", () => {
 
     const res = await fetch(new Request("http://test/v1/collections/nope/digests/2026-06-08"));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /v1/collections/:slug/digests/latest", () => {
+  it("returns the newest week with the same body as the :weekStart route", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("http://test/v1/collections/wd-test-collection/digests/latest"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.weekStart).toBe("2026-06-08");
+    expect(body.id).toBe("cwd_test_w1");
+
+    const byWeek = await fetch(
+      new Request("http://test/v1/collections/wd-test-collection/digests/2026-06-08"),
+    );
+    expect(body).toEqual(await byWeek.json());
+  });
+
+  it("returns 404 for a collection with no digests", async () => {
+    const db = mkDb();
+    await seed(db);
+    await db
+      .insert(collections)
+      .values([{ id: "col_wd_empty", slug: "wd-empty", name: "WD Empty" }]);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("http://test/v1/collections/wd-empty/digests/latest"));
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for an unknown collection slug", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("http://test/v1/collections/nope/digests/latest"));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("digest detail section hydration", () => {
+  // Section parsing only recognizes real `rel_` + 21-char ids in
+  // `/release/...` links, so this fixture uses full-length ids.
+  const idA = `rel_${"a".repeat(21)}`;
+  const idB = `rel_${"b".repeat(21)}`;
+  const idC = `rel_${"c".repeat(21)}`;
+  const idGone = `rel_${"z".repeat(21)}`;
+
+  async function seedHydration(db: ReturnType<typeof mkDb>) {
+    await seed(db);
+    await db.insert(releases).values(
+      [idA, idB, idC].map((id, i) => ({
+        id,
+        sourceId: "src_wd_anth",
+        title: `Release ${id.slice(4, 5).toUpperCase()}`,
+        content: "Body.",
+        url: `https://www.anthropic.com/news/${i}`,
+        publishedAt: "2026-06-16T18:00:00.000Z",
+      })),
+    );
+    await db.insert(collectionWeeklyDigests).values([
+      {
+        id: "cwd_test_w3",
+        collectionId: "col_wd_test",
+        weekStart: "2026-06-15",
+        title: "Sections week",
+        intro: "Two sections.",
+        body: [
+          "### Models",
+          "",
+          `Models moved. [A](/release/${idA}-a) and [Gone](/release/${idGone}).`,
+          "",
+          "### Tools",
+          "",
+          `Tools too. [B](/release/${idB}) and [C](/release/${idC}-c).`,
+        ].join("\n"),
+        // idC is cited in the body but not in releaseIds.
+        releaseIds: JSON.stringify([idA, idB, idGone]),
+        releaseCount: 3,
+        modelId: "openrouter:deepseek/deepseek-chat",
+        generatedAt: "2026-06-22T05:00:00.000Z",
+        updatedAt: "2026-06-22T05:00:00.000Z",
+      },
+    ]);
+  }
+
+  it("sections carry resolved releases; unresolvable ids stay out", async () => {
+    const db = mkDb();
+    await seedHydration(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("http://test/v1/collections/wd-test-collection/digests/latest"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.weekStart).toBe("2026-06-15");
+
+    const [models, tools] = body.sections;
+    expect(models.heading).toBe("Models");
+    expect(models.releaseIds).toEqual([idA, idGone]);
+    expect(models.releases.map((r: any) => r.id)).toEqual([idA]);
+    expect(models.releases[0]).toMatchObject({
+      url: "https://www.anthropic.com/news/0",
+      org: { slug: "wd-anthropic", name: "Anthropic" },
+    });
+    expect(tools.releases.map((r: any) => r.id)).toEqual([idB, idC]);
+
+    // The flat list keeps its meaning: resolvable ids from `releaseIds` only.
+    expect(body.releaseIds).toEqual([idA, idB, idGone]);
+    expect(body.releases.map((r: any) => r.id)).toEqual([idA, idB]);
   });
 });

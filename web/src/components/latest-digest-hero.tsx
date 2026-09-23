@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { CollectionWeeklyDigestDetail, CollectionWeeklyDigestListItem } from "@/lib/api";
 import { OrgAvatar } from "@/components/org-avatar";
-import { sectionProductsFromDetail } from "@/lib/digest-reel";
+import { sectionProducts } from "@/lib/digest-reel";
 import { pluralReleases } from "@/lib/formatters";
 import { weekRangeLabel, shortMonthDayLabel } from "@/lib/digest-format";
 
@@ -23,7 +23,6 @@ export function LatestDigestHero({
   earlier: CollectionWeeklyDigestListItem[];
 }) {
   const digestPath = `/collections/${slug}/digest/${digest.weekStart}`;
-  const releaseById = new Map(digest.releases.map((r) => [r.id, r]));
   const sections = digest.sections ?? [];
   const earlierShown = earlier.slice(0, 2);
 
@@ -72,11 +71,12 @@ export function LatestDigestHero({
               In this issue
             </div>
             {sections.map((section, i) => {
-              const products = sectionProductsFromDetail(section, releaseById);
-              // Count only ids that resolved against the digest's
-              // covered-releases list — `releaseIds.length` can include ids
-              // that didn't resolve (e.g. a release since suppressed).
-              const resolvedCount = section.releaseIds.filter((id) => releaseById.has(id)).length;
+              // Server-hydrated, so ids that no longer resolve (e.g. a
+              // release suppressed since generation) are already dropped —
+              // unlike `releaseIds.length`.
+              const releases = section.releases ?? [];
+              const products = sectionProducts({ releases });
+              const resolvedCount = releases.length;
               return (
                 <Link
                   key={section.anchor}

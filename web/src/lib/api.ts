@@ -641,6 +641,9 @@ export const api = {
   },
   collectionWeeklyDigest: (slug: string, weekStart: string) =>
     fetchApi<CollectionWeeklyDigestDetail>(`/v1/collections/${slug}/digests/${weekStart}`),
+  /** Newest digest's full detail in one call (sections carry hydrated releases). */
+  collectionLatestWeeklyDigest: (slug: string) =>
+    fetchApi<CollectionWeeklyDigestDetail>(`/v1/collections/${slug}/digests/latest`),
   sourceChangelog: (
     ref: { orgSlug: string; sourceSlug: string },
     range?: { path?: string; offset?: number; limit?: number },

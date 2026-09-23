@@ -156,6 +156,17 @@ A brief per-(collection, Eastern-Time day) rollup — a headline `title`, a one-
 - **API:** `GET /v1/collections/:slug/daily-summaries?from=&to=` returns the rows for an inclusive ET range (defaults applied), newest first; additive to the unchanged releases feed. On-demand/dry-run regeneration via the admin-gated `POST /v1/workflows/collection-summaries { collectionId?, date?, dryRun? }`.
 - **Forward-only at launch** — no historical backfill in v1 (a backfill workflow can reuse the same generator later).
 
+### Weekly digest routes
+
+Weekly collection digests are read over three REST routes and one GraphQL field:
+
+- `GET /v1/collections/:slug/digests` lists digests newest-first, cursor-paginated, without `body`/`releaseIds`.
+- `GET /v1/collections/:slug/digests/:weekStart` returns one week's full row (`CollectionWeeklyDigestDetail`).
+- `GET /v1/collections/:slug/digests/latest` returns the same body for the newest week, 404 when the collection has none. It is registered before `:weekStart`, and the collection page fetches it in parallel with the list for its latest-digest hero.
+- GraphQL `latestWeeklyDigests` returns every collection's digest for the newest digested week, for the homepage reel.
+
+Both detail routes build their body with `buildCollectionWeeklyDigestDetail` (`workers/api/src/queries/collection-summaries.ts`). It keeps the flat `releases[]` (every still-resolvable id in `releaseIds`) and hydrates each parsed `sections[]` entry with its cited `releases` through `hydrateDigestSections`, the same helper the GraphQL reel uses. Ids that no longer resolve are dropped from both lists, so web reads `section.releases` directly and never rebuilds an id lookup.
+
 ## Media handling
 
 At ingest time, `normalizeMediaUrl()` in `packages/rendering/src/media-url.ts` rewrites Next.js/Vercel image-optimizer proxy URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset — those proxy endpoints 404 for off-origin fetchers, so the raw `url` query param is extracted and stored instead.
