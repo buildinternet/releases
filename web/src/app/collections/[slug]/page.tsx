@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { etDayKey, etWeekStart } from "@buildinternet/releases-core/dates";
-import { api, ApiSetupError, type CollectionDailySummary } from "@/lib/api";
+import { ApiSetupError, type CollectionDailySummary } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
@@ -14,7 +14,7 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
 import { withCollectionReleaseView } from "@/lib/render-release-body";
 import { getCollectionPage } from "./_lib/collection-data";
-import { getRecentDigests } from "./digest/_lib/digest-data";
+import { getLatestDigestDetail, getRecentDigests } from "./digest/_lib/digest-data";
 
 export async function generateMetadata({
   params,
@@ -48,8 +48,11 @@ export async function generateMetadata({
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  // One list fetch for header teaser + rail (React `cache`; fails soft to []).
+  // Both fail soft (to [] / null) and run in parallel with the page data:
+  // the list feeds the "Earlier" strip and timeline cards, the latest
+  // detail feeds the hero.
   const recentDigestsPromise = getRecentDigests(slug);
+  const latestDigestPromise = getLatestDigestDetail(slug);
   let page;
   try {
     page = await getCollectionPage(slug);
@@ -65,13 +68,15 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   }
 
   const { detail, releases, summaries } = page;
-  const recentDigests = await recentDigestsPromise;
-  const latestDigest = recentDigests[0] ?? null;
-  // Fails soft to `null` — a hiccup fetching the full digest body/sections
-  // just drops the hero, same fail-soft posture as `getRecentDigests`.
-  const latestDigestDetail = latestDigest
-    ? await api.collectionWeeklyDigest(slug, latestDigest.weekStart).catch(() => null)
-    : null;
+  const [recentDigests, latestDigest] = await Promise.all([
+    recentDigestsPromise,
+    latestDigestPromise,
+  ]);
+  // Back issues for the hero's "Earlier" strip: everything after the hero's
+  // week (the list's newest row is the hero itself).
+  const earlierDigests = latestDigest
+    ? recentDigests.filter((d) => d.weekStart < latestDigest.weekStart)
+    : [];
   // Empty when none exist (fail-soft, same as the prior REST `.catch` path).
   const summaryByDate = new Map<string, CollectionDailySummary>(summaries.map((s) => [s.date, s]));
   const digestsByWeek = new Map(recentDigests.map((d) => [d.weekStart, d]));
@@ -117,12 +122,8 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             {detail.description}
           </p>
         )}
-        {latestDigestDetail && (
-          <LatestDigestHero
-            slug={slug}
-            digest={latestDigestDetail}
-            earlier={recentDigests.slice(1, 3)}
-          />
+        {latestDigest && (
+          <LatestDigestHero slug={slug} digest={latestDigest} earlier={earlierDigests} />
         )}
         <AdminOnly devAdmin={isLocalAdminEnabled()}>
           <div className="mt-3">

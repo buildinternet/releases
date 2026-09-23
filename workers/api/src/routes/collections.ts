@@ -36,13 +36,13 @@ import {
   listCollectionDailySummaries,
   listCollectionWeeklyDigests,
   getCollectionWeeklyDigest,
-  resolveDigestCoveredReleases,
+  getLatestCollectionWeeklyDigest,
+  buildCollectionWeeklyDigestDetail,
 } from "../queries/collection-summaries.js";
 import { githubHandleSubquery } from "../queries/shared.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
-import { parseDigestSections } from "@releases/rendering/digest-sections.js";
 import type { Env } from "../index.js";
 import {
   CollectionListResponseSchema,
@@ -794,6 +794,14 @@ collectionRoutes.get(
   },
 );
 
+const COLLECTION_SLUG_PARAM = {
+  name: "slug",
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+  description: "Collection slug.",
+} as const;
+
 collectionRoutes.get(
   "/collections/:slug/digests",
   describeRoute({
@@ -802,13 +810,7 @@ collectionRoutes.get(
     description:
       'Returns AI-generated weekly "mini blog post" digests for the collection, newest-first, cursor-paginated. Rows omit `body`/`releaseIds` — fetch a single week via `GET /v1/collections/:slug/digests/:weekStart` for the full row. Digests are generated on ET Mondays for the just-closed week by the collection-summaries cron and only exist for weeks that cleared the quality floor (>=3 substantive releases).',
     parameters: [
-      {
-        name: "slug",
-        in: "path",
-        required: true,
-        schema: { type: "string" },
-        description: "Collection slug.",
-      },
+      COLLECTION_SLUG_PARAM,
       {
         name: "limit",
         in: "query",
@@ -871,21 +873,50 @@ collectionRoutes.get(
   },
 );
 
+const DIGEST_DETAIL_DESCRIPTION =
+  "Full digest row (title, intro, markdown body, cited release ids) plus server-resolved minimal release info (title, org, upstream url, product, canonical `/release/*` fallback path) for every cited release, and the body's parsed `###` sections (heading, anchor, lede, cited release ids, and those releases resolved) — resolved server-side so the web page never N+1s. `releases[].url` is the primary link when present; `path` is the fallback. Release ids that no longer resolve (deleted/suppressed since generation) are silently dropped from `releases` and `sections[].releases`.";
+
+// Registered before `/digests/:weekStart` so the literal `latest` segment
+// never reaches that handler (it 400s on non-date params).
+collectionRoutes.get(
+  "/collections/:slug/digests/latest",
+  describeRoute({
+    tags: ["Collections"],
+    summary: "A collection's newest weekly digest, with resolved release links",
+    description: `The newest digest for the collection (highest \`weekStart\`), same body as \`GET /v1/collections/:slug/digests/:weekStart\` — one call instead of listing digests and then fetching the first week. ${DIGEST_DETAIL_DESCRIPTION}`,
+    parameters: [COLLECTION_SLUG_PARAM],
+    responses: {
+      200: {
+        description: "The newest digest row with resolved release links.",
+        content: { "application/json": { schema: resolver(CollectionWeeklyDigestDetailSchema) } },
+      },
+      404: {
+        description: "No collection with that slug, or the collection has no digests yet.",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+
+    const collection = await findCollectionBySlug(db, c.req.param("slug"));
+    if (!collection) return respondError(c, new NotFoundError("Collection not found"));
+
+    const digest = await getLatestCollectionWeeklyDigest(db, collection.id);
+    if (!digest) return respondError(c, new NotFoundError("No digests for this collection"));
+
+    return c.json(await buildCollectionWeeklyDigestDetail(db, digest));
+  },
+);
+
 collectionRoutes.get(
   "/collections/:slug/digests/:weekStart",
   describeRoute({
     tags: ["Collections"],
     summary: "One collection's weekly digest, with resolved release links",
-    description:
-      "Full digest row (title, intro, markdown body, cited release ids) for one ET week, plus server-resolved minimal release info (title, org, upstream url, product, canonical `/release/*` fallback path) for every cited release, and the body's parsed `###` sections (heading, anchor, lede, cited release ids) — resolved server-side so the web page never N+1s. `releases[].url` is the primary link when present; `path` is the fallback. `:weekStart` must be the Monday (YYYY-MM-DD, ET) starting the week. Release ids that no longer resolve (deleted/suppressed since generation) are silently dropped from `releases`.",
+    description: `The digest for one ET week. \`:weekStart\` must be the Monday (YYYY-MM-DD, ET) starting the week. ${DIGEST_DETAIL_DESCRIPTION}`,
     parameters: [
-      {
-        name: "slug",
-        in: "path",
-        required: true,
-        schema: { type: "string" },
-        description: "Collection slug.",
-      },
+      COLLECTION_SLUG_PARAM,
       {
         name: "weekStart",
         in: "path",
@@ -931,20 +962,7 @@ collectionRoutes.get(
       return respondError(c, new NotFoundError(`No digest for week ${weekStartParam}`));
     }
 
-    const releases = await resolveDigestCoveredReleases(db, digest.releaseIds);
-
-    return c.json({
-      id: digest.id,
-      weekStart: digest.weekStart,
-      title: digest.title,
-      intro: digest.intro,
-      body: digest.body,
-      releaseIds: digest.releaseIds,
-      releaseCount: digest.releaseCount,
-      generatedAt: digest.generatedAt,
-      releases,
-      sections: parseDigestSections(digest.body),
-    });
+    return c.json(await buildCollectionWeeklyDigestDetail(db, digest));
   },
 );
 

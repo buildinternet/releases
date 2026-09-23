@@ -892,6 +892,7 @@ v1.use(
   "/collections/:slug/digests",
   cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
 );
+// Also matches `/collections/:slug/digests/latest` — same weekly cadence.
 v1.use(
   "/collections/:slug/digests/:weekStart",
   cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),

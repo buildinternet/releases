@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { DigestSection } from "@buildinternet/releases-api-types";
 import {
   digestHref,
   sectionProducts,
-  sectionProductsFromDetail,
   splitDigestReel,
   toReelPreview,
   CARD_SECTIONS,
@@ -81,39 +81,32 @@ describe("sectionProducts", () => {
   });
 });
 
-describe("sectionProductsFromDetail", () => {
-  test("resolves ids through the releases map", () => {
-    const byId = new Map([
-      [
-        "r1",
-        {
-          id: "r1",
-          title: "",
-          path: "/release/r1",
-          url: null,
-          importance: null,
-          org: { slug: "openai", name: "OpenAI" },
-          product: { slug: "codex", name: "Codex" },
-        },
+describe("sectionProducts on a REST digest-detail section", () => {
+  test("uses the server-hydrated releases, same dedupe rule", () => {
+    const rel = (id: string, orgSlug: string, orgName: string, product: string | null) => ({
+      id,
+      title: "",
+      path: `/release/${id}`,
+      url: null,
+      importance: null,
+      org: { slug: orgSlug, name: orgName },
+      product: product ? { slug: product.toLowerCase(), name: product } : null,
+    });
+    const section: DigestSection = {
+      heading: "h",
+      anchor: "h",
+      lede: "",
+      releaseIds: ["r1", "rX", "r2", "r3"],
+      releases: [
+        rel("r1", "openai", "OpenAI", "Codex"),
+        rel("r2", "cognition", "Cognition", "Devin"),
+        rel("r3", "openai", "OpenAI", "Codex"),
       ],
-      [
-        "r2",
-        {
-          id: "r2",
-          title: "",
-          path: "/release/r2",
-          url: null,
-          importance: null,
-          org: { slug: "cognition", name: "Cognition" },
-          product: { slug: "devin", name: "Devin" },
-        },
-      ],
+    };
+    expect(sectionProducts({ releases: section.releases ?? [] }).map((p) => p.name)).toEqual([
+      "Codex",
+      "Devin",
     ]);
-    const out = sectionProductsFromDetail(
-      { heading: "h", anchor: "h", lede: "", releaseIds: ["r1", "rX", "r2", "r1"] },
-      byId as any,
-    );
-    expect(out.map((p) => p.name)).toEqual(["Codex", "Devin"]);
   });
 });
 

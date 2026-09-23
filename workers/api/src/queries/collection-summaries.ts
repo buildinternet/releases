@@ -19,6 +19,7 @@ import { githubHandleSubquery } from "./shared.js";
 import type { CollectionDayRelease } from "@releases/ai-internal/collection-summary";
 import type { WeeklyDigestRelease } from "@releases/ai-internal/collection-weekly-digest";
 import type {
+  CollectionWeeklyDigestDetail,
   CollectionWeeklyDigestListItem,
   DigestCoveredRelease,
 } from "@buildinternet/releases-api-types";
@@ -367,15 +368,18 @@ export async function listCollectionWeeklyDigests(
   };
 }
 
+/** A stored digest row with `releaseIds` parsed out of its JSON column. */
+export type CollectionWeeklyDigestRow = Omit<
+  typeof collectionWeeklyDigests.$inferSelect,
+  "releaseIds"
+> & { releaseIds: string[] };
+
 /** Single digest row by (collectionId, weekStart), or null if missing. */
 export async function getCollectionWeeklyDigest(
   db: AnyDb,
   collectionId: string,
   weekStart: string,
-): Promise<
-  | (Omit<typeof collectionWeeklyDigests.$inferSelect, "releaseIds"> & { releaseIds: string[] })
-  | null
-> {
+): Promise<CollectionWeeklyDigestRow | null> {
   const [row] = await db
     .select()
     .from(collectionWeeklyDigests)
@@ -385,6 +389,21 @@ export async function getCollectionWeeklyDigest(
         eq(collectionWeeklyDigests.weekStart, weekStart),
       ),
     );
+  if (!row) return null;
+  return { ...row, releaseIds: safeParseReleaseIds(row.releaseIds) };
+}
+
+/** A collection's newest digest row (highest `weekStart`), or null if it has none. */
+export async function getLatestCollectionWeeklyDigest(
+  db: AnyDb,
+  collectionId: string,
+): Promise<CollectionWeeklyDigestRow | null> {
+  const [row] = await db
+    .select()
+    .from(collectionWeeklyDigests)
+    .where(eq(collectionWeeklyDigests.collectionId, collectionId))
+    .orderBy(desc(collectionWeeklyDigests.weekStart))
+    .limit(1);
   if (!row) return null;
   return { ...row, releaseIds: safeParseReleaseIds(row.releaseIds) };
 }
@@ -478,13 +497,74 @@ export async function resolveDigestCoveredReleases(
   });
 }
 
+/** A parsed `###` section with its cited releases resolved. */
+export type HydratedDigestSection = ParsedDigestSection & { releases: DigestCoveredRelease[] };
+
+/**
+ * Attach each section's cited releases, in `releaseIds` order, from an
+ * already-resolved lookup (`resolveDigestCoveredReleases` output keyed by id).
+ * Ids missing from the lookup (deleted/suppressed since generation) are
+ * dropped from `releases`; `releaseIds` is left untouched. Shared by the
+ * GraphQL homepage reel and the REST digest detail so both surfaces hydrate
+ * sections the same way.
+ */
+export function hydrateDigestSections(
+  sections: ParsedDigestSection[],
+  byId: ReadonlyMap<string, DigestCoveredRelease>,
+): HydratedDigestSection[] {
+  return sections.map((s) => ({
+    ...s,
+    releases: s.releaseIds.flatMap((id) => {
+      const r = byId.get(id);
+      return r ? [r] : [];
+    }),
+  }));
+}
+
+/**
+ * Wire body for the REST digest detail routes (`/digests/:weekStart` and
+ * `/digests/latest`). One chunked hydrate covers both the flat `releases`
+ * list (every still-resolvable id in `releaseIds`, in that order) and each
+ * section's `releases`. Ids a section cites that aren't in `releaseIds` are
+ * resolved for the section but kept out of the flat list, so `releases`
+ * keeps its documented meaning.
+ */
+export async function buildCollectionWeeklyDigestDetail(
+  db: AnyDb,
+  digest: CollectionWeeklyDigestRow,
+): Promise<CollectionWeeklyDigestDetail> {
+  const sections = parseDigestSections(digest.body);
+  const cited = new Set(digest.releaseIds);
+  const sectionOnlyIds = [
+    ...new Set(sections.flatMap((s) => s.releaseIds).filter((id) => !cited.has(id))),
+  ];
+  const resolved = await resolveDigestCoveredReleases(db, [
+    ...digest.releaseIds,
+    ...sectionOnlyIds,
+  ]);
+  const byId = new Map(resolved.map((r) => [r.id, r]));
+
+  return {
+    id: digest.id,
+    weekStart: digest.weekStart,
+    title: digest.title,
+    intro: digest.intro,
+    body: digest.body,
+    releaseIds: digest.releaseIds,
+    releaseCount: digest.releaseCount,
+    generatedAt: digest.generatedAt,
+    releases: resolved.filter((r) => cited.has(r.id)),
+    sections: hydrateDigestSections(sections, byId),
+  };
+}
+
 export type LatestWeeklyDigest = {
   collection: { slug: string; name: string; isFeatured: boolean };
   weekStart: string;
   title: string;
   intro: string;
   releaseCount: number;
-  sections: Array<ParsedDigestSection & { releases: DigestCoveredRelease[] }>;
+  sections: HydratedDigestSection[];
   /** Distinct orgs across cited releases, first-seen order (facepile). */
   orgs: DigestCoveredRelease["org"][];
 };
@@ -522,13 +602,7 @@ export async function listLatestWeeklyDigests(db: AnyDb): Promise<LatestWeeklyDi
   const byId = new Map((await resolveDigestCoveredReleases(db, allIds)).map((r) => [r.id, r]));
 
   return parsed.map(({ row, sections }) => {
-    const resolved = sections.map((s) => ({
-      ...s,
-      releases: s.releaseIds.flatMap((id) => {
-        const r = byId.get(id);
-        return r ? [r] : [];
-      }),
-    }));
+    const resolved = hydrateDigestSections(sections, byId);
     const orgs = new Map<string, DigestCoveredRelease["org"]>();
     for (const s of resolved)
       for (const r of s.releases) if (!orgs.has(r.org.slug)) orgs.set(r.org.slug, r.org);
