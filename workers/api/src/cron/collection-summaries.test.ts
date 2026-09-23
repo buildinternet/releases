@@ -10,6 +10,7 @@ import {
 import {
   collectionSummaryCatchupDates,
   collectionWeeklyDigestCatchupWeeks,
+  digestPagePaths,
   digestRevalidatePaths,
   generateCollectionSummariesForDay,
   generateCollectionWeeklyDigestsForWeek,
@@ -483,6 +484,24 @@ describe("digestRevalidatePaths", () => {
   });
 });
 
+describe("digestPagePaths", () => {
+  test("lists each collection's digest index once plus every digested week", () => {
+    expect(
+      digestPagePaths([
+        { slug: "ai-labs", weekStart: "2026-06-08" },
+        { slug: "ai-labs", weekStart: "2026-06-01" },
+        { slug: "dev-tools", weekStart: "2026-06-08" },
+      ]),
+    ).toEqual([
+      "/collections/ai-labs/digest",
+      "/collections/ai-labs/digest/2026-06-08",
+      "/collections/ai-labs/digest/2026-06-01",
+      "/collections/dev-tools/digest",
+      "/collections/dev-tools/digest/2026-06-08",
+    ]);
+  });
+});
+
 /** Records the outbound revalidate ping and replies with `status`. */
 function fetchRecorder(status = 200): { calls: unknown[]; fetchImpl: typeof fetch } {
   const calls: unknown[] = [];
@@ -500,14 +519,39 @@ const REVALIDATE_SECRET = {
 };
 
 describe("pingAfterDigests", () => {
-  test("sends one ping with the homepage, collections index, and each digested collection", async () => {
+  test("pings the homepage and collection pages, then the digest pages separately", async () => {
     const { calls, fetchImpl } = fetchRecorder();
     await pingAfterDigests(
       { WEB_SERVICE_KEY: REVALIDATE_SECRET, WEB_BASE_URL: "https://releases.sh" },
-      ["ai-labs"],
+      [{ slug: "ai-labs", weekStart: "2026-06-08" }],
       { fetchImpl },
     );
-    expect(calls).toEqual([{ paths: ["/", "/collections", "/collections/ai-labs"] }]);
+    expect(calls).toEqual([
+      { paths: ["/", "/collections", "/collections/ai-labs"] },
+      { paths: ["/collections/ai-labs/digest", "/collections/ai-labs/digest/2026-06-08"] },
+    ]);
+  });
+
+  test("chunks digest pages to the web route's 50-path cap", async () => {
+    const { calls, fetchImpl } = fetchRecorder();
+    // 26 collections x 1 week = 52 digest-page paths -> chunks of 50 + 2.
+    const digests = Array.from({ length: 26 }, (_, i) => ({
+      slug: `c${i}`,
+      weekStart: "2026-06-08",
+    }));
+    await pingAfterDigests({ WEB_SERVICE_KEY: REVALIDATE_SECRET }, digests, { fetchImpl });
+    const sizes = (calls as { paths: string[] }[]).map((c) => c.paths.length);
+    expect(sizes).toEqual([28, 50, 2]);
+  });
+
+  test("still sends the digest-page ping when the first ping is rejected", async () => {
+    const { calls, fetchImpl } = fetchRecorder(400);
+    await pingAfterDigests(
+      { WEB_SERVICE_KEY: REVALIDATE_SECRET },
+      [{ slug: "ai-labs", weekStart: "2026-06-08" }],
+      { fetchImpl },
+    );
+    expect(calls).toHaveLength(2);
   });
 
   test("sends no ping when no collection was digested", async () => {
@@ -527,7 +571,7 @@ describe("pingAfterDigests", () => {
             },
           },
         },
-        ["ai-labs"],
+        [{ slug: "ai-labs", weekStart: "2026-06-08" }],
         { fetchImpl },
       ),
     ).resolves.toBeUndefined();
@@ -542,7 +586,7 @@ describe("pingAfterDigests", () => {
     await expect(
       pingAfterDigests(
         { WEB_SERVICE_KEY: REVALIDATE_SECRET, WEB_BASE_URL: "https://releases.sh" },
-        ["ai-labs"],
+        [{ slug: "ai-labs", weekStart: "2026-06-08" }],
         { fetchImpl: failingFetch },
       ),
     ).resolves.toBeUndefined();
@@ -561,7 +605,7 @@ describe("runCollectionWeeklyDigests — revalidation ping (#2331)", () => {
     } satisfies CollectionSummariesEnv;
   }
 
-  test("pings once with the homepage, collections index, and the digested collection", async () => {
+  test("pings the homepage and collection pages, then the digest pages", async () => {
     const { db } = createTestDb();
     await seedWeeklyCollection(db);
     const { calls, fetchImpl } = fetchRecorder();
@@ -576,7 +620,10 @@ describe("runCollectionWeeklyDigests — revalidation ping (#2331)", () => {
       "2026-06-15", // Monday; catch-up window covers the just-closed week 2026-06-08
     );
 
-    expect(calls).toEqual([{ paths: ["/", "/collections", "/collections/week"] }]);
+    expect(calls).toEqual([
+      { paths: ["/", "/collections", "/collections/week"] },
+      { paths: ["/collections/week/digest", "/collections/week/digest/2026-06-08"] },
+    ]);
   });
 
   test("sends no ping when the run writes zero digests", async () => {

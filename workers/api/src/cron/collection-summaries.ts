@@ -17,7 +17,11 @@ import {
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { createDb, type AnyDb } from "../db.js";
 import { collections } from "@buildinternet/releases-core/schema";
-import { notifyWebRevalidatePaths, type WebRevalidateEnv } from "../lib/web-revalidate.js";
+import {
+  MAX_REVALIDATE_PATHS,
+  notifyWebRevalidatePaths,
+  type WebRevalidateEnv,
+} from "../lib/web-revalidate.js";
 import {
   getCollectionMembers,
   getCollectionDayReleases,
@@ -330,9 +334,8 @@ export async function generateCollectionWeeklyDigestsForWeek(
     /**
      * Called once per collection whose digest was newly written this call —
      * not for a skip or a failure. `runCollectionWeeklyDigests` and the
-     * durable workflow's `runWeeklyDigests` both use this to collect the
-     * slugs that need an ISR revalidation ping, without this function (or
-     * the admin backfill route that also calls it) needing to know anything
+     * admin backfill route use this to collect the digests that need an ISR
+     * revalidation ping, without this function needing to know anything
      * about revalidation itself.
      */
     onGenerated?: (col: CollectionWeeklyDigestTarget) => void;
@@ -364,9 +367,8 @@ export async function generateCollectionWeeklyDigestsForWeek(
  * digest. The homepage reel and each digested collection's own page (its
  * latest-digest hero) always change; `/collections` also shows per-row digest
  * recency (see `web/src/app/collections/page.tsx`), so it's included
- * unconditionally too. The digest's own new detail page
- * (`/collections/<slug>/digest/<weekStart>`) needs no ping — it renders on
- * first request.
+ * unconditionally too. The digest pages themselves are a separate ping — see
+ * `digestPagePaths`.
  *
  * Exported and side-effect-free so it's testable without a fetch mock, and
  * shared by both the inline cron path (`runCollectionWeeklyDigests`) and the
@@ -377,28 +379,62 @@ export function digestRevalidatePaths(collectionSlugs: string[]): string[] {
   return [...new Set(paths)];
 }
 
+/** One digest written by a run: its collection and ET week. */
+export interface DigestedWeek {
+  slug: string;
+  weekStart: string;
+}
+
 /**
- * Fire the single revalidation ping for a weekly-digest run, or no-op when
- * nothing was generated. Shared by both the inline cron path and the durable
- * workflow's `step.do`-wrapped call — see the module doc on
- * `digestRevalidatePaths` — so the two paths behave identically and a fix to
- * one isn't silently missing from the other.
+ * Pure: the digest pages a run made stale. The collection's digest index
+ * (`/collections/<slug>/digest`) lists every digest, so a new one is missing
+ * from it until revalidated. A week page (`/collections/<slug>/digest/<week>`)
+ * is already cached when a digest is regenerated with `force`; for a brand-new
+ * week the ping is a harmless no-op.
+ */
+export function digestPagePaths(digests: DigestedWeek[]): string[] {
+  const paths = digests.flatMap((d) => [
+    `/collections/${d.slug}/digest`,
+    `/collections/${d.slug}/digest/${d.weekStart}`,
+  ]);
+  return [...new Set(paths)];
+}
+
+/**
+ * Fire the revalidation pings for a weekly-digest run, or no-op when nothing
+ * was generated. Shared by the inline cron path, the durable workflow's
+ * `step.do`-wrapped call, and the admin backfill route, so all three behave
+ * identically and a fix to one isn't silently missing from the others.
+ *
+ * Two kinds of ping: first the homepage + collection pages
+ * (`digestRevalidatePaths`), then the digest pages (`digestPagePaths`) in
+ * chunks of the web route's path cap. They are separate requests on purpose:
+ * web rejects a whole body when any path is outside its allowlist, so during
+ * a deploy where the worker ships before web learns the digest paths, only
+ * the digest-page ping fails.
  *
  * Same fail-open contract as `notifyWebRevalidatePaths` itself: never throws,
  * always resolves. A caller running this inside a durable Workflow step still
  * needs to wrap it in its own `step.do` (not call it bare) so a workflow
- * replay-on-wake can't send the ping twice.
+ * replay-on-wake can't send the pings twice.
  */
 export async function pingAfterDigests(
   env: WebRevalidateEnv,
-  digestedCollectionSlugs: string[],
+  digests: DigestedWeek[],
   opts?: { fetchImpl?: typeof fetch },
 ): Promise<void> {
-  if (digestedCollectionSlugs.length === 0) return;
-  await notifyWebRevalidatePaths(env, digestRevalidatePaths(digestedCollectionSlugs), {
-    component: "collection-weekly-digest",
-    fetchImpl: opts?.fetchImpl,
-  });
+  if (digests.length === 0) return;
+  const notifyOpts = { component: "collection-weekly-digest", fetchImpl: opts?.fetchImpl };
+  await notifyWebRevalidatePaths(
+    env,
+    digestRevalidatePaths(digests.map((d) => d.slug)),
+    notifyOpts,
+  );
+  const pages = digestPagePaths(digests);
+  for (let i = 0; i < pages.length; i += MAX_REVALIDATE_PATHS) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential, bounded chunks
+    await notifyWebRevalidatePaths(env, pages.slice(i, i + MAX_REVALIDATE_PATHS), notifyOpts);
+  }
 }
 
 /**
@@ -425,12 +461,12 @@ export async function runCollectionWeeklyDigests(
   }
 
   const catchup = Math.max(1, Number(env.COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS ?? "1") || 1);
-  const digestedSlugs = new Set<string>();
+  const digested: DigestedWeek[] = [];
 
   let totals = { generated: 0, skipped: 0, failed: 0 };
   for (const weekStart of collectionWeeklyDigestCatchupWeeks(todayEt, catchup)) {
     const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
-      onGenerated: (col) => digestedSlugs.add(col.slug),
+      onGenerated: (col) => digested.push({ slug: col.slug, weekStart }),
     });
     totals = {
       generated: totals.generated + r.generated,
@@ -446,5 +482,5 @@ export async function runCollectionWeeklyDigests(
     ...totals,
   });
 
-  await pingAfterDigests(env, [...digestedSlugs], { fetchImpl: env._revalidateFetchOverride });
+  await pingAfterDigests(env, digested, { fetchImpl: env._revalidateFetchOverride });
 }

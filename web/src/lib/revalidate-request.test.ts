@@ -165,12 +165,23 @@ describe("handleRevalidateRequest", () => {
       expect(revalidated).toHaveLength(50);
     });
 
-    it("rejects a path outside the allowlist", async () => {
+    it("revalidates a collection's digest index and week pages", async () => {
       const { deps: d, revalidated } = deps();
-      const res = await handleRevalidateRequest(
-        post({ paths: ["/collections/ai-labs/digest/2026-06-08"] }),
-        d,
-      );
+      const paths = ["/collections/ai-labs/digest", "/collections/ai-labs/digest/2026-06-08"];
+      const res = await handleRevalidateRequest(post({ paths }), d);
+      expect(res.status).toBe(200);
+      expect(revalidated).toEqual(paths);
+    });
+
+    it.each([
+      ["a three-segment path that isn't a digest index", "/collections/ai-labs/feed"],
+      ["a digest path outside /collections", "/vercel/ai-labs/digest"],
+      ["a digest week that isn't a date", "/collections/ai-labs/digest/latest"],
+      ["a path below a digest week", "/collections/ai-labs/digest/2026-06-08/og"],
+      ["an unsafe collection slug", "/collections/%2e%2e/digest"],
+    ])("rejects %s", async (_label, path) => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(post({ paths: [path] }), d);
       expect(res.status).toBe(400);
       expect(revalidated).toEqual([]);
     });
