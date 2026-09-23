@@ -12,7 +12,7 @@
    max-widths — are never generated, so the settings two-column "third rail"
    collapses to a single column and the Aside/PromoRail drop below the content
    as footer blocks. Scan the package source explicitly so its classes emit. */
-@source "../../../packages/design-system/src";
+@source "../../../../packages/design-system/src";
 
 @theme {
   --font-mono:

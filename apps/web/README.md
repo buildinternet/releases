@@ -47,6 +47,6 @@ Deployed automatically on Vercel.
 
 ## Docs
 
-- [web.md](../docs/architecture/web.md) — changelog range/slicing API, GitHub CHANGELOG
+- [web.md](../../docs/architecture/web.md) — changelog range/slicing API, GitHub CHANGELOG
   ingestion, Open Graph images, org overviews, category overlay, collections, media pipeline, org
   avatars, follows/feed, admin hub

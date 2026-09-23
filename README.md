@@ -147,7 +147,7 @@ personalized feeds, webhooks, and email digests.
 | `apps/webhooks/`  | Signs + delivers `release.created` events (HMAC-SHA256, retry/DLQ) — [docs](docs/webhooks.md) |
 | `apps/web/`       | Next.js frontend, deploys on Vercel                                                           |
 | `packages/`       | Shared code — `core` + `api-types` publish to npm; the rest are private workspaces            |
-| `src/agent/`      | Managed-agents discovery + worker harness (prompt builder + shared types)                     |
+| `managed-agents/` | Managed-agents discovery + worker definitions and harness (prompt builder + shared types)     |
 | `.claude/`        | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
 
 How it fits together:
@@ -169,7 +169,7 @@ This repo has four kinds of code:
 | Historical context | `docs/architecture/`, `docs/plans/`, `docs/superpowers/`                      | Architecture docs are maintained references. Plans and specs are point-in-time design history.                               |
 
 For normal contributions, start with `bun run bootstrap`, `bun run check`, and
-`bun test`. You do not need production Cloudflare, Anthropic, Vercel, email, or
+`bun run test`. You do not need production Cloudflare, Anthropic, Vercel, email, or
 Firecrawl access to work on the core loop. If you are trying to fork or
 self-host the full service, read
 [deploy-coupling.md](docs/architecture/deploy-coupling.md).
@@ -189,7 +189,7 @@ bun run bootstrap        # one-command setup: tooling, deps, env files, local D1
 bun run doctor           # diagnose the setup — reports what's missing and how to fix it
 
 bun run check            # lint + type-check + format (the CI gate)
-bun test                 # full test suite, secret-free
+bun run test             # full test suite, secret-free
 bun run dev:api          # API worker on local D1
 bun run dev:web          # Next.js frontend
 ```

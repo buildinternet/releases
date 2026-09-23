@@ -23,7 +23,7 @@ import matter from "gray-matter";
 import { fetchWithRetry } from "./fetch-with-retry";
 
 const WEB_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const REPO_ROOT = dirname(WEB_ROOT);
+const REPO_ROOT = dirname(dirname(WEB_ROOT));
 
 const SKILLS_INDEX_PATH = join(WEB_ROOT, "public/.well-known/agent-skills/index.json");
 const SERVER_CARD_PATH = join(WEB_ROOT, "public/.well-known/mcp/server-card.json");

@@ -10,7 +10,7 @@ import { describe, expect, it } from "bun:test";
 // resolves content correctly regardless of where the runner was launched
 // from without disturbing cwd-sensitive tests elsewhere in the same process.
 const originalCwd = process.cwd();
-if (path.basename(originalCwd) !== "web") process.chdir(path.join(originalCwd, "web"));
+if (path.basename(originalCwd) !== "web") process.chdir(path.join(originalCwd, "apps", "web"));
 const { GET } = await import("./route.js");
 if (process.cwd() !== originalCwd) process.chdir(originalCwd);
 

@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "fs";
 import * as schema from "@buildinternet/releases-core/schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(__dirname, "..", "workers", "api", "migrations");
+const MIGRATIONS_DIR = join(__dirname, "..", "apps", "api", "migrations");
 
 export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 

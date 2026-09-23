@@ -4,7 +4,7 @@ The `api`, `mcp`, and `discovery` workers have a `[env.staging]` block in their 
 
 - **Hosts:** `api-staging.releases.sh`, `mcp-staging.releases.sh`
 - **Deployed as:** `releases-api-staging`, `releases-mcp-staging`, `releases-discovery-staging`
-- **Managed agents:** separate Anthropic discovery + worker agents, environment, and vault. Skills are deployed as distinct staging resources (display title suffix `(staging)`) so iteration does not affect prod. See [docs/architecture/agents.md](docs/architecture/agents.md#per-environment-agents). There is no CLI trigger for staging discovery sessions yet — the worker is reachable only via direct POST to `releases-discovery-staging` or scrape-agent cron sweeps (and those are disabled in staging).
+- **Managed agents:** separate Anthropic discovery + worker agents, environment, and vault. Skills are deployed as distinct staging resources (display title suffix `(staging)`) so iteration does not affect prod. See [agents.md](agents.md#per-environment-agents). There is no CLI trigger for staging discovery sessions yet — the worker is reachable only via direct POST to `releases-discovery-staging` or scrape-agent cron sweeps (and those are disabled in staging).
 - **DB:** `released-db-staging` (separate D1), refreshed on demand from prod
 - **Crons:** disabled (`CRON_ENABLED=false`, no cron triggers)
 - **Vectorize:** no bindings — search degrades to FTS; `/v1/related/*` returns `degraded: true`

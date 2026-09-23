@@ -23,7 +23,7 @@ Remote MCP server at `agents.releases.sh` (alias `mcp.releases.sh`) — serves t
 | `scope-error.ts`        | Scope-enforcement error type.                 |
 | `stubs/`                | Type stubs for the carved-out workspace.      |
 
-> This workspace is intentionally excluded from the root Bun workspace and root oxlint; it type-checks separately via `npx tsc --noEmit` (see repo root [`AGENTS.md`](../../AGENTS.md)).
+> This workspace is intentionally excluded from the root Bun workspace and root oxlint; it type-checks separately via `cd apps/mcp && npx tsc --noEmit` (see repo root [`AGENTS.md`](../../AGENTS.md)).
 
 ## Deploy
 

@@ -210,7 +210,7 @@ jobs:
         # graphql-codegen emits single-quoted, unformatted output; the
         # committed copy is oxfmt-normalised by lint-staged on commit.
         # Mirror that here before diffing or every PR would fail.
-        working-directory: web
+        working-directory: apps/web
         run: |
           bun run codegen
           bunx oxfmt --write src/lib/graphql/__generated__/
@@ -273,7 +273,7 @@ jobs:
       # then `next build` (Turbopack in Next 16). Catches missing exports,
       # bad imports, and Next compile errors before Vercel.
       - name: Next production build
-        working-directory: web
+        working-directory: apps/web
         run: bun run build
 
   # Non-blocking reminder: a PR that touches a published package (packages/core,

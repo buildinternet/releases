@@ -8,7 +8,7 @@ The conventions below cover the shape of changes so PRs stay easy to review and 
 
 The repo is designed so contribution never requires access to the production infrastructure:
 
-- **No external accounts:** `bun install`, `bun run check`, and `bun test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `apps/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` / `preview:discovery` scripts are the plain-port fallback if you'd rather skip portless.
+- **No external accounts:** `bun install`, `bun run check`, and `bun run test` all run secret-free (that's how CI runs them). `bun run dev:api` + `bun run dev:web` work against a local D1 (`bun run db:reset:local`) — set a stable `BETTER_AUTH_SECRET_DEV` in `apps/api/.dev.vars` and local sign-up/sessions work too. Search degrades to FTS without Vectorize. The portless dev scripts want Node 24+; the `preview:web` / `preview:api` / `preview:mcp` / `preview:discovery` scripts are the plain-port fallback if you'd rather skip portless.
 - **Bring your own keys (feature-scoped):** `ANTHROPIC_API_KEY` for the AI passes (summaries, classification, extraction), `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` (any Cloudflare account) for Browser Rendering scrape fetches, `VOYAGE_API_KEY` for semantic search.
 - **Hosted-only (not reproducible by design):** managed-agent discovery, email, Firecrawl, and the account-scoped bindings in each `wrangler.jsonc` — see [deploy-coupling.md](docs/architecture/deploy-coupling.md) for the fork inventory.
 
@@ -82,9 +82,10 @@ bun run db:generate                  # scaffold a migration preview under .drizz
 Tests use Bun's built-in test runner — no extra dependencies required.
 
 ```bash
-bun test                     # run all tests (evals are excluded by design)
+bun run test                 # run all tests via the root script (evals are excluded by design)
 bun test tests/unit/         # run unit tests only
 bun test tests/api/          # run worker-side route tests
+bun test apps/api            # API worker's colocated tests (the root script runs these in their own process)
 bun test --watch             # re-run on file changes
 ```
 

@@ -11,13 +11,31 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 - **MCP:** Remote MCP server (`apps/mcp/`)
 - **AI:** Anthropic SDK (`@anthropic-ai/sdk`); managed agents via `@anthropic-ai/claude-agent-sdk`
 
+## Layout
+
+```
+apps/
+  web/            Next.js frontend (Vercel)
+  api/            REST API (Cloudflare Worker, Hono + D1)
+  mcp/            remote MCP server (Cloudflare Worker)
+  discovery/      source onboarding (Cloudflare Worker)
+  webhooks/       webhook delivery queue consumer (Cloudflare Worker)
+packages/         shared code: published @buildinternet/releases-* and private @releases/*
+managed-agents/   managed-agent definitions + harness
+actions/          GitHub Actions (publish-changelog)
+skills/           published agent skills
+scripts/          operational + maintenance scripts
+tests/            cross-package tests, fixtures, evals
+docs/             architecture docs, runbooks, plans
+```
+
 ## Commands
 
 - Lint + format + type-check: `bun run check` (oxlint with `typeCheck` via `oxlint-tsgolint`, then `oxfmt --check`)
 - Lint only: `bun run lint` (`bun run typecheck` is an alias)
 - Format: `bun run format:check`
-- Tests: `bun test` (not part of `check`)
-- Targeted `tsc`: `apps/mcp` still uses `npx tsc --noEmit` in CI (carved-out workspace; excluded from root oxlint). `web` and `tests/` have their own tsconfigs for local runs.
+- Tests: `bun run test` (not part of `check`; runs the root script below — a bare `bun test` puts every suite in one process)
+- Targeted `tsc`: `apps/mcp` still uses `npx tsc --noEmit` in CI (carved-out workspace; excluded from root oxlint). `apps/web` and `tests/` have their own tsconfigs for local runs.
 - **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live in the OSS CLI repo.
 
 ## Local development
@@ -26,9 +44,9 @@ Running the four `dev:*` services behind portless, fresh-worktree bootstrap, wor
 
 ## Workspaces and carved-out packages
 
-Root `package.json` declares `apps/api`, `web`, and `packages/*` as workspaces. `apps/discovery/`, `apps/mcp/`, and `apps/webhooks/` are intentionally excluded — wrangler manages their dependencies independently.
+Root `package.json` declares `apps/api`, `apps/web`, and `packages/*` as workspaces. `apps/discovery/`, `apps/mcp/`, and `apps/webhooks/` are intentionally excluded — wrangler manages their dependencies independently, and each has its own `bun.lock`.
 
-The root `test` script runs `apps/api` in its **own `bun test` process**, after the rest: `… bun test tests/ apps/web/ apps/discovery apps/mcp apps/webhooks && bun test apps/api`. This is deliberate isolation, not a style choice: bun's `mock.module()` is process-global, keyed by resolved module, and **not restorable per-specifier** (`mock.restore()` doesn't undo it, and re-mocking with the real impl is impossible — every import of the path resolves to the mock). The discovery scrape-fetch tests `mock.module("@releases/adapters/cloudflare", …)` at module scope, and that stub leaks into `apps/api`'s `render-check` tests, which use the real adapter — an ordering-dependent flake. Splitting `apps/api` into a separate process makes the leak structurally impossible. **Keep discovery (and mcp/webhooks) in the root-cwd multi-dir invocation** — that's where their module mocks resolve against the single root-workspace copy of `@releases/adapters` the source uses. Don't move them to `cd apps/discovery && bun test`: from a different cwd the test's `mock.module` and the source resolve `@releases/adapters/*` inconsistently, so the mock misses and discovery's own tests fail in CI. Isolating `apps/api` (rather than discovery) is what keeps both sides resolving correctly.
+The root `test` script is `bun test packages/ && bun test tests/ apps/web/ apps/discovery apps/mcp apps/webhooks && bun test apps/api`, so `apps/api` runs in its **own `bun test` process**, after the rest. This is deliberate isolation, not a style choice: bun's `mock.module()` is process-global, keyed by resolved module, and **not restorable per-specifier** (`mock.restore()` doesn't undo it, and re-mocking with the real impl is impossible — every import of the path resolves to the mock). The discovery scrape-fetch tests `mock.module("@releases/adapters/cloudflare", …)` at module scope, and that stub leaks into `apps/api`'s `render-check` tests, which use the real adapter — an ordering-dependent flake. Splitting `apps/api` into a separate process makes the leak structurally impossible. **Keep discovery (and mcp/webhooks) in the root-cwd multi-dir invocation** — that's where their module mocks resolve against the single root-workspace copy of `@releases/adapters` the source uses. Don't move them to `cd apps/discovery && bun test`: from a different cwd the test's `mock.module` and the source resolve `@releases/adapters/*` inconsistently, so the mock misses and discovery's own tests fail in CI. Isolating `apps/api` (rather than discovery) is what keeps both sides resolving correctly.
 
 **Reach for interface injection before process isolation.** Process isolation is the fix of last resort — it only works when the leak crosses a boundary the `test` script can split on. When a mock stubs a _third-party_ module that sibling suites import, prefer passing a fake through the seam the code already has. `packages/ai/src/aisdk-text-model.test.ts` used to `mock.module("ai", () => ({ generateText }))`, which dropped every other export and made `overview-content.ts`'s `import { Output, parsePartialJson } from "ai"` fail with an unhandled `SyntaxError` between tests, ordering-dependent. Spreading the real module back into the factory does **not** rescue it: mocking `ai` at all forces a second evaluation of the module, so `ai/test`'s `MockLanguageModelV3` and the `generateText` it runs through resolve to different instances and the run hangs. The fix was to delete the module mock and drive the real `generateText` with a `MockLanguageModelV3` — a plain argument, scoped to one test, invisible to every other file. Most SDKs ship such a seam (`ai/test` here); use it.
 
@@ -57,7 +75,7 @@ The `release_coverage` schema lives with the rest of the DB-coupled internals in
 > Keep entries to **one line: the rule + a pointer to the doc that owns the detail.** When a feature needs a paragraph, that paragraph belongs in `docs/architecture/`, not here. This section has bloated twice from append-on-ship; resist it.
 
 - **This repo is public — keep PII out of committed content.** No absolute home-dir paths (`/Users/<name>/…` — write `~/…` or repo-relative), no personal email addresses (use `@example.com` in fixtures/docs), no customer data or real tokens, in any committed file — including generated plans and specs under `docs/plans/` and `docs/superpowers/`.
-- Logging splits by runtime: **worker code** (`workers/*`) MUST log via `logEvent()` from `@releases/lib/log-event` (worker-safe structured JSON); **CLI + runtime-neutral packages** use `@buildinternet/releases-lib/logger` (stderr + `~/.releases/logs/`). Never import the `fs`-backed `@buildinternet/releases-lib/logger` into a worker. Payload conventions, severity, and `Error` unwrapping: [logging.md](docs/architecture/logging.md).
+- Logging splits by runtime: **worker code** (`apps/api`, `apps/mcp`, `apps/discovery`, `apps/webhooks`) MUST log via `logEvent()` from `@releases/lib/log-event` (worker-safe structured JSON); **CLI + runtime-neutral packages** use `@buildinternet/releases-lib/logger` (stderr + `~/.releases/logs/`). Never import the `fs`-backed `@buildinternet/releases-lib/logger` into a worker. Payload conventions, severity, and `Error` unwrapping: [logging.md](docs/architecture/logging.md).
 - Source types (fetch adapters): `github`, `scrape`, `feed`, `agent`, `appstore`. Adapter behavior + `appstore` materialization: [ingest.md](docs/architecture/ingest.md).
 - **Ingest pipeline** (fetch → parse → insert) — dedup (`UNIQUE(source_id,url)` + `RELEASE_URL_UPSERT`), smart-fetch backoff, URL exclusion (`ignored_urls` org-scoped / `blocked_urls` global, via `isUrlExcluded()`), release suppression (`suppressed=1`), and the ingest-time Haiku 4.5 passes (content summarization, the per-source marketing classifier via `metadata.marketingFilter`, feed-content enrichment via `FEED_ENRICH_ENABLED`): [ingest.md](docs/architecture/ingest.md). Cron/Workflow orchestration: [remote-mode.md](docs/architecture/remote-mode.md).
 - **GitHub Action ingest (#2291):** `actions/publish-changelog` diffs changelog markdown on push and POSTs `upsert-content` to the existing `/releases/batch` route (no parallel write path). Product docs: [Publish from GitHub Actions](apps/web/src/content/docs/integrations/github-actions.md). See [ingest.md → GitHub Action ingest](docs/architecture/ingest.md).

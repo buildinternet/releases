@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { ReleasesJsonConfigSchema } from "../packages/api-types/src/schemas/well-known.js";
 
-const OUT = join(import.meta.dir, "..", "web", "public", "schemas", "releases.json");
+const OUT = join(import.meta.dir, "..", "apps", "web", "public", "schemas", "releases.json");
 
 const base = z.toJSONSchema(ReleasesJsonConfigSchema, { target: "draft-2020-12" });
 const schema = {
