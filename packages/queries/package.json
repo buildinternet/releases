@@ -5,9 +5,12 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
+    "./catalog": "./src/catalog.ts",
     "./domain-lookup": "./src/domain-lookup.ts",
     "./entities": "./src/entities.ts",
+    "./orgs": "./src/orgs.ts",
     "./pagination": "./src/pagination.ts",
+    "./releases": "./src/releases.ts",
     "./sql-fragments": "./src/sql-fragments.ts"
   },
   "dependencies": {

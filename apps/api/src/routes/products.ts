@@ -5,6 +5,7 @@ import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, max, min, sql, type SQL } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
+import { listProductSources } from "@releases/queries/catalog";
 import { createDb } from "../db.js";
 import {
   products,
@@ -471,19 +472,8 @@ export async function buildProductDetailPayload(
   product: typeof products.$inferSelect,
 ) {
   const [productSources, tagRows, aliasRows] = await Promise.all([
-    db
-      .select({
-        id: sourcesVisible.id,
-        slug: sourcesVisible.slug,
-        name: sourcesVisible.name,
-        type: sourcesVisible.type,
-        url: sourcesVisible.url,
-        metadata: sourcesVisible.metadata,
-        kind: sourcesVisible.kind,
-      })
-      .from(sourcesVisible)
-      .where(eq(sourcesVisible.productId, product.id))
-      .orderBy(sourcesVisible.name),
+    // Shared with MCP product detail (`@releases/queries/catalog`).
+    listProductSources(db, product.id),
     db
       .select({ name: tags.name })
       .from(productTags)
@@ -500,7 +490,8 @@ export async function buildProductDetailPayload(
   const { metadata, ...productRow } = product;
   return {
     ...productRow,
-    sources: productSources,
+    // `lastFetchedAt` is MCP-only; keep the REST payload's source shape.
+    sources: productSources.map(({ lastFetchedAt: _lastFetchedAt, ...s }) => s),
     tags: tagRows.map((t) => t.name),
     aliases: aliasRows.map((a) => a.domain),
     notice: parseNotice(metadata),

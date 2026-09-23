@@ -16,6 +16,7 @@ import {
   inArray,
   type SQL,
 } from "drizzle-orm";
+import { findVisibleReleaseDetail } from "@releases/queries/releases";
 import { createDb } from "../db.js";
 import {
   sources,
@@ -23,10 +24,8 @@ import {
   releases,
   releasesVisible,
   organizations,
-  organizationsActive,
   releaseSummaries,
   products,
-  productsActive,
   sourceChangelogFiles,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
@@ -3147,29 +3146,9 @@ sourceRoutes.get(
     // (rel_ + 21 chars); any trailing slug is decorative and ignored.
     const id = parseReleaseParam(c.req.param("id")).id;
 
-    const rows = await db
-      .select({
-        release: releases,
-        sourceName: sourcesVisible.name,
-        sourceSlug: sourcesVisible.slug,
-        sourceType: sourcesVisible.type,
-        sourceMetadata: sourcesVisible.metadata,
-        sourceIsHidden: sourcesVisible.isHidden,
-        orgSlug: organizationsActive.slug,
-        orgName: organizationsActive.name,
-        orgAvatarUrl: organizationsActive.avatarUrl,
-        orgDiscovery: organizationsActive.discovery,
-        orgIsHidden: organizationsActive.isHidden,
-        productSlug: productsActive.slug,
-        productName: productsActive.name,
-      })
-      .from(releases)
-      .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
-      .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
-      .leftJoin(productsActive, eq(sourcesVisible.productId, productsActive.id))
-      .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
-
-    if (rows.length === 0) return respondError(c, new NotFoundError("Release not found"));
+    // Shared with MCP `get_release` (`@releases/queries/releases`).
+    const row = await findVisibleReleaseDetail(db, id);
+    if (!row) return respondError(c, new NotFoundError("Release not found"));
 
     const {
       release,
@@ -3185,7 +3164,7 @@ sourceRoutes.get(
       orgIsHidden,
       productSlug,
       productName,
-    } = rows[0];
+    } = row;
     const org =
       orgSlug && orgName
         ? {
