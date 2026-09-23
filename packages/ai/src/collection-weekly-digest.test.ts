@@ -167,6 +167,12 @@ describe("resolvePlaceholderId", () => {
     expect(resolvePlaceholderId("abc123", idToPath)).toBe("rel_abc123");
   });
 
+  test("repairs a dropped rel when the nanoid starts with an underscore", () => {
+    const underscored = new Map([["rel___gixOB9", "/release/rel___gixOB9"]]);
+    expect(resolvePlaceholderId("___gixOB9", underscored)).toBe("rel___gixOB9");
+    expect(resolvePlaceholderId("__gixOB9", underscored)).toBe("rel___gixOB9");
+  });
+
   test("never resolves an id outside the provided set", () => {
     expect(resolvePlaceholderId("rel_ghost", idToPath)).toBeNull();
     expect(resolvePlaceholderId("ghost", idToPath)).toBeNull();
@@ -186,6 +192,18 @@ describe("versionAnchors", () => {
       "[restored memory files no longer break caching](rel:rel_a), " +
       "[Next.js 16](rel:rel_b), and [Node 22.11 support](rel:rel_c).";
     expect(versionAnchors(body)).toEqual([]);
+  });
+
+  test("allows a change-named anchor that mentions the fixed version", () => {
+    const body = "[RUM Browser SDK 7.4.0 fixed a prototype pollution flaw](rel:rel_a).";
+    expect(versionAnchors(body)).toEqual([]);
+  });
+
+  test("flags short product-plus-version labels", () => {
+    expect(versionAnchors("[Deno 2.9.1](rel:rel_a) and [Codex CLI 0.142.5](rel:rel_b).")).toEqual([
+      "Deno 2.9.1",
+      "Codex CLI 0.142.5",
+    ]);
   });
 
   test("ignores versions in prose outside link anchors", () => {

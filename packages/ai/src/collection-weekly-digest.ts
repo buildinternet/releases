@@ -131,7 +131,7 @@ Version numbers and dates are never the subject of a sentence and never link anc
 </consolidate_by_product>
 
 <title_format>
-An editorial headline naming the theme of the week — not "Week of July 6 digest" and not a list of product names. When several products shipped the same KIND of change, name that theme. When one release clearly dominates, lead with it. No version numbers. Sentence case, no trailing punctuation, no quotation marks, no markdown. Target 40-90 characters.
+An editorial headline naming the theme of the week — not "Week of July 6 digest" and not a list of product names. When several products shipped the same KIND of change, name that theme. When one release clearly dominates, lead with it. No version numbers. Sentence case, no trailing punctuation, no quotation marks, no markdown. Target 40-90 characters; hard cap 90.
 </title_format>
 
 <intro_format>
@@ -240,13 +240,16 @@ export function buildCollectionWeekBlock(
 
 /**
  * Map a placeholder id to a provided release id. Models occasionally drop the
- * `rel_` prefix (`rel:t067…` for `rel_t067…`); that is repaired only when the
- * prefixed id is in the provided set, so nothing outside it ever resolves.
+ * prefix: `rel:t067…` for `rel_t067…`, or just the `rel` when the nanoid
+ * itself starts with `_` (`rel:___gix…` for `rel___gix…`). A repair counts
+ * only when the rebuilt id is in the provided set, so nothing outside it ever
+ * resolves.
  */
 export function resolvePlaceholderId(id: string, idToPath: Map<string, string>): string | null {
-  if (idToPath.has(id)) return id;
-  const prefixed = `rel_${id}`;
-  return idToPath.has(prefixed) ? prefixed : null;
+  for (const candidate of [id, `rel_${id}`, `rel${id}`]) {
+    if (idToPath.has(candidate)) return candidate;
+  }
+  return null;
 }
 
 /**
@@ -318,17 +321,24 @@ function rawPlaceholderIds(body: string): string[] {
 /** A three-part version token (`v2.1.275`, `2.1.274`, `1.0.0-beta.2`). */
 const VERSION_TOKEN_RE = /\bv?\d+\.\d+\.\d+/i;
 
+/** An anchor this short that carries a version is a label, not a change. */
+const VERSION_LABEL_MAX_WORDS = 4;
+
 /**
- * Link anchors in a raw body that carry a full version number — the
- * version-by-version recap the prompt forbids ("[2.1.274](rel:…) tackled…").
- * Two-part names like "Next.js 16" or "Node 22.11" are left alone: a major
- * version can legitimately be the news.
+ * Link anchors in a raw body that are version labels — the version-by-version
+ * recap the prompt forbids ("[2.1.274](rel:…) tackled…", "[Deno 2.9.1](…)").
+ * An anchor that names the change and mentions the version it shipped in
+ * ("RUM Browser SDK 7.4.0 fixed a prototype pollution flaw") is fine, and
+ * two-part names like "Next.js 16" are left alone: a major version can
+ * legitimately be the news.
  */
 export function versionAnchors(body: string): string[] {
   const anchors: string[] = [];
   const re = /\[([^\]]*)\]\(rel:[A-Za-z0-9_-]+\)/g;
   for (let m = re.exec(body); m !== null; m = re.exec(body)) {
-    if (VERSION_TOKEN_RE.test(m[1]!)) anchors.push(m[1]!);
+    const anchor = m[1]!;
+    const words = anchor.trim().split(/\s+/).length;
+    if (VERSION_TOKEN_RE.test(anchor) && words <= VERSION_LABEL_MAX_WORDS) anchors.push(anchor);
   }
   return anchors;
 }
