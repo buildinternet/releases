@@ -312,6 +312,7 @@ export async function searchReleasesFromMatchedEntities(
            o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
            r.version, r.title,
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.url as url,
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.breaking as breaking,

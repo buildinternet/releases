@@ -111,6 +111,14 @@ export const SearchReleaseHitSchema = z.object({
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
   /**
+   * The release's upstream source URL, when it has one. Lets the web link
+   * search/lookup hits straight to the original page instead of the
+   * noindexed `/release/<id>` stub — see `releaseLinkProps()` in
+   * `web/src/lib/release-link.ts`. Optional for older servers / mid-deploy
+   * pin tolerance.
+   */
+  url: z.string().nullable().optional(),
+  /**
    * AI-scored importance 1–5 (5=landmark, 1=housekeeping). Null when
    * unscored; optional for older servers / mid-deploy pin tolerance.
    */
@@ -213,6 +221,9 @@ export const LookupResultPayloadSchema = z.object({
         publishedAt: z.string().nullable(),
         /** First image/gif thumbnail; null when the release has none. */
         thumbnail: ReleaseThumbnailSchema.nullable().optional(),
+        /** The release's upstream source URL, when it has one. See
+         *  `SearchReleaseHitSchema.url`. */
+        url: z.string().nullable().optional(),
       }),
     )
     .optional(),
