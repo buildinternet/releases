@@ -1,5 +1,7 @@
 # @releases/search
 
+**Scope:** embedding providers/cache, Vectorize hybrid search, and the release/entity/changelog embedding pipelines. General-purpose caching or worker plumbing unrelated to search belongs in `lib`, not here.
+
 Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
 
 ## Exports

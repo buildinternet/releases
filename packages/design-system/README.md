@@ -2,6 +2,8 @@
 
 Releases design system — the token + component vocabulary behind the web app, packaged for reuse and for claude.ai/design sync.
 
+**Scope:** the token + component vocabulary (colors, spacing, typography, Button/Input/Card-class primitives) shared across the web app. See 'What lives where' below for the split with `apps/web/src/components/ui`; feature-specific UI and page logic stay in `apps/web`.
+
 ## Exports
 
 Imported as `@releases/design-system` (and `/styles.css`, `/tokens.css`).

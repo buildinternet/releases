@@ -1,5 +1,7 @@
 # @buildinternet/releases-api-types
 
+**Scope:** request/response wire types for the public API worker — types only, zero runtime dependencies. No request logic, no client code, no server handlers.
+
 Wire protocol types for the [Releases](https://releases.sh) registry API.
 
 Pure TypeScript types — zero runtime dependencies — describing request/response
