@@ -14,6 +14,9 @@ import type {
   SearchReleaseHit,
   SearchChunkHit,
 } from "@/lib/api";
+import { releaseLinkProps, isExternalReleaseLink, type ReleaseLinkProps } from "@/lib/release-link";
+import { ReleaseLink } from "./release-link";
+import { ExternalArrow } from "./digest-icons";
 import { collapsedMarkdownComponents } from "./markdown-components";
 import { MemberFacepile } from "@/components/member-facepile";
 
@@ -107,10 +110,6 @@ function interleaveRankedHits(
   return merged;
 }
 
-function releaseHref(hit: SearchReleaseHit): string {
-  return `/release/${hit.id}`;
-}
-
 function chunkDeepLink(hit: SearchChunkHit): string {
   // Heading-aware slicer on the server snaps the offset forward to the
   // nearest `##` heading, so this URL lands the user on the correct
@@ -189,7 +188,7 @@ function ResultCard({
   title,
   titleBadge,
   titleHref,
-  externalUrl,
+  titleLinkProps,
   date,
   sourceName,
   sourceSlug,
@@ -208,8 +207,13 @@ function ResultCard({
   kindLabel?: string;
   title: string;
   titleBadge?: React.ReactNode;
+  /** Internal href for hits with no upstream `url` (e.g. changelog chunks). */
   titleHref: string;
-  externalUrl?: string | null;
+  /** When present, the title links through {@link ReleaseLink} instead of the
+   *  plain internal `titleHref` — upstream `url` first, `/release/<id>` as
+   *  fallback (see `releaseLinkProps()`). Release hits set this; chunk hits
+   *  don't and fall back to `titleHref`. */
+  titleLinkProps?: ReleaseLinkProps;
   date?: string | null;
   sourceName: string;
   sourceSlug: string;
@@ -232,6 +236,15 @@ function ResultCard({
   /** AI-scored importance; flame renders only at 4–5 (same rule as feeds). */
   importance?: number | null;
 }) {
+  const titleContent = (
+    <span className="min-w-0 truncate">
+      <Highlight text={title} tokens={tokens} />
+      {appStore && version && (
+        <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">v{version}</span>
+      )}
+    </span>
+  );
+
   return (
     <div className="group/item border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4">
       <div className="flex items-baseline gap-2 mb-1 min-w-0">
@@ -250,26 +263,31 @@ function ResultCard({
         )}
         {/* Marker sits outside the title link — same pattern as feed cards. */}
         <ImportanceMarker importance={importance} />
-        <Link
-          href={titleHref}
-          className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
-        >
-          <Highlight text={title} tokens={tokens} />
-          {appStore && version && (
-            <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
-              v{version}
-            </span>
-          )}
-        </Link>
-        {externalUrl && (
-          <a
-            href={externalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs shrink-0"
+        {titleLinkProps ? (
+          <ReleaseLink
+            linkProps={titleLinkProps}
+            className="inline-flex items-baseline gap-1 min-w-0 font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline"
           >
-            ↗
-          </a>
+            {titleContent}
+            {isExternalReleaseLink(titleLinkProps) && (
+              <>
+                <ExternalArrow size={11} className="shrink-0 text-stone-300 dark:text-stone-600" />
+                <span className="sr-only"> (opens in new tab)</span>
+              </>
+            )}
+          </ReleaseLink>
+        ) : (
+          <Link
+            href={titleHref}
+            className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
+          >
+            <Highlight text={title} tokens={tokens} />
+            {appStore && version && (
+              <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
+                v{version}
+              </span>
+            )}
+          </Link>
         )}
         {titleBadge}
       </div>
@@ -347,7 +365,7 @@ function ResultCard({
   );
 }
 
-function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: string[] }) {
+export function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: string[] }) {
   // Prefer `summary` (the list projection). Full `content` is only present when
   // the API was called with `?include_content=true`; `||` still covers an empty
   // summary falling back to body so a card never renders blank. Coalesce to ""
@@ -375,12 +393,16 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
   const baseTitle = (hit.type === "rollup" && hit.titleShort) || hit.title;
   const heading = appStore ? appStore.appName : video ? hit.title : hit.version || baseTitle;
   const rehypePlugins = useMarkdownHighlight(tokens);
+  // Default click target: the upstream source URL when the release has one,
+  // the on-site /release/{id} page only as fallback (see release-link.ts).
+  const linkProps = releaseLinkProps({ id: hit.id, url: hit.url });
 
   return (
     <ResultCard
       title={heading}
       titleBadge={<RollupBadge type={hit.type} />}
-      titleHref={releaseHref(hit)}
+      titleHref={`/release/${hit.id}`}
+      titleLinkProps={linkProps}
       date={formatDate(hit.publishedAt)}
       sourceName={hit.sourceName}
       sourceSlug={hit.sourceSlug}

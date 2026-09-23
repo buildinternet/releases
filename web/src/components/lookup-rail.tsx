@@ -2,6 +2,9 @@ import Link from "next/link";
 import type { LookupResultPayload } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
+import { releaseLinkProps, isExternalReleaseLink } from "@/lib/release-link";
+import { ReleaseLink } from "./release-link";
+import { ExternalArrow } from "./digest-icons";
 import { SourceTypeIcon } from "./source-type-icon";
 import { RepoStars } from "@/components/repo-stars";
 import { ReleaseThumb } from "./release-thumb";
@@ -162,33 +165,45 @@ function ReleasesPreview({
         {heading}
       </h3>
       <ul className="divide-y divide-stone-200 dark:divide-stone-800 border-y border-stone-200 dark:border-stone-800">
-        {preview.map((rel) => (
-          <li key={rel.id}>
-            <Link
-              href={`/release/${rel.id}`}
-              className="flex items-center justify-between gap-3 py-1.5 hover:bg-white/60 dark:hover:bg-stone-900/60 -mx-2 px-2 rounded"
-            >
-              {rel.thumbnail && (
-                <ReleaseThumb src={rel.thumbnail.url} alt={rel.thumbnail.alt ?? ""} size="md" />
-              )}
-              <div className="min-w-0 flex-1 flex items-baseline gap-2">
-                <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate">
-                  {rel.version ?? rel.title}
-                </span>
-                {rel.version && rel.title && rel.version !== rel.title && (
-                  <span className="text-[12px] text-stone-500 dark:text-stone-400 truncate">
-                    {rel.title}
-                  </span>
+        {preview.map((rel) => {
+          const linkProps = releaseLinkProps({ id: rel.id, url: rel.url });
+          return (
+            <li key={rel.id}>
+              <ReleaseLink
+                linkProps={linkProps}
+                className="flex items-center justify-between gap-3 py-1.5 hover:bg-white/60 dark:hover:bg-stone-900/60 -mx-2 px-2 rounded"
+              >
+                {rel.thumbnail && (
+                  <ReleaseThumb src={rel.thumbnail.url} alt={rel.thumbnail.alt ?? ""} size="md" />
                 )}
-              </div>
-              {rel.publishedAt && (
-                <time className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums">
-                  {formatDate(rel.publishedAt)}
-                </time>
-              )}
-            </Link>
-          </li>
-        ))}
+                <div className="min-w-0 flex-1 flex items-baseline gap-2">
+                  <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate">
+                    {rel.version ?? rel.title}
+                  </span>
+                  {rel.version && rel.title && rel.version !== rel.title && (
+                    <span className="text-[12px] text-stone-500 dark:text-stone-400 truncate">
+                      {rel.title}
+                    </span>
+                  )}
+                  {isExternalReleaseLink(linkProps) && (
+                    <>
+                      <ExternalArrow
+                        size={10}
+                        className="shrink-0 text-stone-300 dark:text-stone-600"
+                      />
+                      <span className="sr-only"> (opens in new tab)</span>
+                    </>
+                  )}
+                </div>
+                {rel.publishedAt && (
+                  <time className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums">
+                    {formatDate(rel.publishedAt)}
+                  </time>
+                )}
+              </ReleaseLink>
+            </li>
+          );
+        })}
       </ul>
       {remainder > 0 && (
         <p className="text-[12px] text-stone-500 dark:text-stone-400 mt-2">
