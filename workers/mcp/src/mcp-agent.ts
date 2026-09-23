@@ -24,6 +24,7 @@ import {
 import { registerResources, RELEASE_FEED_UI_URI } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
 import { registerFollowsTools } from "./follows-tools.js";
+import { registerWebhookTools } from "./webhook-tools.js";
 import { registerWhatsChangedTool } from "./whats-changed-tool.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import { buildSearchMeta } from "./lib/pagination.js";
@@ -895,6 +896,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   );
 
   registerFollowsTools(server, env, { userToken });
+  registerWebhookTools(server, env, { userToken });
   registerWhatsChangedTool(server, env);
   registerResources(server, db, mediaOrigin);
   registerPrompts(server, db);
