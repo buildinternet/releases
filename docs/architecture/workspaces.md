@@ -13,7 +13,7 @@ personal workspace; they can create more.
 ## What ships
 
 - The `organization()` plugin (core `better-auth`, no extra package) is registered
-  **always-on, no feature flag** in `apps/api/src/auth/index.ts`. It's additive and inert
+  **always-on, no feature flag** in `apps/api/src/auth/instance.ts`. It's additive and inert
   for anyone who never creates a second workspace.
 - Built-in `owner` / `admin` / `member` roles; **no teams**, no custom access-control roles.
 - Tables (`auth*`-prefixed Drizzle vars, BA-default SQL names) live in the worker-local
@@ -68,7 +68,7 @@ column), which drives the **OAuth scope ceiling** in `auth/entitlement.ts`
 
 ## Stripe org-billing seam (inert)
 
-`buildStripePlugin` (`auth/index.ts`) wires the `@better-auth/stripe` subscription feature
+`buildStripePlugin` (`auth/instance.ts`) wires the `@better-auth/stripe` subscription feature
 but keeps it **inert**: `subscription.enabled` with `plans: []` means the `subscription`
 table + endpoints exist yet nothing is purchasable, so no row is ever written (zero user
 impact). Subscriptions are keyed to the workspace (`referenceId` = organization id) and

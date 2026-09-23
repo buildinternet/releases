@@ -16,7 +16,7 @@ This worker is better-auth 1.7. There is no `@better-auth/cimd` plugin; generic 
 
 **What we do.** `rewriteClientMetadataGrantTypes` in `apps/api/src/auth/oauth-grant-types.ts`, applied by `applyOAuthClientInterop` on `/oauth2/register` so `grant_types` is the intersection with `authorization_code`, `refresh_token`, and `client_credentials` before the plugin parses it. Leave the body untouched if `authorization_code` would not remain: ingest still rejects a device-code-only client.
 
-This worker does implement RFC 8628 for the seeded `releases-cli` client (`deviceAuthorization()` in `apps/api/src/auth/index.ts`). oauth-provider's DCR ingest validator does not treat that plugin's grant as supported, so `device_code` stays out of the intersection list.
+This worker does implement RFC 8628 for the seeded `releases-cli` client (`deviceAuthorization()` in `apps/api/src/auth/instance.ts`). oauth-provider's DCR ingest validator does not treat that plugin's grant as supported, so `device_code` stays out of the intersection list.
 
 **Do not.** Add `device_code` or `jwt-bearer` to the DCR supported-grant list without shipping that grant through oauth-provider. Do not implement RFC 8628 for DCR clients just so the metadata document parses. Do not add CIMD as a side effect of this interop fix.
 

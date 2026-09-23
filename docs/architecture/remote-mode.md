@@ -52,7 +52,7 @@ ladder.
 **Browser login (`releases login`, device authorization).** Users mint a `relu_`
 key without copy-pasting a token via the OAuth 2.0 Device Authorization Grant
 (RFC 8628). Better Auth's `deviceAuthorization()` + `bearer()` plugins are always
-registered in `apps/api/src/auth/index.ts` (and, since login issues through
+registered in `apps/api/src/auth/instance.ts` (and, since login issues through
 the user-key route, `user-api-keys-enabled` must also be on). Flow: the CLI POSTs
 `/api/auth/device/code` (client id `releases-cli`; a fail-closed `validateClient`
 allow-list rejects any other id), the user approves at the web `/device` page,
@@ -108,7 +108,7 @@ scopes + `read` (`DCR_SCOPES` in `auth/entitlement.ts`) — never `write` or
 `admin`, never `skip_consent`. Discovery still lists the full ladder on
 `scopes_supported` for first-party clients; DCR does not inherit that list.
 Role-clamp at issuance is a second layer. The endpoint is rate-limited to
-5 registrations/min/IP (explicit in `auth/index.ts`, enforced in deployed prod).
+5 registrations/min/IP (explicit in `auth/instance.ts`, enforced in deployed prod).
 The admin route remains the second sanctioned exception to the
 "no new `/v1/admin/*` CRUD" rule (alongside role provisioning).
 

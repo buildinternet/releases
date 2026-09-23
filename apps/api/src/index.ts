@@ -468,7 +468,7 @@ export type Env = {
     // calls). Secrets Store bindings in prod (add them to the store + wrangler.jsonc
     // before binding — see the GitHub note there), plain strings locally (.dev.vars).
     // STRIPE_SECRET_KEY is the account API key; STRIPE_WEBHOOK_SECRET is the signing
-    // secret for the /api/auth/stripe/webhook endpoint. See auth/index.ts.
+    // secret for the /api/auth/stripe/webhook endpoint. See auth/instance.ts.
     STRIPE_SECRET_KEY?: SecretBinding | string;
     STRIPE_WEBHOOK_SECRET?: SecretBinding | string;
     // Cloudflare Email Sending binding for USER-FACING auth mail (verification +
