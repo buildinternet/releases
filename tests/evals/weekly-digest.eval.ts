@@ -26,9 +26,11 @@ import {
   buildCollectionWeekBlock,
   MAX_OUTPUT_TOKENS,
   parseWeeklyDigest,
+  resolvePlaceholderId,
   resolveReleasePlaceholders,
   selectWeeklyDigestReleases,
   SYSTEM_PROMPT,
+  versionAnchors,
   type CollectionWeekInput,
 } from "@releases/ai-internal/collection-weekly-digest";
 // Anthropic baseline = the shared summarize-lane model (the weekly-digest lane
@@ -201,9 +203,12 @@ function gradeWeeklyDigest(
   });
 
   // ── link discipline (hard gate) ──
+  // Production repairs a dropped `rel_` prefix (resolvePlaceholderId), so the
+  // link checks below count a repairable id as the release it resolves to.
+  const fixtureIdMap = new Map([...fixtureIds].map((id) => [id, id]));
   const placeholderIds: string[] = [];
   for (const m of bodyRaw.matchAll(REL_PLACEHOLDER_RE)) {
-    placeholderIds.push(m[2]);
+    placeholderIds.push(resolvePlaceholderId(m[2], fixtureIdMap) ?? m[2]);
   }
   fields.push({
     field: "link discipline: at least 3 placeholders",
@@ -244,6 +249,13 @@ function gradeWeeklyDigest(
     expected: `all ${highImportanceIds.length} importance>=4 releases cited`,
     actual:
       missingHighImportance.length === 0 ? "clean" : `missing ${missingHighImportance.join(",")}`,
+  });
+  const versioned = versionAnchors(bodyRaw);
+  fields.push({
+    field: "link discipline: no version-number anchor text",
+    passed: versioned.length === 0,
+    expected: "anchors name the change, not the version",
+    actual: versioned.length === 0 ? "clean" : versioned.join(", "),
   });
 
   // ── leakage + banned words ──
@@ -320,7 +332,8 @@ function fakeDigestModel(fixture: WeeklyDigestFixture): TextModel {
     "### Canned dry-run section one",
     "",
     ...allCited.map(
-      (r) => `${r.org} shipped [${r.title}](rel:${r.id}), a change worth a full sentence of prose.`,
+      (r, i) =>
+        `${r.org} shipped [canned change ${i + 1}](rel:${r.id}), a change worth a full sentence of prose.`,
     ),
     "",
     "### Canned dry-run section two",

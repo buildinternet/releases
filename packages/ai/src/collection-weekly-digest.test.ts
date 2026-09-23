@@ -5,8 +5,10 @@ import {
   isSubstantiveRelease,
   MAX_RELEASES,
   parseWeeklyDigest,
+  resolvePlaceholderId,
   resolveReleasePlaceholders,
   selectWeeklyDigestReleases,
+  versionAnchors,
   type CollectionWeekInput,
   type WeeklyDigestRelease,
 } from "./collection-weekly-digest";
@@ -124,7 +126,88 @@ describe("buildCollectionWeekBlock", () => {
 
   test("ends with the link-requirement reminder", () => {
     const block = buildCollectionWeekBlock(input, selectWeeklyDigestReleases(input.releases));
-    expect(block.trimEnd().endsWith("A body with no (rel:...) links is invalid.")).toBe(true);
+    const last = block.trimEnd().split("\n").at(-1)!;
+    expect(last).toStartWith("REMINDER:");
+    expect(last).toContain("A body with no (rel:...) links is invalid.");
+    expect(last).toContain("never a version number or date");
+  });
+
+  test("groups a product's releases under one header, in first-appearance order", () => {
+    // Importance-first selection interleaves products; the block must not.
+    const releases = [
+      release({ id: "rel_cc1", title: "v2.1.275", importance: 4 }),
+      release({ id: "rel_dv", org: "Cognition", product: "Devin", title: "Sep 18" }),
+      release({ id: "rel_cc2", title: "v2.1.274" }),
+      release({ id: "rel_cc3", title: "v2.1.276" }),
+    ];
+    const block = buildCollectionWeekBlock(
+      { ...input, releases },
+      selectWeeklyDigestReleases(releases),
+    );
+    const lines = block.split("\n");
+    const ccHeader = lines.indexOf("Anthropic / Claude Code (3 releases):");
+    const dvHeader = lines.indexOf("Cognition / Devin (1 release):");
+    expect(ccHeader).toBeGreaterThan(-1);
+    expect(dvHeader).toBeGreaterThan(ccHeader);
+    const idx = (id: string) => lines.findIndex((l) => l.includes(`[${id}]`));
+    // All three Claude Code lines sit between its header and Devin's.
+    for (const id of ["rel_cc1", "rel_cc2", "rel_cc3"]) {
+      expect(idx(id)).toBeGreaterThan(ccHeader);
+      expect(idx(id)).toBeLessThan(dvHeader);
+    }
+    expect(idx("rel_dv")).toBeGreaterThan(dvHeader);
+  });
+});
+
+describe("resolvePlaceholderId", () => {
+  const idToPath = new Map([["rel_abc123", "/release/rel_abc123"]]);
+
+  test("returns an exact id and repairs a missing rel_ prefix", () => {
+    expect(resolvePlaceholderId("rel_abc123", idToPath)).toBe("rel_abc123");
+    expect(resolvePlaceholderId("abc123", idToPath)).toBe("rel_abc123");
+  });
+
+  test("repairs a dropped rel when the nanoid starts with an underscore", () => {
+    const underscored = new Map([["rel___gixOB9", "/release/rel___gixOB9"]]);
+    expect(resolvePlaceholderId("___gixOB9", underscored)).toBe("rel___gixOB9");
+    expect(resolvePlaceholderId("__gixOB9", underscored)).toBe("rel___gixOB9");
+  });
+
+  test("never resolves an id outside the provided set", () => {
+    expect(resolvePlaceholderId("rel_ghost", idToPath)).toBeNull();
+    expect(resolvePlaceholderId("ghost", idToPath)).toBeNull();
+  });
+});
+
+describe("versionAnchors", () => {
+  test("flags anchors carrying a full version number", () => {
+    const body =
+      "[v2.1.275](rel:rel_a) fixed caching. [2.1.274](rel:rel_b) tackled retries. " +
+      "[Claude Code 1.0.0-beta.2](rel:rel_c) landed.";
+    expect(versionAnchors(body)).toEqual(["v2.1.275", "2.1.274", "Claude Code 1.0.0-beta.2"]);
+  });
+
+  test("allows change-named anchors and two-part major versions", () => {
+    const body =
+      "[restored memory files no longer break caching](rel:rel_a), " +
+      "[Next.js 16](rel:rel_b), and [Node 22.11 support](rel:rel_c).";
+    expect(versionAnchors(body)).toEqual([]);
+  });
+
+  test("allows a change-named anchor that mentions the fixed version", () => {
+    const body = "[RUM Browser SDK 7.4.0 fixed a prototype pollution flaw](rel:rel_a).";
+    expect(versionAnchors(body)).toEqual([]);
+  });
+
+  test("flags short product-plus-version labels", () => {
+    expect(versionAnchors("[Deno 2.9.1](rel:rel_a) and [Codex CLI 0.142.5](rel:rel_b).")).toEqual([
+      "Deno 2.9.1",
+      "Codex CLI 0.142.5",
+    ]);
+  });
+
+  test("ignores versions in prose outside link anchors", () => {
+    expect(versionAnchors("Pin below 2.1.276. [The proxy fix](rel:rel_a) ships next.")).toEqual([]);
   });
 });
 
@@ -251,6 +334,48 @@ describe("generateCollectionWeeklyDigest", () => {
     expect(result.body).not.toContain("ghost](");
     // usage summed across both attempts
     expect(result.usage.input).toBe(20);
+  });
+
+  test("repairs a dropped rel_ prefix without a retry", async () => {
+    const raw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[Claude Code](rel:abc123) shipped something.</body>" +
+      "<releases>abc123</releases>";
+    const model = sequencedModel([raw]);
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_abc123" })] },
+      new Map([["rel_abc123", "/release/rel_abc123"]]),
+    );
+    expect(model.calls()).toBe(1);
+    expect(result.releaseIds).toEqual(["rel_abc123"]);
+    expect(result.body).toBe("[Claude Code](/release/rel_abc123) shipped something.");
+  });
+
+  test("retries on version-number anchors and tells the model why", async () => {
+    const versionedRaw =
+      "<title>T</title><intro>I</intro>" +
+      "<body>[v2.1.275](rel:rel_1) fixed caching.</body>" +
+      "<releases>rel_1</releases>";
+    const users: string[] = [];
+    let i = 0;
+    const model: TextModel = {
+      id: "test:model",
+      async complete({ user }) {
+        users.push(user);
+        const text = i++ === 0 ? versionedRaw : goodRaw;
+        return { text, usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 } };
+      },
+    };
+    const result = await generateCollectionWeeklyDigest(
+      model,
+      { collectionName: "C", weekStart: "2026-07-06", releases: [release({ id: "rel_1" })] },
+      new Map([["rel_1", "/release/rel_1"]]),
+    );
+    expect(result.attempts).toBe(2);
+    expect(result.body).toContain("[Claude Code](/release/rel_1)");
+    expect(users[0]).not.toContain("previous draft was rejected");
+    expect(users[1]).toContain('version-number link anchors: "v2.1.275"');
   });
 
   test("accepts a soft-only attempt as fallback when the retry is no better", async () => {
