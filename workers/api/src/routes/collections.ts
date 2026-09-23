@@ -794,6 +794,14 @@ collectionRoutes.get(
   },
 );
 
+const COLLECTION_SLUG_PARAM = {
+  name: "slug",
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+  description: "Collection slug.",
+} as const;
+
 collectionRoutes.get(
   "/collections/:slug/digests",
   describeRoute({
@@ -802,13 +810,7 @@ collectionRoutes.get(
     description:
       'Returns AI-generated weekly "mini blog post" digests for the collection, newest-first, cursor-paginated. Rows omit `body`/`releaseIds` — fetch a single week via `GET /v1/collections/:slug/digests/:weekStart` for the full row. Digests are generated on ET Mondays for the just-closed week by the collection-summaries cron and only exist for weeks that cleared the quality floor (>=3 substantive releases).',
     parameters: [
-      {
-        name: "slug",
-        in: "path",
-        required: true,
-        schema: { type: "string" },
-        description: "Collection slug.",
-      },
+      COLLECTION_SLUG_PARAM,
       {
         name: "limit",
         in: "query",
@@ -873,14 +875,6 @@ collectionRoutes.get(
 
 const DIGEST_DETAIL_DESCRIPTION =
   "Full digest row (title, intro, markdown body, cited release ids) plus server-resolved minimal release info (title, org, upstream url, product, canonical `/release/*` fallback path) for every cited release, and the body's parsed `###` sections (heading, anchor, lede, cited release ids, and those releases resolved) — resolved server-side so the web page never N+1s. `releases[].url` is the primary link when present; `path` is the fallback. Release ids that no longer resolve (deleted/suppressed since generation) are silently dropped from `releases` and `sections[].releases`.";
-
-const COLLECTION_SLUG_PARAM = {
-  name: "slug",
-  in: "path",
-  required: true,
-  schema: { type: "string" },
-  description: "Collection slug.",
-} as const;
 
 // Registered before `/digests/:weekStart` so the literal `latest` segment
 // never reaches that handler (it 400s on non-date params).
