@@ -39,11 +39,11 @@ describe("renderReleaseBodyHtml link handling", () => {
     expect(html).toContain("click");
   });
 
-  // The internal-href allowance (added for digest pages) must NOT leak into
-  // callers that don't pass `releaseLinks` — scraped/vendor content with a
-  // root-relative link (e.g. a raw GitHub CHANGELOG.md link) should keep the
-  // default new-tab + external-UGC treatment.
-  test("root-relative app paths still get target=_blank + external UGC rel when releaseLinks is not passed", () => {
+  // This module has no same-origin-link exception — that's digest-only
+  // (render-digest-body.ts). Scraped/vendor content with a root-relative link
+  // (e.g. a raw GitHub CHANGELOG.md link) should keep the default new-tab +
+  // external-UGC treatment.
+  test("root-relative app paths still get target=_blank + external UGC rel", () => {
     const html = renderReleaseBodyHtml({ content: "See [the docs](/docs/x)." }, "full");
     expect(html).toContain('href="/docs/x"');
     expect(html).toContain('target="_blank"');
