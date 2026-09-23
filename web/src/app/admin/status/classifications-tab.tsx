@@ -468,6 +468,13 @@ function ClassificationsTabInner({
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-stone-500 dark:text-stone-400">
+        Interest-alert match rate is on{" "}
+        <Link href="/admin/semantic-alerts" className="underline underline-offset-4">
+          Semantic alerts
+        </Link>
+        .
+      </p>
       <OriginControl origin={origin} onChange={setOrigin} />
       {state === "loading" ? (
         <p className="text-xs text-stone-500">{CLASSIFICATIONS_LOADING_COPY}</p>
@@ -496,6 +503,13 @@ function ClassificationsTabInner({
                 threshold={summary.probability.threshold}
                 showThreshold
               />
+              <p className="mt-1 text-[12px] text-stone-500 dark:text-stone-400">
+                Threshold {summary.probability.threshold} —{" "}
+                <Link href="/admin/classifier" className="hover:underline">
+                  tune it
+                </Link>
+                .
+              </p>
             </div>
             <div className="min-w-0">
               <ProbabilityHistogram

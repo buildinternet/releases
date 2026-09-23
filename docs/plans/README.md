@@ -135,9 +135,9 @@ guard its touched lines), **007 in parallel** (independent surface), then
 
 Refuted on verification (subagent claims that didn't survive reading the code):
 
-- _`@cloudflare/sandbox` is an unused devDependency_: refuted —
-  `workers/discovery/src/index.ts:17` exports `Sandbox` from it, and the root
-  copy is what lets root-cwd `bun test workers/discovery` resolve it.
+- _`@cloudflare/sandbox` is an unused devDependency_: refuted at the time —
+  `workers/discovery/src/index.ts` re-exported `Sandbox` from it. The container
+  and the dependency were both removed later (#2317).
 - _Sequential OG-image fetches should be parallelized_: refuted — the second
   fetch depends on the first's result (`release.org.slug`), and OG routes have
   `revalidate = 86400`.

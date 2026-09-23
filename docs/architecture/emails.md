@@ -35,6 +35,12 @@ to break one message at a time:
   one exception: they are content, and they degrade to the name beside them.
 - **Every button is followed by its URL as selectable text,** in both parts. A
   blocked button must still be a completable action.
+- **One primary button.** The `button` block is the action the message is
+  about. A secondary destination (manage settings, and similar) is a markdown
+  link inside `fine` — a text link, with the URL kept in the plain-text part,
+  and not repeated as a second button, a paste-this-link line, or a footer
+  link. When a message has no in-body action, footer links remain the place
+  for preferences and unsubscribe.
 - **Every footer states why the message arrived,** then links to where that can
   be changed (preferences, unsubscribe, admin), then the brand line. Digest mail
   additionally carries RFC 8058 `List-Unsubscribe` + `List-Unsubscribe-Post`

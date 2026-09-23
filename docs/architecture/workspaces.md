@@ -27,6 +27,10 @@ personal workspace; they can create more.
   (sign-in prompt, email-mismatch, invalid, and accept/decline).
 - Workspace **Integrations** (`/account/integrations`): connect an uploads.sh account
   via OAuth (owner/admin). See [uploads-oauth.md](uploads-oauth.md).
+- Workspace **webhooks** (`/v1/workspaces/:workspaceId/webhooks`, #2324): a webhook
+  subscription owned by the workspace (`webhook_subscriptions.workspace_id`) instead of a
+  user — org-scoped only, owner/admin manage, any member can view/test, cap of 10, cascades
+  on workspace delete. Mirrors `/v1/me/webhooks`; see [docs/webhooks.md](../webhooks.md).
 
 ## Personal-workspace provisioning (lazy)
 
@@ -74,12 +78,27 @@ whole block stays inside `buildStripePlugin`, which returns `null` without the S
 secrets — so local/staging are fully inert. Adding real plans later activates org billing
 with no further plumbing.
 
+## Read surface: `GET /v1/me/workspaces` (#2327)
+
+Lists the caller's workspace memberships — `{ id, name, slug, logo, role, active, createdAt }`
+per workspace, ordered by name. Gated by `requireFollowsPrincipal` (session, `relu_` key, or
+OAuth JWT user principal), same as the rest of `/v1/me/*`. `role` is `member.role`
+(owner/admin/member), not `user.role`. `active` is read from
+`user.last_active_organization_id`, which the session hooks above keep in sync with the
+live session's `activeOrganizationId` on both session create and session update (an
+explicit workspace switch) — so it's accurate without a second `getSession()` call, and it
+resolves for Bearer principals too, which have no session row. Read-only: creating,
+renaming, and switching workspaces stay on Better Auth. Added to unblock workspace-scoped
+webhooks for the CLI and MCP server (#2326, buildinternet/releases-cli#406), which
+authenticate by Bearer and have no browser session to read the active workspace from.
+
 ## Out of scope (follow-ups)
 
 - A workspace switcher in the global nav (deferred until something in the product reads
   the active workspace).
-- A public `/v1/workspaces` REST surface, CLI commands, or MCP tools (the web UI drives
-  Better Auth's own `/api/auth/organization/*` endpoints directly).
+- Writable `/v1/workspaces` REST surface (create/rename/switch), CLI commands, or MCP
+  tools beyond the read-only `GET /v1/me/workspaces` listing above — the web UI still
+  drives Better Auth's own `/api/auth/organization/*` endpoints directly for those.
 - Teams sub-feature; custom access-control roles.
 - Live Stripe plans / checkout / customer portal; a per-organization Stripe customer model.
 - Any relationship between workspaces and the registry `organizations`.

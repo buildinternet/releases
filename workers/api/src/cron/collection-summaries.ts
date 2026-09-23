@@ -17,6 +17,7 @@ import {
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { createDb, type AnyDb } from "../db.js";
 import { collections } from "@buildinternet/releases-core/schema";
+import { notifyWebRevalidatePaths, type WebRevalidateEnv } from "../lib/web-revalidate.js";
 import {
   getCollectionMembers,
   getCollectionDayReleases,
@@ -32,7 +33,7 @@ import {
   type TextModelEnv,
 } from "../lib/text-model.js";
 
-export interface CollectionSummariesEnv extends TextModelEnv {
+export interface CollectionSummariesEnv extends TextModelEnv, WebRevalidateEnv {
   DB: D1Database;
   CRON_ENABLED?: string;
   /** How many recent ET days to back-fill if a row is missing (default 2). */
@@ -45,6 +46,8 @@ export interface CollectionSummariesEnv extends TextModelEnv {
   _modelOverride?: TextModel;
   /** TEST-ONLY: use this model instead of resolveCollectionWeeklyDigestModel(env). */
   _weeklyDigestModelOverride?: TextModel;
+  /** TEST-ONLY: use this fetch instead of the real one for the revalidation ping. */
+  _revalidateFetchOverride?: typeof fetch;
 }
 
 export interface CollectionSummaryTarget {
@@ -210,13 +213,23 @@ export async function runCollectionSummaries(
 
 // ── Weekly digests ────────────────────────────────────────────────
 
+/**
+ * A weekly-digest target also carries `slug` — daily-summary targets don't need
+ * it, so it isn't on the shared `CollectionSummaryTarget` — because the ISR
+ * revalidation ping (see `runCollectionWeeklyDigests`) needs it to build the
+ * collection's page path.
+ */
+export interface CollectionWeeklyDigestTarget extends CollectionSummaryTarget {
+  slug: string;
+}
+
 /** Enabled collections eligible for a weekly-digest run (optional single-collection scope). */
 export async function listCollectionWeeklyDigestTargets(
   db: AnyDb,
   opts?: { collectionId?: string },
-): Promise<CollectionSummaryTarget[]> {
+): Promise<CollectionWeeklyDigestTarget[]> {
   return db
-    .select({ id: collections.id, name: collections.name })
+    .select({ id: collections.id, name: collections.name, slug: collections.slug })
     .from(collections)
     .where(
       and(
@@ -264,6 +277,10 @@ export async function generateWeeklyDigestForCollection(
     const substantiveCount = releases.filter(isSubstantiveRelease).length;
     if (substantiveCount < MIN_SUBSTANTIVE_RELEASES) return "skipped";
 
+    // Stored digest bodies keep internal /release/rel_<id> paths ON PURPOSE:
+    // they are the stable ids `parseDigestSections` reads each section's cited
+    // releases from. Renderers (web page, .md, homepage reel) swap them for the
+    // upstream url at read time via `rewriteDigestReleaseLinks`.
     const idToPath = new Map(
       releases.map((r) => [r.id, releasePath({ id: r.id, title: r.title })]),
     );
@@ -307,7 +324,19 @@ export async function generateCollectionWeeklyDigestsForWeek(
   db: AnyDb,
   model: TextModel,
   weekStart: string,
-  opts?: { collectionId?: string; force?: boolean },
+  opts?: {
+    collectionId?: string;
+    force?: boolean;
+    /**
+     * Called once per collection whose digest was newly written this call —
+     * not for a skip or a failure. `runCollectionWeeklyDigests` and the
+     * durable workflow's `runWeeklyDigests` both use this to collect the
+     * slugs that need an ISR revalidation ping, without this function (or
+     * the admin backfill route that also calls it) needing to know anything
+     * about revalidation itself.
+     */
+    onGenerated?: (col: CollectionWeeklyDigestTarget) => void;
+  },
 ): Promise<{ generated: number; skipped: number; failed: number }> {
   const cols = await listCollectionWeeklyDigestTargets(db, { collectionId: opts?.collectionId });
   let generated = 0;
@@ -318,12 +347,58 @@ export async function generateCollectionWeeklyDigestsForWeek(
     const outcome = await generateWeeklyDigestForCollection(db, model, col, weekStart, {
       force: opts?.force,
     });
-    if (outcome === "generated") generated++;
-    else if (outcome === "skipped") skipped++;
+    if (outcome === "generated") {
+      generated++;
+      opts?.onGenerated?.(col);
+    } else if (outcome === "skipped") skipped++;
     else failed++;
   }
 
   return { generated, skipped, failed };
+}
+
+// ── Weekly-digest ISR revalidation (#2331) ──────────────────────────
+
+/**
+ * Pure: the ISR paths that went stale when these collections got a new weekly
+ * digest. The homepage reel and each digested collection's own page (its
+ * latest-digest hero) always change; `/collections` also shows per-row digest
+ * recency (see `web/src/app/collections/page.tsx`), so it's included
+ * unconditionally too. The digest's own new detail page
+ * (`/collections/<slug>/digest/<weekStart>`) needs no ping — it renders on
+ * first request.
+ *
+ * Exported and side-effect-free so it's testable without a fetch mock, and
+ * shared by both the inline cron path (`runCollectionWeeklyDigests`) and the
+ * durable workflow path (`CollectionSummariesWorkflow.runWeeklyDigests`).
+ */
+export function digestRevalidatePaths(collectionSlugs: string[]): string[] {
+  const paths = ["/", "/collections", ...collectionSlugs.map((slug) => `/collections/${slug}`)];
+  return [...new Set(paths)];
+}
+
+/**
+ * Fire the single revalidation ping for a weekly-digest run, or no-op when
+ * nothing was generated. Shared by both the inline cron path and the durable
+ * workflow's `step.do`-wrapped call — see the module doc on
+ * `digestRevalidatePaths` — so the two paths behave identically and a fix to
+ * one isn't silently missing from the other.
+ *
+ * Same fail-open contract as `notifyWebRevalidatePaths` itself: never throws,
+ * always resolves. A caller running this inside a durable Workflow step still
+ * needs to wrap it in its own `step.do` (not call it bare) so a workflow
+ * replay-on-wake can't send the ping twice.
+ */
+export async function pingAfterDigests(
+  env: WebRevalidateEnv,
+  digestedCollectionSlugs: string[],
+  opts?: { fetchImpl?: typeof fetch },
+): Promise<void> {
+  if (digestedCollectionSlugs.length === 0) return;
+  await notifyWebRevalidatePaths(env, digestRevalidatePaths(digestedCollectionSlugs), {
+    component: "collection-weekly-digest",
+    fetchImpl: opts?.fetchImpl,
+  });
 }
 
 /**
@@ -332,6 +407,11 @@ export async function generateCollectionWeeklyDigestsForWeek(
  * small catch-up window of recent weeks lacking a row. Model resolution is
  * independent of the daily model so a missing weekly-lane model never blocks
  * the daily sweep (and vice versa).
+ *
+ * This is the fallback path used when `COLLECTION_SUMMARIES_WORKFLOW` isn't
+ * bound (e.g. local dev); the deployed cron dispatches the durable workflow
+ * instead (see `CollectionSummariesWorkflow.runWeeklyDigests`), which fires
+ * the same `pingAfterDigests` call from inside its own `step.do`.
  */
 export async function runCollectionWeeklyDigests(
   env: CollectionSummariesEnv,
@@ -345,10 +425,13 @@ export async function runCollectionWeeklyDigests(
   }
 
   const catchup = Math.max(1, Number(env.COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS ?? "1") || 1);
+  const digestedSlugs = new Set<string>();
 
   let totals = { generated: 0, skipped: 0, failed: 0 };
   for (const weekStart of collectionWeeklyDigestCatchupWeeks(todayEt, catchup)) {
-    const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart);
+    const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
+      onGenerated: (col) => digestedSlugs.add(col.slug),
+    });
     totals = {
       generated: totals.generated + r.generated,
       skipped: totals.skipped + r.skipped,
@@ -362,4 +445,6 @@ export async function runCollectionWeeklyDigests(
     mode: "inline",
     ...totals,
   });
+
+  await pingAfterDigests(env, [...digestedSlugs], { fetchImpl: env._revalidateFetchOverride });
 }

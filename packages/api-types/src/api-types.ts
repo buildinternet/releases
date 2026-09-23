@@ -22,6 +22,11 @@ import type {
   AiLaneModelsResponseSchema,
 } from "./schemas/ai-models.js";
 import type {
+  MarketingClassifierThresholdPutSchema,
+  MarketingFilteredSourceSchema,
+  MarketingClassifierStateSchema,
+} from "./schemas/marketing-classifier.js";
+import type {
   MediaItemSchema,
   PaginationSchema,
   StatsSchema,
@@ -221,6 +226,7 @@ import type {
   ClassificationRecentResponseSchema,
   ClassificationRecentItemSchema,
 } from "./schemas/classifications.js";
+import type { SemanticAlertSummarySchema } from "./schemas/semantic-alert-summary.js";
 import type {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
@@ -269,6 +275,7 @@ import type {
   CollectionWeeklyDigestListItemSchema,
   CollectionWeeklyDigestsResponseSchema,
   DigestCoveredReleaseSchema,
+  DigestSectionSchema,
   CollectionWeeklyDigestDetailSchema,
 } from "./schemas/collections.js";
 import type {
@@ -309,6 +316,13 @@ export {
   OpenRouterCatalogModelSchema,
   AiLaneModelsResponseSchema,
 } from "./schemas/ai-models.js";
+export {
+  MarketingClassifierThresholdPutSchema,
+  MarketingFilteredSourceSchema,
+  MarketingClassifierStateSchema,
+  MARKETING_THRESHOLD_MIN,
+  MARKETING_THRESHOLD_MAX,
+} from "./schemas/marketing-classifier.js";
 export {
   OrgListItemSchema,
   OrgListResponseSchema,
@@ -561,6 +575,7 @@ export {
   ClassificationRecentResponseSchema,
   ClassificationRecentItemSchema,
 } from "./schemas/classifications.js";
+export { SemanticAlertSummarySchema } from "./schemas/semantic-alert-summary.js";
 export {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
@@ -611,6 +626,7 @@ export {
   CollectionWeeklyDigestListItemSchema,
   CollectionWeeklyDigestsResponseSchema,
   DigestCoveredReleaseSchema,
+  DigestSectionSchema,
   CollectionWeeklyDigestDetailSchema,
 } from "./schemas/collections.js";
 export {
@@ -638,6 +654,10 @@ export type AiLaneModelsPut = z.infer<typeof AiLaneModelsPutSchema>;
 export type AiLaneState = z.infer<typeof AiLaneStateSchema>;
 export type OpenRouterCatalogModel = z.infer<typeof OpenRouterCatalogModelSchema>;
 export type AiLaneModelsResponse = z.infer<typeof AiLaneModelsResponseSchema>;
+
+export type MarketingClassifierThresholdPut = z.infer<typeof MarketingClassifierThresholdPutSchema>;
+export type MarketingFilteredSource = z.infer<typeof MarketingFilteredSourceSchema>;
+export type MarketingClassifierState = z.infer<typeof MarketingClassifierStateSchema>;
 
 // ── Stub tier (#1947) ──
 
@@ -1250,6 +1270,46 @@ export interface TestUserWebhookResponse {
   eventId: string;
 }
 
+// ── Workspace webhooks ──
+
+/** Workspace member role (Better Auth `member.role`, not `user.role`). */
+export type WorkspaceMemberRole = "owner" | "admin" | "member";
+
+/**
+ * A workspace-owned webhook subscription row (no signing secret). Workspace
+ * webhooks are org-scoped only; there is no workspace follows scope.
+ */
+export interface WorkspaceWebhookSubscription extends Omit<
+  UserWebhookSubscription,
+  "userId" | "scope"
+> {
+  workspaceId: string;
+  scope: "org";
+}
+
+/** List item returned by GET /v1/workspaces/:workspaceId/webhooks. */
+export interface WorkspaceWebhookListItem extends Omit<UserWebhookListItem, "scope"> {
+  workspaceId: string;
+  scope: "org";
+}
+
+/** GET /v1/workspaces/:workspaceId/webhooks response. */
+export interface WorkspaceWebhookListResponse {
+  subscriptions: WorkspaceWebhookListItem[];
+  /** The caller's role in the workspace. */
+  role: WorkspaceMemberRole;
+  /** True for owners and admins: create, edit, rotate, and delete. Members can view and test. */
+  canManage: boolean;
+}
+
+/** POST /v1/workspaces/:workspaceId/webhooks response — signing key shown once (omitted for slack/discord). */
+export interface CreateWorkspaceWebhookResponse
+  extends WorkspaceWebhookSubscription, UserWebhookDeliveryHealth {
+  orgSlug: string | null;
+  orgName: string | null;
+  signingKey?: string;
+}
+
 /** One Analytics Engine delivery-attempt row from GET …/webhooks/:id/deliveries. */
 export interface WebhookDeliveryRow {
   timestamp?: string;
@@ -1316,9 +1376,35 @@ export interface SemanticAlert {
   updatedAt: string;
 }
 
+/**
+ * Claimed-match activity for one alert (#2320). Counts are rows in
+ * `semantic_alert_matches` (notified matches only — below-threshold scores
+ * are not stored). Present on list and notifications-bootstrap rows.
+ */
+export interface SemanticAlertActivity {
+  /** Matches in the last 7 days. Included in `matches30d`. */
+  matches7d: number;
+  /** Matches in the last 30 days. */
+  matches30d: number;
+  /** Newest claim, or null when the alert has never matched. */
+  lastMatchedAt: string | null;
+  /** Newest claim's release, when that row still exists. */
+  lastMatch: {
+    releaseId: string;
+    title: string;
+    /** Canonical site path, `/release/rel_…`. */
+    path: string;
+  } | null;
+}
+
+/** A list row: the saved alert plus recent match activity. */
+export interface SemanticAlertListItem extends SemanticAlert {
+  activity: SemanticAlertActivity;
+}
+
 /** GET /v1/me/semantic-alerts. `candidatePool` is the locked v1 scope. */
 export interface SemanticAlertListResponse {
-  alerts: SemanticAlert[];
+  alerts: SemanticAlertListItem[];
   candidatePool: typeof SEMANTIC_ALERT_CANDIDATE_POOL;
   maxAlerts: number;
 }
@@ -1334,7 +1420,7 @@ export interface NotificationSettingsResponse {
   cadence: DigestCadence;
   feedToken: FeedToken | null;
   webhooks: UserWebhookListItem[];
-  semanticAlerts: SemanticAlert[] | null;
+  semanticAlerts: SemanticAlertListItem[] | null;
 }
 
 /**
@@ -1345,6 +1431,24 @@ export interface NotificationSettingsResponse {
 export interface DeveloperSettingsResponse {
   webhooks: UserWebhookListItem[];
   apiKeys: UserApiKey[] | null;
+}
+
+/** GET /v1/me/workspaces — one row per workspace the caller belongs to. */
+export interface MeWorkspace {
+  /** Better Auth organization id. */
+  id: string;
+  name: string;
+  slug: string;
+  logo: string | null;
+  /** Workspace membership role (`member.role`, not `user.role`). */
+  role: WorkspaceMemberRole;
+  /** The caller's active workspace (see docs/architecture/workspaces.md). */
+  active: boolean;
+  createdAt: string;
+}
+
+export interface MeWorkspacesResponse {
+  workspaces: MeWorkspace[];
 }
 
 // ── Search ──
@@ -1704,6 +1808,7 @@ export type CollectionDailySummariesResponse = z.infer<
 export type CollectionWeeklyDigestListItem = z.infer<typeof CollectionWeeklyDigestListItemSchema>;
 export type CollectionWeeklyDigestsResponse = z.infer<typeof CollectionWeeklyDigestsResponseSchema>;
 export type DigestCoveredRelease = z.infer<typeof DigestCoveredReleaseSchema>;
+export type DigestSection = z.infer<typeof DigestSectionSchema>;
 export type CollectionWeeklyDigestDetail = z.infer<typeof CollectionWeeklyDigestDetailSchema>;
 
 // ── Releases (enriched) ──
@@ -1816,6 +1921,8 @@ export type FeedbackDeleteResponse = z.infer<typeof FeedbackDeleteResponseSchema
 export type ClassificationSummary = z.infer<typeof ClassificationSummarySchema>;
 export type ClassificationRecentResponse = z.infer<typeof ClassificationRecentResponseSchema>;
 export type ClassificationRecentItem = z.infer<typeof ClassificationRecentItemSchema>;
+
+export type SemanticAlertSummary = z.infer<typeof SemanticAlertSummarySchema>;
 
 // ── Recommendations ──
 export type RecommendationNotifyAddedBody = z.infer<typeof RecommendationNotifyAddedBodySchema>;

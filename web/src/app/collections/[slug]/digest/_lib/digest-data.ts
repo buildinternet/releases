@@ -40,8 +40,10 @@ export const getDigestIndex = cache(async (slug: string): Promise<DigestIndexDat
   return { detail, digests: digestsRes.digests };
 });
 
-/** How many recent digests the collection page right-rail surfaces. */
-export const RECENT_DIGESTS_LIMIT = 3;
+/** How many recent digests the collection page fetches — the latest issue's
+ *  hero, plus enough back issues for the "Earlier" strip (shows up to 2) and
+ *  future feed use. */
+export const RECENT_DIGESTS_LIMIT = 8;
 
 /**
  * Recent digests (newest-first). Fails soft to `[]` — a missing list is not

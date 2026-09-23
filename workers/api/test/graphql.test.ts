@@ -20,6 +20,7 @@ import {
   sources,
   collections,
   collectionMembers,
+  collectionWeeklyDigests,
 } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { graphql } from "graphql";
@@ -1015,5 +1016,56 @@ describe("GraphQL spike", () => {
     });
     expect(result.errors).toBeUndefined();
     expect(result.data?.collection).toBeNull();
+  });
+
+  it("latestWeeklyDigests returns sections with upstream release urls", async () => {
+    // seed: org_b + src_b1_1 exist from the shared fixtures; add a collection + digest.
+    // The digest body's release link must match the parser's `rel_` + 21-char id
+    // shape (`RELEASE_LINK_RE` in digest-sections.ts), unlike the shared
+    // fixtures' shorter `rel_src_..._N` ids, so seed a dedicated release here.
+    const relId = "rel_bbbbbbbbbbbbbbbbbbbbb";
+    await h.db.insert(collections).values({ id: "col_dg", slug: "dg", name: "DG" });
+    await h.db.insert(releases).values({
+      id: relId,
+      sourceId: "src_b1_1",
+      title: "Upstream release",
+      content: "body",
+      url: "https://example.com/up",
+      publishedAt: "2026-09-15T00:00:00.000Z",
+    });
+    await h.db.insert(collectionWeeklyDigests).values({
+      id: "cwd_dg",
+      collectionId: "col_dg",
+      weekStart: "2026-09-14",
+      title: "T",
+      intro: "I",
+      body: `### S\n\nLede. [x](/release/${relId})\n`,
+      releaseIds: JSON.stringify([relId]),
+      releaseCount: 3,
+      modelId: null,
+      generatedAt: "2026-09-21T06:00:00.000Z",
+    });
+
+    const result = await graphql({
+      schema,
+      source: `query { latestWeeklyDigests { collection { slug } weekStart sections { anchor releases { url path org { slug } } } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const d = (
+      result.data as {
+        latestWeeklyDigests: Array<{
+          collection: { slug: string };
+          weekStart: string;
+          sections: Array<{
+            anchor: string;
+            releases: Array<{ url: string | null; path: string; org: { slug: string } }>;
+          }>;
+        }>;
+      }
+    ).latestWeeklyDigests[0];
+    expect(d.collection.slug).toBe("dg");
+    expect(d.sections[0].anchor).toBe("s");
+    expect(d.sections[0].releases[0].url).toBe("https://example.com/up");
   });
 });

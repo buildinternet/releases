@@ -16,8 +16,8 @@ for the channel you want releases posted to. Slack gives you a URL that looks li
 
 ## 2. Connect it on Releases Index
 
-Open [Notifications](/account/notifications), find the **Slack** section, paste the webhook
-URL, and click **Create**. That's it. You'll get a Slack message for everything you follow.
+Open [Notifications](/account/notifications), find the **Slack & Discord** section, pick
+**Slack**, paste the webhook URL, and click **Connect**. That's it. You'll get a Slack message for everything you follow.
 
 Use the **Test** button to post a sample message and confirm the channel is wired up.
 

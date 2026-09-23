@@ -23,6 +23,7 @@ import {
   MailIcon,
   ModelIcon,
   PreviewIcon,
+  ShieldIcon,
 } from "@/components/account/icons";
 
 /** Reveal not-yet-wired panels in the sidebar. Flip to true once their backends land. */
@@ -87,6 +88,16 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         ready: true,
       },
       {
+        key: "webhooks",
+        label: "Webhooks & API",
+        href: "/account/webhooks",
+        group: "Personal",
+        description:
+          "Programmatic access and event delivery — API keys for the REST API and MCP server, plus signed release webhooks.",
+        Icon: WebhooksIcon,
+        ready: true,
+      },
+      {
         key: "collections",
         label: "Collections",
         href: "/account/collections",
@@ -139,12 +150,12 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         ready: true,
       },
       {
-        key: "webhooks",
-        label: "Webhooks & API",
-        href: "/account/webhooks",
+        key: "workspace-webhooks",
+        label: "Webhooks",
+        href: "/account/workspace-webhooks",
         group: "Workspace",
         description:
-          "Programmatic access and event delivery — API keys for the REST API and MCP server, plus signed release webhooks.",
+          "Send new releases to your team's Slack, Discord, or any URL. Everyone in the workspace can see these; owners and admins manage them.",
         Icon: WebhooksIcon,
         ready: true,
       },
@@ -208,12 +219,21 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         ready: true,
       },
       {
+        key: "admin-marketing-classifier",
+        label: "Marketing classifier",
+        href: "/admin/classifier",
+        group: ADMIN_GROUP_LABEL,
+        description: "Tune the suppression threshold and per-source marketing filter.",
+        Icon: ShieldIcon,
+        ready: true,
+      },
+      {
         key: "admin-semantic-alerts",
         label: "Semantic alerts",
         href: "/admin/semantic-alerts",
         group: ADMIN_GROUP_LABEL,
         description:
-          "Insert synthetic releases through the live publish path to demo freeform alerts.",
+          "Match rate and fail-closed counts for interest alerts, plus a synthetic-release preview.",
         Icon: PreviewIcon,
         ready: true,
       },

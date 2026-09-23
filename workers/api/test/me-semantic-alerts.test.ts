@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
-import { webhookSubscriptions } from "@buildinternet/releases-core/schema";
+import { eq, sql } from "drizzle-orm";
+import { releasePath } from "@buildinternet/releases-core/release-slug";
+import {
+  organizations,
+  releases,
+  sources,
+  webhookSubscriptions,
+} from "@buildinternet/releases-core/schema";
 import { SEMANTIC_ALERT_QUERY_MAX_CHARS } from "@buildinternet/releases-api-types";
+import type { SemanticAlertActivity } from "@buildinternet/releases-api-types";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { user } from "../src/db/schema-auth.js";
-import { semanticAlerts } from "../src/db/schema-semantic-alerts.js";
+import { semanticAlertMatches, semanticAlerts } from "../src/db/schema-semantic-alerts.js";
 import { meHandlers } from "../src/routes/me.js";
 import { meSemanticAlertHandlers } from "../src/routes/me-semantic-alerts.js";
 
@@ -328,7 +335,247 @@ describe("/v1/me/semantic-alerts", () => {
 
     const on = app({ userId: "u1", enabled: true });
     const onRes = await on.a.request("/me/settings/notifications", {}, on.env);
-    const onBody = (await onRes.json()) as { semanticAlerts: Array<{ id: string }> | null };
+    const onBody = (await onRes.json()) as {
+      semanticAlerts: Array<{ id: string; activity: SemanticAlertActivity }> | null;
+    };
     expect(onBody.semanticAlerts?.map((row) => row.id)).toEqual(["sal_saved"]);
+    expect(onBody.semanticAlerts?.[0]?.activity).toEqual({
+      matches7d: 0,
+      matches30d: 0,
+      lastMatchedAt: null,
+      lastMatch: null,
+    });
+  });
+
+  it("omits activity on create, update, and single-get", async () => {
+    const { a, env } = app({ userId: "u1", enabled: true });
+    const createdRes = await a.request(
+      "/me/semantic-alerts",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "edge databases" }),
+      },
+      env,
+    );
+    const created = (await createdRes.json()) as { id: string; activity?: unknown };
+    expect(created).not.toHaveProperty("activity");
+
+    const patched = await a.request(
+      `/me/semantic-alerts/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "edge databases in production" }),
+      },
+      env,
+    );
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).not.toHaveProperty("activity");
+
+    const one = await a.request(`/me/semantic-alerts/${created.id}`, {}, env);
+    expect(await one.json()).not.toHaveProperty("activity");
+  });
+
+  it("attaches batched match activity on the list", async () => {
+    const recentId = "rel_0123456789abcdefghijk";
+    const olderId = "rel_abcdefghijklmnopqrstu";
+    const quietId = "rel_zzzzzzzzzzzzzzzzzzzzz";
+    await h.db.insert(organizations).values({ id: "org_a", name: "Acme", slug: "acme" });
+    await h.db.insert(sources).values({
+      id: "src_a",
+      name: "Changelog",
+      slug: "changelog",
+      type: "feed",
+      url: "https://example.com/changelog",
+      orgId: "org_a",
+    });
+    await h.db.insert(releases).values([
+      {
+        id: recentId,
+        sourceId: "src_a",
+        title: "A very long changelog title about Slack",
+        titleShort: "Slack finance",
+        content: "notes",
+        url: "https://example.com/slack-recent",
+        publishedAt: new Date().toISOString(),
+        fetchedAt: new Date().toISOString(),
+      },
+      {
+        id: olderId,
+        sourceId: "src_a",
+        title: "Older note",
+        content: "notes",
+        url: "https://example.com/older",
+        publishedAt: new Date().toISOString(),
+        fetchedAt: new Date().toISOString(),
+      },
+      {
+        id: quietId,
+        sourceId: "src_a",
+        title: "Quiet release",
+        content: "notes",
+        url: "https://example.com/quiet",
+        publishedAt: new Date().toISOString(),
+        fetchedAt: new Date().toISOString(),
+      },
+    ]);
+
+    const recentAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+
+    await h.db.insert(semanticAlerts).values([
+      {
+        id: "sal_active",
+        userId: "u1",
+        query: "Slack integrations",
+        enabled: true,
+        threshold: 0.8,
+        deliverEmail: true,
+        deliverWebhook: false,
+        createdAt: new Date("2026-09-20T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-20T00:00:00.000Z"),
+      },
+      {
+        id: "sal_quiet",
+        userId: "u1",
+        query: "quiet interest",
+        enabled: true,
+        threshold: 0.8,
+        deliverEmail: true,
+        deliverWebhook: false,
+        createdAt: new Date("2026-09-19T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-19T00:00:00.000Z"),
+      },
+      {
+        id: "sal_gone",
+        userId: "u1",
+        query: "missing release",
+        enabled: true,
+        threshold: 0.8,
+        deliverEmail: true,
+        deliverWebhook: false,
+        createdAt: new Date("2026-09-18T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-18T00:00:00.000Z"),
+      },
+    ]);
+    await seedUser("u2");
+    await h.db.insert(semanticAlerts).values({
+      id: "sal_other",
+      userId: "u2",
+      query: "someone else",
+      enabled: true,
+      threshold: 0.8,
+      deliverEmail: true,
+      deliverWebhook: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await h.db.insert(semanticAlertMatches).values([
+      {
+        alertId: "sal_active",
+        releaseId: recentId,
+        probability: 0.91,
+        createdAt: recentAt,
+      },
+      {
+        alertId: "sal_active",
+        releaseId: olderId,
+        probability: 0.88,
+        createdAt: tenDaysAgo,
+      },
+      {
+        alertId: "sal_quiet",
+        releaseId: quietId,
+        probability: 0.95,
+        createdAt: fortyDaysAgo,
+      },
+      {
+        alertId: "sal_gone",
+        releaseId: "rel_missingmissingmissing1",
+        probability: 0.9,
+        createdAt: fiveDaysAgo,
+      },
+      {
+        alertId: "sal_other",
+        releaseId: recentId,
+        probability: 0.99,
+        createdAt: recentAt,
+      },
+    ]);
+
+    const { a, env } = app({ userId: "u1", enabled: true });
+    const listRes = await a.request("/me/semantic-alerts", {}, env);
+    expect(listRes.status).toBe(200);
+    const list = (await listRes.json()) as {
+      alerts: Array<{ id: string; activity: SemanticAlertActivity }>;
+    };
+    const byId = new Map(list.alerts.map((row) => [row.id, row.activity]));
+
+    const active = byId.get("sal_active");
+    expect(active?.matches7d).toBe(1);
+    expect(active?.matches30d).toBe(2);
+    expect(Math.floor(new Date(active?.lastMatchedAt ?? 0).getTime() / 1000)).toBe(
+      Math.floor(recentAt.getTime() / 1000),
+    );
+    expect(active?.lastMatch).toEqual({
+      releaseId: recentId,
+      title: "Slack finance",
+      path: releasePath({
+        id: recentId,
+        titleShort: "Slack finance",
+        title: "A very long changelog title about Slack",
+      }),
+    });
+    expect(JSON.stringify(active)).not.toContain("probability");
+
+    const quiet = byId.get("sal_quiet");
+    expect(quiet?.matches7d).toBe(0);
+    expect(quiet?.matches30d).toBe(0);
+    expect(quiet?.lastMatch?.title).toBe("Quiet release");
+    expect(Math.floor(new Date(quiet?.lastMatchedAt ?? 0).getTime() / 1000)).toBe(
+      Math.floor(fortyDaysAgo.getTime() / 1000),
+    );
+
+    const gone = byId.get("sal_gone");
+    expect(gone?.matches7d).toBe(1);
+    expect(gone?.matches30d).toBe(1);
+    expect(gone?.lastMatchedAt).not.toBeNull();
+    expect(gone?.lastMatch).toBeNull();
+
+    expect(byId.has("sal_other")).toBe(false);
+  });
+
+  it("plans match activity reads on (alert_id, created_at)", async () => {
+    const indexes = await h.db.all<{ name: string }>(sql`
+      SELECT name FROM sqlite_master
+      WHERE type = 'index' AND name = 'idx_semantic_alert_matches_alert_created'
+    `);
+    expect(indexes.map((row) => row.name)).toEqual(["idx_semantic_alert_matches_alert_created"]);
+
+    const latestPlan = await h.db.all<{ detail: string }>(sql`
+      EXPLAIN QUERY PLAN
+      SELECT alert_id, release_id, created_at
+      FROM semantic_alert_matches
+      WHERE alert_id = 'sal_saved'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    expect(latestPlan.map((row) => row.detail).join("\n")).toContain(
+      "idx_semantic_alert_matches_alert_created",
+    );
+
+    const countPlan = await h.db.all<{ detail: string }>(sql`
+      EXPLAIN QUERY PLAN
+      SELECT alert_id, COUNT(*)
+      FROM semantic_alert_matches
+      WHERE alert_id = 'sal_saved' AND created_at >= 0
+      GROUP BY alert_id
+    `);
+    expect(countPlan.map((row) => row.detail).join("\n")).toContain(
+      "idx_semantic_alert_matches_alert_created",
+    );
   });
 });

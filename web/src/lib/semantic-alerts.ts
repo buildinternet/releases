@@ -1,6 +1,7 @@
 /**
  * Browser client for semantic alerts (`/v1/me/semantic-alerts`).
- * Preferences only — matched releases are delivered by email and webhook, not listed here.
+ * List rows include recent claimed-match activity. Create and update return
+ * the alert without activity — the panel keeps the counts it already has.
  *
  * Types and caps live here, not via `@buildinternet/releases-api-types`. That
  * barrel is a server/type import; a Client Component value-import pulls every
@@ -35,8 +36,29 @@ export interface SemanticAlert {
   updatedAt: string;
 }
 
+/** Claimed matches only. Mirrors `SemanticAlertActivity` in api-types. */
+export interface SemanticAlertActivity {
+  matches7d: number;
+  matches30d: number;
+  lastMatchedAt: string | null;
+  lastMatch: {
+    releaseId: string;
+    title: string;
+    path: string;
+  } | null;
+}
+
+export function emptySemanticAlertActivity(): SemanticAlertActivity {
+  return { matches7d: 0, matches30d: 0, lastMatchedAt: null, lastMatch: null };
+}
+
+/** List and notifications-bootstrap row. */
+export interface SemanticAlertListItem extends SemanticAlert {
+  activity: SemanticAlertActivity;
+}
+
 export interface SemanticAlertListResponse {
-  alerts: SemanticAlert[];
+  alerts: SemanticAlertListItem[];
   candidatePool: "follows";
   maxAlerts: number;
 }

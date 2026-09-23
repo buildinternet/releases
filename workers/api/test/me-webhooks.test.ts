@@ -432,6 +432,22 @@ describe("/v1/me/webhooks", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST unsafe url + invalid format → reports the url error first", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: "https://127.0.0.1/hook", format: "xml" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).not.toContain("format must be");
+  });
+
   it("POST format slack with a non-Slack host → 400", async () => {
     const { a, env } = app();
     const res = await a.request(

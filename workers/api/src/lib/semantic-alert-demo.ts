@@ -11,6 +11,11 @@
  * the org and the source are fetch-paused so cron will not try to read the
  * placeholder URL. Omit `sourceId` to use it. An explicit source is required
  * to write anywhere else.
+ *
+ * Matching is follows-only. When `userId` is set on the dedicated demo org,
+ * preview upserts that org follow before insert and publish so scoring has a
+ * candidate pool. The follow stays after purge. An explicit source is not
+ * auto-followed.
  */
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
@@ -30,6 +35,7 @@ import {
 import { logEvent } from "@releases/lib/log-event";
 import type { D1Db } from "../db.js";
 import { user } from "../db/schema-auth.js";
+import { addFollow } from "../queries/follows.js";
 import { RELEASES_ID_IN_CHUNK_SIZE } from "./d1-limits.js";
 import {
   ingestReleaseBatch,
@@ -307,7 +313,12 @@ export interface SemanticAlertPreviewResult {
     demo: boolean;
     followsEligible: boolean;
   };
-  follow: { targetType: "org"; targetId: string; slug: string };
+  /**
+   * Org the operator would follow so these rows enter the candidate pool.
+   * `ensured` is true when this request upserted that follow for `userId`
+   * (dedicated demo org only). Purge does not remove it.
+   */
+  follow: { targetType: "org"; targetId: string; slug: string; ensured: boolean };
   seed: string;
   requested: number;
   inserted: number;
@@ -584,6 +595,15 @@ export async function runSemanticAlertPreview(
     }
   }
 
+  // Follows-only matching skips a release with no user_follows row. Upsert the
+  // demo org follow before insert and publish so this request can score.
+  // Explicit sources are left alone — preview must not follow a real org.
+  let followEnsured = false;
+  if (input.userId && target.demo) {
+    await addFollow(db, input.userId, "org", target.source.orgId);
+    followEnsured = true;
+  }
+
   const seed = input.seed ?? randomDemoSeed();
   const generated = generateDemoReleases(input.count, seed, target.source.id);
   const ingested = await ingestReleaseBatch(db, env, target.source, {
@@ -690,7 +710,7 @@ export async function runSemanticAlertPreview(
     requested: input.count,
     inserted: ingested.inserted,
     published: ingested.visiblePublishRows.length,
-    ...(input.userId ? { userId: input.userId } : {}),
+    ...(input.userId ? { userId: input.userId, followEnsured } : {}),
   });
 
   return {
@@ -703,7 +723,12 @@ export async function runSemanticAlertPreview(
       demo: target.demo,
       followsEligible,
     },
-    follow: { targetType: "org", targetId: target.source.orgId, slug: target.orgSlug },
+    follow: {
+      targetType: "org",
+      targetId: target.source.orgId,
+      slug: target.orgSlug,
+      ensured: followEnsured,
+    },
     seed,
     requested: input.count,
     inserted: ingested.inserted,

@@ -31,6 +31,9 @@ export function marketingClassificationInput(
     origin: ClassificationOrigin;
     releaseId?: string | null;
     sourceId?: string | null;
+    /** Effective threshold used for this attempt. Falls back to the code
+     *  default when omitted (callers should always pass the resolved value). */
+    threshold?: number | null;
   },
 ): ClassificationPointInput {
   const scored = record.disposition === "kept" || record.disposition === "suppressed";
@@ -56,7 +59,7 @@ export function marketingClassificationInput(
     failureCategory: scored ? null : record.failureCategory,
     selectedChoiceProbability: decision?.selectedChoiceProbability ?? null,
     providerConfidence: decision?.providerConfidence ?? null,
-    threshold: MARKETING_SUPPRESSION_THRESHOLD,
+    threshold: ctx.threshold ?? MARKETING_SUPPRESSION_THRESHOLD,
     costUsd: verdict ? (verdict.usage.costUsd ?? null) : null,
     inputTokens: verdict ? verdict.usage.input : null,
     outputTokens: verdict ? verdict.usage.output : null,

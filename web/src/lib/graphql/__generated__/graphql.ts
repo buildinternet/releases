@@ -153,6 +153,37 @@ export type HomepageCollectionsQuery = {
   }>;
 };
 
+export type HomepageDigestsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type HomepageDigestsQuery = {
+  latestWeeklyDigests: Array<{
+    weekStart: string;
+    title: string;
+    intro: string;
+    releaseCount: number;
+    collection: { slug: string; name: string; isFeatured: boolean };
+    orgs: Array<{
+      slug: string;
+      name: string;
+      avatarUrl: string | null;
+      githubHandle: string | null;
+    }>;
+    sections: Array<{
+      heading: string;
+      anchor: string;
+      lede: string;
+      releases: Array<{
+        id: string;
+        title: string;
+        url: string | null;
+        path: string;
+        org: { slug: string; name: string; avatarUrl: string | null; githubHandle: string | null };
+        product: { slug: string; name: string } | null;
+      }>;
+    }>;
+  }>;
+};
+
 export type HomepageOrgsStatsQueryVariables = Exact<{
   featuredLimit: number;
 }>;
@@ -894,6 +925,109 @@ export const HomepageCollectionsDocument = {
     },
   ],
 } as unknown as DocumentNode<HomepageCollectionsQuery, HomepageCollectionsQueryVariables>;
+export const HomepageDigestsDocument = {
+  __meta__: { hash: "sha256:e87cfb0c4e84d5566107ccaf350334bf1ec3c31f32cfb72a57c7f56ed4d4bcfd" },
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "HomepageDigests" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "latestWeeklyDigests" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "collection" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "weekStart" } },
+                { kind: "Field", name: { kind: "Name", value: "title" } },
+                { kind: "Field", name: { kind: "Name", value: "intro" } },
+                { kind: "Field", name: { kind: "Name", value: "releaseCount" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "orgs" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                      { kind: "Field", name: { kind: "Name", value: "githubHandle" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "sections" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "heading" } },
+                      { kind: "Field", name: { kind: "Name", value: "anchor" } },
+                      { kind: "Field", name: { kind: "Name", value: "lede" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "releases" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "title" } },
+                            { kind: "Field", name: { kind: "Name", value: "url" } },
+                            { kind: "Field", name: { kind: "Name", value: "path" } },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "org" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                  { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
+                                  { kind: "Field", name: { kind: "Name", value: "githubHandle" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "product" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<HomepageDigestsQuery, HomepageDigestsQueryVariables>;
 export const HomepageOrgsStatsDocument = {
   __meta__: { hash: "sha256:46fa99b87fe2392f5f59b0508a47fa516b4f994537ea5d8906f11e6da18a71fd" },
   kind: "Document",

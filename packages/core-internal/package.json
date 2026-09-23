@@ -28,7 +28,8 @@
     "./overview-upsert": "./src/overview-upsert.ts",
     "./composition-metadata": "./src/composition-metadata.ts",
     "./webhook-alert-format": "./src/webhook-alert-format.ts",
-    "./ai-lane-models": "./src/ai-lane-models.ts"
+    "./ai-lane-models": "./src/ai-lane-models.ts",
+    "./marketing-classifier-settings": "./src/marketing-classifier-settings.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",

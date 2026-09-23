@@ -9,6 +9,73 @@ import { getCollectionReleasesFeed } from "../../queries/orgs.js";
 import { buildFeedCursor, formatAggregateReleaseRow } from "../../utils.js";
 import type { D1Db } from "../../db.js";
 
+const DigestReleaseOrgType = builder.objectType("DigestReleaseOrg", {
+  description: "The org behind a release cited by a weekly digest.",
+  fields: (t) => ({
+    slug: t.exposeString("slug"),
+    name: t.exposeString("name"),
+    avatarUrl: t.exposeString("avatarUrl", { nullable: true }),
+    githubHandle: t.exposeString("githubHandle", { nullable: true }),
+  }),
+});
+
+const DigestReleaseProductType = builder.objectType("DigestReleaseProduct", {
+  description: "The product a digest-cited release's source belongs to, when it has one.",
+  fields: (t) => ({
+    slug: t.exposeString("slug"),
+    name: t.exposeString("name"),
+  }),
+});
+
+const DigestReleaseType = builder.objectType("DigestRelease", {
+  description:
+    "A release cited by a weekly digest. `url` (upstream) is the primary link; `path` is " +
+    "the on-site fallback.",
+  fields: (t) => ({
+    id: t.exposeID("id"),
+    title: t.exposeString("title"),
+    path: t.exposeString("path"),
+    url: t.exposeString("url", { nullable: true }),
+    org: t.expose("org", { type: DigestReleaseOrgType }),
+    product: t.expose("product", { type: DigestReleaseProductType, nullable: true }),
+  }),
+});
+
+const WeeklyDigestSectionType = builder.objectType("WeeklyDigestSection", {
+  description: "One `###` section of a weekly digest, parsed server-side.",
+  fields: (t) => ({
+    heading: t.exposeString("heading"),
+    anchor: t.exposeString("anchor"),
+    lede: t.exposeString("lede"),
+    releases: t.expose("releases", { type: [DigestReleaseType] }),
+  }),
+});
+
+const WeeklyDigestCollectionType = builder.objectType("WeeklyDigestCollection", {
+  description: "The collection a weekly digest preview belongs to.",
+  fields: (t) => ({
+    slug: t.exposeString("slug"),
+    name: t.exposeString("name"),
+    isFeatured: t.exposeBoolean("isFeatured"),
+  }),
+});
+
+export const WeeklyDigestPreviewType = builder.objectType("WeeklyDigestPreview", {
+  description: "One collection's digest for the newest digested week (homepage reel).",
+  fields: (t) => ({
+    collection: t.expose("collection", { type: WeeklyDigestCollectionType }),
+    weekStart: t.exposeString("weekStart"),
+    title: t.exposeString("title"),
+    intro: t.exposeString("intro"),
+    releaseCount: t.exposeInt("releaseCount"),
+    sections: t.expose("sections", { type: [WeeklyDigestSectionType] }),
+    orgs: t.expose("orgs", {
+      type: [DigestReleaseOrgType],
+      description: "Distinct orgs across cited releases, first-seen order (facepile).",
+    }),
+  }),
+});
+
 const CollectionMemberOrgType = builder.objectType("CollectionMemberOrg", {
   description: "An org as it appears in a collection's member preview.",
   fields: (t) => ({

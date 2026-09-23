@@ -25,15 +25,11 @@ export function definitionLabel(c: OverviewCitation): string {
 }
 
 /**
- * Chip href: the canonical internal release page when the source resolved to an
- * on-registry release (#1934) — crawlable, on-domain, keeps link equity inside
- * the registry — else the external source URL.
+ * Chip href: always the upstream `sourceUrl` (the #2218 link policy —
+ * `/release/*` pages are noindexed and robots-disallowed), even when the
+ * source resolved to an on-registry release. `releaseWebUrl` is kept on the
+ * wire for machine consumers but is no longer the web chip's link target.
  */
 export function citationHref(c: OverviewCitation): string {
-  return c.releaseWebUrl ?? c.sourceUrl;
-}
-
-/** True when the chip links to an on-registry release page rather than an external source. */
-export function isInternalCitation(c: OverviewCitation): boolean {
-  return !!c.releaseWebUrl;
+  return c.sourceUrl;
 }

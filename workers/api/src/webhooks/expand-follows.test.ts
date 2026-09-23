@@ -30,6 +30,7 @@ function followsSub(userId: string): WebhookSubscription {
   return {
     id: `whk_${userId}`,
     userId,
+    workspaceId: null,
     scope: "follows",
     orgId: null,
     url: "https://1.1.1.1/hook",

@@ -59,9 +59,42 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 | `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                                      |
 | `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (see [Delivery activity](#delivery-activity)) |
 
+### Finding your workspace id (`/v1/me/workspaces`)
+
+A workspace is your team's account on Releases Index. It's separate from the
+companies and products that webhooks watch. Every account has at least one
+personal workspace. `GET /v1/me/workspaces` lists the workspaces you belong
+to, so scripts, the CLI, and the MCP server can find a workspace id:
+
+```bash
+curl https://api.releases.sh/v1/me/workspaces \
+  -H "Authorization: Bearer $RELEASES_TOKEN"
+```
+
+```json
+{
+  "workspaces": [
+    {
+      "id": "Xk3vQ9dLm2PzR8tYw1Hn",
+      "name": "Acme Team",
+      "slug": "acme-team",
+      "logo": null,
+      "role": "owner",
+      "active": true,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+`role` is your role in that workspace (`owner`, `admin`, or `member`).
+`active` marks the workspace you last switched to. This route only reads.
+Create, rename, and switch workspaces from
+[your account settings](https://releases.sh/account/workspaces).
+
 ### Account UI
 
-Signed-in users can manage webhooks without raw API calls: **Workspace → Webhooks & API** on [releases.sh](https://releases.sh/account/webhooks). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
+Signed-in users can manage webhooks without raw API calls: **Account → Webhooks & API** on [releases.sh](https://releases.sh/account/webhooks). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
 
 From an organization page, **Add webhook** in the header ⋯ menu opens this form already scoped to that org.
 
@@ -105,6 +138,28 @@ Webhook URLs must be public **HTTPS** endpoints. Private IPs, internal hostnames
 ### CLI
 
 After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. Filter flags on `add` / `edit`: `--product`, `--source`, `--type` (`feature` | `rollup`), and `--clear-*` on edit. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
+
+## Workspace webhooks (`/v1/workspaces/:workspaceId/webhooks`)
+
+A webhook can also be owned by a workspace (a Workspaces organization, not a registry org) instead of your personal account, so a shared team channel keeps working after the person who set it up leaves. The route family mirrors `/v1/me/webhooks` exactly, one level down under the workspace:
+
+| Method   | Path                                                     | Purpose                                     |
+| -------- | -------------------------------------------------------- | ------------------------------------------- |
+| `GET`    | `/v1/workspaces/:workspaceId/webhooks`                   | List — includes your `role` and `canManage` |
+| `POST`   | `/v1/workspaces/:workspaceId/webhooks`                   | Create (owner/admin only)                   |
+| `GET`    | `/v1/workspaces/:workspaceId/webhooks/:id`               | Detail                                      |
+| `PATCH`  | `/v1/workspaces/:workspaceId/webhooks/:id`               | Update (owner/admin only)                   |
+| `DELETE` | `/v1/workspaces/:workspaceId/webhooks/:id`               | Remove (owner/admin only)                   |
+| `POST`   | `/v1/workspaces/:workspaceId/webhooks/:id/rotate-secret` | Rotate HMAC signing key (owner/admin only)  |
+| `POST`   | `/v1/workspaces/:workspaceId/webhooks/:id/test`          | Enqueue a synthetic test delivery           |
+| `GET`    | `/v1/workspaces/:workspaceId/webhooks/:id/deliveries`    | Recent delivery attempts                    |
+
+Differences from a personal webhook:
+
+- **Org-scoped only** — there's no workspace "follows" scope. `POST` with `{"scope": "follows"}` returns `400`.
+- **Owners and admins** create/edit/rotate/delete; **any member** can list, view, and test. A non-member gets `404`; a member without manage rights gets `403`.
+- Up to **10** subscriptions per workspace, tracked separately from each member's personal cap.
+- Deleting the workspace deletes its webhooks; a member leaving does not.
 
 ## Admin-provisioned webhooks
 

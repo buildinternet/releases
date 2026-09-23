@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.31.0
+
+### Minor Changes
+
+- 256fdfb: Add `webhook_subscriptions.workspace_id`, so a subscription can be owned by a workspace instead of a user (#2324).
+
 ## 0.30.0
 
 ### Minor Changes

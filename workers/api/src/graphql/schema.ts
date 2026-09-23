@@ -22,6 +22,8 @@ import "./types/collection.js";
 import { SourceTypeEnum } from "./types/enums.js";
 import { getOrgIdsForList, countOrgsForList } from "../queries/orgs.js";
 import { getCollectionsList, getCollectionBySlug } from "../queries/collections.js";
+import { listLatestWeeklyDigests } from "../queries/collection-summaries.js";
+import { WeeklyDigestPreviewType } from "./types/collection.js";
 import type { CollectionMemberOrg, CollectionMemberProduct } from "./builder.js";
 
 const isOrgId = (s: string) => s.startsWith("org_");
@@ -164,6 +166,14 @@ builder.queryType({
           )[],
         }));
       },
+    }),
+
+    latestWeeklyDigests: t.field({
+      type: [WeeklyDigestPreviewType],
+      description:
+        "Every public collection's digest for the newest digested week, with parsed sections " +
+        "and cited releases. Empty when no digests exist.",
+      resolve: (_root, _args, ctx) => listLatestWeeklyDigests(ctx.db),
     }),
 
     collection: t.field({

@@ -310,7 +310,7 @@ describe("classification response shaping", () => {
     expect(shaped.choiceSeries).toEqual([
       { t: "2026-09-20T00:00:00.000Z", choices: { case_study: 3 } },
     ]);
-    expect(shaped.probability.threshold).toBe(0.8);
+    expect(shaped.probability.threshold).toBe(0.65);
     expect(shaped.probability.selected.bins).toHaveLength(10);
     expect(shaped.probability.selected.bins[8]).toEqual({ start: 0.8, end: 0.9, count: 5 });
     expect(shaped.probability.selected.bins[9]).toEqual({ start: 0.9, end: 1, count: 0 });

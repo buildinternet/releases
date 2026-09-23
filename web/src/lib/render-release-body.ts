@@ -9,7 +9,14 @@ import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
-import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { releaseIdFromPath, isHttpUrl } from "@releases/rendering/digest-sections";
+import {
+  EXTERNAL_UGC_REL,
+  isFragmentHref,
+  isInternalHref,
+  isSafeHref,
+  isSafeImgSrc,
+} from "@/lib/sanitize";
 import type { WithBodyHtml } from "@/lib/release-view";
 
 /**
@@ -67,7 +74,25 @@ type RehypeBodyOpts = {
   variant: BodyVariant;
   /** Default `2` (card/changelog pipeline). Digests use `0` so `###` stays h3. */
   demoteHeadings?: DemoteHeadings;
+  /** When set, headings get an `id` derived from their text (digest section anchors). */
+  headingIds?: (text: string) => string;
+  /** When set, `headingIds` only runs for headings whose SOURCE level (before
+   *  `demoteHeadings`) equals this — e.g. `3` so only markdown `###` headings
+   *  get an id, keeping DOM ids in sync with `parseDigestSections`, which
+   *  only slugs `###` sections. Other heading levels get no id. Unset ⇒ every
+   *  level gets one (unchanged default behavior). */
+  headingIdLevel?: number;
+  /** When set, `<a href="/release/rel_…">` links are tagged `data-release-id` and,
+   *  when the map has an http(s) upstream url for that id, rewritten to open the
+   *  upstream link in a new tab (mirrors `releaseLinkTarget()`). */
+  releaseLinks?: ReadonlyMap<string, string | null>;
 };
+
+/** Flattens a hast node's text content (used to derive heading ids). */
+function hastText(node: any): string {
+  if (node.type === "text") return node.value ?? "";
+  return (node.children ?? []).map(hastText).join("");
+}
 
 /**
  * rehype transform reproducing the `markdownComponents` element overrides:
@@ -76,15 +101,20 @@ type RehypeBodyOpts = {
  * external UGC.
  */
 function rehypeReleaseBody(opts: RehypeBodyOpts) {
-  const { variant, demoteHeadings = 2 } = opts;
+  const { variant, demoteHeadings = 2, headingIds, headingIdLevel, releaseLinks } = opts;
   return (tree: any) => {
     visit(tree, "element", (node: any, index: any, parent: any) => {
       const tag = node.tagName as string;
 
       const heading = /^h([1-6])$/.exec(tag);
       if (heading) {
+        const sourceLevel = Number(heading[1]);
         if (demoteHeadings > 0) {
-          node.tagName = `h${Math.min(Number(heading[1]) + demoteHeadings, 6)}`;
+          node.tagName = `h${Math.min(sourceLevel + demoteHeadings, 6)}`;
+        }
+        if (headingIds && (headingIdLevel === undefined || sourceLevel === headingIdLevel)) {
+          const text = hastText(node).trim();
+          if (text) node.properties = { ...node.properties, id: headingIds(text) };
         }
         return;
       }
@@ -108,6 +138,29 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
           parent.children.splice(index, 1, ...node.children);
           return index;
         }
+        const releaseId = releaseLinks ? releaseIdFromPath(href) : null;
+        if (releaseLinks && releaseId) {
+          const upstream = (releaseLinks.get(releaseId) ?? "").trim();
+          if (isHttpUrl(upstream)) {
+            node.properties = {
+              ...node.properties,
+              href: upstream,
+              target: "_blank",
+              rel: EXTERNAL_UGC_REL,
+              dataReleaseId: releaseId,
+            };
+          } else {
+            node.properties = { ...node.properties, dataReleaseId: releaseId };
+          }
+          return;
+        }
+        // Same-origin app paths stay in-document: no new tab, no UGC rel. Only
+        // for callers that opted into release-link handling (digest pages) —
+        // other callers (release/changelog bodies) render scraped/vendor
+        // content that isn't guaranteed to have gone through
+        // `rewriteRelativeLinks`, so a root-relative href there keeps the
+        // default new-tab + external-UGC treatment.
+        if (releaseLinks && isInternalHref(href)) return;
         // Same-page fragment links stay in-document — no new tab, no external rel.
         if (isFragmentHref(href)) return;
         node.properties = { ...node.properties, target: "_blank", rel: EXTERNAL_UGC_REL };
@@ -130,7 +183,12 @@ function rehypeReleaseBody(opts: RehypeBodyOpts) {
 export function renderBodyMarkdownToHtml(
   content: string,
   variant: BodyVariant,
-  opts?: { demoteHeadings?: DemoteHeadings },
+  opts?: {
+    demoteHeadings?: DemoteHeadings;
+    headingIds?: (text: string) => string;
+    headingIdLevel?: number;
+    releaseLinks?: ReadonlyMap<string, string | null>;
+  },
 ): string {
   return unified()
     .use(remarkParse)
@@ -139,6 +197,9 @@ export function renderBodyMarkdownToHtml(
     .use(rehypeReleaseBody, {
       variant,
       demoteHeadings: opts?.demoteHeadings ?? 2,
+      headingIds: opts?.headingIds,
+      headingIdLevel: opts?.headingIdLevel,
+      releaseLinks: opts?.releaseLinks,
     })
     .use([rehypeShikiPlugin])
     .use(rehypeStringify)

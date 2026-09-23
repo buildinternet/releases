@@ -47,6 +47,7 @@ describe("ShippingNowTicker Card — mobile-app variant", () => {
     expect(html).toContain('aria-label="Available for iOS"');
     expect(html).not.toContain("1.2026.188"); // version chip dropped
     expect(html).not.toContain("cdn/shot.png"); // thumbnail dropped
+    expect(html).toContain('data-release-id="rel_app"');
   });
 
   it("renders a non-app release the standard way: title, version chip, thumbnail", () => {
@@ -55,5 +56,6 @@ describe("ShippingNowTicker Card — mobile-app variant", () => {
     expect(html).toContain("2.1.0");
     expect(html).toContain("cdn/turbo.png");
     expect(html).not.toContain("iOS app");
+    expect(html).toContain('data-release-id="rel_feed"');
   });
 });

@@ -150,6 +150,34 @@ type CollectionReleaseSource {
 
 scalar DateTime
 
+"""
+A release cited by a weekly digest. `url` (upstream) is the primary link; `path` is the on-site fallback.
+"""
+type DigestRelease {
+  id: ID!
+  org: DigestReleaseOrg!
+  path: String!
+  product: DigestReleaseProduct
+  title: String!
+  url: String
+}
+
+"""The org behind a release cited by a weekly digest."""
+type DigestReleaseOrg {
+  avatarUrl: String
+  githubHandle: String
+  name: String!
+  slug: String!
+}
+
+"""
+The product a digest-cited release's source belongs to, when it has one.
+"""
+type DigestReleaseProduct {
+  name: String!
+  slug: String!
+}
+
 """A small curator-set note attached to an org, product, or source."""
 type EntityNotice {
   coordinate: String
@@ -335,6 +363,11 @@ type Query {
     """
     productId: String
   ): ReleaseFeed!
+
+  """
+  Every public collection's digest for the newest digested week, with parsed sections and cited releases. Empty when no digests exist.
+  """
+  latestWeeklyDigests: [WeeklyDigestPreview!]!
 
   """Look up an organization by id (org_…) or slug."""
   org(idOrSlug: String!): Org
@@ -553,4 +586,32 @@ enum VideoProvider {
   vimeo
   wistia
   youtube
+}
+
+"""The collection a weekly digest preview belongs to."""
+type WeeklyDigestCollection {
+  isFeatured: Boolean!
+  name: String!
+  slug: String!
+}
+
+"""One collection's digest for the newest digested week (homepage reel)."""
+type WeeklyDigestPreview {
+  collection: WeeklyDigestCollection!
+  intro: String!
+
+  """Distinct orgs across cited releases, first-seen order (facepile)."""
+  orgs: [DigestReleaseOrg!]!
+  releaseCount: Int!
+  sections: [WeeklyDigestSection!]!
+  title: String!
+  weekStart: String!
+}
+
+"""One `###` section of a weekly digest, parsed server-side."""
+type WeeklyDigestSection {
+  anchor: String!
+  heading: String!
+  lede: String!
+  releases: [DigestRelease!]!
 }

@@ -1,4 +1,6 @@
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
+import { isHttpUrl } from "@releases/rendering/digest-sections";
+import { releaseLinkTarget } from "./release-link";
 
 /** Current month + year (e.g. "May 2026") in `en-US`, for freshness signals in
  *  feed-page titles and descriptions. Pinned to UTC so the period doesn't drift
@@ -135,12 +137,13 @@ type ReleaseListItemInput = {
 
 /**
  * Builds an `ItemList` of release (`TechArticle`) nodes for a feed page's JSON-LD
- * `@graph` (org / source / category / collection feeds). Each release links to
- * its canonical `/release/{id}` page when an `id` is present, falling back to
- * the release's external `url`; rows with neither a usable target are skipped.
- * `isPartOfId` ties each release back to the page's primary entity node
- * (Organization / source entity) via schema.org `isPartOf`. Capped at `limit`
- * (default 20) — the list is an SEO signal, not a full feed mirror.
+ * `@graph` (org / source / category / collection feeds). Each release links
+ * upstream when it has an http(s) `url` (the #2218 link policy — `/release/*`
+ * pages are noindexed and robots-disallowed), falling back to the release
+ * page; rows with neither a usable target are skipped. `isPartOfId` ties each
+ * release back to the page's primary entity node (Organization / source
+ * entity) via schema.org `isPartOf`. Capped at `limit` (default 20) — the
+ * list is an SEO signal, not a full feed mirror.
  */
 export function buildReleaseItemListJsonLd(
   releases: readonly ReleaseListItemInput[],
@@ -150,7 +153,8 @@ export function buildReleaseItemListJsonLd(
   const itemListElement = releases
     .slice(0, limit)
     .flatMap((release) => {
-      const url = release.id ? `${SITE_URL}/release/${release.id}` : (release.url ?? undefined);
+      const link = releaseLinkTarget(release);
+      const url = link ? (link.external ? link.href : `${SITE_URL}${link.href}`) : undefined;
       if (!url) return [];
       return [
         {
@@ -281,24 +285,14 @@ export function buildOrgCatalogJsonLd(
 }
 
 /**
- * schema.org node for an org overview's provenance (#1934). A CreativeWork whose
- * `citation` array points at the on-registry release pages the overview drew on,
- * declaring it a derivative aggregation of internal sources — machine-readable
- * provenance that reinforces the internal-link graph (#1601).
- *
- * Only internal (release-page) citations are declared; external-only sources are
- * omitted. Returns `null` when nothing resolved to a release page, so callers can
- * skip emitting an empty node.
- */
-/**
  * schema.org `@graph` for a weekly collection digest page (WS3): an `Article`
  * node — NOT `TechArticle`-with-`sameAs` like a release page, because a
  * digest is first-party editorial content, not a mirror of an external
  * release note — plus a `BreadcrumbList`.
  *
- * `mentions` links out to every covered release's canonical `/release/*`
- * page, reinforcing the internal-link graph (#1601) the same way
- * `buildOverviewCitationJsonLd` does for org overviews.
+ * `mentions` links out to every covered release, upstream when it has one
+ * else its canonical `/release/*` page — `releaseUrls` is resolved by the
+ * caller via `releaseLinkTarget()` (the #2218 link policy).
  */
 export function buildDigestJsonLd(
   digest: {
@@ -366,12 +360,25 @@ export function buildDigestJsonLd(
   };
 }
 
+/**
+ * schema.org node for an org overview's provenance (#1934). A CreativeWork whose
+ * `citation` array points at the upstream sources the overview drew on (the
+ * #2218 link policy — `/release/*` pages are noindexed and robots-disallowed),
+ * declaring it a derivative aggregation with machine-readable provenance.
+ *
+ * Returns `null` when there are no citations, so callers can skip emitting an
+ * empty node.
+ */
 export function buildOverviewCitationJsonLd(
-  citations: readonly { releaseWebUrl?: string | null }[] | undefined | null,
+  citations: readonly { sourceUrl: string }[] | undefined | null,
   opts: { orgName: string; aboutId: string; dateModified?: string | null },
 ): Record<string, unknown> | null {
   const urls = Array.from(
-    new Set((citations ?? []).map((c) => c.releaseWebUrl).filter((u): u is string => !!u)),
+    new Set(
+      (citations ?? [])
+        .map((c) => c.sourceUrl?.trim())
+        .filter((u): u is string => !!u && isHttpUrl(u)),
+    ),
   );
   if (urls.length === 0) return null;
   return {

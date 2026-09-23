@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { releaseLinkTarget, type ReleaseLinkInput } from "@/lib/release-link";
-import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
+import { releaseLinkProps, type ReleaseLinkInput } from "@/lib/release-link";
 
 /**
  * Title link for a release row: upstream source URL when the release has a
@@ -17,14 +16,10 @@ export function ReleaseTitleLink({
   className?: string;
   children: ReactNode;
 }) {
-  const target = releaseLinkTarget(release);
-  if (!target) return children;
+  const linkProps = releaseLinkProps(release);
+  if (!linkProps) return children;
   return (
-    <Link
-      href={target.href}
-      {...(target.external ? { target: "_blank", rel: EXTERNAL_UGC_REL } : {})}
-      className={className}
-    >
+    <Link {...linkProps} className={className}>
       {children}
     </Link>
   );

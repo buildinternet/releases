@@ -142,6 +142,16 @@ Signed-in users manage webhooks at `/v1/me/webhooks` (browser session, user API 
 
 `POST /v1/me/webhooks { "scope": "follows", "url": "…" }` delivers `release.created` events for releases matching the caller's current `user_follows` graph — same semantics as `GET /v1/me/feed` (org follow covers all sources under that org; product follow matches releases from sources tied to that product). **One** follows-scoped subscription per account; it does not count against the 10 org-scoped cap. Follow/unfollow changes apply on the next publish (no snapshot). Scope cannot be converted via `PATCH` — delete and recreate.
 
+### Workspace webhooks
+
+Signed-in users can also create webhooks owned by a workspace (the Better Auth organization backing "Workspaces" — see [workspaces.md](architecture/workspaces.md)) instead of their personal account, so a team's shared channel keeps receiving events even if the person who created the webhook leaves. Routes mirror the personal ones, scoped under `/v1/workspaces/:workspaceId/webhooks`: create/list/get/patch/delete, `rotate-secret`, `test`, and `deliveries`.
+
+- **Org-scoped only.** There is no workspace "follows" scope — every workspace webhook takes `orgId`/`orgSlug` and the same optional `sourceId`/`productId`/`releaseType` filters as a personal org-scoped subscription. `POST` with `scope: "follows"` is rejected with `400 bad_request`.
+- **Permissions.** Workspace owners and admins can create, edit, rotate the signing key, and delete. Any member can list, view, test, and read delivery history. A non-member gets `404` (existence isn't leaked); a member without manage rights gets `403`.
+- **Cap.** Up to **10** webhook subscriptions per workspace (separate from each member's personal 10).
+- **Cascade.** Deleting the workspace deletes its webhooks. A member leaving the workspace does not affect them — the webhook stays owned by the workspace, not by any one person.
+- **Auto-pause notice.** If a workspace webhook is auto-disabled after repeated delivery failures, every owner/admin of the workspace gets an email (not just whoever created it).
+
 ### URL requirements
 
 Webhook URLs must use **HTTPS** and must not target private or internal networks. Registration rejects:

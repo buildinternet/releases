@@ -15,6 +15,7 @@ import { requireFollowsPrincipal } from "../middleware/auth.js";
 import { respondError } from "../lib/error-response.js";
 import { requireWorkspaceManager, workspaceGateError } from "../lib/workspace-access.js";
 import { workspaceIntegrationHandlers } from "./workspace-integrations.js";
+import { workspaceWebhookHandlers } from "./workspace-webhooks.js";
 import {
   ValidationError,
   UnauthorizedError,
@@ -166,3 +167,4 @@ workspaceRoutes.use("/workspaces/*", requireFollowsPrincipal);
 workspaceRoutes.use("/integrations/*", requireFollowsPrincipal);
 workspaceRoutes.route("/", workspaceProfileHandlers);
 workspaceRoutes.route("/", workspaceIntegrationHandlers);
+workspaceRoutes.route("/", workspaceWebhookHandlers);

@@ -24,7 +24,9 @@ Routes under `/v1/me/semantic-alerts`, same principal as follows: Better Auth se
 
 `webhookSubscriptionId` must be one of the caller's own `/v1/me/webhooks` rows. `deliverEmail` / `deliverWebhook` are independent. An alert may point at a subscription and still leave `deliverWebhook` false. An alert with both flags false is stored but never scored.
 
-Account UI on [Notifications](https://releases.sh/account/notifications): list, create, enable/disable, delete. The panel does not list matched releases.
+`GET /v1/me/semantic-alerts` and `semanticAlerts` on the notifications bootstrap add `activity` on each alert: `matches7d`, `matches30d` (the 30-day count includes the 7-day window), `lastMatchedAt`, and `lastMatch` (`releaseId`, `title`, `path`) when the release row still exists. Create, update, and single-get omit `activity`. The read is two statements for the caller's alert ids — a grouped count limited to 30 days, and one latest row per id left-joined to `releases` and capped at that id count (max 5). Index `idx_semantic_alert_matches_alert_created` on `(alert_id, created_at)`. No extra matcher writes and no cron.
+
+Account UI on [Notifications](https://releases.sh/account/notifications): list, create, edit (query, threshold, email, webhook), enable/disable, and delete. Each row shows trailing activity from claimed matches: last matched (relative time and a release link when the row still exists) plus counts for the last 7 and 30 days. Below-threshold scores are not stored for this view.
 
 ## Matcher
 
@@ -55,9 +57,26 @@ The payload is the same signed `release.created` event the structural fanout use
 
 ## Telemetry
 
-Each JEV call logs an `ai_usage` event (`lane: semantic-alert-match`) with token counts, cost, question count, and release id. No query text.
+Each JEV call logs an `ai_usage` event (`lane: semantic-alert-match`) with token counts, cost, question count, and release id. No query text. Daily and weekly spend queries for that lane are in [ai-provider-monitors.md → Interest alert match spend](../runbooks/ai-provider-monitors.md#interest-alert-match-spend).
 
 Optional Analytics Engine points go to the existing classifications dataset with `blob4 = semantic-alert`. Marketing admin queries filter `blob4 = 'marketing'`, so these points stay out of that dashboard. The point carries release id, source id, alert id, disposition (`matched` | `below_threshold` | `failed`), P(true), and the alert threshold. Cost stays on `ai_usage` because one call covers many alerts. Failure categories are `provider_error` or `invalid_probability` — never the provider message.
+
+## Operator visibility
+
+Admin or root (`admin/semantic-alerts`, same gate as the preview). Not behind `semantic-alerts-enabled`.
+
+`GET /v1/admin/semantic-alerts/summary` reads those points for a window (`after`, `before`, `bucket` — same bounds as the marketing summary: default last 7 days, max 100 days). The writer always sets origin `ingest`, and the summary keeps that filter. Counts use `SUM(_sample_interval)`. The body is:
+
+- `totals.scored` — `matched` + `belowThreshold` (a probability came back)
+- `totals.matchRate` — `matched / scored`, or null when nothing was scored
+- `totals.failed` — fail-closed. Stays out of the rate
+- `series` — the same three counts per hour or day
+- `failures` — `provider_error`, `invalid_probability`, or `unknown`
+- `probability` — ten bins of P(true) on `double1`. `0.8` is the start of the default-threshold bin. Each point still stores its own threshold; the chart marks the default
+
+`meta.sampled` is true, `meta.retentionDays` is 90, and `meta.costLane` is `semantic-alert-match`. The response has no alert query, no alert id, and no dollar total. Missing Analytics Engine credentials are `503` `deliveries_unavailable`. A failed statement is `502` `ae_query_failed` with `{ query, status }` only. The summary is cached for 45 seconds in `LATEST_CACHE` under `semantic-alert-summary:v1:` (same TTL trick as marketing classifications).
+
+**Admin → Semantic alerts** (`/admin/semantic-alerts`) renders the summary for 24h / 7d / 30d and pastes the Axiom spend queries under the chart. The synthetic-release preview stays on the same page.
 
 ## Admin preview
 
@@ -70,9 +89,10 @@ Operator tool for local development and live demos. Admin or root only (`admin/s
 - `sourceId` is `src_…` or `orgSlug/sourceSlug` when the demo org is the wrong target. A bare slug is rejected. This is the only way to write onto any other org.
 - Rows go through `ingestReleaseBatch` and `runBatchIngestEffects` (the batch upsert, `publishReleaseEvents`, and webhook fanout). Summaries and embeddings are skipped so a demo does not spend the summarize lane or write vectors.
 - Titles are prefixed `[demo]`. `metadata.semanticAlertDemo` is `true`. The dedicated demo source refuses a request that would push it past 20 flagged rows (`429 limit_exceeded`).
-- `userId`, when set, must be a real account. The response `matcher` field is `scored` when the JEV model is available (including an empty candidate set), or `unavailable` with `model_unavailable` when OpenRouter cannot be built. Omit `userId` and `matcher.status` is `skipped`. A matcher exception is reported as `error` and does not roll back the insert. Follow `semantic-alerts-demo` (or the target org) and create enabled alerts on that account before expecting matches.
+- `userId`, when set, must be a real account. The response `matcher` field is `scored` when the JEV model is available (including an empty candidate set), or `unavailable` with `model_unavailable` when OpenRouter cannot be built. Omit `userId` and `matcher.status` is `skipped`. A matcher exception is reported as `error` and does not roll back the insert or the follow. Create enabled alerts on that account before expecting matches.
+- On a successful preview of the dedicated demo source, `userId` upserts an org follow of `semantic-alerts-demo` for that account before insert and publish, so the follows-only matcher has a candidate pool. `follow.ensured` is `true` when that upsert ran, including when the follow was already there. Purge leaves the follow in place. Omit `userId` and no follow is written (`follow.ensured` is `false`). An explicit `sourceId` is not auto-followed — follow that org before expecting matches there.
 
-`POST /v1/admin/semantic-alerts/purge` deletes **only** rows with `semanticAlertDemo: true`.
+`POST /v1/admin/semantic-alerts/purge` deletes **only** rows with `semanticAlertDemo: true`. It does not unfollow `semantic-alerts-demo`. Unfollow from the account if the demo org should leave the feed.
 
 - `{}` purges the dedicated demo source.
 - `{ sourceId }` purges flagged rows on that source.
@@ -82,9 +102,10 @@ The same actions are on **Admin → Semantic alerts** (`/admin/semantic-alerts`)
 
 ## Code
 
-- Schema + migrations: `workers/api/src/db/schema-semantic-alerts.ts`, `workers/api/migrations/20260922020000_add_semantic_alerts.sql`, `workers/api/migrations/20260922030000_semantic_alert_matches.sql`
+- Schema + migrations: `workers/api/src/db/schema-semantic-alerts.ts`, `workers/api/migrations/20260922020000_add_semantic_alerts.sql`, `workers/api/migrations/20260922030000_semantic_alert_matches.sql`, `workers/api/migrations/20260922200000_semantic_alert_matches_alert_created_idx.sql`
 - Routes: `workers/api/src/routes/me-semantic-alerts.ts`
 - Matcher: `packages/ai/src/semantic-alert-match.ts`, `workers/api/src/semantic-alerts/run.ts` (hooked from `workers/api/src/events/publish.ts`), `workers/api/src/lib/semantic-alert-matcher.ts` (admin preview seam)
-- Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, list response, threshold and cap constants)
+- Wire types: `@buildinternet/releases-api-types` (`SemanticAlert`, `SemanticAlertActivity` on list rows, threshold and cap constants)
 - Web: `web/src/components/semantic-alerts-section.tsx` on the notifications panel
 - Admin preview: `workers/api/src/routes/admin-semantic-alerts.ts`, `workers/api/src/lib/semantic-alert-demo.ts`, `/admin/semantic-alerts`
+- Admin quality summary: `workers/api/src/lib/semantic-alert-summary.ts`, `GET /v1/admin/semantic-alerts/summary`

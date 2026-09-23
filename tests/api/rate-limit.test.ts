@@ -471,7 +471,8 @@ const fakeBetterAuth = (result: {
       key: result.valid
         ? {
             id: "key_1",
-            userId: result.userId ?? null,
+            // Better Auth 1.7 api-key: the owner is `referenceId` (was `userId`).
+            referenceId: result.userId ?? null,
             permissions: result.permissions ?? { api: ["read"] },
           }
         : null,

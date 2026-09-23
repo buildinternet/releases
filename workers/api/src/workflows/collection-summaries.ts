@@ -23,8 +23,10 @@ import {
   listCollectionWeeklyDigestTargets,
   summarizeCollectionForDay,
   generateWeeklyDigestForCollection,
+  pingAfterDigests,
   type CollectionSummaryTarget,
 } from "../cron/collection-summaries.js";
+import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
 
 export type CollectionSummariesWorkflowParams = {
   scheduledTime: number;
@@ -36,11 +38,12 @@ export type CollectionSummariesWorkflowParams = {
   catchupDays?: number;
 };
 
-export type CollectionSummariesWorkflowEnv = TextModelEnv & {
-  DB: D1Database;
-  COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
-  COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS?: string;
-};
+export type CollectionSummariesWorkflowEnv = TextModelEnv &
+  WebRevalidateEnv & {
+    DB: D1Database;
+    COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
+    COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS?: string;
+  };
 
 const RETRY_PLAN: WorkflowStepConfig = {
   retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
@@ -52,6 +55,15 @@ const RETRY_SUMMARIZE: WorkflowStepConfig = {
   timeout: "10 minutes",
 };
 
+// No retries: `pingAfterDigests` already never throws (see web-revalidate.ts),
+// so a retry here would only ever re-run on a genuine bug, not a flaky
+// network blip — and a second send after a replay-on-wake is exactly what a
+// single step.do call (memoized once it resolves) exists to prevent.
+const RETRY_REVALIDATE: WorkflowStepConfig = {
+  retries: { limit: 0, delay: "1 second", backoff: "constant" },
+  timeout: "10 seconds",
+};
+
 interface SummaryTask {
   collectionId: string;
   collectionName: string;
@@ -61,6 +73,7 @@ interface SummaryTask {
 interface WeeklyDigestTask {
   collectionId: string;
   collectionName: string;
+  collectionSlug: string;
   weekStart: string;
 }
 
@@ -182,7 +195,7 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
       RETRY_PLAN,
       async (): Promise<{ tasks: WeeklyDigestTask[] }> => {
         const db = createDb(this.env.DB);
-        const cols: CollectionSummaryTarget[] = await listCollectionWeeklyDigestTargets(db);
+        const cols = await listCollectionWeeklyDigestTargets(db);
         const model = await resolveCollectionWeeklyDigestModel(this.env);
         if (!model) {
           throw new NonRetryableError(
@@ -192,7 +205,12 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
         const tasks: WeeklyDigestTask[] = [];
         for (const weekStart of weekStarts) {
           for (const col of cols) {
-            tasks.push({ collectionId: col.id, collectionName: col.name, weekStart });
+            tasks.push({
+              collectionId: col.id,
+              collectionName: col.name,
+              collectionSlug: col.slug,
+              weekStart,
+            });
           }
         }
         return { tasks };
@@ -209,6 +227,7 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
     let generated = 0;
     let skipped = 0;
     let failed = 0;
+    const digestedSlugs = new Set<string>();
 
     for (let i = 0; i < plan.tasks.length; i++) {
       const task = plan.tasks[i];
@@ -230,8 +249,10 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
           );
         },
       );
-      if (outcome === "generated") generated++;
-      else if (outcome === "skipped") skipped++;
+      if (outcome === "generated") {
+        generated++;
+        digestedSlugs.add(task.collectionSlug);
+      } else if (outcome === "skipped") skipped++;
       else failed++;
     }
 
@@ -242,5 +263,16 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
       skipped,
       failed,
     });
+
+    // Own step so a workflow replay-on-wake can't re-send it: step.do results
+    // are memoized once they resolve, and this call never throws (see
+    // pingAfterDigests / notifyWebRevalidatePaths), so RETRY_REVALIDATE's zero
+    // retries only ever matter for a genuine bug, never a flaky ping.
+    if (digestedSlugs.size > 0) {
+      await step.do("revalidate web", RETRY_REVALIDATE, async () => {
+        await pingAfterDigests(this.env, [...digestedSlugs]);
+        return { pinged: true, collectionSlugs: [...digestedSlugs] };
+      });
+    }
   }
 }

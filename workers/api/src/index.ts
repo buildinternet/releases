@@ -328,6 +328,12 @@ export type Env = {
     // Public web base URL — used by the web revalidate ping and by email/OAuth
     // link building. Defaults to https://releases.sh when unset.
     WEB_BASE_URL?: string;
+    // Bearer key for the web revalidate ping (see web-revalidate.ts). Bound in
+    // prod's Secrets Store only — deliberately unbound in staging, where the
+    // ping no-ops at `no_secret_binding`. A Workflow deployed as part of this
+    // worker (e.g. CollectionSummariesWorkflow) inherits this binding
+    // automatically; no separate wiring needed there.
+    WEB_SERVICE_KEY?: SecretBinding;
     // Deploy-environment discriminator. Set to "production" in the top-level
     // wrangler.jsonc vars and "staging" in the env.staging block. Read by
     // /v1/graphql to gate GraphiQL + introspection. Absent in `wrangler dev`.
@@ -1106,6 +1112,11 @@ export default {
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
         ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
         AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
+        // Weekly-digest ISR revalidation ping (#2331) — only exercised by this
+        // inline fallback path (local dev / no workflow bound); the deployed
+        // workflow path gets the same binding automatically as part of its env.
+        WEB_SERVICE_KEY: env.WEB_SERVICE_KEY,
+        WEB_BASE_URL: env.WEB_BASE_URL,
       };
       if (env.COLLECTION_SUMMARIES_WORKFLOW) {
         ctx.waitUntil(
