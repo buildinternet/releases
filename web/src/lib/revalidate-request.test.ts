@@ -104,4 +104,89 @@ describe("handleRevalidateRequest", () => {
     expect(res.status).toBe(400);
     expect(revalidated).toEqual([]);
   });
+
+  describe("the generalized paths shape", () => {
+    it("still requires the bearer token", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(post({ paths: ["/"] }, null), d);
+      expect(res.status).toBe(401);
+      expect(revalidated).toEqual([]);
+    });
+
+    it("revalidates the homepage and collection paths from a weekly-digest ping", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(
+        post({ paths: ["/", "/collections", "/collections/ai-labs"] }),
+        d,
+      );
+      expect(res.status).toBe(200);
+      expect(revalidated).toEqual(["/", "/collections", "/collections/ai-labs"]);
+      expect(await res.json()).toEqual({
+        revalidated: ["/", "/collections", "/collections/ai-labs"],
+      });
+    });
+
+    it("revalidates an org page path (the shape the per-source ping's derivation uses)", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(
+        post({ paths: ["/vercel", "/vercel/changelog"] }),
+        d,
+      );
+      expect(res.status).toBe(200);
+      expect(revalidated).toEqual(["/vercel", "/vercel/changelog"]);
+    });
+
+    it("dedups repeated paths", async () => {
+      const { deps: d, revalidated } = deps();
+      await handleRevalidateRequest(post({ paths: ["/", "/", "/collections"] }), d);
+      expect(revalidated).toEqual(["/", "/collections"]);
+    });
+
+    it("rejects an empty paths array", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(post({ paths: [] }), d);
+      expect(res.status).toBe(400);
+      expect(revalidated).toEqual([]);
+    });
+
+    it("rejects a paths array over the cap", async () => {
+      const { deps: d, revalidated } = deps();
+      const paths = Array.from({ length: 51 }, (_, i) => `/collections/c${i}`);
+      const res = await handleRevalidateRequest(post({ paths }), d);
+      expect(res.status).toBe(400);
+      expect(revalidated).toEqual([]);
+    });
+
+    it("accepts exactly 50 paths", async () => {
+      const { deps: d, revalidated } = deps();
+      const paths = Array.from({ length: 50 }, (_, i) => `/collections/c${i}`);
+      const res = await handleRevalidateRequest(post({ paths }), d);
+      expect(res.status).toBe(200);
+      expect(revalidated).toHaveLength(50);
+    });
+
+    it("rejects a path outside the allowlist", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(
+        post({ paths: ["/collections/ai-labs/digest/2026-06-08"] }),
+        d,
+      );
+      expect(res.status).toBe(400);
+      expect(revalidated).toEqual([]);
+    });
+
+    it("rejects path-traversal syntax inside a paths entry", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(post({ paths: ["/../etc/passwd"] }), d);
+      expect(res.status).toBe(400);
+      expect(revalidated).toEqual([]);
+    });
+
+    it("rejects a non-string entry in the paths array", async () => {
+      const { deps: d, revalidated } = deps();
+      const res = await handleRevalidateRequest(post({ paths: ["/", 42] }), d);
+      expect(res.status).toBe(400);
+      expect(revalidated).toEqual([]);
+    });
+  });
 });
