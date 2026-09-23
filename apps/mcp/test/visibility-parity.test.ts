@@ -1,6 +1,6 @@
 /**
  * MCP read visibility matches the API (docs/architecture/shared-queries.md,
- * D1–D8). One fixture holds a live row next to a soft-deleted, hidden, or
+ * D1–D9). One fixture holds a live row next to a soft-deleted, hidden, or
  * coverage-side sibling for each case; every test asserts the sibling stays
  * out of MCP output (and, for D2, that a hidden org still resolves).
  */
@@ -30,6 +30,7 @@ import {
   getRelease,
   listCatalog,
   listOrganizations,
+  resolveSource,
 } from "../src/tools";
 
 const WEB = "https://releases.sh";
@@ -348,5 +349,12 @@ describe("D8: stub release locations match the API's order", () => {
     expect(mcpOrder.every((i) => i >= 0)).toBe(true);
     expect(mcpOrder).toEqual([...mcpOrder].sort((a, b) => a - b));
     expect(out).not.toContain("gone.example.com");
+  });
+});
+
+describe("D9: bare slugs skip sources under a deleted org, as /v1/lookups/source-by-slug does", () => {
+  it("resolveSource by bare slug ignores a deleted org's source", async () => {
+    expect(await resolveSource(db, "gone-org")).toBeNull();
+    expect((await resolveSource(db, "standalone"))?.id).toBe("src_standalone");
   });
 });
