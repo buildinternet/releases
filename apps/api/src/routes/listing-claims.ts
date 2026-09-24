@@ -617,7 +617,8 @@ listingClaimRoutes.use("/listing/claim/*", attachFollowsSession);
 listingClaimRoutes.use("/listing/claims", attachFollowsSession);
 // Releasing a claim cuts off its publish tokens, so it takes a real session
 // (cookie or the `releases login` token), never a read-only `relu_` key or an
-// OAuth JWT that attachFollowsSession would otherwise admit.
-listingClaimRoutes.delete("/listing/claims/*", releaseClaimSession);
+// OAuth JWT that attachFollowsSession would otherwise admit. (Only DELETE
+// lives under this path; `use` keeps the gate out of the OpenAPI route list.)
+listingClaimRoutes.use("/listing/claims/*", releaseClaimSession);
 listingClaimRoutes.use("/listing/promote", attachFollowsSession);
 listingClaimRoutes.route("/", listingClaimHandlers);
