@@ -29,6 +29,7 @@ import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { parsePositiveInt } from "./feed-enrich.js";
+import { locallyFetchedSql } from "../queries/source-fetch-routing.js";
 
 export interface SourceStalenessEnv {
   DB: D1Database;
@@ -144,14 +145,10 @@ export async function scanStaleSources(
       and(
         isNull(sources.deletedAt),
         isNotNull(sources.medianGapDays),
-        // Firecrawl sources are covered by scanStaleFirecrawlSources. json_extract
-        // returns 1 for JSON `true`; `IS NOT 1` keeps NULL (absent) rows in.
-        sql`json_extract(${sources.metadata}, '$.firecrawl.enabled') IS NOT 1`,
-        // Push-fed sources (metadata.ingestMode = "push", #2374) are excluded
-        // entirely from this scan — there's no local cadence to be overdue
-        // against. A quieter "no pushes lately" signal is a follow-up, not
-        // this scrape-overdue alarm.
-        sql`json_extract(${sources.metadata}, '$.ingestMode') IS NOT 'push'`,
+        // Firecrawl sources are covered by scanStaleFirecrawlSources; push-fed
+        // sources (#2374) have no local cadence to be overdue against (a
+        // quieter "no pushes lately" signal is a follow-up).
+        locallyFetchedSql(sources.metadata),
       ),
     )
     .groupBy(sources.id);

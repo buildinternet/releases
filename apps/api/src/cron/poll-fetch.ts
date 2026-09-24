@@ -123,6 +123,7 @@ import {
   parsePositiveInt,
   type EnrichOutcome,
 } from "./feed-enrich.js";
+import { locallyFetchedSql } from "../queries/source-fetch-routing.js";
 
 // ── Tier intervals (hours) ──
 // `TIER_INTERVALS` is sourced from @releases/adapters/fetch-plan (imported above)
@@ -335,13 +336,9 @@ export async function queryDueSources(
 
   // Firecrawl-owned sources are ingested via the inbound webhook + workflow, not
   // the poll cron — exclude them from BOTH the inline and workflow fan-out paths
-  // (this query gates both). enabled === true → json_extract returns 1; absent → NULL.
-  const notFirecrawl = sql`(json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') != 1)`;
-
-  // Push-fed sources (metadata.ingestMode = "push", #2374) are fed directly by
-  // their publisher (e.g. actions/publish-changelog) — mirrors notFirecrawl's
-  // NULL-safe shape. Absent → json_extract returns NULL → IS NOT "push" passes.
-  const notPushFed = sql`json_extract(${sourcesActive.metadata}, '$.ingestMode') IS NOT 'push'`;
+  // (this query gates both).
+  // Push-fed sources (#2374) are likewise fed by their publisher, not polled.
+  const notExternallyDriven = locallyFetchedSql(sourcesActive.metadata);
 
   return db
     .select()
@@ -352,8 +349,7 @@ export async function queryDueSources(
         notPaused,
         orgNotFetchPaused,
         backoffReady,
-        notFirecrawl,
-        notPushFed,
+        notExternallyDriven,
         or(...tierConditions),
       ),
     );

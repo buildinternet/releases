@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, ne, or, isNull, sql, asc, inArray } from "drizzle-orm";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
+import { locallyFetchedSql } from "../../queries/source-fetch-routing.js";
 
 export type Candidate = {
   id: string;
@@ -66,13 +67,10 @@ export async function queryCandidates(
       : undefined,
     sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR ${sources.metadata} IS NULL)`,
     // Exclude Firecrawl-owned sources — their monitor fetches them, and the poll
-    // cron drops them the same way (queryDueSources `notFirecrawl`). Without this
+    // cron drops them the same way (`locallyFetchedSql`). Without this
     // a source could be double-fetched by both the monitor and this sweep.
-    sql`(json_extract(${sources.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sources.metadata}, '$.firecrawl.enabled') != 1)`,
-    // Exclude push-fed sources (metadata.ingestMode = "push", #2374) — they're
-    // fed directly by their publisher and never scrape/agent-fetched, so they
-    // must never be flagged into the OrgActor drain either.
-    sql`json_extract(${sources.metadata}, '$.ingestMode') IS NOT 'push'`,
+    // Push-fed sources (#2374) are fed by their publisher and never drained.
+    locallyFetchedSql(sources.metadata),
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
     // Exclude sources whose org has fetch_paused = true (#1057).
     or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
