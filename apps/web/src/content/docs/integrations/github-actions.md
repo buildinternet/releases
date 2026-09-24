@@ -21,6 +21,18 @@ The Action calls `POST /v1/sources/…/releases/batch`. Two kinds of `relk_…` 
 - **A publish token** (the usual choice). If you've verified you own your domain (an ownership claim through the listing flow), you can mint one yourself. It can publish to one source and nothing else: no source edits, no other sources. It stops working if you revoke it or lose the claim. While you're signed in to releases.sh, call `POST /v1/me/publish-tokens` with `{"sourceId": "src_…", "name": "github-actions"}`. The response shows the token once. `GET /v1/me/publish-tokens` lists your tokens and `DELETE /v1/me/publish-tokens/:id` revokes one. These routes need your browser sign-in session; an API key won't work. A button on your account page is coming.
 - **A write-scoped machine token**, issued by a Releases Index admin.
 
+To mint a publish token before the account-page button ships, sign in at releases.sh, open your browser's developer console on any releases.sh page, and run the snippet below with your source id. `credentials: "include"` sends your sign-in cookie. Running it from a releases.sh page matters: the API only accepts this request from the releases.sh origin. Copy the `token` from the response. It won't be shown again.
+
+```js
+const res = await fetch("https://api.releases.sh/v1/me/publish-tokens", {
+  method: "POST",
+  credentials: "include",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ sourceId: "src_…", name: "github-actions" }),
+});
+console.log(await res.json());
+```
+
 Read-only user keys (`relu_…`, including `releases login`) are rejected. Store the token as a repository secret named `RELEASES_API_TOKEN`.
 
 ## 2. Point it at a source

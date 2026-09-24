@@ -21,6 +21,7 @@ import {
   publicReadAuthMiddleware,
   tokensAuthMiddleware,
 } from "../src/middleware/auth.js";
+import { publicRateLimitMiddleware } from "../src/middleware/rate-limit.js";
 import { adminRoutes, publicReadRoutes } from "../src/route-namespaces.js";
 import { mountV1Routes } from "../src/v1-routes.js";
 import { createTestDb, type TestDb } from "./setup";
@@ -664,5 +665,45 @@ describe("admin token surface with publish tokens present", () => {
     expect(res.status).toBe(400);
     const row = await db.select().from(apiTokens).where(eq(apiTokens.id, id)).get();
     expect(JSON.parse(row!.scopes)).toEqual(["publish"]);
+  });
+});
+
+describe("rate-limit tier for publish tokens", () => {
+  function limiter() {
+    const calls: string[] = [];
+    return {
+      calls,
+      async limit({ key }: { key: string }) {
+        calls.push(key);
+        return { success: true };
+      },
+    };
+  }
+
+  it("puts a publish token's public reads on the anonymous per-IP rung, not the machine rung", async () => {
+    const { token } = await mintToken();
+    const app = new Hono();
+    app.use("*", publicRateLimitMiddleware);
+    app.get("/probe", (c) => c.text("ok"));
+    const ipLimiter = limiter();
+    const tokenLimiter = limiter();
+    const res = await app.fetch(
+      new Request("https://api.test/probe", {
+        headers: { ...bearer(token), "cf-connecting-ip": "203.0.113.9" },
+      }),
+      {
+        DB: db,
+        RELEASES_API_KEY: { get: () => Promise.resolve(ROOT) },
+        RATE_LIMIT_ENABLED: "true",
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        PUBLIC_RATE_LIMITER: ipLimiter,
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        ENVIRONMENT: "test",
+      },
+      { waitUntil: () => {}, passThroughOnException: () => {} } as never,
+    );
+    expect(res.status).toBe(200);
+    expect(ipLimiter.calls).toEqual(["203.0.113.9"]);
+    expect(tokenLimiter.calls).toEqual([]);
   });
 });
