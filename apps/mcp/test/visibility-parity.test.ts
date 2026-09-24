@@ -1,6 +1,6 @@
 /**
  * MCP read visibility matches the API (docs/architecture/shared-queries.md,
- * D1–D9). One fixture holds a live row next to a soft-deleted, hidden, or
+ * D1–D12). One fixture holds a live row next to a soft-deleted, hidden, or
  * coverage-side sibling for each case; every test asserts the sibling stays
  * out of MCP output (and, for D2, that a hidden org still resolves).
  */
@@ -31,6 +31,7 @@ import {
   listCatalog,
   listOrganizations,
   resolveSource,
+  search,
 } from "../src/tools";
 
 const WEB = "https://releases.sh";
@@ -104,6 +105,7 @@ beforeAll(async () => {
       deletedAt: DELETED_AT,
     },
     { id: "prod_stub", name: "Stub App", slug: "stub-app", orgId: "org_stub" },
+    { id: "prod_shadow", name: "Shadow App", slug: "shadow-app", orgId: "org_live" },
   ]);
 
   await tdb.db
@@ -118,6 +120,7 @@ beforeAll(async () => {
       src("src_hidden_org", "org_hidden"),
       src("src_gone_org", "org_gone"),
       src("src_stub_product", "org_stub", { productId: "prod_stub" }),
+      src("src_shadow", "org_live", { productId: "prod_shadow", isHidden: true }),
     ]);
 
   await tdb.db
@@ -356,5 +359,37 @@ describe("D9: bare slugs skip sources under a deleted org, as /v1/lookups/source
   it("resolveSource by bare slug ignores a deleted org's source", async () => {
     expect(await resolveSource(db, "gone-org")).toBeNull();
     expect((await resolveSource(db, "standalone"))?.id).toBe("src_standalone");
+  });
+});
+
+function searchText(ret: { result: { content: { text?: string }[] } }): string {
+  return ret.result.content.map((c) => c.text ?? "").join("\n");
+}
+
+describe("D10: search org candidates match /v1/search (searchOrgs)", () => {
+  it("does not surface a soft-deleted org, even with include_empty", async () => {
+    const out = searchText(
+      await search(db, { query: "Co", type: ["orgs"], mode: "lexical", include_empty: true }),
+    );
+    expect(out).toContain("Live Co");
+    expect(out).not.toContain("Gone Co");
+  });
+});
+
+describe("D11: search catalog candidates match /v1/search (searchProducts / searchSources)", () => {
+  it("drops a product whose only source is hidden", async () => {
+    const out = searchText(await search(db, { query: "App", type: ["catalog"], mode: "lexical" }));
+    expect(out).toContain("Live App");
+    expect(out).not.toContain("Shadow App");
+    expect(out).not.toContain("Dead App");
+  });
+});
+
+describe("D12: get_organization products match GET /v1/orgs/:slug", () => {
+  it("omits a soft-deleted product and one with no visible source", async () => {
+    const out = textOf(await getOrganization(db, { identifier: "live" }));
+    expect(out).toContain("Live App");
+    expect(out).not.toContain("Dead App");
+    expect(out).not.toContain("Shadow App");
   });
 });

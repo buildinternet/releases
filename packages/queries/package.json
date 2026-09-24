@@ -13,6 +13,7 @@
     "./pagination": "./src/pagination.ts",
     "./release-locations": "./src/release-locations.ts",
     "./releases": "./src/releases.ts",
+    "./search-entities": "./src/search-entities.ts",
     "./sql-fragments": "./src/sql-fragments.ts"
   },
   "dependencies": {
