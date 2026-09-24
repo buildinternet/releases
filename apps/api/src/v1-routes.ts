@@ -133,8 +133,9 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", collectionRoutes);
   v1.route("/", apiTokenRoutes);
   v1.route("/", userApiKeyRoutes);
-  // Before meRoutes: publish-token routes are cookie-session only and must
-  // answer before meRoutes' `/me/*` session-or-Bearer gate would run.
+  // Before meRoutes: publish-token routes are session-only (cookie, or the
+  // `releases login` session token) and must answer before meRoutes' `/me/*`
+  // gate, which would also admit a `relu_` key, runs.
   v1.route("/", mePublishTokenRoutes);
   v1.route("/", meRoutes);
   v1.route("/", workspaceRoutes);

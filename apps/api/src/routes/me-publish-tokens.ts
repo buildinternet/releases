@@ -1,8 +1,10 @@
 /**
  * Self-serve publish tokens (#2373): a verified domain owner mints a `relk_`
  * token bound to ONE of their org's sources, for the publish-changelog GitHub
- * Action. Cookie-session only — a `relu_` key or other Bearer credential can't
- * reach these routes, so a read-only credential can never mint a write one.
+ * Action. Session only — the web cookie session, or the Better Auth session
+ * token `releases login` stores (#2388). A `relu_` key, `relk_` token or OAuth
+ * JWT can't reach these routes, so a read-only credential can never mint a
+ * write one.
  * Gated on the self-serve listing kill switch (`listing-self-serve-enabled`),
  * the same lane that issues the ownership claims these tokens depend on.
  */
@@ -27,7 +29,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { FLAGS } from "@releases/lib/flags";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
-import { requireCookieSessionWithFlag } from "../middleware/auth.js";
+import { requireSessionOnlyWithFlag } from "../middleware/auth.js";
 import { isExactWebOrigin } from "../auth/index.js";
 import type { MiddlewareHandler } from "hono";
 import { respondError } from "../lib/error-response.js";
@@ -59,7 +61,7 @@ mePublishTokenHandlers.post(
     tags: ["Account"],
     summary: "Mint a publish token for one of your sources",
     description:
-      "Signed-in (cookie session) only — Bearer credentials are not accepted. Mints a `relk_` token bound to one source, usable ONLY on that source's `POST …/releases/batch` route (e.g. from the publish-changelog GitHub Action). Requires a verified ownership claim on the source's organization; the token stops working if the claim or the source goes away. The plaintext token is returned once. At most 5 active publish tokens per source per user.",
+      "Signed-in session only: the web cookie session, or the session token from `releases login` as a Bearer. API keys, machine tokens and OAuth access tokens are refused. Cookie requests must come from the web origin. Mints a `relk_` token bound to one source, usable ONLY on that source's `POST …/releases/batch` route (e.g. from the publish-changelog GitHub Action). Requires a verified ownership claim on the source's organization; the token stops working if the claim or the source goes away. The plaintext token is returned once. At most 5 active publish tokens per source per user.",
     responses: {
       201: {
         description: "Created publish token, including the one-time secret",
@@ -154,7 +156,7 @@ mePublishTokenHandlers.get(
     tags: ["Account"],
     summary: "List your publish tokens",
     description:
-      "Signed-in (cookie session) only. Lists the caller's publish tokens, active and revoked, newest first. Never includes the secret.",
+      "Signed-in session only (cookie, or the `releases login` session token). Lists the caller's publish tokens, active and revoked, newest first. Never includes the secret.",
     responses: {
       200: {
         description: "The caller's publish tokens",
@@ -181,7 +183,7 @@ mePublishTokenHandlers.delete(
     tags: ["Account"],
     summary: "Revoke a publish token",
     description:
-      "Signed-in (cookie session) only. Revokes one of the caller's publish tokens; it stops working immediately. 404 when the id isn't a publish token the caller owns. Idempotent.",
+      "Signed-in session only (cookie, or the `releases login` session token). Revokes one of the caller's publish tokens; it stops working immediately. 404 when the id isn't a publish token the caller owns. Idempotent.",
     responses: {
       200: {
         description: "Revoked",
@@ -211,8 +213,8 @@ mePublishTokenHandlers.delete(
   },
 );
 
-/** Kill switch + cookie-session gate for every publish-token route. */
-export const requirePublishTokenSession = requireCookieSessionWithFlag(
+/** Kill switch + session-only gate (cookie, or the CLI's login session) for every publish-token route. */
+export const requirePublishTokenSession = requireSessionOnlyWithFlag(
   FLAGS.listingSelfServeEnabled,
   (e) => e.LISTING_SELF_SERVE_ENABLED,
 );
@@ -228,6 +230,10 @@ export const requireWebOriginOnMutation: MiddlewareHandler<Env> = async (c, next
   if (c.req.method === "GET" || c.req.method === "HEAD" || c.req.method === "OPTIONS") {
     return next();
   }
+  // Bearer lane (the CLI's login session): the session gate already resolved
+  // it from the header alone, and a browser never sends one on its own, so
+  // there's no cross-site request to guard against.
+  if (c.req.header("Authorization") !== undefined) return next();
   if (!isExactWebOrigin(c.req.header("Origin"), c.env)) {
     logEvent("warn", {
       component: "publish-tokens",

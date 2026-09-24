@@ -42,8 +42,10 @@ let verifyApiKey: ReturnType<typeof mock>;
 
 /**
  * Better Auth seam: a cookie maps to a session user; so does a bearer-plugin
- * style `Authorization: Bearer sess_owner` (to prove the mint gate ignores
- * that lane too). `verifyApiKey` accepts any `relu_` key as OWNER — what
+ * session token `Authorization: Bearer sess_owner` (the `releases login`
+ * lane, #2388). A JWT-shaped or `relu_` Bearer would ALSO resolve to OWNER
+ * here, so a pass on those proves the gate refused them before any lookup.
+ * `verifyApiKey` accepts any `relu_` key as OWNER — what
  * `requireFollowsPrincipal` would honor.
  */
 function betterAuthSeam() {
@@ -52,7 +54,12 @@ function betterAuthSeam() {
       getSession: async ({ headers }: { headers: Headers }) => {
         const cookie = headers.get("cookie");
         const authz = headers.get("authorization");
-        if (cookie === COOKIE_OWNER || authz === "Bearer sess_owner")
+        if (
+          cookie === COOKIE_OWNER ||
+          authz === "Bearer sess_owner" ||
+          authz === "Bearer relu_somekey" ||
+          authz === `Bearer ${JWT_LIKE}`
+        )
           return { user: { id: OWNER, email: "owner@example.com", name: "Owner" } };
         if (cookie === COOKIE_OTHER)
           return { user: { id: OTHER, email: "other@example.com", name: "Other" } };
@@ -109,6 +116,8 @@ function json(method: string, body: unknown, headers: Record<string, string> = {
 }
 
 const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
+/** Three base64url segments — routed as an OAuth JWT, never a session token. */
+const JWT_LIKE = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1In0.c2ln";
 
 async function seed() {
   await db.insert(organizations).values([
@@ -316,7 +325,7 @@ describe("POST /v1/me/publish-tokens (mint)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects a relu_ user key (Bearer) — cookie session only", async () => {
+  it("rejects a relu_ user key (Bearer) before any session lookup", async () => {
     const res = await call(
       "/v1/me/publish-tokens",
       json("POST", { sourceId: "src_a1", name: "x" }, bearer("relu_somekey")),
@@ -327,12 +336,46 @@ describe("POST /v1/me/publish-tokens (mint)", () => {
     expect(await db.select().from(apiTokens).all()).toHaveLength(0);
   });
 
-  it("rejects a bearer-plugin session token too", async () => {
+  it("accepts the `releases login` session token as a Bearer, with no Origin (#2388)", async () => {
+    // No Origin header at all, as a CLI sends it (json() would add one).
+    const res = await call("/v1/me/publish-tokens", {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: "bearer sess_owner" },
+      body: JSON.stringify({ sourceId: "src_a1", name: "cli" }),
+    });
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+
+    const list = await call("/v1/me/publish-tokens", { headers: bearer("sess_owner") });
+    expect(((await list.json()) as { publishTokens: unknown[] }).publishTokens).toHaveLength(1);
+
+    const del = await call(`/v1/me/publish-tokens/${id}`, {
+      method: "DELETE",
+      headers: bearer("sess_owner"),
+    });
+    expect(del.status).toBe(200);
+  });
+
+  it("refuses an OAuth JWT Bearer before any session lookup", async () => {
     const res = await call(
       "/v1/me/publish-tokens",
-      json("POST", { sourceId: "src_a1", name: "x" }, bearer("sess_owner")),
+      json("POST", { sourceId: "src_a1", name: "x" }, bearer(JWT_LIKE)),
     );
     expect(res.status).toBe(401);
+    expect(await db.select().from(apiTokens).all()).toHaveLength(0);
+  });
+
+  it("never falls back to the cookie when a Bearer is present", async () => {
+    const res = await call(
+      "/v1/me/publish-tokens",
+      json(
+        "POST",
+        { sourceId: "src_a1", name: "x" },
+        { Cookie: COOKIE_OWNER, Origin: "https://evil.releases.sh", ...bearer("junk") },
+      ),
+    );
+    expect(res.status).toBe(401);
+    expect(await db.select().from(apiTokens).all()).toHaveLength(0);
   });
 
   it("rejects a relk_ machine token, even root", async () => {
