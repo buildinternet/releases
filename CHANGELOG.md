@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 23, 2026
+
+**Added**
+- `GET /v1/collections/:slug/digests/latest` — fetch the current week's digest for a collection without knowing the week date; the collection page now loads it in parallel with the feed instead of sequentially.
+
+**Changed**
+- Weekly digest summaries now describe each product's week as one story — multiple updates from the same CLI, SDK, or app are grouped into a single account instead of being recapped version-by-version; a version number appears only when it is the news (a major release, or one worth skipping).
+- MCP tools now follow the same visibility rules as the REST API — deleted and hidden orgs, products, and sources no longer appear in lookups, search, the org directory, or latest releases, and tab completion skips them too.
+
+**Fixed**
+- Searching by product scope no longer drops live results when the product also has hidden or deleted sources.
+- Source detail no longer shows tombstoned slugs for a parent org or product that was soft-deleted — those fields return absent instead.
+
 ## September 22, 2026
 
 **Added**
@@ -12,6 +25,11 @@ Interest alerts let you describe what you care about in plain language, and hear
 Write the interest the way you would say it — "Slack integrations with B2B software" is enough. Releases Index looks only at releases from the organizations and products you follow. When a new release matches, you get an email, a webhook, or both. The default confidence is 0.80, which you can raise or lower, and you can keep up to five interests. The words you write stay private to your account.
 
 Turn one on from Account → Notifications. Follows, the digest, and webhooks still cover every release you follow. An interest alert sits beside them, as the note for the release that is actually about the thing you named.
+
+- Interest alerts can now be edited and show recent match history — update the query, confidence level, or delivery channel from Account → Notifications and see how many times each alert matched in the last 7 and 30 days.
+- Weekly digests on the homepage — a full-width reel shows the latest issue from each collection with section rows, summaries on hover, and links that go directly to the upstream release; collection pages open with a latest-issue hero and week dividers in the feed.
+- Workspace webhooks — teams can add a shared Slack, Discord, or signed-JSON webhook under Account → Workspace → Webhooks; owners and admins manage it, members can view and test deliveries, and all owners and admins are notified on auto-pause.
+- MCP tools for webhooks — `list_webhooks` and `manage_webhook` cover both personal and workspace webhooks (create, update, delete, test, and rotate secret) from any MCP client; requires a signed-in user.
 
 ## September 17, 2026
 
