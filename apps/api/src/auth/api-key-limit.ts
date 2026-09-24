@@ -11,11 +11,13 @@ import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { apikey } from "../db/schema-auth.js";
 
 /**
- * Max active keys per user. "Active" = enabled AND not past its expiry. Start
- * conservative — plenty for a CLI login plus a couple of integrations, tight
- * enough that runaway minting trips the cap fast.
+ * Max active keys per user. "Active" = enabled AND not past its expiry. Rate
+ * limits are per account, not per key, so this only bounds table growth from
+ * runaway minting. 25 leaves room for several machines, CI, and scripts; 5 was
+ * tripped by ordinary use while every `releases login` leaked a key
+ * (releases-cli#418).
  */
-export const USER_API_KEY_MAX_ACTIVE = 5;
+export const USER_API_KEY_MAX_ACTIVE = 25;
 
 /**
  * Error code + caller-facing message for a tripped cap, shared by the Better
