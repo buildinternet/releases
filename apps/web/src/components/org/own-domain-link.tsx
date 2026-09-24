@@ -37,8 +37,8 @@ export function OwnDomainLink({
           <DialogHeader>
             <DialogTitle>Verify you own {domain}</DialogTitle>
             <DialogDescription>
-              Verified owners can publish release notes to Releases Index directly, with no
-              scraping.
+              Verified owners can publish release notes to Releases Index directly, so new releases
+              show up right away instead of waiting for our next check.
             </DialogDescription>
           </DialogHeader>
           {open && <ClaimPanel orgSlug={orgSlug} domain={domain} tracked />}

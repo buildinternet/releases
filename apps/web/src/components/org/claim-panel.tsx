@@ -161,7 +161,7 @@ function LocatorEligibilityPreview({
           title="Queued for curator review"
           tone="amber"
           items={queued}
-          note="Bare pages and changelog files need scrape setup — nothing billable runs until a curator enables them."
+          note="Web pages and changelog files need a quick review from our team before we start checking them."
         />
       )}
     </div>
