@@ -159,7 +159,7 @@ export function PublishTokensPanel() {
         <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
           {data.verifiedOrgCount > 0
             ? "Your verified organization has no sources yet. Once it’s tracked, you can mint a token here to publish release notes straight from GitHub Actions."
-            : "Own a domain listed on Releases Index? Verify it from your organization’s page, then mint a token here to publish release notes straight from GitHub Actions."}{" "}
+            : "Own a domain listed on Releases Index? Verify it from your organization’s page (look for “Own your-domain.com?”), then mint a token here to publish release notes straight from GitHub Actions."}{" "}
           <Link href={DOCS_HREF} className="underline">
             How it works
           </Link>

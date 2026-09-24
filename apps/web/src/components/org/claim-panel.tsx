@@ -34,6 +34,11 @@ import type {
  *     tracking" CTA.
  *   - If promotion is off: verified-but-waiting copy, no dead button (the
  *     API 404s promote when the kill switch is off).
+ *
+ * `tracked` (#2393) is the same flow for an org we already track, opened from
+ * the org rail's `OwnDomainLink` dialog: no card chrome or heading (the dialog
+ * has both), and a verified claim points at publish tokens instead of
+ * promotion, which only applies to stubs.
  */
 
 type PanelState =
@@ -156,7 +161,7 @@ function LocatorEligibilityPreview({
           title="Queued for curator review"
           tone="amber"
           items={queued}
-          note="Bare pages and changelog files need scrape setup — nothing billable runs until a curator enables them."
+          note="Web pages and changelog files need a quick review from our team before we start checking them."
         />
       )}
     </div>
@@ -164,14 +169,16 @@ function LocatorEligibilityPreview({
 }
 
 /** Body for the verified phase — promotion on vs waiting. */
-function VerifiedBody({
+export function VerifiedBody({
   claim,
+  tracked,
   promotionEnabled,
   live,
   queued,
   onPromote,
 }: {
   claim: OrgClaim;
+  tracked: boolean;
   promotionEnabled: boolean;
   live: LocatorPreview[];
   queued: LocatorPreview[];
@@ -182,6 +189,23 @@ function VerifiedBody({
       Verified via {methodLabel(claim.method)}.
     </p>
   );
+
+  if (tracked) {
+    return (
+      <div>
+        {verifiedLine}
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
+          You can now mint a publish token and push release notes from GitHub Actions.
+        </p>
+        <Link
+          href="/account/webhooks"
+          className="mt-2 inline-block text-[13px] font-medium underline underline-offset-2"
+        >
+          Create a publish token
+        </Link>
+      </div>
+    );
+  }
 
   if (!promotionEnabled) {
     return (
@@ -262,11 +286,14 @@ export function ClaimPanel({
   orgSlug,
   domain,
   locations = [],
+  tracked = false,
 }: {
   orgSlug: string;
   domain: string | null;
   /** Declared release locations — used for the promote eligibility preview. */
   locations?: ReleaseLocationItem[];
+  /** Already-tracked org, rendered bare inside a dialog (#2393). */
+  tracked?: boolean;
 }) {
   const { data: sessionData, isPending } = useSession();
   const user = sessionData?.user;
@@ -353,37 +380,54 @@ export function ClaimPanel({
 
   // Caps load before we leave "resolving", so this is always set when we render.
   const promotionEnabled = capabilities?.promotionEnabled === true;
-  const canPromote = promotionEnabled && live.length + queued.length > 0;
+  const canPromote = !tracked && promotionEnabled && live.length + queued.length > 0;
 
-  if (!user) {
-    return (
+  const shell = (children: React.ReactNode) =>
+    tracked ? (
+      <div>{children}</div>
+    ) : (
       <section className="mt-4 rounded-[12px] border border-[var(--line)] bg-[var(--surface-2)] p-5">
         <h2 className="text-[15px] font-semibold text-[var(--fg)]">Own this domain?</h2>
-        <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
-          <Link
-            href={`/login?redirect=%2F${encodeURIComponent(orgSlug)}`}
-            className="font-medium underline underline-offset-2"
-          >
-            Sign in
-          </Link>{" "}
-          {promotionEnabled
-            ? `to prove you control ${domain} and unlock self-serve tracking.`
-            : `to prove you control ${domain}.`}
-        </p>
+        {children}
       </section>
+    );
+
+  // The dialog is the only entry point on a tracked org, so say why it's empty
+  // rather than offering a claim the API will 404.
+  if (tracked && capabilities?.selfServeEnabled === false) {
+    return shell(
+      <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
+        Ownership claims aren&apos;t open right now. Please check back later.
+      </p>,
     );
   }
 
-  return (
-    <section className="mt-4 rounded-[12px] border border-[var(--line)] bg-[var(--surface-2)] p-5">
-      <h2 className="text-[15px] font-semibold text-[var(--fg)]">Own this domain?</h2>
+  if (!user) {
+    return shell(
+      <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
+        <Link
+          href={`/login?redirect=%2F${encodeURIComponent(orgSlug)}`}
+          className="font-medium underline underline-offset-2"
+        >
+          Sign in
+        </Link>{" "}
+        {promotionEnabled && !tracked
+          ? `to prove you control ${domain} and unlock self-serve tracking.`
+          : `to prove you control ${domain}.`}
+      </p>,
+    );
+  }
 
+  return shell(
+    <>
       {state.phase === "idle" && (
         <>
           <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
-            {promotionEnabled
-              ? `Prove you control ${domain} to unlock self-serve tracking.`
-              : `Prove you control ${domain}. Verified ownership helps prioritize tracking.`}
+            {tracked
+              ? `Prove you control ${domain} to publish release notes straight from GitHub Actions.`
+              : promotionEnabled
+                ? `Prove you control ${domain} to unlock self-serve tracking.`
+                : `Prove you control ${domain}. Verified ownership helps prioritize tracking.`}
           </p>
           <button type="button" onClick={onStart} className={`mt-3 ${BTN_CLASS}`}>
             Start a claim
@@ -407,6 +451,7 @@ export function ClaimPanel({
       {state.phase === "verified" && (
         <VerifiedBody
           claim={state.claim}
+          tracked={tracked}
           promotionEnabled={promotionEnabled}
           live={live}
           queued={queued}
@@ -440,7 +485,7 @@ export function ClaimPanel({
           onVerify={onVerify}
         />
       )}
-    </section>
+    </>,
   );
 }
 

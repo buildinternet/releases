@@ -10,7 +10,7 @@ adminOnly: false
 
 When the file is live, [check and activate on the submit page](/submit).
 
-If the notes themselves live in git, you can also [publish from GitHub Actions](/docs/integrations/github-actions) so a push upserts releases without waiting on scrape polling.
+If the notes themselves live in git, you can also [publish from GitHub Actions](/docs/integrations/github-actions) so a push updates your releases right away, without waiting for our next check.
 
 ## Fast track: let an agent write it
 
@@ -116,7 +116,7 @@ Repo-root `releases.json` binds **that repo** only (`product` + `releases[]`). U
 
 1. [Submit → check your domain](/submit) and activate if you're unlisted.
 2. The registry re-reads the file on a regular sweep; later edits land without re-submission.
-3. **Feeds / GitHub / App Store** go live after a quick automated check. **Plain web pages** are curator-reviewed before crawl.
+3. **Feeds / GitHub / App Store** go live after a quick automated check. **Plain web pages** get a quick review from our team before we start checking them.
 4. The registry only fills in blanks. It never overwrites curator or editorial fields, and an invalid or missing file changes nothing.
 
 No manifest yet? [Suggest a changelog URL](/submit) for curator review.
