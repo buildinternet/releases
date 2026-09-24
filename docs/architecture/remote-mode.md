@@ -84,20 +84,26 @@ ordinary `relk_` row in `api_tokens` with `principal_type = 'user'`,
 route rejects it.
 
 - **Mint / list / revoke:** `POST|GET /v1/me/publish-tokens`,
-  `DELETE /v1/me/publish-tokens/:id` (`routes/me-publish-tokens.ts`). **Cookie
-  session only.** The gate strips `Authorization` before the session lookup, so a
-  `relu_` key, an OAuth JWT, or a bearer-plugin session token can't mint. A
-  read-only credential must never turn into a write one. Mint needs a `verified`
+  `DELETE /v1/me/publish-tokens/:id` (`routes/me-publish-tokens.ts`). **Session
+  only** (`requireSessionOnlyWithFlag`), one lane per request: the web cookie
+  session, or (when `Authorization` is present) a Better Auth session token as
+  Bearer, the one `releases login` stores after the browser device approval
+  (#2388). On the Bearer lane the cookie is dropped before the lookup, and a
+  `rel?_` key/token or a JWT-shaped Bearer is refused unverified, so a `relu_`
+  key, a machine token, or an OAuth JWT (MCP clients are read-capped) can't
+  mint. A read-only credential must never turn into a write one; a session token
+  can't be derived from a key because the api-key plugin issues no sessions. Mint needs a `verified`
   `org_claims` row on the source's org (403 otherwise). A missing or soft-deleted
   source is a 404. The cap is 5 active tokens per (user, source), enforced by one
   capped `INSERT … SELECT … WHERE count < 5 AND EXISTS(verified claim)`; over the
   cap is a 409 `api_key_limit`. The plaintext is returned once. Gated on the
   `listing-self-serve-enabled` kill switch, the same one the claim routes use.
-  Mint and revoke also require an `Origin` that is **exactly** the web origin
+  On the cookie lane, mint and revoke also require an `Origin` that is **exactly** the web origin
   (`isExactWebOrigin`, from `WEB_BASE_URL`; loopback off-prod). A missing
   `Origin` is refused. The credentialed CORS allow-list reflects any
   releases-family subdomain, so without this check a compromised sibling origin
-  could mint a token with a victim's cookie and read it back.
+  could mint a token with a victim's cookie and read it back. The Bearer lane skips
+  the origin check: a browser never attaches a Bearer on its own.
 - **Verification:** `verifyApiToken` returns `sourceId` and `principalId`, and
   denies any row that breaks the shape: a source-bound row must carry exactly
   `["publish"]` and a user owner, and `publish` without a source is denied. On

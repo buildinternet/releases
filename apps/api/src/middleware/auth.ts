@@ -672,15 +672,32 @@ function requireSessionWithFlag(
 }
 
 /**
- * Cookie-session-only gate behind a feature flag (404 when off). Unlike
- * {@link requireFollowsPrincipal} it accepts NO Bearer lane: the
- * `Authorization` header is stripped before the session lookup, so neither a
- * `relu_` key, an OAuth JWT, nor a bearer-plugin session token can satisfy it,
- * and any `session` an earlier middleware attached is overwritten. Use it for
- * surfaces that mint credentials stronger than the ones a Bearer lane carries
- * (a read-only user key must never mint a write-capable token).
+ * A presented Bearer that is some OTHER credential, never a Better Auth
+ * session token: a `rel?_` key/token (`relk_`, `relu_`, feed/digest/verify
+ * tokens) or an OAuth JWT. Refused before any session lookup.
  */
-export function requireCookieSessionWithFlag(
+function isNonSessionBearer(raw: string): boolean {
+  return /^rel[a-z]_/.test(raw) || isJwtShaped(raw);
+}
+
+/**
+ * Session-only gate behind a feature flag (404 when off), for surfaces that
+ * mint credentials stronger than a key carries (a read-only `relu_` key must
+ * never mint a write-capable token). Exactly one lane per request:
+ *
+ *   • `Authorization` present → it must be a Better Auth **session token**
+ *     (the bearer-plugin token `releases login` stores after the browser
+ *     device approval, #2388). Keys, machine tokens and OAuth JWTs are refused
+ *     unverified, and the cookie is dropped so a junk header can't fall back
+ *     to it.
+ *   • no `Authorization` → the cookie session.
+ *
+ * Callers that also need CSRF protection check the origin only on the cookie
+ * lane (see `requireWebOriginOnMutation`): a browser never attaches a Bearer
+ * on its own, so that lane can't be ridden cross-site. Any `session` an
+ * earlier middleware attached is overwritten.
+ */
+export function requireSessionOnlyWithFlag(
   flagDef: FlagDef,
   envValue: (e: Env["Bindings"]) => string | undefined,
 ): MiddlewareHandler<Env> {
@@ -689,7 +706,17 @@ export function requireCookieSessionWithFlag(
       return respondError(c, new NotFoundError("Not found"));
     }
     const headers = new Headers(c.req.raw.headers);
-    headers.delete("authorization");
+    const authz = headers.get("authorization");
+    if (authz !== null) {
+      // Auth schemes are case-insensitive (RFC 9110); hand Better Auth the
+      // canonical form.
+      const token = /^bearer\s+/i.test(authz) ? authz.replace(/^bearer\s+/i, "").trim() : "";
+      if (!token || isNonSessionBearer(token)) {
+        return respondError(c, new UnauthorizedError("Sign in required"));
+      }
+      headers.set("authorization", `Bearer ${token}`);
+      headers.delete("cookie");
+    }
     const auth = await getOrCreateAuth(c);
     const session = await auth.api.getSession({ headers });
     if (!session?.user?.id) {
