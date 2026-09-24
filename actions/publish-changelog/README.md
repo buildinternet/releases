@@ -61,19 +61,7 @@ jobs:
 
 ### Publish tokens
 
-If you've verified you own your domain, you can mint a token yourself that publishes to one source and nothing else. While signed in to releases.sh (browser session, not an API key), call `POST https://api.releases.sh/v1/me/publish-tokens` with `{"sourceId": "src_…", "name": "github-actions"}`. The token is shown once. Store it as `RELEASES_API_TOKEN`. List tokens with `GET /v1/me/publish-tokens` and revoke one with `DELETE /v1/me/publish-tokens/:id`. A token stops working if you revoke it or lose the ownership claim.
-
-The request must come from a signed-in releases.sh page, because the API only accepts it from that origin. Until the account page has a button, run this in the browser console on releases.sh:
-
-```js
-const res = await fetch("https://api.releases.sh/v1/me/publish-tokens", {
-  method: "POST",
-  credentials: "include",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ sourceId: "src_…", name: "github-actions" }),
-});
-console.log(await res.json());
-```
+If you've verified you own your domain, you can mint a token yourself that publishes to one source and nothing else. Sign in at releases.sh and open [Account → Webhooks & API](https://releases.sh/account/webhooks). Under **Publish tokens**, pick the source, create the token, and copy it. It's shown once, along with the workflow step to paste. Store it as `RELEASES_API_TOKEN`. The same panel lists your tokens and revokes them. A token stops working if you revoke it or lose the ownership claim.
 
 ## Outputs
 

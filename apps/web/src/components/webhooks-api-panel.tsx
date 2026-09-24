@@ -6,6 +6,7 @@ import { getDeveloperSettings } from "@/lib/me-settings";
 import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";
 import { ApiKeysPanel } from "@/components/api-keys-panel";
 import { WebhooksPanel } from "@/components/webhooks-panel";
+import { PublishTokensPanel } from "@/components/publish-tokens-panel";
 import { PanelGrid, ErrorText, secondaryButtonClass } from "@releases/design-system";
 import { PromoRail } from "@/components/account/promo-rail";
 import { webhookCreateLoginPath, type WebhookCreatePrefill } from "@/lib/webhook-create";
@@ -68,6 +69,7 @@ export function WebhooksApiPanel({
         <section>
           <WebhooksPanel initialWebhooks={data.webhooks} createPrefill={createPrefill} />
         </section>
+        <PublishTokensPanel />
       </div>
     </PanelGrid>
   );
