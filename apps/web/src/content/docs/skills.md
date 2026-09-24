@@ -34,7 +34,7 @@ If you're on Claude Code and also want the bundled MCP connection and `/releases
 /plugin install releases@releases
 ```
 
-Claude Code doesn't auto-update third-party plugins by default. To get new skills as they ship, run `/plugin`, open **Marketplaces**, select `releases`, and turn on auto-update. To update once by hand, run `/plugin marketplace update releases`.
+Claude Code doesn't auto-update third-party plugins by default. To get new skills as they ship, run `/plugin`, open **Marketplaces**, select `releases`, and turn on auto-update. To update once by hand, run `/plugin marketplace update releases` to refresh the listing. Then run `claude plugin update releases@releases --scope user`, using the scope you installed with, and restart Claude Code.
 
 ## What the skills do
 
