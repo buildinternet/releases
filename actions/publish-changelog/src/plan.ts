@@ -9,12 +9,19 @@
  *
  * Diff is keyed on version or date so a re-run of the same commit POSTs the
  * same URLs; `mode: "upsert-content"` then no-ops when the body is unchanged.
+ *
+ * A third mode — directory mode, one MDX/Markdown file per entry with
+ * frontmatter metadata — is planned by `planDirectoryIngest` below. It shares
+ * the `PlannedRelease` shape and `renderUrlTemplate`, but the changed-file
+ * list comes from `git diff --name-status` (see git.ts) rather than
+ * diffing two full-file snapshots.
  */
 import { parseChangelog as parseVersioned } from "../../../packages/core/src/changelog-parse";
 import {
   parseChangelog as parseDated,
   type ChangelogSection,
 } from "../../../scripts/changelog/changelog-md";
+import { extractTitleHeading, flattenMdxToMarkdown, parseFrontmatter } from "./mdx";
 
 export type IngestFormat =
   | "keep-a-changelog"
@@ -49,7 +56,7 @@ export type PlanUrlVars = {
 };
 
 export type PlanOptions = {
-  /** `{key}`, `{version}`, `{date}`, `{path}` are interpolated. */
+  /** `{key}`, `{version}`, `{date}`, `{path}`, `{slug}` are interpolated. */
   urlTemplate: string;
   changelogPath?: string;
 };
@@ -110,10 +117,11 @@ function parseSections(markdown: string): { format: IngestFormat; sections: Sect
   return { format: "unknown", sections: [] };
 }
 
+/** `{slug}` is an alias for `{key}` — directory mode's key is the entry's slug. */
 export function renderUrlTemplate(template: string, vars: PlanUrlVars): string {
-  return template.replace(/\{(key|version|date|path)\}/g, (_, name: keyof PlanUrlVars) => {
-    return vars[name] ?? "";
-  });
+  return template.replace(/\{(key|version|date|path|slug)\}/g, (_, name: string) =>
+    name === "slug" ? vars.key : vars[name as keyof PlanUrlVars],
+  );
 }
 
 export function releaseUrl(section: Section, opts: PlanOptions): string {
@@ -200,4 +208,151 @@ export function planChangelogIngest(
 export function isUnparsableChangelog(afterMd: string): boolean {
   if (afterMd.trim().length === 0) return false;
   return parseSections(afterMd).format === "unknown";
+}
+
+// ---------------------------------------------------------------------------
+// Directory mode: one MDX/Markdown file per release, frontmatter metadata.
+// ---------------------------------------------------------------------------
+
+export type DirectoryFileStatus = "A" | "M" | "D";
+
+export type DirectoryFileInput = {
+  /** Path relative to the resolved working-directory (matches `changelog-glob`). */
+  path: string;
+  status: DirectoryFileStatus;
+  /** Raw file content. Required unless `status` is `"D"`. */
+  content?: string;
+};
+
+export type DirectoryIngestPlan = {
+  added: string[];
+  modified: string[];
+  deleted: string[];
+  releases: PlannedRelease[];
+};
+
+export type DirectoryPlanOptions = {
+  /** `{key}`, `{slug}`, `{version}`, `{date}`, `{path}` are interpolated. */
+  urlTemplate: string;
+  /** The `changelog-glob` pattern, used to derive the static base dir for keys. */
+  glob: string;
+};
+
+/** The static (non-wildcard) prefix directory of a glob, e.g. `changelog/**\/*.mdx` → `changelog/`. */
+export function globBaseDir(glob: string): string {
+  const idx = glob.search(/[*?{[]/);
+  if (idx === -1) return "";
+  const prefix = glob.slice(0, idx);
+  const lastSlash = prefix.lastIndexOf("/");
+  return lastSlash === -1 ? "" : prefix.slice(0, lastSlash + 1);
+}
+
+/** File path, relative to the glob's static base dir, without its extension. */
+export function keyFromPath(path: string, baseDir: string): string {
+  const rel = baseDir && path.startsWith(baseDir) ? path.slice(baseDir.length) : path;
+  return rel.replace(/\.[^./]+$/, "");
+}
+
+function basenameNoExt(path: string): string {
+  const base = path.slice(path.lastIndexOf("/") + 1);
+  return base.replace(/\.[^./]+$/, "");
+}
+
+function firstStringField(data: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
+/** Normalizes a frontmatter date value (string, or a YAML-parsed `Date`) to ISO, or null. */
+function normalizeFrontmatterDate(data: Record<string, unknown>): string | null {
+  const keys = ["date", "publishedAt", "published", "pubDate"];
+  for (const key of keys) {
+    const value = data[key];
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString();
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      const iso = dateOnlyToIso(value.trim());
+      if (iso && !Number.isNaN(Date.parse(iso))) return iso;
+      return null;
+    }
+  }
+  return null;
+}
+
+function frontmatterVersion(data: Record<string, unknown>): string | null {
+  const value = data.version;
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return value.trim() || null;
+  return String(value);
+}
+
+/**
+ * Plans directory-mode releases: one entry per added/modified MDX/Markdown
+ * file. Deleted files are reported (not upserted or removed from the index).
+ * Draft files (`draft: true` in frontmatter) are skipped entirely. Pure —
+ * takes file contents already read by the caller (see publish.ts), no I/O.
+ */
+export function planDirectoryIngest(
+  files: DirectoryFileInput[],
+  opts: DirectoryPlanOptions,
+): DirectoryIngestPlan {
+  const baseDir = globBaseDir(opts.glob);
+  const added: string[] = [];
+  const modified: string[] = [];
+  const deleted: string[] = [];
+  const releases: PlannedRelease[] = [];
+
+  for (const file of files) {
+    if (file.status === "D") {
+      deleted.push(file.path);
+      continue;
+    }
+
+    const { data, body } = parseFrontmatter(file.content ?? "");
+    if (data.draft === true) continue;
+
+    const slug = firstStringField(data, ["slug"]);
+    const key = slug || keyFromPath(file.path, baseDir);
+    const title =
+      firstStringField(data, ["title"]) || extractTitleHeading(body) || basenameNoExt(file.path);
+    const publishedAt = normalizeFrontmatterDate(data);
+    const version = frontmatterVersion(data);
+    const explicitUrl = firstStringField(data, ["url", "canonical"]);
+    const content = flattenMdxToMarkdown(body);
+
+    const url =
+      explicitUrl ||
+      renderUrlTemplate(opts.urlTemplate, {
+        key,
+        version: version ?? "",
+        date: (publishedAt ?? "").slice(0, 10),
+        path: file.path,
+      });
+
+    if (!url) {
+      throw new Error(
+        `No URL for "${file.path}" — set url-template, or add a frontmatter url/canonical.`,
+      );
+    }
+
+    releases.push({
+      key,
+      title,
+      content,
+      url,
+      publishedAt,
+      version,
+      type: "feature",
+      prerelease: false,
+    });
+
+    if (file.status === "A") added.push(key);
+    else modified.push(key);
+  }
+
+  return { added, modified, deleted, releases };
 }
