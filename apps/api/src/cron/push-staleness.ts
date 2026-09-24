@@ -29,7 +29,7 @@
  * its own "No pushes lately" section.
  */
 import { createDb } from "../db.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { parsePositiveInt } from "./feed-enrich.js";
@@ -131,7 +131,8 @@ export async function scanStalePushFedSources(
     .where(
       and(
         isNull(sources.deletedAt),
-        eq(sources.isHidden, false),
+        // `is_hidden` is nullable on sources; NULL means visible.
+        or(eq(sources.isHidden, false), isNull(sources.isHidden)),
         sql`json_extract(${sources.metadata}, '$.ingestMode') = 'push'`,
       ),
     )

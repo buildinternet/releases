@@ -31,7 +31,7 @@ function seedSource(opts: {
   fetchPriority?: "normal" | "low" | "paused";
   lastFetchedAt?: string | null;
   createdAt?: string;
-  isHidden?: boolean;
+  isHidden?: boolean | null;
   deletedAt?: string;
 }) {
   db.insert(sources)
@@ -46,7 +46,7 @@ function seedSource(opts: {
       medianGapDays: opts.medianGapDays === undefined ? null : opts.medianGapDays,
       fetchPriority: opts.fetchPriority ?? "normal",
       lastFetchedAt: opts.lastFetchedAt ?? null,
-      isHidden: opts.isHidden ?? false,
+      isHidden: opts.isHidden === undefined ? false : opts.isHidden,
       ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
       ...(opts.deletedAt ? { deletedAt: opts.deletedAt } : {}),
     })
@@ -138,6 +138,18 @@ describe("scanStalePushFedSources", () => {
     // hidden + deleted + non-push filtered in SQL; paused filtered in JS → 1 scanned, 0 stale.
     expect(res.scanned).toBe(1);
     expect(res.stale).toBe(0);
+  });
+
+  it("treats a NULL is_hidden as visible", async () => {
+    seedSource({
+      id: "null-hidden",
+      medianGapDays: 7,
+      isHidden: null,
+      lastFetchedAt: iso(60 * DAY),
+    });
+
+    const res = await scanStalePushFedSources(baseEnv());
+    expect(res.entries.map((e) => e.sourceId)).toEqual(["null-hidden"]);
   });
 
   it("never flags polled (non-push-fed) sources, even when equally overdue", async () => {
