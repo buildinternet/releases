@@ -114,7 +114,7 @@ export default async function SourceByIdLayout({
         marketingFilter?: boolean;
         marketingFilterHint?: string;
         feedContentDepth?: "full" | "summary-only";
-        ingestMode?: "push";
+        ingestMode?: "push" | "poll";
       };
     } catch {
       return {};

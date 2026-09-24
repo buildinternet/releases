@@ -707,3 +707,46 @@ describe("rate-limit tier for publish tokens", () => {
     expect(tokenLimiter.calls).toEqual([]);
   });
 });
+
+describe("first publish marks the source push-fed (#2390)", () => {
+  const batch = (token: string) =>
+    call("/v1/sources/src_a1/releases/batch", json("POST", batchBody(1), bearer(token)));
+  const readSource = async () =>
+    (await db.select().from(sources).where(eq(sources.id, "src_a1")).get()) as {
+      metadata: string | null;
+      lastFetchedAt: string | null;
+    };
+  const setMetadata = (m: Record<string, unknown>) =>
+    db
+      .update(sources)
+      .set({ metadata: JSON.stringify(m) })
+      .where(eq(sources.id, "src_a1"));
+
+  it("sets ingestMode push and stamps lastFetchedAt, keeping other metadata keys", async () => {
+    await setMetadata({ feedUrl: "https://acme.com/feed.xml" });
+    const { token } = await mintToken();
+    expect((await batch(token)).status).toBe(200);
+    const src = await readSource();
+    expect(JSON.parse(src.metadata ?? "{}")).toEqual({
+      feedUrl: "https://acme.com/feed.xml",
+      ingestMode: "push",
+    });
+    expect(src.lastFetchedAt).not.toBeNull();
+  });
+
+  it("never overrides an explicit curator opt-out (ingestMode poll)", async () => {
+    await setMetadata({ ingestMode: "poll" });
+    const { token } = await mintToken();
+    expect((await batch(token)).status).toBe(200);
+    expect(JSON.parse((await readSource()).metadata ?? "{}").ingestMode).toBe("poll");
+  });
+
+  it("does not flip when a non-publish token writes the batch", async () => {
+    const res = await call(
+      "/v1/sources/src_a1/releases/batch",
+      json("POST", batchBody(1), bearer(ROOT)),
+    );
+    expect(res.status).toBe(200);
+    expect(JSON.parse((await readSource()).metadata ?? "{}").ingestMode).toBeUndefined();
+  });
+});

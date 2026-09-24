@@ -85,6 +85,8 @@ Set `metadata.ingestMode = "push"` on the source (via `PATCH /v1/sources/:slug` 
 - The first-party staleness scan (`cron/source-staleness.ts`) skips push-fed sources entirely rather than computing an overdue window against a cadence that doesn't exist. A separate, quieter "no pushes lately" signal (`cron/push-staleness.ts`, #2381) covers them instead: it flags a push-fed source whose last activity (the later of `lastFetchedAt` and its newest release date) is past an adaptive window, and rolls flagged sources into the daily operator staleness digest under their own section. See [firecrawl-monitoring.md → First-party staleness signal + render dry-run](firecrawl-monitoring.md#first-party-staleness-signal--render-dry-run-1528).
 - `ingestReleaseBatch()` stamps `sources.lastFetchedAt` to now on every successful batch write for a push-fed source (regardless of whether anything new was inserted) — there's no poll to do it otherwise, and reusing the existing column avoids a `last_pushed_at` migration. Web/CLI read this the same way they'd read any other last-fetch time.
 
+- **Auto-flip on first owner publish (#2390):** a successful batch write made with an owner's publish token (#2373) sets `ingestMode = "push"` via `markPushFedOnFirstPublish` (`queries/publish-tokens.ts`) — a guarded `json_set` that only fires when the key is ABSENT, and also stamps `lastFetchedAt`. `ingestMode = "poll"` is the explicit curator opt-out: it keeps the source polled while the owner publishes, and the auto-flip never overrides it. The flip is best-effort — a failure logs `mark-push-fed-failed` and never fails the write.
+
 Use `isPushFed(source, meta?)` from `@releases/adapters/source-meta` at every call site instead of reading `metadata.ingestMode` directly.
 
 ## Related
