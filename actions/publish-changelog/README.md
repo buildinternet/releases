@@ -63,6 +63,13 @@ jobs:
 
 If you've verified you own your domain, you can mint a token yourself that publishes to one source and nothing else. Sign in at releases.sh and open [Account → Webhooks & API](https://releases.sh/account/webhooks). Under **Publish tokens**, pick the source, create the token, and copy it. It's shown once, along with the workflow step to paste. Store it as `RELEASES_API_TOKEN`. The same panel lists your tokens and revokes them. A token stops working if you revoke it or lose the ownership claim.
 
+From a terminal, the [CLI](https://github.com/buildinternet/releases-cli) does the same (0.80.0 or later):
+
+```bash
+releases login
+releases publish-token create --source src_… | gh secret set RELEASES_API_TOKEN
+```
+
 ## Outputs
 
 | Output     | Notes                                                                                                                                     |

@@ -23,6 +23,15 @@ The Action calls `POST /v1/sources/…/releases/batch`. Two kinds of `relk_…` 
 
 To mint a publish token, sign in and open [Account → Webhooks & API](/account/webhooks). Under **Publish tokens**, pick the source and create the token. Copy it right away. It won't be shown again. The panel also gives you the workflow step to paste, lists your tokens with when each was last used, and revokes them.
 
+Or from the terminal, with the [CLI](/docs/installation) (0.80.0 or later). `releases login` signs you in through the browser, and `create` prints only the token, so you can pipe it straight into a repository secret:
+
+```bash
+releases login
+releases publish-token create --source src_… | gh secret set RELEASES_API_TOKEN
+releases publish-token list
+releases publish-token revoke <id>
+```
+
 Read-only user keys (`relu_…`, including `releases login`) are rejected. Store the token as a repository secret named `RELEASES_API_TOKEN`.
 
 ## 2. Point it at a source
