@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.33.0
+
+### Minor Changes
+
+- 55d3465: Ending an ownership claim (#2389). Core adds a `revoked` claim status and nullable `org_claims.revoked_at`, `revoked_by`, and `revoke_reason` columns. API types add `revoked` to `OrgClaimStatus`, an optional `revokedAt` on `OrgClaim`, and the admin shapes `AdminOrgClaim`, `ListOrgClaimsResponse`, and `RevokeOrgClaimBody`.
+
 ## 0.32.0
 
 ### Minor Changes
