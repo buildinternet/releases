@@ -31,6 +31,15 @@ export function scopeSatisfies(tokenScopes: string[], required: ApiScope): boole
   return tokenScopes.some((s) => (SCOPE_RANK[s] ?? 0) >= reqRank);
 }
 
+/**
+ * Narrow grant for owner-minted publish tokens (#2373). A token holding it is
+ * bound to ONE source (`api_tokens.source_id`) and may only POST that source's
+ * `releases/batch` route. Deliberately NOT on the `API_SCOPES` ladder: it ranks
+ * 0 in `scopeSatisfies`, so it never satisfies read, write, or admin, and the
+ * admin mint route's `isApiScope` validation rejects it.
+ */
+export const PUBLISH_SCOPE = "publish";
+
 /** Principal types — whom a token acts as. Mirrored by the `api_tokens.principal_type` column. */
 export const PRINCIPAL_TYPES = ["internal", "agent", "user"] as const;
 export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];

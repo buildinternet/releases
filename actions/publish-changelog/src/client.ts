@@ -110,7 +110,7 @@ async function requestJson(
   const text = await res.text();
   if (res.status === 401 || res.status === 403) {
     throw new AuthError(
-      `Releases API rejected the token (${res.status}). Use a write-scoped relk_… token. ${errorMessage(res.status, text)}`,
+      `Releases API rejected the token (${res.status}). Use a write-scoped relk_… token, or a publish token bound to this source. ${errorMessage(res.status, text)}`,
       res.status,
     );
   }

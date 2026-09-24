@@ -14,9 +14,12 @@ The Action has two modes:
 - **Single-file** (default) — one changelog file with `##` sections.
 - **Directory** — one MDX or Markdown file per release, metadata in YAML frontmatter. Used by sites built with Mintlify, Fumadocs, Docusaurus, Astro content collections, or Nextra.
 
-## 1. Create a write token
+## 1. Create a token
 
-The Action calls `POST /v1/sources/…/releases/batch`, which needs a **write-scoped** machine token (`relk_…`).
+The Action calls `POST /v1/sources/…/releases/batch`. Two kinds of `relk_…` token work:
+
+- **A publish token** (the usual choice). If you've verified you own your domain (an ownership claim through the listing flow), you can mint one yourself. It can publish to one source and nothing else: no source edits, no other sources. It stops working if you revoke it or lose the claim. While you're signed in to releases.sh, call `POST /v1/me/publish-tokens` with `{"sourceId": "src_…", "name": "github-actions"}`. The response shows the token once. `GET /v1/me/publish-tokens` lists your tokens and `DELETE /v1/me/publish-tokens/:id` revokes one. These routes need your browser sign-in session; an API key won't work. A button on your account page is coming.
+- **A write-scoped machine token**, issued by a Releases Index admin.
 
 Read-only user keys (`relu_…`, including `releases login`) are rejected. Store the token as a repository secret named `RELEASES_API_TOKEN`.
 
@@ -65,17 +68,17 @@ jobs:
 
 ## Inputs
 
-| Input               | Required | Notes                                                                                                                                                  |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `source`            | yes      | `src_…` id, or a source slug (then set `org`)                                                                                                          |
-| `org`               | no       | Organization slug for the org-scoped batch route                                                                                                       |
-| `api-token`         | yes      | Write-scoped `relk_…`                                                                                                                                  |
-| `api-url`           | no       | Defaults to `https://api.releases.sh`                                                                                                                  |
-| `changelog-path`    | no       | Single-file mode. Defaults to `CHANGELOG.md`. Must stay default when `changelog-glob` is set.                                                          |
-| `changelog-glob`    | no       | Directory mode. e.g. `changelog/**/*.mdx`. See [Directory mode](#directory-mode-mdx-and-markdown). Cannot combine with a non-default `changelog-path`. |
-| `working-directory` | no       | Subdirectory in a monorepo                                                                                                                             |
-| `url-template`      | no       | See [Stable URLs](#stable-urls)                                                                                                                        |
-| `generate-content`  | no       | Defaults to `true`. Admin tokens regenerate summaries for edited entries; write-only tokens skip this (batch already queues the fill for new rows)     |
+| Input               | Required | Notes                                                                                                                                                     |
+| ------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`            | yes      | `src_…` id, or a source slug (then set `org`)                                                                                                             |
+| `org`               | no       | Organization slug for the org-scoped batch route                                                                                                          |
+| `api-token`         | yes      | A publish token for this source, or a write-scoped `relk_…`                                                                                               |
+| `api-url`           | no       | Defaults to `https://api.releases.sh`                                                                                                                     |
+| `changelog-path`    | no       | Single-file mode. Defaults to `CHANGELOG.md`. Must stay default when `changelog-glob` is set.                                                             |
+| `changelog-glob`    | no       | Directory mode. e.g. `changelog/**/*.mdx`. See [Directory mode](#directory-mode-mdx-and-markdown). Cannot combine with a non-default `changelog-path`.    |
+| `working-directory` | no       | Subdirectory in a monorepo                                                                                                                                |
+| `url-template`      | no       | See [Stable URLs](#stable-urls)                                                                                                                           |
+| `generate-content`  | no       | Defaults to `true`. Admin tokens regenerate summaries for edited entries; write and publish tokens skip this (batch already queues the fill for new rows) |
 
 Path filters stay on your workflow `on.push.paths` — the Action does not decide which pushes run.
 

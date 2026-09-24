@@ -165,6 +165,7 @@ import { selectExistingReleaseKeys } from "../lib/ingest/title-dedup.js";
 import { respondError } from "../lib/error-response.js";
 import {
   ConflictError,
+  InsufficientScopeError,
   InternalError,
   NotFoundError,
   UpstreamError,
@@ -755,6 +756,27 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
   if (!src) return respondError(c, new NotFoundError("Source not found"));
+
+  // Owner-minted publish tokens (#2373) pass the auth middleware only on this
+  // route; they may write ONLY to the source they are bound to. Second half of
+  // the required double check (middleware path allowlist + this binding).
+  const auth = c.get("auth");
+  if (auth?.kind === "token" && auth.publishSourceId !== undefined) {
+    if (auth.publishSourceId !== src.id) {
+      logEvent("warn", {
+        component: "publish-tokens",
+        event: "publish-token-rejected",
+        reason: "source_mismatch",
+        tokenId: auth.tokenId,
+        sourceId: auth.publishSourceId,
+        requestedSourceId: src.id,
+      });
+      return respondError(
+        c,
+        new InsufficientScopeError("This publish token can't write to this source"),
+      );
+    }
+  }
 
   const body = await c.req.json<{
     // `mode: "upsert-content"` is a DELIBERATE enrichment pass (#1526): same-URL
