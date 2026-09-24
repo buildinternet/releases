@@ -96,10 +96,13 @@ function buildApp(envOverrides: Record<string, unknown> = {}) {
 
 let call: ReturnType<typeof buildApp>;
 
+/** The exact web origin mint/revoke require (WEB_BASE_URL unset → prod default). */
+const WEB_ORIGIN = "https://releases.sh";
+
 function json(method: string, body: unknown, headers: Record<string, string> = {}): RequestInit {
   return {
     method,
-    headers: { "content-type": "application/json", ...headers },
+    headers: { "content-type": "application/json", Origin: WEB_ORIGIN, ...headers },
     body: JSON.stringify(body),
   };
 }
@@ -298,7 +301,7 @@ describe("POST /v1/me/publish-tokens (mint)", () => {
 
     const del = await call(`/v1/me/publish-tokens/${ids[0]}`, {
       method: "DELETE",
-      headers: { Cookie: COOKIE_OWNER },
+      headers: { Cookie: COOKIE_OWNER, Origin: WEB_ORIGIN },
     });
     expect(del.status).toBe(200);
     expect((await mint("src_a1")).status).toBe(201);
@@ -352,6 +355,40 @@ describe("POST /v1/me/publish-tokens (mint)", () => {
   });
 });
 
+describe("publish-token mutations require the exact web origin (CSRF)", () => {
+  it.each([
+    ["missing", undefined],
+    ["a sibling releases.sh subdomain", "https://evil.releases.sh"],
+    ["an unrelated site", "https://attacker.example.com"],
+  ])("refuses mint with %s Origin", async (_label, origin) => {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      Cookie: COOKIE_OWNER,
+    };
+    if (origin) headers.Origin = origin;
+    const res = await call("/v1/me/publish-tokens", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ sourceId: "src_a1", name: "ci" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses revoke from a sibling subdomain", async () => {
+    const { id } = await mintToken();
+    const res = await call(`/v1/me/publish-tokens/${id}`, {
+      method: "DELETE",
+      headers: { Cookie: COOKIE_OWNER, Origin: "https://evil.releases.sh" },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("still lists tokens without an Origin (GET is read-only)", async () => {
+    const res = await call("/v1/me/publish-tokens", { headers: { Cookie: COOKIE_OWNER } });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("GET /v1/me/publish-tokens + DELETE (list, revoke)", () => {
   it("lists the caller's tokens without secrets", async () => {
     const a = await mintToken("src_a1");
@@ -390,21 +427,21 @@ describe("GET /v1/me/publish-tokens + DELETE (list, revoke)", () => {
     const a = await mintToken("src_a1");
     const asOther = await call(`/v1/me/publish-tokens/${a.id}`, {
       method: "DELETE",
-      headers: { Cookie: COOKIE_OTHER },
+      headers: { Cookie: COOKIE_OTHER, Origin: WEB_ORIGIN },
     });
     expect(asOther.status).toBe(404);
     expect(
       (
         await call("/v1/me/publish-tokens/atk_missing", {
           method: "DELETE",
-          headers: { Cookie: COOKIE_OWNER },
+          headers: { Cookie: COOKIE_OWNER, Origin: WEB_ORIGIN },
         })
       ).status,
     ).toBe(404);
 
     const res = await call(`/v1/me/publish-tokens/${a.id}`, {
       method: "DELETE",
-      headers: { Cookie: COOKIE_OWNER },
+      headers: { Cookie: COOKIE_OWNER, Origin: WEB_ORIGIN },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { id: string; revokedAt: string };
@@ -419,7 +456,7 @@ describe("GET /v1/me/publish-tokens + DELETE (list, revoke)", () => {
     // Idempotent.
     const again = await call(`/v1/me/publish-tokens/${a.id}`, {
       method: "DELETE",
-      headers: { Cookie: COOKIE_OWNER },
+      headers: { Cookie: COOKIE_OWNER, Origin: WEB_ORIGIN },
     });
     expect(again.status).toBe(200);
     expect(((await again.json()) as { revokedAt: string }).revokedAt).toBe(body.revokedAt);
@@ -438,7 +475,7 @@ describe("GET /v1/me/publish-tokens + DELETE (list, revoke)", () => {
     });
     const res = await call("/v1/me/publish-tokens/atk_ladder", {
       method: "DELETE",
-      headers: { Cookie: COOKIE_OWNER },
+      headers: { Cookie: COOKIE_OWNER, Origin: WEB_ORIGIN },
     });
     expect(res.status).toBe(404);
   });
@@ -533,7 +570,7 @@ describe("using a publish token", () => {
     expect((await batch(token)).status).toBe(200);
     await call(`/v1/me/publish-tokens/${id}`, {
       method: "DELETE",
-      headers: { Cookie: COOKIE_OWNER },
+      headers: { Cookie: COOKIE_OWNER, Origin: WEB_ORIGIN },
     });
     expect((await batch(token)).status).toBe(401);
   });

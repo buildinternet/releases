@@ -573,6 +573,22 @@ export function derivePasskeyRp(env: { WEB_BASE_URL?: string }): {
   }
 }
 
+/**
+ * True only for the exact web origin (`WEB_BASE_URL`), plus bare loopback off
+ * production. Stricter than {@link isTrustedCorsOrigin}, which reflects any
+ * releases-family subdomain with credentials: surfaces that hand a secret back
+ * in the response (publish-token mint, #2373) check this so a compromised
+ * sibling subdomain can't mint and read a credential with a victim's cookie.
+ */
+export function isExactWebOrigin(
+  origin: string | undefined,
+  env: { WEB_BASE_URL?: string; ENVIRONMENT?: string },
+): boolean {
+  if (!origin) return false;
+  if (origin === webOriginForEmail(env)) return true;
+  return env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin);
+}
+
 /** Web origin for links in user-facing auth email templates. */
 export function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
   return derivePasskeyRp(env).origin;

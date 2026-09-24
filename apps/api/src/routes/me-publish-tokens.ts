@@ -28,6 +28,8 @@ import { FLAGS } from "@releases/lib/flags";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { requireCookieSessionWithFlag } from "../middleware/auth.js";
+import { isExactWebOrigin } from "../auth/index.js";
+import type { MiddlewareHandler } from "hono";
 import { respondError } from "../lib/error-response.js";
 import { errorResponse } from "../lib/openapi-error.js";
 import { validateJson } from "../lib/validate.js";
@@ -216,12 +218,43 @@ export const requirePublishTokenSession = requireCookieSessionWithFlag(
 );
 
 /**
+ * CSRF guard for the cookie-authenticated mutations: a POST/DELETE must carry an
+ * `Origin` that is exactly the web origin. The credentialed CORS allow-list
+ * reflects any releases-family subdomain, so without this a compromised sibling
+ * origin could mint a token with the victim's cookie and read it back. A
+ * missing `Origin` is refused too — browsers always send it on these methods.
+ */
+export const requireWebOriginOnMutation: MiddlewareHandler<Env> = async (c, next) => {
+  if (c.req.method === "GET" || c.req.method === "HEAD" || c.req.method === "OPTIONS") {
+    return next();
+  }
+  if (!isExactWebOrigin(c.req.header("Origin"), c.env)) {
+    logEvent("warn", {
+      component: "publish-tokens",
+      event: "origin-rejected",
+      method: c.req.method,
+      origin: c.req.header("Origin") ?? null,
+    });
+    return respondError(c, new ForbiddenError("Request origin not allowed"));
+  }
+  await next();
+};
+
+/**
  * Production composition. MUST be mounted before `meRoutes`: its handlers
  * answer without calling `next()`, so `meRoutes`' `/me/*` session-or-Bearer
  * gate (`requireFollowsPrincipal`) never runs for these paths and can't admit
  * a `relu_` key.
  */
 export const mePublishTokenRoutes = new Hono<Env>();
-mePublishTokenRoutes.use("/me/publish-tokens", requirePublishTokenSession);
-mePublishTokenRoutes.use("/me/publish-tokens/*", requirePublishTokenSession);
+mePublishTokenRoutes.use(
+  "/me/publish-tokens",
+  requirePublishTokenSession,
+  requireWebOriginOnMutation,
+);
+mePublishTokenRoutes.use(
+  "/me/publish-tokens/*",
+  requirePublishTokenSession,
+  requireWebOriginOnMutation,
+);
 mePublishTokenRoutes.route("/", mePublishTokenHandlers);

@@ -93,6 +93,11 @@ route rejects it.
   capped `INSERT … SELECT … WHERE count < 5 AND EXISTS(verified claim)`; over the
   cap is a 409 `api_key_limit`. The plaintext is returned once. Gated on the
   `listing-self-serve-enabled` kill switch, the same one the claim routes use.
+  Mint and revoke also require an `Origin` that is **exactly** the web origin
+  (`isExactWebOrigin`, from `WEB_BASE_URL`; loopback off-prod). A missing
+  `Origin` is refused. The credentialed CORS allow-list reflects any
+  releases-family subdomain, so without this check a compromised sibling origin
+  could mint a token with a victim's cookie and read it back.
 - **Verification:** `verifyApiToken` returns `sourceId` and `principalId`, and
   denies any row that breaks the shape: a source-bound row must carry exactly
   `["publish"]` and a user owner, and `publish` without a source is denied. On
