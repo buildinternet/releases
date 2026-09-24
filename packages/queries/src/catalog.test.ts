@@ -5,7 +5,10 @@ import {
   listCatalogProducts,
   listCatalogStandaloneSources,
   listProductSources,
+  listVisibleSourceIdsForOrg,
+  listVisibleSourceIdsForProduct,
 } from "./catalog.js";
+import { findLiveParents } from "./entities.js";
 
 const DELETED_AT = "2026-01-01T00:00:00Z";
 
@@ -62,5 +65,29 @@ describe("catalog reads", () => {
     expect((await listCatalogStandaloneSources(tdb.db)).map((r) => r.slug)).not.toContain(
       "src_gone",
     );
+  });
+
+  it("listVisibleSourceIdsForProduct / ForOrg skip hidden and deleted sources", async () => {
+    expect(await listVisibleSourceIdsForProduct(tdb.db, "prod_app")).toEqual(["src_app"]);
+    expect((await listVisibleSourceIdsForOrg(tdb.db, "org_acme")).toSorted()).toEqual([
+      "src_app",
+      "src_orphaned",
+      "src_solo",
+    ]);
+  });
+
+  it("findLiveParents names live parents and nulls deleted ones", async () => {
+    expect(await findLiveParents(tdb.db, { orgId: "org_acme", productId: "prod_app" })).toEqual({
+      org: { id: "org_acme", slug: "acme", name: "Acme" },
+      product: { id: "prod_app", slug: "app", name: "App" },
+    });
+    expect(await findLiveParents(tdb.db, { orgId: "org_gone", productId: "prod_old" })).toEqual({
+      org: null,
+      product: null,
+    });
+    expect(await findLiveParents(tdb.db, { orgId: null, productId: null })).toEqual({
+      org: null,
+      product: null,
+    });
   });
 });

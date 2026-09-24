@@ -16,6 +16,7 @@ import {
   inArray,
   type SQL,
 } from "drizzle-orm";
+import { findLiveParents } from "@releases/queries/entities";
 import { findVisibleReleaseDetail } from "@releases/queries/releases";
 import { createDb } from "../db.js";
 import {
@@ -200,27 +201,9 @@ async function attachSourceAttribution<
 ): Promise<
   T & { org: { id: string; slug: string; name: string } | null; productSlug: string | null }
 > {
-  const [orgRows, productRows] = await Promise.all([
-    src.orgId
-      ? db
-          .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
-          .from(organizations)
-          .where(eq(organizations.id, src.orgId))
-          .limit(1)
-      : Promise.resolve([] as Array<{ id: string; slug: string; name: string }>),
-    src.productId
-      ? db
-          .select({ slug: products.slug })
-          .from(products)
-          .where(eq(products.id, src.productId))
-          .limit(1)
-      : Promise.resolve([] as Array<{ slug: string }>),
-  ]);
-  return {
-    ...src,
-    org: orgRows[0] ?? null,
-    productSlug: productRows[0]?.slug ?? null,
-  };
+  // A soft-deleted parent comes back null rather than named (shared with MCP).
+  const { org, product } = await findLiveParents(db, src);
+  return { ...src, org, productSlug: product?.slug ?? null };
 }
 
 sourceRoutes.get(
@@ -1443,18 +1426,9 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
 
   const bucketRows = await getSourceActivityBuckets(db, src.id, from, toExclusive);
 
-  let orgSlug: string | null = null;
-  let orgName: string | null = null;
-  if (src.orgId) {
-    const [org] = await db
-      .select({ slug: organizations.slug, name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, src.orgId));
-    if (org) {
-      orgSlug = org.slug;
-      orgName = org.name;
-    }
-  }
+  const { org } = await findLiveParents(db, { orgId: src.orgId, productId: null });
+  const orgSlug = org?.slug ?? null;
+  const orgName = org?.name ?? null;
 
   return c.json({
     source: { slug: src.slug, name: src.name, orgSlug, orgName },
@@ -1877,24 +1851,8 @@ export async function buildSourceDetailPayload(
     : sql`(${releasesVisible.prerelease} IS NULL OR ${releasesVisible.prerelease} = 0)`;
 
   // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
-  const orgQuery = src.orgId
-    ? db
-        .select({
-          id: organizations.id,
-          slug: organizations.slug,
-          name: organizations.name,
-        })
-        .from(organizations)
-        .where(eq(organizations.id, src.orgId))
-    : Promise.resolve([]);
-
-  const productQuery = src.productId
-    ? db
-        .select({ slug: products.slug })
-        .from(products)
-        .where(eq(products.id, src.productId))
-        .limit(1)
-    : Promise.resolve([]);
+  // Live parents only: a soft-deleted org or product is null (shared with MCP).
+  const parentsQuery = findLiveParents(db, src);
 
   // When a cursor is present, we can't derive latestVersion/latestDate from
   // the returned rows (they're somewhere mid-feed), so issue the query in the
@@ -1916,8 +1874,7 @@ export async function buildSourceDetailPayload(
 
   const [
     feedRows,
-    orgRows,
-    productRows,
+    parents,
     metricsRows,
     earliestRows,
     summaryRows,
@@ -1928,8 +1885,7 @@ export async function buildSourceDetailPayload(
       includeCoverage,
       includePrereleases,
     }),
-    orgQuery,
-    productQuery,
+    parentsQuery,
     db
       .select({
         total: count(),
@@ -1962,8 +1918,8 @@ export async function buildSourceDetailPayload(
     latestByDateQuery,
   ]);
 
-  const org = (orgRows[0] as { id: string; slug: string; name: string } | undefined) ?? null;
-  const productSlug = (productRows[0] as { slug: string } | undefined)?.slug ?? null;
+  const org = parents.org;
+  const productSlug = parents.product?.slug ?? null;
   const metrics = metricsRows[0];
   const earliest = earliestRows[0];
   const hasChangelogFile = changelogExistsRows.length > 0;

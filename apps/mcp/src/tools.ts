@@ -61,6 +61,7 @@ import {
 } from "@releases/core-internal/collection-feed";
 import {
   findProductById,
+  findLiveParents,
   findProductForOrgSlug,
   findSourceById,
   findSourceForOrgSlug,
@@ -84,6 +85,8 @@ import {
   listCatalogProducts,
   listCatalogStandaloneSources,
   listProductSources,
+  listVisibleSourceIdsForOrg,
+  listVisibleSourceIdsForProduct,
 } from "@releases/queries/catalog";
 import {
   countCollections,
@@ -552,11 +555,7 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
   if (entityType === "product") {
     const prod = await resolveProduct(db, id);
     if (!prod) return null;
-    const rows = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(eq(sources.productId, prod.id));
-    return rows.map((r) => r.id);
+    return listVisibleSourceIdsForProduct(db, prod.id);
   }
 
   // org/slug coordinate — determine whether it resolves to a source or product
@@ -566,19 +565,15 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
     if (src) return [src.id];
     const prod = await resolveProduct(db, id);
     if (!prod) return null;
-    const rows = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(eq(sources.productId, prod.id));
-    return rows.map((r) => r.id);
+    return listVisibleSourceIdsForProduct(db, prod.id);
   }
 
   // Ambiguous slug: one query against sources joined to their optional
   // product — matches either directly (source slug) or transitively
   // (every source under a product with that slug).
-  const rows = await db.all<{ id: string }>(sql`
-    SELECT s.id as id FROM sources s
-    LEFT JOIN products p ON p.id = s.product_id
+  const rows: { id: string }[] = await db.all<{ id: string }>(sql`
+    SELECT s.id as id FROM sources_visible s
+    LEFT JOIN products_active p ON p.id = s.product_id
     WHERE s.slug = ${id} OR p.slug = ${id}
   `);
   return rows.length > 0 ? rows.map((r) => r.id) : null;
@@ -1187,21 +1182,9 @@ async function renderSourceDetail(
   src: Awaited<ReturnType<typeof resolveSource>> & object,
   changelog?: ChangelogRenderOptions,
 ): Promise<ToolResult> {
-  const [orgRows, productRows, relCountRows, changelogMeta] = await Promise.all([
-    src.orgId
-      ? db
-          .select({ slug: organizations.slug, name: organizations.name })
-          .from(organizations)
-          .where(eq(organizations.id, src.orgId))
-          .limit(1)
-      : Promise.resolve([]),
-    src.productId
-      ? db
-          .select({ slug: products.slug, name: products.name })
-          .from(products)
-          .where(eq(products.id, src.productId))
-          .limit(1)
-      : Promise.resolve([]),
+  const [parents, relCountRows, changelogMeta] = await Promise.all([
+    // Same parent lookup as `GET /v1/sources/:id`: a deleted parent is null.
+    findLiveParents(db, src),
     db
       .select({ n: sql<number>`count(*)` })
       .from(releasesVisible)
@@ -1224,8 +1207,7 @@ async function renderSourceDetail(
       .orderBy(sourceChangelogFiles.path),
   ]);
 
-  const org = orgRows[0] ?? null;
-  const product = productRows[0] ?? null;
+  const { org, product } = parents;
   const releaseCount = Number(relCountRows[0]?.n ?? 0);
 
   const srcCoord = org ? `${org.slug}/${src.slug}` : src.slug;
@@ -1315,11 +1297,10 @@ async function renderProductDetail(
   product: Awaited<ReturnType<typeof resolveProduct>> & object,
 ): Promise<ToolResult> {
   const [orgRows, productSources, tagRows] = await Promise.all([
-    db
-      .select({ slug: organizations.slug, name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, product.orgId))
-      .limit(1),
+    // A soft-deleted org is not named, as in source detail.
+    findLiveParents(db, { orgId: product.orgId, productId: null }).then(({ org }) =>
+      org ? [org] : [],
+    ),
     // Hidden and deleted sources drop out, as in `GET /v1/products/:id`.
     listProductSources(db, product.id),
     db
@@ -1700,11 +1681,7 @@ export async function search(
         counts: empty,
       };
     }
-    const srcRows = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(eq(sources.productId, prod.id));
-    productSourceIds = srcRows.map((r) => r.id);
+    productSourceIds = await listVisibleSourceIdsForProduct(db, prod.id);
     // Resolve org slug for the echo coordinate.
     const [orgRow] = await db
       .select({ slug: organizationsActive.slug })
@@ -1829,11 +1806,7 @@ export async function search(
         // happen to be present (product is more specific).
         let sourceIds = entitySourceIds ?? productSourceIds ?? undefined;
         if (!sourceIds && orgScope) {
-          const rows = await db
-            .select({ id: sources.id })
-            .from(sources)
-            .where(eq(sources.orgId, orgScope.id));
-          sourceIds = rows.map((r) => r.id);
+          sourceIds = await listVisibleSourceIdsForOrg(db, orgScope.id);
         }
 
         if (mode !== "lexical" && searchEnv) {

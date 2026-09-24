@@ -1,6 +1,6 @@
 /**
  * MCP read visibility matches the API (docs/architecture/shared-queries.md,
- * D1–D12). One fixture holds a live row next to a soft-deleted, hidden, or
+ * D1–D14). One fixture holds a live row next to a soft-deleted, hidden, or
  * coverage-side sibling for each case; every test asserts the sibling stays
  * out of MCP output (and, for D2, that a hidden org still resolves).
  */
@@ -391,5 +391,22 @@ describe("D12: get_organization products match GET /v1/orgs/:slug", () => {
     expect(out).toContain("Live App");
     expect(out).not.toContain("Dead App");
     expect(out).not.toContain("Shadow App");
+  });
+});
+
+describe("D13: source detail doesn't name a deleted parent, as GET /v1/sources/:id", () => {
+  it("shows no product for a live source whose product was deleted", async () => {
+    const out = textOf(await getCatalogEntry(db, { identifier: "src_under_dead_product" }));
+    expect(out).not.toContain("Dead App");
+    expect(out).toContain("Product: none");
+  });
+});
+
+describe("D14: product scope expands to visible sources only, as /v1/search?product=", () => {
+  it("a product whose only source is hidden has no sources to search", async () => {
+    const out = searchText(
+      await search(db, { query: "Release", mode: "lexical", product: "prod_shadow" }),
+    );
+    expect(out).toContain("has no sources yet");
   });
 });

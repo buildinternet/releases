@@ -64,6 +64,7 @@ import { videoSourceInfo } from "@releases/adapters/source-meta";
 import { eq, and, sql } from "drizzle-orm";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
+import { listVisibleSourceIdsForProduct } from "@releases/queries/catalog";
 
 /**
  * Bucket the User-Agent into a known client kind, or `null` when we have no
@@ -277,15 +278,12 @@ async function resolveProductScope(
     .limit(1);
   const orgSlug = orgRow?.slug ?? productRow.orgId;
 
-  // Expand the product to all of its source IDs.
-  const sourceRows = await db
-    .select({ id: sources.id })
-    .from(sources)
-    .where(eq(sources.productId, productRow.id));
+  // Expand the product to its visible source IDs (shared with MCP).
+  const sourceIds = await listVisibleSourceIdsForProduct(db, productRow.id);
 
   return {
     kind: "hit",
-    sourceIds: sourceRows.map((r) => r.id),
+    sourceIds,
     productSlug: productRow.slug,
     orgSlug,
   };
