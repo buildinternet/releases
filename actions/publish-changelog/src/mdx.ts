@@ -11,7 +11,8 @@
  */
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-const FENCE_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~)/g;
+// Fenced blocks and inline code spans are passed through untouched.
+const FENCE_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g;
 
 export type Frontmatter = Record<string, unknown>;
 
@@ -42,7 +43,7 @@ export function parseFrontmatter(raw: string): ParsedMdx {
   return { data: {}, body };
 }
 
-/** Splits `text` into fenced (```/~~~) and non-fenced segments, in order. */
+/** Splits `text` into code (```/~~~ fences, inline `spans`) and prose segments, in order. */
 function splitByFences(text: string): { fence: boolean; text: string }[] {
   const parts: { fence: boolean; text: string }[] = [];
   let lastIndex = 0;
@@ -69,6 +70,17 @@ function convertImageTags(text: string): string {
   });
 }
 
+/** `<a href="…">text</a>` → `[text](href)`, so links survive flattening. */
+function convertAnchorTags(text: string): string {
+  return text.replace(
+    /<a\b([^>]*)>([\s\S]*?)<\/a>/gi,
+    (_match: string, attrs: string, inner: string) => {
+      const href = attrs.match(/\bhref\s*=\s*["']([^"']*)["']/i)?.[1];
+      return href ? `[${inner}](${href})` : inner;
+    },
+  );
+}
+
 /** Drops self-closing JSX components, e.g. `<Video src="…" />`. */
 function dropSelfClosingTags(text: string): string {
   return text.replace(/<([A-Za-z][\w.-]*)((?:\s+[^>]*?)?)\/>/g, "");
@@ -92,8 +104,9 @@ function flattenPairedTags(text: string): string {
 /**
  * Converts an MDX body to plain markdown: strips `import`/`export` lines,
  * flattens JSX components to their text children, converts image tags to
- * markdown images, and drops other self-closing components. Fenced code
- * blocks are passed through untouched.
+ * markdown images and anchors to markdown links, and drops other
+ * self-closing components. Fenced code blocks and inline code spans are
+ * passed through untouched.
  */
 export function flattenMdxToMarkdown(body: string): string {
   const segments = splitByFences(body);
@@ -101,6 +114,7 @@ export function flattenMdxToMarkdown(body: string): string {
     if (segment.fence) return segment.text;
     let text = stripImportExportLines(segment.text);
     text = convertImageTags(text);
+    text = convertAnchorTags(text);
     text = dropSelfClosingTags(text);
     text = flattenPairedTags(text);
     return text;

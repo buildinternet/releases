@@ -29,9 +29,9 @@ describe("parseFrontmatter", () => {
     expect(body).toBe("# Just markdown\n\nHello.\n");
   });
 
-  test("parses a plain YAML date as a Date instance", () => {
+  test("keeps a plain YAML date as a string (no timezone shift)", () => {
     const { data } = parseFrontmatter("---\ndate: 2026-06-01\n---\nBody\n");
-    expect(data.date instanceof Date || typeof data.date === "string").toBe(true);
+    expect(data.date).toBe("2026-06-01");
   });
 
   test("draft: true is readable from frontmatter", () => {
@@ -100,6 +100,17 @@ describe("flattenMdxToMarkdown", () => {
     expect(out).not.toContain("<Callout>should flatten");
     expect(out).toContain('<Callout type="info">should NOT flatten</Callout>');
     expect(out).toContain("```jsx");
+  });
+
+  test("leaves JSX-looking text inside inline code spans untouched", () => {
+    const body = "Use `<Foo />` or `<Bar>x</Bar>` in `Map<K, V>`.";
+    expect(flattenMdxToMarkdown(body)).toBe(body);
+  });
+
+  test("converts anchor tags to markdown links", () => {
+    expect(flattenMdxToMarkdown('See <a href="https://x.dev" target="_blank">the docs</a>.')).toBe(
+      "See [the docs](https://x.dev).",
+    );
   });
 
   test("keeps regular markdown, links, and images as-is", () => {

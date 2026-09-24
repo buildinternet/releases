@@ -119,7 +119,7 @@ Each matched file's YAML frontmatter supplies the metadata (first match wins):
 
 `draft: true` skips the file entirely — it is never published, added, or counted.
 
-The body is converted to plain markdown: `import`/`export` lines are stripped, JSX components are flattened to their text children (`<Callout>Hi</Callout>` → `Hi`), and `<img>`/`<Image>` tags become markdown images. Fenced code blocks, regular markdown, links, and images pass through untouched. This is a small regex-based pass — no MDX compiler — so unusual JSX (multi-line imports, custom self-closing tags other than images) may need a manual look at the published body.
+The body is converted to plain markdown: `import`/`export` lines are stripped, JSX components are flattened to their text children (`<Callout>Hi</Callout>` → `Hi`), `<img>`/`<Image>` tags become markdown images, and `<a href>` tags become markdown links. Fenced code blocks, inline code, regular markdown, links, and images pass through untouched. This is a small regex-based pass — no MDX compiler — so unusual JSX (multi-line imports, custom self-closing tags other than images) may need a manual look at the published body. Quote numeric versions in frontmatter (`version: "1.10"`): YAML reads an unquoted `1.10` as the number `1.1`.
 
 Changed files come from `git diff --name-status` against `before-sha`. Added and modified files are upserted; renames land as modified at the new path; deleted files are reported in the `deleted` output and logs but left alone in the index — removing a release is a curator action, not something a push automates. On the very first push to a source (no previous commit to diff), every file matching the glob is published, mirroring single-file mode's behavior on an empty changelog.
 
