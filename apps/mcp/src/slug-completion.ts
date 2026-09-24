@@ -1,9 +1,23 @@
 import { and, asc, eq, or, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
-import { organizations, products, sources } from "@buildinternet/releases-core/schema";
+import type { SQLiteColumn, SQLiteTable, SQLiteView } from "drizzle-orm/sqlite-core";
+import {
+  organizationsActive,
+  productsActive,
+  sourcesVisible,
+} from "@buildinternet/releases-core/schema";
 import type { D1Db } from "./db.js";
 
 const COMPLETE_LIMIT = 20;
+
+// Completion suggests what the directory and catalog would list, so it reads
+// the live views: soft-deleted orgs, products, and sources never appear, and
+// neither do hidden orgs or hidden sources (`list_organizations` and
+// `list_catalog` omit them too). A hidden org still resolves when typed in
+// full; it just isn't suggested.
+const orgs = organizationsActive;
+const visibleOrg = sql`(${orgs.isHidden} = 0 OR ${orgs.isHidden} IS NULL)`;
+
+type Source = SQLiteTable | SQLiteView;
 
 /** Strip SQL LIKE wildcards so user-supplied `%`/`_` can't widen the match; trim whitespace-only input to empty so the caller's early-return can skip the query. */
 function sanitize(value: string): string {
@@ -21,10 +35,11 @@ function sanitize(value: string): string {
  */
 async function completeBySlugOrName(
   db: D1Db,
-  table: SQLiteTable,
+  table: Source,
   slugCol: SQLiteColumn,
   nameCol: SQLiteColumn,
   value: string,
+  scope: SQL = sql`1 = 1`,
 ): Promise<string[]> {
   const needle = sanitize(value);
   if (!needle) return [];
@@ -34,7 +49,10 @@ async function completeBySlugOrName(
     .select({ slug: slugCol })
     .from(table)
     .where(
-      or(sql`LOWER(${slugCol}) LIKE ${substring}`, sql`LOWER(${nameCol}) LIKE ${substring}`) as SQL,
+      and(
+        scope,
+        or(sql`LOWER(${slugCol}) LIKE ${substring}`, sql`LOWER(${nameCol}) LIKE ${substring}`),
+      ) as SQL,
     )
     .orderBy(
       sql`CASE WHEN LOWER(${slugCol}) LIKE ${prefix} OR LOWER(${nameCol}) LIKE ${prefix} THEN 0 ELSE 1 END`,
@@ -45,7 +63,7 @@ async function completeBySlugOrName(
 }
 
 export const completeOrgSlug = (db: D1Db, value: string) =>
-  completeBySlugOrName(db, organizations, organizations.slug, organizations.name, value);
+  completeBySlugOrName(db, orgs, orgs.slug, orgs.name, value, visibleOrg);
 
 /**
  * Catalog completers return `org/slug` coordinates, not bare slugs. The
@@ -53,7 +71,7 @@ export const completeOrgSlug = (db: D1Db, value: string) =>
  * slugs because per-org slug uniqueness (#690) makes them ambiguous, so
  * handing back a bare slug
  * would invite a 400 on the next tool call. Org completion stays bare because
- * `organizations.slug` is still globally unique.
+ * `orgs.slug` is still globally unique.
  *
  * Coordinate-form input — when the user has already typed `org/` or
  * `org/slug-prefix` — gets parsed locally so the org segment narrows results
@@ -62,7 +80,7 @@ export const completeOrgSlug = (db: D1Db, value: string) =>
  */
 async function completeCoordinate(
   db: D1Db,
-  table: SQLiteTable,
+  table: Source,
   slugCol: SQLiteColumn,
   nameCol: SQLiteColumn,
   orgIdCol: SQLiteColumn,
@@ -80,12 +98,13 @@ async function completeCoordinate(
     const slugSubstring = `%${slugNeedle}%`;
     const slugPrefix = `${slugNeedle}%`;
     const rows = await db
-      .select({ slug: slugCol, orgSlug: organizations.slug })
+      .select({ slug: slugCol, orgSlug: orgs.slug })
       .from(table)
-      .innerJoin(organizations, eq(orgIdCol, organizations.id))
+      .innerJoin(orgs, eq(orgIdCol, orgs.id))
       .where(
         and(
-          eq(sql`LOWER(${organizations.slug})`, orgNeedle),
+          visibleOrg,
+          eq(sql`LOWER(${orgs.slug})`, orgNeedle),
           slugNeedle ? (sql`LOWER(${slugCol}) LIKE ${slugSubstring}` as SQL) : sql`1 = 1`,
         ) as SQL,
       )
@@ -100,11 +119,14 @@ async function completeCoordinate(
   const substring = `%${needle}%`;
   const prefix = `${needle}%`;
   const rows = await db
-    .select({ slug: slugCol, orgSlug: organizations.slug })
+    .select({ slug: slugCol, orgSlug: orgs.slug })
     .from(table)
-    .innerJoin(organizations, eq(orgIdCol, organizations.id))
+    .innerJoin(orgs, eq(orgIdCol, orgs.id))
     .where(
-      or(sql`LOWER(${slugCol}) LIKE ${substring}`, sql`LOWER(${nameCol}) LIKE ${substring}`) as SQL,
+      and(
+        visibleOrg,
+        or(sql`LOWER(${slugCol}) LIKE ${substring}`, sql`LOWER(${nameCol}) LIKE ${substring}`),
+      ) as SQL,
     )
     .orderBy(
       sql`CASE WHEN LOWER(${slugCol}) LIKE ${prefix} OR LOWER(${nameCol}) LIKE ${prefix} THEN 0 ELSE 1 END`,
@@ -115,10 +137,24 @@ async function completeCoordinate(
 }
 
 export const completeProductSlug = (db: D1Db, value: string) =>
-  completeCoordinate(db, products, products.slug, products.name, products.orgId, value);
+  completeCoordinate(
+    db,
+    productsActive,
+    productsActive.slug,
+    productsActive.name,
+    productsActive.orgId,
+    value,
+  );
 
 export const completeSourceSlug = (db: D1Db, value: string) =>
-  completeCoordinate(db, sources, sources.slug, sources.name, sources.orgId, value);
+  completeCoordinate(
+    db,
+    sourcesVisible,
+    sourcesVisible.slug,
+    sourcesVisible.name,
+    sourcesVisible.orgId,
+    value,
+  );
 
 /**
  * Union product + source coordinate completion for the unified catalog
