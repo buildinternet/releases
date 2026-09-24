@@ -1,5 +1,16 @@
 # @buildinternet/releases-api-types
 
+## 0.56.0
+
+### Minor Changes
+
+- ebe2fd4: Owner-scoped publish tokens (#2373). Core adds `PUBLISH_SCOPE` (`"publish"`, deliberately off the `read ⊂ write ⊂ admin` ladder) and a nullable `api_tokens.source_id` column. API types add the `/v1/me/publish-tokens` shapes: `CreatePublishTokenBody`, `CreatedPublishToken`, `PublishToken`, `ListPublishTokensResponse`, and `RevokePublishTokenResponse`.
+
+### Patch Changes
+
+- Updated dependencies [ebe2fd4]
+  - @buildinternet/releases-core@0.32.0
+
 ## 0.55.0
 
 ### Minor Changes
