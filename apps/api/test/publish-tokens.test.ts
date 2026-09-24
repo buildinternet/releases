@@ -337,10 +337,12 @@ describe("POST /v1/me/publish-tokens (mint)", () => {
   });
 
   it("accepts the `releases login` session token as a Bearer, with no Origin (#2388)", async () => {
-    const res = await call(
-      "/v1/me/publish-tokens",
-      json("POST", { sourceId: "src_a1", name: "cli" }, bearer("sess_owner")),
-    );
+    // No Origin header at all, as a CLI sends it (json() would add one).
+    const res = await call("/v1/me/publish-tokens", {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: "bearer sess_owner" },
+      body: JSON.stringify({ sourceId: "src_a1", name: "cli" }),
+    });
     expect(res.status).toBe(201);
     const { id } = (await res.json()) as { id: string };
 

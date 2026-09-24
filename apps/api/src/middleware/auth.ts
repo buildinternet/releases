@@ -708,10 +708,13 @@ export function requireSessionOnlyWithFlag(
     const headers = new Headers(c.req.raw.headers);
     const authz = headers.get("authorization");
     if (authz !== null) {
-      const token = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
+      // Auth schemes are case-insensitive (RFC 9110); hand Better Auth the
+      // canonical form.
+      const token = /^bearer\s+/i.test(authz) ? authz.replace(/^bearer\s+/i, "").trim() : "";
       if (!token || isNonSessionBearer(token)) {
         return respondError(c, new UnauthorizedError("Sign in required"));
       }
+      headers.set("authorization", `Bearer ${token}`);
       headers.delete("cookie");
     }
     const auth = await getOrCreateAuth(c);
