@@ -800,7 +800,7 @@ describe("ending a claim (#2389)", () => {
     expect(await res.json()).toMatchObject({
       id: CLAIM,
       status: "revoked",
-      revokedBy: "root",
+      revokedBy: "root-key",
       revokeReason: "domain changed hands",
     });
     expect((await batch(token)).status).toBe(401);

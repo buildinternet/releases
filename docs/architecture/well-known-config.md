@@ -403,7 +403,7 @@ a host.
 
 **Ending a claim (#2389).** A verified claim never lapses on its own (re-verification is #2395), so
 it can be ended explicitly. The row is kept as `revoked` with `revoked_at`, `revoked_by` (`owner`,
-`root`, or `token:<id>`), and `revoke_reason`; `revokeClaim` in `routes/listing-claims.ts` is the
+`root-key`, or the admin token id), and `revoke_reason`; `revokeClaim` in `queries/org-claims.ts` is the
 one writer, guarded on the status it read.
 
 - `DELETE /v1/listing/claims/:id` — the owner releases their own pending or verified claim

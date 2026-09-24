@@ -1,5 +1,5 @@
 -- Ending a verified ownership claim (#2389): the row is kept with
--- status = 'revoked', plus when, by whom ('owner', 'root', or 'token:<id>'),
+-- status = 'revoked', plus when, by whom ('owner', 'root-key', or an admin token id),
 -- and why. SQLite cannot ALTER a CHECK constraint in place, so rebuild the
 -- table to widen the status CHECK (same pattern as
 -- 20260915220000_add_webhook_format_discord.sql). Nothing references

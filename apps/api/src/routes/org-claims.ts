@@ -17,7 +17,6 @@ import {
 } from "@buildinternet/releases-api-types";
 import { organizations, orgClaims, type OrgClaimRow } from "@buildinternet/releases-core/schema";
 import { ForbiddenError, NotFoundError } from "@releases/lib/releases-error";
-import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { orgWhere } from "../utils.js";
@@ -25,7 +24,7 @@ import { isValidBearerAuth, resolveAuthIdentity } from "../middleware/auth.js";
 import { respondError } from "../lib/error-response.js";
 import { errorResponse } from "../lib/openapi-error.js";
 import { validateJson } from "../lib/validate.js";
-import { revokeClaim } from "./listing-claims.js";
+import { revokeClaim } from "../queries/org-claims.js";
 
 function projectAdminClaim(row: OrgClaimRow): AdminOrgClaim {
   return {
@@ -42,10 +41,14 @@ function projectAdminClaim(row: OrgClaimRow): AdminOrgClaim {
   };
 }
 
-/** Admin principal label stored in `revoked_by`: `root` or `token:<id>`. */
-async function adminLabel(c: Context<Env>): Promise<string> {
+/**
+ * Admin label stored in `revoked_by`, in the same `actor` format the other
+ * admin audit events use (site-notice, ai-models, marketing classifier).
+ */
+async function adminActor(c: Context<Env>): Promise<string> {
   const identity = await resolveAuthIdentity(c);
-  return identity?.kind === "token" ? `token:${identity.tokenId}` : "root";
+  if (identity?.kind === "root") return "root-key";
+  return identity?.kind === "token" ? identity.tokenId : "unknown";
 }
 
 export const orgClaimRoutes = new Hono<Env>();
@@ -102,7 +105,7 @@ orgClaimRoutes.delete(
       },
       400: errorResponse("Missing reason"),
       403: errorResponse("Admin scope required"),
-      404: errorResponse("Organization or claim not found"),
+      404: errorResponse("No such claim on this organization"),
     },
   }),
   validateJson(RevokeOrgClaimBodySchema),
@@ -112,32 +115,16 @@ orgClaimRoutes.delete(
     }
     const { reason } = c.req.valid("json");
     const db = createDb(c.env.DB);
-    const [org] = await db
-      .select({ id: organizations.id })
-      .from(organizations)
-      .where(orgWhere(c.req.param("slug")));
-    if (!org) return respondError(c, new NotFoundError("Organization not found"));
-    const [claim] = await db
-      .select()
+    // One query: the claim, only if it belongs to the org named in the path.
+    const [row] = await db
+      .select({ claim: orgClaims })
       .from(orgClaims)
-      .where(and(eq(orgClaims.id, c.req.param("id")), eq(orgClaims.orgId, org.id)))
+      .innerJoin(organizations, eq(organizations.id, orgClaims.orgId))
+      .where(and(eq(orgClaims.id, c.req.param("id")), orgWhere(c.req.param("slug"))))
       .limit(1);
-    if (!claim) return respondError(c, new NotFoundError("Claim not found"));
+    if (!row) return respondError(c, new NotFoundError("Claim not found"));
 
-    const by = await adminLabel(c);
-    const ended = await revokeClaim(db, claim, { by, reason });
-    if (ended !== claim) {
-      logEvent("info", {
-        component: "listing",
-        event: "claim-revoked",
-        claimId: claim.id,
-        orgId: org.id,
-        userId: claim.userId,
-        by,
-        reason,
-        previousStatus: claim.status,
-      });
-    }
+    const ended = await revokeClaim(db, row.claim, { by: await adminActor(c), reason });
     return c.json(projectAdminClaim(ended));
   },
 );

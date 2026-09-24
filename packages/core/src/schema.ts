@@ -640,7 +640,7 @@ export const orgClaims = sqliteTable(
     verifiedAt: text("verified_at"),
     expiresAt: text("expires_at").notNull(),
     revokedAt: text("revoked_at"),
-    // "owner" when the claim holder released it; otherwise the admin principal.
+    // "owner" when the claim holder released it; otherwise the admin actor ("root-key" or a token id).
     revokedBy: text("revoked_by"),
     revokeReason: text("revoke_reason"),
   },

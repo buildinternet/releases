@@ -37,6 +37,7 @@ import { onClaimVerified } from "../lib/email/claim-verified-email.js";
 import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 import { requireListingEnabled } from "./listing.js";
+import { isClaimLive, revokeClaim } from "../queries/org-claims.js";
 
 const CLAIM_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -92,28 +93,6 @@ async function expireOverdueClaims(db: Db, rows: OrgClaimRow[]): Promise<OrgClai
   );
   const overdueIds = new Set(overdue.map((r) => r.id));
   return rows.map((r) => (overdueIds.has(r.id) ? { ...r, status: "expired" as const } : r));
-}
-
-/**
- * End a pending or verified claim, keeping the row as `revoked` (#2389). An
- * already-ended claim (revoked or expired) is returned as-is, so callers can
- * treat a same-object result as "nothing changed". The update is guarded on
- * the status it read, so a racing verify can't be overwritten silently.
- */
-export async function revokeClaim(
-  db: Db,
-  claim: OrgClaimRow,
-  { by, reason }: { by: string; reason: string },
-): Promise<OrgClaimRow> {
-  if (claim.status !== "pending" && claim.status !== "verified") return claim;
-  const revokedAt = new Date().toISOString();
-  const patch = { status: "revoked" as const, revokedAt, revokedBy: by, revokeReason: reason };
-  await db
-    .update(orgClaims)
-    .set(patch)
-    .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, claim.status)));
-  const [fresh] = await db.select().from(orgClaims).where(eq(orgClaims.id, claim.id)).limit(1);
-  return fresh ?? { ...claim, ...patch };
 }
 
 /**
@@ -292,7 +271,7 @@ listingClaimHandlers.post(
 
     // An ended claim never comes back to life by re-checking its old token —
     // a revoked verified claim can still be inside its pending window.
-    if (claim.status === "revoked" || claim.status === "expired") {
+    if (!isClaimLive(claim.status)) {
       return respondError(
         c,
         new ConflictError(
@@ -447,31 +426,16 @@ listingClaimHandlers.delete(
 
     const db = createDb(c.env.DB);
     const webBaseUrl = c.env.WEB_BASE_URL ?? "https://releases.sh";
-    const [claim] = await db
-      .select()
+    const [row] = await db
+      .select({ claim: orgClaims, org: organizations })
       .from(orgClaims)
+      .innerJoin(organizations, eq(organizations.id, orgClaims.orgId))
       .where(and(eq(orgClaims.id, c.req.param("id")), eq(orgClaims.userId, session.user.id)))
       .limit(1);
-    if (!claim) return respondError(c, new NotFoundError("No such claim."));
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, claim.orgId))
-      .limit(1);
-    if (!org) return respondError(c, new NotFoundError("No such claim."));
+    if (!row) return respondError(c, new NotFoundError("No such claim."));
+    const { claim, org } = row;
 
     const ended = await revokeClaim(db, claim, { by: "owner", reason: "released-by-owner" });
-    if (ended !== claim) {
-      logEvent("info", {
-        component: "listing",
-        event: "claim-revoked",
-        claimId: claim.id,
-        orgId: claim.orgId,
-        userId: session.user.id,
-        by: "owner",
-        previousStatus: claim.status,
-      });
-    }
     return c.json(projectClaim(ended, org, webBaseUrl), 200);
   },
 );
