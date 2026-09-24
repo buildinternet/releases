@@ -29,7 +29,11 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/a
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
-import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
+import {
+  USER_API_KEY_PREFIX,
+  DEVICE_AUTH_CLIENT_ID,
+  isDeviceAuthPurpose,
+} from "@buildinternet/releases-core/api-token";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import {
   oauthAccessTokenClaims,
@@ -772,6 +776,16 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
           deviceAuthorization({
             verificationUri: `${releaseWebBase(env)}/device`,
             validateClient: (clientId) => clientId === DEVICE_AUTH_CLIENT_ID,
+            // The CLI names why it's asking (`login`, `keys`, `publish-tokens`) so
+            // the approval page can say so. Absent is allowed for CLIs that predate
+            // it; anything else is refused rather than shown as an unknown request.
+            onDeviceAuthRequest: (_clientId, scope) => {
+              if (!scope || isDeviceAuthPurpose(scope)) return;
+              throw new APIError("BAD_REQUEST", {
+                error: "invalid_scope",
+                error_description: "Unknown device authorization purpose",
+              });
+            },
             // `schema: {}` is load-bearing, not a no-op. The plugin's own options
             // schema declares `schema: z.custom(() => true)` WITHOUT `.optional()`;
             // zod ^4.3.x tolerated a missing value but the root-resolved zod@4.4.3

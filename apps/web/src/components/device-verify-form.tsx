@@ -108,7 +108,7 @@ export function DeviceVerifyForm() {
           required
         />
         <p className="mt-2 text-[12.5px] leading-[1.5] text-stone-500 dark:text-stone-400">
-          Enter the code shown in your terminal after running <Code>releases login</Code>.
+          Enter the code the Releases CLI printed in your terminal.
         </p>
 
         {error ? <AuthError>{error}</AuthError> : null}

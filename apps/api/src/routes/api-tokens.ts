@@ -20,6 +20,7 @@ import { OAUTH_JWT_TOKEN_PREFIX } from "@releases/lib/consumption-ref";
 import type { TokenIdentity } from "@buildinternet/releases-api-types";
 import { newApiTokenId } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
+import { makeAuthAudit } from "../auth/audit.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError, UnauthorizedError, NotFoundError } from "@releases/lib/releases-error";
@@ -298,6 +299,64 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
     lastUsedAt: row.lastUsedAt,
   } satisfies TokenIdentity);
 });
+
+/**
+ * Revoke the user API key presenting this request. Lets the CLI's `releases
+ * auth logout` retire its own `relu_` key without a signed-in session: a key
+ * that can end only itself grants nothing new, even if it leaked. Machine
+ * tokens and OAuth JWTs are refused (they're revoked through their own admin or
+ * consent surfaces).
+ */
+apiTokenRoutes.delete(
+  "/tokens/me",
+  describeRoute({
+    tags: ["Authentication"],
+    summary: "Revoke the presenting user API key",
+    responses: {
+      200: {
+        description: "The key was revoked.",
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: { success: { type: "boolean" } },
+              required: ["success"],
+            },
+          },
+        },
+      },
+      400: errorResponse("The credential is not a user API key"),
+      401: errorResponse("Missing, invalid, or already revoked credential"),
+    },
+  }),
+  async (c) => {
+    const auth = c.get("auth");
+    if (auth?.kind !== "token" || !isUserApiKeyShaped(auth.tokenId)) {
+      return respondError(
+        c,
+        new ValidationError("Only a user API key (relu_) can revoke itself", {
+          code: "bad_request",
+        }),
+      );
+    }
+    const keyId = auth.tokenId.slice(USER_API_KEY_PREFIX.length);
+    const db = createDb(c.env.DB);
+    // The auth middleware already verified this key, so its id is the only
+    // ownership check needed; zero rows means it was revoked mid-request.
+    const [row] = await db
+      .delete(apikey)
+      .where(eq(apikey.id, keyId))
+      .returning({ referenceId: apikey.referenceId });
+    if (!row) return respondError(c, new UnauthorizedError("Invalid API key"));
+    makeAuthAudit(c.env)("info", {
+      event: "api-key-revoked",
+      userId: row.referenceId,
+      keyId,
+      via: "self",
+    });
+    return c.json({ success: true });
+  },
+);
 
 apiTokenRoutes.get("/tokens/:id", async (c) => {
   const db = createDb(c.env.DB);

@@ -472,6 +472,26 @@ export function ScopeGroups({ appName, scopes }: { appName: string; scopes: stri
   );
 }
 
+/**
+ * A one-time account permission (a device approval for a single CLI command,
+ * not an OAuth scope), shown in the same row style as {@link ScopeGroups}.
+ */
+export function AccountPermission({
+  appName,
+  title,
+  desc,
+}: {
+  appName: string;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <PermGroup label={`What ${appName} can do`} badge="One time" count={1}>
+      <Perm icon={KeyIcon} tone="amber" title={title} desc={desc} />
+    </PermGroup>
+  );
+}
+
 /* ─────────────────────────── outcome ─────────────────────────── */
 
 /** Terminal approved/denied result card (device flow stays on the page). */

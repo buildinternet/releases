@@ -34,13 +34,16 @@ function app(db: TestDatabase["db"]) {
   a.use("*", tokensAuthMiddleware);
   // /tokens/me must be reachable by any valid identity (read+).
   a.get("/tokens/me", (c) => c.json({ ok: true }));
+  a.delete("/tokens/me", (c) => c.json({ ok: true }));
   // Any other token route is admin-only.
   a.get("/tokens/abc", (c) => c.json({ ok: true }));
-  return (path: string, token?: string) =>
-    a.request(path, token ? { headers: { Authorization: `Bearer ${token}` } } : {}, {
-      DB: db,
-      RELEASES_API_KEY: mockSecret("root-secret"),
-    });
+  a.delete("/tokens/abc", (c) => c.json({ ok: true }));
+  return (path: string, token?: string, method = "GET") =>
+    a.request(
+      path,
+      { method, ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) },
+      { DB: db, RELEASES_API_KEY: mockSecret("root-secret") },
+    );
 }
 
 describe("tokensAuthMiddleware", () => {
@@ -65,6 +68,18 @@ describe("tokensAuthMiddleware", () => {
     h = createTestDb();
     const token = await seed(h.db, ["admin"]);
     expect((await app(h.db)("/tokens/abc", token)).status).toBe(200);
+  });
+
+  it("read-only token reaches DELETE /tokens/me (self-revoke)", async () => {
+    h = createTestDb();
+    const token = await seed(h.db, ["read"]);
+    expect((await app(h.db)("/tokens/me", token, "DELETE")).status).toBe(200);
+  });
+
+  it("read-only token is 403 on DELETE of any other token route", async () => {
+    h = createTestDb();
+    const token = await seed(h.db, ["read"]);
+    expect((await app(h.db)("/tokens/abc", token, "DELETE")).status).toBe(403);
   });
 
   it("static root key reaches /tokens/me", async () => {

@@ -26,7 +26,7 @@ curl -H "Authorization: Bearer YOUR_KEY" https://api.releases.sh/v1/...
 
 **Account endpoints** (`/v1/me/*` — follows, feed, webhooks, API keys) require a signed-in user. Any of these work:
 
-- **Browser session** — sign in on [releases.sh](https://releases.sh) and call the API with credentials included (cookie on same-site requests, or a session token from device login in the CLI).
+- **Browser session** — sign in on [releases.sh](https://releases.sh) and call the API with credentials included (cookie on same-site requests).
 - **User API key** — minted via `releases login` or **Account → API Keys**. Pass as `Authorization: Bearer <key>`.
 - **Sign in with Releases** — an OAuth access token from an app you've authorized. Pass as `Authorization: Bearer <token>`.
 

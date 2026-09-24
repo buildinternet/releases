@@ -1054,6 +1054,85 @@ describe("device-authorization plugin", () => {
     expect(rows[0]?.userId).toBeNull(); // not approved yet
   });
 
+  it("accepts a known purpose as the scope and refuses anything else", async () => {
+    const auth = await createAuth(baseEnv as never, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    for (const scope of ["login", "keys", "publish-tokens"]) {
+      const res = await auth.api.deviceCode({ body: { client_id: DEVICE_AUTH_CLIENT_ID, scope } });
+      expect(res.user_code).toBeTruthy();
+    }
+    await expect(
+      auth.api.deviceCode({ body: { client_id: DEVICE_AUTH_CLIENT_ID, scope: "admin" } }),
+    ).rejects.toThrow();
+  });
+
+  // The CLI's one-shot model: approve a purpose-labelled request, use the
+  // session, then sign it out with nothing but the Bearer token (no cookie,
+  // no Origin) the way a terminal client calls it.
+  it("shows the purpose to the approver and signs out a Bearer-only session", async () => {
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(baseEnv as never, undefined, {
+      db: createTestDb(),
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+    await auth.api.signUpEmail({
+      body: { email: "device@example.com", password: "correct-horse-battery", name: "Dev" },
+    });
+    const link = captured[0]!.text.match(/https?:\/\/\S*verify-email\S*/)![0];
+    const { headers: verified } = await auth.api.verifyEmail({
+      query: { token: new URL(link).searchParams.get("token")! },
+      returnHeaders: true,
+    });
+    const cookie = verified
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+
+    const code = await auth.api.deviceCode({
+      body: { client_id: DEVICE_AUTH_CLIENT_ID, scope: "keys" },
+    });
+    const claimed = await auth.api.deviceVerify({
+      query: { user_code: code.user_code },
+      headers: { cookie },
+    });
+    expect(claimed.scope).toBe("keys");
+    await auth.api.deviceApprove({ body: { userCode: code.user_code }, headers: { cookie } });
+    const { access_token } = await auth.api.deviceToken({
+      body: {
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        device_code: code.device_code,
+        client_id: DEVICE_AUTH_CLIENT_ID,
+      },
+    });
+
+    const call = (path: string, init: RequestInit = {}) =>
+      auth.handler(
+        new Request(`https://api.releases.localhost/api/auth/${path}`, {
+          ...init,
+          headers: { authorization: `Bearer ${access_token}`, ...init.headers },
+        }),
+      );
+    expect(await (await call("get-session")).json()).not.toBeNull();
+
+    const out = await call("sign-out", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(out.status).toBe(200);
+    expect(await (await call("get-session")).json()).toBeNull();
+
+    // Only the CLI's session ended; the browser session that approved it lives on.
+    const browser = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/get-session", { headers: { cookie } }),
+    );
+    expect(await browser.json()).not.toBeNull();
+  });
+
   it("rejects an unknown client id (validateClient fail-closed)", async () => {
     const auth = await createAuth(baseEnv as never, undefined, {
       db: createTestDb(),
