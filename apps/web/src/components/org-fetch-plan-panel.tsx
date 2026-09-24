@@ -53,6 +53,8 @@ function StarvedBadge({ staleHours }: { staleHours: number | null }) {
 function NextDueCell({ row, now }: { row: FetchPlanRow; now: number }) {
   if (row.plan.cadence === "firecrawl-webhook")
     return <span className="text-stone-400">webhook</span>;
+  if (row.plan.cadence === "push")
+    return <span className="text-stone-400">published directly</span>;
   if (row.plan.paused) return <span className="text-stone-400">—</span>;
 
   // When the SourceActor DO is driving this source, show its alarm time

@@ -25,7 +25,12 @@
  * have an HTTP body to parse.
  */
 import { eq, inArray, count } from "drizzle-orm";
-import { releases, organizations, type ReleaseType } from "@buildinternet/releases-core/schema";
+import {
+  releases,
+  organizations,
+  sources,
+  type ReleaseType,
+} from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../../db.js";
 import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
@@ -35,7 +40,7 @@ import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
-import { getSourceMeta, filterByUrlDeny } from "@releases/adapters/feed.js";
+import { getSourceMeta, filterByUrlDeny, isPushFed } from "@releases/adapters/feed.js";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "./title-dedup.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../media/media-ingest.js";
@@ -411,6 +416,18 @@ export async function ingestReleaseBatch(
     .select({ n: count() })
     .from(releases)
     .where(eq(releases.sourceId, src.id));
+
+  // Push-fed sources (#2374) have no poll cron to stamp `lastFetchedAt` — this
+  // write IS the fetch. Stamp it here, on any successful batch call (even a
+  // no-op re-run with `inserted === 0`), so the web/CLI can show "published
+  // directly" timing instead of a permanently-null last-fetch. Reuses the
+  // existing column rather than adding a `last_pushed_at` migration.
+  if (isPushFed(src, denyMeta)) {
+    await db
+      .update(sources)
+      .set({ lastFetchedAt: new Date().toISOString() })
+      .where(eq(sources.id, src.id));
+  }
 
   return { inserted, total, insertedIds, visiblePublishRows };
 }

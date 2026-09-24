@@ -44,6 +44,9 @@ function unmanagedWhere(now: Date) {
       hasCadence,
       sql`${sourcesActive.orgId} NOT IN (${pausedOrgIds(db)})`,
       sql`(json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') != 1)`,
+      // Push-fed sources (#2374) have no local cadence at all — never counted
+      // as "should be polling but has no alarm".
+      sql`json_extract(${sourcesActive.metadata}, '$.ingestMode') IS NOT 'push'`,
       sql`(
         json_extract(${sourcesActive.metadata}, '$.sourceActor.managed') IS NULL
         OR json_extract(${sourcesActive.metadata}, '$.sourceActor.managed') = 0

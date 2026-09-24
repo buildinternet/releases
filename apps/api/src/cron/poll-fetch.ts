@@ -338,6 +338,11 @@ export async function queryDueSources(
   // (this query gates both). enabled === true → json_extract returns 1; absent → NULL.
   const notFirecrawl = sql`(json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') != 1)`;
 
+  // Push-fed sources (metadata.ingestMode = "push", #2374) are fed directly by
+  // their publisher (e.g. actions/publish-changelog) — mirrors notFirecrawl's
+  // NULL-safe shape. Absent → json_extract returns NULL → IS NOT "push" passes.
+  const notPushFed = sql`json_extract(${sourcesActive.metadata}, '$.ingestMode') IS NOT 'push'`;
+
   return db
     .select()
     .from(sourcesActive)
@@ -348,6 +353,7 @@ export async function queryDueSources(
         orgNotFetchPaused,
         backoffReady,
         notFirecrawl,
+        notPushFed,
         or(...tierConditions),
       ),
     );

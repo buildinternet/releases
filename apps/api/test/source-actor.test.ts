@@ -133,7 +133,7 @@ function mkActor(
 function seedScrapeFlagged(
   db: Db,
   id: string,
-  overrides: Partial<{ changeDetectedAt: string | null }> = {},
+  overrides: Partial<{ changeDetectedAt: string | null; metadata: Record<string, unknown> }> = {},
 ) {
   db.insert(sources)
     .values({
@@ -143,7 +143,7 @@ function seedScrapeFlagged(
       name: id,
       type: "scrape",
       url: `https://example.com/${id}`,
-      metadata: JSON.stringify({}),
+      metadata: JSON.stringify(overrides.metadata ?? {}),
       fetchPriority: "normal",
       lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString(),
       changeDetectedAt:
@@ -271,6 +271,24 @@ describe("SourceActor.alarm", () => {
     expect(h.created).toHaveLength(0);
     expect(h.alarmAt()).toBeNull();
     const mirror = await metaSourceActor(db, "src_paused");
+    expect(mirror?.managed).toBe(false);
+    expect(mirror?.nextAlarmAt).toBeNull();
+  });
+
+  it("push-fed source does not fetch or reschedule, and clears the D1 mirror (#2374)", async () => {
+    const db = mkDb();
+    seedSource(db, "src_push", {
+      lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString(),
+      metadata: JSON.stringify({ ingestMode: "push" }),
+    });
+    const h = mkActor(db);
+    h.store.set("sourceId", "src_push");
+
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(0);
+    expect(h.alarmAt()).toBeNull();
+    const mirror = await metaSourceActor(db, "src_push");
     expect(mirror?.managed).toBe(false);
     expect(mirror?.nextAlarmAt).toBeNull();
   });
@@ -487,6 +505,16 @@ describe("SourceActor → OrgActor notify", () => {
     const calls: Array<{ name: string; id: string }> = [];
     const h = mkActor(db, { orgActorCalls: calls });
     await h.actor.ensureScheduled("src_s3");
+    await h.actor.alarm();
+    expect(calls).toEqual([]);
+  });
+
+  it("does NOT arm the OrgActor for a flagged but push-fed source (#2374)", async () => {
+    const db = mkDb();
+    seedScrapeFlagged(db, "src_s4", { metadata: { ingestMode: "push" } });
+    const calls: Array<{ name: string; id: string }> = [];
+    const h = mkActor(db, { orgActorCalls: calls });
+    await h.actor.ensureScheduled("src_s4");
     await h.actor.alarm();
     expect(calls).toEqual([]);
   });

@@ -285,3 +285,26 @@ describe("queryCandidates firecrawl exclusion", () => {
     expect(rows.map((r) => r.slug)).toEqual(["normal"]);
   });
 });
+
+describe("queryCandidates push-fed exclusion (#2374)", () => {
+  it("excludes sources marked metadata.ingestMode = push", async () => {
+    const db = mkOrderingDb();
+    seedOrderingOrg(db, "org_x");
+    seedOrderingSource(db, {
+      id: "src_normal",
+      slug: "normal",
+      orgId: "org_x",
+      lastFetchedAt: OLD,
+    });
+    seedOrderingSource(db, {
+      id: "src_push",
+      slug: "push-fed",
+      orgId: "org_x",
+      lastFetchedAt: OLD,
+      metadata: { ingestMode: "push" },
+    });
+
+    const { rows } = await queryCandidates(db as any, { cap: 10 });
+    expect(rows.map((r) => r.slug)).toEqual(["normal"]);
+  });
+});

@@ -69,6 +69,10 @@ export async function queryCandidates(
     // cron drops them the same way (queryDueSources `notFirecrawl`). Without this
     // a source could be double-fetched by both the monitor and this sweep.
     sql`(json_extract(${sources.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sources.metadata}, '$.firecrawl.enabled') != 1)`,
+    // Exclude push-fed sources (metadata.ingestMode = "push", #2374) — they're
+    // fed directly by their publisher and never scrape/agent-fetched, so they
+    // must never be flagged into the OrgActor drain either.
+    sql`json_extract(${sources.metadata}, '$.ingestMode') IS NOT 'push'`,
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
     // Exclude sources whose org has fetch_paused = true (#1057).
     or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
