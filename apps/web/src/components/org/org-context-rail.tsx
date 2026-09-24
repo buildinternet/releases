@@ -5,6 +5,7 @@ import type { CollectionListItem } from "@buildinternet/releases-api-types";
 import { accountUrl, AccountIcon, formatAccountHandle } from "@/components/account-link";
 import { ExternalLinkIcon } from "@/components/account/icons";
 import { ReportIssue } from "@/components/report-issue";
+import { OwnDomainLink } from "@/components/org/own-domain-link";
 import type { ReportContext } from "@/lib/report-issue";
 import { domainHref } from "@/lib/source-display";
 import { formatRelativeDate, formatMonthYear } from "@/lib/formatters";
@@ -26,6 +27,7 @@ export function OrgContextRail({
   lastCheckedAt,
   formatPath,
   report,
+  claim,
 }: {
   domain: string | null | undefined;
   category: string | null | undefined;
@@ -38,6 +40,8 @@ export function OrgContextRail({
   formatPath: string;
   /** Optional issue-report target for this org page. */
   report?: ReportContext;
+  /** Tracked org with a domain: offer the ownership-claim dialog (#2393). */
+  claim?: { orgSlug: string; domain: string };
 }) {
   const chips: { label: string; href: string }[] = [];
   if (category)
@@ -152,17 +156,24 @@ export function OrgContextRail({
         </div>
       </div>
 
-      {report ? (
-        <div className="mt-1 ml-0.5">
-          <ReportIssue
-            context={report}
-            className="text-[12.5px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)] underline-offset-2 hover:underline"
-          />
+      {report || claim ? (
+        <div className="mt-1 ml-0.5 flex flex-col items-start gap-1.5">
+          {report ? <ReportIssue context={report} className={FOOTER_LINK_CLASS} /> : null}
+          {claim ? (
+            <OwnDomainLink
+              orgSlug={claim.orgSlug}
+              domain={claim.domain}
+              className={FOOTER_LINK_CLASS}
+            />
+          ) : null}
         </div>
       ) : null}
     </aside>
   );
 }
+
+const FOOTER_LINK_CLASS =
+  "text-[12.5px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)] underline-offset-2 hover:underline";
 
 function RailEyebrow({
   children,

@@ -471,6 +471,12 @@ locator eligibility preview (tier-1 live vs tier-2 queued, same classification a
 the promote CTA (hidden when the org has no declared locations). Success renders the
 locator-outcome summary linking to the now-tracked org.
 
+A stub org renders the panel inline on its page. A **tracked** org (#2393) gets a quiet
+"Own {domain}?" link in the org context rail (`own-domain-link.tsx`) that opens the same panel in
+a dialog with `tracked` set. It mounts only on open, so page views cost no claim fetches. It says
+the lane is closed when self-serve is off, and a verified claim links to the Publish tokens panel on
+`/account/webhooks` instead of offering promotion.
+
 ## Out of scope (phase 2+)
 
 - **CLI:** `releases json validate [path|domain]` (OSS repo, after the api-types publish).

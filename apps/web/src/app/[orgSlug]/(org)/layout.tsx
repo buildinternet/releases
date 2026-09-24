@@ -150,6 +150,11 @@ export default async function OrgLayout({
               trackingSince={org.trackingSince}
               lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
               formatPath={`/${orgSlug}`}
+              claim={
+                AUTH_CONFIGURED && org.domain && org.status !== "stub"
+                  ? { orgSlug: org.slug, domain: org.domain }
+                  : undefined
+              }
               report={{
                 kind: "org",
                 name: org.name,
