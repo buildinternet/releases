@@ -24,6 +24,7 @@ import {
 import { publicRateLimitMiddleware } from "../src/middleware/rate-limit.js";
 import { adminRoutes, publicReadRoutes } from "../src/route-namespaces.js";
 import { mountV1Routes } from "../src/v1-routes.js";
+import { revokeClaim } from "../src/queries/org-claims.js";
 import { createTestDb, type TestDb } from "./setup";
 
 const ROOT = "root-secret";
@@ -791,5 +792,117 @@ describe("first publish marks the source push-fed (#2390)", () => {
     );
     expect(res.status).toBe(200);
     expect(JSON.parse((await readSource()).metadata ?? "{}").ingestMode).toBeUndefined();
+  });
+});
+
+describe("ending a claim (#2389)", () => {
+  const CLAIM = `ocl_${OWNER}_org_a`;
+  const batch = (token: string) =>
+    call("/v1/sources/src_a1/releases/batch", json("POST", batchBody(), bearer(token)));
+  const claimRow = async () =>
+    (await db.select().from(orgClaims).where(eq(orgClaims.id, CLAIM)))[0]!;
+
+  it("the owner releases their claim and the token stops on the next request", async () => {
+    const { token } = await mintToken();
+    expect((await batch(token)).status).toBe(200);
+
+    const res = await call(`/v1/listing/claims/${CLAIM}`, {
+      method: "DELETE",
+      headers: { Cookie: COOKIE_OWNER },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; revokedAt?: string };
+    expect(body.status).toBe("revoked");
+    expect(body.revokedAt).toBeString();
+    expect(await claimRow()).toMatchObject({
+      status: "revoked",
+      revokedBy: "owner",
+      revokeReason: "released-by-owner",
+    });
+
+    expect((await batch(token)).status).toBe(401);
+  });
+
+  it("is idempotent, and 404s someone else's claim", async () => {
+    const del = (cookie: string) =>
+      call(`/v1/listing/claims/${CLAIM}`, { method: "DELETE", headers: { Cookie: cookie } });
+    expect((await del(COOKIE_OTHER)).status).toBe(404);
+    expect((await claimRow()).status).toBe("verified");
+    expect((await del(COOKIE_OWNER)).status).toBe(200);
+    const first = (await claimRow()).revokedAt;
+    expect((await del(COOKIE_OWNER)).status).toBe(200);
+    expect((await claimRow()).revokedAt).toBe(first);
+  });
+
+  it("an admin revokes with a reason; the token stops and the list shows why", async () => {
+    const { token } = await mintToken();
+    const res = await call(
+      `/v1/orgs/acme/claims/${CLAIM}`,
+      json("DELETE", { reason: "domain changed hands" }, bearer(ROOT)),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: CLAIM,
+      status: "revoked",
+      revokedBy: "root-key",
+      revokeReason: "domain changed hands",
+    });
+    expect((await batch(token)).status).toBe(401);
+
+    const list = await call("/v1/orgs/acme/claims", { headers: bearer(ROOT) });
+    expect(list.status).toBe(200);
+    const { claims } = (await list.json()) as { claims: Array<Record<string, unknown>> };
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ userId: OWNER, status: "revoked" });
+    expect(claims[0]).not.toHaveProperty("token");
+  });
+
+  it("requires a reason from the admin", async () => {
+    const res = await call(`/v1/orgs/acme/claims/${CLAIM}`, json("DELETE", {}, bearer(ROOT)));
+    expect(res.status).toBe(400);
+    expect((await claimRow()).status).toBe("verified");
+  });
+
+  it("refuses a read-only relu_ key or an OAuth JWT for the owner release", async () => {
+    // The test seam would resolve both to OWNER, so a pass means the
+    // session-only gate refused them before any lookup.
+    for (const t of ["relu_somekey", JWT_LIKE]) {
+      const res = await call(`/v1/listing/claims/${CLAIM}`, {
+        method: "DELETE",
+        headers: bearer(t),
+      });
+      expect(res.status).toBe(401);
+    }
+    expect((await claimRow()).status).toBe("verified");
+  });
+
+  it("revokes the current row when a verify won the race after the read", async () => {
+    const stale = { ...(await claimRow()), status: "pending" as const };
+    const ended = await revokeClaim(db as never, stale, { by: "owner", reason: "r" });
+    expect(ended.status).toBe("revoked");
+    expect((await claimRow()).status).toBe("revoked");
+  });
+
+  it("keeps the admin routes admin-only", async () => {
+    const { token } = await mintToken();
+    const callers: Record<string, string>[] = [{ Cookie: COOKIE_OWNER }, bearer(token), {}];
+    for (const headers of callers) {
+      const list = await call("/v1/orgs/acme/claims", { headers });
+      expect(list.status).toBe(403);
+      const del = await call(
+        `/v1/orgs/acme/claims/${CLAIM}`,
+        json("DELETE", { reason: "x" }, headers),
+      );
+      expect([401, 403]).toContain(del.status);
+    }
+    expect((await claimRow()).status).toBe("verified");
+  });
+
+  it("404s a claim that belongs to a different org", async () => {
+    const res = await call(
+      `/v1/orgs/beta/claims/${CLAIM}`,
+      json("DELETE", { reason: "x" }, bearer(ROOT)),
+    );
+    expect(res.status).toBe(404);
   });
 });

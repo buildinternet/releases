@@ -323,7 +323,12 @@ export function ClaimPanel({
       try {
         const claims = await listClaims();
         if (cancelled) return;
-        const existing = claims.find((claim) => claim.org.slug === orgSlug);
+        // An org can have several rows (an old released or expired claim next
+        // to a live one), so prefer the live states.
+        const mine = claims.filter((claim) => claim.org.slug === orgSlug);
+        const existing =
+          mine.find((claim) => claim.status === "verified") ??
+          mine.find((claim) => claim.status === "pending");
         if (existing?.status === "verified") setState({ phase: "verified", claim: existing });
         else if (existing?.status === "pending") setState({ phase: "pending", claim: existing });
         else setState({ phase: "idle" });

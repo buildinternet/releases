@@ -762,3 +762,76 @@ describe("wiring: claim routes ride the composed v1 router", () => {
     expect(spec.paths?.["/listing/claims"]?.get).toBeTruthy();
   });
 });
+
+describe("DELETE /v1/listing/claims/:id (#2389)", () => {
+  const post = (a: Hono, path: string, body: unknown) =>
+    a.request(path, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }, env());
+
+  async function verifiedClaim(a: Hono) {
+    const claim = (await (await post(a, "/listing/claim", { domain: "acme.com" })).json()) as {
+      id: string;
+      token: string;
+    };
+    mockWellKnownFetch(claim.token);
+    const v = await post(a, "/listing/claim/verify", { claimId: claim.id });
+    expect(((await v.json()) as { verified: boolean }).verified).toBe(true);
+    return claim;
+  }
+
+  it("verify refuses a released claim, even inside its pending window", async () => {
+    const a = withSession("u1");
+    const claim = await verifiedClaim(a);
+    const del = await a.request(`/listing/claims/${claim.id}`, { method: "DELETE" }, env());
+    expect(del.status).toBe(200);
+
+    // The proof is still published, but the old claim must not come back.
+    const res = await post(a, "/listing/claim/verify", { claimId: claim.id });
+    expect(res.status).toBe(409);
+    const [row] = await h.db.select().from(orgClaims).where(eq(orgClaims.id, claim.id));
+    expect(row!.status).toBe("revoked");
+  });
+
+  it("a revoke that lands during the proof fetch wins over verify", async () => {
+    const a = withSession("u1");
+    const claim = (await (await post(a, "/listing/claim", { domain: "acme.com" })).json()) as {
+      id: string;
+      token: string;
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/.well-known/releases-verify.txt")) {
+        // The owner releases the claim while we're still fetching the proof.
+        await h.db.update(orgClaims).set({ status: "revoked" }).where(eq(orgClaims.id, claim.id));
+        return new Response(claim.token, {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      return new Response(JSON.stringify({ Status: 3 }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const res = await post(a, "/listing/claim/verify", { claimId: claim.id });
+    expect(res.status).toBe(409);
+    const [row] = await h.db.select().from(orgClaims).where(eq(orgClaims.id, claim.id));
+    expect(row!.status).toBe("revoked");
+  });
+
+  it("lets the owner start a fresh claim afterwards", async () => {
+    const a = withSession("u1");
+    const claim = await verifiedClaim(a);
+    await a.request(`/listing/claims/${claim.id}`, { method: "DELETE" }, env());
+
+    const res = await post(a, "/listing/claim", { domain: "acme.com" });
+    expect(res.status).toBe(201);
+    const fresh = (await res.json()) as { id: string; status: string; token: string };
+    expect(fresh.id).not.toBe(claim.id);
+    expect(fresh.status).toBe("pending");
+    expect(fresh.token).not.toBe(claim.token);
+  });
+
+  it("401s when unauthenticated", async () => {
+    const a = withSession(null);
+    const res = await a.request("/listing/claims/ocl_x", { method: "DELETE" }, env());
+    expect(res.status).toBe(401);
+  });
+});

@@ -13,6 +13,7 @@ import type { Env } from "./index.js";
 import { statsRoutes } from "./routes/stats.js";
 import { siteNoticeRoutes } from "./routes/site-notice.js";
 import { orgRoutes } from "./routes/orgs.js";
+import { orgClaimRoutes } from "./routes/org-claims.js";
 import { sitemapRoutes } from "./routes/sitemap.js";
 import { sourceRoutes } from "./routes/sources.js";
 import { searchRoutes } from "./routes/search.js";
@@ -89,6 +90,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", statsRoutes);
   v1.route("/", siteNoticeRoutes);
   v1.route("/", orgRoutes);
+  v1.route("/", orgClaimRoutes);
   v1.route("/", sitemapRoutes);
   v1.route("/", productRoutes);
   v1.route("/", releaseRoutes);

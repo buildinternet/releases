@@ -24,6 +24,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import {
   attachFollowsSession,
+  requireSessionOnlyWithFlag,
   execWaitUntil,
   type AuthSessionContext,
 } from "../middleware/auth.js";
@@ -37,6 +38,7 @@ import { onClaimVerified } from "../lib/email/claim-verified-email.js";
 import { respondError } from "../lib/error-response.js";
 import { validateJson } from "../lib/validate.js";
 import { requireListingEnabled } from "./listing.js";
+import { isClaimLive, revokeClaim } from "../queries/org-claims.js";
 
 const CLAIM_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -72,6 +74,7 @@ function projectClaim(
   };
   if (claim.method) base.method = claim.method as OrgClaim["method"];
   if (claim.verifiedAt) base.verifiedAt = claim.verifiedAt;
+  if (claim.revokedAt) base.revokedAt = claim.revokedAt;
   if (claim.status === "pending") {
     base.token = claim.token;
     base.instructions = claimInstructions(domain);
@@ -86,7 +89,10 @@ async function expireOverdueClaims(db: Db, rows: OrgClaimRow[]): Promise<OrgClai
   if (overdue.length === 0) return rows;
   await Promise.all(
     overdue.map((r) =>
-      db.update(orgClaims).set({ status: "expired" }).where(eq(orgClaims.id, r.id)),
+      db
+        .update(orgClaims)
+        .set({ status: "expired" })
+        .where(and(eq(orgClaims.id, r.id), eq(orgClaims.status, "pending"))),
     ),
   );
   const overdueIds = new Set(overdue.map((r) => r.id));
@@ -267,9 +273,26 @@ listingClaimHandlers.post(
       );
     }
 
+    // An ended claim never comes back to life by re-checking its old token —
+    // a revoked verified claim can still be inside its pending window.
+    if (!isClaimLive(claim.status)) {
+      return respondError(
+        c,
+        new ConflictError(
+          `This claim has ${claim.status === "revoked" ? "been released" : "expired"}; start a new claim.`,
+          {
+            details: { claimId: claim.id },
+          },
+        ),
+      );
+    }
+
     const now = new Date().toISOString();
     if (claim.expiresAt < now) {
-      await db.update(orgClaims).set({ status: "expired" }).where(eq(orgClaims.id, claim.id));
+      await db
+        .update(orgClaims)
+        .set({ status: "expired" })
+        .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, "pending")));
       return respondError(
         c,
         new ConflictError("This claim has expired; start a new claim.", {
@@ -288,10 +311,24 @@ listingClaimHandlers.post(
 
     const result = await verifyDomainControl(org.domain ?? "", claim.token);
     if (result.verified) {
-      await db
+      // Guarded on `pending`: the proof fetch takes seconds, and a revoke that
+      // lands meanwhile must win, not be flipped back to verified.
+      const [flipped] = await db
         .update(orgClaims)
         .set({ status: "verified", verifiedAt: now, method: result.method })
-        .where(eq(orgClaims.id, claim.id));
+        .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, "pending")))
+        .returning({ id: orgClaims.id });
+      if (!flipped) {
+        return respondError(
+          c,
+          new ConflictError(
+            "This claim changed while it was being checked; refresh and try again.",
+            {
+              details: { claimId: claim.id },
+            },
+          ),
+        );
+      }
       await db
         .update(organizations)
         .set({ trackingRequestedAt: now, updatedAt: now })
@@ -384,6 +421,43 @@ listingClaimHandlers.get(
       })
       .filter((claim): claim is OrgClaim => claim !== null);
     return c.json({ claims });
+  },
+);
+
+listingClaimHandlers.delete(
+  "/listing/claims/:id",
+  describeRoute({
+    tags: ["Listing"],
+    summary: "Release one of your ownership claims",
+    description:
+      "Signed-in only, and the claim must belong to the caller (404 otherwise). Ends a pending or verified claim: the row is kept as `revoked`. Publish tokens that relied on it stop working on their next request. Idempotent; an already-expired claim is returned unchanged. You can start a new claim later.",
+    responses: {
+      200: { description: "The ended claim (OrgClaim)" },
+      401: {
+        description: "Sign-in required",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
+      404: errorResponse("Lane disabled, or no such claim for this caller"),
+    },
+  }),
+  requireListingEnabled,
+  async (c) => {
+    const session = requireSession(c);
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+
+    const db = createDb(c.env.DB);
+    const webBaseUrl = c.env.WEB_BASE_URL ?? "https://releases.sh";
+    const [row] = await db
+      .select({ claim: orgClaims, org: organizations })
+      .from(orgClaims)
+      .innerJoin(organizations, eq(organizations.id, orgClaims.orgId))
+      .where(and(eq(orgClaims.id, c.req.param("id")), eq(orgClaims.userId, session.user.id)))
+      .limit(1);
+    if (!row) return respondError(c, new NotFoundError("No such claim."));
+    const { claim, org } = row;
+
+    const ended = await revokeClaim(db, claim, { by: "owner", reason: "released-by-owner" });
+    return c.json(projectClaim(ended, org, webBaseUrl), 200);
   },
 );
 
@@ -527,6 +601,11 @@ listingClaimHandlers.post(
  * anonymously — every handler above gates on `c.get("session")` itself, so
  * flag-off 404s and rate limits fire before any 401.
  */
+const releaseClaimSession = requireSessionOnlyWithFlag(
+  FLAGS.listingSelfServeEnabled,
+  (e) => e.LISTING_SELF_SERVE_ENABLED,
+);
+
 export const listingClaimRoutes = new Hono<Env>();
 // NB: Hono's wildcard needs an explicit path segment ("/listing/claim/*") —
 // a glued "/listing/claim*" is treated as a literal string and matches
@@ -536,5 +615,10 @@ export const listingClaimRoutes = new Hono<Env>();
 // own registration.
 listingClaimRoutes.use("/listing/claim/*", attachFollowsSession);
 listingClaimRoutes.use("/listing/claims", attachFollowsSession);
+// Releasing a claim cuts off its publish tokens, so it takes a real session
+// (cookie or the `releases login` token), never a read-only `relu_` key or an
+// OAuth JWT that attachFollowsSession would otherwise admit. (Only DELETE
+// lives under this path; `use` keeps the gate out of the OpenAPI route list.)
+listingClaimRoutes.use("/listing/claims/*", releaseClaimSession);
 listingClaimRoutes.use("/listing/promote", attachFollowsSession);
 listingClaimRoutes.route("/", listingClaimHandlers);

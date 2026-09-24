@@ -90,7 +90,7 @@ export const ListingClaimVerifyBodySchema = z.strictObject({
 });
 export type ListingClaimVerifyBody = z.infer<typeof ListingClaimVerifyBodySchema>;
 
-export const OrgClaimStatusSchema = z.enum(["pending", "verified", "expired"]);
+export const OrgClaimStatusSchema = z.enum(["pending", "verified", "expired", "revoked"]);
 export type OrgClaimStatus = z.infer<typeof OrgClaimStatusSchema>;
 
 export const ClaimMethodSchema = z.enum(["well-known", "dns-txt"]);
@@ -109,6 +109,8 @@ export const OrgClaimSchema = z.strictObject({
   token: z.string().optional(),
   createdAt: z.string(),
   verifiedAt: z.string().optional(),
+  /** Set once the claim was ended by its owner or an admin (#2389). */
+  revokedAt: z.string().optional(),
   expiresAt: z.string(),
   instructions: z
     .strictObject({
@@ -136,6 +138,35 @@ export const ListingClaimsResultSchema = z.strictObject({
   claims: z.array(OrgClaimSchema),
 });
 export type ListingClaimsResult = z.infer<typeof ListingClaimsResultSchema>;
+
+/**
+ * Admin view of every claim on an org (`GET /v1/orgs/:slug/claims`, #2389).
+ * Never includes the proof token.
+ */
+export const AdminOrgClaimSchema = z.strictObject({
+  id: z.string(),
+  userId: z.string(),
+  status: OrgClaimStatusSchema,
+  method: ClaimMethodSchema.nullable(),
+  createdAt: z.string(),
+  verifiedAt: z.string().nullable(),
+  expiresAt: z.string(),
+  revokedAt: z.string().nullable(),
+  revokedBy: z.string().nullable(),
+  revokeReason: z.string().nullable(),
+});
+export type AdminOrgClaim = z.infer<typeof AdminOrgClaimSchema>;
+
+export const ListOrgClaimsResponseSchema = z.strictObject({
+  claims: z.array(AdminOrgClaimSchema),
+});
+export type ListOrgClaimsResponse = z.infer<typeof ListOrgClaimsResponseSchema>;
+
+/** `DELETE /v1/orgs/:slug/claims/:id` body — admins must say why. */
+export const RevokeOrgClaimBodySchema = z.strictObject({
+  reason: z.string().trim().min(1).max(500),
+});
+export type RevokeOrgClaimBody = z.infer<typeof RevokeOrgClaimBodySchema>;
 
 /**
  * Self-serve Tier-1 promotion (#1947 epic item 3, PR B): a verified owner

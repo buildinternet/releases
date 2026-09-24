@@ -618,6 +618,8 @@ export type NewReleaseLocation = typeof releaseLocations.$inferInsert;
 // passes); a verified claim unlocks self-serve Tier-1 promotion (PR B).
 // Multiple pending claims may coexist; at most one verified claim per
 // (org, user) is meaningful — re-verifying is idempotent at the route layer.
+// Ending a claim (#2389) keeps the row as `revoked` with who/when/why; the
+// owner can start a fresh claim afterwards.
 export const orgClaims = sqliteTable(
   "org_claims",
   {
@@ -629,7 +631,7 @@ export const orgClaims = sqliteTable(
     // Set only once verification succeeds; null while pending.
     method: text("method", { enum: ["well-known", "dns-txt"] }),
     token: text("token").notNull(),
-    status: text("status", { enum: ["pending", "verified", "expired"] })
+    status: text("status", { enum: ["pending", "verified", "expired", "revoked"] })
       .notNull()
       .default("pending"),
     createdAt: text("created_at")
@@ -637,6 +639,10 @@ export const orgClaims = sqliteTable(
       .$defaultFn(() => new Date().toISOString()),
     verifiedAt: text("verified_at"),
     expiresAt: text("expires_at").notNull(),
+    revokedAt: text("revoked_at"),
+    // "owner" when the claim holder released it; otherwise the admin actor ("root-key" or a token id).
+    revokedBy: text("revoked_by"),
+    revokeReason: text("revoke_reason"),
   },
   (table) => [
     index("idx_org_claims_org_user").on(table.orgId, table.userId),
