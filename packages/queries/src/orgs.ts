@@ -6,8 +6,10 @@
  *   still resolve hidden ones, like `GET /v1/orgs/:slug`.
  * - Directory listings (`listOrgDirectoryPage`) skip deleted and hidden orgs,
  *   like `getOrgsWithStats` behind `GET /v1/orgs`.
+ * - Org detail products (`listOrgVisibleProducts`) are shared outright.
  */
-import { sql, type SQL } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
+import { productsActive } from "@buildinternet/releases-core/schema";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { AnyDb } from "@releases/lib/db";
 
@@ -130,4 +132,32 @@ export async function listOrgDirectoryPage(
       : db.all<{ n: number }>(sql`SELECT COUNT(*) AS n ${fromWhere}`),
   ]);
   return { rows, total: Number(totalRow[0]?.n ?? 0) };
+}
+
+/**
+ * An org's products for its detail read (`GET /v1/orgs/:slug`, MCP
+ * `get_organization`): live products with at least one visible source,
+ * ordered by name. Counts are visible-only, so a product whose sources are
+ * all hidden (a paused discovery candidate) doesn't surface.
+ */
+export async function listOrgVisibleProducts(db: AnyDb, orgId: string) {
+  return db
+    .select({
+      id: productsActive.id,
+      slug: productsActive.slug,
+      name: productsActive.name,
+      url: productsActive.url,
+      description: productsActive.description,
+      kind: productsActive.kind,
+      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_visible s WHERE s.product_id = products_active.id)`,
+      releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_visible sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
+    })
+    .from(productsActive)
+    .where(
+      and(
+        eq(productsActive.orgId, orgId),
+        sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = products_active.id)`,
+      ),
+    )
+    .orderBy(productsActive.name);
 }

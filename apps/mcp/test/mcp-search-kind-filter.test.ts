@@ -75,6 +75,29 @@ async function seedFixture(db: TestDatabase["db"]) {
     kind: "platform",
   });
 
+  // Search lists a product only when it has a visible source (as /v1/search
+  // does). These sources don't match "acme", so they don't join the results.
+  await db.insert(sources).values([
+    {
+      id: newSourceId(),
+      orgId,
+      productId: sdkProdId,
+      name: "Zed One",
+      slug: "zed-one",
+      type: "feed",
+      url: "https://example.com/z1",
+    },
+    {
+      id: newSourceId(),
+      orgId,
+      productId: platformProdId,
+      name: "Zed Two",
+      slug: "zed-two",
+      type: "feed",
+      url: "https://example.com/z2",
+    },
+  ]);
+
   // Two releases, one per source — share "quantum" for FTS hits
   const sdkReleaseId = newReleaseId();
   const toolReleaseId = newReleaseId();

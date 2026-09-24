@@ -1,8 +1,8 @@
 # Shared read queries (`packages/queries`)
 
 Working doc and migration map for moving the MCP worker's inline reads onto the
-same query functions the API worker uses. Status: slices 1–5 landed;
-decisions D1–D9 resolved (MCP visibility now matches the API).
+same query functions the API worker uses. Status: slices 1–6 landed;
+decisions D1–D12 resolved (MCP visibility now matches the API).
 
 ## Why
 
@@ -39,16 +39,18 @@ land in two or three places.
 
 ## Modules
 
-| Module          | Exports                                                                                                                                                                                                       | API consumers                                                                         | MCP consumers                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `entities`      | `orgWhere`, `sourceById`, `productById`, `sourceMatchByIdOrSlug`, `productMatchByIdOrSlug`, `findSourceById`, `findProductById`, `findSourceForOrgSlug`, `findProductForOrgSlug`, `isSourceId`, `isProductId` | `utils.ts` re-exports (routes, GraphQL, `resolve*FromContext`)                        | `resolveSource`, `resolveProduct` (typed ID + `org/slug`)                 |
-| `domain-lookup` | `findOrgByDomain`, `findProductsByDomain`                                                                                                                                                                     | `/v1/lookups/by-domain`, `/v1/search?domain=`, org create                             | `lookup_domain`                                                           |
-| `sql-fragments` | `githubHandleSubquery`, `nullsLastOrderBy`                                                                                                                                                                    | `queries/shared.ts` re-exports                                                        | `get_latest_releases`, `get_release`                                      |
-| `pagination`    | `resolvePageWindow`, `slicePage`, `PageWindow`                                                                                                                                                                | `parseListPagination`                                                                 | `parseMcpPagination`, `list_catalog`                                      |
-| `orgs`          | `findOrgByAnyIdentifier`, `listOrgDirectoryPage`, `orgHasVisibleRelease`                                                                                                                                      | —                                                                                     | every tool that resolves an org, `list_organizations`, `search`           |
-| `releases`      | `findVisibleReleaseDetail`, `listLatestReleases`                                                                                                                                                              | `GET /v1/releases/:id`                                                                | `get_release`, `get_latest_releases`                                      |
-| `catalog`       | `listProductSources`, `listCatalogProducts`, `listCatalogStandaloneSources`                                                                                                                                   | `buildProductDetailPayload` (`GET /v1/products/:id`)                                  | product detail, `list_catalog`                                            |
-| `collections`   | `findCollectionBySlug`, `countCollections`, `listCollectionsWhere`, `listCollectionMemberIds`, `getCollectionFullMembers`, `interleaveMembers`, `searchCollectionsDirect`, `findCollectionsByMemberOrgs`      | `queries/collections.ts` + `queries/search.ts` re-exports, collection routes, GraphQL | `list_collections`, `get_collection`, `get_collection_releases`, `search` |
+| Module              | Exports                                                                                                                                                                                                       | API consumers                                                                         | MCP consumers                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `entities`          | `orgWhere`, `sourceById`, `productById`, `sourceMatchByIdOrSlug`, `productMatchByIdOrSlug`, `findSourceById`, `findProductById`, `findSourceForOrgSlug`, `findProductForOrgSlug`, `isSourceId`, `isProductId` | `utils.ts` re-exports (routes, GraphQL, `resolve*FromContext`)                        | `resolveSource`, `resolveProduct` (typed ID + `org/slug`)                           |
+| `domain-lookup`     | `findOrgByDomain`, `findProductsByDomain`                                                                                                                                                                     | `/v1/lookups/by-domain`, `/v1/search?domain=`, org create                             | `lookup_domain`                                                                     |
+| `sql-fragments`     | `githubHandleSubquery`, `nullsLastOrderBy`                                                                                                                                                                    | `queries/shared.ts` re-exports                                                        | `get_latest_releases`, `get_release`                                                |
+| `pagination`        | `resolvePageWindow`, `slicePage`, `PageWindow`                                                                                                                                                                | `parseListPagination`                                                                 | `parseMcpPagination`, `list_catalog`                                                |
+| `orgs`              | `findOrgByAnyIdentifier`, `listOrgDirectoryPage`, `listOrgVisibleProducts`, `orgHasVisibleRelease`                                                                                                            | —, `GET /v1/orgs/:slug` products                                                      | every tool that resolves an org, `list_organizations`, `search`, `get_organization` |
+| `releases`          | `findVisibleReleaseDetail`, `listLatestReleases`                                                                                                                                                              | `GET /v1/releases/:id`                                                                | `get_release`, `get_latest_releases`                                                |
+| `catalog`           | `listProductSources`, `listCatalogProducts`, `listCatalogStandaloneSources`                                                                                                                                   | `buildProductDetailPayload` (`GET /v1/products/:id`)                                  | product detail, `list_catalog`                                                      |
+| `collections`       | `findCollectionBySlug`, `countCollections`, `listCollectionsWhere`, `listCollectionMemberIds`, `getCollectionFullMembers`, `interleaveMembers`, `searchCollectionsDirect`, `findCollectionsByMemberOrgs`      | `queries/collections.ts` + `queries/search.ts` re-exports, collection routes, GraphQL | `list_collections`, `get_collection`, `get_collection_releases`, `search`           |
+| `release-locations` | `listReleaseLocationRows`, `mapReleaseLocation`, `loadReleaseLocations`                                                                                                                                       | `GET /v1/orgs/:slug`, `/v1/lookups`, GraphQL `Org.releaseLocations`                   | `get_organization`, `lookup_domain` stub reads                                      |
+| `search-entities`   | `searchOrgs`, `searchProducts`, `searchSources`, `ScopeOpts`                                                                                                                                                  | `queries/search.ts` re-exports, `/v1/search`                                          | `search` org and catalog candidates                                                 |
 
 `apps/mcp/src/lib/pagination.ts` stays: it holds MCP-only rendering (markdown
 footer, `_meta.pagination`, `_meta.search`) and the `get_latest_releases`
@@ -73,14 +75,14 @@ filters or shape (API is the reference) · **mcp-only** = no API equivalent ·
 | `get_latest_releases` main query                                                       | `getLatestReleasesAcross`, `getOrgReleasesFeed`                           | **done** | `listLatestReleases` (D3). `getLatestReleasesAcross` is now a snake_case wrapper over it.                                                                                          |
 | `get_latest_releases` org → source IDs                                                 | `LatestReleasesFilter.orgId` (`s.org_id = ?`)                             | **done** | Filters `s.org_id` in SQL, like the API.                                                                                                                                           |
 | `list_organizations`                                                                   | `getOrgsWithStats` + `countOrgsForList`                                   | **done** | `listOrgDirectoryPage` (D4). Broader `query` match and `platform` filter stay MCP-only.                                                                                            |
-| `get_organization` (accounts, tags, sources, products, aliases, overview, collections) | `GET /v1/orgs/:slug` handler (inline in `routes/orgs.ts`)                 | drift    | Products: MCP uses `products` + `EXISTS sources_visible`, API `products_active` + same EXISTS (deleted products leak on MCP). Org via `findOrgByAnyIdentifier`.                    |
+| `get_organization` (accounts, tags, sources, products, aliases, overview, collections) | `GET /v1/orgs/:slug` handler (inline in `routes/orgs.ts`)                 | **done** | Products via `listOrgVisibleProducts` (D12). Org via `findOrgByAnyIdentifier`. Accounts, tags, aliases, and overview reads are identical inline.                                   |
 | `get_organization` / `lookup_domain` stub release locations                            | `loadReleaseLocations`                                                    | **done** | `listReleaseLocationRows` / `loadReleaseLocations` (D8), one ORDER BY in SQL.                                                                                                      |
 | `get_release`                                                                          | `GET /v1/releases/:id` handler (`routes/sources.ts`)                      | **done** | `findVisibleReleaseDetail`, used by both (D5).                                                                                                                                     |
 | `renderSourceDetail` (org, product, release count, changelog files)                    | `GET /v1/sources/:id`, `/changelog` route                                 | drift    | Org and product name lookups use base tables (deleted parents still named). Changelog file queries match the API.                                                                  |
 | `renderProductDetail` (org, sources, tags)                                             | `GET /v1/products/:id`                                                    | **done** | Source list via `listProductSources`, used by both (D6). Org and tag lookups still inline.                                                                                         |
 | `list_catalog` products + standalone sources                                           | `GET /v1/orgs/:slug/catalog`                                              | **done** | `listCatalogProducts` / `listCatalogStandaloneSources` (D6). Shape differs from the API (cross-org, standalone-only sources), so the API keeps its own query.                      |
-| `search` org candidates                                                                | `searchOrgs` (`queries/search.ts`)                                        | drift    | MCP: `organizations` base table, matches `category` too, no `is_hidden` / deleted filter.                                                                                          |
-| `search` catalog candidates (products, sources)                                        | catalog branch of `/v1/search`                                            | drift    | Close: both use `products_active` / `sources_visible`. MCP joins `organizations` (not `_active`). Verify before moving.                                                            |
+| `search` org candidates                                                                | `searchOrgs`                                                              | **done** | Shared `searchOrgs` (D10).                                                                                                                                                         |
+| `search` catalog candidates (products, sources)                                        | catalog branch of `/v1/search`                                            | **done** | Shared `searchProducts` / `searchSources` (D11).                                                                                                                                   |
 | `search` collections direct + member rollups                                           | `searchCollectionsDirect`, `findCollectionsByMemberOrgs`                  | **done** | Both workers call the package functions (slice 2).                                                                                                                                 |
 | `search` lexical releases                                                              | `searchReleasesFts`                                                       | shared   | `@releases/search/releases-fts`.                                                                                                                                                   |
 | `search` hybrid + collections semantic                                                 | `runHybridSearch`, `runCollectionsSemantic`                               | shared   | `@releases/search/hybrid-search-worker`.                                                                                                                                           |
@@ -96,8 +98,8 @@ filters or shape (API is the reference) · **mcp-only** = no API equivalent ·
 
 ## Resolved decisions
 
-D1–D7 and D9 were places where MCP returned rows the API hides; D8 was an
-ordering difference. All nine now match the API;
+D1–D7 and D9–D12 were places where MCP returned rows the API hides; D8 was an
+ordering difference. All twelve now match the API;
 `apps/mcp/test/visibility-parity.test.ts` holds a regression test for each.
 
 - **D1.** `MCP_RESOLVE_OPTS` is gone: soft-deleted sources and products no
@@ -129,6 +131,15 @@ ordering difference. All nine now match the API;
   `/v1/lookups/{source,product}-by-slug`, so a live source or product under a
   soft-deleted org no longer resolves by bare slug. The ambiguity policy
   stays in MCP.
+- **D10.** `search` org candidates → `searchOrgs` (`search-entities`): reads
+  `organizations_active`, so a soft-deleted org no longer matches, even with
+  `include_empty`.
+- **D11.** `search` catalog candidates → `searchProducts` / `searchSources`:
+  products need a visible source and a live org; source org columns come
+  from `organizations_active`.
+- **D12.** `get_organization` products → `listOrgVisibleProducts`: reads
+  `products_active`, so a soft-deleted product with a visible source no
+  longer lists.
 
 Latest-releases slice (no D-number: the API is the side that changed, and its
 output is the same):
@@ -150,10 +161,14 @@ Remaining differences, not yet decided:
 
 - `resolveEntityToSourceIds` and the `search` product scope still list deleted
   and hidden source IDs; downstream reads re-filter them.
-- `get_organization` products, `search` org candidates, and
-  `renderSourceDetail` parent names still read base tables.
+- `renderSourceDetail` parent names read the base `organizations` and
+  `products` tables, so a deleted parent is still named. `GET /v1/sources/:id`
+  does the same, so this is consistent, not drift; change both or neither.
+- The `search` product scope lists every source ID under the product, deleted
+  and hidden included. `/v1/search?product=` expands the same way.
 
 ## Next slices
 
-1. Org directory stats, `get_organization` products, `search` org candidates,
-   source detail.
+1. Decide the two consistent-but-loose reads above (source detail parent
+   names, product-scope source IDs) together with the API.
+2. MCP-only reads: `slug-completion.ts` suggests tombstoned slugs.

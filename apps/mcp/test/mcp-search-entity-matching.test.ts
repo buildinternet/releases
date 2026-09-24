@@ -83,6 +83,26 @@ beforeEach(async () => {
       url: "https://github.com/openai/whisper",
       orgId: "org_openai",
     },
+    // Search lists a product only when it has a visible source (as /v1/search
+    // does). Names and URLs chosen not to match the queries below.
+    {
+      id: "src_pkg_one",
+      slug: "pkg-one",
+      name: "Pkg One",
+      type: "feed",
+      url: "https://example.com/p1",
+      orgId: "org_openai",
+      productId: "prod_aisdk",
+    },
+    {
+      id: "src_pkg_two",
+      slug: "pkg-two",
+      name: "Pkg Two",
+      type: "feed",
+      url: "https://example.com/p2",
+      orgId: "org_openai",
+      productId: "prod_remail",
+    },
   ]);
 });
 

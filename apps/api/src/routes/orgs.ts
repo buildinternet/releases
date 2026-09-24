@@ -96,6 +96,7 @@ import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { recordDomainDemand } from "../lib/listing/domain-demand.js";
 import { findOrgByDomain } from "../queries/search.js";
+import { listOrgVisibleProducts } from "@releases/queries/orgs";
 import {
   isConflictError,
   computeAvgPerWeek,
@@ -477,27 +478,7 @@ orgRoutes.get(
 
       getOrgSourcesWithStats(db, org.id),
 
-      db
-        .select({
-          id: productsActive.id,
-          slug: productsActive.slug,
-          name: productsActive.name,
-          url: productsActive.url,
-          description: productsActive.description,
-          kind: productsActive.kind,
-          // Visible-only: a product whose sources are all hidden (e.g. a paused
-          // discovery candidate) must not surface on the public org page.
-          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_visible s WHERE s.product_id = products_active.id)`,
-          releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_visible sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
-        })
-        .from(productsActive)
-        .where(
-          and(
-            eq(productsActive.orgId, org.id),
-            sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = products_active.id)`,
-          ),
-        )
-        .orderBy(productsActive.name),
+      listOrgVisibleProducts(db, org.id),
 
       db
         .select({ domain: domainAliases.domain })

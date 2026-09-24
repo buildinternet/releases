@@ -1,0 +1,269 @@
+/**
+ * Entity candidates for search: orgs, products, and sources matched by LIKE,
+ * then ranked in TS through `rankEntityCandidates`. Shared by `/v1/search`
+ * and the MCP `search` tool so both apply the same visibility joins.
+ */
+import { sql } from "drizzle-orm";
+import { likeContains } from "@buildinternet/releases-core/sql-like";
+import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
+import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
+import type { AnyDb } from "@releases/lib/db";
+import type {
+  RawSourceHit,
+  SearchCatalogHit,
+  SearchOrgHit,
+} from "@buildinternet/releases-api-types";
+
+/**
+ * Optional `orgId` narrows the result set to a single organization. Used
+ * by the `?domain=` filter on /v1/search — the route resolves the domain
+ * to an org first and then passes the id through here, which keeps the
+ * filter applied at the SQL layer instead of post-filtering after a
+ * wider query.
+ *
+ * `includeEmpty` opts back into orgs that have no indexed releases yet
+ * (#746). Defaulted off in the LIKE-on-name path because curator stubs
+ * inflate the result set with noise; the `?domain=` short-circuit always
+ * surfaces the resolved org regardless.
+ *
+ * `kind` filters by entity kind. For releases, COALESCE(source.kind,
+ * product.kind) is applied. For catalog rows (products/sources), only the
+ * row's own `kind` column is matched — no inheritance.
+ *
+ * `since` / `until` are canonical ISO bounds on `published_at` (resolved from
+ * any relative shorthand by the route). They apply only to the release
+ * helpers; the org/product/source helpers ignore them. Both bounds drop rows
+ * with a NULL `published_at`.
+ *
+ * `includeContent` opts into selecting `r.content` on release hits. Default
+ * off — list surfaces only need summary + media; full body is
+ * `GET /v1/releases/:id` (or `?include_content=true` on search).
+ */
+export type ScopeOpts = {
+  orgId?: string;
+  includeEmpty?: boolean;
+  kind?: string;
+  since?: string;
+  until?: string;
+  /**
+   * Narrow release hits to these specific source IDs. Used by the
+   * `?product=` filter on `/v1/search` — the route pre-resolves the product
+   * to its source list and passes the IDs through here so both the FTS path
+   * and the entity-enrichment path stay scoped.
+   *
+   * Capped at `IN_ARRAY_CHUNK_SIZE` IDs per `IN` clause (see `sourceIdInList`).
+   * When the array is empty (product has no sources) the query returns no
+   * release hits — mirrors the "no matching org sources" behaviour.
+   */
+  sourceIds?: string[];
+  /**
+   * Scope to an org set without materializing a source-id list. `orgCategory`
+   * matches `organizations.category`; `collectionId` matches membership via a
+   * `collection_members` EXISTS. Used by the `?category=` / `?collection=`
+   * filters on `/v1/search`. Unlike `sourceIds`, these are uncapped org-set
+   * predicates — a category or collection spanning many sources still filters
+   * correctly. Applied by the org/product/source and release helpers alike.
+   */
+  orgCategory?: string;
+  collectionId?: string;
+  /** When true, SELECT full `r.content`; default omits it from the row. */
+  includeContent?: boolean;
+};
+
+/**
+ * Shared `?category=` / `?collection=` predicates. `orgCategory` matches the
+ * `o.category` column; `collectionId` matches membership via an EXISTS against
+ * `collection_members`. `orgIdExpr` is the column holding the row's org id in
+ * the caller's query (`o.id` for the entity helpers, `s.org_id` for the
+ * source-rooted release helper). Returns empty SQL when neither is set.
+ */
+export function categoryCollectionClauses(opts: ScopeOpts, orgIdExpr = sql`o.id`) {
+  return sql`${opts.orgCategory ? sql`AND o.category = ${opts.orgCategory}` : sql``}${
+    opts.collectionId
+      ? sql`AND EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = ${opts.collectionId} AND cm.org_id = ${orgIdExpr})`
+      : sql``
+  }`;
+}
+
+/**
+ * Build an `IN (...)` value list from a `sourceIds` scope. Callers guard the
+ * empty-array case before reaching here (an empty product returns no hits, not
+ * `IN ()`).
+ *
+ * This is a deliberate **product-scope ceiling**, not a silently-lossy bug:
+ * the list is *capped* at `IN_ARRAY_CHUNK_SIZE` rather than chunked-and-unioned
+ * like `getOrgSparklines`. The scope originates from `?product=`, which
+ * pre-resolves one product to its source list, and a single product owning
+ * more than `IN_ARRAY_CHUNK_SIZE` sources is not a shape we serve — so every
+ * caller (`searchProducts` / `searchSources` / the release FTS helpers) shares
+ * the same ceiling. Chunk-unioning wouldn't be a drop-in fix anyway: the
+ * release helpers are ranked and `LIMIT`-ed, so a UNION across chunks would
+ * mis-rank; lifting the ceiling would mean ranking in TS across per-chunk
+ * result sets.
+ */
+export function sourceIdInList(sourceIds: string[]) {
+  return sql`(${sql.join(
+    sourceIds.slice(0, IN_ARRAY_CHUNK_SIZE).map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
+}
+
+// ── Entity matching ───────────────────────────────────────────────────
+//
+// The entity helpers below candidate via SQL `LIKE %q%` (cheap, index-free,
+// and a strict superset of what we keep), then post-filter and rank in TS
+// through `rankEntityCandidates` (@releases/lib/entity-match — shared with the
+// MCP worker so both surfaces stay in lockstep). Substring-only candidates —
+// "ai" hitting React Em·ai·l or the `.ai` TLD — are dropped, and the survivors
+// order by match tier (exact > name prefix > name word > slug/domain >
+// category) instead of the alphabetical ORDER BY that used to stand in for
+// relevance.
+
+/** Split a `GROUP_CONCAT(domain)` column back into hostnames (commas can't
+ * appear inside a hostname, so the default separator is unambiguous). */
+export function splitConcat(value: string | null): string[] {
+  return value ? value.split(",") : [];
+}
+
+export async function searchOrgs(
+  db: AnyDb,
+  query: string,
+  limit: number,
+  opts: ScopeOpts = {},
+): Promise<SearchOrgHit[]> {
+  const nonEmptyClause = opts.includeEmpty
+    ? sql``
+    : sql`AND EXISTS (
+        SELECT 1
+        FROM sources_visible s2
+        JOIN releases_visible r2 ON r2.source_id = s2.id
+        WHERE s2.org_id = o.id
+      )`;
+
+  // `aliasConcat` carries every alias (product-scoped included) for ranking —
+  // an alias LIKE-match should still surface the org. `orgAliasConcat` is the
+  // subset surfaced on the wire: org-level only (product_id IS NULL), matching
+  // the catalog row's `+N` hover (#2031/#2034). GROUP_CONCAT skips the NULLs the
+  // CASE emits for product-scoped rows.
+  const candidates: (SearchOrgHit & {
+    aliasConcat: string | null;
+    orgAliasConcat: string | null;
+  })[] = await db.all<
+    SearchOrgHit & { aliasConcat: string | null; orgAliasConcat: string | null }
+  >(sql`
+    SELECT o.slug, o.name, o.domain, o.avatar_url as avatarUrl, o.category, o.tier as status,
+           GROUP_CONCAT(da.domain) as aliasConcat,
+           GROUP_CONCAT(CASE WHEN da.product_id IS NULL THEN da.domain END) as orgAliasConcat
+    FROM organizations_active o
+    LEFT JOIN domain_aliases da ON da.org_id = o.id
+    WHERE (${likeContains(sql`o.name`, query)} OR ${likeContains(sql`o.slug`, query)}
+      OR ${likeContains(sql`o.domain`, query)} OR ${likeContains(sql`da.domain`, query)}
+      OR ${likeContains(sql`o.category`, query)})
+      ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
+      ${categoryCollectionClauses(opts)}
+      ${nonEmptyClause}
+    GROUP BY o.id
+    ORDER BY o.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
+  `);
+  return rankEntityCandidates(candidates, query, limit, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    domains: [c.domain, ...splitConcat(c.aliasConcat)],
+    categories: [c.category],
+  })).map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    domain: c.domain,
+    avatarUrl: c.avatarUrl,
+    category: c.category,
+    status: c.status,
+    aliasDomains: splitConcat(c.orgAliasConcat),
+  }));
+}
+
+export async function searchProducts(
+  db: AnyDb,
+  query: string,
+  limit: number,
+  opts: ScopeOpts = {},
+): Promise<SearchCatalogHit[]> {
+  // When sourceIds is an empty array the caller has a product with no sources;
+  // return no hits to avoid an invalid `IN ()` clause.
+  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
+  // When narrowing by sourceIds, restrict to products that own any of those
+  // sources (via an EXISTS subquery against sources_visible).
+  const sourceIdExistsClause =
+    opts.sourceIds && opts.sourceIds.length > 0
+      ? sql`AND EXISTS (
+          SELECT 1 FROM sources_visible sa
+          WHERE sa.product_id = p.id
+            AND sa.id IN ${sourceIdInList(opts.sourceIds)}
+        )`
+      : sql``;
+  const candidates: (SearchCatalogHit & { aliasDomains: string | null })[] = await db.all<
+    SearchCatalogHit & { aliasDomains: string | null }
+  >(sql`
+    SELECT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
+           o.avatar_url as orgAvatarUrl, p.category, 'product' as entryType, p.kind,
+           GROUP_CONCAT(da.domain) as aliasDomains
+    FROM products_active p
+    INNER JOIN organizations_active o ON o.id = p.org_id
+    LEFT JOIN domain_aliases da ON da.product_id = p.id
+    WHERE (${likeContains(sql`p.name`, query)} OR ${likeContains(sql`p.slug`, query)}
+      OR ${likeContains(sql`da.domain`, query)})
+      ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
+      ${opts.kind ? sql`AND p.kind = ${opts.kind}` : sql``}
+      ${categoryCollectionClauses(opts)}
+      ${sourceIdExistsClause}
+      AND EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = p.id)
+    GROUP BY p.id
+    ORDER BY p.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
+  `);
+  return rankEntityCandidates(candidates, query, limit, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    domains: splitConcat(c.aliasDomains),
+  })).map(({ aliasDomains: _drop, ...hit }) => hit);
+}
+
+export async function searchSources(
+  db: AnyDb,
+  query: string,
+  limit: number,
+  opts: ScopeOpts = {},
+): Promise<RawSourceHit[]> {
+  // When sourceIds is an empty array the caller has a product with no sources;
+  // short-circuit to avoid an invalid `IN ()` clause.
+  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
+  const sourceIdClause =
+    opts.sourceIds && opts.sourceIds.length > 0
+      ? sql`AND s.id IN ${sourceIdInList(opts.sourceIds)}`
+      : sql``;
+  // `s.stargazers_count as stars` is selected for the SearchSourceHit shape;
+  // catalog-hit surfacing of stars is deferred with the search-results render
+  // (foldSourcesIntoCatalog drops it today).
+  const candidates: (RawSourceHit & { url: string | null })[] = await db.all<
+    RawSourceHit & { url: string | null }
+  >(sql`
+    SELECT s.slug, s.name, s.type, s.url, o.slug as orgSlug, o.name as orgName,
+           o.avatar_url as orgAvatarUrl,
+           p.slug as productSlug, p.name as productName, p.category as productCategory,
+           s.kind as entityKind, s.stargazers_count as stars
+    FROM sources_active s
+    LEFT JOIN organizations_active o ON o.id = s.org_id
+    LEFT JOIN products_active p ON p.id = s.product_id
+    WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND (${likeContains(sql`s.name`, query)} OR ${likeContains(sql`s.slug`, query)}
+        OR ${likeContains(sql`s.url`, query)})
+      ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
+      ${opts.kind ? sql`AND s.kind = ${opts.kind}` : sql``}
+      ${categoryCollectionClauses(opts, sql`s.org_id`)}
+      ${sourceIdClause}
+    ORDER BY s.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
+  `);
+  return rankEntityCandidates(candidates, query, limit, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    urls: [c.url],
+  })).map(({ url: _drop, ...hit }) => hit);
+}
