@@ -63,7 +63,7 @@ A small but growing number of products declare their changelog location explicit
 
 ## The shortcut: query an index that already did this
 
-Releases Index runs this method — declarations, feed discovery, provider detection, GitHub, and monitored scraping for the holdouts — across hundreds of developer tools and services, then normalizes everything into one registry: org, product, title, date, summary, categories. Most reads are public, with no account or API key.
+Releases Index runs this method — declarations, feed discovery, provider detection, GitHub, and page monitoring for the holdouts — across hundreds of developer tools and services, then normalizes everything into one registry: org, product, title, date, summary, categories. Most reads are public, with no account or API key.
 
 **On the web:** [search](/search) for the product, or browse the [catalog](/catalog). Every org page collects all of its sources — the GitHub releases and the marketing changelog side by side.
 

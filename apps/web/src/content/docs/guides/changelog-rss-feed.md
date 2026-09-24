@@ -23,7 +23,7 @@ If a feed turns up, spot-check that its entries are actually release content and
 
 ## Step 2: no feed? Append `.atom` to a Releases Index page
 
-The Index monitors changelogs across hundreds of developer tools and services — including scrape-only pages with no feed of their own — and serves every org, source, and collection as an Atom feed. Find the product on [releases.sh](/) and append `.atom` to the page URL. No account, no API key.
+The Index monitors changelogs across hundreds of developer tools and services — including changelog pages with no feed of their own — and serves every org, source, and collection as an Atom feed. Find the product on [releases.sh](/) and append `.atom` to the page URL. No account, no API key.
 
 **An organization** — everything a company ships, across all of its changelogs, GitHub repos, and blogs:
 
@@ -45,7 +45,7 @@ https://releases.sh/collections/application-platforms.atom
 
 Browse [collections](/collections) for the full list, or use [search](/search) to find the org or source page you want. The same suffix trick works for other formats: `.json` for structured data and `.md` for an LLM-friendly view.
 
-Entries carry the release title, publish date, and a summary, normalized to the same shape regardless of where the release was published — a GitHub tag, an RSS item, or a scraped page look identical to your reader.
+Entries carry the release title, publish date, and a summary, normalized to the same shape regardless of where the release was published — a GitHub tag, an RSS item, or a plain changelog page look identical to your reader.
 
 ### How fresh is it?
 
