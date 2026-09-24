@@ -24,6 +24,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import {
   attachFollowsSession,
+  requireSessionOnlyWithFlag,
   execWaitUntil,
   type AuthSessionContext,
 } from "../middleware/auth.js";
@@ -88,7 +89,10 @@ async function expireOverdueClaims(db: Db, rows: OrgClaimRow[]): Promise<OrgClai
   if (overdue.length === 0) return rows;
   await Promise.all(
     overdue.map((r) =>
-      db.update(orgClaims).set({ status: "expired" }).where(eq(orgClaims.id, r.id)),
+      db
+        .update(orgClaims)
+        .set({ status: "expired" })
+        .where(and(eq(orgClaims.id, r.id), eq(orgClaims.status, "pending"))),
     ),
   );
   const overdueIds = new Set(overdue.map((r) => r.id));
@@ -285,7 +289,10 @@ listingClaimHandlers.post(
 
     const now = new Date().toISOString();
     if (claim.expiresAt < now) {
-      await db.update(orgClaims).set({ status: "expired" }).where(eq(orgClaims.id, claim.id));
+      await db
+        .update(orgClaims)
+        .set({ status: "expired" })
+        .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, "pending")));
       return respondError(
         c,
         new ConflictError("This claim has expired; start a new claim.", {
@@ -304,10 +311,24 @@ listingClaimHandlers.post(
 
     const result = await verifyDomainControl(org.domain ?? "", claim.token);
     if (result.verified) {
-      await db
+      // Guarded on `pending`: the proof fetch takes seconds, and a revoke that
+      // lands meanwhile must win, not be flipped back to verified.
+      const [flipped] = await db
         .update(orgClaims)
         .set({ status: "verified", verifiedAt: now, method: result.method })
-        .where(eq(orgClaims.id, claim.id));
+        .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, "pending")))
+        .returning({ id: orgClaims.id });
+      if (!flipped) {
+        return respondError(
+          c,
+          new ConflictError(
+            "This claim changed while it was being checked; refresh and try again.",
+            {
+              details: { claimId: claim.id },
+            },
+          ),
+        );
+      }
       await db
         .update(organizations)
         .set({ trackingRequestedAt: now, updatedAt: now })
@@ -580,6 +601,11 @@ listingClaimHandlers.post(
  * anonymously — every handler above gates on `c.get("session")` itself, so
  * flag-off 404s and rate limits fire before any 401.
  */
+const releaseClaimSession = requireSessionOnlyWithFlag(
+  FLAGS.listingSelfServeEnabled,
+  (e) => e.LISTING_SELF_SERVE_ENABLED,
+);
+
 export const listingClaimRoutes = new Hono<Env>();
 // NB: Hono's wildcard needs an explicit path segment ("/listing/claim/*") —
 // a glued "/listing/claim*" is treated as a literal string and matches
@@ -589,6 +615,9 @@ export const listingClaimRoutes = new Hono<Env>();
 // own registration.
 listingClaimRoutes.use("/listing/claim/*", attachFollowsSession);
 listingClaimRoutes.use("/listing/claims", attachFollowsSession);
-listingClaimRoutes.use("/listing/claims/*", attachFollowsSession);
+// Releasing a claim cuts off its publish tokens, so it takes a real session
+// (cookie or the `releases login` token), never a read-only `relu_` key or an
+// OAuth JWT that attachFollowsSession would otherwise admit.
+listingClaimRoutes.delete("/listing/claims/*", releaseClaimSession);
 listingClaimRoutes.use("/listing/promote", attachFollowsSession);
 listingClaimRoutes.route("/", listingClaimHandlers);

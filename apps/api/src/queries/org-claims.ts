@@ -19,14 +19,16 @@ export function isClaimLive(status: OrgClaimRow["status"]): boolean {
 /**
  * End a live claim, keeping the row as `revoked` with who and why, and log it.
  * A terminal claim is returned as-is (idempotent). The update is guarded on the
- * status it read, so a racing verify is never overwritten; losing that race
- * also returns the claim unchanged.
+ * status it read; if a verify flipped `pending` to `verified` in between, it
+ * re-reads and revokes the current row instead of reporting a stale success.
  */
 export async function revokeClaim(
   db: D1Db,
   claim: OrgClaimRow,
-  { by, reason }: { by: string; reason: string },
+  who: { by: string; reason: string },
+  retry = true,
 ): Promise<OrgClaimRow> {
+  const { by, reason } = who;
   if (!isClaimLive(claim.status)) return claim;
   const [ended] = await db
     .update(orgClaims)
@@ -38,7 +40,11 @@ export async function revokeClaim(
     })
     .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, claim.status)))
     .returning();
-  if (!ended) return claim;
+  if (!ended) {
+    const [current] = await db.select().from(orgClaims).where(eq(orgClaims.id, claim.id)).limit(1);
+    if (!current) return claim;
+    return retry ? revokeClaim(db, current, who, false) : current;
+  }
   logEvent("info", {
     component: "listing",
     event: "claim-revoked",

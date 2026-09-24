@@ -24,6 +24,7 @@ import {
 import { publicRateLimitMiddleware } from "../src/middleware/rate-limit.js";
 import { adminRoutes, publicReadRoutes } from "../src/route-namespaces.js";
 import { mountV1Routes } from "../src/v1-routes.js";
+import { revokeClaim } from "../src/queries/org-claims.js";
 import { createTestDb, type TestDb } from "./setup";
 
 const ROOT = "root-secret";
@@ -860,6 +861,26 @@ describe("ending a claim (#2389)", () => {
     const res = await call(`/v1/orgs/acme/claims/${CLAIM}`, json("DELETE", {}, bearer(ROOT)));
     expect(res.status).toBe(400);
     expect((await claimRow()).status).toBe("verified");
+  });
+
+  it("refuses a read-only relu_ key or an OAuth JWT for the owner release", async () => {
+    // The test seam would resolve both to OWNER, so a pass means the
+    // session-only gate refused them before any lookup.
+    for (const t of ["relu_somekey", JWT_LIKE]) {
+      const res = await call(`/v1/listing/claims/${CLAIM}`, {
+        method: "DELETE",
+        headers: bearer(t),
+      });
+      expect(res.status).toBe(401);
+    }
+    expect((await claimRow()).status).toBe("verified");
+  });
+
+  it("revokes the current row when a verify won the race after the read", async () => {
+    const stale = { ...(await claimRow()), status: "pending" as const };
+    const ended = await revokeClaim(db as never, stale, { by: "owner", reason: "r" });
+    expect(ended.status).toBe("revoked");
+    expect((await claimRow()).status).toBe("revoked");
   });
 
   it("keeps the admin routes admin-only", async () => {

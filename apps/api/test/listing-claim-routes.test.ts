@@ -791,6 +791,31 @@ describe("DELETE /v1/listing/claims/:id (#2389)", () => {
     expect(row!.status).toBe("revoked");
   });
 
+  it("a revoke that lands during the proof fetch wins over verify", async () => {
+    const a = withSession("u1");
+    const claim = (await (await post(a, "/listing/claim", { domain: "acme.com" })).json()) as {
+      id: string;
+      token: string;
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/.well-known/releases-verify.txt")) {
+        // The owner releases the claim while we're still fetching the proof.
+        await h.db.update(orgClaims).set({ status: "revoked" }).where(eq(orgClaims.id, claim.id));
+        return new Response(claim.token, {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      return new Response(JSON.stringify({ Status: 3 }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const res = await post(a, "/listing/claim/verify", { claimId: claim.id });
+    expect(res.status).toBe(409);
+    const [row] = await h.db.select().from(orgClaims).where(eq(orgClaims.id, claim.id));
+    expect(row!.status).toBe("revoked");
+  });
+
   it("lets the owner start a fresh claim afterwards", async () => {
     const a = withSession("u1");
     const claim = await verifiedClaim(a);
