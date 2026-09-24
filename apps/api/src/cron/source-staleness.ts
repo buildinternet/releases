@@ -56,8 +56,10 @@ export interface SourceStalenessEnv {
   _drizzleOverride?: unknown;
 }
 
-const DEFAULT_FLOOR_DAYS = 14;
-const DEFAULT_MULTIPLIER = 3;
+// Exported so scanStalePushFedSources (#2381) can reuse the exact same
+// defaults without inventing a parallel constant or a new env var.
+export const DEFAULT_FLOOR_DAYS = 14;
+export const DEFAULT_MULTIPLIER = 3;
 const DEFAULT_POLL_RECENCY_DAYS = 3;
 const DAY_MS = 86_400_000;
 

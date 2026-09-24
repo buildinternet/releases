@@ -4,6 +4,7 @@ import {
   countNeedsAttention,
 } from "../src/lib/email/staleness-digest-email.js";
 import type { StaleSourceEntry } from "../src/cron/source-staleness.js";
+import type { PushStaleEntry } from "../src/cron/push-staleness.js";
 import type { ProviderHealthEntry } from "../src/cron/provider-health.js";
 
 const firstPartyEntry = (over: Partial<StaleSourceEntry> = {}): StaleSourceEntry => ({
@@ -34,6 +35,18 @@ const providerEntry = (over: Partial<ProviderHealthEntry> = {}): ProviderHealthE
   ...over,
 });
 
+const pushFedEntry = (over: Partial<PushStaleEntry> = {}): PushStaleEntry => ({
+  sourceId: "src_push",
+  slug: "changelog-action",
+  orgSlug: "widgetco",
+  orgName: "Widget Co",
+  medianGapDays: 7,
+  windowDays: 21,
+  daysSinceActivity: 35,
+  lastActivityAt: "2026-06-14T00:00:00.000Z",
+  ...over,
+});
+
 describe("buildStalenessDigestEmail", () => {
   it("builds a combined subject and sections for both scan types", () => {
     const { subject, text, html } = buildStalenessDigestEmail({
@@ -51,6 +64,7 @@ describe("buildStalenessDigestEmail", () => {
           thresholdBasis: "floor",
         },
       ],
+      pushFed: [],
       providerHealth: [],
       providerOutageActive: false,
     });
@@ -70,6 +84,7 @@ describe("buildStalenessDigestEmail", () => {
       webOrigin: "https://releases.sh",
       firstParty: [],
       firecrawl: [],
+      pushFed: [],
       providerHealth: [providerEntry()],
       providerOutageActive: true,
     });
@@ -94,6 +109,7 @@ describe("buildStalenessDigestEmail", () => {
       webOrigin: "https://releases.sh",
       firstParty: [],
       firecrawl: [],
+      pushFed: [],
       providerHealth: [providerEntry()],
       providerOutageActive: false,
     });
@@ -115,6 +131,7 @@ describe("buildStalenessDigestEmail", () => {
         firstPartyEntry({ sourceId: "src_app", slug: "some-app", sourceType: "appstore" }),
       ],
       firecrawl: [],
+      pushFed: [],
       providerHealth: [],
       providerOutageActive: false,
     });
@@ -125,6 +142,23 @@ describe("buildStalenessDigestEmail", () => {
     expect(text).toContain("A further 2 are healthy but quiet upstream");
     expect(text).toContain("FIRST-PARTY — POSSIBLE INGEST BREAKAGE (1)");
     expect(text).toContain("UPSTREAM QUIET (2)");
+  });
+
+  it("adds a No pushes lately section for push-fed sources and counts them as actionable", () => {
+    const { subject, text } = buildStalenessDigestEmail({
+      scannedAt: "2026-06-18T04:00:00.000Z",
+      webOrigin: "https://releases.sh",
+      firstParty: [],
+      firecrawl: [],
+      pushFed: [pushFedEntry()],
+      providerHealth: [],
+      providerOutageActive: false,
+    });
+    expect(subject).toBe("[staleness] 1 source needs attention: Widget Co");
+    expect(text).toContain("NO PUSHES LATELY (1)");
+    expect(text).toContain("Widget Co (widgetco) — changelog-action");
+    expect(text).toContain("publisher's pipeline may have stopped");
+    expect(text).toContain("quiet 35d");
   });
 });
 
@@ -138,6 +172,7 @@ describe("countNeedsAttention", () => {
           firstPartyEntry({ sourceId: "src_v", sourceType: "video" }),
         ],
         firecrawl: [],
+        pushFed: [],
         providerHealth: [providerEntry()],
       }),
     ).toBe(2);
@@ -145,8 +180,20 @@ describe("countNeedsAttention", () => {
       countNeedsAttention({
         firstParty: [firstPartyEntry({ sourceType: "github" })],
         firecrawl: [],
+        pushFed: [],
         providerHealth: [],
       }),
     ).toBe(0);
+  });
+
+  it("counts push-fed entries as actionable", () => {
+    expect(
+      countNeedsAttention({
+        firstParty: [],
+        firecrawl: [],
+        pushFed: [pushFedEntry()],
+        providerHealth: [],
+      }),
+    ).toBe(1);
   });
 });
