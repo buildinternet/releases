@@ -12,7 +12,6 @@
       "author": {
         "name": "Build Internet"
       },
-      "version": "0.1.0",
       "strict": false,
       "skills": ["./skills/creating-releases-json"]
     },
@@ -23,7 +22,6 @@
       "author": {
         "name": "Build Internet"
       },
-      "version": "0.1.0",
       "strict": false,
       "skills": [
         "./.claude/skills/finding-changelogs",
@@ -39,7 +37,6 @@
       "author": {
         "name": "Build Internet"
       },
-      "version": "0.1.0",
       "strict": false,
       "skills": [
         "./.claude/skills/local-ingest",
