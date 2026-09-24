@@ -19,7 +19,7 @@ Read-only user keys (`relu_…`, including `releases login`) are rejected. Store
 
 You need the source the Action should write to — preferably the typed id (`src_…`) from the source page or `releases admin source list`. A slug works if you also pass the organization.
 
-If this Action is the _only_ way that source ever gets new content, mark it push-fed so we stop polling it: `PATCH /v1/sources/:slug/metadata` with body `{"ingestMode": "push"}`. The source page then shows "Published Directly" instead of a last-checked time, and `lastFetchedAt` advances on every batch write instead of a scrape.
+If this Action is the _only_ way that source ever gets new content, mark it push-fed so we stop polling it: `PATCH /v1/sources/:slug/metadata` with body `{"ingestMode": "push"}`. The source page then shows a "Last Published" time instead of "Last Checked", and `lastFetchedAt` advances on every batch write instead of a scrape.
 
 ## 3. Add the workflow
 

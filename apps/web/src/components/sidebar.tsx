@@ -39,7 +39,7 @@ interface SidebarProps {
   /**
    * True when the source is fed directly by its publisher (`metadata.ingestMode
    * = "push"`, #2374) rather than polled. Swaps the "Last Checked" label +
-   * staleness tooltip for a plain "Published Directly" label — there's no
+   * staleness tooltip for a plain "Last Published" label — there's no
    * scrape cadence to be stale against.
    */
   pushFed?: boolean;
@@ -63,7 +63,7 @@ export function Sidebar({
       {lastCheckedAt && (
         <div className="mb-6">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1.5 flex items-center gap-1">
-            {pushFed ? "Published Directly" : "Last Checked"}
+            {pushFed ? "Last Published" : "Last Checked"}
             {stale && (
               <InfoTooltip
                 text={
