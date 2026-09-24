@@ -96,3 +96,30 @@ export function listCatalogStandaloneSources(
     ORDER BY s.name, s.slug
   `);
 }
+
+/**
+ * IDs of a product's visible sources, for product-scoped reads
+ * (`/v1/search?product=`, MCP `search` and `get_latest_releases`). Deleted
+ * and hidden sources are left out: every downstream read drops them anyway,
+ * and the scope list is capped at `IN_ARRAY_CHUNK_SIZE`, so dead IDs could
+ * crowd out live ones.
+ */
+export async function listVisibleSourceIdsForProduct(
+  db: AnyDb,
+  productId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: sourcesVisible.id })
+    .from(sourcesVisible)
+    .where(eq(sourcesVisible.productId, productId));
+  return rows.map((r) => r.id);
+}
+
+/** Sibling of `listVisibleSourceIdsForProduct` for an org scope. */
+export async function listVisibleSourceIdsForOrg(db: AnyDb, orgId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: sourcesVisible.id })
+    .from(sourcesVisible)
+    .where(eq(sourcesVisible.orgId, orgId));
+  return rows.map((r) => r.id);
+}

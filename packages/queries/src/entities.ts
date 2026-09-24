@@ -16,6 +16,7 @@ import {
   organizations,
   organizationsActive,
   products,
+  productsActive,
   sources,
 } from "@buildinternet/releases-core/schema";
 import type { AnyDb } from "@releases/lib/db";
@@ -168,4 +169,43 @@ export async function listProductsBySlug(
     .from(products)
     .innerJoin(organizationsActive, eq(products.orgId, organizationsActive.id))
     .where(and(eq(products.slug, slug), isNull(products.deletedAt)));
+}
+
+/** A source's (or product's) parents as detail reads name them. */
+export interface LiveParents {
+  org: { id: string; slug: string; name: string } | null;
+  product: { id: string; slug: string; name: string } | null;
+}
+
+/**
+ * Look up the org and product a detail read attributes a row to. Reads
+ * `organizations_active` / `products_active`, so a soft-deleted parent comes
+ * back null instead of being named by its tombstoned slug — the same rule
+ * `findVisibleReleaseDetail` applies to release parents.
+ */
+export async function findLiveParents(
+  db: AnyDb,
+  ids: { orgId: string | null; productId: string | null },
+): Promise<LiveParents> {
+  const [orgRows, productRows] = await Promise.all([
+    ids.orgId
+      ? db
+          .select({
+            id: organizationsActive.id,
+            slug: organizationsActive.slug,
+            name: organizationsActive.name,
+          })
+          .from(organizationsActive)
+          .where(eq(organizationsActive.id, ids.orgId))
+          .limit(1)
+      : Promise.resolve([]),
+    ids.productId
+      ? db
+          .select({ id: productsActive.id, slug: productsActive.slug, name: productsActive.name })
+          .from(productsActive)
+          .where(eq(productsActive.id, ids.productId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
+  return { org: orgRows[0] ?? null, product: productRows[0] ?? null };
 }
