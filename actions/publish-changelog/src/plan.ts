@@ -53,8 +53,6 @@ export type PlanUrlVars = {
   version: string;
   date: string;
   path: string;
-  /** Directory mode alias for `key` (the stable slug). Optional for single-file mode. */
-  slug?: string;
 };
 
 export type PlanOptions = {
@@ -119,10 +117,11 @@ function parseSections(markdown: string): { format: IngestFormat; sections: Sect
   return { format: "unknown", sections: [] };
 }
 
+/** `{slug}` is an alias for `{key}` — directory mode's key is the entry's slug. */
 export function renderUrlTemplate(template: string, vars: PlanUrlVars): string {
-  return template.replace(/\{(key|version|date|path|slug)\}/g, (_, name: keyof PlanUrlVars) => {
-    return vars[name] ?? (name === "slug" ? vars.key : "");
-  });
+  return template.replace(/\{(key|version|date|path|slug)\}/g, (_, name: string) =>
+    name === "slug" ? vars.key : vars[name as keyof PlanUrlVars],
+  );
 }
 
 export function releaseUrl(section: Section, opts: PlanOptions): string {
@@ -133,7 +132,6 @@ export function releaseUrl(section: Section, opts: PlanOptions): string {
     version: section.version ?? "",
     date,
     path: opts.changelogPath ?? "CHANGELOG.md",
-    slug: section.key,
   });
 }
 
@@ -330,7 +328,6 @@ export function planDirectoryIngest(
       explicitUrl ||
       renderUrlTemplate(opts.urlTemplate, {
         key,
-        slug: key,
         version: version ?? "",
         date: (publishedAt ?? "").slice(0, 10),
         path: file.path,

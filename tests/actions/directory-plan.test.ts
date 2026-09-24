@@ -35,11 +35,10 @@ describe("keyFromPath", () => {
 });
 
 describe("renderUrlTemplate — {slug} placeholder", () => {
-  test("interpolates slug alongside the existing placeholders", () => {
+  test("interpolates {slug} as an alias for key", () => {
     expect(
       renderUrlTemplate("https://x/{path}#{slug}", {
         key: "a",
-        slug: "a",
         version: "",
         date: "",
         path: "changelog/a.mdx",

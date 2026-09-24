@@ -66,18 +66,15 @@ export type PublishResult = {
   skipped: boolean;
 };
 
-function defaultUrlTemplate(env: PublishEnv, changelogPath: string): string {
+/**
+ * GitHub blob URL fallback when `url-template` is unset. `blobPath` is
+ * `CHANGELOG.md#{key}` in single-file mode and `{path}` (the entry file
+ * itself) in directory mode.
+ */
+function defaultUrlTemplate(env: PublishEnv, blobPath: string): string {
   const repo = env.GITHUB_REPOSITORY?.trim();
   const ref = env.GITHUB_REF_NAME?.trim() || "main";
-  if (repo) return `https://github.com/${repo}/blob/${ref}/${changelogPath}#{key}`;
-  throw new Error("url-template is required when GITHUB_REPOSITORY is unset.");
-}
-
-/** Directory-mode fallback: the GitHub blob URL of the file itself (per-file `{path}`). */
-function defaultDirectoryUrlTemplate(env: PublishEnv): string {
-  const repo = env.GITHUB_REPOSITORY?.trim();
-  const ref = env.GITHUB_REF_NAME?.trim() || "main";
-  if (repo) return `https://github.com/${repo}/blob/${ref}/{path}`;
+  if (repo) return `https://github.com/${repo}/blob/${ref}/${blobPath}`;
   throw new Error("url-template is required when GITHUB_REPOSITORY is unset.");
 }
 
@@ -136,12 +133,11 @@ type Plan = {
   modified: string[];
   releases: PlannedRelease[];
   deletedCount: number;
-  deletedPaths: string[];
 };
 
 async function computeSingleFilePlan(env: PublishEnv, workdir: string | undefined): Promise<Plan> {
   const changelogPath = env.CHANGELOG_PATH?.trim() || DEFAULT_CHANGELOG_PATH;
-  const urlTemplate = env.URL_TEMPLATE?.trim() || defaultUrlTemplate(env, changelogPath);
+  const urlTemplate = env.URL_TEMPLATE?.trim() || defaultUrlTemplate(env, `${changelogPath}#{key}`);
   const filePath = workdir ? resolve(workdir, changelogPath) : resolve(changelogPath);
   const beforeMd = gitShowFile(env.BEFORE_SHA, changelogPath, workdir);
   const afterMd = readFileSync(filePath, "utf8");
@@ -159,14 +155,13 @@ async function computeSingleFilePlan(env: PublishEnv, workdir: string | undefine
     modified: plan.modified,
     releases: plan.releases,
     deletedCount: 0,
-    deletedPaths: [],
   };
 }
 
 async function computeDirectoryPlan(env: PublishEnv, workdir: string | undefined): Promise<Plan> {
   const glob = env.CHANGELOG_GLOB?.trim();
   if (!glob) throw new Error("changelog-glob is required in directory mode.");
-  const urlTemplate = env.URL_TEMPLATE?.trim() || defaultDirectoryUrlTemplate(env);
+  const urlTemplate = env.URL_TEMPLATE?.trim() || defaultUrlTemplate(env, "{path}");
 
   const files = await gatherDirectoryFiles(env, workdir, glob);
   const plan = planDirectoryIngest(files, { urlTemplate, glob });
@@ -178,7 +173,6 @@ async function computeDirectoryPlan(env: PublishEnv, workdir: string | undefined
     modified: plan.modified,
     releases: plan.releases,
     deletedCount: plan.deleted.length,
-    deletedPaths: plan.deleted,
   };
 }
 
