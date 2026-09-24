@@ -8,11 +8,18 @@ const render = (purpose: Parameters<typeof ApprovalDetails>[0]["purpose"]) =>
   );
 
 describe("ApprovalDetails", () => {
+  it("never implies the purpose limits access: every purpose says it's full access", () => {
+    for (const p of ["login", "keys", "publish-tokens", null] as const) {
+      expect(render(p)).toContain("signs that device in to your account with full access");
+    }
+  });
+
   it("login: a read-only key, and the CLI signs out after", () => {
     const html = render("login");
     expect(html).toContain("Read catalog data");
     expect(html).toContain("releases login");
-    expect(html).toContain("signs out as soon as the key is created");
+    expect(html).toContain("read-only");
+    expect(html).toContain("then signs out");
   });
 
   it("keys: names the one-time account permission instead of a scope", () => {
@@ -34,6 +41,6 @@ describe("ApprovalDetails", () => {
   it("an older CLI (no purpose) is told it stays signed in", () => {
     const html = render(null);
     expect(html).toContain("Read catalog data");
-    expect(html).toContain("stays signed in as you afterwards");
+    expect(html).toContain("stays signed in afterwards");
   });
 });

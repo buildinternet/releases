@@ -1071,7 +1071,7 @@ describe("device-authorization plugin", () => {
   // The CLI's one-shot model: approve a purpose-labelled request, use the
   // session, then sign it out with nothing but the Bearer token (no cookie,
   // no Origin) the way a terminal client calls it.
-  it("shows the purpose to the approver and signs out a Bearer-only session", async () => {
+  it("returns the purpose to the approving user and signs out a Bearer-only session", async () => {
     const captured: AuthEmailMessage[] = [];
     const auth = await createAuth(baseEnv as never, undefined, {
       db: createTestDb(),

@@ -45,20 +45,26 @@ export function DeviceApproveForm() {
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
   const [outcome, setOutcome] = useState<Outcome>("idle");
   const [error, setError] = useState<string | null>(null);
-  // undefined while loading; null for a CLI that sends no purpose.
+  // undefined while loading; null for a CLI that sends no purpose. A failed
+  // lookup is its own state, never shown as an older CLI's request.
   const [purpose, setPurpose] = useState<DeviceAuthPurpose | null | undefined>(undefined);
+  const [lookupFailed, setLookupFailed] = useState(false);
 
   useEffect(() => {
     if (!user || !userCode) return;
     let cancelled = false;
+    setPurpose(undefined);
+    setLookupFailed(false);
+    const fail = () => {
+      if (!cancelled) setLookupFailed(true);
+    };
     authClient
       .device({ query: { user_code: userCode } })
       .then((res) => {
-        if (!cancelled) setPurpose(devicePurpose(res.data?.scope));
+        if (res.error || !res.data) return fail();
+        if (!cancelled) setPurpose(devicePurpose(res.data.scope));
       })
-      .catch(() => {
-        if (!cancelled) setPurpose(null);
-      });
+      .catch(fail);
     return () => {
       cancelled = true;
     };
@@ -89,7 +95,7 @@ export function DeviceApproveForm() {
     }
   }
 
-  if (isPending || (user && userCode && purpose === undefined)) {
+  if (isPending || (user && userCode && purpose === undefined && !lookupFailed)) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
   }
 
@@ -146,7 +152,7 @@ export function DeviceApproveForm() {
           <button
             type="button"
             onClick={() => act("approve")}
-            disabled={busy !== null}
+            disabled={busy !== null || lookupFailed}
             className={primaryButtonClass}
           >
             {busy === "approve" ? "Approving…" : "Approve device"}
@@ -154,7 +160,14 @@ export function DeviceApproveForm() {
         </>
       }
     >
-      <ApprovalDetails purpose={purpose ?? null} userCode={userCode} email={user.email} />
+      {lookupFailed ? (
+        <AuthError>
+          Couldn&apos;t load this request, so it can&apos;t be approved here. Run the command in
+          your terminal again.
+        </AuthError>
+      ) : (
+        <ApprovalDetails purpose={purpose ?? null} userCode={userCode} email={user.email} />
+      )}
 
       {error ? <AuthError>{error}</AuthError> : null}
     </AuthCard>
@@ -163,7 +176,9 @@ export function DeviceApproveForm() {
 
 /**
  * The card body for one device request: what's being approved, the code to
- * match, and the caution for that purpose. `purpose` null is an older CLI that
+ * match, and the caution for that purpose. The purpose is a label the client
+ * chose, not a limit: approval grants a full session, so the caution says so
+ * and describes the purpose as what the real CLI does with it. `purpose` null is an older CLI that
  * sends none (it keeps its session after login, so the caution says so).
  */
 export function ApprovalDetails({
@@ -198,18 +213,18 @@ export function ApprovalDetails({
 
       <Caution>
         Only approve if you just ran <Code>{copy.command}</Code> yourself. The code above must match
-        your terminal.{" "}
+        your terminal. Approving signs that device in to your account with full access.{" "}
         {purpose === "login" ? (
           <>
-            Approving issues a personal read-only <Code>relu_</Code> API key. The CLI signs out as
-            soon as the key is created.
+            The Releases CLI uses it to create a personal read-only <Code>relu_</Code> API key, then
+            signs out.
           </>
         ) : purpose ? (
-          <>The CLI acts as you for this one command, then signs out.</>
+          <>The Releases CLI uses it for this one command, then signs out.</>
         ) : (
           <>
-            Approving issues a personal <Code>relu_</Code> API key. This version of the CLI also
-            stays signed in as you afterwards; update it to sign out after each step.
+            The Releases CLI uses it to create a personal <Code>relu_</Code> API key. This version
+            stays signed in afterwards; update it to sign out after each step.
           </>
         )}
       </Caution>
