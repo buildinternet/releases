@@ -1,7 +1,9 @@
 name: Publish changelog to Releases Index
 description: >
   Parse changed changelog markdown on push and upsert releases into a Releases
-  Index source via POST /v1/sources/…/releases/batch (upsert-content).
+  Index source via POST /v1/sources/…/releases/batch (upsert-content). Set
+  `changelog-glob` to switch to directory mode: one MDX/Markdown file per
+  release, metadata read from YAML frontmatter.
 author: Releases Index
 branding:
   icon: upload-cloud
@@ -22,9 +24,21 @@ inputs:
     required: false
     default: https://api.releases.sh
   changelog-path:
-    description: Changelog file to parse, relative to the working directory.
+    description: >
+      Single changelog file to parse, relative to the working directory. Ignored
+      (and must be left at its default) when `changelog-glob` is set — the two
+      modes are mutually exclusive.
     required: false
     default: CHANGELOG.md
+  changelog-glob:
+    description: >
+      Directory mode: a glob (e.g. `changelog/**/*.mdx`) matching one MDX/Markdown
+      file per release, resolved relative to `working-directory`. Frontmatter
+      supplies `title`, `date`/`publishedAt`/`published`/`pubDate`, `version`,
+      `slug`, and `url`/`canonical`; `draft: true` skips the file. Cannot be
+      combined with a non-default `changelog-path`.
+    required: false
+    default: ""
   working-directory:
     description: Repository subdirectory that contains the changelog (monorepos).
     required: false
@@ -35,9 +49,12 @@ inputs:
     default: ${{ github.event.before }}
   url-template:
     description: >
-      URL written on each release. Placeholders: `{key}` (version or YYYY-MM-DD),
-      `{version}`, `{date}`, `{path}`. Headings that already carry a link keep that
-      URL. Default is the GitHub blob URL for this file plus `#{key}`.
+      URL written on each release. Placeholders: `{key}` (version, YYYY-MM-DD, or
+      the file's stable slug), `{version}`, `{date}`, `{path}`, `{slug}` (directory
+      mode alias for `{key}`). A frontmatter `url`/`canonical` (directory mode) or a
+      heading link that already carries a URL wins over the template. Default is
+      the GitHub blob URL for the file plus `#{key}` (single-file mode) or just the
+      file's blob URL (directory mode).
     required: false
     default: ""
   generate-content:
@@ -50,11 +67,17 @@ inputs:
 
 outputs:
   added:
-    description: Number of newly added changelog sections published.
+    description: Number of newly added changelog entries published.
     value: ${{ steps.publish.outputs.added }}
   modified:
-    description: Number of edited changelog sections published.
+    description: Number of edited changelog entries published.
     value: ${{ steps.publish.outputs.modified }}
+  deleted:
+    description: >
+      Directory mode only: number of files matching `changelog-glob` that were
+      deleted. Reported only — deletion from the index is a curator action, not
+      automated here.
+    value: ${{ steps.publish.outputs.deleted }}
   inserted:
     description: inserted count returned by the batch upsert (0 on an identical re-run).
     value: ${{ steps.publish.outputs.inserted }}
@@ -74,6 +97,7 @@ runs:
         RELEASES_SOURCE: ${{ inputs.source }}
         RELEASES_ORG: ${{ inputs.org }}
         CHANGELOG_PATH: ${{ inputs.changelog-path }}
+        CHANGELOG_GLOB: ${{ inputs.changelog-glob }}
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
         BEFORE_SHA: ${{ inputs.before-sha }}
         URL_TEMPLATE: ${{ inputs.url-template }}
