@@ -176,6 +176,20 @@ export function isUserApiKeyShaped(raw: string): boolean {
  */
 export const DEVICE_AUTH_CLIENT_ID = "releases-cli";
 
+/**
+ * Why the CLI is asking for a device approval, sent as the device-code `scope`
+ * so the web approval page can say what the user is agreeing to. `login` mints
+ * the read-only `relu_` key; `keys` and `publish-tokens` are one-shot approvals
+ * for a single account command. A label, not an enforced scope: the device
+ * flow still issues a session, which the CLI signs out after that one step.
+ */
+export const DEVICE_AUTH_PURPOSES = ["login", "keys", "publish-tokens"] as const;
+export type DeviceAuthPurpose = (typeof DEVICE_AUTH_PURPOSES)[number];
+
+export function isDeviceAuthPurpose(value: unknown): value is DeviceAuthPurpose {
+  return (DEVICE_AUTH_PURPOSES as readonly unknown[]).includes(value);
+}
+
 /** SHA-256 of the secret as lowercase hex. Web Crypto — runtime-neutral. */
 export async function hashSecret(secret: string): Promise<string> {
   const data = new TextEncoder().encode(secret);

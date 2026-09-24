@@ -60,8 +60,21 @@ and the CLI polls `/api/auth/device/token` until it gets a **session access
 token**. That token rides as `Authorization: Bearer` — `bearer()` is what makes
 `requireSession` honor it — to the _same_ `POST /v1/api-keys` route the web panel
 uses, which injects the owner and mints a read-only `relu_` key (the ceiling
-above applies). The session is then discarded; the durable `relu_` key is what's
-stored.
+above applies). The CLI then signs the session out (`POST /api/auth/sign-out`
+with the same Bearer); only the durable `relu_` key is stored.
+
+The device session is a full account session for as long as it lives (the
+device plugin stores the request's `scope` but doesn't enforce it), so the CLI
+never keeps one. The `scope` names the **purpose** instead —
+`DEVICE_AUTH_PURPOSES` in `@buildinternet/releases-core/api-token`: `login`,
+`keys`, `publish-tokens`; `onDeviceAuthRequest` refuses anything else, and an
+absent scope (older CLIs) is allowed. The `/device/approve` page reads it back
+(`GET /api/auth/device`, owner-only) and says what's being approved. Account
+commands (`releases keys`, `releases publish-token`) each run their own one-shot
+approval, use the session for that command, and sign out. `releases auth
+logout` revokes its key with the key itself via `DELETE /v1/tokens/me` (a
+`relu_` key may end only itself), so it needs no session. Scoped CLI tokens
+through the OAuth provider are the follow-up.
 
 > **`verificationUri` must be an absolute URL on the WEB origin**
 > (`${WEB_BASE_URL}/device`), never a relative `/device`. The approval page is
@@ -87,8 +100,8 @@ route rejects it.
   `DELETE /v1/me/publish-tokens/:id` (`routes/me-publish-tokens.ts`). **Session
   only** (`requireSessionOnlyWithFlag`), one lane per request: the web cookie
   session, or (when `Authorization` is present) a Better Auth session token as
-  Bearer, the one `releases login` stores after the browser device approval
-  (#2388). On the Bearer lane the cookie is dropped before the lookup, and a
+  Bearer, from the one-shot device approval `releases publish-token` runs for
+  that command (#2388). On the Bearer lane the cookie is dropped before the lookup, and a
   `rel?_` key/token or a JWT-shaped Bearer is refused unverified, so a `relu_`
   key, a machine token, or an OAuth JWT (MCP clients are read-capped) can't
   mint. A read-only credential must never turn into a write one; a session token

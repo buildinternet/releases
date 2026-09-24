@@ -551,12 +551,13 @@ const TOKENS_ME_PATHS = new Set(["/v1/tokens/me", "/tokens/me"]);
 
 /**
  * Auth for the `/v1/tokens` namespace. `GET /v1/tokens/me` is self-introspection
- * (any valid identity, read+); every other token route is admin-only. One
+ * and `DELETE /v1/tokens/me` self-revocation of a `relu_` key (any valid
+ * identity, read+); every other token route is admin-only. One
  * wrapper guarantees exactly one auth path runs per request — the generic
  * adminRoutes loop in index.ts would otherwise blanket-admin-gate `/me` too.
  */
 export const tokensAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
-  if (c.req.method === "GET" && TOKENS_ME_PATHS.has(c.req.path)) {
+  if ((c.req.method === "GET" || c.req.method === "DELETE") && TOKENS_ME_PATHS.has(c.req.path)) {
     return requireReadAuthMiddleware(c, next);
   }
   return authMiddleware(c, next);
