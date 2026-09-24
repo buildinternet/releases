@@ -31,6 +31,7 @@ function seedSource(opts: {
   lastFetchedAt?: string | null;
   createdAt?: string;
   firecrawl?: boolean;
+  pushFed?: boolean;
   deletedAt?: string;
 }) {
   db.insert(sources)
@@ -41,7 +42,11 @@ function seedSource(opts: {
       slug: opts.id,
       type: "scrape",
       url: `https://example.com/${opts.id}`,
-      metadata: opts.firecrawl ? JSON.stringify({ firecrawl: { enabled: true } }) : "{}",
+      metadata: opts.firecrawl
+        ? JSON.stringify({ firecrawl: { enabled: true } })
+        : opts.pushFed
+          ? JSON.stringify({ ingestMode: "push" })
+          : "{}",
       medianGapDays: opts.medianGapDays === undefined ? 7 : opts.medianGapDays,
       fetchPriority: opts.fetchPriority ?? "normal",
       // Default: actively polled an hour ago.
@@ -125,6 +130,17 @@ describe("scanStaleSources", () => {
     const res = await scanStaleSources(baseEnv());
     // deleted + firecrawl filtered in SQL; paused filtered in JS → 1 scanned, 0 stale.
     expect(res.scanned).toBe(1);
+    expect(res.stale).toBe(0);
+  });
+
+  it("excludes push-fed sources (metadata.ingestMode = push, #2374)", async () => {
+    // Would otherwise flag as stale (established cadence, way overdue) — the
+    // push-fed exclusion must drop it in SQL before the JS overdue check runs.
+    seedSource({ id: "push", medianGapDays: 7, pushFed: true });
+    seedRelease("push", 60 * DAY);
+
+    const res = await scanStaleSources(baseEnv());
+    expect(res.scanned).toBe(0);
     expect(res.stale).toBe(0);
   });
 

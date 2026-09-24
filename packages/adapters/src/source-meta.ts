@@ -363,6 +363,28 @@ export interface SourceMetadata {
     /** True while the actor is driving this source; false when handed back. */
     managed: boolean;
   };
+
+  /**
+   * Marks a source as fed directly by its publisher — e.g. `actions/publish-changelog`
+   * POSTing to `POST /v1/sources/:id/releases/batch` on every push to the
+   * changelog file. A push-fed source is "externally driven, no local cadence"
+   * exactly like Firecrawl monitoring (`firecrawl.enabled`): it's excluded from
+   * the poll cron (`queryDueSources`), the `SourceActor` alarm (which mirrors
+   * Firecrawl's `nextDueAt: null` → `noReschedule`), the scrape/agent OrgActor
+   * drain (`queryCandidates`), the unmanaged-actor sweep, and the first-party
+   * staleness scan (`scanStaleSources`) — receiving no pushes for a long time
+   * deserves a quieter signal than the scrape-overdue alarm, not implemented
+   * here yet. Use {@link isPushFed} rather than reading this field directly so
+   * every call site stays in sync if the marker's shape ever grows.
+   *
+   * Set via the freeform `PATCH /v1/sources/:slug` or `.../metadata` routes —
+   * no schema/allowlist change needed, both already accept arbitrary metadata
+   * keys. `POST /v1/sources/:id/releases/batch` stamps `lastFetchedAt` on a
+   * successful write for push-fed sources only (there's no separate
+   * `last_pushed_at` column) so the web/CLI can show "published directly"
+   * timing without a migration.
+   */
+  ingestMode?: "push";
 }
 
 /** Parse the JSON metadata blob from a source row. */
@@ -384,6 +406,18 @@ export function isGitHubFetched(source: Source, meta?: SourceMetadata): boolean 
   if (source.type === "github") return true;
   const m = meta ?? getSourceMeta(source);
   return typeof m.githubUrl === "string" && m.githubUrl.length > 0;
+}
+
+/**
+ * True when a source is fed directly by its publisher (e.g.
+ * `actions/publish-changelog`) and must never be polled, drained, or
+ * staleness-scanned locally — mirrors `metadata.firecrawl.enabled` as the
+ * single source of truth every fetch-routing call site checks. See
+ * {@link SourceMetadata.ingestMode}.
+ */
+export function isPushFed(source: Source, meta?: SourceMetadata): boolean {
+  const m = meta ?? getSourceMeta(source);
+  return m.ingestMode === "push";
 }
 
 /**

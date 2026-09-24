@@ -17,6 +17,7 @@ import { sql, and, eq, or } from "drizzle-orm";
 import { organizations, sourcesActive } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../db.js";
+import { locallyFetchedSql } from "./source-fetch-routing.js";
 
 /**
  * A `nextAlarmAt` this far in the past means the scheduled tick never wrote a
@@ -43,7 +44,7 @@ function unmanagedWhere(now: Date) {
     and(
       hasCadence,
       sql`${sourcesActive.orgId} NOT IN (${pausedOrgIds(db)})`,
-      sql`(json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesActive.metadata}, '$.firecrawl.enabled') != 1)`,
+      locallyFetchedSql(sourcesActive.metadata),
       sql`(
         json_extract(${sourcesActive.metadata}, '$.sourceActor.managed') IS NULL
         OR json_extract(${sourcesActive.metadata}, '$.sourceActor.managed') = 0

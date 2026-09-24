@@ -99,6 +99,24 @@ describe("describeFetchPlan — strategy", () => {
     const s = mkSource({ type: "scrape", metadata: { firecrawl: { enabled: true } } });
     expect(describeFetchPlan(s).intervalLabel).toBe(FIRECRAWL_DEFAULT_SCHEDULE);
   });
+
+  it("push-fed (metadata.ingestMode = push) → published directly, on-publish cadence", () => {
+    const s = mkSource({ type: "scrape", metadata: { ingestMode: "push" } });
+    const plan = describeFetchPlan(s);
+    expect(plan.strategy).toBe("push");
+    expect(plan.strategyLabel).toBe("Published directly");
+    expect(plan.cadence).toBe("push");
+    expect(plan.intervalHours).toBeNull();
+    expect(plan.intervalLabel).toBe("on publish");
+  });
+
+  it("push-fed wins over firecrawl, same precedence as firecrawl over type", () => {
+    const s = mkSource({
+      type: "scrape",
+      metadata: { ingestMode: "push", firecrawl: { enabled: true } },
+    });
+    expect(describeFetchPlan(s).strategy).toBe("push");
+  });
 });
 
 describe("describeFetchPlan — interval", () => {
@@ -137,6 +155,14 @@ describe("computeFetchState", () => {
     const state = computeFetchState(s, describeFetchPlan(s), now);
     expect(state.nextDueAt).toBeNull();
     expect(state.backedOff).toBe(false);
+  });
+
+  it("push-fed source has no local next-due", () => {
+    const s = mkSource({ metadata: { ingestMode: "push" } });
+    const state = computeFetchState(s, describeFetchPlan(s), now);
+    expect(state.nextDueAt).toBeNull();
+    expect(state.backedOff).toBe(false);
+    expect(state.paused).toBe(false);
   });
 
   it("normal source next-due = lastPolledAt + 4h", () => {

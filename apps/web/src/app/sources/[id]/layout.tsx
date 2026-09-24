@@ -114,11 +114,13 @@ export default async function SourceByIdLayout({
         marketingFilter?: boolean;
         marketingFilterHint?: string;
         feedContentDepth?: "full" | "summary-only";
+        ingestMode?: "push";
       };
     } catch {
       return {};
     }
   })();
+  const pushFed = sourceMeta.ingestMode === "push";
   const hasHighlights = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   const hasChangelog = !!source.hasChangelogFile;
   const appInfo = getAppInfo(source);
@@ -195,6 +197,7 @@ export default async function SourceByIdLayout({
             lastCheckedAt={source.lastPolledAt ?? source.lastFetchedAt}
             lastFetchedAt={source.lastFetchedAt}
             trackingSince={source.trackingSince}
+            pushFed={pushFed}
           />
         </div>
       </div>

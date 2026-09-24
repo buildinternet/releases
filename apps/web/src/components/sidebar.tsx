@@ -36,6 +36,13 @@ interface SidebarProps {
   lastFetchedAt?: string | null;
   /** ISO timestamp for when tracking began — rendered as a small footnote at the bottom. */
   trackingSince?: string | null;
+  /**
+   * True when the source is fed directly by its publisher (`metadata.ingestMode
+   * = "push"`, #2374) rather than polled. Swaps the "Last Checked" label +
+   * staleness tooltip for a plain "Last Published" label — there's no
+   * scrape cadence to be stale against.
+   */
+  pushFed?: boolean;
   /** Optional issue-report target for product/source pages using this sidebar. */
   report?: ReportContext;
 }
@@ -47,15 +54,16 @@ export function Sidebar({
   lastCheckedAt,
   lastFetchedAt,
   trackingSince,
+  pushFed,
   report,
 }: SidebarProps) {
-  const stale = isStale(lastCheckedAt);
+  const stale = !pushFed && isStale(lastCheckedAt);
   return (
     <div className="w-full md:w-[200px] shrink-0">
       {lastCheckedAt && (
         <div className="mb-6">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1.5 flex items-center gap-1">
-            Last Checked
+            {pushFed ? "Last Published" : "Last Checked"}
             {stale && (
               <InfoTooltip
                 text={

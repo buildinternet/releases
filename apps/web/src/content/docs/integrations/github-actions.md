@@ -19,6 +19,8 @@ Read-only user keys (`relu_…`, including `releases login`) are rejected. Store
 
 You need the source the Action should write to — preferably the typed id (`src_…`) from the source page or `releases admin source list`. A slug works if you also pass the organization.
 
+If this Action is the _only_ way that source ever gets new content, mark it push-fed so we stop polling it: `PATCH /v1/sources/:slug/metadata` with body `{"ingestMode": "push"}`. The source page then shows a "Last Published" time instead of "Last Checked", and `lastFetchedAt` advances on every batch write instead of a scrape.
+
 ## 3. Add the workflow
 
 Copy the committed example at [`actions/publish-changelog/examples/publish-changelog.yml`](https://github.com/buildinternet/releases/blob/main/actions/publish-changelog/examples/publish-changelog.yml) into your repo's `.github/workflows/`. Replace the `source` id and `RELEASES_API_TOKEN` secret. Do not copy this repo's dogfood `.github/workflows/changelog-publish.yml` — that file pins our source and updates URL.

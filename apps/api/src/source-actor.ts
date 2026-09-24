@@ -28,6 +28,7 @@ import { eq, sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
+import { isPushFed } from "@releases/adapters/source-meta";
 import { logEvent } from "@releases/lib/log-event";
 import { seedJitterMs } from "./lib/sources/source-actor-seed.js";
 import { notifyOrgDrain } from "./lib/sources/org-drain-notify.js";
@@ -86,7 +87,7 @@ export interface SourceActorState {
   tier: Source["fetchPriority"];
   /** ISO time of the last successful fetch (mirrored from D1). */
   lastFetchedAt: string | null;
-  /** ms epoch of the next scheduled alarm (null ⇒ no reschedule: paused/firecrawl). */
+  /** ms epoch of the next scheduled alarm (null ⇒ no reschedule: paused/firecrawl/push-fed). */
   nextAlarmAt: number | null;
   /** A workflow was fired and is presumed running (cleared once past SAFETY_WINDOW). */
   inFlight: boolean;
@@ -260,7 +261,8 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       return;
     }
 
-    // Paused / firecrawl (webhook-driven): no local cadence ⇒ no reschedule.
+    // Paused / firecrawl (webhook-driven) / push-fed (publisher-driven, #2374):
+    // no local cadence ⇒ no reschedule.
     if (state.nextDueAt == null) {
       await this.noReschedule(row);
       return;
@@ -333,6 +335,11 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   private async maybeNotifyOrgDrain(row: Source): Promise<void> {
     if (row.type !== "scrape" && row.type !== "agent") return;
     if (!row.changeDetectedAt || !row.orgId) return;
+    // Defensive: a push-fed scrape/agent source (#2374) should never reach the
+    // drain — queryCandidates already excludes it, but this stops the notify
+    // from firing a moment earlier if a source is ever flagged before its
+    // ingestMode marker is set.
+    if (isPushFed(row)) return;
     await notifyOrgDrain(this.env.ORG_ACTOR, row.orgId, "source-actor");
   }
 

@@ -126,6 +126,15 @@ export function describeWorkflowStages(source: Source): WorkflowStage[] {
         upsert,
         ...TAIL_COMMON,
       ];
+    case "push":
+      // No poll/fetch/extract: the publisher (e.g. actions/publish-changelog)
+      // POSTs already-structured releases straight to the batch route (#2374).
+      return [
+        { key: "webhook", label: "Batch write", kind: "sync", detailHint: "releases/batch" },
+        ...classify,
+        upsert,
+        ...TAIL_COMMON,
+      ];
     default: {
       const _exhaustive: never = strategy;
       return _exhaustive;

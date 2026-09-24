@@ -10,6 +10,7 @@ import {
   isGitHubFetched,
   isAppStoreFetched,
   isVideoFetched,
+  isPushFed,
   type SourceMetadata,
 } from "./source-meta.js";
 
@@ -27,16 +28,17 @@ export type FetchStrategy =
   | "crawl"
   | "scrape"
   | "agent"
-  | "firecrawl";
+  | "firecrawl"
+  | "push";
 
 export interface FetchPlan {
   strategy: FetchStrategy;
   strategyLabel: string;
-  /** Base poll interval in hours; null for firecrawl (external cadence) and paused. */
+  /** Base poll interval in hours; null for firecrawl/push (external cadence) and paused. */
   intervalHours: number | null;
-  /** Human-readable cadence: "every 4 hours", a firecrawl schedule, or "paused". */
+  /** Human-readable cadence: "every 4 hours", a firecrawl schedule, "on publish", or "paused". */
   intervalLabel: string;
-  cadence: "poll" | "firecrawl-webhook";
+  cadence: "poll" | "firecrawl-webhook" | "push";
   paused: boolean;
   /** Present only when strategy === "firecrawl". */
   firecrawlSchedule?: string;
@@ -86,6 +88,8 @@ function strategyLabel(strategy: FetchStrategy, meta: SourceMetadata): string {
       return "Agent extraction";
     case "firecrawl":
       return "Firecrawl";
+    case "push":
+      return "Published directly";
     case "scrape":
       return "Browser scrape";
   }
@@ -104,6 +108,21 @@ function formatInterval(hours: number): string {
 export function describeFetchPlan(source: Source): FetchPlan {
   const meta = getSourceMeta(source);
   const paused = source.fetchPriority === "paused";
+
+  // Push-fed wins over everything else, like firecrawl below: the source is
+  // fed directly by its publisher (e.g. actions/publish-changelog) and has no
+  // local fetch cadence at all — never polled, never drained, never staleness
+  // scanned. Checked ahead of firecrawl since a source is never both.
+  if (isPushFed(source, meta)) {
+    return {
+      strategy: "push",
+      strategyLabel: "Published directly",
+      intervalHours: null,
+      intervalLabel: "on publish",
+      cadence: "push",
+      paused,
+    };
+  }
 
   // Firecrawl wins: these sources are excluded from the poll cron and run on
   // their own external schedule (ingested via the inbound webhook + workflow).
@@ -187,8 +206,15 @@ export function computeSweepHealth(source: Source, plan: FetchPlan, now: Date): 
 export function computeFetchState(source: Source, plan: FetchPlan, now: Date): FetchState {
   const lastPolledAt = source.lastPolledAt ?? null;
 
-  // No local cadence to project for firecrawl (webhook-driven) or paused sources.
-  if (plan.paused || plan.cadence === "firecrawl-webhook" || plan.intervalHours == null) {
+  // No local cadence to project for firecrawl (webhook-driven), push-fed
+  // (publisher-driven), or paused sources. `intervalHours == null` already
+  // covers push/firecrawl (both null it), kept explicit for readability.
+  if (
+    plan.paused ||
+    plan.cadence === "firecrawl-webhook" ||
+    plan.cadence === "push" ||
+    plan.intervalHours == null
+  ) {
     return { lastPolledAt, nextDueAt: null, backedOff: false, paused: plan.paused };
   }
 

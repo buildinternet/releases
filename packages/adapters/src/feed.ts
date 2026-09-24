@@ -12,6 +12,7 @@ import TurndownService from "turndown";
 export {
   getSourceMeta,
   isGitHubFetched,
+  isPushFed,
   effectiveGitHubUrl,
   synthesizeReleaseUrl,
   type SourceMetadata,

@@ -14,14 +14,15 @@ export type FetchStrategy =
   | "crawl"
   | "scrape"
   | "agent"
-  | "firecrawl";
+  | "firecrawl"
+  | "push";
 
 export interface FetchPlan {
   strategy: FetchStrategy;
   strategyLabel: string;
   intervalHours: number | null;
   intervalLabel: string;
-  cadence: "poll" | "firecrawl-webhook";
+  cadence: "poll" | "firecrawl-webhook" | "push";
   paused: boolean;
   firecrawlSchedule?: string;
 }

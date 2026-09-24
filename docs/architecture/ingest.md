@@ -73,6 +73,20 @@ Render escalation needs `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` bound o
 
 `actions/publish-changelog` is a reusable composite Action that diffs a changelog on push and POSTs the changed `##` sections to the existing `POST /v1/sources/:id/releases/batch` (`mode: "upsert-content"`). No dedicated ingest route: auth is the same write-scoped Bearer gate as every other batch write, and batch already runs generate-content / embed / events. Product docs: [Publish from GitHub Actions](../../apps/web/src/content/docs/integrations/github-actions.md). Parent: #2290 (GitHub App is phase 2).
 
+### Push-fed sources (#2374)
+
+A source fed only by pushes (`actions/publish-changelog`, or any other write-scoped caller of the batch route) has nothing to poll — the changelog file only changes when its repo pushes. Nothing stopped the scrape/agent poller from also fetching it, which duplicates work and can flag it as "stranded" into the `OrgActor` drain.
+
+Set `metadata.ingestMode = "push"` on the source (via `PATCH /v1/sources/:slug` or `.../metadata` — both accept freeform metadata keys already, no schema change) to mark it externally driven, mirroring `metadata.firecrawl.enabled`'s "no local cadence" treatment:
+
+- `describeFetchPlan()` (`packages/adapters/src/fetch-plan.ts`) returns strategy `"push"`, `cadence: "push"`, `intervalHours: null`, label "Published directly" — push wins over every other strategy, same precedence as Firecrawl.
+- `queryDueSources` (the poll cron) and `queryCandidates` (the OrgActor scrape/agent drain) both exclude push-fed sources via a NULL-safe `json_extract(metadata,'$.ingestMode') IS NOT 'push'` filter, matching the existing `firecrawl.enabled` exclusion shape.
+- `SourceActor.alarm()` sees `computeFetchState()`'s `nextDueAt: null` for a push-fed source and calls `noReschedule()` — same path a paused or Firecrawl-owned source takes.
+- The first-party staleness scan (`cron/source-staleness.ts`) skips push-fed sources entirely rather than computing an overdue window against a cadence that doesn't exist. A quieter "no pushes lately" signal, measured from the last successful batch write, is a worthwhile follow-up but isn't implemented yet.
+- `ingestReleaseBatch()` stamps `sources.lastFetchedAt` to now on every successful batch write for a push-fed source (regardless of whether anything new was inserted) — there's no poll to do it otherwise, and reusing the existing column avoids a `last_pushed_at` migration. Web/CLI read this the same way they'd read any other last-fetch time.
+
+Use `isPushFed(source, meta?)` from `@releases/adapters/source-meta` at every call site instead of reading `metadata.ingestMode` directly.
+
 ## Related
 
 - [remote-mode.md](remote-mode.md) — cron polling, poll-and-fetch / scrape-agent Workflows, retier, smear/jitter.
