@@ -32,10 +32,12 @@ import { createDb } from "../db.js";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
+import { pushFedSql } from "../queries/source-fetch-routing.js";
 import { parsePositiveInt } from "./feed-enrich.js";
 import {
   DEFAULT_FLOOR_DAYS as SOURCE_STALE_DEFAULT_FLOOR_DAYS,
   DEFAULT_MULTIPLIER as SOURCE_STALE_DEFAULT_MULTIPLIER,
+  newestReleaseSql,
 } from "./source-staleness.js";
 
 export interface PushStalenessEnv {
@@ -49,12 +51,7 @@ export interface PushStalenessEnv {
   _drizzleOverride?: unknown;
 }
 
-/**
- * Fixed window (days) used when a push-fed source has no established cadence
- * (`medianGapDays == null`). Unlike the first-party scan, sparse push-fed
- * sources are never skipped outright — a broken pipeline on a brand-new
- * source is exactly the case we don't want to miss.
- */
+/** Window (days) for a push-fed source with no established cadence; see the file header. */
 export const NO_CADENCE_WINDOW_DAYS = 30;
 
 const DAY_MS = 86_400_000;
@@ -121,9 +118,7 @@ export async function scanStalePushFedSources(
       fetchPriority: sources.fetchPriority,
       lastFetchedAt: sources.lastFetchedAt,
       createdAt: sources.createdAt,
-      newestRelease: sql<
-        string | null
-      >`MAX(CASE WHEN ${releases.suppressed} = 0 THEN COALESCE(${releases.publishedAt}, ${releases.fetchedAt}) END)`,
+      newestRelease: newestReleaseSql(),
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
@@ -133,12 +128,11 @@ export async function scanStalePushFedSources(
         isNull(sources.deletedAt),
         // `is_hidden` is nullable on sources; NULL means visible.
         or(eq(sources.isHidden, false), isNull(sources.isHidden)),
-        sql`json_extract(${sources.metadata}, '$.ingestMode') = 'push'`,
+        pushFedSql(sources.metadata),
       ),
     )
     .groupBy(sources.id);
 
-  let stale = 0;
   const entries: PushStaleEntry[] = [];
   for (const r of rows) {
     // Paused is an operator's explicit "stop caring" switch.
@@ -161,7 +155,6 @@ export async function scanStalePushFedSources(
     const overdueCutoff = new Date(now.getTime() - windowDays * DAY_MS).toISOString();
     if (lastActivity >= overdueCutoff) continue;
 
-    stale++;
     const daysSince = Math.round((now.getTime() - new Date(lastActivity).getTime()) / DAY_MS);
     const roundedWindow = Math.round(windowDays);
     const entry: PushStaleEntry = {
@@ -190,6 +183,7 @@ export async function scanStalePushFedSources(
 
   entries.sort((a, b) => b.daysSinceActivity - a.daysSinceActivity);
 
+  const stale = entries.length;
   logEvent(stale > 0 ? "warn" : "info", {
     component: "push-staleness",
     event: "scan-complete",

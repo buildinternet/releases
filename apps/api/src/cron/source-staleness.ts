@@ -24,7 +24,7 @@
  * cron rolls first-party + Firecrawl flags into an operator email.
  */
 import { createDb } from "../db.js";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
@@ -62,6 +62,18 @@ export const DEFAULT_FLOOR_DAYS = 14;
 export const DEFAULT_MULTIPLIER = 3;
 const DEFAULT_POLL_RECENCY_DAYS = 3;
 const DAY_MS = 86_400_000;
+
+/**
+ * Per-source newest non-suppressed release date, for a query grouped by
+ * source and left-joined to `releases`. A suppressed release isn't "new
+ * output"; `fetched_at` stands in when `published_at` is null. Shared with
+ * the push-fed scan (`push-staleness.ts`).
+ */
+export function newestReleaseSql(): SQL<string | null> {
+  return sql<
+    string | null
+  >`MAX(CASE WHEN ${releases.suppressed} = 0 THEN COALESCE(${releases.publishedAt}, ${releases.fetchedAt}) END)`;
+}
 
 /** One first-party source flagged as overdue during {@link scanStaleSources}. */
 export type StaleSourceEntry = {
@@ -136,9 +148,7 @@ export async function scanStaleSources(
       lastPolledAt: sources.lastPolledAt,
       lastFetchedAt: sources.lastFetchedAt,
       createdAt: sources.createdAt,
-      newestRelease: sql<
-        string | null
-      >`MAX(CASE WHEN ${releases.suppressed} = 0 THEN COALESCE(${releases.publishedAt}, ${releases.fetchedAt}) END)`,
+      newestRelease: newestReleaseSql(),
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))

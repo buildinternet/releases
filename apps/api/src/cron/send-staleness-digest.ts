@@ -42,9 +42,12 @@ export async function sendStalenessDigest(
   pushFed: number;
   providerHealth: number;
 }> {
-  const firstParty = await scanStaleSources(env, now);
-  const firecrawl = await scanStaleFirecrawlSources(env, now);
-  const pushFed = await scanStalePushFedSources(env, now);
+  // Independent read-only scans — run them together.
+  const [firstParty, firecrawl, pushFed] = await Promise.all([
+    scanStaleSources(env, now),
+    scanStaleFirecrawlSources(env, now),
+    scanStalePushFedSources(env, now),
+  ]);
   // scanProviderHealth already fails open internally (any DB/query error is
   // caught and logged there, returning an empty result). This try/catch is
   // defense-in-depth: a provider-health regression must never take down the
@@ -87,6 +90,13 @@ export async function sendStalenessDigest(
     return { emailed: false, firstParty: 0, firecrawl: 0, pushFed: 0, providerHealth: 0 };
   }
 
+  const counts = {
+    firstParty: firstParty.entries.length,
+    firecrawl: firecrawl.entries.length,
+    pushFed: pushFed.entries.length,
+    providerHealth: providerHealth.entries.length,
+  };
+
   const rendered = buildStalenessDigestEmail({
     firstParty: firstParty.entries,
     firecrawl: firecrawl.entries,
@@ -108,50 +118,23 @@ export async function sendStalenessDigest(
         component: "staleness-digest",
         event: "email-skipped",
         reason: result.reason,
-        firstParty: firstParty.entries.length,
-        firecrawl: firecrawl.entries.length,
-        pushFed: pushFed.entries.length,
-        providerHealth: providerHealth.entries.length,
+        ...counts,
       });
-      return {
-        emailed: false,
-        firstParty: firstParty.entries.length,
-        firecrawl: firecrawl.entries.length,
-        pushFed: pushFed.entries.length,
-        providerHealth: providerHealth.entries.length,
-      };
+      return { emailed: false, ...counts };
     }
     logEvent("info", {
       component: "staleness-digest",
       event: "email-sent",
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      pushFed: pushFed.entries.length,
-      providerHealth: providerHealth.entries.length,
+      ...counts,
     });
-    return {
-      emailed: true,
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      pushFed: pushFed.entries.length,
-      providerHealth: providerHealth.entries.length,
-    };
+    return { emailed: true, ...counts };
   } catch (err) {
     logEvent("warn", {
       component: "staleness-digest",
       event: "email-error",
       err,
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      pushFed: pushFed.entries.length,
-      providerHealth: providerHealth.entries.length,
+      ...counts,
     });
-    return {
-      emailed: false,
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      pushFed: pushFed.entries.length,
-      providerHealth: providerHealth.entries.length,
-    };
+    return { emailed: false, ...counts };
   }
 }
