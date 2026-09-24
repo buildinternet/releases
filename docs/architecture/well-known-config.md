@@ -384,7 +384,7 @@ newest-first and carrying `trackingRequestedAt` per item.
 
 A signed-in user can prove control of a listed (stub or tracked) domain and unlock self-serve
 Tier-1 promotion (PR B). Claims live in a new `org_claims` table (`clm_` + nanoid id,
-`org_id`/`user_id` FKs, `method`, `token`, `status: pending|verified|expired`, `expiresAt`) —
+`org_id`/`user_id` FKs, `method`, `token`, `status: pending|verified|expired|revoked`, `expiresAt`) —
 distinct from the anonymous validate/activate lane above: claims bind to a **principal**, not just
 a host.
 
@@ -400,6 +400,21 @@ a host.
   `[ownership] verified: {domain}`); either path failing never fails the verify response.
 - `GET /v1/listing/claims` — the caller's own claims, org-pointer joined; lazily expires overdue
   pending rows on read.
+
+**Ending a claim (#2389).** A verified claim never lapses on its own (re-verification is #2395), so
+it can be ended explicitly. The row is kept as `revoked` with `revoked_at`, `revoked_by` (`owner`,
+`root`, or `token:<id>`), and `revoke_reason`; `revokeClaim` in `routes/listing-claims.ts` is the
+one writer, guarded on the status it read.
+
+- `DELETE /v1/listing/claims/:id` — the owner releases their own pending or verified claim
+  (404 for anyone else's). Idempotent.
+- `GET /v1/orgs/:slug/claims` and `DELETE /v1/orgs/:slug/claims/:id { reason }` — admin scope,
+  checked in the handler (`routes/org-claims.ts`); on the org routes rather than a new `/admin/*`
+  family. The list never includes the proof token.
+- `verify` refuses a revoked or expired claim with a 409, so an old token that's still published
+  can't bring a claim back; the owner starts a fresh one instead.
+- Nothing else needs cleanup: publish tokens and promotion re-check for a `verified` row on every
+  request, so they stop at once. The migration rebuilds `org_claims` to widen its status `CHECK`.
 
 **Token semantics.** One `relv_` token proves both mechanisms — the owner publishes whichever they
 can reach:

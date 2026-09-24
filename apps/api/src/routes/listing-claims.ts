@@ -72,6 +72,7 @@ function projectClaim(
   };
   if (claim.method) base.method = claim.method as OrgClaim["method"];
   if (claim.verifiedAt) base.verifiedAt = claim.verifiedAt;
+  if (claim.revokedAt) base.revokedAt = claim.revokedAt;
   if (claim.status === "pending") {
     base.token = claim.token;
     base.instructions = claimInstructions(domain);
@@ -91,6 +92,28 @@ async function expireOverdueClaims(db: Db, rows: OrgClaimRow[]): Promise<OrgClai
   );
   const overdueIds = new Set(overdue.map((r) => r.id));
   return rows.map((r) => (overdueIds.has(r.id) ? { ...r, status: "expired" as const } : r));
+}
+
+/**
+ * End a pending or verified claim, keeping the row as `revoked` (#2389). An
+ * already-ended claim (revoked or expired) is returned as-is, so callers can
+ * treat a same-object result as "nothing changed". The update is guarded on
+ * the status it read, so a racing verify can't be overwritten silently.
+ */
+export async function revokeClaim(
+  db: Db,
+  claim: OrgClaimRow,
+  { by, reason }: { by: string; reason: string },
+): Promise<OrgClaimRow> {
+  if (claim.status !== "pending" && claim.status !== "verified") return claim;
+  const revokedAt = new Date().toISOString();
+  const patch = { status: "revoked" as const, revokedAt, revokedBy: by, revokeReason: reason };
+  await db
+    .update(orgClaims)
+    .set(patch)
+    .where(and(eq(orgClaims.id, claim.id), eq(orgClaims.status, claim.status)));
+  const [fresh] = await db.select().from(orgClaims).where(eq(orgClaims.id, claim.id)).limit(1);
+  return fresh ?? { ...claim, ...patch };
 }
 
 /**
@@ -267,6 +290,20 @@ listingClaimHandlers.post(
       );
     }
 
+    // An ended claim never comes back to life by re-checking its old token —
+    // a revoked verified claim can still be inside its pending window.
+    if (claim.status === "revoked" || claim.status === "expired") {
+      return respondError(
+        c,
+        new ConflictError(
+          `This claim has ${claim.status === "revoked" ? "been released" : "expired"}; start a new claim.`,
+          {
+            details: { claimId: claim.id },
+          },
+        ),
+      );
+    }
+
     const now = new Date().toISOString();
     if (claim.expiresAt < now) {
       await db.update(orgClaims).set({ status: "expired" }).where(eq(orgClaims.id, claim.id));
@@ -384,6 +421,58 @@ listingClaimHandlers.get(
       })
       .filter((claim): claim is OrgClaim => claim !== null);
     return c.json({ claims });
+  },
+);
+
+listingClaimHandlers.delete(
+  "/listing/claims/:id",
+  describeRoute({
+    tags: ["Listing"],
+    summary: "Release one of your ownership claims",
+    description:
+      "Signed-in only, and the claim must belong to the caller (404 otherwise). Ends a pending or verified claim: the row is kept as `revoked`. Publish tokens that relied on it stop working on their next request. Idempotent; an already-expired claim is returned unchanged. You can start a new claim later.",
+    responses: {
+      200: { description: "The ended claim (OrgClaim)" },
+      401: {
+        description: "Sign-in required",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
+      404: errorResponse("Lane disabled, or no such claim for this caller"),
+    },
+  }),
+  requireListingEnabled,
+  async (c) => {
+    const session = requireSession(c);
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+
+    const db = createDb(c.env.DB);
+    const webBaseUrl = c.env.WEB_BASE_URL ?? "https://releases.sh";
+    const [claim] = await db
+      .select()
+      .from(orgClaims)
+      .where(and(eq(orgClaims.id, c.req.param("id")), eq(orgClaims.userId, session.user.id)))
+      .limit(1);
+    if (!claim) return respondError(c, new NotFoundError("No such claim."));
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, claim.orgId))
+      .limit(1);
+    if (!org) return respondError(c, new NotFoundError("No such claim."));
+
+    const ended = await revokeClaim(db, claim, { by: "owner", reason: "released-by-owner" });
+    if (ended !== claim) {
+      logEvent("info", {
+        component: "listing",
+        event: "claim-revoked",
+        claimId: claim.id,
+        orgId: claim.orgId,
+        userId: session.user.id,
+        by: "owner",
+        previousStatus: claim.status,
+      });
+    }
+    return c.json(projectClaim(ended, org, webBaseUrl), 200);
   },
 );
 
@@ -536,5 +625,6 @@ export const listingClaimRoutes = new Hono<Env>();
 // own registration.
 listingClaimRoutes.use("/listing/claim/*", attachFollowsSession);
 listingClaimRoutes.use("/listing/claims", attachFollowsSession);
+listingClaimRoutes.use("/listing/claims/*", attachFollowsSession);
 listingClaimRoutes.use("/listing/promote", attachFollowsSession);
 listingClaimRoutes.route("/", listingClaimHandlers);

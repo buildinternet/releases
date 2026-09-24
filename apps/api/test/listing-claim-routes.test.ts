@@ -762,3 +762,51 @@ describe("wiring: claim routes ride the composed v1 router", () => {
     expect(spec.paths?.["/listing/claims"]?.get).toBeTruthy();
   });
 });
+
+describe("DELETE /v1/listing/claims/:id (#2389)", () => {
+  const post = (a: Hono, path: string, body: unknown) =>
+    a.request(path, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }, env());
+
+  async function verifiedClaim(a: Hono) {
+    const claim = (await (await post(a, "/listing/claim", { domain: "acme.com" })).json()) as {
+      id: string;
+      token: string;
+    };
+    mockWellKnownFetch(claim.token);
+    const v = await post(a, "/listing/claim/verify", { claimId: claim.id });
+    expect(((await v.json()) as { verified: boolean }).verified).toBe(true);
+    return claim;
+  }
+
+  it("verify refuses a released claim, even inside its pending window", async () => {
+    const a = withSession("u1");
+    const claim = await verifiedClaim(a);
+    const del = await a.request(`/listing/claims/${claim.id}`, { method: "DELETE" }, env());
+    expect(del.status).toBe(200);
+
+    // The proof is still published, but the old claim must not come back.
+    const res = await post(a, "/listing/claim/verify", { claimId: claim.id });
+    expect(res.status).toBe(409);
+    const [row] = await h.db.select().from(orgClaims).where(eq(orgClaims.id, claim.id));
+    expect(row!.status).toBe("revoked");
+  });
+
+  it("lets the owner start a fresh claim afterwards", async () => {
+    const a = withSession("u1");
+    const claim = await verifiedClaim(a);
+    await a.request(`/listing/claims/${claim.id}`, { method: "DELETE" }, env());
+
+    const res = await post(a, "/listing/claim", { domain: "acme.com" });
+    expect(res.status).toBe(201);
+    const fresh = (await res.json()) as { id: string; status: string; token: string };
+    expect(fresh.id).not.toBe(claim.id);
+    expect(fresh.status).toBe("pending");
+    expect(fresh.token).not.toBe(claim.token);
+  });
+
+  it("401s when unauthenticated", async () => {
+    const a = withSession(null);
+    const res = await a.request("/listing/claims/ocl_x", { method: "DELETE" }, env());
+    expect(res.status).toBe(401);
+  });
+});
