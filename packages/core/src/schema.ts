@@ -1644,10 +1644,15 @@ export const apiTokens = sqliteTable(
     // Provenance: who minted it ("static-key", a minting token's id, later a user id).
     createdBy: text("created_by"),
     metadata: text("metadata").default("{}"),
+    // Owner-minted publish tokens (#2373): set only on a `publish`-scoped row,
+    // binding it to ONE source. Null on every ladder (read/write/admin) token.
+    // Hard-deleting the source drops its publish tokens.
+    sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("idx_api_tokens_lookup_id").on(table.lookupId),
     index("idx_api_tokens_principal").on(table.principalType, table.principalId),
+    index("idx_api_tokens_source").on(table.sourceId),
     // DB-level guard so non-ORM writes can't slip in an out-of-vocabulary value.
     // Keep in lockstep with PRINCIPAL_TYPES and the matching CHECK in the migration.
     check(

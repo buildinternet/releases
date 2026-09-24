@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
-import { apiTokens } from "@buildinternet/releases-core/schema";
+import { apiTokens, organizations, sources } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 import { resolveMcpAuth, isMeteredMcpMethod, machineTokenIdForUsage } from "../src/auth.js";
 import type { Env } from "../src/mcp-agent.js";
@@ -81,6 +81,31 @@ describe("resolveMcpAuth — identity (prod, no staging gate)", () => {
     const r = await resolveMcpAuth(req({ Authorization: `Bearer ${bogus}` }), baseEnv());
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.identity.kind).toBe("anonymous");
+  });
+
+  it("source-bound publish token (#2373) ⇒ anonymous, never forwarded", async () => {
+    h.db.insert(organizations).values({ id: "org_pub", slug: "pub", name: "Pub" }).run();
+    h.db
+      .insert(sources)
+      .values({
+        id: "src_pub",
+        slug: "pub-src",
+        name: "Pub",
+        type: "feed",
+        url: "https://pub.test/changelog",
+        orgId: "org_pub",
+      })
+      .run();
+    const token = await seed(["publish"], {
+      id: "tok_pub",
+      principalType: "user",
+      principalId: "user_pub",
+      sourceId: "src_pub",
+    });
+    const r = await resolveMcpAuth(req({ Authorization: `Bearer ${token}` }), baseEnv());
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.identity).toMatchObject({ kind: "anonymous", scopes: ["read"], token: null });
   });
 
   it("static root key ⇒ root identity, wildcard scope, no raw token", async () => {

@@ -72,6 +72,62 @@ stored.
 > so only the page needed to live on the web origin. The same rule applies to any
 > Better Auth redirect/verification target that points at a web page.
 
+### Publish tokens (owner-scoped, #2373)
+
+A verified domain owner can mint a token that publishes to **one** of their
+sources without admin help, for the `publish-changelog` GitHub Action. It is an
+ordinary `relk_` row in `api_tokens` with `principal_type = 'user'`,
+`principal_id = <userId>`, `scopes = ["publish"]`, and `source_id` set
+(`ON DELETE CASCADE`). `publish` (`PUBLISH_SCOPE` in
+`@buildinternet/releases-core/api-token`) is **not** on the ladder: it ranks 0 in
+`scopeSatisfies`, so it never satisfies read, write, or admin, and the admin mint
+route rejects it.
+
+- **Mint / list / revoke:** `POST|GET /v1/me/publish-tokens`,
+  `DELETE /v1/me/publish-tokens/:id` (`routes/me-publish-tokens.ts`). **Cookie
+  session only.** The gate strips `Authorization` before the session lookup, so a
+  `relu_` key, an OAuth JWT, or a bearer-plugin session token can't mint. A
+  read-only credential must never turn into a write one. Mint needs a `verified`
+  `org_claims` row on the source's org (403 otherwise). A missing or soft-deleted
+  source is a 404. The cap is 5 active tokens per (user, source), enforced by one
+  capped `INSERT … SELECT … WHERE count < 5 AND EXISTS(verified claim)`; over the
+  cap is a 409 `api_key_limit`. The plaintext is returned once. Gated on the
+  `listing-self-serve-enabled` kill switch, the same one the claim routes use.
+  Mint and revoke also require an `Origin` that is **exactly** the web origin
+  (`isExactWebOrigin`, from `WEB_BASE_URL`; loopback off-prod). A missing
+  `Origin` is refused. The credentialed CORS allow-list reflects any
+  releases-family subdomain, so without this check a compromised sibling origin
+  could mint a token with a victim's cookie and read it back.
+- **Verification:** `verifyApiToken` returns `sourceId` and `principalId`, and
+  denies any row that breaks the shape: a source-bound row must carry exactly
+  `["publish"]` and a user owner, and `publish` without a source is denied. On
+  every request, `resolveAuthUncached` then re-checks the grant
+  (`checkPublishBinding` in `queries/publish-tokens.ts`). The source must exist
+  and not be soft-deleted, its org must not be soft-deleted, and the owner must
+  still hold a `verified` claim on that org. Any miss, or an error while checking,
+  resolves to `none` (401 on a write). The binding rides on `AuthContext` as
+  `publishSourceId`.
+- **Route gating (double check):** `createAuthMiddleware` lets an under-scoped
+  token through only when it carries `publishSourceId`, the gate requires
+  `write` (never `admin`), the method is `POST`, and `isPublishBatchPath` matches
+  `/v1/sources/:slug/releases/batch` or
+  `/v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch` exactly. Everything else
+  gets the usual 403 `insufficient_scope`. `postReleasesBatchHandler` then
+  answers 403 when the resolved source isn't the bound one. Batch content checks
+  (URL exclusion, suppression, dedup) apply as for any writer. Public GETs still
+  work with the token attached. The MCP worker reads a source-bound token as
+  anonymous.
+- **Claim lapse:** a verified claim has no clock expiry. Its `expires_at` is only
+  the pending-proof deadline. "Lapsed" means the claim row is gone (the org was
+  deleted, or someone removed it) or is no longer `verified`. There is no
+  user-facing claim-revoke route yet. Either way, the token stops working on the
+  next request, with no cache in between.
+- **Audit:** `logEvent` under `component: "publish-tokens"`:
+  `publish-token-minted`, `publish-token-revoked`, `publish-token-mint-denied`,
+  and `publish-token-rejected` (reason `claim_missing` / `source_deleted` /
+  `source_missing` / `org_deleted` / `source_mismatch` / `binding_check_error`).
+  These events never include the token.
+
 ### Role provisioning (admin / curator)
 
 A signed-in user's OAuth scope ceiling comes from the Better Auth admin-plugin

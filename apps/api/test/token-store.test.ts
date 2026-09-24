@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
-import { apiTokens } from "@buildinternet/releases-core/schema";
+import { apiTokens, organizations, sources } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 
 let h: TestDatabase | null = null;
@@ -62,6 +62,8 @@ describe("verifyApiToken", () => {
       tokenId: "tok_ok",
       scopes: ["read", "write"],
       principalType: "internal",
+      principalId: null,
+      sourceId: null,
     });
   });
 
@@ -174,5 +176,86 @@ describe("touchLastUsed", () => {
     await touchLastUsed(h.db as never, "tok_stale");
     const after = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_stale")).get();
     expect(after?.lastUsedAt).not.toBe(before?.lastUsedAt);
+  });
+});
+
+describe("verifyApiToken — publish tokens (#2373)", () => {
+  function seedSource(db: TestDatabase["db"]) {
+    db.insert(organizations).values({ id: "org_p", slug: "p", name: "P" }).run();
+    db.insert(sources)
+      .values({
+        id: "src_p",
+        slug: "p-src",
+        name: "P",
+        type: "feed",
+        url: "https://p.test/changelog",
+        orgId: "org_p",
+      })
+      .run();
+  }
+
+  it("returns the source binding and owning user for a well-formed publish token", async () => {
+    h = createTestDb();
+    seedSource(h.db);
+    const { token } = await seedToken(h.db, {
+      id: "tok_pub",
+      scopes: JSON.stringify(["publish"]),
+      principalType: "user",
+      principalId: "user_1",
+      sourceId: "src_p",
+    });
+    expect(await verifyApiToken(h.db as never, token)).toEqual({
+      ok: true,
+      tokenId: "tok_pub",
+      scopes: ["publish"],
+      principalType: "user",
+      principalId: "user_1",
+      sourceId: "src_p",
+    });
+  });
+
+  it("denies a source-bound row whose scopes aren't exactly publish", async () => {
+    h = createTestDb();
+    seedSource(h.db);
+    for (const [i, scopes] of [["write"], ["publish", "read"], ["admin"]].entries()) {
+      const { token } = await seedToken(h.db, {
+        id: `tok_bad${i}`,
+        scopes: JSON.stringify(scopes),
+        principalType: "user",
+        principalId: "user_1",
+        sourceId: "src_p",
+      });
+      expect((await verifyApiToken(h.db as never, token)).ok).toBe(false);
+    }
+  });
+
+  it("denies a source-bound row without a user owner", async () => {
+    h = createTestDb();
+    seedSource(h.db);
+    const internal = await seedToken(h.db, {
+      id: "tok_int",
+      scopes: JSON.stringify(["publish"]),
+      principalType: "internal",
+      sourceId: "src_p",
+    });
+    expect((await verifyApiToken(h.db as never, internal.token)).ok).toBe(false);
+    const noId = await seedToken(h.db, {
+      id: "tok_noid",
+      scopes: JSON.stringify(["publish"]),
+      principalType: "user",
+      sourceId: "src_p",
+    });
+    expect((await verifyApiToken(h.db as never, noId.token)).ok).toBe(false);
+  });
+
+  it("denies a publish scope with no source binding", async () => {
+    h = createTestDb();
+    const { token } = await seedToken(h.db, {
+      id: "tok_unbound",
+      scopes: JSON.stringify(["publish"]),
+      principalType: "user",
+      principalId: "user_1",
+    });
+    expect((await verifyApiToken(h.db as never, token)).ok).toBe(false);
   });
 });

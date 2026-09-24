@@ -69,6 +69,8 @@ function toPublicRow(row: typeof apiTokens.$inferSelect) {
     lastUsedAt: row.lastUsedAt,
     createdAt: row.createdAt,
     createdBy: row.createdBy,
+    // Non-null only on an owner-minted publish token (#2373).
+    sourceId: row.sourceId ?? null,
   };
 }
 
@@ -326,6 +328,15 @@ apiTokenRoutes.patch("/tokens/:id", async (c) => {
     patch.name = body.name.trim();
   }
   if (body.scopes !== undefined) {
+    // Publish tokens (#2373) carry a fixed `["publish"]` scope tied to their
+    // source binding; never widen one onto the ladder. (verifyApiToken would
+    // deny the resulting row anyway — this makes the refusal explicit.)
+    if (existing.sourceId) {
+      return respondError(
+        c,
+        new ValidationError("publish token scopes can't be changed", { code: "bad_request" }),
+      );
+    }
     const scopes = validateScopes(body.scopes);
     if (!scopes) return respondError(c, new ValidationError(SCOPES_HINT, { code: "bad_request" }));
     patch.scopes = JSON.stringify(scopes);

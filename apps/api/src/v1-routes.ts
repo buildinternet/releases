@@ -61,6 +61,7 @@ import { collectionRoutes } from "./routes/collections.js";
 import { apiTokenRoutes } from "./routes/api-tokens.js";
 import { userApiKeyRoutes } from "./routes/user-api-keys.js";
 import { meRoutes } from "./routes/me.js";
+import { mePublishTokenRoutes } from "./routes/me-publish-tokens.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { feedRoutes } from "./routes/feed.js";
 import { digestRoutes } from "./routes/digest.js";
@@ -130,6 +131,9 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", collectionRoutes);
   v1.route("/", apiTokenRoutes);
   v1.route("/", userApiKeyRoutes);
+  // Before meRoutes: publish-token routes are cookie-session only and must
+  // answer before meRoutes' `/me/*` session-or-Bearer gate would run.
+  v1.route("/", mePublishTokenRoutes);
   v1.route("/", meRoutes);
   v1.route("/", workspaceRoutes);
   v1.route("/", feedRoutes);

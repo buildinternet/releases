@@ -4,6 +4,7 @@ import {
   ROOT_SCOPE,
   isApiScope,
   scopeSatisfies,
+  PUBLISH_SCOPE,
   parseStoredScopes,
   API_TOKEN_PREFIX,
   generateApiToken,
@@ -57,6 +58,19 @@ describe("scopeSatisfies", () => {
   it("unknown scopes grant nothing", () => {
     expect(scopeSatisfies(["orgs:write"], "read")).toBe(false);
     expect(scopeSatisfies([], "read")).toBe(false);
+  });
+});
+
+describe("PUBLISH_SCOPE", () => {
+  it("never satisfies any rung of the ladder", () => {
+    expect(scopeSatisfies([PUBLISH_SCOPE], "read")).toBe(false);
+    expect(scopeSatisfies([PUBLISH_SCOPE], "write")).toBe(false);
+    expect(scopeSatisfies([PUBLISH_SCOPE], "admin")).toBe(false);
+  });
+
+  it("is not an admin-mintable ladder scope", () => {
+    expect(isApiScope(PUBLISH_SCOPE)).toBe(false);
+    expect((API_SCOPES as readonly string[]).includes(PUBLISH_SCOPE)).toBe(false);
   });
 });
 

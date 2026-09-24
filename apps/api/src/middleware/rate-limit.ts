@@ -110,7 +110,9 @@ function bearer(c: Context<Env>): string {
  * Classify the caller into a rate-limit tier. Root + trusted proxy are exempt.
  * `relk_` machine tokens → machine rung (keyed on tokenId). OAuth-JWT users
  * (`oauth_…`) and valid `relu_` keys → account rung (keyed on userId). Everything
- * else → anonymous (keyed on IP). The `relu_` path verifies behind the KV cache
+ * else → anonymous (keyed on IP). A source-bound publish token (#2373) is a
+ * `relk_` row but NOT a machine principal: it only exists to push one source's
+ * changelog, so its reads get the anonymous per-IP rung, not 600/token. The `relu_` path verifies behind the KV cache
  * so a junk string can't mint an account bucket (it caches invalid → IP rung).
  */
 async function classifyPrincipal(
@@ -120,7 +122,7 @@ async function classifyPrincipal(
   if (await isTrustedProxy(c)) return { tier: "exempt" };
   const identity = await resolveAuthIdentity(c);
   if (identity?.kind === "root") return { tier: "exempt" };
-  if (identity?.kind === "token") {
+  if (identity?.kind === "token" && identity.publishSourceId === undefined) {
     const id = identity.tokenId;
     const tier = classifyTokenId(id);
     // Account tier → bucket on the userId (strip the oauth_ prefix) so a user's

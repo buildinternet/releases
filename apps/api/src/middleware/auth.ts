@@ -12,6 +12,7 @@ import {
   type ApiScope,
   isApiTokenShaped,
   isUserApiKeyShaped,
+  PUBLISH_SCOPE,
   ROOT_SCOPE,
   scopeSatisfies,
   USER_API_KEY_PREFIX,
@@ -34,6 +35,7 @@ import {
 } from "@releases/lib/releases-error";
 import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
+import { checkPublishBinding } from "../queries/publish-tokens.js";
 import type { Env } from "../index.js";
 import { createAuth } from "../auth/index.js";
 import { apiScopesFromPermissions, clampUserKeyScopes } from "../auth/api-key-scope.js";
@@ -59,6 +61,11 @@ export type AuthContext =
       scopes: string[];
       machinePrincipalType?: PrincipalType;
       oauthClientId?: string;
+      /**
+       * Set only for an owner-minted publish token (#2373) whose binding was
+       * re-checked on this request: the ONE source it may batch-write to.
+       */
+      publishSourceId?: string;
     };
 
 /** Minimal session shape attached to the Hono context by `requireSession`. */
@@ -94,6 +101,7 @@ type ResolvedAuth =
       scopes: string[];
       machinePrincipalType?: PrincipalType;
       oauthClientId?: string;
+      publishSourceId?: string;
     }
   | { kind: "rate_limited" }
   // skip=true means "local dev, no secret configured" — preserve open access.
@@ -271,6 +279,70 @@ export async function validateAccountCredential(
   return { valid: false };
 }
 
+/**
+ * Re-check an owner-minted publish token's grant (#2373): true only when the
+ * bound source is live and the owning user still holds a verified claim on its
+ * org. Logs the rejection reason (never the token). Errors fail closed.
+ */
+async function resolvePublishBinding(
+  db: ReturnType<typeof createDb>,
+  tokenId: string,
+  sourceId: string,
+  userId: string | null,
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const check = await checkPublishBinding(db, sourceId, userId);
+    if (check.ok) return true;
+    logEvent("warn", {
+      component: "publish-tokens",
+      event: "publish-token-rejected",
+      reason: check.reason,
+      tokenId,
+      sourceId,
+      userId,
+    });
+    return false;
+  } catch (err) {
+    logEvent("warn", {
+      component: "publish-tokens",
+      event: "publish-token-rejected",
+      reason: "binding_check_error",
+      tokenId,
+      sourceId,
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+/**
+ * The ONLY routes an owner-minted publish token may write to: the two shapes
+ * of the batch release insert. Structural, exact-segment match — no prefix or
+ * suffix matching — accepting both the `/v1`-prefixed production path and the
+ * bare form direct-mount unit tests see. The handler then re-checks that the
+ * resolved source is the token's bound source.
+ *
+ *   /v1/sources/:slug/releases/batch
+ *   /v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch
+ */
+export function isPublishBatchPath(path: string): boolean {
+  if (!path.startsWith("/")) return false;
+  let segs = path.slice(1).split("/");
+  if (segs.some((s) => s.length === 0)) return false;
+  if (segs[0] === "v1") segs = segs.slice(1);
+  if (segs.length === 4) {
+    return segs[0] === "sources" && segs[2] === "releases" && segs[3] === "batch";
+  }
+  if (segs.length === 6) {
+    return (
+      segs[0] === "orgs" && segs[2] === "sources" && segs[4] === "releases" && segs[5] === "batch"
+    );
+  }
+  return false;
+}
+
 const RESOLVE_MEMO_METERED = new WeakMap<Request, Promise<ResolvedAuth>>();
 const RESOLVE_MEMO_UNMETERED = new WeakMap<Request, Promise<ResolvedAuth>>();
 
@@ -332,15 +404,35 @@ async function resolveAuthUncached(
   if (isApiTokenShaped(presented)) {
     if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
       return { kind: "none", skip: false };
-    const result = await verifyApiToken(createDb(c.env.DB), presented);
-    if (result.ok)
+    const db = createDb(c.env.DB);
+    const result = await verifyApiToken(db, presented);
+    if (!result.ok) return { kind: "none", skip: false };
+    if (result.sourceId !== null) {
+      // Owner-minted publish token (#2373). The credential is valid; now prove
+      // the grant still stands, on every request: the source is live and the
+      // owner still holds a verified claim on its org. Any miss (or an error
+      // while checking) reads as an invalid credential — fail closed.
+      const bound = await resolvePublishBinding(
+        db,
+        result.tokenId,
+        result.sourceId,
+        result.principalId,
+      );
+      if (!bound) return { kind: "none", skip: false };
       return {
         kind: "token",
         tokenId: result.tokenId,
         scopes: result.scopes,
         machinePrincipalType: result.principalType,
+        publishSourceId: result.sourceId,
       };
-    return { kind: "none", skip: false };
+    }
+    return {
+      kind: "token",
+      tokenId: result.tokenId,
+      scopes: result.scopes,
+      machinePrincipalType: result.principalType,
+    };
   }
 
   // "Sign in with Releases" OAuth JWT access tokens (#1483). Verified locally
@@ -579,6 +671,37 @@ function requireSessionWithFlag(
   };
 }
 
+/**
+ * Cookie-session-only gate behind a feature flag (404 when off). Unlike
+ * {@link requireFollowsPrincipal} it accepts NO Bearer lane: the
+ * `Authorization` header is stripped before the session lookup, so neither a
+ * `relu_` key, an OAuth JWT, nor a bearer-plugin session token can satisfy it,
+ * and any `session` an earlier middleware attached is overwritten. Use it for
+ * surfaces that mint credentials stronger than the ones a Bearer lane carries
+ * (a read-only user key must never mint a write-capable token).
+ */
+export function requireCookieSessionWithFlag(
+  flagDef: FlagDef,
+  envValue: (e: Env["Bindings"]) => string | undefined,
+): MiddlewareHandler<Env> {
+  return async (c, next) => {
+    if (!(await flag(c.env.FLAGS, envValue(c.env), flagDef))) {
+      return respondError(c, new NotFoundError("Not found"));
+    }
+    const headers = new Headers(c.req.raw.headers);
+    headers.delete("authorization");
+    const auth = await getOrCreateAuth(c);
+    const session = await auth.api.getSession({ headers });
+    if (!session?.user?.id) {
+      return respondError(c, new UnauthorizedError("Sign in required"));
+    }
+    c.set("session", {
+      user: { id: session.user.id, email: session.user.email, name: session.user.name },
+    });
+    await next();
+  };
+}
+
 /** Self-serve API key surface gate (`/v1/api-keys`) — flag-gated rollout. */
 export const requireSession: MiddlewareHandler<Env> = requireSessionWithFlag(
   FLAGS.userApiKeysEnabled,
@@ -757,11 +880,35 @@ function createAuthMiddleware(opts: {
       return respondError(c, new UnauthorizedError("Missing API key"));
     }
 
-    if (!scopeSatisfies(auth.scopes, opts.requiredScope)) {
+    if (!scopeSatisfies(auth.scopes, opts.requiredScope) && !isPublishTokenWrite(c, auth, opts)) {
       return respondError(c, new InsufficientScopeError(`Requires '${opts.requiredScope}' scope`));
     }
 
     recordAuth(c, auth);
     await next();
   };
+}
+
+/**
+ * The one exception to the scope ladder: an owner-minted publish token (its
+ * binding already re-checked in `resolveAuthUncached`) may POST a batch-insert
+ * route behind a `write` gate. Never an admin-gated route, never another
+ * method or path. `postReleasesBatchHandler` then enforces that the resolved
+ * source IS the token's bound source — both checks are required.
+ */
+function isPublishTokenWrite(
+  c: Context<Env>,
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+  opts: { requiredScope: ApiScope },
+): boolean {
+  return (
+    auth.kind === "token" &&
+    typeof auth.publishSourceId === "string" &&
+    auth.publishSourceId.length > 0 &&
+    auth.scopes.length === 1 &&
+    auth.scopes[0] === PUBLISH_SCOPE &&
+    opts.requiredScope === "write" &&
+    c.req.method === "POST" &&
+    isPublishBatchPath(c.req.path)
+  );
 }

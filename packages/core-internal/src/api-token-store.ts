@@ -13,6 +13,7 @@ import {
   hashSecret,
   parseApiToken,
   parseStoredScopes,
+  PUBLISH_SCOPE,
   type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
 
@@ -20,7 +21,20 @@ import {
 type AnyDb = DrizzleD1Database<any>;
 
 export type TokenVerifyResult =
-  | { ok: true; tokenId: string; scopes: string[]; principalType: PrincipalType }
+  | {
+      ok: true;
+      tokenId: string;
+      scopes: string[];
+      principalType: PrincipalType;
+      principalId: string | null;
+      /**
+       * Set only on an owner-minted publish token (#2373): the ONE source it may
+       * write to. Callers MUST re-check the binding (source live + owner still
+       * holds a verified claim) before honoring it — this verifier only proves
+       * the credential itself is valid and well-formed.
+       */
+      sourceId: string | null;
+    }
   | { ok: false };
 
 /** How long after a successful auth before we rewrite last_used_at again. */
@@ -68,7 +82,29 @@ export async function verifyApiToken(
   // a powerless-but-authenticated identity (which would still bypass rate limits).
   const scopes = parseStoredScopes(row.scopes);
   if (scopes.length === 0) return { ok: false };
-  return { ok: true, tokenId: row.id, scopes, principalType: row.principalType };
+
+  // Publish-token shape invariant (#2373), fail closed both ways: a
+  // source-bound row must carry exactly `["publish"]` and a user owner, and the
+  // `publish` scope is meaningless without a source binding. A row edited
+  // out-of-band into any other shape (e.g. `write` + source_id) is denied
+  // rather than admitted with ladder scopes.
+  const sourceId = row.sourceId ?? null;
+  const hasPublish = scopes.includes(PUBLISH_SCOPE);
+  if (sourceId !== null) {
+    if (scopes.length !== 1 || !hasPublish) return { ok: false };
+    if (row.principalType !== "user" || !row.principalId) return { ok: false };
+  } else if (hasPublish) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    tokenId: row.id,
+    scopes,
+    principalType: row.principalType,
+    principalId: row.principalId ?? null,
+    sourceId,
+  };
 }
 
 /**

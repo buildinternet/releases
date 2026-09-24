@@ -318,6 +318,10 @@ async function resolveIdentity(
   if (isApiTokenShaped(presented)) {
     if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
     const res = await verifyApiToken(createDb(env.DB), presented);
+    // Owner-minted publish tokens (#2373) are bound to one source's batch-write
+    // route on the REST API and carry no ladder scope, so they grant nothing
+    // here — read them as anonymous rather than forwarding them downstream.
+    if (res.ok && res.sourceId !== null) return ANONYMOUS;
     if (res.ok)
       // relk_ is a machine principal (no owning user) — userToken + userId null.
       return {

@@ -46,18 +46,34 @@ jobs:
 
 ## Inputs
 
-| Input               | Required | Default                                          | Notes                                                                                                                                        |
-| ------------------- | -------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`            | yes      |                                                  | `src_…` id, or a source slug (then pass `org`)                                                                                               |
-| `org`               | no       |                                                  | Organization slug, for `/v1/orgs/:org/sources/:source/releases/batch`                                                                        |
-| `api-token`         | yes      |                                                  | Write-scoped `relk_…`. Read-only `relu_` keys are rejected.                                                                                  |
-| `api-url`           | no       | `https://api.releases.sh`                        |                                                                                                                                              |
-| `changelog-path`    | no       | `CHANGELOG.md`                                   | Single-file mode. Must stay at its default when `changelog-glob` is set.                                                                     |
-| `changelog-glob`    | no       | `""`                                             | Directory mode. e.g. `changelog/**/*.mdx`, resolved relative to `working-directory`. Cannot be combined with a non-default `changelog-path`. |
-| `working-directory` | no       | repo root                                        |                                                                                                                                              |
-| `before-sha`        | no       | `github.event.before`                            |                                                                                                                                              |
-| `url-template`      | no       | GitHub blob URL (+ `#{key}` in single-file mode) | Placeholders `{key}`, `{version}`, `{date}`, `{path}`, `{slug}`                                                                              |
-| `generate-content`  | no       | `true`                                           | Admin-token regenerate for edited entries; write-only tokens skip                                                                            |
+| Input               | Required | Default                                          | Notes                                                                                                                                                |
+| ------------------- | -------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`            | yes      |                                                  | `src_…` id, or a source slug (then pass `org`)                                                                                                       |
+| `org`               | no       |                                                  | Organization slug, for `/v1/orgs/:org/sources/:source/releases/batch`                                                                                |
+| `api-token`         | yes      |                                                  | A publish token for this source (self-serve for verified domain owners, see below), or a write-scoped `relk_…`. Read-only `relu_` keys are rejected. |
+| `api-url`           | no       | `https://api.releases.sh`                        |                                                                                                                                                      |
+| `changelog-path`    | no       | `CHANGELOG.md`                                   | Single-file mode. Must stay at its default when `changelog-glob` is set.                                                                             |
+| `changelog-glob`    | no       | `""`                                             | Directory mode. e.g. `changelog/**/*.mdx`, resolved relative to `working-directory`. Cannot be combined with a non-default `changelog-path`.         |
+| `working-directory` | no       | repo root                                        |                                                                                                                                                      |
+| `before-sha`        | no       | `github.event.before`                            |                                                                                                                                                      |
+| `url-template`      | no       | GitHub blob URL (+ `#{key}` in single-file mode) | Placeholders `{key}`, `{version}`, `{date}`, `{path}`, `{slug}`                                                                                      |
+| `generate-content`  | no       | `true`                                           | Admin-token regenerate for edited entries; write and publish tokens skip                                                                             |
+
+### Publish tokens
+
+If you've verified you own your domain, you can mint a token yourself that publishes to one source and nothing else. While signed in to releases.sh (browser session, not an API key), call `POST https://api.releases.sh/v1/me/publish-tokens` with `{"sourceId": "src_…", "name": "github-actions"}`. The token is shown once. Store it as `RELEASES_API_TOKEN`. List tokens with `GET /v1/me/publish-tokens` and revoke one with `DELETE /v1/me/publish-tokens/:id`. A token stops working if you revoke it or lose the ownership claim.
+
+The request must come from a signed-in releases.sh page, because the API only accepts it from that origin. Until the account page has a button, run this in the browser console on releases.sh:
+
+```js
+const res = await fetch("https://api.releases.sh/v1/me/publish-tokens", {
+  method: "POST",
+  credentials: "include",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ sourceId: "src_…", name: "github-actions" }),
+});
+console.log(await res.json());
+```
 
 ## Outputs
 
