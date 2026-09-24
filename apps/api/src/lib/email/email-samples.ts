@@ -462,6 +462,18 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
             thresholdBasis: "floor",
           },
         ],
+        pushFed: [
+          {
+            sourceId: "src_sample_push",
+            slug: "changelog-action",
+            orgSlug: "example",
+            orgName: "Example Co",
+            medianGapDays: 7,
+            windowDays: 30,
+            daysSinceActivity: 35,
+            lastActivityAt: "2026-05-20T00:00:00.000Z",
+          },
+        ],
         providerHealth: [
           {
             sourceId: "src_sample_quota",

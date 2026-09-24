@@ -7,6 +7,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { scanStaleFirecrawlSources, type FirecrawlStalenessEnv } from "./firecrawl-staleness.js";
 import { scanStaleSources, type SourceStalenessEnv } from "./source-staleness.js";
+import { scanStalePushFedSources, type PushStalenessEnv } from "./push-staleness.js";
 import { scanProviderHealth, type ProviderHealthEnv } from "./provider-health.js";
 import {
   buildStalenessDigestEmail,
@@ -16,6 +17,7 @@ import { sendEmail, type EmailEnv } from "../lib/email/email.js";
 
 export type SendStalenessDigestEnv = SourceStalenessEnv &
   FirecrawlStalenessEnv &
+  PushStalenessEnv &
   ProviderHealthEnv &
   EmailEnv & {
     WEB_BASE_URL?: string;
@@ -33,9 +35,19 @@ function webOrigin(env: SendStalenessDigestEnv): string {
 export async function sendStalenessDigest(
   env: SendStalenessDigestEnv,
   now: Date = new Date(),
-): Promise<{ emailed: boolean; firstParty: number; firecrawl: number; providerHealth: number }> {
-  const firstParty = await scanStaleSources(env, now);
-  const firecrawl = await scanStaleFirecrawlSources(env, now);
+): Promise<{
+  emailed: boolean;
+  firstParty: number;
+  firecrawl: number;
+  pushFed: number;
+  providerHealth: number;
+}> {
+  // Independent read-only scans — run them together.
+  const [firstParty, firecrawl, pushFed] = await Promise.all([
+    scanStaleSources(env, now),
+    scanStaleFirecrawlSources(env, now),
+    scanStalePushFedSources(env, now),
+  ]);
   // scanProviderHealth already fails open internally (any DB/query error is
   // caught and logged there, returning an empty result). This try/catch is
   // defense-in-depth: a provider-health regression must never take down the
@@ -61,6 +73,7 @@ export async function sendStalenessDigest(
   const attention = countNeedsAttention({
     firstParty: firstParty.entries,
     firecrawl: firecrawl.entries,
+    pushFed: pushFed.entries,
     providerHealth: providerHealth.entries,
   });
 
@@ -70,15 +83,24 @@ export async function sendStalenessDigest(
       event: "skipped-empty",
       scannedFirstParty: firstParty.scanned,
       scannedFirecrawl: firecrawl.scanned,
+      scannedPushFed: pushFed.scanned,
       scannedProviderHealth: providerHealth.scanned,
       upstreamQuiet: firstParty.entries.length,
     });
-    return { emailed: false, firstParty: 0, firecrawl: 0, providerHealth: 0 };
+    return { emailed: false, firstParty: 0, firecrawl: 0, pushFed: 0, providerHealth: 0 };
   }
+
+  const counts = {
+    firstParty: firstParty.entries.length,
+    firecrawl: firecrawl.entries.length,
+    pushFed: pushFed.entries.length,
+    providerHealth: providerHealth.entries.length,
+  };
 
   const rendered = buildStalenessDigestEmail({
     firstParty: firstParty.entries,
     firecrawl: firecrawl.entries,
+    pushFed: pushFed.entries,
     providerHealth: providerHealth.entries,
     providerOutageActive: providerHealth.outageActive,
     webOrigin: webOrigin(env),
@@ -96,44 +118,23 @@ export async function sendStalenessDigest(
         component: "staleness-digest",
         event: "email-skipped",
         reason: result.reason,
-        firstParty: firstParty.entries.length,
-        firecrawl: firecrawl.entries.length,
-        providerHealth: providerHealth.entries.length,
+        ...counts,
       });
-      return {
-        emailed: false,
-        firstParty: firstParty.entries.length,
-        firecrawl: firecrawl.entries.length,
-        providerHealth: providerHealth.entries.length,
-      };
+      return { emailed: false, ...counts };
     }
     logEvent("info", {
       component: "staleness-digest",
       event: "email-sent",
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      providerHealth: providerHealth.entries.length,
+      ...counts,
     });
-    return {
-      emailed: true,
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      providerHealth: providerHealth.entries.length,
-    };
+    return { emailed: true, ...counts };
   } catch (err) {
     logEvent("warn", {
       component: "staleness-digest",
       event: "email-error",
       err,
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      providerHealth: providerHealth.entries.length,
+      ...counts,
     });
-    return {
-      emailed: false,
-      firstParty: firstParty.entries.length,
-      firecrawl: firecrawl.entries.length,
-      providerHealth: providerHealth.entries.length,
-    };
+    return { emailed: false, ...counts };
   }
 }

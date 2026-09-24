@@ -3,12 +3,15 @@
  */
 import type { FirecrawlStaleEntry } from "../../cron/firecrawl-staleness.js";
 import type { StaleSourceEntry } from "../../cron/source-staleness.js";
+import type { PushStaleEntry } from "../../cron/push-staleness.js";
 import type { ProviderHealthEntry } from "../../cron/provider-health.js";
 import { renderEmail, subjectNames, type EmailBlock } from "@releases/rendering/email-shell";
 
 export type StalenessDigestInput = {
   firstParty: StaleSourceEntry[];
   firecrawl: FirecrawlStaleEntry[];
+  /** Push-fed sources (#2381) whose publisher appears to have stopped pushing. */
+  pushFed: PushStaleEntry[];
   /** Sources whose most recent ingest attempt failed as a provider quota/billing shutoff. */
   providerHealth: ProviderHealthEntry[];
   /**
@@ -38,17 +41,21 @@ const TRANSPARENT_SOURCE_TYPES = new Set(["github", "appstore", "video"]);
 /**
  * The actionable population for a digest run: an active provider shutoff (or
  * a cleared one's missed ingests), opaque-pipeline first-party sources gone
- * quiet, and dead Firecrawl monitors. Upstream-quiet transparent sources are
- * excluded — they ride along informationally but should never by themselves
- * trigger an email. `sendStalenessDigest` uses this to decide whether to send.
+ * quiet, dead Firecrawl monitors, and push-fed sources that stopped
+ * receiving pushes. Upstream-quiet transparent sources are excluded — they
+ * ride along informationally but should never by themselves trigger an
+ * email. A push-fed entry IS actionable (unlike upstream-quiet): silence
+ * there means the publisher's pipeline broke, not that they simply haven't
+ * shipped. `sendStalenessDigest` uses this to decide whether to send.
  */
 export function countNeedsAttention(
-  input: Pick<StalenessDigestInput, "firstParty" | "firecrawl" | "providerHealth">,
+  input: Pick<StalenessDigestInput, "firstParty" | "firecrawl" | "pushFed" | "providerHealth">,
 ): number {
   return (
     input.providerHealth.length +
     input.firstParty.filter((e) => !TRANSPARENT_SOURCE_TYPES.has(e.sourceType)).length +
-    input.firecrawl.length
+    input.firecrawl.length +
+    input.pushFed.length
   );
 }
 
@@ -80,7 +87,11 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
   // counts — counting a GitHub repo that simply stopped shipping as a source
   // that "needs attention" made the fleet read far more broken than it is.
   const attention =
-    providerActive.length + providerAftermath.length + opaque.length + input.firecrawl.length;
+    providerActive.length +
+    providerAftermath.length +
+    opaque.length +
+    input.firecrawl.length +
+    input.pushFed.length;
   const hasProviderIssue = providerActive.length > 0;
   // Name the orgs that need attention: "4 overdue" alone reads the same every
   // day and says nothing about whether this run needs attention.
@@ -89,6 +100,7 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
     ...providerAftermath.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
     ...opaque.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
     ...input.firecrawl.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
+    ...input.pushFed.map((e) => e.orgName ?? e.orgSlug ?? e.slug),
   ]);
   const subject = hasProviderIssue
     ? `[staleness] provider quota shutoff: ${providerActive.length} source${providerActive.length === 1 ? "" : "s"} unable to ingest${affected ? ` (${affected})` : ""}`
@@ -187,6 +199,24 @@ export function buildStalenessDigestEmail(input: StalenessDigestInput): {
         metrics: `last fetch ${e.lastFetchedAt ?? "(never)"} · threshold ${e.staleHours}h (${e.thresholdBasis}) · ${e.sourceId}`,
         url: adminUrl ?? undefined,
         sev: "crit",
+      });
+    }
+  }
+
+  if (input.pushFed.length > 0) {
+    blocks.push({ t: "kicker", text: `No pushes lately (${input.pushFed.length})` });
+    blocks.push({
+      t: "fine",
+      text: "Push-fed sources whose publisher has gone quiet past their overdue window. The publisher's pipeline may have stopped — check its workflow runs and API token.",
+    });
+    for (const e of input.pushFed) {
+      const adminUrl = sourceAdminUrl(input.webOrigin, e.orgSlug, e.slug);
+      blocks.push({
+        t: "entity",
+        coord: orgHeadline(e.orgName, e.orgSlug, e.slug),
+        metrics: `quiet ${e.daysSinceActivity}d · window ${e.windowDays}d · last activity ${e.lastActivityAt} · ${e.sourceId}`,
+        url: adminUrl ?? undefined,
+        sev: "warn",
       });
     }
   }
