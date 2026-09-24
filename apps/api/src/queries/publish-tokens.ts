@@ -171,6 +171,27 @@ export async function listPublishTokens(db: D1Db, userId: string): Promise<Publi
 }
 
 /**
+ * Mark a source push-fed on its owner's first publish-token write (#2390): an
+ * owner who wired up a publish token is pushing, so stop polling it. Only flips
+ * when `metadata.ingestMode` is ABSENT, so a curator's explicit `"poll"`
+ * opt-out (or an existing `"push"`) is never touched. Also stamps
+ * `last_fetched_at`, which the batch ingest only does for sources that were
+ * already push-fed when the request started. Returns true when it flipped.
+ */
+export async function markPushFedOnFirstPublish(db: D1Db, sourceId: string): Promise<boolean> {
+  const now = new Date().toISOString();
+  const flipped = await db.all<{ id: string }>(sql`
+    UPDATE sources
+    SET metadata = json_set(coalesce(metadata, '{}'), '$.ingestMode', 'push'),
+        last_fetched_at = ${now}
+    WHERE id = ${sourceId}
+      AND json_extract(coalesce(metadata, '{}'), '$.ingestMode') IS NULL
+    RETURNING id
+  `);
+  return flipped.length > 0;
+}
+
+/**
  * Revoke one of the caller's publish tokens. Returns null when the id isn't a
  * publish token the caller owns (the route answers 404 — no existence oracle).
  * Idempotent: revoking an already-revoked token keeps its original timestamp.

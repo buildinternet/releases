@@ -383,8 +383,13 @@ export interface SourceMetadata {
    * successful write for push-fed sources only (there's no separate
    * `last_pushed_at` column) so the web/CLI can show "published directly"
    * timing without a migration.
+   *
+   * The first successful batch write made with an owner's publish token (#2390)
+   * sets `"push"` automatically when the key is ABSENT. `"poll"` is an explicit
+   * curator opt-out: the source keeps being polled even while its owner
+   * publishes, and the auto-flip never overrides it.
    */
-  ingestMode?: "push";
+  ingestMode?: "push" | "poll";
 }
 
 /** Parse the JSON metadata blob from a source row. */

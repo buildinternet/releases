@@ -48,6 +48,7 @@ import {
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
 import { releaseWebBase } from "../queries/releases.js";
+import { markPushFedOnFirstPublish } from "../queries/publish-tokens.js";
 import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
 import { SourcePatchInputSchema } from "@buildinternet/releases-api-types";
 import {
@@ -841,6 +842,29 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       releases: body.releases,
       enrichMode,
     });
+    // An owner publishing with their own token (#2390) means the source is fed
+    // directly: stop polling it. Never overrides an explicit curator setting.
+    // Best-effort: the releases are already written, so a failure here must not
+    // turn the response into a 500.
+    if (auth?.kind === "token" && auth.publishSourceId === src.id) {
+      try {
+        if (await markPushFedOnFirstPublish(db, src.id)) {
+          logEvent("info", {
+            component: "publish-tokens",
+            event: "source-marked-push-fed",
+            tokenId: auth.tokenId,
+            sourceId: src.id,
+          });
+        }
+      } catch (err) {
+        logEvent("warn", {
+          component: "publish-tokens",
+          event: "mark-push-fed-failed",
+          sourceId: src.id,
+          err: err instanceof Error ? err : String(err),
+        });
+      }
+    }
     c.executionCtx.waitUntil(runBatchIngestEffects(db, c.env, src, result));
     return c.json({
       inserted: result.inserted,
