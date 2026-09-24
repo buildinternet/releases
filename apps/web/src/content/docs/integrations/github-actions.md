@@ -18,20 +18,10 @@ The Action has two modes:
 
 The Action calls `POST /v1/sources/…/releases/batch`. Two kinds of `relk_…` token work:
 
-- **A publish token** (the usual choice). If you've verified you own your domain (an ownership claim through the listing flow), you can mint one yourself. It can publish to one source and nothing else: no source edits, no other sources. It stops working if you revoke it or lose the claim. While you're signed in to releases.sh, call `POST /v1/me/publish-tokens` with `{"sourceId": "src_…", "name": "github-actions"}`. The response shows the token once. `GET /v1/me/publish-tokens` lists your tokens and `DELETE /v1/me/publish-tokens/:id` revokes one. These routes need your browser sign-in session; an API key won't work. A button on your account page is coming.
+- **A publish token** (the usual choice). If you've verified you own your domain (an ownership claim through the listing flow), you can mint one yourself. It can publish to one source and nothing else: no source edits, no other sources. It stops working if you revoke it or lose the claim.
 - **A write-scoped machine token**, issued by a Releases Index admin.
 
-To mint a publish token before the account-page button ships, sign in at releases.sh, open your browser's developer console on any releases.sh page, and run the snippet below with your source id. `credentials: "include"` sends your sign-in cookie. Running it from a releases.sh page matters: the API only accepts this request from the releases.sh origin. Copy the `token` from the response. It won't be shown again.
-
-```js
-const res = await fetch("https://api.releases.sh/v1/me/publish-tokens", {
-  method: "POST",
-  credentials: "include",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ sourceId: "src_…", name: "github-actions" }),
-});
-console.log(await res.json());
-```
+To mint a publish token, sign in and open [Account → Webhooks & API](/account/webhooks). Under **Publish tokens**, pick the source and create the token. Copy it right away. It won't be shown again. The panel also gives you the workflow step to paste, lists your tokens with when each was last used, and revokes them.
 
 Read-only user keys (`relu_…`, including `releases login`) are rejected. Store the token as a repository secret named `RELEASES_API_TOKEN`.
 
