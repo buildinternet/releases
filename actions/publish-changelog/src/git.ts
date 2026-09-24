@@ -44,12 +44,17 @@ function parseNameStatusLine(line: string): NameStatusEntry | null {
 /**
  * `git diff --name-status -M --relative <before>..HEAD`, filtered to files
  * git touched between the before-push SHA and the current commit. Paths are
- * relative to `cwd` (the resolved working-directory). Empty when `before` is
- * missing or an all-zero first-push SHA — callers should treat that as "diff
- * everything" the same way the single-file path does.
+ * relative to `cwd` (the resolved working-directory). Returns null when there
+ * is nothing to diff against — `before` missing, an all-zero first-push SHA,
+ * or git failing (shallow clone, force-pushed-away SHA). Callers treat null as
+ * "publish everything", the same way the single-file path does; the batch
+ * upsert makes that safe to repeat.
  */
-export function gitDiffNameStatus(before: string | undefined, cwd?: string): NameStatusEntry[] {
-  if (isMissingOrZeroSha(before)) return [];
+export function gitDiffNameStatus(
+  before: string | undefined,
+  cwd?: string,
+): NameStatusEntry[] | null {
+  if (isMissingOrZeroSha(before)) return null;
   try {
     const out = execFileSync(
       "git",
@@ -63,6 +68,6 @@ export function gitDiffNameStatus(before: string | undefined, cwd?: string): Nam
       .map(parseNameStatusLine)
       .filter((entry): entry is NameStatusEntry => entry !== null);
   } catch {
-    return [];
+    return null;
   }
 }

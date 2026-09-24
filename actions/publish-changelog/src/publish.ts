@@ -101,7 +101,13 @@ async function gatherDirectoryFiles(
   const bunGlob = new Bun.Glob(glob);
   const files: DirectoryFileInput[] = [];
 
-  if (isMissingOrZeroSha(env.BEFORE_SHA)) {
+  const entries = gitDiffNameStatus(env.BEFORE_SHA, workdir);
+  if (entries === null) {
+    if (!isMissingOrZeroSha(env.BEFORE_SHA)) {
+      console.warn(
+        `git diff against ${env.BEFORE_SHA} failed (shallow clone or rewritten history?); publishing every file matching ${glob}.`,
+      );
+    }
     for await (const relPath of bunGlob.scan({ cwd, onlyFiles: true, dot: false })) {
       const content = readFileSync(resolve(cwd, relPath), "utf8");
       files.push({ path: relPath, status: "A", content });
@@ -109,7 +115,6 @@ async function gatherDirectoryFiles(
     return files;
   }
 
-  const entries = gitDiffNameStatus(env.BEFORE_SHA, workdir);
   for (const entry of entries) {
     if (!bunGlob.match(entry.path)) continue;
     if (entry.status === "D") {

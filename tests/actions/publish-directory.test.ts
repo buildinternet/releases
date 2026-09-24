@@ -107,6 +107,30 @@ describe("publishChangelog — directory mode (git integration)", () => {
     );
   });
 
+  test("an unknown before-sha (shallow clone, rewritten history) falls back to publishing every file", async () => {
+    repoDir = initRepo();
+    write(repoDir, "changelog/a.mdx", "---\ntitle: A\ndate: 2026-06-01\n---\n\nA body.\n");
+    write(repoDir, "changelog/b.mdx", "---\ntitle: B\ndate: 2026-06-02\n---\n\nB body.\n");
+    commit(repoDir, "initial");
+
+    const captured: { body?: unknown }[] = [];
+    const result = await publishChangelog(
+      {
+        RELEASES_API_TOKEN: "relk_x",
+        RELEASES_SOURCE: "src_test",
+        CHANGELOG_GLOB: "changelog/**/*.mdx",
+        URL_TEMPLATE: "https://example.com/changelog/{slug}",
+        WORKING_DIRECTORY: repoDir,
+        GENERATE_CONTENT: "false",
+        BEFORE_SHA: "1234567890abcdef1234567890abcdef12345678",
+      },
+      fetchImpl(captured),
+    );
+
+    expect(result.added.sort()).toEqual(["a", "b"]);
+    expect((captured[0]?.body as { releases: unknown[] }).releases).toHaveLength(2);
+  });
+
   test("added/modified/deleted are classified from git diff --name-status between pushes", async () => {
     repoDir = initRepo();
     write(repoDir, "changelog/a.mdx", "---\ntitle: A\ndate: 2026-06-01\n---\n\nA body.\n");
