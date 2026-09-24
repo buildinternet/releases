@@ -1,5 +1,13 @@
 # @buildinternet/releases-api-types
 
+## 0.57.1
+
+### Patch Changes
+
+- 087f58a: Add `DEVICE_AUTH_PURPOSES`, `DeviceAuthPurpose`, and `isDeviceAuthPurpose` to `api-token`. The CLI sends the purpose as the device-code `scope` (`login`, `keys`, or `publish-tokens`) so the approval page can say what's being approved. API types: no shape changes; bumped to follow the core pin.
+- Updated dependencies [087f58a]
+  - @buildinternet/releases-core@0.34.0
+
 ## 0.57.0
 
 ### Minor Changes
