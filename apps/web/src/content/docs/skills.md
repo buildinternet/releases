@@ -74,6 +74,6 @@ Most need an admin API key to do anything.
 
 ## Source
 
-- **Reader skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `skills/`.
+- **Reader skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `plugins/claude/releases/skills/`.
 - **Operator skills**: [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `.claude/skills/`.
 - **Owner manifest skill** (`creating-releases-json`): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `skills/creating-releases-json/`. Two files drive skill grouping and must stay in sync: the skills.sh **web** repo page reads root [`skills.sh.json`](https://github.com/buildinternet/releases/blob/main/skills.sh.json) ([skills.sh customize](https://www.skills.sh/docs/customize)), while the `npx skills add` **CLI** picker groups by plugin from [`.claude-plugin/marketplace.json`](https://github.com/buildinternet/releases/blob/main/.claude-plugin/marketplace.json) (each `plugins[].name` becomes a picker group).

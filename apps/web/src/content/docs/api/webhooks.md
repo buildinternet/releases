@@ -137,7 +137,7 @@ Webhook URLs must be public **HTTPS** endpoints. Private IPs, internal hostnames
 
 ### CLI
 
-After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. Filter flags on `add` / `edit`: `--product`, `--source`, `--type` (`feature` | `rollup`), and `--clear-*` on edit. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
+After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. Filter flags on `add` / `edit`: `--product`, `--source`, `--type` (`feature` | `rollup`), and `--clear-*` on edit. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/plugins/claude/releases/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
 
 ## Workspace webhooks (`/v1/workspaces/:workspaceId/webhooks`)
 
