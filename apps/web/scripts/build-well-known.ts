@@ -34,19 +34,17 @@ buildMcpServerCard();
 async function buildSkillsIndex() {
   // One entry per skill, fetched from its canonical repo (#1090): user-facing
   // skills live in the CLI repo's Claude plugin folder
-  // (plugins/claude/releases/skills/, moved from skills/ in releases-cli#423);
-  // operator + owner skills live in this monorepo (.claude/skills/ and skills/
-  // respectively). A skill may list fallback dirs, tried in order on a 404.
+  // (plugins/claude/releases/skills/); operator + owner skills live in this
+  // monorepo (.claude/skills/ and skills/ respectively).
   const CLI_REPO = "buildinternet/releases-cli";
   const MONO_REPO = "buildinternet/releases";
   const REF = "main";
-  // TODO: drop the "skills" fallback once releases-cli#423 is merged.
-  const CLI_SKILL_DIRS = ["plugins/claude/releases/skills", "skills"];
-  const SKILLS: { name: string; repo: string; dir: string | string[] }[] = [
+  const CLI_SKILL_DIR = "plugins/claude/releases/skills";
+  const SKILLS: { name: string; repo: string; dir: string }[] = [
     // Reader (CLI repo)
-    { name: "analyzing-releases", repo: CLI_REPO, dir: CLI_SKILL_DIRS },
-    { name: "releases-cli", repo: CLI_REPO, dir: CLI_SKILL_DIRS },
-    { name: "releases-mcp", repo: CLI_REPO, dir: CLI_SKILL_DIRS },
+    { name: "analyzing-releases", repo: CLI_REPO, dir: CLI_SKILL_DIR },
+    { name: "releases-cli", repo: CLI_REPO, dir: CLI_SKILL_DIR },
+    { name: "releases-mcp", repo: CLI_REPO, dir: CLI_SKILL_DIR },
     // Owner listing (monorepo)
     { name: "creating-releases-json", repo: MONO_REPO, dir: "skills" },
     // Operator (monorepo)
@@ -60,15 +58,9 @@ async function buildSkillsIndex() {
   try {
     const entries = await Promise.all(
       SKILLS.map(async ({ name, repo, dir }) => {
-        const dirs = Array.isArray(dir) ? dir : [dir];
-        let url = "";
-        let res: Response | undefined;
-        for (const d of dirs) {
-          url = `https://raw.githubusercontent.com/${repo}/${REF}/${d}/${name}/SKILL.md`;
-          res = await fetchWithRetry(url);
-          if (res.status !== 404) break;
-        }
-        if (!res?.ok) throw new Error(`Fetch ${url} failed: ${res?.status}`);
+        const url = `https://raw.githubusercontent.com/${repo}/${REF}/${dir}/${name}/SKILL.md`;
+        const res = await fetchWithRetry(url);
+        if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
         const body = await res.text();
         const { data } = matter(body);
         const description =
