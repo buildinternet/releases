@@ -3,6 +3,17 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 24, 2026
+
+**Added**
+- Publish tokens — verified domain owners can mint a per-source token from Account → Webhooks & API, copy a ready-to-paste `publish-changelog` workflow step, and revoke it at any time; `releases publish-token` commands in the CLI can mint and manage tokens using the session from `releases login`.
+- GitHub Action directory mode — set `changelog-glob` (e.g. `changelog/**/*.mdx`) in `publish-changelog` to publish one-file-per-entry Markdown or MDX changelogs; title, date, version, slug, and canonical URL are read from frontmatter, and `draft: true` skips an entry.
+- Claim a tracked org — an "Own this domain?" link in the org sidebar lets the actual owner start a verification claim on any org the registry already tracks, not just stubs; owners and admins can revoke a claim when it's no longer needed.
+
+**Changed**
+- CLI approval screens now say what they're actually approving — `releases login`, `releases keys`, and `releases publish-token` each show a distinct confirmation screen; `releases login` no longer keeps a long-lived session after the key is created.
+- Read-only API key limit raised to 25 — the per-user cap for personal keys increases from 5 to 25, leaving room for multiple machines, CI environments, and scripts under one account.
+
 ## September 23, 2026
 
 **Added**
