@@ -1,5 +1,9 @@
 import { describe, it, expect } from "bun:test";
-import { formatFeedbackEmail, withinNotifyBudget } from "../src/lib/email/feedback-email.js";
+import {
+  formatFeedbackEmail,
+  isFirstNotifyForMessage,
+  withinNotifyBudget,
+} from "../src/lib/email/feedback-email.js";
 import type { Feedback } from "@buildinternet/releases-core/schema";
 
 function fakeKv(initial: Record<string, string> = {}) {
@@ -77,5 +81,30 @@ describe("withinNotifyBudget", () => {
 
   it("fails open when no KV is available", async () => {
     expect(await withinNotifyBudget(undefined, 2)).toBe(true);
+  });
+});
+
+describe("isFirstNotifyForMessage", () => {
+  it("allows the first occurrence and suppresses repeats", async () => {
+    const kv = fakeKv();
+    expect(await isFirstNotifyForMessage(kv, "probe")).toBe(true);
+    expect(await isFirstNotifyForMessage(kv, "probe")).toBe(false);
+  });
+
+  it("treats case and whitespace variants as the same message", async () => {
+    const kv = fakeKv();
+    expect(await isFirstNotifyForMessage(kv, "Search is  broken")).toBe(true);
+    expect(await isFirstNotifyForMessage(kv, " search is broken ")).toBe(false);
+  });
+
+  it("does not suppress different messages", async () => {
+    const kv = fakeKv();
+    expect(await isFirstNotifyForMessage(kv, "first message")).toBe(true);
+    expect(await isFirstNotifyForMessage(kv, "second message")).toBe(true);
+  });
+
+  it("fails open when no KV is available", async () => {
+    expect(await isFirstNotifyForMessage(undefined, "probe")).toBe(true);
+    expect(await isFirstNotifyForMessage(undefined, "probe")).toBe(true);
   });
 });
