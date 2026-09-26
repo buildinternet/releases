@@ -15,7 +15,7 @@
 
 import type { ReactNode, SVGProps } from "react";
 import { useState } from "react";
-import { SCOPE_LABELS } from "@/lib/entitlement";
+import { ACCOUNT_ACTIONS_LABEL, SCOPE_LABELS } from "@/lib/entitlement";
 
 /* ─────────────────────────── line icons ───────────────────────────
    Hand-rolled inline SVGs (no icon dependency, matching the rest of the
@@ -435,20 +435,32 @@ const GROUP_ORDER: {
 /**
  * Renders the requested+entitled scopes as grouped permission rows. Unknown
  * scopes fall back to the account group with a neutral shield so a future scope
- * never renders blank. Empty groups are skipped.
+ * never renders blank. Empty groups are skipped. `accountActions` adds the
+ * scope-less {@link ACCOUNT_ACTIONS_LABEL} row to the action group — for grants
+ * that carry the user's identity (OAuth consent), since follows and webhooks
+ * are gated on that, not on a scope.
  */
-export function ScopeGroups({ appName, scopes }: { appName: string; scopes: string[] }) {
+export function ScopeGroups({
+  appName,
+  scopes,
+  accountActions = false,
+}: {
+  appName: string;
+  scopes: string[];
+  accountActions?: boolean;
+}) {
   return (
     <>
       {GROUP_ORDER.map(({ key, label, badge, defaultOpen }) => {
         const inGroup = scopes.filter((s) => (SCOPE_META[s]?.group ?? "account") === key);
-        if (inGroup.length === 0) return null;
+        const withAccountActions = accountActions && key === "action";
+        if (inGroup.length === 0 && !withAccountActions) return null;
         return (
           <PermGroup
             key={key}
             label={label(appName)}
             badge={badge}
-            count={inGroup.length}
+            count={inGroup.length + (withAccountActions ? 1 : 0)}
             defaultOpen={defaultOpen}
           >
             {inGroup.map((scope) => {
@@ -465,6 +477,14 @@ export function ScopeGroups({ appName, scopes }: { appName: string; scopes: stri
                 />
               );
             })}
+            {withAccountActions ? (
+              <Perm
+                icon={UserIcon}
+                tone="blue"
+                title={ACCOUNT_ACTIONS_LABEL.title}
+                desc={ACCOUNT_ACTIONS_LABEL.desc}
+              />
+            ) : null}
           </PermGroup>
         );
       })}
