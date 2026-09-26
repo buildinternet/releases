@@ -2,7 +2,13 @@ import { type McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getEntityType } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
-import { callMe, text, apiErrorMessage, type ToolReturn } from "./lib/user-api-proxy.js";
+import {
+  callMe,
+  text,
+  apiErrorMessage,
+  userRequired as sharedUserRequired,
+  type ToolReturn,
+} from "./lib/user-api-proxy.js";
 import type { Env } from "./mcp-agent.js";
 import type {
   MeWorkspace,
@@ -38,13 +44,15 @@ import type {
  * "you can't manage this" / "not found" message rather than a raw HTTP code.
  */
 
-/** Shared message when the caller has no user identity to act as. */
-function userRequired(): ToolReturn {
-  return text(
-    "Managing webhooks requires a signed-in user. Authenticate with a `relu_…` user API key " +
-      "or a 'Sign in with Releases' OAuth token (Authorization: Bearer …). Anonymous, " +
-      "machine (`relk_…`), and root credentials have no personal or workspace webhooks.",
-    true,
+/** Message when the caller has no user identity to act as — `toolName` must be listed in USER_REQUIRED_TOOLS. */
+function userRequired(toolName: string): ToolReturn {
+  return sharedUserRequired(
+    toolName,
+    "Managing webhooks requires a signed-in user. Sign in to Releases from your MCP client's " +
+      "connector settings — most OAuth-aware clients will prompt automatically — or " +
+      "authenticate with a `relu_…` user API key or a 'Sign in with Releases' OAuth token " +
+      "(Authorization: Bearer …). Anonymous, machine (`relk_…`), and root credentials have no " +
+      "personal or workspace webhooks.",
   );
 }
 
@@ -225,7 +233,7 @@ export function registerWebhookTools(
       }),
     },
     async ({ workspace, id, enabled }) => {
-      if (!userToken) return userRequired();
+      if (!userToken) return userRequired("list_webhooks");
       try {
         let ws: MeWorkspace | null = null;
         if (workspace) {
@@ -247,7 +255,7 @@ export function registerWebhookTools(
             },
           );
           if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-          if (status === 401) return userRequired();
+          if (status === 401) return userRequired("list_webhooks");
           if (status !== 200) {
             return text(statusMessage(status, json, { inWorkspace: !!ws, action: "read" }), true);
           }
@@ -269,7 +277,7 @@ export function registerWebhookTools(
         const qs = enabled !== undefined ? `?enabled=${enabled}` : "";
         const { status, json } = await callMe(env, userToken, `${base}${qs}`, { method: "GET" });
         if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-        if (status === 401) return userRequired();
+        if (status === 401) return userRequired("list_webhooks");
         if (status !== 200) {
           return text(statusMessage(status, json, { inWorkspace: !!ws, action: "read" }), true);
         }
@@ -374,7 +382,7 @@ export function registerWebhookTools(
       description,
       enabled,
     }) => {
-      if (!userToken) return userRequired();
+      if (!userToken) return userRequired("manage_webhook");
       try {
         let ws: MeWorkspace | null = null;
         if (workspace) {
@@ -434,7 +442,7 @@ export function registerWebhookTools(
               body: JSON.stringify(body),
             });
             if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-            if (status === 401) return userRequired();
+            if (status === 401) return userRequired("manage_webhook");
             if (status !== 201) {
               return text(
                 statusMessage(status, json, { inWorkspace: !!ws, action: "write" }),
@@ -481,7 +489,7 @@ export function registerWebhookTools(
               { method: "PATCH", body: JSON.stringify(patch) },
             );
             if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-            if (status === 401) return userRequired();
+            if (status === 401) return userRequired("manage_webhook");
             if (status !== 200) {
               return text(
                 statusMessage(status, json, { inWorkspace: !!ws, action: "write" }),
@@ -501,7 +509,7 @@ export function registerWebhookTools(
               { method: "DELETE" },
             );
             if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-            if (status === 401) return userRequired();
+            if (status === 401) return userRequired("manage_webhook");
             if (status !== 204) {
               return text(
                 statusMessage(status, json, { inWorkspace: !!ws, action: "write" }),
@@ -520,7 +528,7 @@ export function registerWebhookTools(
               { method: "POST", body: "" },
             );
             if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-            if (status === 401) return userRequired();
+            if (status === 401) return userRequired("manage_webhook");
             if (status !== 200) {
               return text(statusMessage(status, json, { inWorkspace: !!ws, action: "test" }), true);
             }
@@ -536,7 +544,7 @@ export function registerWebhookTools(
               { method: "POST", body: "" },
             );
             if (status === 0) return text("Webhooks are unavailable in this environment.", true);
-            if (status === 401) return userRequired();
+            if (status === 401) return userRequired("manage_webhook");
             if (status !== 200) {
               return text(
                 statusMessage(status, json, { inWorkspace: !!ws, action: "write" }),

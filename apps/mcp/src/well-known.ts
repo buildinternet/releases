@@ -121,3 +121,16 @@ export function protectedResourceMetadataResponse(env: Env, requestUrl?: string)
 export function wwwAuthenticateChallenge(requestUrl: string): string {
   return `Bearer error="invalid_token", resource_metadata="${protectedResourceMetadataUrl(requestUrl)}"`;
 }
+
+/**
+ * RFC 6750 §3.1 `WWW-Authenticate` challenge for a MISSING bearer token — the
+ * sibling of `wwwAuthenticateChallenge` above, which covers a presented-but-
+ * *invalid* token. Per the spec, a server SHOULD omit `error=` when no
+ * credential was presented at all (it isn't "invalid", it's simply absent);
+ * `scope` names what would satisfy the gated tool. Used by the anonymous
+ * sign-in step-up challenge (#2408) when a caller with no credential invokes a
+ * user-gated tool (see `user-required-tools.ts`).
+ */
+export function missingTokenChallenge(requestUrl: string, scope = "read write"): string {
+  return `Bearer scope="${scope}", resource_metadata="${protectedResourceMetadataUrl(requestUrl)}"`;
+}

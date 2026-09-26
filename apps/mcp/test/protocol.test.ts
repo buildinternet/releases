@@ -53,11 +53,17 @@ export function modernRpc(method: string, params?: Record<string, unknown>) {
   };
 }
 
-export function modernRequest(body: unknown, mcpMethod: string, mcpName?: string): Request {
+export function modernRequest(
+  body: unknown,
+  mcpMethod: string,
+  mcpName?: string,
+  extraHeaders?: Record<string, string>,
+): Request {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
     "mcp-method": mcpMethod,
+    ...extraHeaders,
   };
   if (mcpName !== undefined) headers["mcp-name"] = mcpName;
   return new Request("https://mcp.releases.sh/mcp", {
@@ -171,11 +177,20 @@ describe("legacy (2025-era) requests", () => {
 
 describe("modern tools/call", () => {
   it("routes a modern tools/call through the header + envelope path", async () => {
+    // `list_follows` is a DB-free tool (proxies to env.API instead), handy for
+    // exercising dispatch without the full env this harness stubs out.
+    // A completely credential-less call to it is now intercepted by the
+    // anonymous sign-in challenge (#2408, see mcp-signin-challenge.test.ts) —
+    // present a garbage Bearer token here instead, which still resolves to
+    // anonymous (no known token shape matches) but counts as "a credential was
+    // presented", so this test keeps proving dispatch reaches the tool rather
+    // than re-testing the challenge.
     const res = await worker.fetch(
       modernRequest(
         modernRpc("tools/call", { name: "list_follows", arguments: {} }),
         "tools/call",
         "list_follows",
+        { Authorization: "Bearer not-a-real-token" },
       ),
       stubEnv(),
       stubCtx(),

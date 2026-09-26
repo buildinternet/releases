@@ -21,9 +21,15 @@ import {
   type OAuthJwtConfig,
   type JWTVerifyGetKey,
 } from "@releases/lib/oauth-jwt";
-import { DEFAULT_OAUTH_ISSUER, oauthAudiences, wwwAuthenticateChallenge } from "./well-known.js";
+import {
+  DEFAULT_OAUTH_ISSUER,
+  oauthAudiences,
+  wwwAuthenticateChallenge,
+  missingTokenChallenge,
+} from "./well-known.js";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
+import { USER_REQUIRED_TOOLS } from "./user-required-tools.js";
 
 /** Custom header carrying the staging shared secret. Mirrors apps/api. */
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
@@ -83,6 +89,37 @@ export async function isMeteredMcpMethod(request: Request): Promise<boolean> {
     return isBillableMethod((body as { method?: unknown })?.method);
   } catch {
     return true; // parse failure → meter (safe)
+  }
+}
+
+/**
+ * Does this JSON-RPC body call one of `USER_REQUIRED_TOOLS` (the follows /
+ * webhook tools, see `user-required-tools.ts`)? Only a `tools/call` counts —
+ * `initialize`, `tools/list`, reads, and notifications never match. Recurses
+ * into a JSON-RPC batch array so a batch containing ANY such call matches.
+ */
+function callTargetsUserRequiredTool(body: unknown): boolean {
+  if (Array.isArray(body)) return body.some((m) => callTargetsUserRequiredTool(m));
+  const b = body as { method?: unknown; params?: { name?: unknown } };
+  if (b?.method !== "tools/call") return false;
+  return typeof b.params?.name === "string" && USER_REQUIRED_TOOLS.has(b.params.name);
+}
+
+/**
+ * Peek the JSON-RPC body to decide whether this request calls a user-required
+ * tool — the trigger for the anonymous sign-in challenge (#2408). Clones the
+ * request so the original stream stays intact for downstream parsing. An
+ * unparseable body never challenges (fails toward the existing anonymous-read
+ * behavior, matching `isMeteredMcpMethod`'s general fail-open-to-read stance
+ * for auth decisions — here "fail open" means "don't challenge").
+ */
+async function isUserRequiredToolCall(request: Request): Promise<boolean> {
+  if (request.method !== "POST") return false;
+  try {
+    const body = (await request.clone().json()) as unknown;
+    return callTargetsUserRequiredTool(body);
+  } catch {
+    return false;
   }
 }
 
@@ -224,6 +261,32 @@ function invalidTokenChallenge(request: Request): Response {
       headers: {
         "Content-Type": "application/json",
         "WWW-Authenticate": wwwAuthenticateChallenge(request.url),
+      },
+    },
+  );
+}
+
+/**
+ * RFC 6750 §3.1 step-up challenge (#2408) for a caller with NO credential at
+ * all invoking a user-gated tool (`follow`, `manage_webhook`, …; see
+ * `user-required-tools.ts`). Unlike `invalidTokenChallenge`, this carries no
+ * `error=` param — the token isn't invalid, it's simply absent — so an
+ * OAuth-aware MCP client (Claude, et al.) starts sign-in instead of the model
+ * having to explain a plain tool-result error. Only reachable once the
+ * staging gate (if any) has passed, same ordering as the invalid-JWT
+ * challenge below.
+ */
+function signInChallenge(request: Request): Response {
+  return new Response(
+    JSON.stringify({
+      error: "unauthorized",
+      message: "Sign in to use this tool.",
+    }),
+    {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+        "WWW-Authenticate": missingTokenChallenge(request.url),
       },
     },
   );
@@ -412,6 +475,20 @@ export async function resolveMcpAuth(
   // A presented-but-invalid OAuth JWT → discovery challenge (only reachable once
   // the staging gate, if any, has passed).
   if ("invalidToken" in resolved) return { ok: false, response: invalidTokenChallenge(request) };
+
+  // A caller with NO credential at all (never one who merely failed to
+  // authenticate — that's the invalidToken branch above) invoking a
+  // user-gated tool gets a sign-in step-up challenge instead of silently
+  // falling through to anonymous read and a plain tool-result error (#2408).
+  // `resolved.kind === "anonymous"` is guaranteed here whenever `presented` is
+  // empty (see `resolveIdentity`'s `if (!presented) return ANONYMOUS`), kept
+  // as an explicit guard so this only ever fires for the genuinely
+  // credential-less path — a relk_/relu_/root caller (even one whose token
+  // failed to authenticate and fell open to ANONYMOUS) keeps the existing
+  // tool-result behavior instead of a step-up challenge.
+  if (!presented && resolved.kind === "anonymous" && (await isUserRequiredToolCall(request))) {
+    return { ok: false, response: signInChallenge(request) };
+  }
 
   return { ok: true, identity: resolved };
 }

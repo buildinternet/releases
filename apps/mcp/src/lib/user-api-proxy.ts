@@ -1,5 +1,6 @@
 import { getSecret } from "@releases/lib/secrets";
 import type { Env } from "../mcp-agent.js";
+import { USER_REQUIRED_TOOLS } from "../user-required-tools.js";
 
 /**
  * Shared plumbing for MCP tools that act on the caller's own account by
@@ -47,6 +48,25 @@ export async function callMe(
     // non-JSON body (empty 204 etc.) — leave json null
   }
   return { status: res.status, json };
+}
+
+/**
+ * Shared "sign in required" tool result for the follows/webhook tools.
+ * `toolName` MUST be listed in `USER_REQUIRED_TOOLS` (`../user-required-tools.js`)
+ * — the same set the HTTP-layer sign-in challenge in `auth.ts` consults to
+ * decide which anonymous `tools/call`s get a 401 instead of falling through
+ * here — or this throws, so a new user-gated tool can't silently miss the
+ * challenge. `message` is the tool-family-specific guidance text (mentions
+ * both the connector-settings sign-in flow and the Bearer-key fallback).
+ */
+export function userRequired(toolName: string, message: string): ToolReturn {
+  if (!USER_REQUIRED_TOOLS.has(toolName)) {
+    throw new Error(
+      `userRequired("${toolName}") called for a tool missing from USER_REQUIRED_TOOLS — ` +
+        "add it there so the anonymous sign-in challenge (auth.ts) covers it too.",
+    );
+  }
+  return text(message, true);
 }
 
 /** Extract `{ error: { message } }` from a standardized error envelope, if present. */

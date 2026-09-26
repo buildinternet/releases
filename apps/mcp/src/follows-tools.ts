@@ -3,7 +3,12 @@ import { z } from "zod";
 import { getEntityType } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
 import { buildCursorMeta } from "./lib/pagination.js";
-import { callMe, text, type ToolReturn } from "./lib/user-api-proxy.js";
+import {
+  callMe,
+  text,
+  userRequired as sharedUserRequired,
+  type ToolReturn,
+} from "./lib/user-api-proxy.js";
 import type { Env } from "./mcp-agent.js";
 
 /**
@@ -17,13 +22,14 @@ import type { Env } from "./mcp-agent.js";
  * credential and maps it to the user — so these tools never hold a user id.
  */
 
-/** Shared message when the caller has no user identity to act as. */
-function userRequired(): ToolReturn {
-  return text(
-    "Following requires a signed-in user. Authenticate with a `relu_…` user API key " +
-      "or a 'Sign in with Releases' OAuth token (Authorization: Bearer …). Anonymous, " +
-      "machine (`relk_…`), and root credentials have no follows.",
-    true,
+/** Message when the caller has no user identity to act as — `toolName` must be listed in USER_REQUIRED_TOOLS. */
+function userRequired(toolName: string): ToolReturn {
+  return sharedUserRequired(
+    toolName,
+    "Following requires a signed-in user. Sign in to Releases from your MCP client's " +
+      "connector settings — most OAuth-aware clients will prompt automatically — or " +
+      "authenticate with a `relu_…` user API key or a 'Sign in with Releases' OAuth token " +
+      "(Authorization: Bearer …). Anonymous, machine (`relk_…`), and root credentials have no follows.",
   );
 }
 
@@ -97,7 +103,7 @@ export function registerFollowsTools(
       }),
     },
     async ({ entity }) => {
-      if (!userToken) return userRequired();
+      if (!userToken) return userRequired("follow");
       const target = asFollowTarget(entity);
       if (!target)
         return text(
@@ -114,7 +120,7 @@ export function registerFollowsTools(
         if (status === 200) return text(`Already following ${target.targetId}.`);
         if (status === 404)
           return text(`No ${target.targetType} found for id ${target.targetId}.`, true);
-        if (status === 401) return userRequired();
+        if (status === 401) return userRequired("follow");
         return text(`Failed to follow (HTTP ${status}).`, true);
       } catch (err) {
         logEvent("error", { component: "mcp-follows", event: "follow-failed", err });
@@ -136,7 +142,7 @@ export function registerFollowsTools(
       }),
     },
     async ({ entity }) => {
-      if (!userToken) return userRequired();
+      if (!userToken) return userRequired("unfollow");
       const target = asFollowTarget(entity);
       if (!target) return text(`'${entity}' is not a followable id.`, true);
       try {
@@ -148,7 +154,7 @@ export function registerFollowsTools(
         );
         if (status === 0) return text("Follows are unavailable in this environment.", true);
         if (status === 200) return text(`Unfollowed ${target.targetId}.`);
-        if (status === 401) return userRequired();
+        if (status === 401) return userRequired("unfollow");
         return text(`Failed to unfollow (HTTP ${status}).`, true);
       } catch (err) {
         logEvent("error", { component: "mcp-follows", event: "unfollow-failed", err });
@@ -166,11 +172,11 @@ export function registerFollowsTools(
         "List the organizations and products you follow (newest first). Requires a signed-in user.",
     },
     async () => {
-      if (!userToken) return userRequired();
+      if (!userToken) return userRequired("list_follows");
       try {
         const { status, json } = await callMe(env, userToken, "/v1/me/follows", { method: "GET" });
         if (status === 0) return text("Follows are unavailable in this environment.", true);
-        if (status === 401) return userRequired();
+        if (status === 401) return userRequired("list_follows");
         if (status !== 200) return text(`Failed to load follows (HTTP ${status}).`, true);
         const follows = (json as { follows?: FollowRow[] }).follows ?? [];
         if (follows.length === 0) return text("You're not following anything yet.");
@@ -211,7 +217,7 @@ export function registerFollowsTools(
       }),
     },
     async ({ cursor, limit }) => {
-      if (!userToken) return userRequired();
+      if (!userToken) return userRequired("get_personalized_feed");
       try {
         const qs = new URLSearchParams();
         if (cursor) qs.set("cursor", cursor);
@@ -221,7 +227,7 @@ export function registerFollowsTools(
           method: "GET",
         });
         if (status === 0) return text("The feed is unavailable in this environment.", true);
-        if (status === 401) return userRequired();
+        if (status === 401) return userRequired("get_personalized_feed");
         if (status !== 200) return text(`Failed to load your feed (HTTP ${status}).`, true);
         const body = json as {
           items?: FeedItem[];
