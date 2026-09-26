@@ -15,6 +15,10 @@ import { sendEmail, type EmailEnv } from "./email.js";
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;
 const DEFAULT_ACK_MAX_PER_HOUR = 20;
 const DEFAULT_ADDED_MAX_PER_HOUR = 20;
+// Per-address ack cap. The global ack budget bounds total volume, but alone it
+// would let one caller point all 20 hourly acks at a single stranger's inbox.
+// 3 leaves room for a real visitor suggesting a few sources in one sitting.
+const ACK_MAX_PER_RECIPIENT_PER_HOUR = 3;
 const HOUR_MS = 3_600_000;
 
 type AtomicCounterStore = Pick<D1Database, "prepare">;
@@ -63,6 +67,17 @@ export async function withinRecommendationAckBudget(
   max: number,
 ): Promise<boolean> {
   return withinHourlyNotificationBudget(counter, "recommendation:ack", max);
+}
+
+export async function withinRecommendationAckRecipientBudget(
+  counter: AtomicCounterStore | undefined,
+  email: string,
+): Promise<boolean> {
+  return withinHourlyNotificationBudget(
+    counter,
+    `recommendation:ack-to:${email.trim().toLowerCase()}`,
+    ACK_MAX_PER_RECIPIENT_PER_HOUR,
+  );
 }
 
 export async function withinRecommendationAddedBudget(
@@ -183,6 +198,17 @@ export async function sendRecommendationAck(
 ): Promise<void> {
   if (!row.contactEmail) return;
   try {
+    // Checked before the global budget so a capped recipient doesn't burn a
+    // global slot.
+    if (!(await withinRecommendationAckRecipientBudget(env.DB, row.contactEmail))) {
+      logEvent("warn", {
+        component: "recommendations",
+        event: "ack-recipient-capped",
+        id: row.id,
+        maxPerHour: ACK_MAX_PER_RECIPIENT_PER_HOUR,
+      });
+      return;
+    }
     const max = parseInt(env.RECOMMENDATION_ACK_MAX_PER_HOUR ?? "", 10) || DEFAULT_ACK_MAX_PER_HOUR;
     if (!(await withinRecommendationAckBudget(env.DB, max))) {
       logEvent("warn", {

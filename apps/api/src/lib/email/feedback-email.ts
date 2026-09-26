@@ -39,6 +39,26 @@ export async function withinNotifyBudget(kv: NotifyKv | undefined, max: number):
   return true;
 }
 
+/**
+ * True the first time a given message text is seen in the rolling hour, false
+ * for repeats. A burst of identical submissions (a scanner posting "probe" in a
+ * loop) then sends one email instead of one per row; every row is still stored.
+ * Same fail-open, approximate-under-concurrency semantics as the budget above.
+ */
+export async function isFirstNotifyForMessage(
+  kv: NotifyKv | undefined,
+  message: string,
+): Promise<boolean> {
+  if (!kv) return true;
+  const normalized = message.replace(/\s+/g, " ").trim().toLowerCase();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  const key = `feedback:notify:msg:${hex}`;
+  if (await kv.get(key)) return false;
+  await kv.put(key, "1", { expirationTtl: 3600 });
+  return true;
+}
+
 function truncate(s: string, max: number): string {
   const oneLine = s.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
@@ -79,6 +99,11 @@ export function formatFeedbackEmail(row: Feedback): {
 
 export async function notifyFeedback(env: FeedbackNotifyEnv, row: Feedback): Promise<void> {
   try {
+    // Before the budget check so duplicates don't consume hourly slots.
+    if (!(await isFirstNotifyForMessage(env.ALERT_DEDUP_KV, row.message))) {
+      logEvent("info", { component: "feedback", event: "notify-duplicate", id: row.id });
+      return;
+    }
     const max = parseInt(env.FEEDBACK_NOTIFY_MAX_PER_HOUR ?? "", 10) || DEFAULT_NOTIFY_MAX_PER_HOUR;
     if (!(await withinNotifyBudget(env.ALERT_DEDUP_KV, max))) {
       logEvent("warn", {

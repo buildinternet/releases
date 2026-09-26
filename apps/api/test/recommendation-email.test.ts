@@ -4,6 +4,7 @@ import {
   formatRecommendationAddedEmail,
   formatRecommendationEmail,
   recommendationRegistryUrl,
+  sendRecommendationAck,
   sendRecommendationAdded,
   withinRecommendationAckBudget,
   withinRecommendationAddedBudget,
@@ -218,5 +219,44 @@ describe("withinRecommendationNotifyBudget", () => {
     expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(true);
     expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(true);
     expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(false);
+  });
+});
+
+describe("sendRecommendationAck", () => {
+  function ackEnv(db: unknown, calls: unknown[]) {
+    return {
+      DB: db as D1Database,
+      AUTH_EMAIL: {
+        send: async (msg: unknown) => {
+          calls.push(msg);
+          return {};
+        },
+      },
+    };
+  }
+
+  it("caps acknowledgments per recipient address", async () => {
+    const db = createTestDb();
+    const calls: unknown[] = [];
+    const env = ackEnv(db, calls);
+    for (let i = 0; i < 5; i++) {
+      await sendRecommendationAck(env, {
+        ...base,
+        id: `rec_${i}`,
+        contactEmail: "Victim@Example.com",
+      });
+    }
+    expect(calls).toHaveLength(3);
+  });
+
+  it("does not let one capped recipient block other addresses", async () => {
+    const db = createTestDb();
+    const calls: unknown[] = [];
+    const env = ackEnv(db, calls);
+    for (let i = 0; i < 4; i++) {
+      await sendRecommendationAck(env, { ...base, id: `rec_${i}`, contactEmail: "a@example.com" });
+    }
+    await sendRecommendationAck(env, { ...base, id: "rec_b", contactEmail: "b@example.com" });
+    expect(calls).toHaveLength(4);
   });
 });
