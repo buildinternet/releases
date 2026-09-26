@@ -29,6 +29,17 @@ export const SCOPE_LABELS: Record<string, { title: string; desc: string }> = {
   admin: { title: "Full admin access", desc: "Administrative operations on your behalf." },
 };
 
+/**
+ * What any signed-in OAuth grant can do regardless of scope: the follows and
+ * webhook routes (`/v1/me/*`) are gated on the user token, not the scope
+ * ladder, so a `read`-only client can still change these. Shown on consent so
+ * "Read catalog data" doesn't undersell the grant.
+ */
+export const ACCOUNT_ACTIONS_LABEL = {
+  title: "Manage your follows and webhooks",
+  desc: "Follow and unfollow orgs and products, and create, edit, or delete your webhooks, as you.",
+};
+
 export function entitledScopes(role: string | null | undefined): string[] {
   // `role` may be a comma-separated multi-role string (admin-plugin convention).
   const roles = (role || "user")

@@ -217,7 +217,7 @@ export function OauthConsentForm() {
           No grantable scopes were requested, or none match your account permissions.
         </p>
       ) : (
-        <ScopeGroups appName={appName} scopes={grantable} />
+        <ScopeGroups appName={appName} scopes={grantable} accountActions />
       )}
 
       {error ? <AuthError>{error}</AuthError> : null}
