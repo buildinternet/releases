@@ -207,6 +207,17 @@ session-gated self-service write endpoints (`/api/auth/oauth2/{create,update,
 delete}-client`, `/api/auth/oauth2/client/rotate-secret`) are restricted to `role=admin`.
 The #1480 entitlement ceiling still applies regardless of client trust.
 
+MCP clients that support **Client ID Metadata Documents** (CIMD, #2409) skip
+registration: they send an HTTPS URL as `client_id` (Claude's is
+`https://claude.ai/oauth/mcp-oauth-client-metadata`), and `@better-auth/cimd`
+fetches that document on first authorize and persists a row keyed by the URL
+(`client_discovery_id = "cimd"`). AS metadata advertises
+`client_id_metadata_document_supported: true`. CIMD rows get the same ceiling as
+DCR: `DCR_SCOPES`, consent required, no shared secret, PKCE. A document asking for
+more (a wider `scope`, `skip_consent`, a secret auth method) is refused. The fetch
+goes through a Workers transport (`auth/oauth-cimd.ts`) that never follows
+redirects. See [mcp-cimd-interop.md §0](mcp-cimd-interop.md#0-cimd-url-client-ids).
+
 ### Resource-server JWT verification (#1483)
 
 The REST API worker and the MCP worker accept the AS's JWT access tokens as a

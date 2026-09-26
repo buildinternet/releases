@@ -19,6 +19,7 @@ import {
 } from "better-auth/plugins";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { cimd } from "@better-auth/cimd";
 import { passkey as passkeyPlugin } from "@better-auth/passkey";
 import { dash, sentinel } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
@@ -43,6 +44,7 @@ import {
   OAUTH_SCOPES,
 } from "./entitlement.js";
 import { applyOAuthClientInterop } from "./oauth-client-interop.js";
+import { cimdClientRowPatch, createWorkersClientMetadataFetch } from "./oauth-cimd.js";
 import {
   oauthClientIdFromAuthorizationCode,
   oauthUserIdFromAuthorizationCode,
@@ -420,6 +422,26 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     return row?.scopes && row.scopes.length > 0 ? row.scopes : DCR_SCOPES;
   }
 
+  /**
+   * Re-assert the DCR ceiling on a newly created CIMD row, and log the event.
+   * Best-effort: the plugin logs and ignores a thrown callback, so a failed
+   * clamp never fails the authorize.
+   */
+  async function clampCimdClient(
+    client: Parameters<typeof cimdClientRowPatch>[0] & { clientId: string },
+  ): Promise<void> {
+    const patch = cimdClientRowPatch(client);
+    if (patch) {
+      await db.update(oauthClient).set(patch).where(eq(oauthClient.clientId, client.clientId));
+    }
+    logEvent("info", {
+      component: "auth",
+      event: "oauth-cimd-client-created",
+      clientId: client.clientId,
+      clamped: patch !== undefined,
+    });
+  }
+
   // Fire-and-forget an email send: hand the REAL send promise to the request's
   // `waitUntil` so it outlives the response (the Better Auth docs flag AWAITING the
   // send as a timing-attack oracle, and on Workers a bare floating promise is
@@ -692,6 +714,21 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
           scopes: info.scopes as string[] | undefined, // optional on the introspection path; oauthAccessTokenClaims guards with ?? []
         });
       },
+    }),
+    // Client ID Metadata Documents (#2409): a client may send an HTTPS URL as its
+    // `client_id` instead of registering; the plugin fetches that document and
+    // persists a discovery-owned row (DCR_SCOPES ceiling, consent required, no
+    // shared secret, PKCE). Also advertises `client_id_metadata_document_supported`
+    // in AS metadata. DCR above stays on for clients without CIMD. The fetch cache
+    // and rate limits are per isolate (the auth instance is memoized). See
+    // oauth-cimd.ts and docs/architecture/mcp-cimd-interop.md.
+    cimd({
+      fetchClientMetadataResource:
+        deps.fetchClientMetadataResource ?? createWorkersClientMetadataFetch(),
+      metadataProfile: "mcp-2026-07-28",
+      // Created only: a refresh re-derives scopes from DCR_SCOPES and keeps the
+      // operator-set flags, so an admin `trusted` PATCH must not be reverted.
+      onClientCreated: ({ client }) => clampCimdClient(client),
     }),
     // Better Auth admin plugin — adds the `role` column that drives OAuth scope
     // entitlement (auth/entitlement.ts). Reuses the built-in admin/user roles;
