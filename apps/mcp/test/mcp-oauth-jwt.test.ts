@@ -92,6 +92,35 @@ describe("MCP OAuth-JWT lane", () => {
     if (r.ok) expect(r.identity.scopes).toEqual(["read"]);
   });
 
+  it("accepts every host listed in OAUTH_JWT_AUDIENCE, origin and /mcp", async () => {
+    const multi = env({
+      OAUTH_JWT_AUDIENCE: "https://agents.releases.sh, https://mcp.releases.sh",
+    });
+    for (const aud of [
+      "https://agents.releases.sh",
+      "https://agents.releases.sh/mcp",
+      "https://mcp.releases.sh",
+      "https://mcp.releases.sh/mcp",
+    ]) {
+      const r = await resolveMcpAuth(
+        req({ Authorization: `Bearer ${await jwt("read", { aud })}` }),
+        multi,
+        { jwtKeyResolver: keyResolver },
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.identity.scopes).toEqual(["read"]);
+    }
+  });
+
+  it("rejects an agents.releases.sh token when only mcp.releases.sh is configured", async () => {
+    const r = await resolveMcpAuth(
+      req({ Authorization: `Bearer ${await jwt("read", { aud: "https://agents.releases.sh" })}` }),
+      env(),
+      { jwtKeyResolver: keyResolver },
+    );
+    expect(r.ok).toBe(false);
+  });
+
   it("maps a read-only JWT to read scope", async () => {
     const r = await resolveMcpAuth(
       req({ Authorization: `Bearer ${await jwt("openid read")}` }),

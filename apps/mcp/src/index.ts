@@ -35,7 +35,7 @@ async function handle(
   // every other route, so it is deferred until after resolveMcpAuth below.
   const wantsMetadata = request.method === "GET" && isProtectedResourceMetadataPath(url.pathname);
   if (wantsMetadata && !env.STAGING_ACCESS_KEY) {
-    return protectedResourceMetadataResponse(env);
+    return protectedResourceMetadataResponse(env, request.url);
   }
 
   // Resolve the caller's identity (relk_ token → scopes, static key → root,
@@ -45,7 +45,7 @@ async function handle(
   const auth = await resolveMcpAuth(request, env);
   if (!auth.ok) return auth.response;
   // Staging: the gate has now passed, so serve the (otherwise public) metadata.
-  if (wantsMetadata) return protectedResourceMetadataResponse(env);
+  if (wantsMetadata) return protectedResourceMetadataResponse(env, request.url);
   const { identity } = auth;
 
   // Three-rung rate limiting: anonymous / account / machine. Returns 429 when

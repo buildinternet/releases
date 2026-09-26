@@ -31,9 +31,10 @@
     // "Sign in with Releases" OAuth resource-server verification (#1483). The AS
     // issuer (Better Auth base URL incl. the /api/auth basePath — matches the
     // discovery `issuer` + token `iss`; the JWKS host is derived origin-relative)
-    // and this worker's expected token audience.
+    // and this worker's expected token audiences — one per host it answers on,
+    // comma-separated. Discovery advertises the one matching the request host.
     "OAUTH_JWT_ISSUER": "https://api.releases.sh/api/auth",
-    "OAUTH_JWT_AUDIENCE": "https://mcp.releases.sh",
+    "OAUTH_JWT_AUDIENCE": "https://agents.releases.sh, https://mcp.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
     "EMBEDDING_PROVIDER": "voyage",
