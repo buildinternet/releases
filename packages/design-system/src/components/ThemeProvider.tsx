@@ -51,7 +51,7 @@ function applyTheme(resolved: "light" | "dark") {
 }
 
 // Theme is resolved client-side only. We keep the preference mirrored onto a DOM
-// attribute (read back by getInitialTheme + the beforeInteractive bootstrap), but
+// attribute (read back by getInitialTheme + the inline <head> bootstrap), but
 // deliberately do NOT persist it to a cookie: a server-readable theme cookie would
 // tempt the root layout back into `cookies()`, which opts every route into dynamic
 // rendering and defeats site-wide ISR. localStorage is the source of truth.
