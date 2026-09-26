@@ -131,6 +131,6 @@ export function wwwAuthenticateChallenge(requestUrl: string): string {
  * sign-in step-up challenge (#2408) when a caller with no credential invokes a
  * user-gated tool (see `user-required-tools.ts`).
  */
-export function missingTokenChallenge(requestUrl: string, scope = "read write"): string {
+export function missingTokenChallenge(requestUrl: string, scope = "read"): string {
   return `Bearer scope="${scope}", resource_metadata="${protectedResourceMetadataUrl(requestUrl)}"`;
 }
