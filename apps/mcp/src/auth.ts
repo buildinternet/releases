@@ -21,11 +21,7 @@ import {
   type OAuthJwtConfig,
   type JWTVerifyGetKey,
 } from "@releases/lib/oauth-jwt";
-import {
-  DEFAULT_OAUTH_AUDIENCE,
-  DEFAULT_OAUTH_ISSUER,
-  wwwAuthenticateChallenge,
-} from "./well-known.js";
+import { DEFAULT_OAUTH_ISSUER, oauthAudiences, wwwAuthenticateChallenge } from "./well-known.js";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
 
@@ -41,12 +37,11 @@ const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
  * well-known.ts) so no new config is required there.
  */
 function oauthJwtConfig(env: Env): OAuthJwtConfig {
-  const audience = env.OAUTH_JWT_AUDIENCE || DEFAULT_OAUTH_AUDIENCE;
   return {
     issuer: env.OAUTH_JWT_ISSUER || DEFAULT_OAUTH_ISSUER,
-    // Origin and `/mcp`: generic clients mint `aud` from whichever RFC 8707
-    // `resource` they sent. Discovery still advertises the origin.
-    audience: mcpResourceAndOrigin(audience),
+    // Every configured host, origin and `/mcp`: generic clients mint `aud` from
+    // whichever RFC 8707 `resource` they sent. Discovery still advertises the origin.
+    audience: oauthAudiences(env).flatMap(mcpResourceAndOrigin),
   };
 }
 

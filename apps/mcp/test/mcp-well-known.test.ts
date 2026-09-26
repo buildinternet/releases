@@ -12,6 +12,7 @@ import {
   wwwAuthenticateChallenge,
   isProtectedResourceMetadataPath,
   protectedResourceMetadataResponse,
+  oauthAudiences,
   PROTECTED_RESOURCE_PATH,
 } from "../src/well-known.js";
 import type { Env } from "../src/mcp-agent.js";
@@ -47,6 +48,34 @@ describe("buildProtectedResourceMetadata", () => {
     const audience = "https://mcp.releases.sh";
     const doc = buildProtectedResourceMetadata(env({ OAUTH_JWT_AUDIENCE: audience }));
     expect(doc.resource).toBe(audience);
+  });
+});
+
+describe("per-host resource (dual host)", () => {
+  const dual = env({ OAUTH_JWT_AUDIENCE: "https://agents.releases.sh, https://mcp.releases.sh" });
+
+  it("advertises the audience matching the request host", () => {
+    expect(
+      buildProtectedResourceMetadata(dual, "https://agents.releases.sh/.well-known/x").resource,
+    ).toBe("https://agents.releases.sh");
+    expect(
+      buildProtectedResourceMetadata(dual, "https://mcp.releases.sh/.well-known/x").resource,
+    ).toBe("https://mcp.releases.sh");
+  });
+
+  it("falls back to the first audience for an unlisted host or no request", () => {
+    expect(buildProtectedResourceMetadata(dual, "https://x.workers.dev/mcp").resource).toBe(
+      "https://agents.releases.sh",
+    );
+    expect(buildProtectedResourceMetadata(dual).resource).toBe("https://agents.releases.sh");
+  });
+
+  it("parses the comma list, ignoring blanks", () => {
+    expect(oauthAudiences(env({ OAUTH_JWT_AUDIENCE: " https://a.x , ,https://b.x" }))).toEqual([
+      "https://a.x",
+      "https://b.x",
+    ]);
+    expect(oauthAudiences(env())).toEqual(["https://mcp.releases.sh"]);
   });
 });
 

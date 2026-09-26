@@ -23,6 +23,41 @@ import type { Env } from "./mcp-agent.js";
 export const DEFAULT_OAUTH_AUDIENCE = "https://mcp.releases.sh";
 export const DEFAULT_OAUTH_ISSUER = "https://api.releases.sh/api/auth";
 
+/**
+ * The configured MCP audiences. `OAUTH_JWT_AUDIENCE` may list several bare
+ * origins, comma-separated, when the worker answers on more than one host
+ * (prod: agents.releases.sh and the mcp.releases.sh alias). The first entry is
+ * the default advertised resource.
+ */
+export function oauthAudiences(env: Env): string[] {
+  const list = (env.OAUTH_JWT_AUDIENCE ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return list.length > 0 ? list : [DEFAULT_OAUTH_AUDIENCE];
+}
+
+/**
+ * The audience to advertise for a request: the configured audience on the same
+ * origin the client connected to, so RFC 9728 §3.3's "resource must match the
+ * URL used" check passes on every host. Falls back to the first audience.
+ */
+export function resourceForRequest(env: Env, requestUrl?: string): string {
+  const audiences = oauthAudiences(env);
+  if (requestUrl) {
+    const origin = new URL(requestUrl).origin;
+    const match = audiences.find((aud) => {
+      try {
+        return new URL(aud).origin === origin;
+      } catch {
+        return false;
+      }
+    });
+    if (match) return match;
+  }
+  return audiences[0];
+}
+
 /** RFC 9728 metadata path (root form; the canonical resource is the bare origin). */
 export const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 
@@ -41,13 +76,17 @@ export interface ProtectedResourceMetadata {
 /**
  * Build the protected-resource metadata document from the OAuth resource-server
  * env vars, falling back to the prod defaults the auth path uses so the two
- * surfaces never disagree. `resource` is the configured audience (bare origin).
+ * surfaces never disagree. `resource` is the configured audience (bare origin)
+ * matching the request's host, when one does.
  * The AS and this worker also accept the `/mcp` transport URL as `aud`; see
  * mcp-cimd-interop.md.
  */
-export function buildProtectedResourceMetadata(env: Env): ProtectedResourceMetadata {
+export function buildProtectedResourceMetadata(
+  env: Env,
+  requestUrl?: string,
+): ProtectedResourceMetadata {
   return {
-    resource: env.OAUTH_JWT_AUDIENCE || DEFAULT_OAUTH_AUDIENCE,
+    resource: resourceForRequest(env, requestUrl),
     authorization_servers: [env.OAUTH_JWT_ISSUER || DEFAULT_OAUTH_ISSUER],
     scopes_supported: ["read", "write", "admin"],
     bearer_methods_supported: ["header"],
@@ -69,8 +108,8 @@ export function isProtectedResourceMetadataPath(pathname: string): boolean {
 }
 
 /** Build the public 200 JSON response carrying the protected-resource metadata. */
-export function protectedResourceMetadataResponse(env: Env): Response {
-  return Response.json(buildProtectedResourceMetadata(env), {
+export function protectedResourceMetadataResponse(env: Env, requestUrl?: string): Response {
+  return Response.json(buildProtectedResourceMetadata(env, requestUrl), {
     headers: { "Cache-Control": "public, max-age=3600" },
   });
 }
