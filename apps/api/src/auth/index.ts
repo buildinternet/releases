@@ -15,6 +15,7 @@ import type { Env } from "../index.js";
 import type { buildAuthInstance } from "./instance.js";
 import type { AuthEmailMessage } from "./email.js";
 import type { AuthAuditEmitter } from "./audit.js";
+import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
 
 type Bindings = Env["Bindings"];
 
@@ -725,6 +726,11 @@ export interface CreateAuthDeps {
    * ({@link makeAuthAudit}). See `audit.ts`.
    */
   audit?: AuthAuditEmitter;
+  /**
+   * CIMD metadata-document transport — tests stub the client's document;
+   * defaults to the Workers fetch transport in oauth-cimd.ts.
+   */
+  fetchClientMetadataResource?: ClientMetadataResourceFetch;
 }
 
 type WaitUntilFn = (promise: Promise<unknown>) => void;
@@ -807,7 +813,12 @@ export function resetAuthCacheForTests(): void {
 }
 
 function hasCustomAuthDeps(deps: CreateAuthDeps): boolean {
-  return deps.db != null || deps.sendEmail != null || deps.audit != null;
+  return (
+    deps.db != null ||
+    deps.sendEmail != null ||
+    deps.audit != null ||
+    deps.fetchClientMetadataResource != null
+  );
 }
 
 /**

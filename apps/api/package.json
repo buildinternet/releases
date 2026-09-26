@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "catalog:",
     "agents": "^0.20.1",
     "@better-auth/api-key": "^1.7.2",
+    "@better-auth/cimd": "^1.7.2",
     "@better-auth/core": "^1.7.2",
     "@better-auth/infra": "^0.4.5",
     "@better-auth/oauth-provider": "^1.7.2",
