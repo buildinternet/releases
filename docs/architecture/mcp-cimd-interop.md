@@ -27,10 +27,13 @@ This worker is better-auth 1.7. Generic clients get a `client_id` one of two way
 
 - Sends `redirect: "manual"` and throws on any 3xx except 304. The plugin asks for `redirect: "error"`, which workerd's `fetch` rejects. 304 passes through because the plugin sends conditional requests.
 - Allows only GET and HEAD over HTTPS.
+- Re-runs the plugin's `validateClientIdUrl` host check on every fetch, so the plugin's follow-up fetches (a document's `jwks_uri`) get it too.
 
 The plugin's Node transport also resolves DNS once and pins the connection, so a public hostname can't rebind to a private address. We rely on the platform for that on Workers: Cloudflare won't connect a Worker subrequest to a private or reserved address.
 
 **Reaper.** CIMD rows are `oauth_client` rows. The nightly sweep (`cron/sweep-oauth-clients.ts`) reaps them like abandoned DCR rows. That's harmless: the next authorize recreates the row from the document.
+
+**Compared with uploads.** buildinternet/uploads (`apps/auth/src/cimd-transport.ts`) rewrites each fetched document with its DCR sanitizer, so a document asking for more is capped rather than refused, and a `private_key_jwt` client becomes public. We deliberately refuse instead: every published document we've checked passes unchanged, and refusing never downgrades a client's authentication.
 
 **Do not.** Pass the plugin's Node transport (`@better-auth/cimd/node`) on Workers; it needs `node:dns` and `node:https`. Add a `scope` rewrite to accept documents that ask for `write`/`admin`. Clamp on refresh. Turn DCR off while clients without CIMD support remain.
 

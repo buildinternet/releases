@@ -19,6 +19,7 @@
  * alone: they re-derive scopes and keep operator flags (an admin `trusted`).
  */
 
+import { validateClientIdUrl } from "@better-auth/cimd";
 import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
 import { capDcrScopes } from "./oauth-dcr.js";
 
@@ -33,6 +34,7 @@ const REDIRECT_STATUSES: ReadonlySet<number> = new Set([300, 301, 302, 303, 307,
  *
  * SSRF: the plugin already rejects non-HTTPS URLs and IP-literal / localhost
  * hosts that aren't public-routable, and caps the body (5 KB) and time (5 s).
+ * We re-run its `validateClientIdUrl` host check on every fetch.
  * The remaining gap its Node transport closes — a public hostname whose DNS
  * points at a private address — is closed by the platform here: Cloudflare
  * refuses to connect a Worker subrequest to a private/reserved address, so
@@ -50,6 +52,10 @@ export function createWorkersClientMetadataFetch(
     if (method !== "GET" && method !== "HEAD") {
       throw new TypeError("CIMD metadata fetch supports only GET and HEAD");
     }
+    // The plugin checks the client_id URL before calling us; re-checking here
+    // also covers its follow-up fetches (a document's `jwks_uri`).
+    const urlError = validateClientIdUrl(url.toString());
+    if (urlError) throw new TypeError(`CIMD metadata URL rejected: ${urlError}`);
     const res = await fetchImpl(url.toString(), {
       method,
       headers: init?.headers,

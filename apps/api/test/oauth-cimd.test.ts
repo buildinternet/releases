@@ -183,6 +183,25 @@ describe("CIMD (client ID metadata documents)", () => {
     expect(await db.select().from(oauthClient)).toHaveLength(0);
   });
 
+  it("refuses a redirect_uri the document does not list", async () => {
+    const db = createTestDb();
+    const stub = stubDocuments({ [CLAUDE_CLIENT_ID]: claudeDocument });
+    const auth = await createAuth(baseEnv, undefined, {
+      db,
+      sendEmail: () => {},
+      fetchClientMetadataResource: stub.fetchClientMetadataResource,
+    });
+    const attacker = "https://evil.example.com/callback";
+    const res = await auth.handler(
+      new Request(authorizeUrl(CLAUDE_CLIENT_ID, attacker), { redirect: "manual" }),
+    );
+    // Never bounce the browser (or a code) to an unregistered redirect: the AS
+    // sends it to its own error page instead.
+    const location = res.headers.get("location") ?? "";
+    expect(location.startsWith(attacker)).toBe(false);
+    expect(location).toContain("/api/auth/error?error=invalid_redirect");
+  });
+
   it("rejects a document with a shared-secret auth method", async () => {
     const db = createTestDb();
     const clientId = "https://agent.example.com/secret.json";
@@ -243,6 +262,21 @@ describe("createWorkersClientMetadataFetch", () => {
     const transport = createWorkersClientMetadataFetch(impl);
     await expect(transport("http://claude.ai/doc")).rejects.toThrow(/https/);
     await expect(transport(CLAUDE_CLIENT_ID, { method: "POST" })).rejects.toThrow(/GET/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses loopback, private, and metadata hosts", async () => {
+    const { calls, impl } = recordingFetch(new Response("{}"));
+    const transport = createWorkersClientMetadataFetch(impl);
+    for (const url of [
+      "https://127.0.0.1/doc",
+      "https://localhost/doc",
+      "https://10.0.0.5/doc",
+      "https://169.254.169.254/latest",
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential assertions
+      await expect(transport(url)).rejects.toThrow(/rejected/);
+    }
     expect(calls).toHaveLength(0);
   });
 });
