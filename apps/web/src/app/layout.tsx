@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import localFont from "next/font/local";
-import Script from "next/script";
 import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { FollowsProvider } from "@/components/follows-provider";
@@ -65,8 +64,8 @@ const THEME_STYLE = `html{background-color:#fafaf9;color:#1c1917;color-scheme:li
 const THEME_SCRIPT = `(function(){try{var d=document.documentElement;var stored=localStorage.getItem("theme");var pref=stored==="light"||stored==="dark"?stored:d.dataset.themePreference||"system";var resolved=pref==="dark"||pref==="light"?pref:window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.dataset.themePreference=pref;d.classList.remove("light","dark");d.classList.add(resolved);d.style.colorScheme=resolved;}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Theme is resolved entirely client-side: THEME_SCRIPT (below, beforeInteractive)
-  // reads localStorage and paints the resolved theme class before first paint,
+  // Theme is resolved entirely client-side: THEME_SCRIPT (below, inline in <head>)
+  // runs synchronously during parsing, reads localStorage and paints the resolved theme class before first paint,
   // THEME_STYLE covers the unclassed/system default, and `suppressHydrationWarning`
   // absorbs the server (unclassed) vs. client (classed) diff. Reading a theme
   // cookie here would opt every route into dynamic rendering (no-store), defeating
@@ -97,9 +96,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <head>
-        <Script id="theme-bootstrap" strategy="beforeInteractive">
-          {THEME_SCRIPT}
-        </Script>
+        {/* A plain inline <script>, NOT next/script: in the App Router,
+            `strategy="beforeInteractive"` is emitted as a `self.__next_s` queue
+            entry that only runs once the async runtime chunks load — after
+            first paint — so every `dark:` utility flashed light on load. */}
+        <script
+          id="theme-bootstrap"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
+        />
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
       </head>
       <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased min-h-screen flex flex-col">
