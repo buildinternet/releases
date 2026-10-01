@@ -3,6 +3,23 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## September 26, 2026
+
+**Added**
+- Connect Claude to the MCP server using its published identity — Claude's "Use Claude's published identity" option in the connector dialog now works; the server fetches Claude's client metadata on first connect and registers it automatically, with no manual pre-registration step.
+
+**Changed**
+- OAuth consent screen now lists follows and webhooks — connecting an app via OAuth shows that it can follow and unfollow orgs and products and manage your webhooks, matching what the grant actually allows.
+
+**Fixed**
+- Dark mode no longer flashes light on first load — the theme bootstrap now runs as an inline `<head>` script, so the dark class applies before first paint whether you chose dark explicitly or follow your OS setting.
+
+## September 25, 2026
+
+**Fixed**
+- MCP OAuth sign-in now works on `agents.releases.sh` — connecting to `https://agents.releases.sh/mcp` (the advertised address) was routing tokens to the wrong audience; tokens minted for either `agents.releases.sh` or `mcp.releases.sh` are now accepted on both.
+- Calling account MCP tools without a credential now prompts sign-in — `follow`, `unfollow`, `list_follows`, `get_personalized_feed`, `list_webhooks`, and `manage_webhook` now return a proper OAuth challenge in clients like Claude, triggering the sign-in flow instead of showing a plain error.
+
 ## September 24, 2026
 
 **Added**
