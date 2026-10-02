@@ -7,6 +7,8 @@ description: Push changelog markdown from a Git repo into Releases Index on ever
 
 If your release notes live in git — `CHANGELOG.md`, Keep a Changelog, a dated product log, or one MDX file per release — a GitHub Action can create or update the matching releases in Releases Index the moment the file lands on your default branch. You don't wait for us to check your changelog.
 
+Not on GitHub? The Action posts a normal batch write. [Publish from any CI](/docs/integrations/ci) has the `curl` recipe and a GitLab example. `releases publish` will run the same plan from the CLI.
+
 Re-running the same commit is safe. Each entry is keyed by a stable URL, and the batch upsert only writes when the body actually changed.
 
 The Action has two modes:

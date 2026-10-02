@@ -1,9 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { isMissingOrZeroSha } from "./plan";
 
-/** True when `sha` is missing or an all-zero first-push SHA. */
-export function isMissingOrZeroSha(sha: string | undefined): boolean {
-  return !sha || /^0+$/.test(sha);
-}
+export { isMissingOrZeroSha };
 
 /** Empty string when `sha` is missing, an all-zero first-push SHA, or the path is new. */
 export function gitShowFile(sha: string | undefined, path: string, cwd?: string): string {

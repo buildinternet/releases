@@ -5,12 +5,15 @@
  *
  * Two modes:
  *   - Single-file (default): diffs one changelog file's `##` sections
- *     before/after the push (see plan.ts `planChangelogIngest`).
+ *     before/after the push (`planChangelogIngest`).
  *   - Directory (when `changelog-glob` is set): diffs the files matching
  *     the glob via `git diff --name-status` and plans one release per
- *     added/modified MDX/Markdown file, frontmatter-driven (see plan.ts
- *     `planDirectoryIngest`). Mutually exclusive with a non-default
+ *     added/modified MDX/Markdown file, frontmatter-driven
+ *     (`planDirectoryIngest`). Mutually exclusive with a non-default
  *     `changelog-path`.
+ *
+ * Planning lives in `@buildinternet/releases-core/changelog-publish`
+ * (re-exported from plan.ts). This file is git I/O plus the batch POST.
  *
  * Env (set by action.yml):
  *   RELEASES_API_TOKEN, RELEASES_API_URL, RELEASES_SOURCE, RELEASES_ORG?,
