@@ -9,6 +9,7 @@ import {
   AuthCard,
   AuthError,
   CardTitle,
+  Caution,
   Code,
   ConnVisual,
   Divider,
@@ -19,6 +20,11 @@ import {
   ScopeGroups,
 } from "@/components/auth-flow";
 import type { OAuthClient } from "@better-auth/oauth-provider";
+import {
+  consentTrust,
+  describeRedirectDestination,
+  type RedirectDestination,
+} from "@/lib/oauth-redirect-destination";
 
 // IMPORTANT: call the oauth-provider endpoints by their LITERAL paths via
 // `authClient.$fetch`, NOT as named methods. The client half of the plugin
@@ -33,6 +39,22 @@ import type { OAuthClient } from "@better-auth/oauth-provider";
 type ConsentResult = { redirect_uri?: string };
 /** OAuth error body shape returned by the AS on a rejected request. */
 type OAuthError = { error_description?: string; message?: string };
+/**
+ * Public client info plus `official`, which the API's public-client after-hook
+ * adds from the operator-set flag (apps/api/src/auth/oauth-public-client.ts).
+ */
+type PublicClient = OAuthClient & { official?: boolean };
+
+/** Where the code goes, as plain text (never a link — the host is untrusted). */
+function DestinationLabel({ destination }: { destination: RedirectDestination }) {
+  if (destination.kind === "web") return <span className="font-mono">{destination.host}</span>;
+  if (destination.kind === "local") return <>an app on this device</>;
+  return (
+    <>
+      the <span className="font-mono">{destination.scheme}://</span> app
+    </>
+  );
+}
 
 /**
  * OAuth consent form rendered on /oauth/consent. Reads the signed OAuth params
@@ -52,7 +74,7 @@ export function OauthConsentForm() {
   const user = sessionData?.user;
   const role = (user as { role?: string } | undefined)?.role ?? null;
 
-  const [client, setClient] = useState<OAuthClient | null>(null);
+  const [client, setClient] = useState<PublicClient | null>(null);
   const [clientLoading, setClientLoading] = useState(true);
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +89,7 @@ export function OauthConsentForm() {
       // GET /api/auth/oauth2/public-client?client_id=… (session-gated; the
       // credentialed auth client sends the cookie). Returns OAuth metadata-named
       // fields (client_name / client_uri / logo_uri).
-      const { data } = await authClient.$fetch<OAuthClient>("/oauth2/public-client", {
+      const { data } = await authClient.$fetch<PublicClient>("/oauth2/public-client", {
         method: "GET",
         query: { client_id: clientId },
       });
@@ -150,23 +172,18 @@ export function OauthConsentForm() {
   }
 
   const appName = client?.client_name ?? clientId;
-  // Validate URL schemes before rendering — a registered client could set a
-  // javascript:/vbscript:/etc. URI, which would execute on click/load. Drop any
-  // URI that isn't an http(s) link (or an inline data:image for the logo).
-  const safeClientUri =
-    client?.client_uri && /^https?:\/\//i.test(client.client_uri) ? client.client_uri : null;
+  // Validate the logo scheme before rendering — a registered client could set a
+  // javascript:/vbscript:/etc. URI. Only http(s) or an inline data:image.
   const safeLogoUri =
     client?.logo_uri && /^(https?:\/\/|data:image\/)/i.test(client.logo_uri)
       ? client.logo_uri
       : null;
-  let clientHost: string | null = null;
-  if (safeClientUri) {
-    try {
-      clientHost = new URL(safeClientUri).host;
-    } catch {
-      clientHost = null;
-    }
-  }
+  // Self-registered (DCR / CIMD) clients choose their own name, logo, and
+  // client_uri, so none of those say who gets the code. Show the signed
+  // redirect_uri's destination instead, and vouch for the client only when an
+  // operator marked it official.
+  const destination = describeRedirectDestination(params.get("redirect_uri"));
+  const trust = consentTrust(client?.official, destination);
 
   const noScopes = grantable.length === 0;
 
@@ -197,17 +214,30 @@ export function OauthConsentForm() {
       <CardTitle>
         <span className="font-semibold">{appName}</span> wants to access your Releases Index account
       </CardTitle>
-      {clientHost ? (
-        <IdentityRow verified>
-          <a
-            href={safeClientUri ?? undefined}
-            target="_blank"
-            rel="noreferrer"
-            className="hover:underline"
-          >
-            {clientHost}
-          </a>
-        </IdentityRow>
+      {trust === "verified" ? <IdentityRow verified>Verified by Releases Index</IdentityRow> : null}
+      {destination ? (
+        <p className="mt-2 text-center text-[13px] text-stone-500 dark:text-stone-400">
+          Allowing sends access to{" "}
+          <span className="text-stone-700 dark:text-stone-200">
+            <DestinationLabel destination={destination} />
+          </span>
+        </p>
+      ) : null}
+      {trust === "unverified-local" ? (
+        <p className="mt-1 text-center text-[12px] text-stone-400 dark:text-stone-500">
+          Unverified · name and logo are provided by the app
+        </p>
+      ) : null}
+      {trust === "unverified-web" ? (
+        <Caution>
+          Releases Index hasn&apos;t verified this app. Only allow access if you trust{" "}
+          {destination?.kind === "web" ? (
+            <span className="font-mono font-semibold">{destination.host}</span>
+          ) : (
+            "where this request came from"
+          )}
+          .
+        </Caution>
       ) : null}
 
       <Divider />

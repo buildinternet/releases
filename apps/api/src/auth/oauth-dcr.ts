@@ -28,6 +28,11 @@ const STRIP_REGISTRATION_FIELDS = [
   "client_secret",
   "jwks",
   "jwks_uri",
+  // The consent page's "verified" badge reads `metadata.official`, which only
+  // the admin/oauth routes may set (oauth-public-client.ts). Better Auth 1.7
+  // already drops register-body `metadata` extras; this is a backstop.
+  "official",
+  "metadata",
 ] as const;
 
 const DCR_SCOPE_SET: ReadonlySet<string> = new Set(DCR_SCOPES);

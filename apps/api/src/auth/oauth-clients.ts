@@ -10,6 +10,7 @@
 import { generateRandomString } from "better-auth/crypto";
 import { createHash } from "@better-auth/utils/hash";
 import { base64Url } from "@better-auth/utils/base64";
+import { isOfficialClientRow, parseMetadata, withOfficialFlag } from "./oauth-public-client.js";
 
 /** Extends the relk_/relu_/relo_ credential family; the operator-facing secret prefix. */
 export const CLIENT_SECRET_PREFIX = "reloc_";
@@ -40,6 +41,11 @@ export interface CreateClientInput {
   scopes: string[];
   /** Maps to skip_consent — only the admin path can set this. */
   trusted?: boolean;
+  /**
+   * Operator-verified: the consent page shows a "Verified" badge. Defaults to
+   * true — a root-key-provisioned client is first-party by definition.
+   */
+  official?: boolean;
   type?: "web" | "native" | "user-agent-based";
   tokenEndpointAuthMethod?: "none" | "client_secret_basic" | "client_secret_post";
   grantTypes?: string[];
@@ -55,6 +61,8 @@ export interface PublicOAuthClient {
   redirectUris: string[];
   scopes: string[];
   trusted: boolean;
+  /** Operator-set `metadata.official` — drives the consent page's verified badge. */
+  official: boolean;
   disabled: boolean;
   public: boolean;
   type: string | null;
@@ -95,6 +103,7 @@ export function toPublicClient(row: Record<string, unknown>): PublicOAuthClient 
     redirectUris: (row.redirectUris as string[]) ?? [],
     scopes: (row.scopes as string[]) ?? [],
     trusted: Boolean(row.skipConsent),
+    official: isOfficialClientRow(row),
     disabled: Boolean(row.disabled),
     public: isPublicClientRow(row),
     type: (row.type as string | null) ?? null,
@@ -130,6 +139,7 @@ export async function createOAuthClient(
     skipConsent: input.trusted ?? false,
     uri: input.clientUri ?? null,
     icon: input.logoUri ?? null,
+    metadata: withOfficialFlag(null, input.official ?? true),
     createdAt: now,
     updatedAt: now,
   };
@@ -163,7 +173,7 @@ export async function getOAuthClient(
 export async function updateClientFlags(
   adapter: OAuthClientAdapter,
   clientId: string,
-  fields: { disabled?: boolean; trusted?: boolean },
+  fields: { disabled?: boolean; trusted?: boolean; official?: boolean },
 ): Promise<PublicOAuthClient | null> {
   const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
   if (!row) return null;
@@ -171,6 +181,9 @@ export async function updateClientFlags(
   const update: Record<string, unknown> = { updatedAt: now };
   if (typeof fields.disabled === "boolean") update.disabled = fields.disabled;
   if (typeof fields.trusted === "boolean") update.skipConsent = fields.trusted;
+  if (typeof fields.official === "boolean") {
+    update.metadata = withOfficialFlag(parseMetadata(row.metadata), fields.official);
+  }
   await adapter.update({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId), update });
   return toPublicClient({ ...row, ...update });
 }

@@ -189,15 +189,17 @@ The admin route remains the second sanctioned exception to the
 
 - `POST /v1/admin/oauth/clients` — create a client. Body: `redirectUris`
   (required, non-empty), `scopes` (required, non-empty), optional `name`,
-  `trusted` (→ `skip_consent`, first-party only), `tokenEndpointAuthMethod`
+  `trusted` (→ `skip_consent`, first-party only), `official` (default `true`;
+  see consent trust below), `tokenEndpointAuthMethod`
   (`none` ⇒ a secretless **public/PKCE** client, e.g. the MCP client), `type`,
   `grantTypes`, `requirePKCE`, `clientUri`, `logoUri`. Returns the
   `reloc_`-prefixed `clientSecret` **once** (null for a public client).
 - `GET /v1/admin/oauth/clients` · `GET /v1/admin/oauth/clients/:clientId` —
   list/get public, secret-free client fields.
-- `PATCH /v1/admin/oauth/clients/:clientId { disabled?, trusted? }` — disable is
-  a true kill switch (the AS rejects disabled clients at authorize/token/
-  introspect); `trusted` toggles `skip_consent`.
+- `PATCH /v1/admin/oauth/clients/:clientId { disabled?, trusted?, official? }` —
+  disable is a true kill switch (the AS rejects disabled clients at authorize/
+  token/introspect); `trusted` toggles `skip_consent`; `official` toggles the
+  consent page's verified badge (works on DCR/CIMD rows too).
 - `POST /v1/admin/oauth/clients/:clientId/rotate-secret` — new `reloc_` secret,
   returned once; 400 for a public client.
 - `DELETE /v1/admin/oauth/clients/:clientId`.
@@ -217,6 +219,27 @@ DCR: `DCR_SCOPES`, consent required, no shared secret, PKCE. A document asking f
 more (a wider `scope`, `skip_consent`, a secret auth method) is refused. The fetch
 goes through a Workers transport (`auth/oauth-cimd.ts`) that never follows
 redirects. See [mcp-cimd-interop.md §0](mcp-cimd-interop.md#0-cimd-url-client-ids).
+
+**Consent trust.** DCR and CIMD clients choose their own `client_name`,
+`logo_uri`, and `client_uri`, so a client can register as "Claude" with
+`client_uri: https://claude.ai` and a redirect to its own server. The consent
+page (`/oauth/consent`) therefore never shows `client_uri`. It shows where the
+code goes, read from the signed `redirect_uri` in the consent query: a web host,
+"an app on this device" for a loopback redirect, or "the `scheme://` app" for a
+private-use scheme. It then picks one of three trust tiers
+(`apps/web/src/lib/oauth-redirect-destination.ts`):
+
+| Client                                              | Consent page shows                                              |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| `official` (operator-set `metadata.official`)       | "Verified by Releases Index" badge                              |
+| Unverified, loopback or private-use-scheme redirect | Muted "Unverified · name and logo are provided by the app" note |
+| Unverified, web redirect (or unknown)               | Amber warning naming the redirect host                          |
+
+The API adds `official` to `/oauth2/public-client{,-prelogin}` in an after-hook
+(`auth/oauth-public-client.ts`). A failed lookup returns `false`. Only the
+admin route writes the flag. The DCR sanitizer strips `official` and `metadata`
+from register bodies, and CIMD documents carrying either field are stored with
+`metadata: null`.
 
 ### Resource-server JWT verification (#1483)
 
