@@ -30,8 +30,9 @@ export const KIND_LABEL: Record<LocatorKind, string> = {
 };
 
 /** Prefer feed → github → appstore → file → url (same order as materialize). */
+type LocatorField = Exclude<LocatorKind, "push">;
 const KIND_ORDER: ReadonlyArray<{
-  key: LocatorKind;
+  key: LocatorField;
   classification: LocatorClassification;
 }> = [
   { key: "feed", classification: "tier1-live" },
