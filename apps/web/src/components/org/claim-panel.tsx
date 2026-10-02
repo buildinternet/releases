@@ -82,15 +82,21 @@ function outcomeMessage(
     : `${label} was found, but didn't match.`;
 }
 
-function promoteCtaCopy(live: number, queued: number): string {
-  if (live > 0 && queued === 0) {
+function promoteCtaCopy(live: number, queued: number, push: number): string {
+  if (push > 0 && live === 0 && queued === 0) {
+    return "Enabling tracking creates a source you publish to. We won't poll it — mint a token and add the GitHub Action after.";
+  }
+  if (live > 0 && queued === 0 && push === 0) {
     return "Enable tracking to start fetching these sources automatically.";
   }
   if (live > 0 && queued > 0) {
     return "Feeds, GitHub, and App Store sources go live now; pages and files stay paused until a curator reviews them.";
   }
-  if (live === 0 && queued > 0) {
+  if (live === 0 && queued > 0 && push === 0) {
     return "These locations need curator review before anything is fetched. Enabling tracking queues them and marks this org as tracked.";
+  }
+  if (push > 0) {
+    return "Fetched sources follow the usual rules. Push locations become sources you publish to with the GitHub Action.";
   }
   return "Add release locations to your releases.json before enabling tracking.";
 }
@@ -125,6 +131,7 @@ function LocatorGroup({
             </span>
             <span className="min-w-0 truncate font-mono text-[12px]">
               {item.title ?? item.locator}
+              {item.path ? ` · ${item.path}` : ""}
             </span>
           </li>
         ))}
@@ -137,11 +144,13 @@ function LocatorGroup({
 function LocatorEligibilityPreview({
   live,
   queued,
+  push,
 }: {
   live: LocatorPreview[];
   queued: LocatorPreview[];
+  push: LocatorPreview[];
 }) {
-  if (live.length === 0 && queued.length === 0) return null;
+  if (live.length === 0 && queued.length === 0 && push.length === 0) return null;
 
   return (
     <div className="mt-3 space-y-3">
@@ -154,6 +163,14 @@ function LocatorEligibilityPreview({
           tone="good"
           items={live}
           note="RSS/Atom feeds, GitHub repos, and App Store listings fetch without AI extraction."
+        />
+      )}
+      {push.length > 0 && (
+        <LocatorGroup
+          title="You publish"
+          tone="good"
+          items={push}
+          note="We create a push-fed source and do not poll it. Next: mint a publish token, then add the publish-changelog Action pointed at the declared path."
         />
       )}
       {queued.length > 0 && (
@@ -175,6 +192,7 @@ export function VerifiedBody({
   promotionEnabled,
   live,
   queued,
+  push,
   onPromote,
 }: {
   claim: OrgClaim;
@@ -182,6 +200,7 @@ export function VerifiedBody({
   promotionEnabled: boolean;
   live: LocatorPreview[];
   queued: LocatorPreview[];
+  push: LocatorPreview[];
   onPromote: (claim: OrgClaim) => void;
 }) {
   const verifiedLine = (
@@ -220,13 +239,13 @@ export function VerifiedBody({
     );
   }
 
-  const hasLocations = live.length + queued.length > 0;
+  const hasLocations = live.length + queued.length + push.length > 0;
   return (
     <div>
       {verifiedLine}
-      <LocatorEligibilityPreview live={live} queued={queued} />
+      <LocatorEligibilityPreview live={live} queued={queued} push={push} />
       <p className="mt-3 text-[13.5px] leading-relaxed text-[var(--fg-3)]">
-        {promoteCtaCopy(live.length, queued.length)}
+        {promoteCtaCopy(live.length, queued.length, push.length)}
       </p>
       {hasLocations ? (
         <button type="button" onClick={() => onPromote(claim)} className={`mt-3 ${BTN_CLASS}`}>
@@ -301,7 +320,7 @@ export function ClaimPanel({
   const [checked, setChecked] = useState<ClaimVerifyResult["checked"] | null>(null);
   const [capabilities, setCapabilities] = useState<ListingCapabilities | null>(null);
 
-  const { live, queued } = useMemo(() => {
+  const { live, queued, push } = useMemo(() => {
     const previews = classifyReleaseLocations(locations);
     return partitionLocatorPreviews(previews);
   }, [locations]);
@@ -460,6 +479,7 @@ export function ClaimPanel({
           promotionEnabled={promotionEnabled}
           live={live}
           queued={queued}
+          push={push}
           onPromote={onPromote}
         />
       )}

@@ -37,6 +37,8 @@ export function mapReleaseLocation(row: ReleaseLocationRow): ReleaseLocationItem
     ...(row.appstore ? { appstore: row.appstore } : {}),
     ...(row.file ? { file: row.file } : {}),
     ...(row.title ? { title: row.title } : {}),
+    ...(row.publish === "push" ? { publish: "push" as const } : {}),
+    ...(row.path ? { path: row.path } : {}),
     canonical: row.canonical,
     basis: row.basis,
     productId: row.productId,

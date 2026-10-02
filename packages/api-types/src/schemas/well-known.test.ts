@@ -122,6 +122,67 @@ describe("releases.json v2 schemas", () => {
     ).toBe(false);
   });
 
+  it("accepts a push-publish locator on github + path", () => {
+    expect(
+      ReleasesJsonDomainSchema.parse({
+        version: 2,
+        releases: [
+          { github: "acme/docs", path: "changelog/**/*.mdx", publish: "push", title: "Docs" },
+        ],
+      }),
+    ).toEqual({
+      version: 2,
+      releases: [
+        { github: "acme/docs", path: "changelog/**/*.mdx", publish: "push", title: "Docs" },
+      ],
+    });
+    expect(
+      ReleasesJsonRepoSchema.safeParse({
+        version: 2,
+        releases: [{ github: "self", path: "CHANGELOG.md", publish: "push" }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an incomplete or unsafe push-publish locator", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [{ github: "acme/docs", publish: "push" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [{ path: "CHANGELOG.md", publish: "push" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [{ github: "acme/docs", path: "CHANGELOG.md" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [{ github: "acme/docs", path: "CHANGELOG.md", publish: "poll" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [{ github: "acme/docs", path: "../secrets", publish: "push" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [{ github: "acme/docs", path: "/etc/passwd", publish: "push" }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("allows github self only in repo files", () => {
     expect(
       ReleasesJsonDomainSchema.safeParse({ version: 2, releases: [{ github: "self" }] }).success,

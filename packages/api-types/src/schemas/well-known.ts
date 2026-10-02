@@ -17,6 +17,19 @@ const HttpsUrlSchema = z.url().startsWith("https://", "locator must be an https 
 /** Shared tag-array bounds — kept identical for org-level and product-level tags. */
 const TagsSchema = z.array(z.string().min(1).max(60)).max(50);
 
+/**
+ * Changelog file or glob inside the declared repo (Action `changelog-path` /
+ * `changelog-glob`). Relative only — no scheme, no leading slash, no `..`.
+ */
+const PublishPathSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(
+    /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._~@%+\-/*?[\]{}]+$/,
+    "path must be a relative changelog file or glob",
+  );
+
 const ReleaseLocationFields = {
   url: HttpsUrlSchema.optional(),
   feed: HttpsUrlSchema.optional(),
@@ -24,6 +37,13 @@ const ReleaseLocationFields = {
   file: HttpsUrlSchema.optional(),
   title: z.string().min(1).max(200).optional(),
   canonical: z.boolean().optional(),
+  /**
+   * `"push"` means the owner publishes this changelog (GitHub Action / publish
+   * token) instead of us polling it. Requires `github` + `path`.
+   */
+  publish: z.literal("push").optional(),
+  /** Required with `publish: "push"`. The file or glob the Action watches. */
+  path: PublishPathSchema.optional(),
 };
 
 function hasLocator(value: {
@@ -36,6 +56,12 @@ function hasLocator(value: {
   return Boolean(value.url || value.feed || value.github || value.appstore || value.file);
 }
 
+/** `publish: "push"` is a mode on a github locator, not a locator by itself. */
+function pushPublishComplete(value: { github?: string; publish?: "push"; path?: string }): boolean {
+  if (value.publish === "push") return Boolean(value.github && value.path);
+  return value.path === undefined;
+}
+
 /** A domain manifest can name a concrete GitHub repository, but never `self`. */
 export const ReleasesJsonDomainReleaseSchema = z
   .strictObject({
@@ -45,7 +71,11 @@ export const ReleasesJsonDomainReleaseSchema = z
       .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "github must be owner/repo")
       .optional(),
   })
-  .refine(hasLocator, "at least one release locator is required");
+  .refine(hasLocator, "at least one release locator is required")
+  .refine(
+    pushPublishComplete,
+    'publish: "push" requires github (owner/repo) and path (changelog file or glob)',
+  );
 
 /** A repo manifest additionally accepts `github: "self"`. */
 export const ReleasesJsonRepoReleaseSchema = z
@@ -58,7 +88,11 @@ export const ReleasesJsonRepoReleaseSchema = z
       ])
       .optional(),
   })
-  .refine(hasLocator, "at least one release locator is required");
+  .refine(hasLocator, "at least one release locator is required")
+  .refine(
+    pushPublishComplete,
+    'publish: "push" requires github (owner/repo or "self") and path (changelog file or glob)',
+  );
 
 function releasesArray<T extends z.ZodType>(item: T, max: number) {
   return z

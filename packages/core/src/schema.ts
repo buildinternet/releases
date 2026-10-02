@@ -561,6 +561,11 @@ export const releaseLocations = sqliteTable(
     file: text("file"),
     title: text("title"),
     canonical: integer("canonical", { mode: "boolean" }).notNull().default(false),
+    // Push-publish mode (#2376). `publish = 'push'` plus `path` (changelog file
+    // or glob) marks a github locator the owner publishes via the Action,
+    // instead of one we poll. Null on every fetched locator.
+    publish: text("publish"),
+    path: text("path"),
     // Provenance ladder (#1872), curator > declared > detected > generated.
     // Ships now with these values; adopts #1872's shared enum/helper later (no-op
     // — values match). Manifest sweep writes `declared`, the CLI create-stub verb

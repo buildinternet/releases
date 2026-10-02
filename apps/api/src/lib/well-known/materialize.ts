@@ -3,6 +3,7 @@ import {
   blockedUrls,
   ignoredUrls,
   orgAccounts,
+  orgClaims,
   productTags,
   products,
   sources,
@@ -39,6 +40,8 @@ export interface ClassifiedLocation {
   tier: 1 | 2;
   paused: boolean;
   locator: string;
+  /** Set when the entry declares `publish: "push"` on a github locator. */
+  publish?: "push";
 }
 
 export interface ExclusionPolicy {
@@ -135,7 +138,27 @@ function appStoreTrackId(value: string | undefined): string | null {
   return value ? (parseAppStoreIdentifier(value)?.trackId ?? null) : null;
 }
 
+/** Owner-published changelog: github coordinate plus `publish: "push"`. */
+export function isPushPublish(
+  location: DeclaredLocation,
+): location is DeclaredLocation & { publish: "push"; github: string } {
+  return (
+    location.publish === "push" && typeof location.github === "string" && location.github.length > 0
+  );
+}
+
 export function classifyLocation(location: DeclaredLocation): ClassifiedLocation {
+  // Push wins over a companion feed/url on the same entry — the declaration
+  // is "we publish this", not "poll the feed".
+  if (isPushPublish(location)) {
+    return {
+      type: "github",
+      tier: 1,
+      paused: false,
+      locator: location.github === "self" ? "self" : location.github,
+      publish: "push",
+    };
+  }
   if (location.feed) {
     return { type: "feed", tier: 1, paused: false, locator: location.feed };
   }
@@ -440,6 +463,18 @@ function skipPlan(
   };
 }
 
+/**
+ * Fill-if-empty push markers. `ingestMode: "poll"` is the curator opt-out and
+ * is left alone; an absent key becomes `"push"`. `publishPath` is recorded
+ * only when the source doesn't already have one.
+ */
+function withPushFedFill(metadata: string | null | undefined, location: DeclaredLocation): string {
+  const current = parseMetadata(metadata);
+  if (current.ingestMode == null) current.ingestMode = "push";
+  if (location.path && current.publishPath == null) current.publishPath = location.path;
+  return JSON.stringify(current);
+}
+
 async function materializeLocation(
   db: Db,
   location: DeclaredLocation,
@@ -453,6 +488,8 @@ async function materializeLocation(
     usedSourceSlugs: Set<string>;
     claimedLocators: Set<string>;
     githubOwners: Set<string>;
+    /** True when the org has a verified ownership claim. Push locators require it. */
+    ownerVerified: boolean;
     hash: string;
   },
   opts: MaterializationOptions,
@@ -460,17 +497,32 @@ async function materializeLocation(
   const classified = classifyLocation(location);
   const title = sourceTitle(location, classified, context.productName);
   const canonical = location.canonical === true;
+  // Fail closed before any match or create. An unverified domain keeps the
+  // locator as a declaration only — no source row, no ingestMode write.
+  if (classified.publish === "push" && !context.ownerVerified) {
+    return skipPlan(
+      classified,
+      title,
+      context.productId ?? undefined,
+      canonical,
+      "unverified_owner",
+    );
+  }
   const existing =
     location.github === "self" && opts.repoSourceId
       ? context.existingSources.find((source) => source.id === opts.repoSourceId)
       : context.existingSources.find((source) => locationMatchesSource(location, source));
   if (existing) {
-    const current = parseMetadata(existing.metadata);
+    const baseMetadata =
+      classified.publish === "push"
+        ? withPushFedFill(existing.metadata, location)
+        : existing.metadata;
+    const current = parseMetadata(baseMetadata);
     const currentDeclared =
       typeof current.declared === "object" && current.declared !== null
         ? (current.declared as Record<string, unknown>)
         : {};
-    const metadata = mergeSelfDeclaredMetadata(existing.metadata, {
+    const metadata = mergeSelfDeclaredMetadata(baseMetadata, {
       fields: [
         "declared",
         ...(location.canonical ? ["canonical"] : []),
@@ -542,7 +594,10 @@ async function materializeLocation(
   }
 
   let effective = classified;
-  if (location.github && location.github !== "self") {
+  // A polled github repo is demoted when the org's known GitHub identity
+  // doesn't match. A push locator is not: verification is the gate, and we
+  // never fetch the repo — the owner publishes into the source they declared.
+  if (location.github && location.github !== "self" && classified.publish !== "push") {
     const owner = location.github.split("/")[0]!.toLowerCase();
     if (!context.githubOwners.has(owner)) effective = { ...classified, tier: 2, paused: true };
   }
@@ -571,6 +626,9 @@ async function materializeLocation(
     ...probe.metadata,
     ...(location.feed ? { feedUrl: location.feed } : {}),
     ...(location.file ? { declaredFileUrl: location.file } : {}),
+    ...(classified.publish === "push"
+      ? { ingestMode: "push" as const, publishPath: location.path }
+      : {}),
     declaredMaterialized: true,
     ...(location.canonical ? { canonical: true } : {}),
   };
@@ -581,6 +639,7 @@ async function materializeLocation(
     declared: routing,
   });
   const paused = effective.paused || context.archived;
+  const slug = nextSlug(probe.title ?? title, context.usedSourceSlugs);
   context.claimedLocators.add(locatorKey);
   if (!opts.dryRun) {
     await db.insert(sources).values({
@@ -588,7 +647,7 @@ async function materializeLocation(
       orgId: context.orgId,
       productId: context.productId,
       name: probe.title ?? title,
-      slug: nextSlug(probe.title ?? title, context.usedSourceSlugs),
+      slug,
       type: effective.type,
       url,
       metadata,
@@ -596,6 +655,21 @@ async function materializeLocation(
       discovery: "curated",
       isHidden: false,
     });
+    // Later locators in this manifest (a plain github entry for the same repo,
+    // or a second path) must match this row instead of inserting another.
+    context.existingSources.push({
+      id: sourceId,
+      orgId: context.orgId,
+      productId: context.productId,
+      name: probe.title ?? title,
+      slug,
+      type: effective.type,
+      url,
+      metadata,
+      fetchPriority: paused ? "paused" : "normal",
+      discovery: "curated",
+      isHidden: false,
+    } as typeof sources.$inferSelect);
   }
   return {
     plan: {
@@ -620,22 +694,29 @@ export async function reconcileDomainEntities(
   manifest: ReleasesJsonDomain,
   opts: MaterializationOptions,
 ): Promise<{ plan: EntityMaterializationPlan; applied: boolean }> {
-  const [existingProducts, existingSources, githubAccounts, ignored, blocked] = await Promise.all([
-    db
-      .select()
-      .from(products)
-      .where(and(eq(products.orgId, orgId), isNull(products.deletedAt))),
-    db
-      .select()
-      .from(sources)
-      .where(and(eq(sources.orgId, orgId), isNull(sources.deletedAt))),
-    db
-      .select({ handle: orgAccounts.handle })
-      .from(orgAccounts)
-      .where(and(eq(orgAccounts.orgId, orgId), eq(orgAccounts.platform, "github"))),
-    db.select({ url: ignoredUrls.url }).from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId)),
-    db.select({ pattern: blockedUrls.pattern, type: blockedUrls.type }).from(blockedUrls),
-  ]);
+  const [existingProducts, existingSources, githubAccounts, ignored, blocked, verifiedClaims] =
+    await Promise.all([
+      db
+        .select()
+        .from(products)
+        .where(and(eq(products.orgId, orgId), isNull(products.deletedAt))),
+      db
+        .select()
+        .from(sources)
+        .where(and(eq(sources.orgId, orgId), isNull(sources.deletedAt))),
+      db
+        .select({ handle: orgAccounts.handle })
+        .from(orgAccounts)
+        .where(and(eq(orgAccounts.orgId, orgId), eq(orgAccounts.platform, "github"))),
+      db.select({ url: ignoredUrls.url }).from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId)),
+      db.select({ pattern: blockedUrls.pattern, type: blockedUrls.type }).from(blockedUrls),
+      db
+        .select({ id: orgClaims.id })
+        .from(orgClaims)
+        .where(and(eq(orgClaims.orgId, orgId), eq(orgClaims.status, "verified")))
+        .limit(1),
+    ]);
+  const ownerVerified = verifiedClaims.length > 0;
   const plan: EntityMaterializationPlan = { products: [], sources: [] };
   const policy: ExclusionPolicy = {
     ignored: ignored.map((row) => row.url),
@@ -759,6 +840,7 @@ export async function reconcileDomainEntities(
           usedSourceSlugs,
           claimedLocators,
           githubOwners,
+          ownerVerified,
           hash,
         },
         opts,
@@ -781,6 +863,7 @@ export async function reconcileDomainEntities(
         usedSourceSlugs,
         claimedLocators,
         githubOwners,
+        ownerVerified,
         hash,
       },
       opts,

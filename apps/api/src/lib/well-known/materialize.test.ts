@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
 import {
+  orgClaims,
   organizations,
   productTags,
   products,
@@ -15,6 +16,26 @@ import {
   reconcileDomainEntities,
 } from "./materialize.js";
 
+const PUSH = {
+  github: "acme/docs",
+  path: "changelog/**/*.mdx",
+  publish: "push" as const,
+};
+
+async function verifyOrg(db: ReturnType<typeof createTestDb>, orgId: string) {
+  await db.insert(orgClaims).values({
+    id: `clm_${orgId}`,
+    orgId,
+    userId: "user_owner",
+    token: "relv_test",
+    status: "verified",
+    method: "well-known",
+    verifiedAt: "2026-09-01T00:00:00.000Z",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    expiresAt: "2026-09-08T00:00:00.000Z",
+  });
+}
+
 describe("well-known materialization helpers", () => {
   it("classifies MA-free and pending locator tiers", () => {
     expect(classifyLocation({ feed: "https://acme.com/feed.xml" })).toMatchObject({
@@ -26,6 +47,13 @@ describe("well-known materialization helpers", () => {
       type: "github",
       tier: 1,
       paused: false,
+    });
+    expect(classifyLocation(PUSH)).toMatchObject({
+      type: "github",
+      tier: 1,
+      paused: false,
+      locator: "acme/docs",
+      publish: "push",
     });
     expect(
       classifyLocation({ appstore: "https://apps.apple.com/us/app/acme/id123" }),
@@ -126,8 +154,9 @@ describe("well-known materialization helpers", () => {
         resolveCategory: async () => null,
       },
     );
-    expect(plan.sources.map((entry) => entry.action)).toEqual(["create", "skip"]);
-    expect(plan.sources[1]!.note).toBe("duplicate_location");
+    // The second declaration matches the source the first one just created,
+    // so the manifest still lands a single row.
+    expect(plan.sources.map((entry) => entry.action)).toEqual(["create", "match"]);
     const rows = await db.select().from(sources).where(eq(sources.orgId, "org_a"));
     expect(rows.length).toBe(1);
   });
@@ -186,5 +215,116 @@ describe("well-known materialization helpers", () => {
     expect(dry.plan.products[0]).toMatchObject({ tags: ["x"] });
     const allLinks = await db.select().from(productTags);
     expect(allLinks.length).toBe(2); // still only ci + cloud from the applied run
+  });
+
+  it("creates a push-fed github source for a verified owner", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
+    await verifyOrg(db, "org_a");
+    const { plan } = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      { version: 2, releases: [PUSH] },
+      {
+        dryRun: false,
+        enabled: true,
+        source: "well-known",
+        probe: async () => ({ ok: true, url: "https://github.com/acme/docs", title: "docs" }),
+        resolveCategory: async () => null,
+      },
+    );
+    expect(plan.sources[0]).toMatchObject({
+      action: "create",
+      type: "github",
+      locator: "acme/docs",
+      paused: false,
+    });
+    const [row] = await db.select().from(sources).where(eq(sources.orgId, "org_a"));
+    expect(row!.type).toBe("github");
+    expect(row!.url).toBe("https://github.com/acme/docs");
+    expect(row!.fetchPriority).not.toBe("paused");
+    const meta = JSON.parse(row!.metadata ?? "{}") as { ingestMode?: string; publishPath?: string };
+    expect(meta.ingestMode).toBe("push");
+    expect(meta.publishPath).toBe("changelog/**/*.mdx");
+  });
+
+  it("leaves a push locator unmaterialized when the domain is unverified", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
+    await db.insert(orgClaims).values({
+      id: "clm_pending",
+      orgId: "org_a",
+      userId: "user_owner",
+      token: "relv_pending",
+      status: "pending",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      expiresAt: "2026-09-08T00:00:00.000Z",
+    });
+    await db.insert(sources).values({
+      id: "src_docs",
+      orgId: "org_a",
+      name: "Docs",
+      slug: "docs",
+      type: "github",
+      url: "https://github.com/acme/docs",
+      metadata: JSON.stringify({ curatorNote: "untouched" }),
+    });
+    const { plan } = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      { version: 2, releases: [PUSH] },
+      {
+        dryRun: false,
+        enabled: true,
+        source: "well-known",
+        probe: async () => ({ ok: true }),
+        resolveCategory: async () => null,
+      },
+    );
+    expect(plan.sources[0]).toMatchObject({ action: "skip", note: "unverified_owner" });
+    const [row] = await db.select().from(sources).where(eq(sources.orgId, "org_a"));
+    expect(JSON.parse(row!.metadata ?? "{}")).toEqual({ curatorNote: "untouched" });
+  });
+
+  it("does not overwrite a curator poll opt-out when matching a push locator", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
+    await verifyOrg(db, "org_a");
+    await db.insert(sources).values({
+      id: "src_docs",
+      orgId: "org_a",
+      name: "Docs",
+      slug: "docs",
+      type: "github",
+      url: "https://github.com/acme/docs",
+      metadata: JSON.stringify({ ingestMode: "poll", curatorNote: "keep polling" }),
+      fetchPriority: "normal",
+    });
+    const { plan } = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      { version: 2, releases: [PUSH] },
+      {
+        dryRun: false,
+        enabled: true,
+        source: "well-known",
+        probe: async () => {
+          throw new Error("matched sources are not probed");
+        },
+        resolveCategory: async () => null,
+      },
+    );
+    expect(plan.sources[0]).toMatchObject({ action: "match", sourceId: "src_docs" });
+    const [row] = await db.select().from(sources).where(eq(sources.id, "src_docs"));
+    const meta = JSON.parse(row!.metadata ?? "{}") as {
+      ingestMode?: string;
+      publishPath?: string;
+      curatorNote?: string;
+    };
+    expect(meta.ingestMode).toBe("poll");
+    expect(meta.publishPath).toBe("changelog/**/*.mdx");
+    expect(meta.curatorNote).toBe("keep polling");
+    expect(row!.fetchPriority).toBe("normal");
+    expect(row!.url).toBe("https://github.com/acme/docs");
   });
 });

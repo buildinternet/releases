@@ -32,6 +32,12 @@ function normalizeGithub(value: string): string {
  * curator input, whose github locators are always `owner/repo`.
  */
 export function releaseLocationMatchKey(location: DeclaredLocation): string {
+  // A push declaration of a repo is a different fact from "poll this repo's
+  // GitHub releases", so it must not collapse onto the plain github key.
+  // Path stays case-sensitive (it's a file path); the coordinate is normalized.
+  if (location.publish === "push" && location.github && location.github !== "self") {
+    return `push:${normalizeGithub(location.github)}:${location.path ?? ""}`;
+  }
   if (location.feed) return `feed:${normalizeUrl(location.feed)}`;
   if (location.github && location.github !== "self") {
     return `github:${normalizeGithub(location.github)}`;

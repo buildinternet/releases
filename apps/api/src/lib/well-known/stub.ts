@@ -100,6 +100,8 @@ function locatorRow(
     file: location.file ?? null,
     title: location.title ?? null,
     canonical: location.canonical === true,
+    publish: location.publish === "push" ? "push" : null,
+    path: location.publish === "push" ? (location.path ?? null) : null,
     basis: ctx.basis,
     evidence: ctx.evidence ?? null,
     sourceId: null,

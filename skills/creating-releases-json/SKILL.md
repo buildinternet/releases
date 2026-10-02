@@ -92,6 +92,8 @@ Map each finding to a locator key:
 | `github`   | A repo whose Releases are the record                              | `"owner/repo"`. In a **repo file only**, `"self"` = this repo. |
 | `appstore` | An App Store listing URL                                          | `https://` only.                                             |
 | `file`     | A raw changelog document at a URL (hosted `CHANGELOG.md`)         | `https://` only.                                             |
+| `publish`  | `"push"` — the owner publishes this changelog; the registry does not poll it | Requires `github` and `path`. See below.          |
+| `path`     | Changelog file or glob inside that repo                            | Only with `publish: "push"`. Relative, no `..`.              |
 
 One `releases[]` entry can combine keys when they describe the **same** source — most
 commonly `url` + `feed` (the page a human reads and the feed a machine follows for it).
@@ -101,6 +103,37 @@ scope**).
 
 `source.url` is for humans. If a URL is purely a machine endpoint nobody would visit,
 it belongs in `feed`/`file`, not `url`.
+
+### Direct publishing (`publish: "push"`)
+
+Use this when the changelog lives in git and the owner will **push it in** with the
+[publish-changelog GitHub Action](https://releases.sh/docs/integrations/github-actions),
+instead of the registry polling a feed or a page. It uses the same `releases[]` entry
+as every other locator, with `github` naming the repo:
+
+```json
+{
+  "github": "acme/docs",
+  "path": "changelog/**/*.mdx",
+  "publish": "push"
+}
+```
+
+- `github` is `"owner/repo"`, or `"self"` in a **repo** file.
+- `path` is the file (`CHANGELOG.md` → Action input `changelog-path`) or glob
+  (`changelog/**/*.mdx` → `changelog-glob`). Relative only.
+- A single file with no wildcard is the usual Keep-a-Changelog case; a glob is
+  directory mode (one MDX/Markdown file per release).
+
+Do **not** invent this for a changelog the registry can already fetch. It is for
+owners who publish on merge. The registry creates the push-fed source only after
+the domain's ownership claim is verified; until then the locator is recorded and
+left unmaterialized. `POST /v1/listing/validate` lists the three steps that
+follow: verify the domain, mint a publish token (Account → Webhooks & API), add
+the Action pointed at `path`.
+
+A plain `github` entry without `publish` still means "poll this repo's GitHub
+releases". Do not set `publish` on a feed or a page.
 
 ## Step 2b — Model products correctly (don't over-fragment)
 
@@ -157,6 +190,7 @@ Rules to honor (the validator in Step 4 enforces all of these):
   (`https://releases.sh/schemas/releases.json`) is optional but recommended — it gives
   editors autocomplete and validation.
 - **Every `releases[]` entry needs ≥1 locator** (`url`/`feed`/`github`/`appstore`/`file`).
+  `publish: "push"` is a mode on a `github` locator and also requires `path`.
 - **`url`/`feed`/`appstore`/`file`/`avatar` must be `https://`.** (`website`/`docs`/`support`
   on a product may be any valid URL.)
 - **Limits:** ≤ 24 products, ≤ 8 locations per product, and ≤ 32 locations per file total
@@ -240,7 +274,9 @@ After it's deployed and publicly reachable, confirm it end-to-end:
      -d '{"domain":"{domain}"}'
    ```
    The response previews the parsed identity, per-product location counts, and how each
-   locator will be tiered. This is read-only — it does **not** create a listing.
+   locator will be tiered. A `publish: "push"` locator comes back as `kind: "push"`
+   with `setupSteps` (verify the domain, mint a publish token, add the Action). This
+   is read-only — it does **not** create a listing.
 
 Then stop. There's nothing else to run: the registry re-reads the file on a regular sweep,
 so future edits are picked up automatically. Feeds/GitHub/App Store locations go live after a

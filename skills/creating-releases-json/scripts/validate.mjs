@@ -22,6 +22,9 @@ const MAX_PRODUCT_RELEASES = 8;
 const MAX_FILE_RELEASES = 32;
 
 const GITHUB_REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+// Relative changelog file or glob. No scheme, no leading slash, no `..`.
+const PUBLISH_PATH =
+  /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._~@%+\-/*?[\]{}]+$/;
 const ORG_ID = /^org_[A-Za-z0-9]+$/;
 const PRD_ID = /^prd_[A-Za-z0-9]+$/;
 
@@ -83,7 +86,17 @@ function checkRegistries(path, reg) {
 // One release-location entry. `allowSelf` toggles github: "self" (repo scope only).
 function checkRelease(path, entry, allowSelf) {
   if (!isObject(entry)) return err(path, "must be an object");
-  checkKnownKeys(path, entry, ["url", "feed", "appstore", "file", "title", "canonical", "github"]);
+  checkKnownKeys(path, entry, [
+    "url",
+    "feed",
+    "appstore",
+    "file",
+    "title",
+    "canonical",
+    "github",
+    "publish",
+    "path",
+  ]);
 
   for (const key of ["url", "feed", "appstore", "file"]) {
     if (entry[key] !== undefined && !isHttpsUrl(entry[key]))
@@ -96,6 +109,19 @@ function checkRelease(path, entry, allowSelf) {
     const ok = GITHUB_REPO.test(entry.github) || (allowSelf && entry.github === "self");
     if (!ok)
       err(`${path}.github`, allowSelf ? 'must be "owner/repo" or "self"' : 'must be "owner/repo"');
+  }
+
+  if (entry.publish !== undefined && entry.publish !== "push")
+    err(`${path}.publish`, 'must be "push" when set');
+  if (entry.path !== undefined) {
+    if (typeof entry.path !== "string" || !PUBLISH_PATH.test(entry.path) || entry.path.length > 200)
+      err(`${path}.path`, "must be a relative changelog file or glob (no leading slash, no ..)");
+  }
+  if (entry.publish === "push") {
+    if (!entry.github) err(`${path}.github`, 'is required when publish is "push"');
+    if (!entry.path) err(`${path}.path`, 'is required when publish is "push"');
+  } else if (entry.path !== undefined) {
+    err(`${path}.path`, 'is only valid together with "publish": "push"');
   }
 
   const hasLocator = entry.url || entry.feed || entry.github || entry.appstore || entry.file;
