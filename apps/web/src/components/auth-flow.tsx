@@ -257,12 +257,19 @@ export function AuthHeading({ title, subtitle }: { title: ReactNode; subtitle?: 
   );
 }
 
-/** Identity row under the title — verified domain or account email. */
+/**
+ * Identity row under the title — an account email, or (with `verified`) the
+ * operator-verified badge on the OAuth consent page. Never pass a client's
+ * self-reported domain with `verified`: DCR / CIMD clients choose their own.
+ */
 export function IdentityRow({ verified, children }: { verified?: boolean; children: ReactNode }) {
   return (
     <div className="mt-[9px] flex items-center justify-center gap-1.5 text-[13px] text-stone-500 dark:text-stone-400">
       {verified ? (
-        <span className="inline-flex text-green-600 dark:text-green-400" title="Verified domain">
+        <span
+          className="inline-flex text-green-600 dark:text-green-400"
+          title="Verified by Releases Index"
+        >
           <ShieldCheckIcon className="h-[14px] w-[14px]" />
         </span>
       ) : null}

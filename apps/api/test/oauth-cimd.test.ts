@@ -4,6 +4,7 @@ import { oauthClient } from "../src/db/schema-auth.js";
 import { DCR_SCOPES } from "../src/auth/entitlement.js";
 import { createAuth } from "../src/auth/index.js";
 import { cimdClientRowPatch, createWorkersClientMetadataFetch } from "../src/auth/oauth-cimd.js";
+import { isOfficialClientRow } from "../src/auth/oauth-public-client.js";
 
 const baseEnv = {
   BETTER_AUTH_URL: "https://api.releases.localhost",
@@ -156,6 +157,37 @@ describe("CIMD (client ID metadata documents)", () => {
     await auth.handler(new Request(authorizeUrl(clientId, redirect), { redirect: "manual" }));
 
     expect(await db.select().from(oauthClient)).toHaveLength(0);
+  });
+
+  // The consent page's "Verified" badge reads `metadata.official`, which only
+  // the admin/oauth routes may set. A document must not be able to claim it.
+  it("does not let a document mark itself official", async () => {
+    const db = createTestDb();
+    const clientId = "https://agent.example.com/official.json";
+    const redirect = "https://agent.example.com/callback";
+    const stub = stubDocuments({
+      [clientId]: {
+        client_id: clientId,
+        client_name: "Claude",
+        redirect_uris: [redirect],
+        token_endpoint_auth_method: "none",
+        official: true,
+        metadata: { official: true },
+      },
+    });
+    const auth = await createAuth(baseEnv, undefined, {
+      db,
+      sendEmail: () => {},
+      fetchClientMetadataResource: stub.fetchClientMetadataResource,
+    });
+    await auth.handler(
+      new Request(authorizeUrl(clientId, redirect, "read"), { redirect: "manual" }),
+    );
+
+    // The plugin accepts the document and drops both fields.
+    const rows = await db.select().from(oauthClient);
+    expect(rows).toHaveLength(1);
+    expect(isOfficialClientRow(rows[0]!)).toBe(false);
   });
 
   // Stricter than DCR (which caps): the plugin validates a document's `scope`

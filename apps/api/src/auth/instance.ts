@@ -45,6 +45,7 @@ import {
 } from "./entitlement.js";
 import { applyOAuthClientInterop } from "./oauth-client-interop.js";
 import { cimdClientRowPatch, createWorkersClientMetadataFetch } from "./oauth-cimd.js";
+import { annotatePublicClientOfficial, PUBLIC_CLIENT_PATHS } from "./oauth-public-client.js";
 import {
   oauthClientIdFromAuthorizationCode,
   oauthUserIdFromAuthorizationCode,
@@ -1098,6 +1099,12 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       after: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/oauth2/register") {
           await clampRegisteredDcrClient(db, ctx.context.returned);
+          return;
+        }
+        // Consent page trust tier: add the operator-set `official` flag to the
+        // public client info (see oauth-public-client.ts).
+        if (PUBLIC_CLIENT_PATHS.has(ctx.path)) {
+          await annotatePublicClientOfficial(db, ctx.context.returned);
           return;
         }
         if (ctx.path !== "/one-tap/callback") return;

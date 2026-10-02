@@ -117,6 +117,7 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
     redirectUris,
     scopes,
     trusted: b.trusted === true,
+    official: typeof b.official === "boolean" ? b.official : undefined,
     tokenEndpointAuthMethod:
       b.tokenEndpointAuthMethod as CreateClientInput["tokenEndpointAuthMethod"],
     type: b.type as CreateClientInput["type"],
@@ -134,6 +135,7 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
     event: "oauth-client-created",
     clientId: client.clientId,
     trusted: client.trusted,
+    official: client.official,
     public: client.public,
     actor: "root-key",
   });
@@ -164,20 +166,28 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
   if (typeof raw !== "object" || raw === null)
     return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   const b = raw as Record<string, unknown>;
-  if (typeof b.disabled !== "boolean" && typeof b.trusted !== "boolean") {
+  if (
+    typeof b.disabled !== "boolean" &&
+    typeof b.trusted !== "boolean" &&
+    typeof b.official !== "boolean"
+  ) {
     return respondError(
       c,
-      new ValidationError("nothing to update: provide disabled and/or trusted (boolean)", {
-        code: "bad_request",
-      }),
+      new ValidationError(
+        "nothing to update: provide disabled, trusted, and/or official (boolean)",
+        {
+          code: "bad_request",
+        },
+      ),
     );
   }
 
   const disabled = typeof b.disabled === "boolean" ? b.disabled : undefined;
   const trusted = typeof b.trusted === "boolean" ? b.trusted : undefined;
+  const official = typeof b.official === "boolean" ? b.official : undefined;
 
   const adapter = await getAdapter(c);
-  const updated = await updateClientFlags(adapter, clientId, { disabled, trusted });
+  const updated = await updateClientFlags(adapter, clientId, { disabled, trusted, official });
   if (!updated) return respondError(c, new NotFoundError(undefined, { code: "client_not_found" }));
 
   logEvent("info", {
@@ -186,6 +196,7 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
     clientId,
     disabled,
     trusted,
+    official,
     actor: "root-key",
   });
 
