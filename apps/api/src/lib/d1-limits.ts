@@ -64,10 +64,11 @@ export const ORG_ACCOUNTS_INSERT_CHUNK_SIZE = 18;
 // like any other value. 9 rows * 11 = 99 bindings.
 export const CHANGELOG_CHUNK_INSERT_CHUNK_SIZE = 9;
 
-// `release_locations` INSERT binds 16 placeholders per row when every row in
+// `release_locations` INSERT binds 18 placeholders per row when every row in
 // the batch carries a uniform column set (id, org_id, product_id, url, feed,
-// github, appstore, file, title, canonical, basis, evidence, source_id,
-// match_key, created_at, updated_at). deleted_at is the only column left as an
-// inline null. 6 rows * 16 = 96 bindings, under the 100 cap. Callers build
-// every row with the same keys so the prepared statement shape stays uniform.
-export const RELEASE_LOCATIONS_INSERT_CHUNK_SIZE = 6;
+// github, appstore, file, title, canonical, publish, path, basis, evidence,
+// source_id, match_key, created_at, updated_at). deleted_at is the only column
+// left as an inline null. 5 rows * 18 = 90 bindings, under the 100 cap.
+// Callers build every row with the same keys so the prepared statement shape
+// stays uniform.
+export const RELEASE_LOCATIONS_INSERT_CHUNK_SIZE = 5;

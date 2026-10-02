@@ -8,14 +8,16 @@
 
 import type { ReleaseLocationItem } from "@buildinternet/releases-api-types";
 
-export type LocatorKind = "feed" | "github" | "appstore" | "url" | "file";
-export type LocatorClassification = "tier1-live" | "tier2-paused-review";
+export type LocatorKind = "feed" | "github" | "appstore" | "url" | "file" | "push";
+export type LocatorClassification = "tier1-live" | "tier2-paused-review" | "push-setup";
 
 export type LocatorPreview = {
   kind: LocatorKind;
   locator: string;
   title?: string | null;
   classification: LocatorClassification;
+  /** Changelog file or glob, set on push locators. */
+  path?: string;
 };
 
 export const KIND_LABEL: Record<LocatorKind, string> = {
@@ -24,11 +26,13 @@ export const KIND_LABEL: Record<LocatorKind, string> = {
   appstore: "App Store",
   url: "Page",
   file: "File",
+  push: "Push",
 };
 
 /** Prefer feed → github → appstore → file → url (same order as materialize). */
+type LocatorField = Exclude<LocatorKind, "push">;
 const KIND_ORDER: ReadonlyArray<{
-  key: LocatorKind;
+  key: LocatorField;
   classification: LocatorClassification;
 }> = [
   { key: "feed", classification: "tier1-live" },
@@ -39,6 +43,15 @@ const KIND_ORDER: ReadonlyArray<{
 ];
 
 export function classifyReleaseLocation(loc: ReleaseLocationItem): LocatorPreview {
+  if (loc.publish === "push" && loc.github) {
+    return {
+      kind: "push",
+      locator: loc.github,
+      title: loc.title,
+      classification: "push-setup",
+      ...(loc.path ? { path: loc.path } : {}),
+    };
+  }
   for (const { key, classification } of KIND_ORDER) {
     const locator = loc[key];
     if (locator) {
@@ -60,9 +73,11 @@ export function classifyReleaseLocations(locations: ReleaseLocationItem[]): Loca
 export function partitionLocatorPreviews(previews: LocatorPreview[]): {
   live: LocatorPreview[];
   queued: LocatorPreview[];
+  push: LocatorPreview[];
 } {
   return {
     live: previews.filter((p) => p.classification === "tier1-live"),
     queued: previews.filter((p) => p.classification === "tier2-paused-review"),
+    push: previews.filter((p) => p.classification === "push-setup"),
   };
 }

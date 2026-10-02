@@ -123,17 +123,55 @@ manifest and registry noun.
 Locator keys double as the type discriminator (no separate `type` field — the per-type
 payload _is_ the locator, and combos like `url`+`feed` legitimately describe one source):
 
-| Field       | Maps to                                      | Notes                                                                                                  |
-| ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `url`       | `source.url` (human page); `scrape` if alone | Canonical release-notes page — [source.url is for humans](remote-mode.md#display-url-vs-fetch-routing) |
-| `feed`      | `type: feed` + `metadata.feedUrl`            | RSS/Atom; may be third-party-hosted (Canny, Beamer, …)                                                 |
-| `github`    | `type: github` (`owner/repo`)                | In repo files, `"github": "self"` = this repo (tagged releases / CHANGELOG)                            |
-| `appstore`  | `type: appstore`                             | App Store URL                                                                                          |
-| `file`      | Raw changelog document at a URL              | Hosted `CHANGELOG.md` outside GitHub; document-parse, not render+extract                               |
-| `title`     | Source display name                          | Optional                                                                                               |
-| `canonical` | Coverage hint                                | At most one per product/repo scope; feeds `release_coverage` grouping                                  |
+| Field       | Maps to                                      | Notes                                                                                                                                               |
+| ----------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`       | `source.url` (human page); `scrape` if alone | Canonical release-notes page — [source.url is for humans](remote-mode.md#display-url-vs-fetch-routing)                                              |
+| `feed`      | `type: feed` + `metadata.feedUrl`            | RSS/Atom; may be third-party-hosted (Canny, Beamer, …)                                                                                              |
+| `github`    | `type: github` (`owner/repo`)                | In repo files, `"github": "self"` = this repo (tagged releases / CHANGELOG)                                                                         |
+| `appstore`  | `type: appstore`                             | App Store URL                                                                                                                                       |
+| `file`      | Raw changelog document at a URL              | Hosted `CHANGELOG.md` outside GitHub; document-parse, not render+extract                                                                            |
+| `publish`   | Mode on a `github` locator                   | `"push"` only. The owner publishes via the Action; we do not poll. See below.                                                                       |
+| `path`      | Changelog file or glob inside that repo      | Required with `publish: "push"`. Relative, no leading slash, no `..`. Maps to the Action's `changelog-path` (no `*`) or `changelog-glob` (has `*`). |
+| `title`     | Source display name                          | Optional                                                                                                                                            |
+| `canonical` | Coverage hint                                | At most one per product/repo scope; feeds `release_coverage` grouping                                                                               |
 
 **Constraint:** at least one of `url` / `feed` / `github` / `appstore` / `file` per entry.
+`publish: "push"` is not itself a locator — it requires `github` and `path`. `path` without
+`publish` is rejected. Other `publish` values are rejected.
+
+### Push-publish locator (#2376)
+
+An owner who publishes the changelog from git says so on the same `releases[]` entry
+the rest of the manifest uses. The issue sketch used a `repo` key; the shipped shape
+reuses `github` (already `owner/repo`, or `"self"` in a repo file) so there isn't a
+second way to name a repository:
+
+```json
+{ "github": "acme/docs", "path": "changelog/**/*.mdx", "publish": "push" }
+```
+
+Materialization creates or matches a **github** source with `metadata.ingestMode = "push"`
+and `metadata.publishPath` set to `path` — the same push-fed marker as
+[#2374](https://github.com/buildinternet/releases/issues/2374), not a new source type.
+`source.url` stays the GitHub repo URL.
+
+**Verified owners only.** The org must have a `verified` ownership claim. Otherwise the
+locator is left unmaterialized (`note: unverified_owner`): no source row, and no write to
+an existing source's metadata. A matched source is fill-if-empty: `ingestMode` is set to
+`"push"` only when the key is absent, so a curator's explicit `"poll"` opt-out sticks, and
+`publishPath` is recorded only when absent. Other curator fields (`fetchPriority`,
+`isHidden`, `discovery`, name, url) are not touched.
+
+Push locators skip the polled-github "known GitHub identity" demotion to tier 2. That
+demotion exists because we would otherwise fetch someone else's repo. A push source is
+never fetched; the verified claim is the gate, and a failed repo probe still skips the
+create.
+
+`POST /v1/listing/validate` reports these as `kind: "push"`, `classification: "push-setup"`,
+plus `path` and `setupSteps` (verify the domain, mint a publish token, add the Action).
+Stored on `release_locations.publish` / `release_locations.path` so promotion reconstructs
+the same locator. The match key is `push:{owner}/{repo}:{path}`, distinct from a plain
+`github:` key for the same repo.
 
 **Caps** (tune at implementation): ≤ 24 products, ≤ 8 release locations per product, ≤ 32 per
 file. Fetch guards unchanged: 64 KB body cap, 5 s timeout, SSRF blocklist, no redirects.
@@ -230,11 +268,11 @@ flowchart TD
     Auto --> Dedup["dedup by canonical locator vs existing sources\n+ ignored/blocked URL lists"]
 ```
 
-| Tier | Locators                     | Behavior                                                                                                                                                                                            |
-| ---- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | `feed`, `github`, `appstore` | Deterministic probe → auto-create source with `basis: declared`. MA-free ingestion paths; no curator wait.                                                                                          |
-| 2    | Bare `url` only (⇒ `scrape`) | Billable (MA extraction). Created in a paused/pending state with the #1528 render dry-run for signal; curator (or a later budgeted queue) enables ingest. Never triggers billable ingest on create. |
-| 2    | `file` (phase 1)             | Accepted by the schema; treated as Tier 2 pending until the document-parse ingest lane ships.                                                                                                       |
+| Tier | Locators                     | Behavior                                                                                                                                                                                                                                             |
+| ---- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `feed`, `github`, `appstore` | Deterministic probe → auto-create source with `basis: declared`. MA-free ingestion paths; no curator wait. `github` + `publish: "push"` is tier 1 only for a verified owner and lands `ingestMode: "push"` (no poll). Unverified → skip, not tier 2. |
+| 2    | Bare `url` only (⇒ `scrape`) | Billable (MA extraction). Created in a paused/pending state with the #1528 render dry-run for signal; curator (or a later budgeted queue) enables ingest. Never triggers billable ingest on create.                                                  |
+| 2    | `file` (phase 1)             | Accepted by the schema; treated as Tier 2 pending until the document-parse ingest lane ships.                                                                                                                                                        |
 
 **Cross-entity safety:** a domain file proves control of _that domain_ only. A declared
 `github` repo auto-creates only when the repo owner matches the org's known GitHub identity
@@ -346,6 +384,8 @@ Two anonymous, public routes let an owner list their domain without a curator ro
   (same fetch guards as the sweep: HTTPS-only, 64KB, 5s, no redirects), validates it against the
   v2 schema, and returns a preview (`ListingValidationResult`: identity, per-product location
   counts, per-locator tier classification, and `domainStatus` — `unlisted` / `stub` / `listed`).
+  A `publish: "push"` locator is classified `push-setup` and includes `setupSteps` (verify,
+  mint a publish token, add the Action) plus the declared `path`.
   No writes.
 - `POST /v1/listing/activate { domain, requestTracking? }` — re-validates server-side, then
   materializes an instant **stub** org (`ListingActivateResult`). Returns `201` on create, `200`

@@ -27,6 +27,7 @@ describe("VerifiedBody", () => {
         promotionEnabled
         live={live}
         queued={[]}
+        push={[]}
         onPromote={() => {}}
       />,
     );
@@ -43,11 +44,40 @@ describe("VerifiedBody", () => {
         promotionEnabled
         live={live}
         queued={[]}
+        push={[]}
         onPromote={() => {}}
       />,
     );
     expect(html).toContain("Enable tracking");
     expect(html).not.toContain("/account/webhooks");
+  });
+});
+
+describe("VerifiedBody push locators", () => {
+  it("offers tracking for a push-only stub and names the publish path", () => {
+    const html = renderToStaticMarkup(
+      <VerifiedBody
+        claim={claim}
+        tracked={false}
+        promotionEnabled
+        live={[]}
+        queued={[]}
+        push={[
+          {
+            kind: "push",
+            locator: "acme/docs",
+            classification: "push-setup",
+            path: "changelog/**/*.mdx",
+          },
+        ]}
+        onPromote={() => {}}
+      />,
+    );
+    expect(html).toContain("You publish");
+    expect(html).toContain("acme/docs");
+    expect(html).toContain("changelog/**/*.mdx");
+    expect(html).toContain("Enable tracking");
+    expect(html).toContain("mint a publish token");
   });
 });
 

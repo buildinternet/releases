@@ -7,6 +7,7 @@ import {
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { fetchReleasesJson } from "../well-known/fetch.js";
 import { classifyLocation, type DeclaredLocation } from "../well-known/materialize.js";
+import { pushPublishSetupSteps } from "../well-known/push-publish.js";
 import { resolveDomainOrg } from "../well-known/stub.js";
 import type { createDb } from "../../db.js";
 
@@ -34,6 +35,18 @@ function locatorKind(loc: DeclaredLocation): ListingLocation["kind"] {
 
 function toListingLocation(loc: DeclaredLocation, productName?: string): ListingLocation {
   const classified = classifyLocation(loc);
+  if (classified.publish === "push") {
+    return {
+      locator: classified.locator,
+      kind: "push",
+      classification: "push-setup",
+      becomes:
+        "Push-fed source after the domain is verified. You publish with the GitHub Action; we do not poll it.",
+      ...(loc.path ? { path: loc.path } : {}),
+      setupSteps: pushPublishSetupSteps(loc),
+      ...(productName ? { productName } : {}),
+    };
+  }
   return {
     locator: classified.locator,
     kind: locatorKind(loc),

@@ -62,6 +62,9 @@ function rowToRelease(row: typeof releaseLocations.$inferSelect): ReleasesJsonDo
     ...(row.file ? { file: row.file } : {}),
     ...(row.title ? { title: row.title } : {}),
     ...(row.canonical ? { canonical: true } : {}),
+    ...(row.publish === "push" && row.github && row.path
+      ? { publish: "push" as const, path: row.path }
+      : {}),
   } as ReleasesJsonDomainRelease;
 }
 

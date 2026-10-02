@@ -24,15 +24,27 @@ export const ListingIssueSchema = z.strictObject({
 });
 export type ListingIssue = z.infer<typeof ListingIssueSchema>;
 
+/** One follow-up the owner takes after declaring `publish: "push"`. */
+export const ListingSetupStepSchema = z.strictObject({
+  id: z.enum(["verify", "token", "action"]),
+  title: z.string(),
+  detail: z.string(),
+});
+export type ListingSetupStep = z.infer<typeof ListingSetupStepSchema>;
+
 export const ListingLocationSchema = z.strictObject({
   /** The declared locator value (feed URL, github ref, url, appstore id, file). */
   locator: z.string(),
-  kind: z.enum(["feed", "github", "appstore", "url", "file"]),
-  classification: z.enum(["tier1-live", "tier2-paused-review"]),
+  kind: z.enum(["feed", "github", "appstore", "url", "file", "push"]),
+  classification: z.enum(["tier1-live", "tier2-paused-review", "push-setup"]),
   /** Plain-English "what this becomes" for the preview UI. */
   becomes: z.string(),
   /** Present when the locator is nested under a manifest product. */
   productName: z.string().optional(),
+  /** Changelog file or glob. Present on `kind: "push"`. */
+  path: z.string().optional(),
+  /** Present on `kind: "push"`: verify ownership, mint a token, add the Action. */
+  setupSteps: z.array(ListingSetupStepSchema).optional(),
 });
 export type ListingLocation = z.infer<typeof ListingLocationSchema>;
 

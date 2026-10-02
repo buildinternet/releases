@@ -27,6 +27,19 @@ describe("classifyReleaseLocation", () => {
     ).toBe("tier1-live");
   });
 
+  it("classifies a push-publish github locator as push-setup", () => {
+    const preview = classifyReleaseLocation(
+      loc({ github: "acme/docs", path: "changelog/**/*.mdx", publish: "push" }),
+    );
+    expect(preview).toEqual({
+      kind: "push",
+      locator: "acme/docs",
+      title: undefined,
+      classification: "push-setup",
+      path: "changelog/**/*.mdx",
+    });
+  });
+
   it("classifies bare url and file as tier2-paused-review", () => {
     expect(classifyReleaseLocation(loc({ url: "https://acme.com/whats-new" })).classification).toBe(
       "tier2-paused-review",
@@ -53,8 +66,21 @@ describe("partitionLocatorPreviews", () => {
       loc({ url: "https://acme.com/blog" }),
       loc({ github: "acme/cli" }),
     ]);
-    const { live, queued } = partitionLocatorPreviews(previews);
+    const { live, queued, push } = partitionLocatorPreviews(previews);
     expect(live.map((p) => p.kind)).toEqual(["feed", "github"]);
+    expect(queued.map((p) => p.kind)).toEqual(["url"]);
+    expect(push).toEqual([]);
+  });
+
+  it("puts push locators in their own bucket", () => {
+    const { live, queued, push } = partitionLocatorPreviews(
+      classifyReleaseLocations([
+        loc({ github: "acme/docs", path: "CHANGELOG.md", publish: "push" }),
+        loc({ url: "https://acme.com/blog" }),
+      ]),
+    );
+    expect(push.map((p) => p.kind)).toEqual(["push"]);
+    expect(live).toEqual([]);
     expect(queued.map((p) => p.kind)).toEqual(["url"]);
   });
 });

@@ -29,6 +29,20 @@ describe("releaseLocationMatchKey", () => {
       "feed:https://a.com/Feed",
     );
     expect(releaseLocationMatchKey({ github: "Acme/Repo.git" })).toBe("github:acme/repo");
+    expect(
+      releaseLocationMatchKey({
+        github: "Acme/Repo",
+        path: "changelog/**/*.mdx",
+        publish: "push",
+      }),
+    ).toBe("push:acme/repo:changelog/**/*.mdx");
+    expect(
+      releaseLocationMatchKey({
+        github: "acme/repo",
+        path: "changelog/**/*.mdx",
+        publish: "push",
+      }),
+    ).not.toBe(releaseLocationMatchKey({ github: "acme/repo" }));
     // A bare url and a feed with the same string stay distinct declared facts.
     expect(releaseLocationMatchKey({ url: "https://a.com/x" })).not.toBe(
       releaseLocationMatchKey({ feed: "https://a.com/x" }),
@@ -105,7 +119,7 @@ describe("createStubOrg", () => {
     expect(res.locationCount).toBe(1);
   });
 
-  it("chunks locator inserts past the D1 bind cap (>6 rows)", async () => {
+  it("chunks locator inserts past the D1 bind cap (>5 rows)", async () => {
     const db = createTestDb();
     const locations = Array.from({ length: 8 }, (_, i) => ({ feed: `https://c.com/${i}.xml` }));
     const res = await createStubOrg(

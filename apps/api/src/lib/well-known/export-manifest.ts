@@ -170,6 +170,13 @@ function sourceToLocator(source: SourceRow): ReleasesJsonDomainRelease | null {
   }
   if (!base) return null;
   if (source.isPrimary) base.canonical = true;
+  // Round-trip a push-fed github source back to the locator that created it.
+  // Path is required by the schema whenever publish is set, so omit both when
+  // the source never recorded one.
+  if (meta.ingestMode === "push" && base.github && typeof meta.publishPath === "string") {
+    base.publish = "push";
+    base.path = meta.publishPath;
+  }
   return base;
 }
 

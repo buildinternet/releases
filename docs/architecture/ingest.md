@@ -89,6 +89,8 @@ Set `metadata.ingestMode = "push"` on the source (via `PATCH /v1/sources/:slug` 
 
 Use `isPushFed(source, meta?)` from `@releases/adapters/source-meta` at every call site instead of reading `metadata.ingestMode` directly.
 
+A verified owner can declare the same thing in `releases.json` (`github` + `path` + `publish: "push"`, #2376). Materialization creates the github source with `ingestMode: "push"` and `publishPath` already set; an unverified domain leaves the locator unmaterialized. See [well-known-config.md → Push-publish locator](well-known-config.md#push-publish-locator-2376).
+
 ## Related
 
 - [remote-mode.md](remote-mode.md) — cron polling, poll-and-fetch / scrape-agent Workflows, retier, smear/jitter.

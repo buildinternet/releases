@@ -45,10 +45,19 @@ const KIND_LABEL: Record<ListingLocation["kind"], string> = {
   appstore: "App Store",
   url: "Page",
   file: "File",
+  push: "Push",
 };
 
 function tierLabel(classification: ListingLocation["classification"]): string {
-  return classification === "tier1-live" ? "Goes live" : "Reviewed first";
+  if (classification === "tier1-live") return "Goes live";
+  if (classification === "push-setup") return "You publish";
+  return "Reviewed first";
+}
+
+function tierClass(classification: ListingLocation["classification"]): string {
+  if (classification === "tier1-live") return "font-medium text-emerald-600 dark:text-emerald-400";
+  if (classification === "push-setup") return "font-medium text-sky-700 dark:text-sky-400";
+  return "font-medium text-amber-700 dark:text-amber-400";
 }
 
 function ManifestPreview({ result }: { result: ListingValidationResult }) {
@@ -115,15 +124,14 @@ function ManifestPreview({ result }: { result: ListingValidationResult }) {
                       {location.productName}
                     </p>
                   )}
+                  {location.path && (
+                    <p className="mt-0.5 truncate font-mono text-xs text-stone-400 dark:text-stone-500">
+                      {location.path}
+                    </p>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2 text-xs">
-                  <span
-                    className={
-                      location.classification === "tier1-live"
-                        ? "font-medium text-emerald-600 dark:text-emerald-400"
-                        : "font-medium text-amber-700 dark:text-amber-400"
-                    }
-                  >
+                  <span className={tierClass(location.classification)}>
                     {tierLabel(location.classification)}
                   </span>
                   <span className="hidden text-stone-400 dark:text-stone-500 sm:inline">
@@ -133,6 +141,29 @@ function ManifestPreview({ result }: { result: ListingValidationResult }) {
               </li>
             ))}
           </ul>
+          {result.locations.some((location) => (location.setupSteps?.length ?? 0) > 0) && (
+            <div className="mt-3 space-y-3">
+              {result.locations
+                .filter((location) => (location.setupSteps?.length ?? 0) > 0)
+                .map((location, index) => (
+                  <div key={`setup:${location.locator}:${index}`}>
+                    <p className="text-xs font-medium text-stone-700 dark:text-stone-200">
+                      Next for {location.locator}
+                    </p>
+                    <ol className="mt-1 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+                      {(location.setupSteps ?? []).map((step) => (
+                        <li key={step.id}>
+                          <span className="font-medium text-stone-700 dark:text-stone-300">
+                            {step.title}.
+                          </span>{" "}
+                          {step.detail}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
     </div>

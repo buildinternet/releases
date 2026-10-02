@@ -124,6 +124,25 @@ describe("buildOrgManifest", () => {
     expect(locators).toContainEqual({ github: "beta/core" });
   });
 
+  it("exports a push-fed github source as a push-publish locator", async () => {
+    const db = createTestDb();
+    const org = await seedOrg(db, { slug: "pushy", domain: "pushy.com" });
+    await addSource(db, org.id, {
+      type: "github",
+      url: "https://github.com/acme/docs",
+      metadata: JSON.stringify({
+        ingestMode: "push",
+        publishPath: "changelog/**/*.mdx",
+      }),
+    });
+
+    const manifest = await buildOrgManifest(db as never, org);
+    expect(ReleasesJsonDomainSchema.safeParse(manifest).success).toBe(true);
+    expect(manifest.releases).toEqual([
+      { github: "acme/docs", path: "changelog/**/*.mdx", publish: "push" },
+    ]);
+  });
+
   it("excludes hidden and soft-deleted sources", async () => {
     const db = createTestDb();
     const org = await seedOrg(db, { slug: "gamma", domain: "gamma.com" });

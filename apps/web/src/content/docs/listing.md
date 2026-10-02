@@ -62,6 +62,20 @@ Each `releases[]` entry needs **at least one** locator:
 
 Optional: `title` on a location; `"canonical": true` on the primary one per scope.
 
+### Publish it yourself
+
+If the changelog lives in git and you will push it with the [GitHub Action](/docs/integrations/github-actions), mark that entry instead of asking us to poll the repo:
+
+```json
+{
+  "github": "acme/docs",
+  "path": "changelog/**/*.mdx",
+  "publish": "push"
+}
+```
+
+`path` is the file (`CHANGELOG.md`) or glob (`changelog/**/*.mdx`) the Action watches. We create that source only after you verify domain ownership. Checking the domain then lists the next steps: verify, mint a publish token, add the Action. Until then the locator stays declared and nothing is polled.
+
 ### Multiple products
 
 Add `products[]` only when each product has **its own** release location. If everything shares one changelog, keep it as one entry. Company fields (`name`, `description`, `category`, `avatar`, `social`, `tags`) are optional.

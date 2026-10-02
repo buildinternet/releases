@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { eq } from "drizzle-orm";
 import {
+  orgClaims,
   organizations,
   products,
   sources,
@@ -285,6 +286,62 @@ describe("promoteStubOrg", () => {
       expect(after!.promotingAt).toBeNull();
       const srcs = await db.select().from(sources).where(eq(sources.orgId, org.id));
       expect(srcs.length).toBe(0);
+    });
+
+    it("materializes a stored push locator only after the domain is verified", async () => {
+      const db = createTestDb();
+      const { org } = await createStubOrg(
+        db as never,
+        {
+          name: "Pushy",
+          slug: "pushy",
+          domain: "pushy.example",
+          locations: [{ github: "acme/docs", path: "changelog/**/*.mdx", publish: "push" }],
+        },
+        { basis: "declared" },
+      );
+      const [stored] = await db
+        .select()
+        .from(releaseLocations)
+        .where(eq(releaseLocations.orgId, org.id));
+      expect(stored!.publish).toBe("push");
+      expect(stored!.path).toBe("changelog/**/*.mdx");
+      expect(stored!.github).toBe("acme/docs");
+
+      const skipped = await promoteStubOrg(db as never, org.id, { probe: okProbe });
+      expect(skipped.promoted).toBe(true);
+      expect(skipped.sourcesCreated).toBe(0);
+      expect(skipped.plan?.sources[0]).toMatchObject({
+        action: "skip",
+        note: "unverified_owner",
+      });
+
+      await db.insert(orgClaims).values({
+        id: "clm_pushy",
+        orgId: org.id,
+        userId: "user_owner",
+        token: "relv_test",
+        status: "verified",
+        method: "dns-txt",
+        verifiedAt: "2026-09-01T00:00:00.000Z",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        expiresAt: "2026-09-08T00:00:00.000Z",
+      });
+      // Promotion of an already-tracked org is a no-op, so flip back to stub
+      // the way a failed tier-flip would, and promote again with the claim.
+      await db.update(organizations).set({ tier: "stub" }).where(eq(organizations.id, org.id));
+      const created = await promoteStubOrg(db as never, org.id, {
+        probe: async () => ({ ok: true, url: "https://github.com/acme/docs" }),
+      });
+      expect(created.sourcesCreated).toBe(1);
+      const [src] = await db.select().from(sources).where(eq(sources.orgId, org.id));
+      const meta = JSON.parse(src!.metadata ?? "{}") as {
+        ingestMode?: string;
+        publishPath?: string;
+      };
+      expect(src!.type).toBe("github");
+      expect(meta.ingestMode).toBe("push");
+      expect(meta.publishPath).toBe("changelog/**/*.mdx");
     });
 
     it("dryRun never takes a claim", async () => {

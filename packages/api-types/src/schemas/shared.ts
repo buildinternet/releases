@@ -87,6 +87,10 @@ export const ReleaseLocationItemSchema = z.object({
   productId: z.string().nullable(),
   /** Set once the locator has been promoted into a source, else null. */
   sourceId: z.string().nullable(),
+  /** `"push"` when the owner publishes this changelog instead of us polling it. */
+  publish: z.literal("push").optional(),
+  /** Changelog file or glob. Present with `publish: "push"`. */
+  path: z.string().optional(),
 });
 
 export const PaginationSchema = z.object({

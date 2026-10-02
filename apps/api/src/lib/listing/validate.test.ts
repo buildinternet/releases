@@ -108,4 +108,46 @@ describe("validateListing", () => {
     });
     expect(res.domainStatus).toBe("listed");
   });
+
+  it("reports a push locator with the setup steps that follow it", async () => {
+    const db = createTestDb();
+    const res = await validateListing(db as never, "acme.com", {
+      ...WEB,
+      fetchImpl: manifestFetch({
+        version: 2,
+        name: "Acme",
+        releases: [{ github: "acme/docs", path: "changelog/**/*.mdx", publish: "push" }],
+      }),
+    });
+    expect(res.valid).toBe(true);
+    expect(res.locations).toEqual([
+      {
+        locator: "acme/docs",
+        kind: "push",
+        classification: "push-setup",
+        becomes:
+          "Push-fed source after the domain is verified. You publish with the GitHub Action; we do not poll it.",
+        path: "changelog/**/*.mdx",
+        setupSteps: [
+          {
+            id: "verify",
+            title: "Verify domain ownership",
+            detail: expect.stringContaining("verified"),
+          },
+          {
+            id: "token",
+            title: "Mint a publish token",
+            detail: expect.stringContaining("RELEASES_API_TOKEN"),
+          },
+          {
+            id: "action",
+            title: "Add the GitHub Action",
+            detail: expect.stringContaining("changelog-glob"),
+          },
+        ],
+      },
+    ]);
+    expect(res.locations[0]!.setupSteps![2]!.detail).toContain("acme/docs");
+    expect(res.locations[0]!.setupSteps![2]!.detail).toContain("changelog/**/*.mdx");
+  });
 });

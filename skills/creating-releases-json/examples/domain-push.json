@@ -1,0 +1,13 @@
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "name": "Acme",
+  "releases": [
+    {
+      "github": "acme/docs",
+      "path": "changelog/**/*.mdx",
+      "publish": "push",
+      "title": "Product changelog"
+    }
+  ]
+}
