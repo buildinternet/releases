@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 1, 2026
+
+**Added**
+- `releases.json` push-publish locators — declare a GitHub Action-fed changelog in your domain manifest with `"publish": "push"` alongside the `github` and `path` fields; the listing flow returns the domain-verify, token-mint, and Action-wire-up steps automatically, with no separate manual source setup needed.
+
 ## September 26, 2026
 
 **Added**
