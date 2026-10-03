@@ -38,7 +38,7 @@ Click to install in a supported editor. The deeplink opens the app and prompts y
 
 ### Claude
 
-Release Notes Index is listed in the [Claude connector directory](https://claude.ai/directory/releases-index). Open the listing and click **Connect** to add it to Claude on the web, desktop, and mobile. No API key is needed.
+Release Notes Index is listed in the [Claude connector directory](https://claude.ai/directory/releases-index). Open the listing to connect it to Claude on the web, desktop, and mobile. No API key is needed.
 
 ### Claude Code
 
