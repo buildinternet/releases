@@ -41,6 +41,7 @@ const ENTRIES: readonly Seed[] = [
   { slug: "integrations/slack", section: "Integrations", label: "Slack" },
   { slug: "integrations/discord", section: "Integrations", label: "Discord" },
   { slug: "integrations/github-actions", section: "Integrations", label: "GitHub Actions" },
+  { slug: "integrations/ci", section: "Integrations", label: "Any CI" },
 
   { slug: "cli/browsing", section: "CLI", label: "Browsing & Search" },
 

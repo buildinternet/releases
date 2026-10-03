@@ -2,6 +2,7 @@
  * Thin Releases API client for the publish Action.
  * Auth failures (missing token, 401, 403) fail closed — no retry, no fallback write path.
  */
+import { UPSERT_CONTENT_MODE } from "./plan";
 
 export class AuthError extends Error {
   readonly status: number;
@@ -136,7 +137,7 @@ export async function postReleaseBatch(
     {
       method: "POST",
       token: opts.token,
-      body: { mode: "upsert-content", releases: opts.releases },
+      body: { mode: UPSERT_CONTENT_MODE, releases: opts.releases },
     },
   );
   const parsed = body as BatchResponse;

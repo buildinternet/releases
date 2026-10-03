@@ -10,7 +10,7 @@ adminOnly: false
 
 When the file is live, [check and activate on the submit page](/submit).
 
-If the notes themselves live in git, you can also [publish from GitHub Actions](/docs/integrations/github-actions) so a push updates your releases right away, without waiting for our next check.
+If the notes themselves live in git, you can [publish from GitHub Actions](/docs/integrations/github-actions) or [from any other CI](/docs/integrations/ci) so a push updates your releases right away, without waiting for our next check.
 
 ## Fast track: let an agent write it
 
@@ -74,7 +74,7 @@ If the changelog lives in git and you will push it with the [GitHub Action](/doc
 }
 ```
 
-`path` is the file (`CHANGELOG.md`) or glob (`changelog/**/*.mdx`) the Action watches. We create that source only after you verify domain ownership. Checking the domain then lists the next steps: verify, mint a publish token, add the Action. Until then the locator stays declared and nothing is polled.
+`path` is the file (`CHANGELOG.md`) or glob (`changelog/**/*.mdx`) your publisher reads — the GitHub Action's `changelog-path` / `changelog-glob`, or the same path you diff in any other CI. We create that source only after you verify domain ownership. Checking the domain then lists the next steps: verify, mint a publish token, add the Action (or [post the batch yourself](/docs/integrations/ci)). Until then the locator stays declared and nothing is polled.
 
 ### Multiple products
 

@@ -71,7 +71,7 @@ Render escalation needs `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` bound o
 
 ## GitHub Action ingest
 
-`actions/publish-changelog` is a reusable composite Action that diffs a changelog on push and POSTs the changed `##` sections to the existing `POST /v1/sources/:id/releases/batch` (`mode: "upsert-content"`). No dedicated ingest route: auth is the same write-scoped Bearer gate as every other batch write, and batch already runs generate-content / embed / events. Product docs: [Publish from GitHub Actions](../../apps/web/src/content/docs/integrations/github-actions.md). Parent: #2290 (GitHub App is phase 2).
+`actions/publish-changelog` is a reusable composite Action that diffs a changelog on push and POSTs the changed `##` sections to the existing `POST /v1/sources/:id/releases/batch` (`mode: "upsert-content"`). No dedicated ingest route: auth is the same write-scoped Bearer gate as every other batch write, and batch already runs generate-content / embed / events. The plan (single-file headings, directory frontmatter, and the batch body) is `@buildinternet/releases-core/changelog-publish` — the Action re-exports it, and `releases publish` in the CLI will call the same subpath (#2377). Product docs: [Publish from GitHub Actions](../../apps/web/src/content/docs/integrations/github-actions.md), [Publish from any CI](../../apps/web/src/content/docs/integrations/ci.md). Parent: #2290 (GitHub App is phase 2).
 
 ### Push-fed sources (#2374)
 

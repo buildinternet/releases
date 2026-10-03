@@ -9,7 +9,7 @@ Two modes, mutually exclusive:
 - **Single-file** (default) — one `CHANGELOG.md` with `##` sections.
 - **Directory** — one MDX/Markdown file per release, metadata in YAML frontmatter. Set `changelog-glob` to turn this on.
 
-Docs: [Publish from GitHub Actions](https://releases.sh/docs/integrations/github-actions).
+Docs: [Publish from GitHub Actions](https://releases.sh/docs/integrations/github-actions). The same batch write from GitLab or any other CI: [Publish from any CI](https://releases.sh/docs/integrations/ci). Planning (single-file `##` sections and directory frontmatter) lives in `@buildinternet/releases-core/changelog-publish`, which `releases publish` will call too.
 
 ## Example
 
