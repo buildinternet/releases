@@ -99,6 +99,8 @@ To use Releases Index as an MCP tool server, the easiest path is the hosted remo
 
 <!-- slot:mcp-install-buttons -->
 
+Claude (web, desktop, and mobile): add Release Notes Index from the [Claude connector directory](https://claude.ai/directory/releases-index).
+
 Codex:
 
 ```bash

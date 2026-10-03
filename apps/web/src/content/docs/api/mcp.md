@@ -36,6 +36,10 @@ Click to install in a supported editor. The deeplink opens the app and prompts y
 
 <!-- slot:mcp-install-buttons -->
 
+### Claude
+
+Release Notes Index is listed in the [Claude connector directory](https://claude.ai/directory/releases-index). Open the listing to connect it to Claude on the web, desktop, and mobile. No API key is needed.
+
 ### Claude Code
 
 ```bash

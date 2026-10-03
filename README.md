@@ -66,7 +66,8 @@ No account or API key needed for reads — all four surfaces are public.
 **MCP** — hosted at `agents.releases.sh/mcp` (`mcp.releases.sh/mcp` still
 works), listed in the
 [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp)
-as `sh.releases/mcp`:
+as `sh.releases/mcp`, and in the
+[Claude connector directory](https://claude.ai/directory/releases-index) for Claude on the web, desktop, and mobile:
 
 ```bash
 claude mcp add --transport http releases https://agents.releases.sh/mcp   # Claude Code

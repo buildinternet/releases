@@ -1,5 +1,5 @@
 import { adminDocs } from "@/flags";
-import { CLAUDE_CODE_MCP_CMD, MCP_REMOTE_URL } from "@/lib/agent-launch";
+import { CLAUDE_CODE_MCP_CMD, CLAUDE_DIRECTORY_URL, MCP_REMOTE_URL } from "@/lib/agent-launch";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import {
   docsManifest,
@@ -23,7 +23,7 @@ const SUMMARY = `${SITE_TAGLINE} Releases Index tracks release notes, changelogs
 const CONTEXT = `Quick facts:
 
 - REST API base URL: \`${API_BASE_URL}/v1\`. OpenAPI 3.1 spec: ${API_BASE_URL}/v1/openapi.json. Interactive reference: ${API_BASE_URL}/v1/docs.
-- Hosted MCP server (Streamable HTTP, read tools public, no key): \`${MCP_REMOTE_URL}\`. Claude Code: \`${CLAUDE_CODE_MCP_CMD}\`.
+- Hosted MCP server (Streamable HTTP, read tools public, no key): \`${MCP_REMOTE_URL}\`. Claude Code: \`${CLAUDE_CODE_MCP_CMD}\`. Claude (web, desktop, mobile): ${CLAUDE_DIRECTORY_URL}.
 - CLI: \`npm install -g @buildinternet/releases\` (or \`brew install buildinternet/tap/releases\`). Agent skills: \`npx skills add buildinternet/releases-cli\`.
 - Links below point to Markdown versions of each page. Any page on this site is also available as Markdown by appending \`.md\` to its URL (for example, ${BASE_URL}/docs/installation.md) or by sending \`Accept: text/markdown\` to the canonical URL.
 - Org and source pages have machine-readable suffixes — \`.md\` (LLM-friendly), \`.json\`, \`.atom\` — e.g. ${BASE_URL}/anthropic.md.`;
@@ -53,7 +53,8 @@ const OPTIONAL = `## Optional
 
 - [llms-full.txt](${BASE_URL}/llms-full.txt): All documentation pages concatenated into one file, for single-context ingestion.
 - [CLI source repository](https://github.com/buildinternet/releases-cli): The open-source CLI, agent skills, and Claude Code plugins.
-- [MCP Registry listing](https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp): The hosted server's entry in the official MCP Registry (\`sh.releases/mcp\`).`;
+- [MCP Registry listing](https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp): The hosted server's entry in the official MCP Registry (\`sh.releases/mcp\`).
+- [Claude connector directory](${CLAUDE_DIRECTORY_URL}): Add the hosted MCP server to Claude on the web, desktop, and mobile.`;
 
 function line(entry: DocEntry): string {
   const url = `${BASE_URL}${entry.mdPath}`;
