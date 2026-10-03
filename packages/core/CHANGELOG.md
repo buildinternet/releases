@@ -1,5 +1,12 @@
 # @buildinternet/releases-core
 
+## 0.35.0
+
+### Minor Changes
+
+- 0bb7dbd: Add `@buildinternet/releases-core/changelog-publish`, the shared planner for publishing a changelog. It plans single-file `##` sections and directory/frontmatter entries, diffs against a since-SHA snapshot, and builds the `upsert-content` batch body the publish-changelog Action posts. `releases publish` will call the same API.
+- 5caeb2c: Push-publish locators in releases.json. A `github` entry can set `publish: "push"` and a `path` (changelog file or glob) to say the owner publishes that changelog instead of the registry polling it. Core stores `publish` and `path` on `release_locations` so the declaration survives stub promotion. API types accept the locator and return the follow-up setup steps from listing validate.
+
 ## 0.34.0
 
 ### Minor Changes
