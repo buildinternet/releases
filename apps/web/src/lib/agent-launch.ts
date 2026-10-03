@@ -40,7 +40,7 @@ export const CODEX_MCP_CMD = `codex mcp add releases --url ${MCP_REMOTE_URL}`;
  * `/api/llms`) and the agent skill.
  */
 export const CLI_SETUP_PROMPT =
-  "Set up the releases.sh CLI so you can look up product changelogs and release notes on demand. " +
+  "Set up the Releases Index CLI so you can look up product changelogs and release notes on demand. " +
   "Run: npm install -g @buildinternet/releases. " +
   "Then read https://releases.sh/llms.txt and follow it to set up the skill " +
   "(npx skills add buildinternet/releases-cli).";

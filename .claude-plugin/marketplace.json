@@ -3,12 +3,12 @@
   "owner": {
     "name": "Build Internet"
   },
-  "description": "Skills for listing your product on the Releases.sh registry, plus the operator skills for running and maintaining it. Grouping mirrors skills.sh.json so the skills.sh page and the `npx skills add` picker agree.",
+  "description": "Skills for listing your product on the Release Notes Index, plus the operator skills for running and maintaining it. Grouping mirrors skills.sh.json so the skills.sh page and the `npx skills add` picker agree.",
   "plugins": [
     {
       "name": "listing",
       "source": "./",
-      "description": "Owner-facing: discover where you publish release notes and write a valid releases.json manifest to list your product on releases.sh.",
+      "description": "Owner-facing: discover where you publish release notes and write a valid releases.json manifest to list your product on Releases Index.",
       "author": {
         "name": "Build Internet"
       },

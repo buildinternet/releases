@@ -77,7 +77,7 @@ export function formatClaimVerifiedEmail(input: {
       { t: "button", label: "View organization", url: orgUrl },
     ],
     footer: {
-      reason: `You received this because you verified ownership of ${input.domain} on releases.sh.`,
+      reason: `You received this because you verified ownership of ${input.domain} on Releases Index.`,
       links: [{ label: "View organization", href: orgUrl }],
     },
   });

@@ -52,7 +52,7 @@ Triggers on landscape questions: "what is X shipping lately", "how does X compar
 
 ### creating-releases-json
 
-Triggers when you want to **list your own product**: "add a releases.json", "get indexed on releases.sh", "make us a manifest for our website." It finds where you actually publish release notes, writes a valid v2 manifest, and walks through publishing it at `/.well-known/releases.json`.
+Triggers when you want to **list your own product**: "add a releases.json", "get indexed on Releases Index", "make us a manifest for our website." It finds where you actually publish release notes, writes a valid v2 manifest, and walks through publishing it at `/.well-known/releases.json`.
 
 Install just this skill (or grab the copy buttons on the [submit page](/submit)):
 

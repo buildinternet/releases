@@ -97,7 +97,7 @@ function UnsupportedOriginNotice({ href }: { href: string }) {
       Sign-in isn&apos;t available on this deployment URL — session cookies, SSO, and passkeys are
       tied to the main domain.{" "}
       <a href={href} className="font-medium underline underline-offset-2">
-        Continue on releases.sh
+        Continue on Releases Index
       </a>{" "}
       to sign in.
     </div>
@@ -611,7 +611,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             </>
           ) : (
             <>
-              New to releases.sh?{" "}
+              New to Releases Index?{" "}
               <Link
                 href={target === "/" ? "/signup" : `/signup?redirect=${encodeURIComponent(target)}`}
                 className="font-medium text-[var(--accent)] underline-offset-2 hover:underline"

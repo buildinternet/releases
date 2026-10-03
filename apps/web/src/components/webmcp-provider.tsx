@@ -46,7 +46,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
 
     async function apiFetch(path: string): Promise<unknown> {
       const res = await fetch(`${base}${path}`, { signal });
-      if (!res.ok) throw new Error(`releases.sh API error: ${res.status} ${res.statusText}`);
+      if (!res.ok) throw new Error(`Releases Index API error: ${res.status} ${res.statusText}`);
       return res.json();
     }
 
@@ -273,7 +273,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "open_search_page",
         title: "Open search page",
         description:
-          "Navigate the current browser tab to the releases.sh search results page for a query. Use when the user wants to browse results visually on the site.",
+          "Navigate the current browser tab to the Releases Index search results page for a query. Use when the user wants to browse results visually on the site.",
         inputSchema: {
           type: "object",
           properties: {

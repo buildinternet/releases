@@ -4,7 +4,7 @@ description: >-
   Create or update a releases.json manifest so registries and agents can find
   where a company or project publishes its release notes. Use this whenever
   someone wants to "list our product on Releases", "add a releases.json", "get
-  indexed on releases.sh", "here's our website, make us a manifest", declare a
+  indexed on Releases Index", "here's our website, make us a manifest", declare a
   changelog / updates page / RSS feed / GitHub releases / App Store listing /
   CHANGELOG for discovery, publish a /.well-known/releases.json, or edit an
   existing one — even if they don't say "releases.json" by name. The usual input
@@ -266,7 +266,7 @@ After it's deployed and publicly reachable, confirm it end-to-end:
    ```bash
    curl -fsSL https://{domain}/.well-known/releases.json | node <skill-dir>/scripts/validate.mjs /dev/stdin
    ```
-2. **Optional — ask releases.sh to validate the live domain** (no account needed; reads the
+2. **Optional — ask Releases Index to validate the live domain** (no account needed; reads the
    file the same way the daily sweep will):
    ```bash
    curl -fsS -X POST https://api.releases.sh/v1/listing/validate \

@@ -24,7 +24,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     const orgSlug = source.org?.slug;
     const orgDetail = orgSlug ? await api.orgDetail(orgSlug).catch(() => null) : null;
     const avatarUrl = await resolveAvatarUrl(orgDetail);
-    const orgName = source.org?.name ?? orgSlug ?? "releases.sh";
+    const orgName = source.org?.name ?? orgSlug ?? "Releases Index";
 
     const metrics = [
       { label: "Releases", value: formatCount(source.releaseCount) },
