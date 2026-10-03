@@ -269,7 +269,8 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   const server = new McpServer(
     {
       name: "releases",
-      version: "0.15.1",
+      title: "Release Notes Index",
+      version: "0.15.2",
       icons: [...MCP_SERVER_ICONS],
     },
     {
