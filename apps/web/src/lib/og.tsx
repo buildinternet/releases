@@ -124,7 +124,7 @@ function BrandBar({ avatarUrl, bleed }: { avatarUrl?: string | null; bleed?: boo
             color: "#fafaf9",
           }}
         >
-          {pixelWordmark("releases.sh")}
+          {pixelWordmark("Release Notes Index")}
         </div>
       </div>
       {avatarUrl ? (
@@ -537,7 +537,7 @@ export async function resolveAvatarUrl(org: OrgAvatarShape): Promise<string | nu
 export function renderOgFallback(init?: OgResponseInit): ImageResponse {
   return renderOgImage(
     {
-      title: "releases.sh",
+      title: "Release Notes Index",
       subtitle: "The latest product releases, indexed for agents",
     },
     init,

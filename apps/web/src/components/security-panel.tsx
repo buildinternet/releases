@@ -253,7 +253,7 @@ function ConnectionsSection() {
         Connected accounts
       </div>
       <p className="mt-1 mb-3.5 text-[13px] text-stone-500 dark:text-stone-400">
-        Identity providers you can use to sign in to releases.sh.
+        Identity providers you can use to sign in to Releases Index.
       </p>
       {error && (
         <div className="mb-3">

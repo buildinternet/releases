@@ -90,7 +90,7 @@ Also available as the `whats_changed` [MCP tool](/docs/api/mcp).
 
 - The API is advertised by RFC 9727 at [`/.well-known/api-catalog`](/.well-known/api-catalog).
 - The OpenAPI 3.1 spec is the source of truth: [`https://api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json).
-- Every org and source page on `releases.sh` has machine-readable URL suffixes: `.json` (programmatic), `.md` (LLM-friendly), `.atom` (feed readers).
+- Every org and source page on Releases Index has machine-readable URL suffixes: `.json` (programmatic), `.md` (LLM-friendly), `.atom` (feed readers).
 
 ```
 https://releases.sh/anthropic          # HTML

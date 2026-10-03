@@ -189,10 +189,10 @@ export function renderLandingPage(mcpUrl: string): string {
   <body>
     <main>
       <div class="brand">
-        <a href="${SITE_URL}" aria-label="releases.sh home">
+        <a href="${SITE_URL}" aria-label="Release Notes Index home">
           ${ICON_SVG}
         </a>
-        <span><a href="${SITE_URL}">releases.sh</a></span>
+        <span><a href="${SITE_URL}">Release Notes Index</a></span>
       </div>
 
       <h1>Releases MCP</h1>
@@ -210,7 +210,7 @@ export function renderLandingPage(mcpUrl: string): string {
     </main>
 
     <footer>
-      <a href="${SITE_URL}">Browse the registry at releases.sh</a>
+      <a href="${SITE_URL}">Browse the Release Notes Index</a>
     </footer>
 
     <script>

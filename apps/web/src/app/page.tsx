@@ -352,6 +352,9 @@ export default async function HomePage() {
         "@type": "WebSite",
         "@id": "https://releases.sh#website",
         name: "Release Notes Index",
+        // Google's site-name picker reads `alternateName` as the accepted short
+        // form; without it, mismatched signals fall back to the bare domain.
+        alternateName: ["Releases Index"],
         url: "https://releases.sh",
         description:
           "The latest product releases, indexed for agents. Release Notes Index is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
@@ -369,6 +372,7 @@ export default async function HomePage() {
         "@type": "Organization",
         "@id": "https://releases.sh#org",
         name: "Release Notes Index",
+        alternateName: "Releases Index",
         url: "https://releases.sh",
         description:
           "A registry of release notes from across the web, indexed for agents and queryable from your terminal, code, or MCP client.",

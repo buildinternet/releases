@@ -78,7 +78,7 @@ We follow standard security practices for a service of this kind. Traffic is ser
 
 If you are a publisher and want a source removed from our index, or if you believe content we've indexed infringes your rights, email [abuse@releases.sh](mailto:abuse@releases.sh) with:
 
-- The source URL or releases.sh page you want removed.
+- The source URL or Releases Index page you want removed.
 - Your relationship to the content (publisher, rights holder, agent).
 - A brief reason for the request.
 
