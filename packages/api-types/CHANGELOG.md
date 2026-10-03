@@ -1,5 +1,17 @@
 # @buildinternet/releases-api-types
 
+## 0.58.0
+
+### Minor Changes
+
+- 5caeb2c: Push-publish locators in releases.json. A `github` entry can set `publish: "push"` and a `path` (changelog file or glob) to say the owner publishes that changelog instead of the registry polling it. Core stores `publish` and `path` on `release_locations` so the declaration survives stub promotion. API types accept the locator and return the follow-up setup steps from listing validate.
+
+### Patch Changes
+
+- Updated dependencies [0bb7dbd]
+- Updated dependencies [5caeb2c]
+  - @buildinternet/releases-core@0.35.0
+
 ## 0.57.1
 
 ### Patch Changes
