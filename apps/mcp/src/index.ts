@@ -85,7 +85,7 @@ async function handle(
       });
     }
     return Response.json({
-      name: "Releases MCP Server",
+      name: "Releases Index MCP Server",
       description: "Changelog registry — search releases, compare products, and get AI summaries",
       mcp_endpoint: "/mcp",
     });

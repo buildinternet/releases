@@ -9,6 +9,9 @@
 /** Canonical public MCP URL. `https://mcp.releases.sh/mcp` remains a working alias. */
 export const MCP_REMOTE_URL = "https://agents.releases.sh/mcp";
 
+/** Public Claude connector directory listing for the hosted MCP server. */
+export const CLAUDE_DIRECTORY_URL = "https://claude.ai/directory/releases-index";
+
 /** stdio bridge config shared by the Cursor + VS Code one-click installers. */
 export const stdioConfig = {
   command: "npx",

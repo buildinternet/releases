@@ -8,6 +8,7 @@
  */
 
 const DOCS_URL = "https://releases.sh/docs/api/mcp";
+const CLAUDE_DIRECTORY_URL = "https://claude.ai/directory/releases-index";
 const SITE_URL = "https://releases.sh";
 
 // Same markup as apps/web/src/app/icon.svg — inlined so the worker stays a single
@@ -30,7 +31,7 @@ export function renderLandingPage(mcpUrl: string): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Releases MCP</title>
+    <title>Releases Index MCP</title>
     <meta name="description" content="A unified registry of product release information, available over MCP." />
     <link rel="icon" type="image/svg+xml" href="${ICON_DATA_URL}" />
     <style>
@@ -134,6 +135,7 @@ export function renderLandingPage(mcpUrl: string): string {
         transition: background-color 0.1s ease;
       }
       a.docs-link:hover { background: var(--hover); }
+      a.docs-link + a.docs-link { margin-top: 8px; }
       a.docs-link:focus-visible {
         outline: 2px solid var(--fg);
         outline-offset: 2px;
@@ -195,7 +197,7 @@ export function renderLandingPage(mcpUrl: string): string {
         <span><a href="${SITE_URL}">Release Notes Index</a></span>
       </div>
 
-      <h1>Releases MCP</h1>
+      <h1>Releases Index MCP</h1>
       <p class="lede">A unified registry of product release information, available over MCP.</p>
 
       <h2>Endpoint</h2>
@@ -205,6 +207,10 @@ export function renderLandingPage(mcpUrl: string): string {
       </div>
       <a class="docs-link" href="${DOCS_URL}">
         <span>Read the documentation</span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="docs-link" href="${CLAUDE_DIRECTORY_URL}">
+        <span>Add to Claude from the connector directory</span>
         <span class="arrow" aria-hidden="true">→</span>
       </a>
     </main>
