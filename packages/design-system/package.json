@@ -2,7 +2,7 @@
   "name": "@releases/design-system",
   "version": "0.1.0",
   "private": true,
-  "description": "Releases design system — the token + component vocabulary behind the web app, packaged for reuse and for claude.ai/design sync.",
+  "description": "Releases Index design system — the token + component vocabulary behind the web app, packaged for reuse and for claude.ai/design sync.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {

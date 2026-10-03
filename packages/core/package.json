@@ -1,7 +1,7 @@
 {
   "name": "@buildinternet/releases-core",
   "version": "0.35.0",
-  "description": "Pure helpers shared by the Releases registry — schema, categories, slicing, IDs, slugs, tokens.",
+  "description": "Pure helpers shared by Releases Index — schema, categories, slicing, IDs, slugs, tokens.",
   "type": "module",
   "license": "MIT",
   "repository": {

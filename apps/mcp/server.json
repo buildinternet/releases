@@ -1,13 +1,13 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "sh.releases/mcp",
-  "title": "Releases",
-  "description": "An agent-friendly API for product changelogs. A unified registry via CLI, API, or MCP.",
+  "title": "Release Notes Index",
+  "description": "Release notes and changelogs from across the web, indexed for agents. Also via CLI and REST API.",
   "repository": {
     "url": "https://github.com/buildinternet/releases",
     "source": "github"
   },
-  "version": "0.15.1",
+  "version": "0.15.2",
   "remotes": [
     {
       "type": "streamable-http",
