@@ -191,6 +191,10 @@ export const account = sqliteTable(
     // Non-unique on purpose: the plugin doesn't require uniqueness, and a plain
     // index can't fail on legacy duplicate pairs. Migration 20260831000000.
     index("idx_account_issuer_account_id").on(t.issuer, t.accountId),
+    // One row per provider identity. Better Auth 1.7.7's findAccountByKey reads
+    // up to two rows for (providerId, accountId) and throws on a duplicate, which
+    // blocks that user's social sign-in. Migration 20261004230000.
+    uniqueIndex("idx_account_provider_account_id").on(t.providerId, t.accountId),
   ],
 );
 
