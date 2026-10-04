@@ -165,14 +165,13 @@ export const account = sqliteTable(
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     /**
-     * Leftover from Better Auth 1.7.0–1.7.2, which keyed account identity on
-     * `(issuer, accountId)`. 1.7.3 restored the 1.6 key `(providerId, accountId)`
-     * and stopped writing this column. Keep the column through the 1.7.7
-     * deploy: the previous worker still inserts it, and dropping it in the
-     * same release would reject those writes. It stays nullable (migration
-     * 20260831000000 added it without NOT NULL — SQLite can't add a NOT NULL
-     * column to a populated table) so inserts that omit it succeed. The index
-     * below is non-unique, so unused NULL values don't collide.
+     * Better Auth 1.7 account-identity issuer — identity is keyed on
+     * `(issuer, accountId)`. Synthetic for providers without one of their own:
+     * `local:oauth:<providerId>` for social accounts, `local:<providerId>` for
+     * local methods (see `createOAuthAccountIssuer` in @better-auth/core).
+     * Nullable at the DB level (added + backfilled by migration
+     * 20260831000000; SQLite can't add NOT NULL to a populated table) —
+     * Better Auth always populates it on insert.
      */
     issuer: text("issuer"),
     accessToken: text("access_token"),
@@ -188,9 +187,9 @@ export const account = sqliteTable(
   },
   (t) => [
     index("idx_account_user_id").on(t.userId),
-    // Historical 1.7.0–1.7.2 lookup. Non-unique on purpose; 1.7.3+ looks up
-    // accounts by (providerId, accountId) and does not write `issuer`.
-    // Migration 20260831000000.
+    // findAccountByKey({ issuer, accountId }) — 1.7's account-identity lookup.
+    // Non-unique on purpose: the plugin doesn't require uniqueness, and a plain
+    // index can't fail on legacy duplicate pairs. Migration 20260831000000.
     index("idx_account_issuer_account_id").on(t.issuer, t.accountId),
   ],
 );
