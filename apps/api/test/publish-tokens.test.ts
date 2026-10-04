@@ -20,7 +20,6 @@ import {
   isPublishBatchPath,
   publicReadAuthMiddleware,
   tokensAuthMiddleware,
-  webhooksAuthMiddleware,
 } from "../src/middleware/auth.js";
 import { publicRateLimitMiddleware } from "../src/middleware/rate-limit.js";
 import { adminRoutes, publicReadRoutes } from "../src/route-namespaces.js";
@@ -85,12 +84,7 @@ function buildApp(envOverrides: Record<string, unknown> = {}) {
     v1.use(`/${r}/*`, publicReadAuthMiddleware);
   }
   for (const r of adminRoutes) {
-    const mw =
-      r === "tokens"
-        ? tokensAuthMiddleware
-        : r === "webhooks"
-          ? webhooksAuthMiddleware
-          : authMiddleware;
+    const mw = r === "tokens" ? tokensAuthMiddleware : authMiddleware;
     v1.use(`/${r}`, mw);
     v1.use(`/${r}/*`, mw);
   }

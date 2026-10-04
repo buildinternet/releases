@@ -1,23 +1,19 @@
 /**
- * Inbound provider webhooks are POST /v1/webhooks/<provider>. Production
- * mounts the admin `/webhooks` gate and the workspace session gate before
+ * Inbound provider webhooks are POST /v1/inbound/<provider>. Production
+ * mounts the admin namespace gates and the workspace session gate before
  * the receivers. A configured Firecrawl token (no user session, no admin
  * Bearer) must reach the webhook handler. A missing or wrong token is
  * rejected by that handler. The old /v1/integrations/... paths are not
- * aliases. Subscription CRUD on /v1/webhooks stays admin-gated.
+ * aliases, and the admin /v1/webhooks namespace does not receive them.
  */
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import {
-  authMiddleware,
-  tokensAuthMiddleware,
-  webhooksAuthMiddleware,
-} from "../src/middleware/auth.js";
+import { authMiddleware, tokensAuthMiddleware } from "../src/middleware/auth.js";
 import { adminRoutes } from "../src/route-namespaces.js";
 import { mountV1Routes } from "../src/v1-routes.js";
 import { createTestDb } from "./setup";
 
-const WEBHOOK_PATH = "/v1/webhooks/firecrawl";
+const WEBHOOK_PATH = "/v1/inbound/firecrawl";
 /** Fixture only — not a deployed secret. */
 const WEBHOOK_TOKEN = "test-firecrawl-webhook-token";
 const ROOT_KEY = "test-root-api-key";
@@ -39,12 +35,7 @@ function buildApp() {
   });
   const v1 = new Hono();
   for (const r of adminRoutes) {
-    const mw =
-      r === "tokens"
-        ? tokensAuthMiddleware
-        : r === "webhooks"
-          ? webhooksAuthMiddleware
-          : authMiddleware;
+    const mw = r === "tokens" ? tokensAuthMiddleware : authMiddleware;
     v1.use(`/${r}`, mw);
     v1.use(`/${r}/*`, mw);
   }
@@ -77,7 +68,7 @@ async function errorBody(res: Response): Promise<ErrorBody> {
   return (await res.json()) as ErrorBody;
 }
 
-describe("POST /v1/webhooks/firecrawl through the mounted v1 app", () => {
+describe("POST /v1/inbound/firecrawl through the mounted v1 app", () => {
   it("accepts the configured token with no user session when the body has no source id", async () => {
     const res = await call(
       WEBHOOK_PATH,
@@ -112,10 +103,7 @@ describe("POST /v1/webhooks/firecrawl through the mounted v1 app", () => {
   });
 
   it("lets the GitHub webhook reject a missing signature itself", async () => {
-    const res = await call(
-      "/v1/webhooks/github",
-      post({ zen: "hi" }, { "X-GitHub-Event": "ping" }),
-    );
+    const res = await call("/v1/inbound/github", post({ zen: "hi" }, { "X-GitHub-Event": "ping" }));
     expect(res.status).toBe(401);
     expect(res.headers.get("WWW-Authenticate")).toBeNull();
     const body = await errorBody(res);
@@ -159,8 +147,11 @@ describe("POST /v1/webhooks/firecrawl through the mounted v1 app", () => {
     expect(body.error.message).toBe("Missing API key");
   });
 
-  it("does not treat GET /v1/webhooks/firecrawl as the inbound receiver", async () => {
-    const res = await call("/v1/webhooks/firecrawl", { method: "GET" });
+  it("keeps POST /v1/webhooks/firecrawl behind the admin gate", async () => {
+    const res = await call(
+      "/v1/webhooks/firecrawl",
+      post({ type: "monitor.page" }, { "X-Firecrawl-Token": WEBHOOK_TOKEN }),
+    );
     expect(res.status).toBe(401);
     expect(res.headers.get("WWW-Authenticate")).toBe('Bearer realm="releases-api"');
     const body = await errorBody(res);

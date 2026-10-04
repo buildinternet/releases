@@ -79,8 +79,6 @@ export const adminRoutes = [
   "admin/emails",
   // Operator preview + match-quality summary (#2304, #2312).
   "admin/semantic-alerts",
-  // Outbound subscription CRUD. Inbound POST /webhooks/firecrawl and
-  // POST /webhooks/github skip this gate in webhooksAuthMiddleware.
   "webhooks",
   "workflows",
   "tokens",

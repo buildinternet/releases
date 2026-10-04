@@ -102,7 +102,7 @@ const makeWebhookBody = (
     data: dataItems,
   });
 
-describe("POST /v1/webhooks/firecrawl", () => {
+describe("POST /v1/inbound/firecrawl", () => {
   beforeEach(async () => {
     spawns = [];
     cacheStore = {};
@@ -127,7 +127,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("1. returns 401 when X-Firecrawl-Token header is missing", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: makeWebhookBody("src_fc", [
@@ -141,7 +141,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("2. returns 401 when token is wrong", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,7 +158,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("3. spawns a workflow for status=new with correct params", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -182,7 +182,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("4. spawns a workflow for status=changed + judgment.meaningful=true", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -204,7 +204,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("5. skips workflow for status=changed + judgment.meaningful=false", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -226,7 +226,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("6. spawns workflow for status=changed with no judgment (fail-open)", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -247,7 +247,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("7. skips workflow for status=same", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -264,7 +264,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("8. returns 200 with no spawn for unknown sourceId", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -290,7 +290,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
     ].join("\n");
 
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -326,7 +326,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
     ].join("\n");
 
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -352,7 +352,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("11. omits `delta` on a new event so the workflow scrapes the baseline page", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -372,7 +372,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
     );
 
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -407,7 +407,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
       );
 
     const res = await idempotentFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -450,7 +450,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
       );
 
     const res = await failingFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -484,7 +484,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
       );
 
     const res = await duplicateFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -500,7 +500,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
 
   it("15. KV key is written only after a successful spawn", async () => {
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -523,7 +523,7 @@ describe("POST /v1/webhooks/firecrawl", () => {
     const url1 = "https://acme.example.com/changelog/2026/05/15/a";
     const url2 = "https://acme.example.com/changelog/2026/05/16/b";
     const res = await webhookFetchApi(
-      new Request("http://test/v1/webhooks/firecrawl", {
+      new Request("http://test/v1/inbound/firecrawl", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
         body: makeWebhookBody("src_fc", [
@@ -623,7 +623,7 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(capturedSpec?.webhook?.url).toBe("https://api.releases.sh/v1/webhooks/firecrawl");
+    expect(capturedSpec?.webhook?.url).toBe("https://api.releases.sh/v1/inbound/firecrawl");
   });
 
   it("returns 404 for a non-existent source id", async () => {

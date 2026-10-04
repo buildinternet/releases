@@ -69,7 +69,7 @@ function webhookUrl(env: Env["Bindings"]): string {
   // WEB_BASE_URL points at the Next.js frontend
   // (https://releases.sh), where this path 404s — see Phase 2 webhook receiver.
   const base = env.ADMIN_BASE_URL ?? "https://api.releases.sh";
-  return `${base.replace(/\/$/, "")}/v1/webhooks/firecrawl`;
+  return `${base.replace(/\/$/, "")}/v1/inbound/firecrawl`;
 }
 
 firecrawlRoutes.post(
@@ -195,10 +195,9 @@ firecrawlRoutes.post(
 );
 
 // ---------------------------------------------------------------------------
-// Inbound receiver: POST /v1/webhooks/firecrawl.
-// The `/webhooks` namespace is admin-gated for subscription CRUD.
-// webhooksAuthMiddleware lets this POST through; the handler checks
-// X-Firecrawl-Token. There is no /integrations alias.
+// Inbound receiver: POST /v1/inbound/firecrawl.
+// `inbound` is in none of the route-namespace lists, so no shared auth
+// middleware runs. The handler checks X-Firecrawl-Token itself.
 // ---------------------------------------------------------------------------
 
 /**
@@ -235,7 +234,7 @@ interface FirecrawlPageEvent {
   }>;
 }
 
-firecrawlRoutes.post("/webhooks/firecrawl", async (c) => {
+firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
   const env = c.env as Env["Bindings"];
 
   // Auth: verify token BEFORE any DB work so we never leak whether a source

@@ -61,12 +61,19 @@ principal gate (`requireFollowsPrincipal` on `/v1/workspaces/*` and
   `POST /v1/integrations/uploads/callback` — uploads.sh OAuth connect (owner/admin
   for start/callback/disconnect). See [uploads-oauth.md](uploads-oauth.md).
 
-Inbound provider webhooks are `POST /v1/webhooks/firecrawl` (`X-Firecrawl-Token`)
-and `POST /v1/webhooks/github` (`X-Hub-Signature-256`). They are not on this
-session gate. `/v1/webhooks` is otherwise admin subscription CRUD; those two
-POSTs skip that gate (`webhooksAuthMiddleware`) and check their own secrets.
-`/v1/integrations/firecrawl/webhook` and `/v1/integrations/github/webhook` are
-not aliases.
+Inbound provider webhooks live under `/v1/inbound/<provider>`:
+`POST /v1/inbound/firecrawl` (`X-Firecrawl-Token`) and
+`POST /v1/inbound/github` (`X-Hub-Signature-256`). `inbound` is in none of the
+route-namespace lists, so no shared auth middleware runs; each handler checks
+its own secret. Keep a new receiver here rather than under a gated namespace
+such as `/v1/integrations` or `/v1/webhooks`. The old
+`/v1/integrations/firecrawl/webhook` and `/v1/integrations/github/webhook`
+paths are not aliases.
+
+A sub-router's `.use("/prefix/*", gate)` applies to every route under that
+prefix, including routes registered later by other routers (all routers mount
+at `/`). `apps/api/test/route-gate-isolation.test.ts` fails when one router's
+gate covers another router's route.
 
 ## Entity resolution: IDs over slugs
 

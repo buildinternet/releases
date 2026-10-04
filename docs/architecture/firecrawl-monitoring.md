@@ -19,7 +19,7 @@ sequenceDiagram
 
     loop on schedule
         FC->>FC: scrape (proxy clears challenge) → diff → judge(goal)
-        FC->>API: POST /v1/webhooks/firecrawl  (monitor.page: status, judgment, diff)
+        FC->>API: POST /v1/inbound/firecrawl  (monitor.page: status, judgment, diff)
         API->>API: auth + idempotency + cost gate + addedContentFromDiff(diff.text) → delta
         API->>WF: spawn {sourceId, url, checkId, status, delta}
         WF->>WF: resolve-body (delta, else re-scrape) → extract → dedup+insert → embed/summarize → bookkeep
@@ -35,7 +35,7 @@ sequenceDiagram
 - `name` = `releases:<source.id>` (keyed on the id, not slug — slugs aren't globally unique post-#690).
 - `schedule` — `{ text, timezone: "UTC" }`, default `every 6 hours`.
 - `targets` — for a **scrape** monitor (`target` unset/`"scrape"`, the default), `[{ type: "scrape", urls: [url], scrapeOptions: { formats: ["markdown"], proxy } }]`. For a **crawl** monitor (`target: "crawl"`), `[{ type: "crawl", url, crawlOptions: { limit, maxDiscoveryDepth, … }, scrapeOptions: { formats: ["markdown"], proxy } }]` (proxy default `auto`). See [Crawl-target monitors](#crawl-target-monitors-multi-page-sources).
-- `webhook` — `url` is **`ADMIN_BASE_URL`** + `/v1/webhooks/firecrawl` (`https://api.releases.sh/v1/webhooks/firecrawl` in prod — the API worker, _not_ the public web origin), `headers: { "X-Firecrawl-Token": <FIRECRAWL_WEBHOOK_SECRET> }`, `metadata: { sourceId }`, `events: ["monitor.page"]`.
+- `webhook` — `url` is **`ADMIN_BASE_URL`** + `/v1/inbound/firecrawl` (`https://api.releases.sh/v1/inbound/firecrawl` in prod — the API worker, _not_ the public web origin), `headers: { "X-Firecrawl-Token": <FIRECRAWL_WEBHOOK_SECRET> }`, `metadata: { sourceId }`, `events: ["monitor.page"]`.
 - `goal` — default "Detect new product releases…"; drives the AI change judge.
 
 **Create vs. update is asymmetric.** `createMonitor` sends the full spec. `updateMonitor` (a `PATCH`) reconciles **only the app-owned webhook** (URL + token + sourceId). `schedule`/`proxy`/`goal`/`targets` are sent once at create and are **dashboard-authoritative thereafter** — an operator tuning cadence/proxy in the Firecrawl dashboard sticks, and a later `sync` can never revert it. A `404` on update self-heals by recreating with the full spec. `monitorId` / `lastCheckId` / `lastChangeAt` are stamped on `metadata.firecrawl`.
@@ -51,7 +51,7 @@ A `scrape` monitor watches one URL. Some changelogs are **multi-page** — an in
 
 ## Webhook wire format
 
-The receiver is `POST /v1/webhooks/firecrawl`. It checks `X-Firecrawl-Token` and does not require a user session. The `/v1/webhooks` admin gate (subscription CRUD) does not apply to this POST. The previous `/v1/integrations/firecrawl/webhook` path is not accepted. Payload is nested and carries a **diff, not markdown**:
+The receiver is `POST /v1/inbound/firecrawl`. It checks `X-Firecrawl-Token` itself. `inbound` is in none of the route-namespace lists, so no shared auth middleware runs and no user session is needed. The previous `/v1/integrations/firecrawl/webhook` path is not accepted. Payload is nested and carries a **diff, not markdown**:
 
 ```jsonc
 {

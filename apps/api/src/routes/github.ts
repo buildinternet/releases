@@ -18,9 +18,9 @@ export const githubRoutes = new Hono<Env>();
 // and exercised end-to-end (install → ping → 200) before any product logic
 // lands.
 //
-// POST /v1/webhooks/github. The `/webhooks` admin gate skips this POST
-// (webhooksAuthMiddleware); the handler checks `X-Hub-Signature-256`.
-// There is no /integrations alias. When a real second product behavior lands
+// POST /v1/inbound/github. `inbound` is in none of the route-namespace
+// lists, so no shared auth middleware runs; the handler checks
+// `X-Hub-Signature-256` itself. When a real second product behavior lands
 // here, the shared inbound-webhook ingress harness (#1247) should absorb the
 // Firecrawl + GitHub receiver boilerplate; until then this stays a small
 // self-contained sibling rather than a premature abstraction.
@@ -58,7 +58,7 @@ async function verifyGitHubSignature(
   return constantTimeEqual(provided, expected);
 }
 
-githubRoutes.post("/webhooks/github", async (c) => {
+githubRoutes.post("/inbound/github", async (c) => {
   const env = c.env as Env["Bindings"];
 
   // Read the raw body up front — the signature is computed over these exact
