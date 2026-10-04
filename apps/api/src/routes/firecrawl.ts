@@ -69,7 +69,7 @@ function webhookUrl(env: Env["Bindings"]): string {
   // WEB_BASE_URL points at the Next.js frontend
   // (https://releases.sh), where this path 404s — see Phase 2 webhook receiver.
   const base = env.ADMIN_BASE_URL ?? "https://api.releases.sh";
-  return `${base.replace(/\/$/, "")}/v1/integrations/firecrawl/webhook`;
+  return `${base.replace(/\/$/, "")}/v1/webhooks/firecrawl`;
 }
 
 firecrawlRoutes.post(
@@ -195,12 +195,10 @@ firecrawlRoutes.post(
 );
 
 // ---------------------------------------------------------------------------
-// Inbound webhook receiver.
-// Not in `publicReadRoutes` or `adminRoutes`. The workspace session gate is
-// `/integrations/uploads/*` only — this path must stay off a blanket
-// `/integrations/*` matcher, or a token-only caller is refused with
-// "Sign in required" before the comparison below. The handler then
-// self-authenticates with a constant-time token comparison.
+// Inbound receiver: POST /v1/webhooks/firecrawl.
+// The `/webhooks` namespace is admin-gated for subscription CRUD.
+// webhooksAuthMiddleware lets this POST through; the handler checks
+// X-Firecrawl-Token. There is no /integrations alias.
 // ---------------------------------------------------------------------------
 
 /**
@@ -237,7 +235,7 @@ interface FirecrawlPageEvent {
   }>;
 }
 
-firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
+firecrawlRoutes.post("/webhooks/firecrawl", async (c) => {
   const env = c.env as Env["Bindings"];
 
   // Auth: verify token BEFORE any DB work so we never leak whether a source

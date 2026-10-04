@@ -12,7 +12,7 @@ const baseSource = {
 
 it("derives a spec from source + metadata with defaults applied", () => {
   const spec = deriveMonitorSpec(baseSource, {
-    webhookUrl: "https://api.releases.sh/v1/integrations/firecrawl/webhook",
+    webhookUrl: "https://api.releases.sh/v1/webhooks/firecrawl",
     webhookSecret: "shh",
   });
   expect(spec.targets).toEqual([

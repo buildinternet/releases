@@ -3,6 +3,7 @@ import {
   authMiddleware,
   publicReadAuthMiddleware,
   tokensAuthMiddleware,
+  webhooksAuthMiddleware,
 } from "./middleware/auth.js";
 import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
 import type { JWTVerifyGetKey } from "@releases/lib/oauth-jwt";
@@ -347,7 +348,7 @@ export type Env = {
     FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
     FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in wrangler in Phase 2
     // GitHub App webhook signing secret — verifies inbound `X-Hub-Signature-256`
-    // on POST /v1/integrations/github/webhook (#1698). Bound from the Secrets
+    // on POST /v1/webhooks/github (#1698). Bound from the Secrets
     // Store; an unresolved binding fails the receiver closed (401).
     RELEASES_GITHUB_WEBHOOK_SECRET?: SecretBinding;
     // Durable backfill workflow (#1281). Routes POST /v1/workflows/backfill-source
@@ -678,9 +679,15 @@ for (const r of publicReadRoutes) {
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
 for (const r of adminRoutes) {
-  // /tokens needs a split gate: read for /tokens/me self-introspection, admin
-  // for the rest. Every other admin namespace stays admin-only.
-  const mw = r === "tokens" ? tokensAuthMiddleware : authMiddleware;
+  // /tokens: read for /tokens/me, admin for the rest.
+  // /webhooks: admin for subscription CRUD; POST /webhooks/firecrawl and
+  // POST /webhooks/github skip that gate and check their own secrets.
+  const mw =
+    r === "tokens"
+      ? tokensAuthMiddleware
+      : r === "webhooks"
+        ? webhooksAuthMiddleware
+        : authMiddleware;
   v1.use(`/${r}`, mw, dbHealthCheck);
   v1.use(`/${r}/*`, mw, dbHealthCheck);
 }

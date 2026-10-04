@@ -388,7 +388,7 @@
       "class_name": "BatchSummarizeWorkflow",
     },
     {
-      // Triggered by inbound Firecrawl webhook (POST /v1/integrations/firecrawl/webhook)
+      // Triggered by inbound Firecrawl webhook (POST /v1/webhooks/firecrawl)
       // when a monitored source page has changed. Scrapes via Firecrawl, extracts,
       // inserts, embeds, and optionally summarizes. Phase 2 of the Firecrawl
       // monitoring integration.
@@ -707,7 +707,7 @@
       "secret_name": "FIRECRAWL_WEBHOOK_SECRET",
     },
     // GitHub App webhook signing secret — verifies inbound `X-Hub-Signature-256`
-    // on POST /v1/integrations/github/webhook (#1698). Prod only; the staging
+    // on POST /v1/webhooks/github (#1698). Prod only; the staging
     // block doesn't inherit these (no inbound webhooks in staging).
     {
       "binding": "RELEASES_GITHUB_WEBHOOK_SECRET",

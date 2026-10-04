@@ -564,6 +564,27 @@ export const tokensAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
 };
 
 /**
+ * Inbound provider receivers that share the `/webhooks` namespace with admin
+ * subscription CRUD. Exact POST match — `GET /webhooks/firecrawl` stays the
+ * admin `GET /webhooks/:id` lookup. Each handler checks its own secret.
+ * The `/v1`-prefixed form is what production sees; the bare form covers
+ * direct-mount tests.
+ */
+const INBOUND_PROVIDER_WEBHOOKS = new Set([
+  "/v1/webhooks/firecrawl",
+  "/webhooks/firecrawl",
+  "/v1/webhooks/github",
+  "/webhooks/github",
+]);
+
+export const webhooksAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
+  if (c.req.method === "POST" && INBOUND_PROVIDER_WEBHOOKS.has(c.req.path)) {
+    return next();
+  }
+  return authMiddleware(c, next);
+};
+
+/**
  * Low-cardinality route family from a `/v1`-prefixed path (the segment after
  * `v1`, e.g. `/v1/orgs/vercel/releases` → `orgs`). Keeps the consumption
  * `operation` dimension bounded and free of ids — never the raw path.

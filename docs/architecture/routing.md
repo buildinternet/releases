@@ -61,8 +61,12 @@ principal gate (`requireFollowsPrincipal` on `/v1/workspaces/*` and
   `POST /v1/integrations/uploads/callback` — uploads.sh OAuth connect (owner/admin
   for start/callback/disconnect). See [uploads-oauth.md](uploads-oauth.md).
 
-Inbound webhooks at `/v1/integrations/firecrawl/webhook` and
-`/v1/integrations/github/webhook` are outside that gate and check their own secrets.
+Inbound provider webhooks are `POST /v1/webhooks/firecrawl` (`X-Firecrawl-Token`)
+and `POST /v1/webhooks/github` (`X-Hub-Signature-256`). They are not on this
+session gate. `/v1/webhooks` is otherwise admin subscription CRUD; those two
+POSTs skip that gate (`webhooksAuthMiddleware`) and check their own secrets.
+`/v1/integrations/firecrawl/webhook` and `/v1/integrations/github/webhook` are
+not aliases.
 
 ## Entity resolution: IDs over slugs
 

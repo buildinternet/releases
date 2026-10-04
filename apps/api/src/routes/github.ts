@@ -18,13 +18,12 @@ export const githubRoutes = new Hono<Env>();
 // and exercised end-to-end (install → ping → 200) before any product logic
 // lands.
 //
-// Convention: like the Firecrawl receiver (`routes/firecrawl.ts`), this path
-// is in neither `publicReadRoutes` nor `adminRoutes`, and the workspace
-// session gate covers `/integrations/uploads/*` only. The handler
-// self-authenticates. When a real second product behavior lands here, the
-// shared inbound-webhook ingress harness (#1247) should absorb the Firecrawl
-// + GitHub receiver boilerplate; until then this stays a small self-contained
-// sibling rather than a premature abstraction.
+// POST /v1/webhooks/github. The `/webhooks` admin gate skips this POST
+// (webhooksAuthMiddleware); the handler checks `X-Hub-Signature-256`.
+// There is no /integrations alias. When a real second product behavior lands
+// here, the shared inbound-webhook ingress harness (#1247) should absorb the
+// Firecrawl + GitHub receiver boilerplate; until then this stays a small
+// self-contained sibling rather than a premature abstraction.
 // ---------------------------------------------------------------------------
 
 /**
@@ -59,7 +58,7 @@ async function verifyGitHubSignature(
   return constantTimeEqual(provided, expected);
 }
 
-githubRoutes.post("/integrations/github/webhook", async (c) => {
+githubRoutes.post("/webhooks/github", async (c) => {
   const env = c.env as Env["Bindings"];
 
   // Read the raw body up front — the signature is computed over these exact

@@ -6,7 +6,7 @@ function secretBinding(value: string) {
   return { get: async () => value };
 }
 
-const WEBHOOK_PATH = "/v1/integrations/github/webhook";
+const WEBHOOK_PATH = "/v1/webhooks/github";
 const SECRET = "gh-test-webhook-secret";
 
 /** Compute GitHub's `sha256=<hex>` HMAC over the raw body, as the App would. */
@@ -33,7 +33,7 @@ function post(body: string, headers: Record<string, string>) {
   return new Request(`https://api${WEBHOOK_PATH}`, { method: "POST", headers, body });
 }
 
-describe("POST /v1/integrations/github/webhook — plumbing stub", () => {
+describe("POST /v1/webhooks/github — plumbing stub", () => {
   it("rejects a missing signature with 401", async () => {
     const res = await app()(
       post(JSON.stringify({ zen: "hi" }), {
