@@ -1,0 +1,11 @@
+-- One account row per (provider_id, account_id). Better Auth 1.7.7 throws
+-- "Multiple accounts match the same accountId" on a duplicate pair, which
+-- blocks social sign-in for that user. Three Google identities had duplicate
+-- rows (same user each) and were removed by hand before this migration.
+--
+-- This fails if any duplicate pair remains. That failure is intended: find
+-- them with
+--   SELECT provider_id, account_id, COUNT(*) FROM account
+--   GROUP BY 1, 2 HAVING COUNT(*) > 1;
+-- and delete the stale row of each pair before re-running.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_account_provider_account_id ON account (provider_id, account_id);
