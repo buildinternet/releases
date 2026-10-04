@@ -7,10 +7,10 @@ function secretBinding(value: string) {
   return { get: async () => value };
 }
 
-const WEBHOOK_PATH = "/v1/integrations/firecrawl/webhook";
+const WEBHOOK_PATH = "/v1/inbound/firecrawl";
 const TOKEN = "fc-test-token";
 
-describe("POST /v1/integrations/firecrawl/webhook — JSON body boundary", () => {
+describe("POST /v1/inbound/firecrawl — JSON body boundary", () => {
   it("malformed JSON returns 400 instead of silently skipping as no_source_id", async () => {
     const fetchApi = createTestApp(createTestDb(), firecrawlRoutes, {
       env: { FIRECRAWL_WEBHOOK_SECRET: secretBinding(TOKEN) },

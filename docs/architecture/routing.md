@@ -51,14 +51,29 @@ and are refused (401); a presented-but-unresolvable Bearer credential gets a 401
 - `/v1/me/webhooks` — self-serve outbound webhook subscriptions (`GET/POST`, per-id `GET/PATCH/DELETE`, `rotate-secret`, `test`, `deliveries`). Default `scope: "org"` (requires `orgId`/`orgSlug`, optional source filter, max 10). `scope: "follows"` delivers releases matching the caller's `user_follows` graph (max 1, separate from the org cap). Same principal gate as follows. Subscriber contract: [docs/webhooks.md](../webhooks.md).
 - `/v1/me/semantic-alerts` — freeform interest alerts (`GET/POST`, per-id `GET/PATCH/DELETE`), max 5 per account, threshold default 0.80. Same principal gate as follows. `semantic-alerts-enabled` off → 404 and the matcher does not run. The candidate pool is follows-only; a match sends webhook and/or email. List rows include `activity` (7-day and 30-day match counts and the latest matched release). `GET /v1/me/settings/notifications` includes `semanticAlerts` (`null` when the flag is off). See [semantic-alerts.md](semantic-alerts.md).
 
-Workspace profile, avatar, and integrations sit on the same principal gate
-(`requireFollowsPrincipal` on `/v1/workspaces/*` and `/v1/integrations/*`):
+Workspace profile, avatar, and the uploads OAuth callback sit on the same
+principal gate (`requireFollowsPrincipal` on `/v1/workspaces/*` and
+`/v1/integrations/uploads/*`):
 
 - `GET`/`PATCH /v1/workspaces/:workspaceId/profile` and `POST …/avatar` — workspace
   display fields and logo (owner/admin for writes).
 - `GET`/`POST`/`DELETE /v1/workspaces/:workspaceId/integrations/uploads` plus
   `POST /v1/integrations/uploads/callback` — uploads.sh OAuth connect (owner/admin
   for start/callback/disconnect). See [uploads-oauth.md](uploads-oauth.md).
+
+Inbound provider webhooks live under `/v1/inbound/<provider>`:
+`POST /v1/inbound/firecrawl` (`X-Firecrawl-Token`) and
+`POST /v1/inbound/github` (`X-Hub-Signature-256`). `inbound` is in none of the
+route-namespace lists, so no shared auth middleware runs; each handler checks
+its own secret. Keep a new receiver here rather than under a gated namespace
+such as `/v1/integrations` or `/v1/webhooks`. The old
+`/v1/integrations/firecrawl/webhook` and `/v1/integrations/github/webhook`
+paths are not aliases.
+
+A sub-router's `.use("/prefix/*", gate)` applies to every route under that
+prefix, including routes registered later by other routers (all routers mount
+at `/`). `apps/api/test/route-gate-isolation.test.ts` fails when one router's
+gate covers another router's route.
 
 ## Entity resolution: IDs over slugs
 

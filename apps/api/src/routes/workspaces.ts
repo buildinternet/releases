@@ -161,10 +161,12 @@ workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
   });
 });
 
-/** Session-or-Bearer principal gate, then workspace profile/avatar + integrations. */
+/** Session gate for workspace routes and the uploads OAuth callback. */
 export const workspaceRoutes = new Hono<Env>();
 workspaceRoutes.use("/workspaces/*", requireFollowsPrincipal);
-workspaceRoutes.use("/integrations/*", requireFollowsPrincipal);
+// The callback is the only integration-setup route outside `/workspaces/*`.
+// Inbound provider webhooks are POST /v1/webhooks/<provider>.
+workspaceRoutes.use("/integrations/uploads/*", requireFollowsPrincipal);
 workspaceRoutes.route("/", workspaceProfileHandlers);
 workspaceRoutes.route("/", workspaceIntegrationHandlers);
 workspaceRoutes.route("/", workspaceWebhookHandlers);

@@ -1,6 +1,6 @@
 /**
  * Workflow triggered when Firecrawl detects a change on a monitored source
- * (inbound webhook → POST /v1/integrations/firecrawl/webhook). Re-scrapes the
+ * (inbound webhook → POST /v1/inbound/firecrawl). Re-scrapes the
  * page via Firecrawl, extracts releases, inserts them through the standard
  * ingest tail (dedup → coverage → publish → revalidate ping), then embeds and
  * optionally summarizes the new rows. See Phase 2 of the Firecrawl monitoring
