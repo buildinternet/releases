@@ -20,17 +20,18 @@
  * registration. Both opencode and Cursor fail `/oauth2/register` on 1.7
  * unless the registration body is corrected before the plugin validates it.
  *
- * This stack now runs `@better-auth/oauth-provider@1.7.2`, where the register
+ * This stack now runs `@better-auth/oauth-provider@1.7.7`, where the register
  * schema does carry `application_type` — so this rewrite is live, not the
  * inert forward-compat it was under the 1.6.25 pin it was written against.
  *
  * Routing Cursor to the native branch exposes a second upstream bug: 1.7's
  * native validator accepts only authority-free reverse-domain private-use
  * URIs, and rejects the host-bearing `cursor://anysphere.cursor-mcp/oauth/callback`
- * form (better-auth/better-auth#10956, #10946 — not fixed as of 1.7.2). The
+ * form (better-auth/better-auth#10956, #10946 — still open as of 1.7.7). The
  * dist patch from uploads PR #886 is therefore ported here as
- * `patches/@better-auth%2Foauth-provider@1.7.2.patch`; delete it once an
- * upstream release ships the fix.
+ * `patches/@better-auth%2Foauth-provider@1.7.7.patch`; delete it once an
+ * upstream release ships the fix. The patch targets a hashed dist filename,
+ * so re-check it on every `@better-auth/oauth-provider` bump.
  *
  * All helpers here are pure: they never mutate the input body, and return
  * `undefined` to mean "no change" so callers can leave the document as

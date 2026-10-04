@@ -25,6 +25,9 @@ import {
   oauthAccessToken,
   oauthRefreshToken,
   oauthConsent,
+  oauthResource,
+  oauthClientResource,
+  oauthClientAssertion,
 } from "../src/db/schema-auth.js";
 
 describe("entitledScopes", () => {
@@ -248,6 +251,9 @@ describe("absolute consent/login redirect origin", () => {
           oauthAccessToken,
           oauthRefreshToken,
           oauthConsent,
+          oauthResource,
+          oauthClientResource,
+          oauthClientAssertion,
         },
       }),
       plugins: [

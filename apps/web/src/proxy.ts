@@ -102,6 +102,7 @@ const RESERVED_FIRST_SEGMENT = new Set([
   "actions",
   "admin",
   "api",
+  "auth",
   "bot",
   "catalog",
   "categories",

@@ -14,6 +14,9 @@ import {
   oauthAccessToken,
   oauthRefreshToken,
   oauthConsent,
+  oauthResource,
+  oauthClientResource,
+  oauthClientAssertion,
   jwks,
 } from "../src/db/schema-auth.js";
 import { DCR_SCOPES } from "../src/auth/entitlement.js";
@@ -492,6 +495,10 @@ describe("oauth provider wiring", () => {
           oauthAccessToken,
           oauthRefreshToken,
           oauthConsent,
+          // 1.7.7 schema validation requires the resource tables the provider writes.
+          oauthResource,
+          oauthClientResource,
+          oauthClientAssertion,
         },
       }),
       plugins: [

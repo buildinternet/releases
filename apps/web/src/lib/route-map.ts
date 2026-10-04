@@ -59,6 +59,7 @@ export const STATIC_PAGES = new Set(["privacy", "terms", "security", "search", "
 const RESERVED = new Set([
   "admin",
   "api",
+  "auth",
   "_next",
   ".well-known",
   "favicon.ico",

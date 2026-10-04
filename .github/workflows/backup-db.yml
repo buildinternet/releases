@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BUN_VERSION: "1.4.0"
+  BUN_VERSION: "1.4.2"
   # wrangler 4.88+ requires Node 22+. bunx invokes wrangler's bin via the
   # `#!/usr/bin/env node` shebang, so the runner's Node version is what counts.
   NODE_VERSION: "24.15.0"
