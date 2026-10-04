@@ -29,6 +29,19 @@ const testEnv = {
 describe("createAuth memoization", () => {
   beforeEach(() => resetAuthCacheForTests());
 
+  it("points OAuth failures at the web error page and encrypts the session cache", async () => {
+    const auth = await createAuth({
+      ...(testEnv as Record<string, unknown>),
+      WEB_BASE_URL: "https://releases.localhost/",
+    } as never);
+    expect(auth.options.onAPIError?.errorURL).toBe("https://releases.localhost/auth/error");
+    expect(auth.options.session?.cookieCache).toMatchObject({
+      enabled: true,
+      maxAge: 5 * 60,
+      strategy: "jwe",
+    });
+  });
+
   it("reuses the same instance for repeated calls with the same env", async () => {
     const first = await createAuth(testEnv);
     const second = await createAuth(testEnv);

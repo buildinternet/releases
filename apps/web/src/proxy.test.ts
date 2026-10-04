@@ -81,6 +81,9 @@ describe("proxy legacy ?tab= redirects", () => {
   it("does NOT redirect reserved top-level routes that happen to carry a tab query", () => {
     // The org-slug redirect must never hijack a real top-level route.
     expect(run("/login?tab=releases").headers.get("location")).toBeNull();
+    // `changelog` is a source-level tab, so an unreserved two-segment path
+    // would 308. `/auth/error` is a real route and must stay put.
+    expect(run("/auth/error?tab=changelog").headers.get("location")).toBeNull();
     expect(run("/docs?tab=releases").headers.get("location")).toBeNull();
     expect(run("/search?tab=sources").headers.get("location")).toBeNull();
   });

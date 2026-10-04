@@ -227,11 +227,13 @@ describe("CIMD (client ID metadata documents)", () => {
     const res = await auth.handler(
       new Request(authorizeUrl(CLAUDE_CLIENT_ID, attacker), { redirect: "manual" }),
     );
-    // Never bounce the browser (or a code) to an unregistered redirect: the AS
-    // sends it to its own error page instead.
+    // Never bounce the browser (or a code) to an unregistered redirect. The AS
+    // sends it to the web app's auth error page (`onAPIError.errorURL`), which
+    // falls back to the prod web origin when WEB_BASE_URL is unset.
     const location = res.headers.get("location") ?? "";
     expect(location.startsWith(attacker)).toBe(false);
-    expect(location).toContain("/api/auth/error?error=invalid_redirect");
+    expect(location.startsWith("https://releases.sh/auth/error?")).toBe(true);
+    expect(location).toContain("error=invalid_redirect");
   });
 
   it("rejects a document with a shared-secret auth method", async () => {

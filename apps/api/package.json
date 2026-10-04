@@ -11,13 +11,13 @@
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
     "agents": "^0.20.1",
-    "@better-auth/api-key": "^1.7.2",
-    "@better-auth/cimd": "^1.7.2",
-    "@better-auth/core": "^1.7.2",
-    "@better-auth/infra": "^0.4.5",
-    "@better-auth/oauth-provider": "^1.7.2",
-    "@better-auth/passkey": "^1.7.2",
-    "@better-auth/stripe": "^1.7.2",
+    "@better-auth/api-key": "^1.7.7",
+    "@better-auth/cimd": "^1.7.7",
+    "@better-auth/core": "^1.7.7",
+    "@better-auth/infra": "^0.4.14",
+    "@better-auth/oauth-provider": "^1.7.7",
+    "@better-auth/passkey": "^1.7.7",
+    "@better-auth/stripe": "^1.7.7",
     "@better-auth/utils": "0.4.2",
     "@envelop/disable-introspection": "^9.1.1",
     "@escape.tech/graphql-armor-cost-limit": "^2.4.3",
@@ -29,7 +29,7 @@
     "@hono/zod-validator": "^0.8.0",
     "@pothos/core": "^4.13.1",
     "@pothos/plugin-dataloader": "^4.4.5",
-    "better-auth": "^1.7.2",
+    "better-auth": "^1.7.7",
     "dataloader": "^2.2.3",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.21.2",
@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260822.1",
-    "jose": "^6.2.5",
+    "jose": "^6.2.12",
     "wrangler": "^4.125.0"
   }
 }

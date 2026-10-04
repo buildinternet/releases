@@ -869,12 +869,26 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     // parseable when BETTER_AUTH_URL is unset; prod/staging always set it.
     baseURL: env.BETTER_AUTH_URL ?? DEFAULT_AUTH_ORIGIN,
     trustedOrigins: authTrustedOrigins(env),
-    // Short-lived signed cookie cache — avoids a D1 read on every getSession within
-    // a visit. https://better-auth.com/docs/guides/optimizing-for-performance
+    // OAuth callback failures redirect here instead of Better Auth's default
+    // development error page (`${baseURL}/error`, which is the API origin).
+    // Absolute on the web origin: a root-relative path is resolved against
+    // baseURL and would strand the user on api.releases.sh.
+    onAPIError: {
+      errorURL: `${releaseWebBase(env)}/auth/error`,
+    },
+    // Short-lived cookie cache — avoids a D1 read on every getSession within
+    // a visit. `jwe` encrypts the `session_data` cookie (A256CBC-HS512). The
+    // `session_token` cookie stays the credential. A cache written with the
+    // previous compact strategy fails to decrypt; getSession expires that
+    // cookie and reads the session from D1. It does not delete the session.
+    // The cache window is 5 minutes, so the deploy costs one extra D1 read
+    // per live cache cookie, then the next response writes a JWE cache.
+    // https://better-auth.com/docs/concepts/session-management#cookie-cache-strategies
     session: {
       cookieCache: {
         enabled: true,
         maxAge: 5 * 60,
+        strategy: "jwe",
       },
     },
     database: drizzleAdapter(db, {
