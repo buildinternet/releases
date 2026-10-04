@@ -18,13 +18,13 @@ export const githubRoutes = new Hono<Env>();
 // and exercised end-to-end (install → ping → 200) before any product logic
 // lands.
 //
-// Convention: like the Firecrawl receiver (`routes/firecrawl.ts`), the
-// `integrations` namespace is in NEITHER `publicReadRoutes` nor `adminRoutes`,
-// so no auth middleware runs — the handler self-authenticates. When a real
-// second product behavior lands here, the shared inbound-webhook ingress
-// harness (#1247) should absorb the Firecrawl + GitHub receiver boilerplate;
-// until then this stays a small self-contained sibling rather than a premature
-// abstraction.
+// Convention: like the Firecrawl receiver (`routes/firecrawl.ts`), this path
+// is in neither `publicReadRoutes` nor `adminRoutes`, and the workspace
+// session gate covers `/integrations/uploads/*` only. The handler
+// self-authenticates. When a real second product behavior lands here, the
+// shared inbound-webhook ingress harness (#1247) should absorb the Firecrawl
+// + GitHub receiver boilerplate; until then this stays a small self-contained
+// sibling rather than a premature abstraction.
 // ---------------------------------------------------------------------------
 
 /**

@@ -51,7 +51,7 @@ A `scrape` monitor watches one URL. Some changelogs are **multi-page** — an in
 
 ## Webhook wire format
 
-The receiver is `POST /v1/integrations/firecrawl/webhook` (in neither `publicReadRoutes` nor `adminRoutes`, so no auth middleware runs — it self-authenticates). Payload is nested and carries a **diff, not markdown**:
+The receiver is `POST /v1/integrations/firecrawl/webhook` (in neither `publicReadRoutes` nor `adminRoutes`). The workspace session gate covers `/integrations/uploads/*` only, so this route is not behind a user session — it self-authenticates with `X-Firecrawl-Token`. Payload is nested and carries a **diff, not markdown**:
 
 ```jsonc
 {

@@ -195,10 +195,12 @@ firecrawlRoutes.post(
 );
 
 // ---------------------------------------------------------------------------
-// Phase 2: inbound webhook receiver
-// The `integrations` namespace is in neither `publicReadRoutes` nor
-// `adminRoutes`, so no middleware runs — the handler self-authenticates via
-// a constant-time token comparison to prevent timing-oracle attacks.
+// Inbound webhook receiver.
+// Not in `publicReadRoutes` or `adminRoutes`. The workspace session gate is
+// `/integrations/uploads/*` only — this path must stay off a blanket
+// `/integrations/*` matcher, or a token-only caller is refused with
+// "Sign in required" before the comparison below. The handler then
+// self-authenticates with a constant-time token comparison.
 // ---------------------------------------------------------------------------
 
 /**

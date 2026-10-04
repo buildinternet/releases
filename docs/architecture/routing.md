@@ -51,14 +51,18 @@ and are refused (401); a presented-but-unresolvable Bearer credential gets a 401
 - `/v1/me/webhooks` — self-serve outbound webhook subscriptions (`GET/POST`, per-id `GET/PATCH/DELETE`, `rotate-secret`, `test`, `deliveries`). Default `scope: "org"` (requires `orgId`/`orgSlug`, optional source filter, max 10). `scope: "follows"` delivers releases matching the caller's `user_follows` graph (max 1, separate from the org cap). Same principal gate as follows. Subscriber contract: [docs/webhooks.md](../webhooks.md).
 - `/v1/me/semantic-alerts` — freeform interest alerts (`GET/POST`, per-id `GET/PATCH/DELETE`), max 5 per account, threshold default 0.80. Same principal gate as follows. `semantic-alerts-enabled` off → 404 and the matcher does not run. The candidate pool is follows-only; a match sends webhook and/or email. List rows include `activity` (7-day and 30-day match counts and the latest matched release). `GET /v1/me/settings/notifications` includes `semanticAlerts` (`null` when the flag is off). See [semantic-alerts.md](semantic-alerts.md).
 
-Workspace profile, avatar, and integrations sit on the same principal gate
-(`requireFollowsPrincipal` on `/v1/workspaces/*` and `/v1/integrations/*`):
+Workspace profile, avatar, and the uploads OAuth callback sit on the same
+principal gate (`requireFollowsPrincipal` on `/v1/workspaces/*` and
+`/v1/integrations/uploads/*`):
 
 - `GET`/`PATCH /v1/workspaces/:workspaceId/profile` and `POST …/avatar` — workspace
   display fields and logo (owner/admin for writes).
 - `GET`/`POST`/`DELETE /v1/workspaces/:workspaceId/integrations/uploads` plus
   `POST /v1/integrations/uploads/callback` — uploads.sh OAuth connect (owner/admin
   for start/callback/disconnect). See [uploads-oauth.md](uploads-oauth.md).
+
+Inbound webhooks at `/v1/integrations/firecrawl/webhook` and
+`/v1/integrations/github/webhook` are outside that gate and check their own secrets.
 
 ## Entity resolution: IDs over slugs
 

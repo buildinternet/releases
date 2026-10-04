@@ -161,10 +161,17 @@ workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
   });
 });
 
-/** Session-or-Bearer principal gate, then workspace profile/avatar + integrations. */
+/**
+ * Session-or-Bearer principal gate for workspace routes and the uploads OAuth
+ * callback. Keep the integrations matcher on `/integrations/uploads/*` only:
+ * `/integrations/firecrawl/webhook` and `/integrations/github/webhook` sit on
+ * the same prefix and authenticate with their own secrets. A blanket
+ * `/integrations/*` gate answers those callers "Sign in required" before the
+ * handler's token check runs.
+ */
 export const workspaceRoutes = new Hono<Env>();
 workspaceRoutes.use("/workspaces/*", requireFollowsPrincipal);
-workspaceRoutes.use("/integrations/*", requireFollowsPrincipal);
+workspaceRoutes.use("/integrations/uploads/*", requireFollowsPrincipal);
 workspaceRoutes.route("/", workspaceProfileHandlers);
 workspaceRoutes.route("/", workspaceIntegrationHandlers);
 workspaceRoutes.route("/", workspaceWebhookHandlers);
