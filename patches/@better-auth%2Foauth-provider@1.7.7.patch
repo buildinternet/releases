@@ -1,7 +1,7 @@
-diff --git a/dist/authorize-BmTe2VYG.mjs b/dist/authorize-BmTe2VYG.mjs
-index 42c943dd45aa3d297a14edcc056a14e7ddd54680..b0eb5d8db91e68a3bbadd026961126628e1499be 100644
---- a/dist/authorize-BmTe2VYG.mjs
-+++ b/dist/authorize-BmTe2VYG.mjs
+diff --git a/dist/authorize-K1WHCNih.mjs b/dist/authorize-K1WHCNih.mjs
+index 892e39ff5f37078ee30b8c950be5f12adf96262e..0052720e3bf9ceaef9ab2da3d85984d823b9cc3c 100644
+--- a/dist/authorize-K1WHCNih.mjs
++++ b/dist/authorize-K1WHCNih.mjs
 @@ -1643,8 +1643,25 @@ const FORBIDDEN_NATIVE_REDIRECT_SCHEMES = new Set([
  	"mailto:",
  	"javascript:",
