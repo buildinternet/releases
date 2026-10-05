@@ -48,8 +48,11 @@ describe("parseTimeWindow", () => {
     expect(r).toEqual({ ok: false, message: "`since` must not be after `until`" });
   });
 
-  it("allows an equal since/until (degenerate but not inverted)", () => {
-    const r = parseTimeWindow("2026-01-01", "2026-01-01");
-    expect(r.ok).toBe(true);
+  it("treats an equal bare-date since/until as that whole UTC day", () => {
+    expect(parseTimeWindow("2026-01-01", "2026-01-01")).toEqual({
+      ok: true,
+      since: "2026-01-01T00:00:00.000Z",
+      until: "2026-01-01T23:59:59.999Z",
+    });
   });
 });

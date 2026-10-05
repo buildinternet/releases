@@ -548,7 +548,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .string()
           .optional()
           .describe(
-            "Keep only release hits published at or before this bound. Same input formats as `since`.",
+            "Keep only release hits published at or before this bound. Same input formats as `since`; a bare date (`2026-06-25`) includes that whole UTC day.",
           ),
       }),
     },
@@ -639,7 +639,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .string()
           .optional()
           .describe(
-            "Keep only releases published at or before this bound. Same input formats as `since`.",
+            "Keep only releases published at or before this bound. Same input formats as `since`; a bare date (`2026-06-25`) includes that whole UTC day.",
           ),
         minImportance: z
           .number()

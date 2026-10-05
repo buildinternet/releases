@@ -402,7 +402,7 @@ searchRoutes.get(
         required: false,
         schema: { type: "string" },
         description:
-          "Keep only release hits published at or before this bound. Same input formats as `since`. Filters `published_at`; releases with no date are dropped.",
+          "Keep only release hits published at or before this bound. Same input formats as `since`; a bare date (`2026-06-25`) includes that whole UTC day. Filters `published_at`; releases with no date are dropped.",
       },
     ],
     responses: {

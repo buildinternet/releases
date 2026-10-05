@@ -226,6 +226,24 @@ describe("resolveDateParam", () => {
     expect(resolveDateParam("2026-01-01")).toBe("2026-01-01T00:00:00.000Z");
   });
 
+  test('bound "end" resolves a bare date to the last millisecond of that day', () => {
+    expect(resolveDateParam("2026-06-25", now, { bound: "end" })).toBe("2026-06-25T23:59:59.999Z");
+  });
+
+  test('bound "end" leaves datetimes and shorthand unchanged', () => {
+    expect(resolveDateParam("2026-06-25T12:00:00Z", now, { bound: "end" })).toBe(
+      "2026-06-25T12:00:00.000Z",
+    );
+    expect(resolveDateParam("90d", now, { bound: "end" })).toBe("2026-02-21T12:00:00.000Z");
+  });
+
+  test("rejects impossible calendar dates instead of rolling them over", () => {
+    expect(resolveDateParam("2026-02-30")).toBeNull();
+    expect(resolveDateParam("2026-02-29")).toBeNull();
+    expect(resolveDateParam("2028-02-29")).toBe("2028-02-29T00:00:00.000Z");
+    expect(resolveDateParam("2026-02-30", now, { bound: "end" })).toBeNull();
+  });
+
   test("normalizes an ISO datetime to a canonical UTC timestamp", () => {
     expect(resolveDateParam("2026-01-01T12:30:00Z")).toBe("2026-01-01T12:30:00.000Z");
   });

@@ -61,6 +61,7 @@ const RELATIVE_DATE_RE = /^(\d+)([dwmy])$/i;
  * deliberately not matched: `new Date()` would parse it as local time, so the
  * same input would resolve to different instants depending on the runtime.
  */
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}(:?\d{2})?))?$/;
 
 /**
@@ -81,8 +82,18 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2
  * or otherwise unparseable input so callers can map a miss to a 400 / error.
  *
  * `now` is injectable for deterministic tests; defaults to the current time.
+ *
+ * `bound: "end"` is for an upper bound (`until`): a bare date (`2026-06-25`)
+ * then resolves to the LAST millisecond of that UTC day
+ * (`2026-06-25T23:59:59.999Z`) so the named day is included. Without it a
+ * bare-date `until` resolves to that day's midnight and excludes the day.
+ * Datetimes and relative shorthand are unaffected.
  */
-export function resolveDateParam(input: string, now: Date = new Date()): string | null {
+export function resolveDateParam(
+  input: string,
+  now: Date = new Date(),
+  opts: { bound?: "start" | "end" } = {},
+): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
@@ -118,6 +129,13 @@ export function resolveDateParam(input: string, now: Date = new Date()): string 
   // values like `2026-13-45` or `2026-02-29`.
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return null;
+  const dateOnly = DATE_ONLY_RE.test(trimmed);
+  // `new Date` rolls day overflow forward (`2026-02-30` → Mar 2) instead of
+  // failing, so a bare date must also be a real calendar day.
+  if (dateOnly && !isDateKey(trimmed)) return null;
+  if (opts.bound === "end" && dateOnly) {
+    return new Date(parsed.getTime() + 86_400_000 - 1).toISOString();
+  }
   return parsed.toISOString();
 }
 

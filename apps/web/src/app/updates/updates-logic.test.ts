@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   collectOrgFeed,
-  findReleaseForDay,
   monthKeyOf,
   monthLabelOf,
   buildMonthBuckets,
@@ -198,7 +197,7 @@ describe("entry* helpers (row | rollup)", () => {
   });
 });
 
-describe("findReleaseForDay", () => {
+describe("collectOrgFeed", () => {
   const pages: Record<
     string,
     {
@@ -230,42 +229,9 @@ describe("findReleaseForDay", () => {
     return { calls, fetchPage };
   };
 
-  test("finds a day on the first page without paging", async () => {
-    const { calls, fetchPage } = makeFetch();
-    expect((await findReleaseForDay("2026-10-03", fetchPage))?.id).toBe("a");
-    expect(calls).toEqual([undefined]);
-  });
-
-  test("follows the cursor for days past the first page", async () => {
-    const { calls, fetchPage } = makeFetch();
-    expect((await findReleaseForDay("2026-06-25", fetchPage))?.id).toBe("c");
-    expect(calls).toEqual([undefined, "c2"]);
-  });
-
-  test("stops early once the page is older than the requested day", async () => {
-    const { calls, fetchPage } = makeFetch();
-    expect(await findReleaseForDay("2026-08-01", fetchPage)).toBeNull();
-    expect(calls).toEqual([undefined]);
-  });
-
-  test("returns null when the cursor runs out", async () => {
-    const { fetchPage } = makeFetch();
-    expect(await findReleaseForDay("2026-01-01", fetchPage)).toBeNull();
-  });
-
   test("collectOrgFeed gathers every page", async () => {
     const { calls, fetchPage } = makeFetch();
     expect((await collectOrgFeed(fetchPage)).map((r) => r.id)).toEqual(["a", "b", "c", "d"]);
     expect(calls).toEqual([undefined, "c2"]);
-  });
-
-  test("bails on a repeating cursor instead of looping", async () => {
-    let n = 0;
-    const result = await findReleaseForDay("2026-01-01", async () => {
-      n++;
-      return { releases: [{ publishedAt: null }], pagination: { nextCursor: "same" } };
-    });
-    expect(result).toBeNull();
-    expect(n).toBe(2);
   });
 });

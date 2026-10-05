@@ -188,7 +188,7 @@ releaseRoutes.get(
         required: false,
         schema: { type: "string" },
         description:
-          "Keep only releases published at or before this bound. Same input formats as `since`.",
+          "Keep only releases published at or before this bound. Same input formats as `since`; a bare date (`2026-06-25`) includes that whole UTC day.",
       },
       {
         name: "minImportance",

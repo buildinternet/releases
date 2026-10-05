@@ -1,6 +1,6 @@
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { normalizeVersionLabel } from "@/lib/release-title";
-import { collectCursorPages, cursorPages } from "@/lib/cursor-pages";
+import { collectCursorPages } from "@/lib/cursor-pages";
 import type { FeedEntry, RollupItem } from "@/components/org-release-entries";
 
 /**
@@ -192,7 +192,7 @@ export function entryVersionLabel(entry: FeedEntry): string | null {
  *  without importing `RollupItem` directly. */
 export type { RollupItem };
 
-// ── Full-feed walks (/updates/[date], sitemap) ──
+// ── Full-feed walk (sitemap) ──
 
 /** The org feed caps `?limit=` at 100 server-side; older days live past page 1. */
 export const ORG_FEED_PAGE_LIMIT = 100;
@@ -200,23 +200,6 @@ export const ORG_FEED_PAGE_LIMIT = 100;
 type FetchOrgFeedPage<T> = (
   cursor: string | undefined,
 ) => Promise<{ releases: T[]; pagination: { nextCursor: string | null } }>;
-
-/**
- * Find the release published on `date` (YYYY-MM-DD, UTC) in the newest-first
- * org feed. Stops paging as soon as a page's oldest entry is before `date`.
- */
-export async function findReleaseForDay<T extends { publishedAt: string | null }>(
-  date: string,
-  fetchPage: FetchOrgFeedPage<T>,
-): Promise<T | null> {
-  for await (const { releases } of cursorPages(fetchPage)) {
-    const match = releases.find((r) => (r.publishedAt ?? "").slice(0, 10) === date);
-    if (match) return match;
-    const oldest = releases.at(-1)?.publishedAt?.slice(0, 10);
-    if (oldest && oldest < date) return null;
-  }
-  return null;
-}
 
 /** Every release in the org feed, across all pages. */
 export function collectOrgFeed<T>(fetchPage: FetchOrgFeedPage<T>): Promise<T[]> {

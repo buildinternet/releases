@@ -512,15 +512,20 @@ export const api = {
       sourceType?: string;
       includePrereleases?: boolean;
       product?: string;
+      /** ISO date/datetime bounds on `published_at`. A bare-date `until` covers that whole UTC day. */
+      since?: string;
+      until?: string;
     } = {},
   ) => {
-    const { cursor, limit = 20, sourceType, includePrereleases, product } = opts;
+    const { cursor, limit = 20, sourceType, includePrereleases, product, since, until } = opts;
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit !== 20) params.set("limit", String(limit));
     if (sourceType && sourceType !== "all") params.set("source_type", sourceType);
     if (includePrereleases) params.set("include_prereleases", "true");
     if (product) params.set("product", product);
+    if (since) params.set("since", since);
+    if (until) params.set("until", until);
     const qs = params.toString();
     return fetchApi<OrgReleasesFeedResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },

@@ -400,7 +400,7 @@ export function parseTimeWindow(
     since = resolved;
   }
   if (untilRaw !== undefined && untilRaw !== "") {
-    const resolved = resolveDateParam(untilRaw);
+    const resolved = resolveDateParam(untilRaw, undefined, { bound: "end" });
     if (resolved === null)
       return { ok: false, message: `Invalid \`until\` query param — ${TIME_WINDOW_HINT}` };
     until = resolved;
