@@ -3,6 +3,14 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 4, 2026
+
+**Fixed**
+- `until` date filters — bare dates now include releases through the end of that day; the REST API, MCP tools, and CLI `--until` flag were cutting the day off at midnight, so single-day queries returned nothing.
+- `/updates/<date>` pages — day pages, the sitemap, and the digest archive now follow pagination through the full feed history; they were 404ing or truncating once the feed exceeded 100 releases.
+- Google sign-in — a duplicate-identity issue left a small number of users unable to sign in with Google; affected rows are cleared and the condition is now rejected at the database level.
+- OAuth error page — sign-in failures now redirect to a proper page on releases.sh instead of a raw API error screen; the underlying auth library update also closes a security advisory for an OAuth state / magic-link token confusion issue (any in-flight flows at deploy time will need to be restarted).
+
 ## October 3, 2026
 
 **Changed**
