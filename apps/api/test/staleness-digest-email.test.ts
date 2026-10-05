@@ -6,6 +6,7 @@ import {
 import type { StaleSourceEntry } from "../src/cron/source-staleness.js";
 import type { PushStaleEntry } from "../src/cron/push-staleness.js";
 import type { ProviderHealthEntry } from "../src/cron/provider-health.js";
+import type { FirecrawlQuietEntry, FirecrawlStaleEntry } from "../src/cron/firecrawl-staleness.js";
 
 const firstPartyEntry = (over: Partial<StaleSourceEntry> = {}): StaleSourceEntry => ({
   sourceId: "src_a",
@@ -59,6 +60,7 @@ describe("buildStalenessDigestEmail", () => {
           slug: "changelog",
           orgSlug: "acme",
           orgName: "Acme",
+          lastDeliveryAt: "2026-06-12T00:00:00.000Z",
           lastFetchedAt: "2026-06-10T00:00:00.000Z",
           staleHours: 48,
           thresholdBasis: "floor",
@@ -71,7 +73,8 @@ describe("buildStalenessDigestEmail", () => {
     expect(subject).toBe("[staleness] 2 sources need attention: Vercel, Acme");
     expect(text).toContain("FIRST-PARTY — POSSIBLE INGEST BREAKAGE (1)");
     expect(text).toContain("Vercel (vercel) — next-js");
-    expect(text).toContain("FIRECRAWL MONITORS (1)");
+    expect(text).toContain("FIRECRAWL — NO DELIVERIES (1)");
+    expect(text).toContain("last delivery 2026-06-12T00:00:00.000Z");
     expect(text).toContain("https://releases.sh/vercel/next-js");
     expect(text).toContain("Internal daily digest");
     expect(html).toContain("Source staleness digest");
@@ -195,5 +198,90 @@ describe("countNeedsAttention", () => {
         providerHealth: [],
       }),
     ).toBe(1);
+  });
+});
+
+describe("buildStalenessDigestEmail — Firecrawl delivery health", () => {
+  const fcEntry = (slug: string): FirecrawlStaleEntry => ({
+    sourceId: `src_${slug}`,
+    slug,
+    orgSlug: "acme",
+    orgName: "Acme",
+    lastDeliveryAt: "2026-09-14T00:05:00.000Z",
+    lastFetchedAt: "2026-09-10T00:05:00.000Z",
+    staleHours: 48,
+    thresholdBasis: "floor",
+  });
+  const base = {
+    scannedAt: "2026-09-20T04:00:00.000Z",
+    webOrigin: "https://releases.sh",
+    firstParty: [],
+    pushFed: [],
+    providerHealth: [],
+    providerOutageActive: false,
+  };
+
+  it("collapses a fleet-wide stop into one headline naming the rejection cause", () => {
+    const firecrawl = ["one", "two", "three"].map(fcEntry);
+    const { subject, text } = buildStalenessDigestEmail({
+      ...base,
+      firecrawl,
+      firecrawlOutage: {
+        stale: 3,
+        scanned: 3,
+        lastDeliveryAt: "2026-09-14T00:05:00.000Z",
+        authRejection: {
+          firstAt: "2026-09-15T00:01:00.000Z",
+          lastAt: "2026-09-20T00:07:00.000Z",
+          reason: "mismatch",
+        },
+      },
+    });
+    expect(subject).toBe("[staleness] Firecrawl deliveries stopped for all 3 sources");
+    expect(text).toContain(
+      "Firecrawl deliveries stopped for all 3 sources since 2026-09-14T00:05:00.000Z",
+    );
+    expect(text).toContain("FIRECRAWL_WEBHOOK_SECRET");
+    expect(text).toContain("since 2026-09-15T00:01:00.000Z");
+    expect(text).toContain("Affected: acme/one, acme/two, acme/three.");
+    // One headline, not one row per source.
+    expect(text).not.toContain("FIRECRAWL — NO DELIVERIES");
+  });
+
+  it("points upstream of the handler when no rejections were recorded", () => {
+    const { text } = buildStalenessDigestEmail({
+      ...base,
+      firecrawl: ["one", "two", "three"].map(fcEntry),
+      firecrawlOutage: { stale: 3, scanned: 3, lastDeliveryAt: null, authRejection: null },
+    });
+    expect(text).toContain("recorded no auth rejections");
+    expect(text).toContain("gated by middleware");
+  });
+
+  it("lists delivering-but-unchanged pages as informational only", () => {
+    const quiet: FirecrawlQuietEntry[] = [
+      {
+        sourceId: "src_q",
+        slug: "whats-new",
+        orgSlug: "acme",
+        orgName: "Acme",
+        lastDeliveryAt: "2026-09-20T00:03:00.000Z",
+        lastFetchedAt: "2026-08-30T00:03:00.000Z",
+        quietDays: 21,
+      },
+    ];
+    const { text } = buildStalenessDigestEmail({
+      ...base,
+      firstParty: [firstPartyEntry()],
+      firecrawl: [],
+      firecrawlQuiet: quiet,
+    });
+    expect(text).toContain("FIRECRAWL — DELIVERING, UNCHANGED (1)");
+    expect(text).toContain("unchanged 21d");
+    expect(text).toContain("1 Firecrawl page is delivering but unchanged.");
+    // Quiet pages never count toward attention (and so never trigger a send).
+    expect(
+      countNeedsAttention({ firstParty: [], firecrawl: [], pushFed: [], providerHealth: [] }),
+    ).toBe(0);
   });
 });
