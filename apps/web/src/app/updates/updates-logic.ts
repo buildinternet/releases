@@ -1,5 +1,6 @@
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { normalizeVersionLabel } from "@/lib/release-title";
+import { collectCursorPages, cursorPages } from "@/lib/cursor-pages";
 import type { FeedEntry, RollupItem } from "@/components/org-release-entries";
 
 /**
@@ -195,43 +196,20 @@ export type { RollupItem };
 
 /** The org feed caps `?limit=` at 100 server-side; older days live past page 1. */
 export const ORG_FEED_PAGE_LIMIT = 100;
-/** Same safety cap as the `/updates` feed's eager cursor walk. */
-const ORG_FEED_MAX_PAGES = 25;
 
-interface OrgFeedPage<T> {
-  releases: T[];
-  pagination: { nextCursor: string | null };
-}
-
-type FetchOrgFeedPage<T> = (cursor: string | undefined) => Promise<OrgFeedPage<T>>;
+type FetchOrgFeedPage<T> = (
+  cursor: string | undefined,
+) => Promise<{ releases: T[]; pagination: { nextCursor: string | null } }>;
 
 /**
- * Yield each page of the newest-first org feed by following `nextCursor`.
- * Stops when the cursor runs out, a cursor repeats (the REST feed fails open
- * to page 1 on a bad cursor, which would otherwise loop), or the page cap hits.
- */
-export async function* orgFeedPages<T>(fetchPage: FetchOrgFeedPage<T>): AsyncGenerator<T[]> {
-  let cursor: string | undefined;
-  const seen = new Set<string>();
-  for (let page = 0; page < ORG_FEED_MAX_PAGES; page++) {
-    const feed = await fetchPage(cursor);
-    yield feed.releases;
-    const next = feed.pagination.nextCursor;
-    if (!next || seen.has(next)) return;
-    seen.add(next);
-    cursor = next;
-  }
-}
-
-/**
- * Find the release published on `date` (YYYY-MM-DD, UTC). Stops paging as
- * soon as a page's oldest entry is already before `date`.
+ * Find the release published on `date` (YYYY-MM-DD, UTC) in the newest-first
+ * org feed. Stops paging as soon as a page's oldest entry is before `date`.
  */
 export async function findReleaseForDay<T extends { publishedAt: string | null }>(
   date: string,
   fetchPage: FetchOrgFeedPage<T>,
 ): Promise<T | null> {
-  for await (const releases of orgFeedPages(fetchPage)) {
+  for await (const { releases } of cursorPages(fetchPage)) {
     const match = releases.find((r) => (r.publishedAt ?? "").slice(0, 10) === date);
     if (match) return match;
     const oldest = releases.at(-1)?.publishedAt?.slice(0, 10);
@@ -241,8 +219,6 @@ export async function findReleaseForDay<T extends { publishedAt: string | null }
 }
 
 /** Every release in the org feed, across all pages. */
-export async function collectOrgFeed<T>(fetchPage: FetchOrgFeedPage<T>): Promise<T[]> {
-  const all: T[] = [];
-  for await (const releases of orgFeedPages(fetchPage)) all.push(...releases);
-  return all;
+export function collectOrgFeed<T>(fetchPage: FetchOrgFeedPage<T>): Promise<T[]> {
+  return collectCursorPages(fetchPage, (p) => p.releases);
 }
