@@ -5,6 +5,7 @@ import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
 import { buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
+import { ORG_FEED_PAGE_LIMIT, collectOrgFeed } from "./updates/updates-logic";
 
 // Render on-demand (not during `next build`) so a cold worker / slow D1 can't
 // time out the Vercel export. The API response already carries Cache-Control,
@@ -49,9 +50,13 @@ const UPDATES_ORG_SLUG = "releases-sh";
 
 async function updatesEntries(): Promise<MetadataRoute.Sitemap> {
   try {
-    const feed = await api.orgReleases(UPDATES_ORG_SLUG, { limit: 100 });
+    // Walk every page — the feed caps at 100 rows, and older days would
+    // otherwise drop out of the sitemap as the changelog grows.
+    const releases = await collectOrgFeed((cursor) =>
+      api.orgReleases(UPDATES_ORG_SLUG, { limit: ORG_FEED_PAGE_LIMIT, cursor }),
+    );
     return buildUpdatesSitemapEntries(
-      feed.releases.map((r) => r.publishedAt),
+      releases.map((r) => r.publishedAt),
       BASE_URL,
     );
   } catch {

@@ -8,7 +8,7 @@ import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { deriveFeedTitle } from "@/lib/release-title";
-import { DAY_LOOKUP_PAGE_LIMIT, findReleaseForDay } from "../updates-logic";
+import { ORG_FEED_PAGE_LIMIT, findReleaseForDay } from "../updates-logic";
 
 const ORG_SLUG = "releases-sh";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -16,7 +16,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // One rollup release per active day; walks the cursor past the 100-row page cap.
 function findReleaseForDate(date: string) {
   return findReleaseForDay(date, (cursor) =>
-    api.orgReleases(ORG_SLUG, { limit: DAY_LOOKUP_PAGE_LIMIT, cursor }),
+    api.orgReleases(ORG_SLUG, { limit: ORG_FEED_PAGE_LIMIT, cursor }),
   );
 }
 

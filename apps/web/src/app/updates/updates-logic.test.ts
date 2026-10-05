@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  collectOrgFeed,
   findReleaseForDay,
   monthKeyOf,
   monthLabelOf,
@@ -250,6 +251,12 @@ describe("findReleaseForDay", () => {
   test("returns null when the cursor runs out", async () => {
     const { fetchPage } = makeFetch();
     expect(await findReleaseForDay("2026-01-01", fetchPage)).toBeNull();
+  });
+
+  test("collectOrgFeed gathers every page", async () => {
+    const { calls, fetchPage } = makeFetch();
+    expect((await collectOrgFeed(fetchPage)).map((r) => r.id)).toEqual(["a", "b", "c", "d"]);
+    expect(calls).toEqual([undefined, "c2"]);
   });
 
   test("bails on a repeating cursor instead of looping", async () => {
