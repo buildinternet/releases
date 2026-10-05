@@ -121,14 +121,40 @@ export function shouldRenderAsVideo(opts: {
 }
 
 /**
- * The Cloudflare Media Transformations MP4 URL for a same-origin (R2-hosted) GIF
- * source. Callers reach this only via {@link shouldRenderAsVideo}, which gates
- * to same-origin — a cross-origin `/cdn-cgi/media/` request 403s once the zone's
+ * True when `src` points at an MP4 (by `.mp4` pathname). Unparseable inputs are
+ * not MP4s.
+ */
+export function isMp4Src(src: string): boolean {
+  try {
+    return /\.mp4$/i.test(new URL(src).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pure core of {@link releaseVideoUrl}, parameterized on the origin for
+ * testability. A same-origin `.mp4` is returned as-is: ingest already transcodes
+ * GIFs to MP4 and stores them in R2 (`releases/<hash>.mp4`), so running that
+ * MP4 back through `/cdn-cgi/media/mode=video` re-encodes an already-optimized
+ * file. Media Transformations bills one transformation per second of output
+ * video, so the redundant pass is the bulk of our video-transform usage. Only a
+ * raw (not yet transcoded) GIF goes through the transform.
+ */
+export function videoUrl(src: string, origin: string): string {
+  if (isSameOrigin(src, origin) && isMp4Src(src)) return src;
+  return cfMediaUrl(src, { origin });
+}
+
+/**
+ * The `<video>` source for a same-origin (R2-hosted) GIF-or-MP4 media item.
+ * Callers reach this only via {@link shouldRenderAsVideo}, which gates to
+ * same-origin — a cross-origin `/cdn-cgi/media/` request 403s once the zone's
  * Transformations "Sources" list is scoped to "Specified origins". See
- * {@link cfMediaUrl}.
+ * {@link videoUrl} and {@link cfMediaUrl}.
  */
 export function releaseVideoUrl(src: string): string {
-  return cfMediaUrl(src, { origin: MEDIA_ORIGIN });
+  return videoUrl(src, MEDIA_ORIGIN);
 }
 
 /**
