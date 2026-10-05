@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { api, ApiNotFoundError } from "@/lib/api";
+import { collectCursorPages } from "@/lib/cursor-pages";
 import type {
   CollectionDetail,
   CollectionWeeklyDigestDetail,
@@ -30,14 +31,20 @@ export type DigestIndexData = {
   digests: CollectionWeeklyDigestListItem[];
 };
 
-const DIGEST_INDEX_LIMIT = 50;
+/** The digests route caps `?limit=` at 100; bigger pages mean fewer hops. */
+const DIGEST_INDEX_PAGE_LIMIT = 100;
 
+/** Full archive (newest-first): the index page lists every issue, and the
+ *  week page derives prev/next from it, so it must not stop at one page. */
 export const getDigestIndex = cache(async (slug: string): Promise<DigestIndexData> => {
-  const [detail, digestsRes] = await Promise.all([
+  const [detail, digests] = await Promise.all([
     api.collectionDetail(slug),
-    api.collectionWeeklyDigests(slug, { limit: DIGEST_INDEX_LIMIT }),
+    collectCursorPages(
+      (cursor) => api.collectionWeeklyDigests(slug, { limit: DIGEST_INDEX_PAGE_LIMIT, cursor }),
+      (page) => page.digests,
+    ),
   ]);
-  return { detail, digests: digestsRes.digests };
+  return { detail, digests };
 });
 
 /** How many recent digests the collection page fetches — the latest issue's
