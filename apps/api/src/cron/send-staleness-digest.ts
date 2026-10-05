@@ -86,6 +86,7 @@ export async function sendStalenessDigest(
       scannedPushFed: pushFed.scanned,
       scannedProviderHealth: providerHealth.scanned,
       upstreamQuiet: firstParty.entries.length,
+      firecrawlQuiet: firecrawl.quiet.length,
     });
     return { emailed: false, firstParty: 0, firecrawl: 0, pushFed: 0, providerHealth: 0 };
   }
@@ -100,6 +101,8 @@ export async function sendStalenessDigest(
   const rendered = buildStalenessDigestEmail({
     firstParty: firstParty.entries,
     firecrawl: firecrawl.entries,
+    firecrawlQuiet: firecrawl.quiet,
+    firecrawlOutage: firecrawl.outage,
     pushFed: pushFed.entries,
     providerHealth: providerHealth.entries,
     providerOutageActive: providerHealth.outageActive,

@@ -20,6 +20,11 @@ import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ensureSourceActorScheduled } from "../lib/sources/source-actor-schedule.js";
 import {
+  recordFirecrawlAuthRejection,
+  stampFirecrawlDelivery,
+  type FirecrawlAuthRejectReason,
+} from "../lib/ingest/firecrawl-delivery.js";
+import {
   NotFoundError,
   UnauthorizedError,
   InternalError,
@@ -242,6 +247,20 @@ firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
   const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
   const token = c.req.header("X-Firecrawl-Token") ?? "";
   if (!secret || !constantTimeEqual(token, secret)) {
+    // Log the rejection (never the token) and leave a throttled marker for the
+    // staleness scan: without it, a receiver rejecting every delivery looks
+    // exactly like a fleet of quiet pages (2026-09-15 → 10-04).
+    const reason: FirecrawlAuthRejectReason = !secret
+      ? "secret-unbound"
+      : token
+        ? "mismatch"
+        : "missing";
+    logEvent(reason === "secret-unbound" ? "error" : "warn", {
+      component: "firecrawl-webhook",
+      event: "auth-rejected",
+      reason,
+    });
+    await recordFirecrawlAuthRejection(env.LATEST_CACHE, reason);
     return respondError(c, new UnauthorizedError());
   }
 
@@ -259,6 +278,21 @@ firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
       sourceId,
     });
     return c.json({ ok: true, skipped: "unknown_or_disabled" });
+  }
+
+  // Proof the pipe works, independent of whether anything changed: the
+  // staleness scan measures from this, not from `lastFetchedAt` (which only the
+  // ingest workflow advances, so gate-skipped deliveries never move it).
+  // Stamped before any spawn so the workflow's source snapshot carries it.
+  try {
+    await stampFirecrawlDelivery(db, sourceId);
+  } catch (err) {
+    logEvent("warn", {
+      component: "firecrawl-webhook",
+      event: "delivery-stamp-failed",
+      sourceId,
+      err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+    });
   }
 
   // Static per-source toggle — compute once, not per page.

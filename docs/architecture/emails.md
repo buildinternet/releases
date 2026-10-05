@@ -72,6 +72,7 @@ collapsed and blanks dropped:
 | digest            | `Releases digest — Cloudflare, Anthropic +2 more · 7 updates · Jul 21`                 |
 | poll-and-fetch    | `[alert] poll-and-fetch: Vercel — Next.js +1 more failed (2 sources, scheduledTime=…)` |
 | staleness         | `[staleness] 4 sources overdue: Vercel, Acme +2 more`                                  |
+| staleness outage  | `[staleness] Firecrawl deliveries stopped for all 14 sources`                          |
 | cron report       | `[degraded] scrape-agent-sweep: degraded — 2/4 dispatched → 1 inserted (Example Co)`   |
 | webhook DLQ       | `[alert] webhook DLQ: 3 messages — Acme Inc`                                           |
 | search no-results | `[alert] search no-results: 24.0% zero-hit (29/120) — "sample zero hit" +1 more`       |

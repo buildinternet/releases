@@ -1198,6 +1198,7 @@ export default {
             SOURCE_STALE_POLL_RECENCY_DAYS: env.SOURCE_STALE_POLL_RECENCY_DAYS,
             FIRECRAWL_STALE_HOURS: env.FIRECRAWL_STALE_HOURS,
             FIRECRAWL_API_KEY: env.FIRECRAWL_API_KEY,
+            LATEST_CACHE: env.LATEST_CACHE,
             SEND_EMAIL: env.SEND_EMAIL,
             EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
             EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
@@ -1296,9 +1297,9 @@ export default {
       return;
     }
     // Resilience: on every hourly fire, flag firecrawl-owned sources whose
-    // monitor has stopped delivering (out of credits / suspended / failing
-    // workflow). Cheap scan over the ~handful of firecrawl sources; emits warn
-    // events on the `firecrawl-staleness` component. No-ops when CRON_ENABLED is
+    // monitor has stopped delivering (out of credits / suspended / receiver
+    // rejecting). Cheap scan over the ~handful of firecrawl sources; emits one
+    // `scan-complete` summary event on the `firecrawl-staleness` component. No-ops when CRON_ENABLED is
     // "false". See resilience option A.
     ctx.waitUntil(
       loggedDispatch(
@@ -1308,6 +1309,7 @@ export default {
           CRON_ENABLED: env.CRON_ENABLED,
           FIRECRAWL_STALE_HOURS: env.FIRECRAWL_STALE_HOURS,
           FIRECRAWL_API_KEY: env.FIRECRAWL_API_KEY,
+          LATEST_CACHE: env.LATEST_CACHE,
         }),
         alertEnv,
       ),

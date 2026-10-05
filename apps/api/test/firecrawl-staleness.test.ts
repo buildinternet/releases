@@ -38,7 +38,7 @@ beforeEach(() => {
 
 function seed(opts: {
   id: string;
-  firecrawl?: { enabled: boolean; monitorId?: string } | null;
+  firecrawl?: { enabled: boolean; monitorId?: string; lastDeliveryAt?: string } | null;
   lastFetchedAt?: string | null;
   createdAt?: string;
 }) {
@@ -107,7 +107,7 @@ describe("scanStaleFirecrawlSources", () => {
 
     // Disabled cron → no-op without touching the DB.
     const off = await scanStaleFirecrawlSources({ ...baseEnv(), CRON_ENABLED: "false" });
-    expect(off).toEqual({ scanned: 0, stale: 0, entries: [] });
+    expect(off).toEqual({ scanned: 0, stale: 0, entries: [], quiet: [], outage: null });
   });
 
   it("raises the threshold to 2x the monitor's live cadence for slow schedules", async () => {
@@ -189,6 +189,101 @@ describe("scanStaleFirecrawlSources", () => {
     expect(res.stale).toBe(1);
     expect(res.scanned).toBe(1);
     expect(res.entries).toHaveLength(1);
+  });
+});
+
+describe("scanStaleFirecrawlSources — delivery clock", () => {
+  it("measures from the last delivery, so a gate-skipped quiet page is not stale", async () => {
+    // Nothing ingested for 20 days, but a delivery landed an hour ago.
+    seed({
+      id: "quiet",
+      firecrawl: { enabled: true, lastDeliveryAt: iso(1 * HOUR) },
+      lastFetchedAt: iso(20 * 24 * HOUR),
+    });
+    // Fresh ingest, recent delivery → neither stale nor quiet.
+    seed({
+      id: "busy",
+      firecrawl: { enabled: true, lastDeliveryAt: iso(1 * HOUR) },
+      lastFetchedAt: iso(2 * HOUR),
+    });
+    const res = await scanStaleFirecrawlSources(baseEnv());
+    expect(res.stale).toBe(0);
+    expect(res.quiet.map((q) => q.sourceId)).toEqual(["quiet"]);
+    expect(res.quiet[0].quietDays).toBe(20);
+    expect(res.outage).toBeNull();
+  });
+
+  it("flags a source whose deliveries stopped, recording both clocks", async () => {
+    seed({
+      id: "dead",
+      firecrawl: { enabled: true, lastDeliveryAt: iso(72 * HOUR) },
+      lastFetchedAt: iso(30 * 24 * HOUR),
+    });
+    const res = await scanStaleFirecrawlSources(baseEnv());
+    expect(res.stale).toBe(1);
+    expect(res.entries[0].lastDeliveryAt).not.toBeNull();
+    expect(res.entries[0].lastFetchedAt).not.toBeNull();
+    // Stale sources are never also listed as quiet.
+    expect(res.quiet).toEqual([]);
+  });
+
+  it("does not list an unstamped source as quiet", async () => {
+    // Pre-deploy row: no lastDeliveryAt; the ingest clock is recent enough.
+    seed({ id: "legacy", firecrawl: { enabled: true }, lastFetchedAt: iso(1 * HOUR) });
+    const res = await scanStaleFirecrawlSources(baseEnv());
+    expect(res.stale).toBe(0);
+    expect(res.quiet).toEqual([]);
+  });
+});
+
+describe("scanStaleFirecrawlSources — fleet-wide outage", () => {
+  const kvWith = (value: unknown) =>
+    ({
+      get: async () => (value === null ? null : JSON.stringify(value)),
+    }) as unknown as Pick<KVNamespace, "get">;
+
+  it("rolls up when every source stopped delivering, with the receiver's rejection marker", async () => {
+    seed({ id: "a", firecrawl: { enabled: true, lastDeliveryAt: iso(100 * HOUR) } });
+    seed({ id: "b", firecrawl: { enabled: true, lastDeliveryAt: iso(80 * HOUR) } });
+    seed({ id: "c", firecrawl: { enabled: true, lastDeliveryAt: iso(90 * HOUR) } });
+    const marker = { firstAt: iso(70 * HOUR), lastAt: iso(2 * HOUR), reason: "mismatch" };
+
+    const res = await scanStaleFirecrawlSources({ ...baseEnv(), LATEST_CACHE: kvWith(marker) });
+    expect(res.stale).toBe(3);
+    expect(res.outage).not.toBeNull();
+    expect(res.outage!.scanned).toBe(3);
+    expect(res.outage!.stale).toBe(3);
+    // The most recent delivery among the stale sources = when the pipe went quiet.
+    expect(res.outage!.lastDeliveryAt).toBe(
+      res.entries.find((e) => e.sourceId === "b")!.lastDeliveryAt,
+    );
+    expect(res.outage!.authRejection).toEqual(marker as never);
+  });
+
+  it("reports no rejection marker when the handler recorded none", async () => {
+    for (const id of ["a", "b", "c"]) {
+      seed({ id, firecrawl: { enabled: true, lastDeliveryAt: iso(100 * HOUR) } });
+    }
+    const res = await scanStaleFirecrawlSources({ ...baseEnv(), LATEST_CACHE: kvWith(null) });
+    expect(res.outage?.authRejection).toBeNull();
+  });
+
+  it("does not roll up a minority of stale sources", async () => {
+    seed({ id: "a", firecrawl: { enabled: true, lastDeliveryAt: iso(100 * HOUR) } });
+    for (const id of ["b", "c", "d"]) {
+      seed({ id, firecrawl: { enabled: true, lastDeliveryAt: iso(1 * HOUR) } });
+    }
+    const res = await scanStaleFirecrawlSources(baseEnv());
+    expect(res.stale).toBe(1);
+    expect(res.outage).toBeNull();
+  });
+
+  it("needs at least three sources to call it systemic", async () => {
+    seed({ id: "a", firecrawl: { enabled: true, lastDeliveryAt: iso(100 * HOUR) } });
+    seed({ id: "b", firecrawl: { enabled: true, lastDeliveryAt: iso(100 * HOUR) } });
+    const res = await scanStaleFirecrawlSources(baseEnv());
+    expect(res.stale).toBe(2);
+    expect(res.outage).toBeNull();
   });
 });
 

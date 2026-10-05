@@ -311,6 +311,12 @@ export interface SourceMetadata {
     };
     lastCheckId?: string; // observability
     lastChangeAt?: string; // observability (ISO)
+    /**
+     * Last authenticated webhook delivery (ISO), stamped by the receiver on
+     * every delivery — including ones the cost gate skips — so the staleness
+     * scan can tell a quiet page from a broken pipe. See firecrawl-monitoring.md.
+     */
+    lastDeliveryAt?: string;
   };
 
   /**
