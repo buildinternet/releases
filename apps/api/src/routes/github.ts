@@ -4,6 +4,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
+import { logInboundAuthRejected } from "../lib/inbound-auth.js";
 import { UnauthorizedError } from "@releases/lib/releases-error";
 
 export const githubRoutes = new Hono<Env>();
@@ -70,6 +71,7 @@ githubRoutes.post("/inbound/github", async (c) => {
   const secret = await getSecret(env.RELEASES_GITHUB_WEBHOOK_SECRET);
   const signature = c.req.header("X-Hub-Signature-256");
   if (!secret || !(await verifyGitHubSignature(secret, rawBody, signature))) {
+    logInboundAuthRejected("github-webhook", secret, signature);
     return respondError(c, new UnauthorizedError());
   }
 

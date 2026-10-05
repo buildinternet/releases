@@ -1,13 +1,23 @@
 /**
  * Resilience option A: detect Firecrawl-owned sources whose monitor has stopped
- * delivering — out of credits, account suspended, or the ingest workflow has
- * been failing repeatedly. A healthy monitor fires on its schedule and
- * `FirecrawlIngestWorkflow` writes `lastFetchedAt` on every run (even a
- * no_change run), so a stale `lastFetchedAt` on a `firecrawl.enabled` source
- * means the external monitor is no longer reaching us. The poll cron can't
+ * delivering — out of credits, account suspended, the receiver rejecting
+ * deliveries, or the route gated upstream of the handler. The poll cron can't
  * catch this — those sources are deliberately excluded from it — so this scan
- * is the only signal. It emits warn-level events (alerting is via Workers Logs
- * / Axiom on the `firecrawl-staleness` component).
+ * is the only signal.
+ *
+ * The clock is the last DELIVERY, not the last ingest. The receiver stamps
+ * `metadata.firecrawl.lastDeliveryAt` on every authenticated delivery, while
+ * `lastFetchedAt` only moves when the ingest workflow runs — the cost gate skips
+ * unchanged and non-meaningful deliveries before that. Measuring from
+ * `lastFetchedAt` made a healthy-but-quiet monitor indistinguishable from a
+ * broken receiver. So the scan splits:
+ *
+ * - `entries` (stale): no delivery inside the window — a broken pipe. Actionable.
+ * - `quiet`: deliveries arriving, but no ingested change in
+ *   {@link QUIET_DAYS} days. Informational only — the page just hasn't changed.
+ * - `outage`: when all or nearly all sources are stale at once the cause is
+ *   shared (receiver route, `FIRECRAWL_WEBHOOK_SECRET`, Firecrawl account), so
+ *   the digest leads with one headline instead of N identical rows.
  *
  * The staleness window is `max(FIRECRAWL_STALE_HOURS, 2× the monitor's actual
  * cadence)`. The fixed value is a *floor*: it stays correct for fast cadences,
@@ -16,6 +26,9 @@
  * be stale) only ever *raises* the threshold so a slow (e.g. weekly) monitor
  * isn't false-flagged. A source within the floor window needs no schedule read
  * at all, so the only `getMonitor` calls are for sources already past the floor.
+ *
+ * Logging is one `scan-complete` summary per run (the scan runs hourly), not a
+ * warning per stale source.
  */
 import { createDb } from "../db.js";
 import { eq, sql } from "drizzle-orm";
@@ -23,6 +36,10 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { createFirecrawlClient, type FirecrawlClient } from "@releases/adapters/firecrawl.js";
+import {
+  readFirecrawlAuthRejection,
+  type FirecrawlAuthRejection,
+} from "../lib/ingest/firecrawl-delivery.js";
 
 type SecretBinding = { get(): Promise<string> };
 
@@ -40,6 +57,11 @@ export interface FirecrawlStalenessEnv {
    * floor, i.e. the original fixed-window behavior.
    */
   FIRECRAWL_API_KEY?: SecretBinding;
+  /**
+   * Holds the receiver's auth-rejection marker. Read only when deliveries have
+   * stopped fleet-wide, to say whether the handler is rejecting them.
+   */
+  LATEST_CACHE?: Pick<KVNamespace, "get">;
   /** TEST-ONLY: bypass createDb(env.DB) and use the provided instance directly. */
   _drizzleOverride?: unknown;
   /** TEST-ONLY: inject a Firecrawl client instead of building one from the key. */
@@ -47,6 +69,14 @@ export interface FirecrawlStalenessEnv {
 }
 
 const DEFAULT_STALE_HOURS = 48;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+/** Delivering but no ingested change for this long → listed as quiet (informational). */
+export const QUIET_DAYS = 14;
+/** Fleet-wide outage: at least this share of sources stale at once… */
+const OUTAGE_SHARE = 0.8;
+/** …out of at least this many sources (one or two stale is not "systemic"). */
+const OUTAGE_MIN_SOURCES = 3;
 
 /** A bare integer token within [lo, hi] — no lists, ranges, steps, or names. */
 function isIntInRange(token: string, lo: number, hi: number): boolean {
@@ -126,38 +156,74 @@ export async function thresholdHours(
   }
 }
 
-/** One Firecrawl-monitored source flagged as overdue during the scan. */
+/** One Firecrawl-monitored source with no delivery inside its window. */
 export type FirecrawlStaleEntry = {
   sourceId: string;
   slug: string;
   orgSlug: string | null;
   orgName: string | null;
+  /** Last authenticated webhook delivery (null before the first stamped delivery). */
+  lastDeliveryAt: string | null;
+  /** Last ingest-workflow run — i.e. the last delivery that carried a change. */
   lastFetchedAt: string | null;
   staleHours: number;
   thresholdBasis: "floor" | "schedule";
+};
+
+/** Deliveries are arriving, but nothing has been ingested in {@link QUIET_DAYS} days. */
+export type FirecrawlQuietEntry = {
+  sourceId: string;
+  slug: string;
+  orgSlug: string | null;
+  orgName: string | null;
+  lastDeliveryAt: string;
+  lastFetchedAt: string | null;
+  quietDays: number;
+};
+
+/** All or nearly all sources stopped delivering at once — a shared cause. */
+export type FirecrawlOutage = {
+  stale: number;
+  scanned: number;
+  /** The most recent delivery among the stale sources — when the pipe went quiet. */
+  lastDeliveryAt: string | null;
+  /** The receiver's recent auth-rejection marker, if any (see firecrawl-delivery.ts). */
+  authRejection: FirecrawlAuthRejection | null;
 };
 
 export type FirecrawlStalenessScanResult = {
   scanned: number;
   stale: number;
   entries: FirecrawlStaleEntry[];
+  quiet: FirecrawlQuietEntry[];
+  outage: FirecrawlOutage | null;
 };
 
+/** Latest of two ISO timestamps (lexicographic order is chronological for ISO-8601 UTC). */
+function latest(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
+}
+
 /**
- * Scan firecrawl-enabled sources and warn on any whose last run is older than
- * its staleness window. Returns counts and flagged rows for digest email.
+ * Scan firecrawl-enabled sources and split them into stale (no deliveries),
+ * quiet (delivering, nothing new), and a fleet-wide outage rollup.
  */
 export async function scanStaleFirecrawlSources(
   env: FirecrawlStalenessEnv,
   now: Date = new Date(),
 ): Promise<FirecrawlStalenessScanResult> {
-  if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0, entries: [] };
+  if (env.CRON_ENABLED === "false") {
+    return { scanned: 0, stale: 0, entries: [], quiet: [], outage: null };
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the workflows
   const db: any = env._drizzleOverride ?? createDb(env.DB);
   const parsed = Number(env.FIRECRAWL_STALE_HOURS);
   const floorHours = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_STALE_HOURS;
-  const floorCutoff = new Date(now.getTime() - floorHours * 3600_000).toISOString();
+  const floorCutoff = new Date(now.getTime() - floorHours * HOUR_MS).toISOString();
+  const quietCutoff = new Date(now.getTime() - QUIET_DAYS * DAY_MS).toISOString();
 
   const rows: Array<{
     id: string;
@@ -168,6 +234,7 @@ export async function scanStaleFirecrawlSources(
     lastFetchedAt: string | null;
     createdAt: string | null;
     monitorId: string | null;
+    lastDeliveryAt: string | null;
   }> = await db
     .select({
       id: sources.id,
@@ -178,6 +245,9 @@ export async function scanStaleFirecrawlSources(
       lastFetchedAt: sources.lastFetchedAt,
       createdAt: sources.createdAt,
       monitorId: sql<string | null>`json_extract(${sources.metadata}, '$.firecrawl.monitorId')`,
+      lastDeliveryAt: sql<
+        string | null
+      >`json_extract(${sources.metadata}, '$.firecrawl.lastDeliveryAt')`,
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
@@ -202,53 +272,84 @@ export async function scanStaleFirecrawlSources(
     }
   }
 
-  let stale = 0;
   const entries: FirecrawlStaleEntry[] = [];
+  const quiet: FirecrawlQuietEntry[] = [];
   for (const r of rows) {
-    // A never-run source (lastFetchedAt null) uses createdAt as the clock, so a
-    // freshly-enabled source isn't flagged until it's had a full window to fire.
-    const last = r.lastFetchedAt ?? r.createdAt;
-    if (!last) continue;
-    // Fresh against the floor → fresh against any schedule-derived (≥ floor)
-    // threshold, so skip without a (paid) getMonitor call. This is the common
-    // case; reads only happen for sources already past the floor.
-    if (last >= floorCutoff) continue;
+    // An ingest run implies a delivery, so the delivery clock is the later of
+    // the two — which also covers sources not yet stamped (pre-deploy rows). A
+    // never-delivered source uses createdAt, so a freshly-enabled source isn't
+    // flagged until it's had a full window to fire.
+    const lastDelivery = latest(r.lastDeliveryAt, r.lastFetchedAt) ?? r.createdAt;
+    if (!lastDelivery) continue;
 
-    // Past the floor — see whether the monitor's actual cadence rescues it
-    // (e.g. a weekly monitor that's legitimately only fired 4 days ago).
-    // eslint-disable-next-line no-await-in-loop -- sequential per-source; only runs for the rare past-floor source
-    const { hours, basis } = await thresholdHours(client, r.monitorId, floorHours);
-    const cutoff = new Date(now.getTime() - hours * 3600_000).toISOString();
-    if (last >= cutoff) continue;
-
-    stale++;
-    const entry: FirecrawlStaleEntry = {
+    const base = {
       sourceId: r.id,
       slug: r.slug,
       orgSlug: r.orgSlug,
       orgName: r.orgName,
       lastFetchedAt: r.lastFetchedAt,
-      staleHours: hours,
-      thresholdBasis: basis,
     };
-    entries.push(entry);
-    logEvent("warn", {
-      component: "firecrawl-staleness",
-      event: "stale-source",
-      sourceId: r.id,
-      slug: r.slug,
-      orgId: r.orgId,
-      lastFetchedAt: r.lastFetchedAt,
-      staleHours: hours,
-      thresholdBasis: basis,
-    });
+
+    // Fresh against the floor → fresh against any schedule-derived (≥ floor)
+    // threshold, so skip without a (paid) getMonitor call. This is the common
+    // case; reads only happen for sources already past the floor. Past the
+    // floor, the monitor's actual cadence may rescue it (e.g. a weekly monitor
+    // that's legitimately only fired 4 days ago).
+    if (lastDelivery < floorCutoff) {
+      // eslint-disable-next-line no-await-in-loop -- sequential per-source; only runs for the rare past-floor source
+      const { hours, basis } = await thresholdHours(client, r.monitorId, floorHours);
+      if (lastDelivery < new Date(now.getTime() - hours * HOUR_MS).toISOString()) {
+        entries.push({
+          ...base,
+          lastDeliveryAt: r.lastDeliveryAt,
+          staleHours: hours,
+          thresholdBasis: basis,
+        });
+        continue;
+      }
+    }
+
+    // Quiet needs a stamped delivery: without one we can't tell a quiet page
+    // from a pipe that hasn't been observed yet.
+    const lastChange = r.lastFetchedAt ?? r.createdAt;
+    if (r.lastDeliveryAt && lastChange && lastChange < quietCutoff) {
+      quiet.push({
+        ...base,
+        lastDeliveryAt: r.lastDeliveryAt,
+        quietDays: Math.floor((now.getTime() - Date.parse(lastChange)) / DAY_MS),
+      });
+    }
   }
 
+  let outage: FirecrawlOutage | null = null;
+  if (rows.length >= OUTAGE_MIN_SOURCES && entries.length >= rows.length * OUTAGE_SHARE) {
+    outage = {
+      stale: entries.length,
+      scanned: rows.length,
+      lastDeliveryAt: entries.reduce<string | null>(
+        (acc, e) => latest(acc, latest(e.lastDeliveryAt, e.lastFetchedAt)),
+        null,
+      ),
+      authRejection: await readFirecrawlAuthRejection(env.LATEST_CACHE),
+    };
+  }
+
+  const stale = entries.length;
   logEvent(stale > 0 ? "warn" : "info", {
     component: "firecrawl-staleness",
     event: "scan-complete",
     scanned: rows.length,
     stale,
+    quiet: quiet.length,
+    outage: outage !== null,
+    ...(outage
+      ? {
+          outageLastDeliveryAt: outage.lastDeliveryAt,
+          authRejectionReason: outage.authRejection?.reason ?? null,
+          authRejectionLastAt: outage.authRejection?.lastAt ?? null,
+        }
+      : {}),
+    staleSourceIds: entries.map((e) => e.sourceId),
   });
-  return { scanned: rows.length, stale, entries };
+  return { scanned: rows.length, stale, entries, quiet, outage };
 }

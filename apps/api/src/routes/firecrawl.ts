@@ -20,6 +20,12 @@ import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ensureSourceActorScheduled } from "../lib/sources/source-actor-schedule.js";
 import {
+  recordFirecrawlAuthRejection,
+  stampFirecrawlDelivery,
+} from "../lib/ingest/firecrawl-delivery.js";
+import { logInboundAuthRejected } from "../lib/inbound-auth.js";
+import { logSwallowed } from "../lib/log-swallowed.js";
+import {
   NotFoundError,
   UnauthorizedError,
   InternalError,
@@ -242,6 +248,10 @@ firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
   const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
   const token = c.req.header("X-Firecrawl-Token") ?? "";
   if (!secret || !constantTimeEqual(token, secret)) {
+    // The KV marker lets the staleness scan tell a rejecting receiver from a
+    // fleet of quiet pages.
+    const reason = logInboundAuthRejected("firecrawl-webhook", secret, token);
+    await recordFirecrawlAuthRejection(env.LATEST_CACHE, reason);
     return respondError(c, new UnauthorizedError());
   }
 
@@ -260,6 +270,14 @@ firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
     });
     return c.json({ ok: true, skipped: "unknown_or_disabled" });
   }
+
+  // Proof the pipe works, independent of whether anything changed: the
+  // staleness scan measures from this, not from `lastFetchedAt` (which only the
+  // ingest workflow advances, so gate-skipped deliveries never move it).
+  // Stamped before any spawn so the workflow's source snapshot carries it.
+  await stampFirecrawlDelivery(db, sourceId).catch(
+    logSwallowed("firecrawl-webhook", "delivery-stamp-failed", { sourceId }),
+  );
 
   // Static per-source toggle — compute once, not per page.
   const judgeOn = fc.judgeEnabled !== false;
