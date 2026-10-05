@@ -44,11 +44,12 @@ Different kinds of endpoints paginate differently. There are three shapes:
 
 ## Release date filtering
 
-`/v1/search` and `/v1/releases/latest` accept optional `since` and `until` query params that limit results by publish date. Each takes an ISO date/datetime (`2026-01-01`) or a relative shorthand (`90d`, `4w`, `6m`, `2y`). A value that can't be parsed returns a `400`. On `/v1/search` these params filter the release hits only; the orgs, catalog, and collections sections are unaffected. Releases with no `published_at` are dropped from the window.
+`/v1/search`, `/v1/releases/latest`, and the org feed (`/v1/orgs/:slug/releases`) accept optional `since` and `until` query params that limit results by publish date. Each takes an ISO date/datetime (`2026-01-01`) or a relative shorthand (`90d`, `4w`, `6m`, `2y`). Both ends are inclusive: a bare-date `until` covers that whole UTC day, so `since=2026-06-25&until=2026-06-25` returns everything published on June 25. A value that can't be parsed, or an impossible date like `2026-02-30`, returns a `400`. On `/v1/search` these params filter the release hits only; the orgs, catalog, and collections sections are unaffected. Releases with no `published_at` are dropped from the window.
 
 ```bash
 curl "https://api.releases.sh/v1/search?q=slack%20integration&since=90d"
 curl "https://api.releases.sh/v1/releases/latest?org=vercel&since=2026-01-01&until=2026-03-31"
+curl "https://api.releases.sh/v1/orgs/vercel/releases?since=2026-06-25&until=2026-06-25"
 ```
 
 ## Resource shape

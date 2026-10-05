@@ -599,7 +599,7 @@ function resolveToolWindow(params: {
     since = resolved;
   }
   if (params.until) {
-    const resolved = resolveDateParam(params.until);
+    const resolved = resolveDateParam(params.until, undefined, { bound: "end" });
     if (resolved === null)
       return { ok: false, message: `Invalid \`until\` "${params.until}" — ${hint}.` };
     until = resolved;
