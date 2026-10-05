@@ -2,8 +2,8 @@
  * Delivery-health bookkeeping for the Firecrawl webhook receiver.
  *
  * Two signals let the staleness scan tell "the receiver is rejecting every
- * delivery" apart from "these pages are just quiet" (the 2026-09-15 → 10-04
- * outage looked identical to a quiet fleet for three weeks):
+ * delivery" apart from "these pages are just quiet" (see
+ * docs/architecture/firecrawl-monitoring.md):
  *
  * - `metadata.firecrawl.lastDeliveryAt` — stamped on EVERY authenticated
  *   delivery for a known, enabled source, including ones the cost gate skips
@@ -16,8 +16,9 @@
  */
 import { eq, sql } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
+import type { InboundAuthRejectReason } from "../inbound-auth.js";
 
-export type FirecrawlAuthRejectReason = "missing" | "mismatch" | "secret-unbound";
+export type FirecrawlAuthRejectReason = InboundAuthRejectReason;
 
 export type FirecrawlAuthRejection = {
   /** First rejection in the current streak (the marker expires after a quiet TTL). */

@@ -10,8 +10,7 @@
  * `lastFetchedAt` only moves when the ingest workflow runs — the cost gate skips
  * unchanged and non-meaningful deliveries before that. Measuring from
  * `lastFetchedAt` made a healthy-but-quiet monitor indistinguishable from a
- * broken receiver (2026-09-15 → 10-04: every delivery 401'd, the digest listed
- * all 14 sources as stale every day with no hint why). So the scan now splits:
+ * broken receiver. So the scan splits:
  *
  * - `entries` (stale): no delivery inside the window — a broken pipe. Actionable.
  * - `quiet`: deliveries arriving, but no ingested change in
@@ -70,6 +69,8 @@ export interface FirecrawlStalenessEnv {
 }
 
 const DEFAULT_STALE_HOURS = 48;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
 /** Delivering but no ingested change for this long → listed as quiet (informational). */
 export const QUIET_DAYS = 14;
 /** Fleet-wide outage: at least this share of sources stale at once… */
@@ -198,14 +199,6 @@ export type FirecrawlStalenessScanResult = {
   outage: FirecrawlOutage | null;
 };
 
-const EMPTY_RESULT: FirecrawlStalenessScanResult = {
-  scanned: 0,
-  stale: 0,
-  entries: [],
-  quiet: [],
-  outage: null,
-};
-
 /** Latest of two ISO timestamps (lexicographic order is chronological for ISO-8601 UTC). */
 function latest(a: string | null, b: string | null): string | null {
   if (!a) return b;
@@ -221,14 +214,16 @@ export async function scanStaleFirecrawlSources(
   env: FirecrawlStalenessEnv,
   now: Date = new Date(),
 ): Promise<FirecrawlStalenessScanResult> {
-  if (env.CRON_ENABLED === "false") return EMPTY_RESULT;
+  if (env.CRON_ENABLED === "false") {
+    return { scanned: 0, stale: 0, entries: [], quiet: [], outage: null };
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the workflows
   const db: any = env._drizzleOverride ?? createDb(env.DB);
   const parsed = Number(env.FIRECRAWL_STALE_HOURS);
   const floorHours = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_STALE_HOURS;
-  const floorCutoff = new Date(now.getTime() - floorHours * 3600_000).toISOString();
-  const quietCutoff = new Date(now.getTime() - QUIET_DAYS * 86_400_000).toISOString();
+  const floorCutoff = new Date(now.getTime() - floorHours * HOUR_MS).toISOString();
+  const quietCutoff = new Date(now.getTime() - QUIET_DAYS * DAY_MS).toISOString();
 
   const rows: Array<{
     id: string;
@@ -287,46 +282,42 @@ export async function scanStaleFirecrawlSources(
     const lastDelivery = latest(r.lastDeliveryAt, r.lastFetchedAt) ?? r.createdAt;
     if (!lastDelivery) continue;
 
-    let isStale = false;
+    const base = {
+      sourceId: r.id,
+      slug: r.slug,
+      orgSlug: r.orgSlug,
+      orgName: r.orgName,
+      lastFetchedAt: r.lastFetchedAt,
+    };
+
     // Fresh against the floor → fresh against any schedule-derived (≥ floor)
     // threshold, so skip without a (paid) getMonitor call. This is the common
-    // case; reads only happen for sources already past the floor.
+    // case; reads only happen for sources already past the floor. Past the
+    // floor, the monitor's actual cadence may rescue it (e.g. a weekly monitor
+    // that's legitimately only fired 4 days ago).
     if (lastDelivery < floorCutoff) {
-      // Past the floor — see whether the monitor's actual cadence rescues it
-      // (e.g. a weekly monitor that's legitimately only fired 4 days ago).
       // eslint-disable-next-line no-await-in-loop -- sequential per-source; only runs for the rare past-floor source
       const { hours, basis } = await thresholdHours(client, r.monitorId, floorHours);
-      const cutoff = new Date(now.getTime() - hours * 3600_000).toISOString();
-      if (lastDelivery < cutoff) {
-        isStale = true;
+      if (lastDelivery < new Date(now.getTime() - hours * HOUR_MS).toISOString()) {
         entries.push({
-          sourceId: r.id,
-          slug: r.slug,
-          orgSlug: r.orgSlug,
-          orgName: r.orgName,
+          ...base,
           lastDeliveryAt: r.lastDeliveryAt,
-          lastFetchedAt: r.lastFetchedAt,
           staleHours: hours,
           thresholdBasis: basis,
         });
+        continue;
       }
     }
 
     // Quiet needs a stamped delivery: without one we can't tell a quiet page
     // from a pipe that hasn't been observed yet.
-    if (!isStale && r.lastDeliveryAt) {
-      const lastChange = r.lastFetchedAt ?? r.createdAt;
-      if (lastChange && lastChange < quietCutoff) {
-        quiet.push({
-          sourceId: r.id,
-          slug: r.slug,
-          orgSlug: r.orgSlug,
-          orgName: r.orgName,
-          lastDeliveryAt: r.lastDeliveryAt,
-          lastFetchedAt: r.lastFetchedAt,
-          quietDays: Math.floor((now.getTime() - Date.parse(lastChange)) / 86_400_000),
-        });
-      }
+    const lastChange = r.lastFetchedAt ?? r.createdAt;
+    if (r.lastDeliveryAt && lastChange && lastChange < quietCutoff) {
+      quiet.push({
+        ...base,
+        lastDeliveryAt: r.lastDeliveryAt,
+        quietDays: Math.floor((now.getTime() - Date.parse(lastChange)) / DAY_MS),
+      });
     }
   }
 

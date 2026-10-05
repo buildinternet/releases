@@ -4,6 +4,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
+import { logInboundAuthRejected } from "../lib/inbound-auth.js";
 import { UnauthorizedError } from "@releases/lib/releases-error";
 
 export const githubRoutes = new Hono<Env>();
@@ -70,14 +71,7 @@ githubRoutes.post("/inbound/github", async (c) => {
   const secret = await getSecret(env.RELEASES_GITHUB_WEBHOOK_SECRET);
   const signature = c.req.header("X-Hub-Signature-256");
   if (!secret || !(await verifyGitHubSignature(secret, rawBody, signature))) {
-    // Log the rejection reason (never the signature) so a broken secret shows
-    // up as an app event, not only as a 401 in the request logs.
-    const reason = !secret ? "secret-unbound" : signature ? "mismatch" : "missing";
-    logEvent(reason === "secret-unbound" ? "error" : "warn", {
-      component: "github-webhook",
-      event: "auth-rejected",
-      reason,
-    });
+    logInboundAuthRejected("github-webhook", secret, signature);
     return respondError(c, new UnauthorizedError());
   }
 

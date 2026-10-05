@@ -22,8 +22,9 @@ import { ensureSourceActorScheduled } from "../lib/sources/source-actor-schedule
 import {
   recordFirecrawlAuthRejection,
   stampFirecrawlDelivery,
-  type FirecrawlAuthRejectReason,
 } from "../lib/ingest/firecrawl-delivery.js";
+import { logInboundAuthRejected } from "../lib/inbound-auth.js";
+import { logSwallowed } from "../lib/log-swallowed.js";
 import {
   NotFoundError,
   UnauthorizedError,
@@ -247,19 +248,9 @@ firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
   const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
   const token = c.req.header("X-Firecrawl-Token") ?? "";
   if (!secret || !constantTimeEqual(token, secret)) {
-    // Log the rejection (never the token) and leave a throttled marker for the
-    // staleness scan: without it, a receiver rejecting every delivery looks
-    // exactly like a fleet of quiet pages (2026-09-15 → 10-04).
-    const reason: FirecrawlAuthRejectReason = !secret
-      ? "secret-unbound"
-      : token
-        ? "mismatch"
-        : "missing";
-    logEvent(reason === "secret-unbound" ? "error" : "warn", {
-      component: "firecrawl-webhook",
-      event: "auth-rejected",
-      reason,
-    });
+    // The KV marker lets the staleness scan tell a rejecting receiver from a
+    // fleet of quiet pages.
+    const reason = logInboundAuthRejected("firecrawl-webhook", secret, token);
     await recordFirecrawlAuthRejection(env.LATEST_CACHE, reason);
     return respondError(c, new UnauthorizedError());
   }
@@ -284,16 +275,9 @@ firecrawlRoutes.post("/inbound/firecrawl", async (c) => {
   // staleness scan measures from this, not from `lastFetchedAt` (which only the
   // ingest workflow advances, so gate-skipped deliveries never move it).
   // Stamped before any spawn so the workflow's source snapshot carries it.
-  try {
-    await stampFirecrawlDelivery(db, sourceId);
-  } catch (err) {
-    logEvent("warn", {
-      component: "firecrawl-webhook",
-      event: "delivery-stamp-failed",
-      sourceId,
-      err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
-    });
-  }
+  await stampFirecrawlDelivery(db, sourceId).catch(
+    logSwallowed("firecrawl-webhook", "delivery-stamp-failed", { sourceId }),
+  );
 
   // Static per-source toggle — compute once, not per page.
   const judgeOn = fc.judgeEnabled !== false;
