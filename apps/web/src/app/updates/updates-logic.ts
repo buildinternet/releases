@@ -190,3 +190,41 @@ export function entryVersionLabel(entry: FeedEntry): string | null {
  *  (always true today via `rollupTags`) — re-exported so callers can narrow
  *  without importing `RollupItem` directly. */
 export type { RollupItem };
+
+// ── Day lookup (/updates/[date]) ──
+
+/** The org feed caps `?limit=` at 100 server-side; older days live past page 1. */
+export const DAY_LOOKUP_PAGE_LIMIT = 100;
+/** Same safety cap as the `/updates` feed's eager cursor walk. */
+const DAY_LOOKUP_MAX_PAGES = 25;
+
+interface DayLookupPage<T> {
+  releases: T[];
+  pagination: { nextCursor: string | null };
+}
+
+/**
+ * Find the release published on `date` (YYYY-MM-DD, UTC) by walking the
+ * newest-first org feed. Stops as soon as a page's oldest entry is already
+ * before `date`, the cursor runs out, or a cursor repeats (the REST feed fails
+ * open to page 1 on a bad cursor, which would otherwise loop).
+ */
+export async function findReleaseForDay<T extends { publishedAt: string | null }>(
+  date: string,
+  fetchPage: (cursor: string | undefined) => Promise<DayLookupPage<T>>,
+): Promise<T | null> {
+  let cursor: string | undefined;
+  const seen = new Set<string>();
+  for (let page = 0; page < DAY_LOOKUP_MAX_PAGES; page++) {
+    const feed = await fetchPage(cursor);
+    const match = feed.releases.find((r) => (r.publishedAt ?? "").slice(0, 10) === date);
+    if (match) return match;
+    const oldest = feed.releases.at(-1)?.publishedAt?.slice(0, 10);
+    if (oldest && oldest < date) return null;
+    const next = feed.pagination.nextCursor;
+    if (!next || seen.has(next)) return null;
+    seen.add(next);
+    cursor = next;
+  }
+  return null;
+}

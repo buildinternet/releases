@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  findReleaseForDay,
   monthKeyOf,
   monthLabelOf,
   buildMonthBuckets,
@@ -193,5 +194,71 @@ describe("entry* helpers (row | rollup)", () => {
     expect(entryComposition(entry)).toEqual({ bugs: 0, features: 2, enhancements: 1 });
     expect(entryAreaGroup(entry)).toEqual({ slug: "cli", label: "CLI" });
     expect(entryVersionLabel(entry)).toBe("v0.65.0→v0.66.0");
+  });
+});
+
+describe("findReleaseForDay", () => {
+  const pages: Record<
+    string,
+    {
+      releases: { id: string; publishedAt: string | null }[];
+      pagination: { nextCursor: string | null };
+    }
+  > = {
+    first: {
+      releases: [
+        { id: "a", publishedAt: "2026-10-03T12:00:00Z" },
+        { id: "b", publishedAt: "2026-07-02T12:00:00Z" },
+      ],
+      pagination: { nextCursor: "c2" },
+    },
+    c2: {
+      releases: [
+        { id: "c", publishedAt: "2026-06-25T12:00:00Z" },
+        { id: "d", publishedAt: "2026-03-01T12:00:00Z" },
+      ],
+      pagination: { nextCursor: null },
+    },
+  };
+  const makeFetch = () => {
+    const calls: (string | undefined)[] = [];
+    const fetchPage = async (cursor: string | undefined) => {
+      calls.push(cursor);
+      return pages[cursor ?? "first"]!;
+    };
+    return { calls, fetchPage };
+  };
+
+  test("finds a day on the first page without paging", async () => {
+    const { calls, fetchPage } = makeFetch();
+    expect((await findReleaseForDay("2026-10-03", fetchPage))?.id).toBe("a");
+    expect(calls).toEqual([undefined]);
+  });
+
+  test("follows the cursor for days past the first page", async () => {
+    const { calls, fetchPage } = makeFetch();
+    expect((await findReleaseForDay("2026-06-25", fetchPage))?.id).toBe("c");
+    expect(calls).toEqual([undefined, "c2"]);
+  });
+
+  test("stops early once the page is older than the requested day", async () => {
+    const { calls, fetchPage } = makeFetch();
+    expect(await findReleaseForDay("2026-08-01", fetchPage)).toBeNull();
+    expect(calls).toEqual([undefined]);
+  });
+
+  test("returns null when the cursor runs out", async () => {
+    const { fetchPage } = makeFetch();
+    expect(await findReleaseForDay("2026-01-01", fetchPage)).toBeNull();
+  });
+
+  test("bails on a repeating cursor instead of looping", async () => {
+    let n = 0;
+    const result = await findReleaseForDay("2026-01-01", async () => {
+      n++;
+      return { releases: [{ publishedAt: null }], pagination: { nextCursor: "same" } };
+    });
+    expect(result).toBeNull();
+    expect(n).toBe(2);
   });
 });

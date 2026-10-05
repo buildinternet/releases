@@ -8,15 +8,16 @@ import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { deriveFeedTitle } from "@/lib/release-title";
+import { DAY_LOOKUP_PAGE_LIMIT, findReleaseForDay } from "../updates-logic";
 
 const ORG_SLUG = "releases-sh";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// One rollup release per active day. The feed is small and grows ~1/day, so a
-// single page pull + date match is cheaper than a dedicated by-date endpoint.
-async function findReleaseForDate(date: string) {
-  const feed = await api.orgReleases(ORG_SLUG, { limit: 100 });
-  return feed.releases.find((r) => (r.publishedAt ?? "").slice(0, 10) === date) ?? null;
+// One rollup release per active day; walks the cursor past the 100-row page cap.
+function findReleaseForDate(date: string) {
+  return findReleaseForDay(date, (cursor) =>
+    api.orgReleases(ORG_SLUG, { limit: DAY_LOOKUP_PAGE_LIMIT, cursor }),
+  );
 }
 
 // releases.sh's own changelog entries carry the date as their raw `title`; the
