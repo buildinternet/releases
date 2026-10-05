@@ -1,5 +1,12 @@
 import { describe, it, expect } from "bun:test";
-import { thumbUrl, isGifSrc, shouldRenderAsVideo, pickReleaseThumb } from "./media";
+import {
+  thumbUrl,
+  isGifSrc,
+  isMp4Src,
+  shouldRenderAsVideo,
+  videoUrl,
+  pickReleaseThumb,
+} from "./media";
 
 const origin = "https://media.releases.sh";
 
@@ -102,5 +109,34 @@ describe("shouldRenderAsVideo", () => {
     expect(
       shouldRenderAsVideo({ type: "gif", src: "https://cdn.example.com/x.gif", enabled: true }),
     ).toBe(false);
+  });
+});
+
+describe("isMp4Src", () => {
+  it("detects a .mp4 pathname, case-insensitively", () => {
+    expect(isMp4Src(`${origin}/releases/abc.mp4`)).toBe(true);
+    expect(isMp4Src(`${origin}/releases/abc.MP4?v=1`)).toBe(true);
+  });
+
+  it("is false for gifs and unparseable strings", () => {
+    expect(isMp4Src(`${origin}/releases/abc.gif`)).toBe(false);
+    expect(isMp4Src("not a url")).toBe(false);
+  });
+});
+
+describe("videoUrl", () => {
+  it("serves an already-transcoded same-origin mp4 directly, with no transform", () => {
+    const src = `${origin}/releases/abc.mp4`;
+    expect(videoUrl(src, origin)).toBe(src);
+  });
+
+  it("routes a same-origin gif through the media transform", () => {
+    const src = `${origin}/releases/abc.gif`;
+    expect(videoUrl(src, origin)).toBe(`${origin}/cdn-cgi/media/mode=video/${src}`);
+  });
+
+  it("does not skip the transform for an mp4 on a look-alike host", () => {
+    const src = "https://media.releases.sh.evil.com/releases/abc.mp4";
+    expect(videoUrl(src, origin)).toBe(`${origin}/cdn-cgi/media/mode=video/${src}`);
   });
 });
