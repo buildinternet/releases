@@ -3,6 +3,16 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 3, 2026
+
+**Changed**
+- Product name is now consistently "Release Notes Index" across sign-in screens, social preview images, the MCP server's display name in connected clients, and in-product copy.
+
+## October 2, 2026
+
+**Fixed**
+- OAuth consent screen now shows the real redirect destination — instead of the client's self-reported name and domain, the page shows where your access token is actually sent (another website, an app on this device, or a named app-scheme app); unverified clients that redirect to an external site show an amber warning.
+
 ## October 1, 2026
 
 **Added**
