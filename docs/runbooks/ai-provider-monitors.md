@@ -270,6 +270,44 @@ carrying `summarize-release` is down, its key is bad, or the lane is switched of
 disabled (a flag or a model var), this fires continuously and correctly — confirm intent before
 chasing it as an incident.
 
+### Explained summarization skips
+
+Empty bodies, oversized bodies, and eligibility gates never call the model, so they leave no
+`ai_usage` / `summarize-release` event. That absence false-fired this monitor (four empty-body
+prereleases on `supabase/supabase-cli` hit `isEmptyContent`). The live monitor query is maintained
+in Axiom; the code signal it can count without inferring from a missing usage event is
+`summarize-skip`.
+
+```kusto
+['releases-cloudflare-logs']
+| where ['body'] contains '"event":"summarize-skip"'
+| extend p = parse_json(['body'])
+| extend lane = tostring(p['lane']), reason = tostring(p['reason']), n = toint(p['count'])
+| where lane == 'summarize-release'
+| summarize skips = sum(n) by reason
+```
+
+| Field                 | Meaning                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| `component`           | `auto-generate-content` (ingest hook) or `batch-summarize` (daily batch)   |
+| `event`               | `summarize-skip`                                                           |
+| `lane`                | `summarize-release` — same string as `ai_usage.lane`                       |
+| `reason`              | Stable code, see below                                                     |
+| `count`               | Releases skipped for that reason on this call. Sum this.                   |
+| `releaseIds`          | First 20 ids. Do not `array_length` this for the total.                    |
+| `releaseIdsTruncated` | `true` when `count` is larger than `releaseIds`                            |
+| `sourceSlug`          | Set on the ingest hook. Omitted on the daily batch, which is cross-source. |
+
+Reason codes: `empty`, `too-large`, `opted-out`, `source-opt-out`, `hidden`, `coverage`,
+`row-cap`, `missing`, `ineligible`. Definitions live in `apps/api/src/lib/ai/summarize-skip.ts`.
+
+`batch-summary` still carries `candidateCount`, `skippedEmpty`, and `skippedTooLarge` for the
+ingest loop that reaches a model resolver. Those two skip fields match the `empty` and
+`too-large` events from the same call — do not add them to `summarize-skip` counts. Hidden,
+opted-out, source opt-out, coverage, and row-cap return before `batch-summary` and only show up
+on `summarize-skip`. A missing provider is not one of these reasons; those candidates stay
+unexplained so this monitor can still fire.
+
 ---
 
 ## Triage queries

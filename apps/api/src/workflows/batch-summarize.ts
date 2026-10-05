@@ -49,6 +49,7 @@ import {
 import { fetchEligibleReleases } from "@releases/core-internal/eligibility";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/ai/anthropic.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { logSummarizeSkip } from "../lib/ai/summarize-skip.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -182,10 +183,30 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         });
 
         // Filter out empty-content and over-size rows locally (no API call).
+        // Same order as before: empty wins over too-large, so who is submitted
+        // does not change. The ids are the `summarize-skip` signal.
+        const skippedEmptyIds: string[] = [];
+        const skippedTooLargeIds: string[] = [];
         const rows = eligible.filter((row) => {
-          if (!row.content || isEmptyContent(row.content)) return false;
-          if (row.content.length > MAX_BODY_CHARS) return false;
+          if (!row.content || isEmptyContent(row.content)) {
+            skippedEmptyIds.push(row.id);
+            return false;
+          }
+          if (row.content.length > MAX_BODY_CHARS) {
+            skippedTooLargeIds.push(row.id);
+            return false;
+          }
           return true;
+        });
+        logSummarizeSkip({
+          component: "batch-summarize",
+          reason: "empty",
+          releaseIds: skippedEmptyIds,
+        });
+        logSummarizeSkip({
+          component: "batch-summarize",
+          reason: "too-large",
+          releaseIds: skippedTooLargeIds,
         });
 
         // Estimate cost without any API calls. Each request carries the full
@@ -240,6 +261,8 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           sinceDays,
           eligibleCount: eligible.length,
           filteredCount: rows.length,
+          skippedEmpty: skippedEmptyIds.length,
+          skippedTooLarge: skippedTooLargeIds.length,
           estCostUsd,
           maxCostUsd,
         });

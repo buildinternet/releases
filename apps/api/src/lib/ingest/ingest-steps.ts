@@ -44,6 +44,11 @@ import { invalidateLatestCache, type InvalidationEnv } from "../latest-cache.js"
 import { resolveSummarizeModel, type TextModelEnv } from "../ai/text-model.js";
 import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "../d1-limits.js";
 import { logUsage } from "../ai/usage-log.js";
+import {
+  logSummarizeSkip,
+  logSummarizeSkips,
+  type SummarizeSkipReason,
+} from "../ai/summarize-skip.js";
 // Type-only — erased at compile, so no runtime import cycle with the workflow
 // module that imports the values below from here.
 import type { PollAndFetchWorkflowEnv } from "../../workflows/poll-and-fetch.js";
@@ -116,6 +121,13 @@ const MAX_AUTOGEN_BODY_CHARS = 50_000;
  * Per-row exceptions log + continue so a single bad call can't pin the
  * workflow into a retry storm. The step itself only throws on outer-loop
  * failures (SELECT, client construction).
+ *
+ * Every pre-model short-circuit emits `summarize-skip` (`lane:
+ * summarize-release`, stable `reason` code, `count` + `releaseIds`). That
+ * includes gates that return before `batch-summary` (hidden, opted-out,
+ * source opt-out, coverage, row cap) and the in-loop empty / too-large
+ * skips. `batch-summary.skippedEmpty` / `skippedTooLarge` are unchanged.
+ * Who gets a model call is unchanged.
  */
 export async function generateContentForReleases(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
@@ -130,7 +142,15 @@ export async function generateContentForReleases(
   opts: { ignoreAutoGenerateGate?: boolean } = {},
 ): Promise<number> {
   // Hidden sources skip AI features per existing convention.
-  if (source.isHidden === true) return 0;
+  if (source.isHidden === true) {
+    logSummarizeSkip({
+      component: "auto-generate-content",
+      reason: "hidden",
+      releaseIds: insertedIds,
+      sourceSlug: source.slug,
+    });
+    return 0;
+  }
 
   // Order matters: SELECT before secret-store fetch. Most orgs are opted out,
   // and the empty-result path saves a Secrets Store round-trip per non-opted
@@ -184,6 +204,32 @@ export async function generateContentForReleases(
     rows.push(...chunkRows);
   }
 
+  // Ids the eligibility SELECT dropped never reach a model. Classify them so
+  // Axiom can count the reason instead of inferring a skip from a missing
+  // `ai_usage`. Fail-open: a probe error must not block summarization of the
+  // rows that did pass.
+  const eligibleIds = new Set(rows.map((row) => row.id));
+  const ineligibleIds = insertedIds.filter((id) => !eligibleIds.has(id));
+  if (ineligibleIds.length > 0) {
+    try {
+      const grouped = await classifyIneligibleReleases(
+        db,
+        source.id,
+        ineligibleIds,
+        opts.ignoreAutoGenerateGate === true,
+      );
+      logSummarizeSkips("auto-generate-content", source.slug, grouped);
+    } catch (err) {
+      logEvent("warn", {
+        component: "auto-generate-content",
+        event: "skip-classify-failed",
+        sourceSlug: source.slug,
+        count: ineligibleIds.length,
+        err,
+      });
+    }
+  }
+
   if (rows.length === 0) return 0;
 
   if (rows.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
@@ -193,6 +239,12 @@ export async function generateContentForReleases(
       sourceSlug: source.slug,
       candidateCount: rows.length,
       cap: MAX_AUTOGEN_ROWS_PER_FIRE,
+    });
+    logSummarizeSkip({
+      component: "auto-generate-content",
+      reason: "row-cap",
+      releaseIds: rows.map((row) => row.id),
+      sourceSlug: source.slug,
     });
     return 0;
   }
@@ -205,8 +257,8 @@ export async function generateContentForReleases(
 
   const startedAt = Date.now();
 
-  let skippedEmpty = 0;
-  let skippedTooLarge = 0;
+  const skippedEmptyIds: string[] = [];
+  const skippedTooLargeIds: string[] = [];
   let failed = 0;
   let totalTokens = 0;
 
@@ -233,7 +285,7 @@ export async function generateContentForReleases(
 
   for (const row of rows) {
     if ((row.content?.length ?? 0) > MAX_AUTOGEN_BODY_CHARS) {
-      skippedTooLarge++;
+      skippedTooLargeIds.push(row.id);
       logEvent("warn", {
         component: "auto-generate-content",
         event: "body-cap-skip",
@@ -289,7 +341,7 @@ export async function generateContentForReleases(
         );
       }
       if (result.skipped) {
-        skippedEmpty++;
+        skippedEmptyIds.push(row.id);
         continue;
       }
 
@@ -367,20 +419,120 @@ export async function generateContentForReleases(
     }
   }
 
+  logSummarizeSkip({
+    component: "auto-generate-content",
+    reason: "empty",
+    releaseIds: skippedEmptyIds,
+    sourceSlug: source.slug,
+  });
+  logSummarizeSkip({
+    component: "auto-generate-content",
+    reason: "too-large",
+    releaseIds: skippedTooLargeIds,
+    sourceSlug: source.slug,
+  });
+
   logEvent("info", {
     component: "auto-generate-content",
     event: "batch-summary",
     sourceSlug: source.slug,
     candidateCount: rows.length,
     generated,
-    skippedEmpty,
-    skippedTooLarge,
+    skippedEmpty: skippedEmptyIds.length,
+    skippedTooLarge: skippedTooLargeIds.length,
     failed,
     totalTokens,
     durationMs: Date.now() - startedAt,
   });
 
   return generated;
+}
+
+/**
+ * Why an inserted id failed `summarizeEligibilityConds`. One reason per id,
+ * first match wins, matching the SELECT's AND order: org opt-in, then
+ * per-source opt-out, then coverage.
+ *
+ * Org and source gates apply to every id on this source, so those two reasons
+ * are a single PK lookup — the common opted-out fire must not probe each
+ * release. Coverage vs. a missing id still needs a per-id probe, and only
+ * runs when the source-level gates would have allowed the row through.
+ */
+async function classifyIneligibleReleases(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- same drizzle override as the caller
+  db: any,
+  sourceId: string,
+  ids: string[],
+  ignoreAutoGate: boolean,
+): Promise<Map<SummarizeSkipReason, string[]>> {
+  const grouped = new Map<SummarizeSkipReason, string[]>();
+  const pushAll = (reason: SummarizeSkipReason) => {
+    grouped.set(reason, [...ids]);
+  };
+
+  const [gate]: { autoGenerateContent: boolean; sourceOptOut: number }[] = await db
+    .select({
+      autoGenerateContent: organizations.autoGenerateContent,
+      sourceOptOut:
+        sql<number>`CASE WHEN json_extract(${sources.metadata}, '$.summarize') = 0 THEN 1 ELSE 0 END`.as(
+          "source_opt_out",
+        ),
+    })
+    .from(sources)
+    .innerJoin(organizations, eq(organizations.id, sources.orgId))
+    .where(eq(sources.id, sourceId))
+    .limit(1);
+
+  if (!gate) {
+    pushAll("missing");
+    return grouped;
+  }
+  if (!ignoreAutoGate && !sqliteFlagOn(gate.autoGenerateContent)) {
+    pushAll("opted-out");
+    return grouped;
+  }
+  if (Number(gate.sourceOptOut) === 1) {
+    pushAll("source-opt-out");
+    return grouped;
+  }
+
+  const found = new Set<string>();
+  const coverage = new Set<string>();
+  for (const chunk of chunkArray(ids, IN_ARRAY_CHUNK_SIZE)) {
+    // eslint-disable-next-line no-await-in-loop -- chunked under the D1 bind cap
+    const probes: { id: string; isCoverage: number }[] = await db
+      .select({
+        id: releases.id,
+        isCoverage:
+          sql<number>`CASE WHEN ${releaseCoverage.coverageId} IS NOT NULL THEN 1 ELSE 0 END`.as(
+            "is_coverage",
+          ),
+      })
+      .from(releases)
+      .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
+      .where(inArray(releases.id, chunk));
+    for (const probe of probes) {
+      found.add(probe.id);
+      if (Number(probe.isCoverage) === 1) coverage.add(probe.id);
+    }
+  }
+
+  const push = (reason: SummarizeSkipReason, id: string) => {
+    const list = grouped.get(reason);
+    if (list) list.push(id);
+    else grouped.set(reason, [id]);
+  };
+  for (const id of ids) {
+    if (!found.has(id)) push("missing", id);
+    else if (coverage.has(id)) push("coverage", id);
+    else push("ineligible", id);
+  }
+  return grouped;
+}
+
+/** Drizzle boolean mode is `true`/`false`; a raw SQLite read can still surface `1`/`0`. */
+function sqliteFlagOn(value: unknown): boolean {
+  return value === true || value === 1;
 }
 
 /**
