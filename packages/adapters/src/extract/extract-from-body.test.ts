@@ -10,7 +10,7 @@ const silentLogger: ExtractLogger = { info: () => {}, warn: () => {}, debug: () 
 function makeDeps(client: unknown, overrides?: Partial<ExtractDeps>): ExtractDeps {
   return {
     anthropicClient: client as never,
-    agentModel: "claude-sonnet-5",
+    agentModel: "claude-sonnet-5-5",
     logger: silentLogger,
     cloudflare: null,
     repo: {} as never,
@@ -229,8 +229,8 @@ describe("extractFromBody — model selection", () => {
       makeDeps(capturingClient(params)), // no oneShotModel
     );
 
-    expect(params[0]!.model).toBe("claude-sonnet-5");
-    expect(result.modelUsed).toBe("claude-sonnet-5");
+    expect(params[0]!.model).toBe("claude-sonnet-5-5");
+    expect(result.modelUsed).toBe("claude-sonnet-5-5");
   });
 
   test("tool-loop path stays on agentModel even when oneShotModel is Haiku", async () => {
@@ -250,9 +250,9 @@ describe("extractFromBody — model selection", () => {
     // Agentic loop must not be downgraded — every call runs on agentModel.
     // Guard against a vacuous `.every` pass: assert calls were actually made.
     expect(params.length).toBeGreaterThan(0);
-    expect(params.every((p) => p.model === "claude-sonnet-5")).toBe(true);
+    expect(params.every((p) => p.model === "claude-sonnet-5-5")).toBe(true);
     expect(result.mode).toBe("toolloop");
-    expect(result.modelUsed).toBe("claude-sonnet-5");
+    expect(result.modelUsed).toBe("claude-sonnet-5-5");
   });
 });
 
@@ -292,7 +292,7 @@ describe("extractFromBody — deterministic extraction", () => {
   // extract_releases tool call intermittently returns `releases: []` on the same
   // input (observed 1-in-4 on the OpenAI changelog). temperature 0 makes the
   // parse deterministic — but only on models that still accept it. Models
-  // released after Opus 4.6 (Sonnet 5, Opus 4.7+, Fable) reject a non-default
+  // released after Opus 4.6 (Sonnet 5.5, Opus 4.7+, Fable) reject a non-default
   // temperature with a 400, so the knob is model-gated (modelAcceptsTemperature).
   function captureOneShotParams(respModel: string) {
     const captured: Anthropic.MessageCreateParams[] = [];
@@ -345,12 +345,12 @@ describe("extractFromBody — deterministic extraction", () => {
     expect(captured[0]!.temperature).toBe(0);
   });
 
-  test("oneshot path omits temperature when it falls back to Sonnet 5 (rejects it)", async () => {
-    const { captured, client } = captureOneShotParams("claude-sonnet-5");
-    // No oneShotModel → falls back to agentModel (claude-sonnet-5).
+  test("oneshot path omits temperature when it falls back to Sonnet 5.5 (rejects it)", async () => {
+    const { captured, client } = captureOneShotParams("claude-sonnet-5-5");
+    // No oneShotModel → falls back to agentModel (claude-sonnet-5-5).
     await extractFromBody(oneShotOpts, makeDeps(client));
     expect(captured.length).toBe(1);
-    expect(captured[0]!.model).toBe("claude-sonnet-5");
+    expect(captured[0]!.model).toBe("claude-sonnet-5-5");
     expect(captured[0]!.temperature).toBeUndefined();
   });
 });
@@ -422,7 +422,7 @@ describe("extractFromBody — fallback paths", () => {
                 id: "msg_fallback",
                 type: "message",
                 role: "assistant",
-                model: "claude-sonnet-5",
+                model: "claude-sonnet-5-5",
                 content: [
                   {
                     type: "tool_use",

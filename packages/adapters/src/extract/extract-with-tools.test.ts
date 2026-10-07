@@ -11,7 +11,7 @@ const silentLogger: ExtractLogger = {
   debug: () => {},
 };
 
-function makeDeps(client: unknown, agentModel = "claude-sonnet-5"): ExtractDeps {
+function makeDeps(client: unknown, agentModel = "claude-sonnet-5-5"): ExtractDeps {
   return {
     anthropicClient: client as never,
     agentModel,
@@ -132,7 +132,7 @@ describe("extractWithTools — happy path", () => {
 
 describe("extractWithTools — deterministic extraction", () => {
   // The determinism knob (temperature 0) is model-gated: models released after
-  // Opus 4.6 (Sonnet 5, Opus 4.7+, Fable) reject a non-default temperature with a
+  // Opus 4.6 (Sonnet 5.5, Opus 4.7+, Fable) reject a non-default temperature with a
   // 400, so it's omitted there and kept on models that still accept it (Haiku
   // 4.5). See modelAcceptsTemperature in shared.ts.
   function captureToolLoopParams(agentModel: string) {
@@ -168,9 +168,9 @@ describe("extractWithTools — deterministic extraction", () => {
     fetchUrl: "https://x.test/feed.json",
   };
 
-  test("tool-loop rounds omit temperature on Sonnet 5 (rejects non-default temperature)", async () => {
-    const { captured, client } = captureToolLoopParams("claude-sonnet-5");
-    await extractWithTools(loopOpts, makeDeps(client, "claude-sonnet-5"));
+  test("tool-loop rounds omit temperature on Sonnet 5.5 (rejects non-default temperature)", async () => {
+    const { captured, client } = captureToolLoopParams("claude-sonnet-5-5");
+    await extractWithTools(loopOpts, makeDeps(client, "claude-sonnet-5-5"));
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured.every((p) => p.temperature === undefined)).toBe(true);
   });

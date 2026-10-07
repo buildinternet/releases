@@ -213,7 +213,7 @@ async function runOneShot(
     model,
     max_tokens: maxOutputTokens,
     // Deterministic parse on models that still accept it (Haiku one-shot);
-    // omitted on Sonnet 5 / Opus 4.7+ / Fable, which 400 on a
+    // omitted on Sonnet 5.5 / Opus 4.7+ / Fable, which 400 on a
     // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
     ...(modelAcceptsTemperature(model)
       ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note

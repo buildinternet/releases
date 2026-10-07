@@ -254,9 +254,10 @@ describe("applySlidingCacheBreakpoint", () => {
 
 describe("modelAcceptsTemperature", () => {
   test("returns false for models that reject a non-default temperature", () => {
-    // Sonnet 5, Opus 4.7/4.8, Fable 5, and Mythos 400 on any non-default
-    // sampling parameter — extraction must omit `temperature` for these.
+    // Sonnet 5.5 / Sonnet 5, Opus 4.7/4.8, Fable 5, and Mythos 400 on any
+    // non-default sampling parameter — extraction must omit `temperature`.
     for (const model of [
+      "claude-sonnet-5-5",
       "claude-sonnet-5",
       "claude-opus-4-7",
       "claude-opus-4-8",
