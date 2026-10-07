@@ -33,7 +33,7 @@ export function mockAnthropicClient(
       id: `msg_${i}`,
       type: "message",
       role: "assistant",
-      model: "claude-sonnet-5",
+      model: "claude-sonnet-5-5",
       content: resp.content,
       stop_reason: resp.stop_reason,
       stop_sequence: null,

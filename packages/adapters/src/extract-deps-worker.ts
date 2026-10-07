@@ -49,7 +49,7 @@ export interface WorkerDepsEnv {
  * degrades, and they run on small inputs (the loop slices the body) so the
  * cost is already low.
  */
-const DEFAULT_AGENT_MODEL = "claude-sonnet-5";
+const DEFAULT_AGENT_MODEL = "claude-sonnet-5-5";
 
 /**
  * Default model for the SINGLE-CALL body extraction (crawl one-shot,

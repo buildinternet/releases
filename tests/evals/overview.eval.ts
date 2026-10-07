@@ -79,7 +79,7 @@ async function main() {
 
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
   // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
-  // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
+  // overrides it (e.g. claude-sonnet-5-5 for Anthropic). See ./judge-model.ts.
   const judgeModel = useJudge ? resolveJudgeModel() : null;
 
   let allPassed = true;

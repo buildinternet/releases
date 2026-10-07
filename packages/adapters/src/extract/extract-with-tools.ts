@@ -172,7 +172,7 @@ export async function extractWithTools(
     const stream = deps.anthropicClient.beta.messages.stream({
       model: deps.agentModel,
       max_tokens: 16_384,
-      // Deterministic parse on models that still accept it; omitted on Sonnet 5 /
+      // Deterministic parse on models that still accept it; omitted on Sonnet 5.5 /
       // Opus 4.7+ / Fable, which 400 on a non-default temperature. See
       // EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
       ...(modelAcceptsTemperature(deps.agentModel)

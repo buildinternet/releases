@@ -17,6 +17,25 @@ describe("estimateCost", () => {
     });
   });
 
+  it("matches the Sonnet 5.5 list prices on the Claude docs", () => {
+    const cost = estimateCost(
+      {
+        inputTokens: 1_000_000,
+        cacheWriteTokens: 1_000_000,
+        cacheReadTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      },
+      "claude-sonnet-5-5",
+    );
+    expect(cost).toEqual({
+      inputUsd: 2,
+      cacheWriteUsd: 2.5,
+      cacheReadUsd: 0.2,
+      outputUsd: 10,
+      totalUsd: 14.7,
+    });
+  });
+
   it("matches the Sonnet 4.6 list prices on the Anthropic pricing page", () => {
     // 1M of each token type; total should equal sum of the four prices.
     const cost = estimateCost(
@@ -87,7 +106,9 @@ describe("estimateCost", () => {
     expect(ratio).toBeLessThan(3.1);
   });
 
-  it("ANTHROPIC_PRICING covers both currently used models", () => {
+  it("ANTHROPIC_PRICING covers the current Sonnet default and retained older ids", () => {
+    expect(ANTHROPIC_PRICING["claude-sonnet-5-5"]).toBeDefined();
+    expect(ANTHROPIC_PRICING["claude-sonnet-5"]).toBeDefined();
     expect(ANTHROPIC_PRICING["claude-sonnet-4-6"]).toBeDefined();
     expect(ANTHROPIC_PRICING["claude-haiku-4-5"]).toBeDefined();
   });

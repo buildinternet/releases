@@ -361,7 +361,7 @@ export function findContentStart(lines: string[]): number {
  * the input context: the default output budget here is 16K, so a large body
  * needs the model to be more concise than usual or it'll exhaust output
  * mid-extraction — regardless of how much input context the model can hold
- * (Sonnet 5 is 1M). The thresholds stay conservative for that output-budget
+ * (Sonnet 5.5 is 1M). The thresholds stay conservative for that output-budget
  * reason.
  *
  * - LARGE: warn the AI to budget concisely (most-recent entries only)
@@ -386,9 +386,9 @@ export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
  * one-shot backfill has nothing to hide behind, which is how it surfaced. 0
  * removes the variance (0 misses across 5+5 validation runs).
  *
- * MODEL-GATED: models released after Opus 4.6 (Sonnet 5, Opus 4.7+, Fable 5)
+ * MODEL-GATED: models released after Opus 4.6 (Sonnet 5.5, Opus 4.7+, Fable 5)
  * reject any non-default `temperature` with a 400 — and are deterministic enough
- * not to need it. Haiku 4.5 (the one-shot model) and Sonnet 4.6 still accept it,
+ * not to need it. Haiku 4.5 (the one-shot model) and earlier models still accept it,
  * so we keep the reproducibility guarantee there and omit the knob on the newer
  * agent models rather than degrade the Haiku path. Callers gate on
  * `modelAcceptsTemperature(model)` before sending it.
@@ -397,11 +397,11 @@ export const EXTRACTION_TEMPERATURE = 0;
 
 /**
  * Whether a model still accepts the `temperature` sampling parameter. Models
- * released after Opus 4.6 (Sonnet 5, Opus 4.7/4.8, Fable 5, Mythos) reject any
+ * released after Opus 4.6 (Sonnet 5.5, Opus 4.7/4.8, Fable 5, Mythos) reject any
  * non-default value with a 400, so extraction must omit `temperature` there and
  * rely on the model's own determinism; Haiku 4.5 and earlier still honor it.
- * Substring match so both the alias (`claude-sonnet-5`) and any dated snapshot
- * are covered. Add a family here when a new temperature-rejecting model ships.
+ * Substring match so `claude-sonnet-5-5` and the earlier `claude-sonnet-5` id
+ * are both covered. Add a family here when a new temperature-rejecting model ships.
  */
 const TEMPERATURE_UNSUPPORTED_FRAGMENTS = [
   "sonnet-5",

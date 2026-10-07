@@ -106,14 +106,14 @@ describe("runOneShotAiSdk", () => {
     expect(requests[0]!.temperature).toBe(0);
   });
 
-  it("omits temperature on a model that rejects it (Sonnet 5)", async () => {
+  it("omits temperature on a model that rejects it (Sonnet 5.5)", async () => {
     const requests: AnthropicWireBody[] = [];
     const mockFetch = (async (_url: string, init: RequestInit) => {
       requests.push(JSON.parse(init.body as string) as AnthropicWireBody);
       return anthropicResponse(terminalContent);
     }) as unknown as typeof globalThis.fetch;
 
-    await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-sonnet-5", mockFetch }));
+    await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-sonnet-5-5", mockFetch }));
 
     expect(requests[0]!.temperature).toBeUndefined();
   });

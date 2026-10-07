@@ -16,7 +16,7 @@
  *
  * Override via `JUDGE_MODEL`: an Anthropic id (`claude-…`) judges with the SDK
  * (needs `ANTHROPIC_API_KEY`); anything else is treated as an OpenRouter model
- * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-4-6` to go
+ * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-5-5` to go
  * back to Sonnet, or `JUDGE_MODEL=google/gemini-2.5-flash-lite` for cheaper.
  */
 import {
@@ -202,7 +202,7 @@ export function resolveJudgeModel(): TextModel {
   if (!lane) {
     throw new Error(
       `Judge model "${id}" needs OPENROUTER_API_KEY. Set it, or set ` +
-        `JUDGE_MODEL=claude-sonnet-4-6 to judge with Anthropic instead.`,
+        `JUDGE_MODEL=claude-sonnet-5-5 to judge with Anthropic instead.`,
     );
   }
   return asEvalTextModel(lane, evalLabel("openrouter", id));

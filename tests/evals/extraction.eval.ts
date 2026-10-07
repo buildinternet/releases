@@ -43,10 +43,10 @@ interface Lane {
 
 const LANES: Lane[] = [
   {
-    name: "sonnet-4.6 (anthropic)",
+    name: "sonnet-5.5 (anthropic)",
     model: () => {
       const key = process.env.ANTHROPIC_API_KEY;
-      return key ? anthropicSpikeModel({ apiKey: key, model: "claude-sonnet-4-6" }) : null;
+      return key ? anthropicSpikeModel({ apiKey: key, model: "claude-sonnet-5-5" }) : null;
     },
   },
   {
