@@ -268,14 +268,9 @@ describe("modelAcceptsTemperature", () => {
   });
 
   test("returns true for models that still honor temperature", () => {
-    // Haiku 4.5 (the one-shot model) and Sonnet 4.6 still accept temperature 0,
+    // Haiku 4.5 (the one-shot model) and earlier models still accept temperature 0,
     // which suppresses the ~1-in-4 spurious-empty on forced tool extraction.
-    for (const model of [
-      "claude-haiku-4-5",
-      "claude-haiku-4-5-20251001",
-      "claude-sonnet-4-6",
-      "claude-opus-4-6",
-    ]) {
+    for (const model of ["claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-opus-4-6"]) {
       expect(modelAcceptsTemperature(model)).toBe(true);
     }
   });

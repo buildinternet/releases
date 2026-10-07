@@ -212,8 +212,8 @@ async function runOneShot(
   const stream = deps.anthropicClient.messages.stream({
     model,
     max_tokens: maxOutputTokens,
-    // Deterministic parse on models that still accept it (Haiku one-shot,
-    // Sonnet 4.6); omitted on Sonnet 5 / Opus 4.7+ / Fable, which 400 on a
+    // Deterministic parse on models that still accept it (Haiku one-shot);
+    // omitted on Sonnet 5 / Opus 4.7+ / Fable, which 400 on a
     // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
     ...(modelAcceptsTemperature(model)
       ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note

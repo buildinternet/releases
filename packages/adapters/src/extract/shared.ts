@@ -388,7 +388,7 @@ export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
  *
  * MODEL-GATED: models released after Opus 4.6 (Sonnet 5, Opus 4.7+, Fable 5)
  * reject any non-default `temperature` with a 400 — and are deterministic enough
- * not to need it. Haiku 4.5 (the one-shot model) and Sonnet 4.6 still accept it,
+ * not to need it. Haiku 4.5 (the one-shot model) and earlier models still accept it,
  * so we keep the reproducibility guarantee there and omit the knob on the newer
  * agent models rather than degrade the Haiku path. Callers gate on
  * `modelAcceptsTemperature(model)` before sending it.

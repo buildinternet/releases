@@ -210,7 +210,7 @@ function getDateRangeAfter(range: DateRange): string | null {
 }
 
 function formatModelName(model: string): string {
-  // e.g. "claude-haiku-4-5-20251001" → "Haiku 4.5", "claude-sonnet-4-5-20250514" → "Sonnet 4.5"
+  // e.g. "claude-haiku-4-5-20251001" → "Haiku 4.5"
   const match = model.match(/claude-(\w+)-(\d+)-(\d+)/);
   if (match) {
     const name = match[1].charAt(0).toUpperCase() + match[1].slice(1);

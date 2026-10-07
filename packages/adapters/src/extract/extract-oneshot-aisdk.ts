@@ -99,7 +99,7 @@ export async function runOneShotAiSdk(
     },
     toolChoice: { type: "tool", toolName: "extract_releases" },
     // Deterministic parse on models that still accept a non-default temperature
-    // (Haiku one-shot, Sonnet 4.6, most OpenRouter models); omitted on Sonnet 5 /
+    // (Haiku one-shot, most OpenRouter models); omitted on Sonnet 5 /
     // Opus 4.7+ / Fable, which 400 on it. Mirrors the legacy runOneShot gate.
     ...(modelAcceptsTemperature(deps.modelLabel) ? { temperature: EXTRACTION_TEMPERATURE } : {}),
     maxOutputTokens: opts.maxOutputTokens,

@@ -124,7 +124,7 @@ describe("PUT /ai/models", () => {
       {
         method: "PUT",
         headers: { ...auth, "content-type": "application/json" },
-        body: JSON.stringify({ models: { extract: "anthropic/claude-sonnet-4.6" } }),
+        body: JSON.stringify({ models: { extract: "anthropic/claude-sonnet-5" } }),
       },
       env,
     );
@@ -133,7 +133,7 @@ describe("PUT /ai/models", () => {
       lanes: Array<{ id: string; override: string | null; effective: string }>;
     };
     expect(setBody.lanes.find((l) => l.id === "extract")?.override).toBe(
-      "anthropic/claude-sonnet-4.6",
+      "anthropic/claude-sonnet-5",
     );
 
     const clear = await a.request(
