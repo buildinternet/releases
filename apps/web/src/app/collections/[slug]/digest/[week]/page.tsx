@@ -12,6 +12,7 @@ import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
 import { DigestFormatLinks } from "@/components/digest-format-links";
 import { DigestWeekGlance } from "@/components/digest-week-glance/digest-week-glance";
+import { OpenDetailsOnHash } from "@/components/open-details-on-hash";
 import { RELEASES_COVERED_ANCHOR } from "@/lib/digest-glance";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
@@ -314,6 +315,8 @@ export default async function CollectionDigestPage({
           {AI_DIGEST_DISCLAIMER}
         </div>
 
+        {/* The glance list links uncited releases here; expand the block on arrival. */}
+        <OpenDetailsOnHash id={RELEASES_COVERED_ANCHOR} />
         {orgGroups.length > 0 && (
           // Native <details>: starts collapsed (less visual clutter) but the
           // full link list stays in the HTML for crawlers and expand-on-demand.
