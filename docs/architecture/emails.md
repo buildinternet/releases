@@ -144,6 +144,13 @@ markup ships correct and dormant.
 message means adding a sample there; the catalog is what makes the whole surface
 reviewable in one place.
 
+Samples are fabricated. To see a REAL collection weekly digest before the Monday
+run, use the "Live collection digest" control on the same page or
+`POST /v1/admin/digest/collection-test { collectionSlug, weekStart?, email|userId }`
+(root key): it renders the stored digest through the queue consumer's own load +
+render path and sends it to one user without touching any subscription or
+`last_sent_week`.
+
 The `/submit` thank-you (`recommendation.ack`) fires automatically when a
 submitter leaves a contact address. The follow-up that their source was added
 (`recommendation.added`) is **opt-in**: operators send it via
