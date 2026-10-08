@@ -1,5 +1,12 @@
 # @buildinternet/releases-api-types
 
+## 0.58.1
+
+### Patch Changes
+
+- c9ae102: Add optional `composition` (features / enhancements / bugs counts) to `DigestCoveredRelease`, so digest consumers can show what each covered release contains.
+- e4c77be: Add optional `publishedAt` to `DigestCoveredRelease`, so digest consumers can place each covered release on its day of the week.
+
 ## 0.58.0
 
 ### Minor Changes
