@@ -1,5 +1,7 @@
 # @buildinternet/releases-linux-arm64
 
+## 0.83.2
+
 ## 0.83.1
 
 ## 0.83.0

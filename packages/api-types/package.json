@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-api-types",
-  "version": "0.58.1",
+  "version": "0.58.2",
   "description": "Wire protocol — request/response types for the Releases Index API. Shared by web, workers, and clients.",
   "type": "module",
   "license": "MIT",

@@ -1,5 +1,13 @@
 # @buildinternet/releases-api-types
 
+## 0.58.2
+
+### Patch Changes
+
+- 8ea7765: Add `weeklyDigestEnabled` to the collection detail response so clients know whether a collection generates weekly digests.
+- 19544ed: Add `CollectionDigestSubscription` and the `/v1/me/collection-digests` response types, for subscribing to a collection's weekly digest by email.
+- e04603b: Accept `weeklyDigestEnabled` in the `PATCH /v1/collections/:slug` request body so a collection's weekly digest generation can be turned off (it is on by default for new collections).
+
 ## 0.58.1
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @buildinternet/releases
 
+## 0.83.2
+
+### Patch Changes
+
+- d6d2c30: The CLI is now built and published from the `buildinternet/releases` monorepo. Install commands are unchanged; GitHub release binaries and the Homebrew formula now point at that repo.
+- 5deafce: `releases list --org <unknown>` (and `--product <unknown>`) now prints "No sources configured." instead of crashing with `undefined is not an object (evaluating 'pageItems.length')`. The sources client normalizes a bare-array `/v1/sources` response into the paginated envelope when one was requested, so older API deploys that short-circuit unknown filters with `[]` no longer break the command.
+
 ## 0.83.1
 
 ### Patch Changes
