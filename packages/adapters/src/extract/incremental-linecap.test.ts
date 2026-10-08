@@ -78,7 +78,7 @@ function mockCreateClient(): { client: Pick<Anthropic, "messages">; calls: Captu
     id: "msg_mock",
     type: "message",
     role: "assistant",
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-haiku-5-5",
     content: [
       {
         type: "tool_use",
@@ -144,6 +144,8 @@ describe("runIncrementalExtraction — lineCap", () => {
     );
 
     expect(calls).toHaveLength(1);
+    expect(calls[0]!.params.thinking).toEqual({ type: "disabled" });
+    expect(calls[0]!.params.temperature).toBeUndefined();
     const content = getUserMessageContent(calls);
     expect(content).not.toContain(SENTINEL);
     // Sanity: the slice header says lines 1–200 of 500

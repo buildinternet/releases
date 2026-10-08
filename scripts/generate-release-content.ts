@@ -53,6 +53,7 @@ import {
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
+import { haikuThinkingParam } from "@releases/adapters/extract/shared";
 import { buildLaneAnthropicModel, buildLaneOpenRouterModel } from "@releases/adapters/lane-model";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 import { adminPatch, adminPost } from "./lib/admin-client.js";
@@ -390,6 +391,7 @@ async function runBatch(
       params: {
         model: MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
+        ...haikuThinkingParam(MODEL),
         system: [
           {
             type: "text" as const,
@@ -575,12 +577,13 @@ if (useAnthropicBatch || providerPath === "anthropic-realtime") {
   const estCost = estimateCost(
     { inputTokens: estInputTokens, outputTokens: estOutputTokens },
     MODEL,
-    { batch: useAnthropicBatch },
+    // Sum of many sub-100K prompts — stay on the ≤100K Haiku 5.5 rate.
+    { batch: useAnthropicBatch, longContext: false },
   );
   estCostUsd = estCost?.totalUsd ?? 0;
   estCostLabel = useAnthropicBatch
-    ? `Haiku 4.5 batch -50%; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`
-    : `Haiku 4.5 list; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`;
+    ? `Haiku 5.5 batch -50%; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`
+    : `Haiku 5.5 list; ${estInputTokens.toLocaleString()} in + ${estOutputTokens.toLocaleString()} out`;
 } else {
   // OpenRouter DeepSeek Flash rough list estimate for the budget guard.
   // Actual billed cost comes from OpenRouter; this is intentionally approximate.
@@ -701,7 +704,7 @@ const finalCost =
           outputTokens: totalOutput,
         },
         MODEL,
-        { batch: useAnthropicBatch },
+        { batch: useAnthropicBatch, longContext: false },
       )
     : {
         totalUsd:
@@ -715,8 +718,8 @@ const finalCostLabel =
   providerPath === "openrouter-realtime"
     ? `OpenRouter ${openRouterModel} rough list`
     : useAnthropicBatch
-      ? "Haiku 4.5 batch price = list x 0.5"
-      : "Haiku 4.5 list price";
+      ? "Haiku 5.5 batch price = list x 0.5"
+      : "Haiku 5.5 list price";
 
 logger.info(
   `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}, skipped ${skippedEmpty} empty-body, failed ${failed}`,

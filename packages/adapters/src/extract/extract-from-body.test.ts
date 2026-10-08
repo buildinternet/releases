@@ -207,12 +207,12 @@ describe("extractFromBody — model selection", () => {
         fetchUrl: "https://x.test/feed.json",
         useToolLoop: false,
       },
-      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-4-5-20251001" }),
+      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-5-5" }),
     );
 
     expect(params).toHaveLength(1);
-    expect(params[0]!.model).toBe("claude-haiku-4-5-20251001");
-    expect(result.modelUsed).toBe("claude-haiku-4-5-20251001");
+    expect(params[0]!.model).toBe("claude-haiku-5-5");
+    expect(result.modelUsed).toBe("claude-haiku-5-5");
   });
 
   test("one-shot falls back to agentModel when oneShotModel is unset (back-compat)", async () => {
@@ -244,7 +244,7 @@ describe("extractFromBody — model selection", () => {
         fetchUrl: "https://x.test/feed.json",
         useToolLoop: true,
       },
-      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-4-5-20251001" }),
+      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-5-5" }),
     );
 
     // Agentic loop must not be downgraded — every call runs on agentModel.
@@ -335,7 +335,7 @@ describe("extractFromBody — deterministic extraction", () => {
     useToolLoop: false as const,
   };
 
-  test("oneshot path requests temperature 0 on the Haiku one-shot model", async () => {
+  test("oneshot path requests temperature 0 on Haiku 4.5", async () => {
     const { captured, client } = captureOneShotParams("claude-haiku-4-5-20251001");
     await extractFromBody(
       oneShotOpts,
@@ -343,6 +343,15 @@ describe("extractFromBody — deterministic extraction", () => {
     );
     expect(captured.length).toBe(1);
     expect(captured[0]!.temperature).toBe(0);
+    expect(captured[0]!.thinking).toBeUndefined();
+  });
+
+  test("oneshot path omits temperature and disables thinking on Haiku 5.5", async () => {
+    const { captured, client } = captureOneShotParams("claude-haiku-5-5");
+    await extractFromBody(oneShotOpts, makeDeps(client, { oneShotModel: "claude-haiku-5-5" }));
+    expect(captured.length).toBe(1);
+    expect(captured[0]!.temperature).toBeUndefined();
+    expect(captured[0]!.thinking).toEqual({ type: "disabled" });
   });
 
   test("oneshot path omits temperature when it falls back to Sonnet 5.5 (rejects it)", async () => {
@@ -497,7 +506,7 @@ describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
           id: "msg_aisdk",
           type: "message",
           role: "assistant",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           stop_reason: "tool_use",
           stop_sequence: null,
           content: [
@@ -523,7 +532,7 @@ describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
 
     const model = anthropicSpikeModel({
       apiKey: "sk-test",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       fetch: mockFetch,
     });
 
@@ -538,7 +547,7 @@ describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
       },
       makeDeps(client, {
         oneShotAiSdkModel: model,
-        oneShotAiSdkModelLabel: "claude-haiku-4-5",
+        oneShotAiSdkModelLabel: "claude-haiku-5-5",
         oneShotAiSdkProvider: "anthropic",
       }),
     );
@@ -546,7 +555,7 @@ describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
     expect(aiSdkRequests.length).toBeGreaterThan(0);
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]!.title).toBe("aisdk-entry");
-    expect(result.modelUsed).toBe("claude-haiku-4-5");
+    expect(result.modelUsed).toBe("claude-haiku-5-5");
     expect(result.mode).toBe("oneshot");
   });
 
@@ -563,11 +572,11 @@ describe("extractFromBody — one-shot AI-SDK routing (issue #2166)", () => {
         fetchUrl: "https://x.test/feed.json",
         useToolLoop: false,
       },
-      makeDeps(client, { oneShotModel: "claude-haiku-4-5-20251001" }),
+      makeDeps(client, { oneShotModel: "claude-haiku-5-5" }),
     );
 
     expect(params).toHaveLength(1);
-    expect(result.modelUsed).toBe("claude-haiku-4-5-20251001");
+    expect(result.modelUsed).toBe("claude-haiku-5-5");
   });
 });
 
@@ -593,7 +602,7 @@ describe("extractFromBody — one-shot ai_usage telemetry (issue #2166)", () => 
           id: "msg_usage",
           type: "message",
           role: "assistant",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           stop_reason: "tool_use",
           stop_sequence: null,
           content: [
@@ -616,7 +625,7 @@ describe("extractFromBody — one-shot ai_usage telemetry (issue #2166)", () => 
 
     const model = anthropicSpikeModel({
       apiKey: "sk-test",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       fetch: mockFetch,
     });
 
@@ -637,7 +646,7 @@ describe("extractFromBody — one-shot ai_usage telemetry (issue #2166)", () => 
         },
         makeDeps(client, {
           oneShotAiSdkModel: model,
-          oneShotAiSdkModelLabel: "claude-haiku-4-5",
+          oneShotAiSdkModelLabel: "claude-haiku-5-5",
           oneShotAiSdkProvider: opts.provider,
         }),
       );

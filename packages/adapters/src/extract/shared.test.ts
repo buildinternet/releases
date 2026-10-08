@@ -254,8 +254,8 @@ describe("applySlidingCacheBreakpoint", () => {
 
 describe("modelAcceptsTemperature", () => {
   test("returns false for models that reject a non-default temperature", () => {
-    // Sonnet 5.5 / Sonnet 5, Opus 4.7/4.8, Fable 5, and Mythos 400 on any
-    // non-default sampling parameter — extraction must omit `temperature`.
+    // Sonnet 5.5 / Sonnet 5, Opus 4.7/4.8, Fable 5, Mythos, and Haiku 5.5 400
+    // on any non-default sampling parameter — extraction must omit `temperature`.
     for (const model of [
       "claude-sonnet-5-5",
       "claude-sonnet-5",
@@ -263,14 +263,16 @@ describe("modelAcceptsTemperature", () => {
       "claude-opus-4-8",
       "claude-fable-5",
       "claude-mythos-5",
+      "claude-haiku-5-5",
+      "anthropic:claude-haiku-5-5",
     ]) {
       expect(modelAcceptsTemperature(model)).toBe(false);
     }
   });
 
   test("returns true for models that still honor temperature", () => {
-    // Haiku 4.5 (the one-shot model) and earlier models still accept temperature 0,
-    // which suppresses the ~1-in-4 spurious-empty on forced tool extraction.
+    // Haiku 4.5 and earlier still accept temperature 0, which suppresses the
+    // ~1-in-4 spurious-empty on forced tool extraction. Haiku 5.5 does not.
     for (const model of ["claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-opus-4-6"]) {
       expect(modelAcceptsTemperature(model)).toBe(true);
     }

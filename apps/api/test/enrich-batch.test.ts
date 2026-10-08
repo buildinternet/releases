@@ -23,6 +23,7 @@ describe("buildEnrichBatchRequests", () => {
     ]);
     expect(req.params.model).toBe(MODEL);
     expect(req.params.max_tokens).toBe(MAX_OUTPUT_TOKENS);
+    expect(req.params.thinking).toEqual({ type: "disabled" });
     expect(req.params.system).toEqual([
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ]);

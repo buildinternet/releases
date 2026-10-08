@@ -61,7 +61,7 @@ If `selected` is empty (`totalAvailable: 0`), **stop**. Report "no releases in w
 
 ### 2. Generate the overview
 
-Call Anthropic with the system prompt and user-prompt template below. Use `claude-haiku-4-5` or `claude-sonnet-5-5` — this isn't a heavy reasoning task. Cache the system prompt with `cache_control: { type: "ephemeral" }` since it's reused across orgs.
+Call Anthropic with the system prompt and user-prompt template below. Use `claude-haiku-5-5` or `claude-sonnet-5-5` — this isn't a heavy reasoning task. Cache the system prompt with `cache_control: { type: "ephemeral" }` since it's reused across orgs. Both models reject a non-default `temperature`, `top_p`, or any `top_k` — omit those. Haiku 5.5 thinks by default and those tokens count against `max_tokens`; send `thinking: { type: "disabled" }`. Do not send that thinking shape to Sonnet 5.5.
 
 **Pass releases as `search_result` content blocks**, not embedded XML — that way Anthropic emits inline citations linking each cited claim back to the originating release post (#846). The citation payload is the second output of this step (alongside the markdown body) and gets persisted via the CLI's `--citations-file` flag in step 3.
 

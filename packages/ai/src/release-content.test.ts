@@ -12,7 +12,7 @@ import type { TextModel, TextModelRequest } from "./text-model";
 function stubModel(text: string) {
   const calls: TextModelRequest[] = [];
   const model: TextModel = {
-    id: "anthropic:claude-haiku-4-5",
+    id: "anthropic:claude-haiku-5-5",
     async complete(req) {
       calls.push(req);
       return { text, usage: { input: 10, output: 6, cacheCreate: 0, cacheRead: 0 } };

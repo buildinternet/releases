@@ -34,7 +34,7 @@ export interface BatchSubmitFields {
   anthropicBatchId: string;
   /** Who is submitting: 'script' | 'workflow' | 'admin'. */
   caller: BatchCaller;
-  /** Model slug (e.g. "claude-haiku-4-5-20251001"). */
+  /** Model slug (e.g. "claude-haiku-5-5"). */
   model: string;
   /** Total number of requests in this batch. */
   requestCountTotal: number;

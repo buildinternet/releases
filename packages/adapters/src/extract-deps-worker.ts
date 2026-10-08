@@ -59,7 +59,7 @@ const DEFAULT_AGENT_MODEL = "claude-sonnet-5-5";
  * ~⅓ the cost; the agentic loops above stay on Sonnet. Override per env via
  * `oneShotModel`.
  */
-const DEFAULT_ONESHOT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_ONESHOT_MODEL = "claude-haiku-5-5";
 
 /**
  * Build an org-scoped sub-resource path for a source. We pass `source.id`

@@ -2019,7 +2019,7 @@ export interface Session {
    *
    * This is a logical role label, not the runtime model identifier. The
    * resolved Anthropic model string (e.g. `claude-sonnet-5-5`,
-   * `claude-haiku-4-5`) lives on `usage.model` when the session reported
+   * `claude-haiku-5-5`) lives on `usage.model` when the session reported
    * one — consult that field for the concrete model.
    */
   agent?: "sonnet" | "haiku" | "coordinator" | "deterministic";

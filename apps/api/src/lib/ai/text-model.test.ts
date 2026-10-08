@@ -171,7 +171,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
           ...overrides,
         }),
       );
-      expect(model?.id).toBe("anthropic:claude-haiku-4-5");
+      expect(model?.id).toBe("anthropic:claude-haiku-5-5");
       expect(model).toHaveProperty("complete");
     });
   }

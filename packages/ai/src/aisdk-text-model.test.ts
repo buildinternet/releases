@@ -57,9 +57,25 @@ describe("aisdkTextModel", () => {
     });
   });
 
+  it("disables adaptive thinking on Haiku 5.5 so small output caps are not spent on reasoning", async () => {
+    const mock = textModel();
+    const model = aisdkTextModel(mock, "anthropic:claude-haiku-5-5");
+    await model.complete({ system: "SYS", user: "U", maxTokens: 40 });
+    expect(mock.doGenerateCalls[0]?.providerOptions).toEqual({
+      anthropic: { thinking: { type: "disabled" } },
+    });
+  });
+
+  it("does not send Anthropic thinking options for a non-Haiku id", async () => {
+    const mock = textModel();
+    const model = aisdkTextModel(mock, "openrouter:deepseek/deepseek-v4.1-flash");
+    await model.complete({ system: "SYS", user: "U", maxTokens: 40 });
+    expect(mock.doGenerateCalls[0]?.providerOptions).toBeUndefined();
+  });
+
   it("passes ephemeral cache control when cacheSystem is true", async () => {
     const mock = textModel();
-    const model = aisdkTextModel(mock, "anthropic:claude-haiku-4-5");
+    const model = aisdkTextModel(mock, "anthropic:claude-haiku-5-5");
 
     await model.complete({ system: "SYS", user: "U", maxTokens: 40, cacheSystem: true });
 

@@ -3,6 +3,7 @@
  * instead of direct Anthropic `messages.create` or the hand-rolled OpenRouter fetch.
  */
 
+import { haikuThinkingProviderOptions } from "@releases/adapters/extract/shared";
 import { generateText, type LanguageModel } from "ai";
 import { agentTelemetry } from "./agent-telemetry";
 import type { TextModel, TextModelRequest, TextModelResult } from "./text-model";
@@ -48,6 +49,11 @@ export function aisdkTextModel(
   return {
     id,
     async complete(req: TextModelRequest): Promise<TextModelResult> {
+      // Haiku 5.5 thinks by default and those tokens count against maxTokens.
+      // Marketing (40), release-content (440), collection summary (512), and
+      // article extract would otherwise come back empty. OpenRouter ids don't
+      // match, so DeepSeek keeps its own reasoning prefs.
+      const thinking = haikuThinkingProviderOptions(id);
       const res = await generateText({
         model,
         instructions: req.cacheSystem
@@ -55,6 +61,7 @@ export function aisdkTextModel(
           : req.system,
         prompt: req.user,
         maxOutputTokens: req.maxTokens,
+        ...(thinking ? { providerOptions: thinking } : {}),
         // Callers (poll-fetch, marketing classifier, …) own per-item retry/fail-open;
         // internal SDK retries would amplify cost and stall workflow tests.
         maxRetries: 0,

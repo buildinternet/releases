@@ -10,6 +10,7 @@ import {
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
   EXTRACTION_TEMPERATURE,
+  haikuThinkingParam,
   modelAcceptsTemperature,
   type ExtractionGuidance,
 } from "./shared.js";
@@ -173,12 +174,13 @@ export async function extractWithTools(
       model: deps.agentModel,
       max_tokens: 16_384,
       // Deterministic parse on models that still accept it; omitted on Sonnet 5.5 /
-      // Opus 4.7+ / Fable, which 400 on a non-default temperature. See
+      // Opus 4.7+ / Fable / Haiku 5.5, which 400 on a non-default temperature. See
       // EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
       ...(modelAcceptsTemperature(deps.agentModel)
         ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
           { temperature: EXTRACTION_TEMPERATURE }
         : {}),
+      ...haikuThinkingParam(deps.agentModel),
       system: systemBlocks,
       tools,
       messages,

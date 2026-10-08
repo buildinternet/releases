@@ -19,7 +19,7 @@ import type { TextModel, TextModelUsage } from "./text-model";
 /** Anthropic default the caller builds the fallback `TextModel` from. The async
  *  Message-Batches enrichment path (`enrich-apply.ts`) also reuses it directly —
  *  OpenRouter has no Batches API, so that 50%-off lane stays on Anthropic. */
-export const MODEL = "claude-haiku-4-5";
+export const MODEL = "claude-haiku-5-5";
 
 /** Cap on page markdown sent to the model. Article pages are small; this guards
  *  against the occasional page that inlines a huge nav tree or comment thread. */

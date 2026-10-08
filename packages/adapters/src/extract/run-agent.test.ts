@@ -3,7 +3,7 @@ import { buildAgentUsageRows } from "./run-agent.js";
 import type { ExtractFromBodyResult } from "./extract-from-body.js";
 
 const AGENT_MODEL = "claude-sonnet-5-5";
-const ONESHOT_MODEL = "claude-haiku-4-5-20251001";
+const ONESHOT_MODEL = "claude-haiku-5-5";
 
 function makeResult(over: Partial<ExtractFromBodyResult> = {}): ExtractFromBodyResult {
   return {

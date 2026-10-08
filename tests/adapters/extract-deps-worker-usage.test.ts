@@ -40,7 +40,7 @@ describe("buildWorkerExtractDeps().repo.logUsage", () => {
 
     await deps.repo.logUsage({
       operation: "agent-ingest",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       inputTokens: 100,
       outputTokens: 20,
       sourceId: "src_djFtfbJFwNTRq_dKhinln",
@@ -60,7 +60,7 @@ describe("buildWorkerExtractDeps().repo.logUsage", () => {
 
     await deps.repo.logUsage({
       operation: "agent-ingest",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       inputTokens: 100,
       outputTokens: 20,
       sourceSlug: "resend-changelog",

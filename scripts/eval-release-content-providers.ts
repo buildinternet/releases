@@ -17,7 +17,7 @@
  *   bun scripts/eval-release-content-providers.ts --providers=anthropic-haiku,cf-glm
  *   bun scripts/eval-release-content-providers.ts --since=14            # past 14 days
  *
- * Provider scope: Anthropic Haiku 4.5 (production baseline, direct) plus
+ * Provider scope: Anthropic Haiku 5.5 (production baseline, direct) plus
  * Workers AI hosted models reached via the existing CLOUDFLARE_API_TOKEN.
  * No new third-party API keys required — everything else (OpenAI, Groq,
  * DeepSeek, etc.) is dropped from this iteration. Workers AI is itself an
@@ -30,7 +30,7 @@
  *   CLOUDFLARE_API_TOKEN   — for the cf-* providers (Workers AI)
  *
  * Model ID overrides (defaults shown — reset via env when provider-side IDs shift):
- *   ANTHROPIC_MODEL=claude-haiku-4-5
+ *   ANTHROPIC_MODEL=claude-haiku-5-5
  *   CF_KIMI_MODEL=@cf/moonshotai/kimi-k2.6
  *   CF_GLM_MODEL=@cf/zai-org/glm-4.7-flash
  *   CF_QWEN_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
@@ -41,6 +41,7 @@
  * verify with each provider's pricing page before quoting in roadmap docs.
  */
 
+import { haikuThinkingParam } from "@releases/adapters/extract/shared";
 import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "node:child_process";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -90,7 +91,7 @@ if (Number.isNaN(maxTokens) || maxTokens < 1) {
 
 // ─── Provider config ─────────────────────────────────────────────────────────
 
-// Anthropic Haiku 4.5 (production baseline, direct) plus Workers AI hosted
+// Anthropic Haiku 5.5 (production baseline, direct) plus Workers AI hosted
 // models reached via the existing CLOUDFLARE_API_TOKEN. No third-party API
 // keys beyond what's already in .env. Workers AI is an AI Gateway-supported
 // provider, so flipping calls to gateway-routed (cf-aig observability) is a
@@ -169,11 +170,11 @@ const CF_MODELS: CfModelEntry[] = [
 const PROVIDERS: ProviderConfig[] = [
   {
     id: "anthropic-haiku",
-    label: "Anthropic Haiku 4.5",
-    model: process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5",
+    label: "Anthropic Haiku 5.5",
+    model: process.env.ANTHROPIC_MODEL ?? "claude-haiku-5-5",
     apiKey: process.env.ANTHROPIC_API_KEY,
-    inputPricePerM: 1.0,
-    outputPricePerM: 5.0,
+    inputPricePerM: 0.1,
+    outputPricePerM: 0.5,
   },
   ...CF_MODELS.map((m) => ({
     id: m.id,
@@ -333,6 +334,8 @@ async function callAnthropic(cfg: ProviderConfig, userBlock: string): Promise<Pr
     const res = await client.messages.create({
       model: cfg.model,
       max_tokens: maxTokens,
+      // Haiku 5.5 thinks by default; this lane's output cap is a few hundred tokens.
+      ...haikuThinkingParam(cfg.model),
       system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userBlock }],
     });

@@ -78,7 +78,7 @@ let nextExtractResult = {
   fallbackReason: null as string | null,
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
-  modelUsed: "claude-haiku-4-5",
+  modelUsed: "claude-haiku-5-5",
 };
 
 mock.module("@releases/adapters/extract", () => ({
@@ -172,7 +172,7 @@ describe("scrapeFetch crawl-extract-skip memoization", () => {
       fallbackReason: null,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      modelUsed: "claude-haiku-4-5",
+      modelUsed: "claude-haiku-5-5",
     };
   });
 

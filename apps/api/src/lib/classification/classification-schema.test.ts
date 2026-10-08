@@ -103,7 +103,7 @@ describe("encodeClassificationPoint", () => {
       releaseId: "not-a-release",
       sourceId: "src_ok'; DROP TABLE",
       provider: "anthropic",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       choice: "How Acme cut costs https://secret.example/post",
       reason: "provider said: billing hard limit reached",
       failureCategory: "rate limit: try again",

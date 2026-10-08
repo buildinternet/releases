@@ -150,7 +150,7 @@ describe("extractFirecrawlMarkdown", () => {
       fakeSource,
       {
         anthropicClient: client as never,
-        agentModel: "claude-haiku-4-5-20251001",
+        agentModel: "claude-haiku-5-5",
         logger: fakeLogger,
       },
       { pageUrl },
@@ -165,7 +165,7 @@ describe("extractFirecrawlMarkdown", () => {
     const { client } = makeFakeAnthropicClient();
     const { releases } = await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-haiku-4-5-20251001",
+      agentModel: "claude-haiku-5-5",
       logger: fakeLogger,
     });
 
@@ -185,7 +185,7 @@ describe("extractFirecrawlMarkdown", () => {
       fakeSource,
       {
         anthropicClient: client as never,
-        agentModel: "claude-haiku-4-5-20251001",
+        agentModel: "claude-haiku-5-5",
         logger: fakeLogger,
       },
       { pageUrl: "https://product.beehiiv.com/p/beehiiv-mcp-v2" },
@@ -201,7 +201,7 @@ describe("extractFirecrawlMarkdown", () => {
     const { client, calls } = makeFakeAnthropicClient();
     await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-haiku-4-5-20251001",
+      agentModel: "claude-haiku-5-5",
       logger: fakeLogger,
     });
 
@@ -219,7 +219,7 @@ describe("extractFirecrawlMarkdown", () => {
       fakeSource,
       {
         anthropicClient: client as never,
-        agentModel: "claude-haiku-4-5-20251001",
+        agentModel: "claude-haiku-5-5",
         logger: fakeLogger,
       },
       { pageUrl: "https://product.beehiiv.com/p/beehiiv-mcp-v2" },
@@ -233,7 +233,7 @@ describe("extractFirecrawlMarkdown", () => {
     const { client, calls } = makeFakeAnthropicClient();
     await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-haiku-4-5-20251001",
+      agentModel: "claude-haiku-5-5",
       logger: fakeLogger,
     });
 
@@ -287,7 +287,7 @@ describe("extractChangelogAllWindows", () => {
     const { client } = makeCountingFakeClient();
     const result = await extractChangelogAllWindows(deepChangelog, fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-haiku-4-5-20251001",
+      agentModel: "claude-haiku-5-5",
       logger: fakeLogger,
     });
 
@@ -305,7 +305,7 @@ describe("extractChangelogAllWindows", () => {
       fakeSource,
       {
         anthropicClient: client as never,
-        agentModel: "claude-haiku-4-5-20251001",
+        agentModel: "claude-haiku-5-5",
         logger: fakeLogger,
       },
       { maxWindows: 1 },
@@ -321,7 +321,7 @@ describe("extractChangelogAllWindows", () => {
     const { client } = makeCountingFakeClient();
     const result = await extractChangelogAllWindows("# v1.2.0\nAdded X.", fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-haiku-4-5-20251001",
+      agentModel: "claude-haiku-5-5",
       logger: fakeLogger,
     });
 

@@ -365,8 +365,8 @@ function fakeDigestModel(fixture: WeeklyDigestFixture): TextModel {
 
 function estimateUsageCostUsd(modelId: string, usage: TextModelUsage): number | null {
   if (usage.costUsd != null) return usage.costUsd;
-  // Anthropic ids look like "anthropic:claude-haiku-4-5" (eval label) or bare
-  // "claude-haiku-4-5" — try the bare form against the pricing table.
+  // Anthropic ids look like "anthropic:claude-haiku-5-5" (eval label) or bare
+  // "claude-haiku-5-5" — try the bare form against the pricing table.
   const bareModel = modelId.includes(":") ? modelId.split(":")[1] : modelId;
   const est = estimateCost(
     {

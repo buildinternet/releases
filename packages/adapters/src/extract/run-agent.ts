@@ -13,6 +13,7 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { extractFromBody, type ExtractFromBodyResult } from "./extract-from-body.js";
 import {
   extractReleasesToolFull,
+  haikuThinkingParam,
   WEBFETCH_SYSTEM_PROMPT,
   CLOUDFLARE_SYSTEM_PROMPT,
   mapEntries,
@@ -415,6 +416,9 @@ async function runWebFetchLoop(
     const stream = anthropicClient.messages.stream({
       model: agentModel,
       max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
+      // No-op on Sonnet 5.5 (the default agent). Disables adaptive thinking
+      // when a caller points this loop at Haiku 5.5.
+      ...haikuThinkingParam(agentModel),
       system: systemPrompt,
       tools,
       messages,

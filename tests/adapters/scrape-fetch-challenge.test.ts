@@ -59,7 +59,7 @@ mock.module("./extract-deps-worker.js", () => ({
       updateSourceMeta: async () => {},
     },
     anthropicClient: {},
-    agentModel: "claude-haiku-4-5",
+    agentModel: "claude-haiku-5-5",
   }),
 }));
 

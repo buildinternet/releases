@@ -42,17 +42,17 @@ export const config = {
   cloudflareApiToken: () => process.env.CLOUDFLARE_API_TOKEN || "",
   githubToken: () => process.env.GITHUB_TOKEN || "",
   ingestModel: () =>
-    legacyEnv("RELEASES_INGEST_MODEL", "RELEASED_INGEST_MODEL") || "claude-haiku-4-5-20251001",
+    legacyEnv("RELEASES_INGEST_MODEL", "RELEASED_INGEST_MODEL") || "claude-haiku-5-5",
   agentModel: () =>
     legacyEnv("RELEASES_AGENT_MODEL", "RELEASED_AGENT_MODEL") || "claude-sonnet-5-5",
   queryModel: () =>
     legacyEnv("RELEASES_QUERY_MODEL", "RELEASED_QUERY_MODEL") || "claude-sonnet-5-5",
   summaryModel: () =>
-    legacyEnv("RELEASES_SUMMARY_MODEL", "RELEASED_SUMMARY_MODEL") || "claude-haiku-4-5-20251001",
+    legacyEnv("RELEASES_SUMMARY_MODEL", "RELEASED_SUMMARY_MODEL") || "claude-haiku-5-5",
   groupingModel: () =>
-    legacyEnv("RELEASES_GROUPING_MODEL", "RELEASED_GROUPING_MODEL") || "claude-haiku-4-5-20251001",
+    legacyEnv("RELEASES_GROUPING_MODEL", "RELEASED_GROUPING_MODEL") || "claude-haiku-5-5",
   workerAgentModel: () =>
-    legacyEnv("RELEASES_WORKER_AGENT_MODEL", "RELEASED_WORKER_AGENT_MODEL") || "claude-haiku-4-5",
+    legacyEnv("RELEASES_WORKER_AGENT_MODEL", "RELEASED_WORKER_AGENT_MODEL") || "claude-haiku-5-5",
   apiUrl: () => legacyEnv("RELEASES_API_URL", "RELEASED_API_URL") || "",
   stagingApiUrl: () => legacyEnv("RELEASES_STAGING_API_URL", "RELEASED_STAGING_API_URL") || "",
   apiKey: () => legacyEnv("RELEASES_API_KEY", "RELEASED_API_KEY") || "",

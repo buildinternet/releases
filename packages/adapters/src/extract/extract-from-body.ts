@@ -23,6 +23,7 @@ import {
   HUGE_BODY_MAX_OUTPUT_TOKENS,
   MAX_BODY_CHARS_TOOLLOOP,
   EXTRACTION_TEMPERATURE,
+  haikuThinkingParam,
   modelAcceptsTemperature,
   type ExtractionGuidance,
 } from "./shared.js";
@@ -212,13 +213,14 @@ async function runOneShot(
   const stream = deps.anthropicClient.messages.stream({
     model,
     max_tokens: maxOutputTokens,
-    // Deterministic parse on models that still accept it (Haiku one-shot);
-    // omitted on Sonnet 5.5 / Opus 4.7+ / Fable, which 400 on a
+    // Deterministic parse on models that still accept it (Haiku 4.5);
+    // omitted on Sonnet 5.5 / Opus 4.7+ / Fable / Haiku 5.5, which 400 on a
     // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
     ...(modelAcceptsTemperature(model)
       ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
         { temperature: EXTRACTION_TEMPERATURE }
       : {}),
+    ...haikuThinkingParam(model),
     system: systemBlocks,
     tools: [toolDef],
     tool_choice: { type: "tool", name: "extract_releases" },

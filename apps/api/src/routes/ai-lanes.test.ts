@@ -62,7 +62,7 @@ function mockAnthropicFetch(text: string, usage: AnthropicUsage = {}) {
         id: "msg_test",
         type: "message",
         role: "assistant",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         content: [{ type: "text", text }],
         stop_reason: "end_turn",
         usage: {
@@ -292,7 +292,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     };
     expect(body.lane).toBe("marketing");
     expect(body.provider).toBe("anthropic");
-    expect(body.model).toBe("claude-haiku-4-5");
+    expect(body.model).toBe("claude-haiku-5-5");
     expect(body.applied).toBe(false);
     expect(body.result.isMarketing).toBe(false);
     expect(body.usage.input).toBe(10);

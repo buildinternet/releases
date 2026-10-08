@@ -32,7 +32,7 @@ const asDb = (db: TestDatabase["db"]): any => db as any;
 const BASE_SUBMIT: BatchSubmitFields = {
   anthropicBatchId: "msgbatch_test_001",
   caller: "script",
-  model: "claude-haiku-4-5-20251001",
+  model: "claude-haiku-5-5",
   requestCountTotal: 10,
   estCostUsd: 0.05,
   callerContext: { orgs: ["openai", "anthropic"], since_days: 7 },
@@ -66,7 +66,7 @@ describe("recordBatchSubmit", () => {
     expect(row).toBeDefined();
     expect(row!.status).toBe("submitted");
     expect(row!.caller).toBe("script");
-    expect(row!.model).toBe("claude-haiku-4-5-20251001");
+    expect(row!.model).toBe("claude-haiku-5-5");
     expect(row!.anthropicBatchId).toBe("msgbatch_test_001");
     expect(row!.requestCountTotal).toBe(10);
     expect(row!.estCostUsd).toBeCloseTo(0.05);

@@ -30,9 +30,9 @@ describe("estimateCost", () => {
     expect(cost).toEqual({
       inputUsd: 2,
       cacheWriteUsd: 2.5,
-      cacheReadUsd: 0.2,
+      cacheReadUsd: 0.1,
       outputUsd: 10,
-      totalUsd: 14.7,
+      totalUsd: 14.6,
     });
   });
 
@@ -53,6 +53,70 @@ describe("estimateCost", () => {
       cacheReadUsd: 0.3,
       outputUsd: 15,
       totalUsd: 22.05,
+    });
+  });
+
+  it("matches the Haiku 5.5 ≤100K list prices", () => {
+    const cost = estimateCost(
+      {
+        inputTokens: 100_000,
+        cacheWriteTokens: 1_000_000,
+        cacheReadTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      },
+      "claude-haiku-5-5",
+      // Cache tokens here are a rate check, not a prompt-length check.
+      { longContext: false },
+    );
+    expect(cost).toEqual({
+      inputUsd: 0.01,
+      cacheWriteUsd: 0.125,
+      cacheReadUsd: 0.01,
+      outputUsd: 0.5,
+      totalUsd: 0.645,
+    });
+  });
+
+  it("bills a Haiku 5.5 prompt over 100K tokens entirely at the long-context tier", () => {
+    const atCap = estimateCost({ inputTokens: 100_000, outputTokens: 1_000 }, "claude-haiku-5-5");
+    expect(atCap).toEqual({
+      inputUsd: 0.01,
+      cacheWriteUsd: 0,
+      cacheReadUsd: 0,
+      outputUsd: 0.0005,
+      totalUsd: 0.0105,
+    });
+
+    const over = estimateCost(
+      {
+        inputTokens: 90_000,
+        cacheReadTokens: 10_000,
+        outputTokens: 1_000_000,
+        cacheWriteTokens: 1_000_000,
+      },
+      "claude-haiku-5-5",
+    );
+    expect(over).toEqual({
+      inputUsd: 0.045,
+      cacheWriteUsd: 0.625,
+      cacheReadUsd: 0.0005,
+      outputUsd: 2.5,
+      totalUsd: 3.1705,
+    });
+  });
+
+  it("keeps a summed multi-request blob on the ≤100K Haiku 5.5 rate", () => {
+    const cost = estimateCost(
+      { inputTokens: 500_000, outputTokens: 1_000_000 },
+      "claude-haiku-5-5",
+      { longContext: false, batch: true },
+    );
+    expect(cost).toEqual({
+      inputUsd: 0.025,
+      cacheWriteUsd: 0,
+      cacheReadUsd: 0,
+      outputUsd: 0.25,
+      totalUsd: 0.275,
     });
   });
 
@@ -110,6 +174,7 @@ describe("estimateCost", () => {
     expect(ANTHROPIC_PRICING["claude-sonnet-5-5"]).toBeDefined();
     expect(ANTHROPIC_PRICING["claude-sonnet-5"]).toBeDefined();
     expect(ANTHROPIC_PRICING["claude-sonnet-4-6"]).toBeDefined();
+    expect(ANTHROPIC_PRICING["claude-haiku-5-5"]).toBeDefined();
     expect(ANTHROPIC_PRICING["claude-haiku-4-5"]).toBeDefined();
   });
 
