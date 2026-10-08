@@ -101,3 +101,26 @@ describe("proxy legacy ?tab= redirects", () => {
     expect(run("/vercel").headers.get("location")).toBeNull();
   });
 });
+
+describe("proxy changelog deep links", () => {
+  const rewrite = (path: string) => run(path).headers.get("x-middleware-rewrite");
+
+  it("rewrites ?path= and ?offset= to the dynamic deep-link route, keeping the query", () => {
+    expect(rewrite("/vercel/next-js/changelog?offset=4096")).toBe(
+      "https://releases.sh/vercel/next-js/changelog/deep?offset=4096",
+    );
+    expect(rewrite("/vercel/next-js/changelog?path=packages%2Fa%2FCHANGELOG.md")).toBe(
+      "https://releases.sh/vercel/next-js/changelog/deep?path=packages%2Fa%2FCHANGELOG.md",
+    );
+  });
+
+  it("leaves the plain changelog URL on the cached route", () => {
+    expect(rewrite("/vercel/next-js/changelog")).toBeNull();
+    expect(rewrite("/vercel/next-js/changelog?utm_source=x")).toBeNull();
+  });
+
+  it("ignores other paths and top-level routes", () => {
+    expect(rewrite("/vercel/next-js?offset=1")).toBeNull();
+    expect(rewrite("/sources/src_a/changelog?offset=1")).toBeNull();
+  });
+});

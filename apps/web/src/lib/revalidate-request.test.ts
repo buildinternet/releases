@@ -66,14 +66,22 @@ describe("handleRevalidateRequest", () => {
     expect(await res.json()).toEqual({ revalidated: ["/vercel"] });
   });
 
-  it("revalidates the org, source and product pages together", async () => {
+  it("revalidates the org, source (with its sub-tabs) and product pages together", async () => {
     const { deps: d, revalidated } = deps();
     const res = await handleRevalidateRequest(
-      post({ orgSlug: "vercel", sourceSlug: "changelog", productSlug: "next-js" }),
+      post({ orgSlug: "vercel", sourceSlug: "swr", productSlug: "next-js" }),
       d,
     );
     expect(res.status).toBe(200);
-    expect(revalidated).toEqual(["/vercel", "/vercel/changelog", "/vercel/next-js"]);
+    // revalidatePath only marks the exact path stale, so the source's ISR
+    // sub-tabs are listed explicitly.
+    expect(revalidated).toEqual([
+      "/vercel",
+      "/vercel/swr",
+      "/vercel/swr/changelog",
+      "/vercel/swr/highlights",
+      "/vercel/next-js",
+    ]);
   });
 
   it("does not revalidate the same path twice when source and product collide", async () => {
@@ -82,7 +90,12 @@ describe("handleRevalidateRequest", () => {
       post({ orgSlug: "vercel", sourceSlug: "next-js", productSlug: "next-js" }),
       d,
     );
-    expect(revalidated).toEqual(["/vercel", "/vercel/next-js"]);
+    expect(revalidated).toEqual([
+      "/vercel",
+      "/vercel/next-js",
+      "/vercel/next-js/changelog",
+      "/vercel/next-js/highlights",
+    ]);
   });
 
   // The worker is a trusted caller, but a slug carrying path syntax would let a
@@ -173,8 +186,23 @@ describe("handleRevalidateRequest", () => {
       expect(revalidated).toEqual(paths);
     });
 
+    it("revalidates a source's ISR sub-tabs and an updates day by hand", async () => {
+      const { deps: d, revalidated } = deps();
+      const paths = [
+        "/vercel/swr/changelog",
+        "/vercel/swr/highlights",
+        "/updates",
+        "/updates/2026-10-04",
+      ];
+      const res = await handleRevalidateRequest(post({ paths }), d);
+      expect(res.status).toBe(200);
+      expect(revalidated).toEqual(paths);
+    });
+
     it.each([
       ["a three-segment path that isn't a digest index", "/collections/ai-labs/feed"],
+      ["a source sub-tab that isn't cached", "/vercel/swr/admin"],
+      ["an updates day that isn't a date", "/updates/latest"],
       ["a digest path outside /collections", "/vercel/ai-labs/digest"],
       ["a digest week that isn't a date", "/collections/ai-labs/digest/latest"],
       ["a path below a digest week", "/collections/ai-labs/digest/2026-06-08/og"],

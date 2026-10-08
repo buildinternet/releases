@@ -13,6 +13,7 @@ import path from "node:path";
 const ISR_ROUTES = [
   "app/[orgSlug]/[slug]/page.tsx",
   "app/[orgSlug]/[slug]/highlights/page.tsx",
+  "app/[orgSlug]/[slug]/changelog/page.tsx",
   "app/collections/[slug]/page.tsx",
   "app/collections/[slug]/digest/page.tsx",
   "app/collections/[slug]/digest/[week]/page.tsx",
