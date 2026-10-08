@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 5, 2026
+
+**Fixed**
+- Animated release media — GIFs transcoded to MP4 at ingest now render directly instead of being re-encoded a second time; release pages with animated media load faster.
+
 ## October 4, 2026
 
 **Fixed**
