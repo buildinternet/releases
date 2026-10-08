@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { VerifyEmailHint } from "./verify-email-hint";
+import { useSession } from "@/lib/auth-client";
 import { useFollows } from "./follows-provider";
 import {
   listCollectionDigestSubscriptions,
@@ -28,8 +30,11 @@ export function CollectionDigestSubscribe({
   const [subscribedState, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const { data: session } = useSession();
   const signedIn = Boolean(follows?.ready && follows.signedIn);
   const subscribed = signedIn && subscribedState;
+  // Sends skip unverified addresses, so say so rather than leave it silent.
+  const unverified = subscribed && session?.user != null && !session.user.emailVerified;
 
   useEffect(() => {
     if (!signedIn) return;
@@ -93,6 +98,7 @@ export function CollectionDigestSubscribe({
         {subscribed ? "Emailing you weekly" : "Email me this digest weekly"}
         {subscribed && <span className="font-normal text-[var(--fg-3)]">· Turn off</span>}
       </button>
+      {unverified && session?.user && <VerifyEmailHint email={session.user.email} />}
       {error && (
         <span role="alert" className="text-[12px] text-[var(--fg-3)]">
           Couldn&apos;t update. Try again.
