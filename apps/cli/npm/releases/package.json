@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases",
-  "version": "0.83.2",
+  "version": "0.83.3",
   "description": "CLI for Release Notes Index — the changelog & release-notes registry for developers and AI agents",
   "bin": {
     "releases": "bin/releases"
@@ -13,11 +13,11 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "@buildinternet/releases-darwin-arm64": "0.83.2",
-    "@buildinternet/releases-darwin-x64": "0.83.2",
-    "@buildinternet/releases-linux-x64": "0.83.2",
-    "@buildinternet/releases-linux-arm64": "0.83.2",
-    "@buildinternet/releases-windows-x64": "0.83.2"
+    "@buildinternet/releases-darwin-arm64": "0.83.3",
+    "@buildinternet/releases-darwin-x64": "0.83.3",
+    "@buildinternet/releases-linux-x64": "0.83.3",
+    "@buildinternet/releases-linux-arm64": "0.83.3",
+    "@buildinternet/releases-windows-x64": "0.83.3"
   },
   "keywords": [
     "changelog",
