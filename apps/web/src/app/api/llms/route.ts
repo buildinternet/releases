@@ -24,7 +24,7 @@ const CONTEXT = `Quick facts:
 
 - REST API base URL: \`${API_BASE_URL}/v1\`. OpenAPI 3.1 spec: ${API_BASE_URL}/v1/openapi.json. Interactive reference: ${API_BASE_URL}/v1/docs.
 - Hosted MCP server (Streamable HTTP, read tools public, no key): \`${MCP_REMOTE_URL}\`. Claude Code: \`${CLAUDE_CODE_MCP_CMD}\`. Claude (web, desktop, mobile): ${CLAUDE_DIRECTORY_URL}.
-- CLI: \`npm install -g @buildinternet/releases\` (or \`brew install buildinternet/tap/releases\`). Agent skills: \`npx skills add buildinternet/releases-cli\`.
+- CLI: \`npm install -g @buildinternet/releases\` (or \`brew install buildinternet/tap/releases\`). Agent skills: \`npx skills add buildinternet/releases\`.
 - Links below point to Markdown versions of each page. Any page on this site is also available as Markdown by appending \`.md\` to its URL (for example, ${BASE_URL}/docs/installation.md) or by sending \`Accept: text/markdown\` to the canonical URL.
 - Org and source pages have machine-readable suffixes — \`.md\` (LLM-friendly), \`.json\`, \`.atom\` — e.g. ${BASE_URL}/anthropic.md.`;
 

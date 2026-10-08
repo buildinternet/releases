@@ -13,3 +13,5 @@ Shared npm packages are split by where they're published from:
 **If a CLI-only change needs to ship:** land it in `buildinternet/releases-cli`, run `bun run changeset` there, and merge. The OSS repo's own workflow handles the version PR + publish.
 
 The monorepo does not carry CLI binary scaffolds or Homebrew releases — if you see those in an old PR, don't restore them.
+
+The `releases` Claude Code plugin (`plugins/claude/releases/`: hosted MCP connection, `/releases` command, reader skills) now lives in this monorepo and is installed via `npx skills add buildinternet/releases` or `/plugin marketplace add buildinternet/releases`. The CLI code and its npm/Homebrew publishing still live in releases-cli pending #2445.

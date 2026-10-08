@@ -1,7 +1,7 @@
 {
   "extraKnownMarketplaces": {
     "releases": {
-      "source": { "source": "github", "repo": "buildinternet/releases-cli" }
+      "source": { "source": "github", "repo": "buildinternet/releases" }
     }
   },
   "enabledPlugins": { "releases@releases": true },

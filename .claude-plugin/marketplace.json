@@ -1,10 +1,19 @@
 {
-  "name": "releases-registry",
+  "name": "releases",
   "owner": {
     "name": "Build Internet"
   },
-  "description": "Skills for listing your product on the Release Notes Index, plus the operator skills for running and maintaining it. Grouping mirrors skills.sh.json so the skills.sh page and the `npx skills add` picker agree.",
+  "description": "Search changelogs and look up release notes in the Release Notes Index, plus the skills for listing your product on it and the operator skills for running and maintaining the registry. Grouping mirrors skills.sh.json so the skills.sh page and the `npx skills add` picker agree.",
   "plugins": [
+    {
+      "name": "releases",
+      "source": "./plugins/claude/releases",
+      "description": "Search changelogs and look up releases via the hosted Release Notes Index. Bundles the hosted MCP connection, the /releases lookup command, and auto-triggering skills for release/changelog questions.",
+      "author": {
+        "name": "Build Internet"
+      },
+      "skills": ["./skills/releases-mcp", "./skills/releases-cli", "./skills/analyzing-releases"]
+    },
     {
       "name": "listing",
       "source": "./",

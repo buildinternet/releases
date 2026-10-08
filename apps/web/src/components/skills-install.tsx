@@ -6,14 +6,14 @@ const tabs = [
   {
     id: "standalone",
     label: "Standalone (any agent)",
-    commands: ["npx skills add buildinternet/releases-cli"],
+    commands: ["npx skills add buildinternet/releases"],
     note: "Drops skill files into the project. Works in Claude Code, Codex, Cursor, OpenCode.",
   },
   {
     id: "plugin",
     label: "Claude Code plugin",
     commands: [
-      "/plugin marketplace add buildinternet/releases-cli",
+      "/plugin marketplace add buildinternet/releases",
       "/plugin install releases@releases",
     ],
     note: "Adds the skills plus the bundled MCP server and /releases command.",

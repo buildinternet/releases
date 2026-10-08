@@ -17,7 +17,7 @@ They work in Claude Code, Codex, Cursor, OpenCode, and any other agent that supp
 Run this from the root of any project where you want the skills, using the [`skills`](https://skills.sh) CLI:
 
 ```bash
-npx skills add buildinternet/releases-cli
+npx skills add buildinternet/releases
 ```
 
 Your agent picks them up on the next session.
@@ -27,7 +27,7 @@ Your agent picks them up on the next session.
 If you're on Claude Code and also want the bundled MCP connection and `/releases` command:
 
 ```bash
-/plugin marketplace add buildinternet/releases-cli
+/plugin marketplace add buildinternet/releases
 ```
 
 ```bash
@@ -74,6 +74,6 @@ Most need an admin API key to do anything.
 
 ## Source
 
-- **Reader skills** (search, MCP, analysis): [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) under `plugins/claude/releases/skills/`.
+- **Reader skills** (search, MCP, analysis): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `plugins/claude/releases/skills/`.
 - **Operator skills**: [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `.claude/skills/`.
 - **Owner manifest skill** (`creating-releases-json`): [github.com/buildinternet/releases](https://github.com/buildinternet/releases) under `skills/creating-releases-json/`. Two files drive skill grouping and must stay in sync: the skills.sh **web** repo page reads root [`skills.sh.json`](https://github.com/buildinternet/releases/blob/main/skills.sh.json) ([skills.sh customize](https://www.skills.sh/docs/customize)), while the `npx skills add` **CLI** picker groups by plugin from [`.claude-plugin/marketplace.json`](https://github.com/buildinternet/releases/blob/main/.claude-plugin/marketplace.json) (each `plugins[].name` becomes a picker group).

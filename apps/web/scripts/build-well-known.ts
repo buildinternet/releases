@@ -5,22 +5,19 @@
  *   /.well-known/agent-skills/index.json   — Agent Skills Discovery (RFC v0.2.0)
  *   /.well-known/mcp/server-card.json      — MCP Server Card (SEP-1649)
  *
- * Skills are hosted in the OSS CLI repo (buildinternet/releases-cli) — at build
- * time we fetch each SKILL.md, compute a sha256 digest, and pull the
- * description out of the YAML frontmatter. The MCP server card is derived from
- * apps/mcp/server.json so it stays in sync on version bumps.
+ * Every skill lives in this monorepo — at build time we read each SKILL.md from
+ * the local tree, compute a sha256 digest, and pull the description out of the
+ * YAML frontmatter. The emitted `url` points at the raw GitHub copy on main. The
+ * MCP server card is derived from apps/mcp/server.json so it stays in sync on
+ * version bumps.
  *
- * Each fetch retries (fetchWithRetry) on a thrown network error or a 5xx/429
- * response — a transient blip on raw.githubusercontent.com shouldn't fail a
- * production deploy (#2160). A 404 is NOT retried: it means a skill moved, and
- * that should fail loudly and fast.
+ * A missing SKILL.md throws: a skill that moved should fail the build loudly.
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
 import { createHash } from "crypto";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import matter from "gray-matter";
-import { fetchWithRetry } from "./fetch-with-retry";
 
 const WEB_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_ROOT = dirname(dirname(WEB_ROOT));
@@ -28,71 +25,52 @@ const REPO_ROOT = dirname(dirname(WEB_ROOT));
 const SKILLS_INDEX_PATH = join(WEB_ROOT, "public/.well-known/agent-skills/index.json");
 const SERVER_CARD_PATH = join(WEB_ROOT, "public/.well-known/mcp/server-card.json");
 
-await buildSkillsIndex();
+buildSkillsIndex();
 buildMcpServerCard();
 
-async function buildSkillsIndex() {
-  // One entry per skill, fetched from its canonical repo (#1090): user-facing
-  // skills live in the CLI repo's Claude plugin folder
-  // (plugins/claude/releases/skills/); operator + owner skills live in this
-  // monorepo (.claude/skills/ and skills/ respectively).
-  const CLI_REPO = "buildinternet/releases-cli";
-  const MONO_REPO = "buildinternet/releases";
+function buildSkillsIndex() {
+  // One entry per skill, all read from the local tree (#1090): reader skills
+  // live in the Claude plugin folder (plugins/claude/releases/skills/), the
+  // owner skill in skills/, operator skills in .claude/skills/.
+  const REPO = "buildinternet/releases";
   const REF = "main";
-  const CLI_SKILL_DIR = "plugins/claude/releases/skills";
-  const SKILLS: { name: string; repo: string; dir: string }[] = [
-    // Reader (CLI repo)
-    { name: "analyzing-releases", repo: CLI_REPO, dir: CLI_SKILL_DIR },
-    { name: "releases-cli", repo: CLI_REPO, dir: CLI_SKILL_DIR },
-    { name: "releases-mcp", repo: CLI_REPO, dir: CLI_SKILL_DIR },
-    // Owner listing (monorepo)
-    { name: "creating-releases-json", repo: MONO_REPO, dir: "skills" },
-    // Operator (monorepo)
-    { name: "classify-media-relevance", repo: MONO_REPO, dir: ".claude/skills" },
-    { name: "finding-changelogs", repo: MONO_REPO, dir: ".claude/skills" },
-    { name: "managing-sources", repo: MONO_REPO, dir: ".claude/skills" },
-    { name: "parsing-changelogs", repo: MONO_REPO, dir: ".claude/skills" },
-    { name: "seeding-playbooks", repo: MONO_REPO, dir: ".claude/skills" },
+  const READER_DIR = "plugins/claude/releases/skills";
+  const SKILLS: { name: string; dir: string }[] = [
+    // Reader
+    { name: "analyzing-releases", dir: READER_DIR },
+    { name: "releases-cli", dir: READER_DIR },
+    { name: "releases-mcp", dir: READER_DIR },
+    // Owner listing
+    { name: "creating-releases-json", dir: "skills" },
+    // Operator
+    { name: "classify-media-relevance", dir: ".claude/skills" },
+    { name: "finding-changelogs", dir: ".claude/skills" },
+    { name: "managing-sources", dir: ".claude/skills" },
+    { name: "parsing-changelogs", dir: ".claude/skills" },
+    { name: "seeding-playbooks", dir: ".claude/skills" },
   ];
 
-  try {
-    const entries = await Promise.all(
-      SKILLS.map(async ({ name, repo, dir }) => {
-        const url = `https://raw.githubusercontent.com/${repo}/${REF}/${dir}/${name}/SKILL.md`;
-        const res = await fetchWithRetry(url);
-        if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
-        const body = await res.text();
-        const { data } = matter(body);
-        const description =
-          typeof data.description === "string" ? data.description.replace(/\s+/g, " ").trim() : "";
-        if (!description) throw new Error(`Skill ${name} has no description`);
-        return {
-          name,
-          type: "skill-md" as const,
-          description,
-          url,
-          digest: `sha256:${createHash("sha256").update(body).digest("hex")}`,
-        };
-      }),
-    );
-    writeJson(SKILLS_INDEX_PATH, {
-      $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
-      skills: entries,
-    });
-    console.log(`Agent skills index: ${entries.length} skills → ${SKILLS_INDEX_PATH}`);
-  } catch (err) {
-    // Reuse a previously-built index rather than aborting — but note this only
-    // ever fires on a local rebuild. The generated file isn't tracked in git, so
-    // on a fresh CI/Vercel checkout there is nothing to fall back TO and the
-    // build fails. That's the intended outcome: if GitHub is down long enough to
-    // exhaust the retries above, a red build you re-run beats silently shipping
-    // a stale index, and the previous deploy keeps serving in the meantime.
-    if (existsSync(SKILLS_INDEX_PATH)) {
-      console.warn(`Agent skills fetch failed, keeping previous index: ${err}`);
-    } else {
-      throw err;
-    }
-  }
+  const entries = SKILLS.map(({ name, dir }) => {
+    const path = join(REPO_ROOT, dir, name, "SKILL.md");
+    if (!existsSync(path)) throw new Error(`Skill file missing: ${path}`);
+    const body = readFileSync(path, "utf8");
+    const { data } = matter(body);
+    const description =
+      typeof data.description === "string" ? data.description.replace(/\s+/g, " ").trim() : "";
+    if (!description) throw new Error(`Skill ${name} has no description`);
+    return {
+      name,
+      type: "skill-md" as const,
+      description,
+      url: `https://raw.githubusercontent.com/${REPO}/${REF}/${dir}/${name}/SKILL.md`,
+      digest: `sha256:${createHash("sha256").update(body).digest("hex")}`,
+    };
+  });
+  writeJson(SKILLS_INDEX_PATH, {
+    $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+    skills: entries,
+  });
+  console.log(`Agent skills index: ${entries.length} skills → ${SKILLS_INDEX_PATH}`);
 }
 
 function buildMcpServerCard() {
