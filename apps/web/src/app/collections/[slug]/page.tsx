@@ -131,7 +131,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             {detail.description}
           </p>
         )}
-        {latestDigest && <CollectionDigestSubscribe slug={slug} className="mt-3" />}
+        {detail.weeklyDigestEnabled && <CollectionDigestSubscribe slug={slug} className="mt-3" />}
         {latestDigest && (
           <LatestDigestHero slug={slug} digest={latestDigest} earlier={earlierDigests} />
         )}

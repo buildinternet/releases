@@ -39,6 +39,7 @@ export type CollectionPageQuery = {
     description: string | null;
     isFeatured: boolean;
     dailySummaryEnabled: boolean;
+    weeklyDigestEnabled: boolean;
     members: Array<
       | {
           __typename: "CollectionMemberOrg";
@@ -537,7 +538,7 @@ export type SourceDetailQuery = {
 };
 
 export const CollectionPageDocument = {
-  __meta__: { hash: "sha256:2cdd4a63d4f1cae66c04422da6ce48b4d1b5f3da9863c12715bd814a13d60b41" },
+  __meta__: { hash: "sha256:867049c5a2dc09633898708d013c9eabf5e7593f71ace2842a41584d822df241" },
   kind: "Document",
   definitions: [
     {
@@ -583,6 +584,7 @@ export const CollectionPageDocument = {
                 { kind: "Field", name: { kind: "Name", value: "description" } },
                 { kind: "Field", name: { kind: "Name", value: "isFeatured" } },
                 { kind: "Field", name: { kind: "Name", value: "dailySummaryEnabled" } },
+                { kind: "Field", name: { kind: "Name", value: "weeklyDigestEnabled" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "members" },

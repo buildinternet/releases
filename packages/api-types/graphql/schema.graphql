@@ -46,6 +46,11 @@ type Collection {
   """
   releases(limit: Int = 20): CollectionReleaseFeed!
   slug: String!
+
+  """
+  Whether the collection generates weekly digests (gates the email-subscribe toggle). Defaults false when the parent was loaded as a list preview without the column.
+  """
+  weeklyDigestEnabled: Boolean!
 }
 
 """AI-generated daily rollup for one ET calendar day in a collection."""

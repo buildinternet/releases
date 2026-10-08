@@ -939,6 +939,7 @@ describe("GraphQL spike", () => {
         description: "Full detail",
         isFeatured: true,
         dailySummaryEnabled: true,
+        weeklyDigestEnabled: true,
       },
     ]);
     // Pin product prod_a1 so releases from src_a1_1 appear in the feed.
@@ -956,6 +957,7 @@ describe("GraphQL spike", () => {
           description
           isFeatured
           dailySummaryEnabled
+          weeklyDigestEnabled
           members {
             __typename
             ... on CollectionMemberProduct { slug name org { slug } }
@@ -985,6 +987,7 @@ describe("GraphQL spike", () => {
           description: string | null;
           isFeatured: boolean;
           dailySummaryEnabled: boolean;
+          weeklyDigestEnabled: boolean;
           members: Array<{ __typename: string; slug: string }>;
           releases: {
             nextCursor: string | null;
@@ -1000,6 +1003,7 @@ describe("GraphQL spike", () => {
       description: "Full detail",
       isFeatured: true,
       dailySummaryEnabled: true,
+      weeklyDigestEnabled: true,
     });
     expect(col.members).toHaveLength(2);
     // 5 releases under prod_a1 + 5 under org_b's src_b1_1 = 10

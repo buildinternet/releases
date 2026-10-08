@@ -48,6 +48,8 @@ export type Collection = {
   isFeatured: boolean;
   /** Present on detail path; list previews may omit (resolver loads the column). */
   dailySummaryEnabled?: boolean;
+  /** Present on detail path; list previews may omit (resolver loads the column). */
+  weeklyDigestEnabled?: boolean;
   previewMembers: CollectionMember[];
 };
 export type CollectionReleaseOrg = { slug: string; name: string };

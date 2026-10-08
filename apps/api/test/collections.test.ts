@@ -236,6 +236,21 @@ describe("collections", () => {
     expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["anthropic", "openai"]);
   });
 
+  it("exposes weeklyDigestEnabled on detail (default false, true once enabled)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const url = "http://test/v1/collections/test-frontier-labs";
+    const off = (await (await fetch(new Request(url))).json()) as any;
+    expect(off.weeklyDigestEnabled).toBe(false);
+    await db
+      .update(collections)
+      .set({ weeklyDigestEnabled: true })
+      .where(eq(collections.slug, "test-frontier-labs"));
+    const on = (await (await fetch(new Request(url))).json()) as any;
+    expect(on.weeklyDigestEnabled).toBe(true);
+  });
+
   it("404s on unknown collection", async () => {
     const db = mkDb();
     await seed(db);
