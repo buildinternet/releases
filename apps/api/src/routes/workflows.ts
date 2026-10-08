@@ -3354,7 +3354,7 @@ workflowsRoutes.post("/workflows/backfill-weekly-digests", async (c) => {
     const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
       collectionId,
       force,
-      onGenerated: (col) => digested.push({ slug: col.slug, weekStart }),
+      onGenerated: (col) => digested.push({ collectionId: col.id, slug: col.slug, weekStart }),
     });
     totals = {
       generated: totals.generated + r.generated,

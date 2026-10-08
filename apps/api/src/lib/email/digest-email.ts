@@ -376,24 +376,23 @@ export function buildDigestEmail(content: DigestEmailContent): {
 }
 
 /**
- * Render + send a digest through the Cloudflare Email Sending binding. Never throws
- * — a missing binding or send error degrades to a logged `{ sent: false }` so the
- * cron loop can fire-and-forget per recipient. Adds RFC 8058 List-Unsubscribe
- * headers for one-click unsubscribe.
+ * Send one rendered reader-digest message through the Cloudflare Email Sending
+ * binding with RFC 8058 one-click unsubscribe headers. Never throws: a missing
+ * binding or send error comes back as `{ sent: false }` (logged under `log`).
+ * Shared by the follows digest and the collection weekly digest (#2459).
  */
-export async function sendDigestEmail(
+export async function sendDigestMail(
   env: DigestEmailEnv,
-  input: DigestEmailInput,
+  msg: { to: string; subject: string; text: string; html: string; unsubscribeUrl: string },
+  log: { component: string } & Record<string, unknown>,
 ): Promise<{ sent: boolean; reason?: "no_binding" | "error" }> {
-  const { subject, text, html } = buildDigestEmail(input);
-  const addr = env.DIGEST_EMAIL_FROM || DEFAULT_FROM;
-  const from = `${FROM_NAME} <${addr}>`;
+  const from = `${FROM_NAME} <${env.DIGEST_EMAIL_FROM || DEFAULT_FROM}>`;
 
   if (!env.AUTH_EMAIL) {
     logEvent("warn", {
-      component: "digest",
+      ...log,
       event: "email-no-binding",
-      message: `AUTH_EMAIL binding absent; digest not sent to ${input.to}`,
+      message: `AUTH_EMAIL binding absent; digest not sent to ${msg.to}`,
       environment: env.ENVIRONMENT,
     });
     return { sent: false, reason: "no_binding" };
@@ -401,32 +400,44 @@ export async function sendDigestEmail(
 
   try {
     await env.AUTH_EMAIL.send({
-      to: input.to,
+      to: msg.to,
       from,
-      subject,
-      text,
-      html,
+      subject: msg.subject,
+      text: msg.text,
+      html: msg.html,
       headers: {
-        "List-Unsubscribe": `<${input.unsubscribeUrl}>`,
+        "List-Unsubscribe": `<${msg.unsubscribeUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     });
     logEvent("info", {
-      component: "digest",
+      ...log,
       event: "email-sent",
-      message: `Sent ${input.cadence} digest to ${input.to}`,
-      count: input.releases.length,
+      message: `Sent digest to ${msg.to}`,
       environment: env.ENVIRONMENT,
     });
     return { sent: true };
   } catch (err) {
     logEvent("error", {
-      component: "digest",
+      ...log,
       event: "email-send-failed",
-      message: `Failed to send digest to ${input.to}`,
+      message: `Failed to send digest to ${msg.to}`,
       error: err instanceof Error ? err.message : String(err),
       environment: env.ENVIRONMENT,
     });
     return { sent: false, reason: "error" };
   }
+}
+
+/** Render + send a follows digest. Never throws (see `sendDigestMail`). */
+export async function sendDigestEmail(
+  env: DigestEmailEnv,
+  input: DigestEmailInput,
+): Promise<{ sent: boolean; reason?: "no_binding" | "error" }> {
+  const { subject, text, html } = buildDigestEmail(input);
+  return sendDigestMail(
+    env,
+    { to: input.to, subject, text, html, unsubscribeUrl: input.unsubscribeUrl },
+    { component: "digest", cadence: input.cadence, count: input.releases.length },
+  );
 }

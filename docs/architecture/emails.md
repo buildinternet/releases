@@ -11,7 +11,7 @@ order. No sender hand-rolls markup.
 | Lane     | Messages                                                                                                                                                                                           | Tone                                     |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, submission added, ownership claim verified                                                                 | accent                                   |
-| Reader   | daily + weekly follow digest                                                                                                                                                                       | accent                                   |
+| Reader   | daily + weekly follow digest, collection weekly digest                                                                                                                                             | accent                                   |
 | Operator | cron report, staleness digest, recommendation, ownership claim verified, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
 
 The lane label sits in the masthead; the tone colors the 3px rule at the top of
@@ -70,6 +70,7 @@ collapsed and blanks dropped:
 | Message           | Subject                                                                                |
 | ----------------- | -------------------------------------------------------------------------------------- |
 | digest            | `Releases digest — Cloudflare, Anthropic +2 more · 7 updates · Jul 21`                 |
+| collection digest | `Agents learn to review their own work — Coding Agents · Sep 28 – Oct 4`               |
 | poll-and-fetch    | `[alert] poll-and-fetch: Vercel — Next.js +1 more failed (2 sources, scheduledTime=…)` |
 | staleness         | `[staleness] 4 sources overdue: Vercel, Acme +2 more`                                  |
 | staleness outage  | `[staleness] Firecrawl deliveries stopped for all 14 sources`                          |
@@ -83,6 +84,27 @@ the whole story. Operator subjects keep their `[alert]` / `[feedback]` prefixes
 Account mail carries the fact the reader needs instead: the new address on an
 email change, the expiry when it is short, the domain they submitted, the
 org/source that was added.
+
+## Collection weekly digest
+
+Signed-in readers opt in per collection ("Email me this digest weekly" on the
+collection and digest pages, `PUT/DELETE /v1/me/collection-digests/:slug`), stored
+in `user_collection_digest_subs`. It is not a follow: follows shape the feed, this
+only sends mail. The email is a teaser for the digest page: the intro, the week's
+five biggest releases (importance descending, linked to their digest section),
+one "Read the digest" button, and a quiet `fine` link to the week's replay.
+
+Sending is driven by the digest being written, not a clock. When the
+collection-summaries workflow writes a digest for the **just-closed** week, it
+enqueues one `collection-digest` message per verified subscriber on the existing
+`digest-delivery` queue. Catch-up weeks, `force` regens, and
+`POST /v1/workflows/backfill-weekly-digests` never email. Each send claims
+`(user, collection, week)` by moving `last_sent_week` forward first, so a queue
+redelivery or workflow replay can't mail twice; a failed send releases the claim
+for the retry. Unsubscribe reuses the reader's `reld_` token at
+`/v1/digest/unsubscribe/:token/collections/:slug`, which removes only that subscription and leaves the follows
+digest alone. It sends alongside the weekly follows digest; the two are not
+merged.
 
 ## Gmail annotations
 

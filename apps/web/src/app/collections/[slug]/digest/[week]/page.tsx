@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { BreadcrumbHome } from "@/components/breadcrumb-home";
 import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
+import { CollectionDigestSubscribe } from "@/components/collection-digest-subscribe";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
 import { DigestFormatLinks } from "@/components/digest-format-links";
@@ -307,6 +308,7 @@ export default async function CollectionDigestPage({
           atomHref={`/collections/${slug}/digest.atom`}
           className="mt-4"
         />
+        <CollectionDigestSubscribe slug={slug} className="mt-3" />
 
         <DigestWeekGlance
           releases={digest.releases}

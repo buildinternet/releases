@@ -28,6 +28,10 @@ import {
   type CollectionSummaryTarget,
 } from "../cron/collection-summaries.js";
 import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
+import {
+  sendCollectionDigests,
+  type SendCollectionDigestsEnv,
+} from "../cron/send-collection-digests.js";
 
 export type CollectionSummariesWorkflowParams = {
   scheduledTime: number;
@@ -40,7 +44,8 @@ export type CollectionSummariesWorkflowParams = {
 };
 
 export type CollectionSummariesWorkflowEnv = TextModelEnv &
-  WebRevalidateEnv & {
+  WebRevalidateEnv &
+  SendCollectionDigestsEnv & {
     DB: D1Database;
     COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
     COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS?: string;
@@ -252,7 +257,11 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
       );
       if (outcome === "generated") {
         generated++;
-        digested.push({ slug: task.collectionSlug, weekStart: task.weekStart });
+        digested.push({
+          collectionId: task.collectionId,
+          slug: task.collectionSlug,
+          weekStart: task.weekStart,
+        });
       } else if (outcome === "skipped") skipped++;
       else failed++;
     }
@@ -274,6 +283,15 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
         await pingAfterDigests(this.env, digested);
         return { pinged: true, digests: digested };
       });
+    }
+
+    // Email subscribers the just-closed week's new digests (#2459). Its own step
+    // so a replay-on-wake can't fan out twice; the per-(user, collection, week)
+    // claim in the consumer is the backstop. sendCollectionDigests never throws.
+    if (digested.length > 0) {
+      await step.do("email digest subscribers", RETRY_REVALIDATE, async () =>
+        sendCollectionDigests(this.env, digested, todayEt),
+      );
     }
   }
 }

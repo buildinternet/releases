@@ -14,11 +14,11 @@ import { sendDigestEmail, type DigestEmailEnv } from "../lib/email/digest-email.
 import { parsePositiveInt } from "./feed-enrich.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 import { sendDigestBatch } from "../queues/enqueue-release-fanout.js";
-import type { DigestDeliveryMessage } from "../queues/types.js";
+import type { DigestDeliveryMessage, DigestQueueMessage } from "../queues/types.js";
 
 export interface SendDigestsEnv {
   DB: D1Database;
-  DIGEST_DELIVERY_QUEUE?: Queue<DigestDeliveryMessage>;
+  DIGEST_DELIVERY_QUEUE?: Queue<DigestQueueMessage>;
   AUTH_EMAIL?: AuthEmailBinding;
   DIGEST_EMAIL_FROM?: string;
   WEB_BASE_URL?: string;
@@ -51,10 +51,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Build the absolute unsubscribe URL. Points at the API worker (it serves
- * /v1/digest/unsubscribe/:token). Falls back to the prod host.
+ * /v1/digest/unsubscribe/:token). With a collection slug, the URL unsubscribes
+ * from that collection's weekly digest only (#2459).
  */
-function unsubscribeUrlFor(apiOrigin: string, token: string): string {
-  return `${apiOrigin}/v1/digest/unsubscribe/${token}`;
+export function unsubscribeUrlFor(
+  apiOrigin: string,
+  token: string,
+  collectionSlug?: string,
+): string {
+  const base = `${apiOrigin}/v1/digest/unsubscribe/${token}`;
+  return collectionSlug ? `${base}/collections/${encodeURIComponent(collectionSlug)}` : base;
 }
 
 /** The render/send knobs shared by every recipient in a run. */

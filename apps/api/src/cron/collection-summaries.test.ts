@@ -27,6 +27,8 @@ import {
   hasCollectionWeeklyDigest,
 } from "../queries/collection-summaries";
 import type { TextModel } from "@releases/ai-internal/text-model";
+import { user } from "../db/schema-auth";
+import { subscribeCollectionDigest } from "../queries/collection-digest-subs";
 
 function fakeModel(onCall?: () => void): TextModel {
   return {
@@ -677,5 +679,62 @@ describe("runCollectionWeeklyDigests — revalidation ping (#2331)", () => {
         "2026-06-15",
       ),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("runCollectionWeeklyDigests — subscriber emails (#2459)", () => {
+  async function seedSubscriber(db: ReturnType<typeof createTestDb>["db"]): Promise<void> {
+    await db.insert(user).values({
+      id: "u_sub",
+      name: "Sub",
+      email: "sub@example.com",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await subscribeCollectionDigest(db, "u_sub", "week");
+  }
+
+  function env(sent: string[], extra?: Partial<CollectionSummariesEnv>): CollectionSummariesEnv {
+    return {
+      DB: undefined as unknown as D1Database,
+      _weeklyDigestModelOverride: fakeWeeklyModel(),
+      AUTH_EMAIL: {
+        send: async (m: { subject: string }) => {
+          sent.push(m.subject);
+          return { messageId: "m" };
+        },
+      } as unknown as CollectionSummariesEnv["AUTH_EMAIL"],
+      ...extra,
+    };
+  }
+
+  test("emails subscribers the just-closed week's new digest", async () => {
+    const { db } = createTestDb();
+    await seedWeeklyCollection(db);
+    await seedSubscriber(db);
+    const sent: string[] = [];
+
+    await runCollectionWeeklyDigests(env(sent), db, "2026-06-15");
+
+    expect(sent).toEqual(["Week — Week · Jun 8 – 14"]);
+  });
+
+  test("never emails a digest written for a catch-up week", async () => {
+    const { db } = createTestDb();
+    await seedWeeklyCollection(db);
+    await seedSubscriber(db);
+    const sent: string[] = [];
+
+    // Two weeks later with a 2-week catch-up: 2026-06-08 is generated as a
+    // catch-up week, the just-closed week (2026-06-15) has no releases.
+    await runCollectionWeeklyDigests(
+      env(sent, { COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS: "2" }),
+      db,
+      "2026-06-22",
+    );
+
+    expect(await hasCollectionWeeklyDigest(db, "col_week", "2026-06-08")).toBe(true);
+    expect(sent).toEqual([]);
   });
 });

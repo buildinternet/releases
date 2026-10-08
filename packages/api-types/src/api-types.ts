@@ -1359,6 +1359,25 @@ export interface DigestPrefsRequest {
   cadence: DigestCadence;
 }
 
+/** One collection whose weekly digest the caller gets by email (#2459). */
+export interface CollectionDigestSubscription {
+  collectionSlug: string;
+  collectionName: string;
+  /** ISO-8601. */
+  createdAt: string;
+}
+
+/** GET /v1/me/collection-digests response, newest first. */
+export interface CollectionDigestSubscriptionsResponse {
+  subscriptions: CollectionDigestSubscription[];
+}
+
+/** PUT / DELETE /v1/me/collection-digests/:slug response. Both are idempotent. */
+export interface CollectionDigestSubscriptionResponse {
+  collectionSlug: string;
+  subscribed: boolean;
+}
+
 // ── Semantic alerts (#2304 Phase 1) ──
 
 /** Hard cap on saved semantic alerts per account. Enforced on create. */

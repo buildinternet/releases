@@ -14,6 +14,7 @@ import {
   type AuthEmailEnv,
 } from "../../auth/email.js";
 import { buildDigestEmail } from "./digest-email.js";
+import { buildCollectionDigestEmail } from "./collection-digest-email.js";
 import { buildSemanticAlertEmail } from "./semantic-alert-email.js";
 import { formatFeedbackEmail } from "./feedback-email.js";
 import { formatPollFetchAlert } from "./poll-fetch-alert.js";
@@ -47,6 +48,7 @@ export type EmailSampleId =
   | "auth.magic-link"
   | "digest.daily"
   | "digest.weekly"
+  | "digest.collection"
   | "alert.semantic-match"
   | "recommendation.ack"
   | "recommendation.added"
@@ -104,6 +106,12 @@ export const EMAIL_SAMPLE_CATALOG: EmailSampleMeta[] = [
     id: "digest.weekly",
     label: "Follow digest (weekly)",
     description: "Weekly variant of the follow digest",
+    channel: "auth",
+  },
+  {
+    id: "digest.collection",
+    label: "Collection weekly digest",
+    description: "A collection's weekly digest, sent to its subscribers",
     channel: "auth",
   },
   {
@@ -367,6 +375,33 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
         manageUrl: `${web}/following`,
         unsubscribeUrl: `${api}/v1/digest/unsubscribe/reld_sample`,
         referenceDate: new Date().toISOString(),
+      });
+    }
+    case "digest.collection": {
+      const covered = (id: string, title: string, product: string, importance: number) => ({
+        id,
+        title,
+        path: `/release/${id}`,
+        org: { slug: "acme", name: "Acme", avatarUrl: null, githubHandle: null },
+        product: { slug: product.toLowerCase(), name: product },
+        importance,
+      });
+      return buildCollectionDigestEmail({
+        collection: { slug: "coding-agents", name: "Coding Agents" },
+        digest: {
+          weekStart: "2026-09-28",
+          title: "Agents learn to review their own work",
+          intro:
+            "Three coding agents shipped self-review loops this week, and two more cut their per-task cost.",
+          releases: [
+            covered("rel_sample1", "Review mode checks diffs before opening a PR", "Coder", 5),
+            covered("rel_sample2", "Background tasks now run in parallel", "Runner", 4),
+            covered("rel_sample3", "Cheaper default model for small edits", "Coder", 3),
+          ],
+          sections: [{ anchor: "self-review", releaseIds: ["rel_sample1"] }],
+        },
+        baseUrl: web,
+        unsubscribeUrl: `${api}/v1/digest/unsubscribe/reld_sample/collections/coding-agents`,
       });
     }
     case "alert.semantic-match":
