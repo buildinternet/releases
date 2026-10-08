@@ -14,6 +14,7 @@ import {
   collectionWeeklyDigests,
 } from "@buildinternet/releases-core/schema";
 import { SitemapPayloadSchema } from "@buildinternet/releases-api-types";
+import { PRODUCT_HAS_VISIBLE_SOURCE } from "@releases/queries/orgs";
 import type { Env } from "../index.js";
 
 export const sitemapRoutes = new Hono<Env>();
@@ -25,7 +26,7 @@ sitemapRoutes.get(
     tags: ["Sitemap"],
     summary: "Bulk URL payload for the web sitemap generator",
     description:
-      "Lists every visible org / source / product / collection slug paired with the timestamp the web uses to drive `<lastmod>`. Joined through `*_active` views, so soft-deleted and hidden (`is_hidden = 1`) rows are excluded; stub-tier orgs (#1947) are excluded too (their pages are `noindex`). Sources also carry `hasChangelog` and `hasHighlights` flags so the web only emits `/{org}/{src}/changelog` and `/{org}/{src}/highlights` URLs when the corresponding routes resolve (#875).\n\nOrg id lookups are chunked to 90 at a time to stay under D1's 100-bound-parameter cap on prepared statements.",
+      "Lists every visible org / source / product / collection slug paired with the timestamp the web uses to drive `<lastmod>`. Joined through `*_active` views, so soft-deleted and hidden (`is_hidden = 1`) rows are excluded; stub-tier orgs (#1947) are excluded too (their pages are `noindex`). Products are listed only when they have at least one visible source — the same definition as org detail (`PRODUCT_HAS_VISIBLE_SOURCE`) — so a product the org page hides never appears here. Sources also carry `hasChangelog` and `hasHighlights` flags so the web only emits `/{org}/{src}/changelog` and `/{org}/{src}/highlights` URLs when the corresponding routes resolve (#875).\n\nOrg id lookups are chunked to 90 at a time to stay under D1's 100-bound-parameter cap on prepared statements.",
     responses: {
       200: {
         description: "Bulk URL payload",
@@ -105,7 +106,6 @@ sitemapRoutes.get(
               orgId: sourcesActive.orgId,
               slug: sourcesActive.slug,
               id: sourcesActive.id,
-              productId: sourcesActive.productId,
               isHidden: sourcesActive.isHidden,
             })
             .from(sourcesActive)
@@ -120,7 +120,7 @@ sitemapRoutes.get(
               slug: productsActive.slug,
             })
             .from(productsActive)
-            .where(inArray(productsActive.orgId, chunk)),
+            .where(and(inArray(productsActive.orgId, chunk), PRODUCT_HAS_VISIBLE_SOURCE)),
         ),
       ),
       Promise.all(
@@ -186,7 +186,6 @@ sitemapRoutes.get(
               id: s.id,
               orgSlug: orgIdToSlug.get(s.orgId)!,
               slug: s.slug,
-              productId: s.productId ?? null,
               latestDate: latestBySource.get(s.id) ?? null,
               hasChangelog: sourcesWithChangelog.has(s.id),
               hasHighlights: sourcesWithSummaries.has(s.id),

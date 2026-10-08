@@ -22,7 +22,7 @@ import { taxonomySidebarSections, collectionsSidebarSection } from "@/components
 import { buildReleaseItemListJsonLd } from "@/lib/schema-org";
 import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
-import { sourceIdPath } from "@/lib/links";
+import { sourcePath } from "@/lib/links";
 import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
@@ -208,7 +208,7 @@ export async function ProductView({
                 {appEntries.map((e) => (
                   <Link
                     key={e.slug}
-                    href={sourceIdPath(e.id)}
+                    href={sourcePath(orgSlug, e.slug)}
                     className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-md px-2 py-1 transition-colors"
                   >
                     <AppIcon iconUrl={e.app.iconUrl} name={e.name} size={16} />

@@ -65,48 +65,25 @@ export function buildOrgSitemapEntries(
 
 /**
  * Pure construction of the product + source sitemap entries from a
- * `/v1/sitemap` payload. Lives in its own side-effect-free module (no Next.js
- * app imports, no docs/flags machinery) so the #1190 shadow-routing logic is
- * unit testable independent of the sitemap route's module-load side effects.
+ * `/v1/sitemap` payload. Side-effect-free (no Next.js app imports) so it's unit
+ * testable apart from the sitemap route.
  *
- * Products are canonical at the bare `/[org]/[slug]` (#1190). A source whose
- * slug collides with a product in the same org is "shadowed" — the product
- * wins the bare URL via product-first resolution, so the source's canonical
- * home is `/sources/:id` (no sub-tabs). Non-shadowed and orphan sources keep
- * their bare URL plus `highlights`/`changelog` sub-tabs. If a shadowed source
- * is missing an `id` (stale/cached payload from an older worker), it degrades
- * to the bare URL + sub-tabs rather than emitting `/sources/undefined`.
- *
- * Single-product orgs are skipped: the org page IS that product's feed, so the
- * product page 308-redirects to `/[org]` (`org.products.length <= 1` collapse,
- * apps/web/src/app/[orgSlug]/[slug]/page.tsx). Emitting its bare URL here would put
- * a redirecting URL in the sitemap; the `/[org]` org entry already covers the
- * content. Shadow detection (`productKeys`) still uses the FULL product set so
- * a single-product org's colliding source keeps routing to `/sources/:id`
- * instead of falling back to the redirecting bare URL (#1636).
+ * One rule: products and sources live at the bare `/{org}/{slug}`. Product and
+ * source slugs never collide within an org (the API rejects it), so the two
+ * never compete for a URL. The single exception is the single-product collapse:
+ * an org with fewer than two products has no product URLs (they 308 to
+ * `/{org}`, see `collapsesToOrg`). `data.products` holds visible products only,
+ * the same set the page counts, so the sitemap and the redirect agree.
  */
 export function buildEntitySitemapEntries(
   data: SitemapPayload,
   baseUrl: string,
 ): MetadataRoute.Sitemap {
-  // Set of "orgSlug/slug" that a product owns. These slugs win the bare
-  // /[org]/[slug] URL via product-first resolution (#1190), so any source
-  // whose slug collides in the same org is "shadowed" and must be listed at
-  // /sources/:id instead of the bare path. Built from the FULL product set —
-  // independent of the single-product emit filter below — so shadow routing
-  // stays correct even when a product entry is omitted (#1636).
-  const productKeys = new Set(data.products.map((p) => `${p.orgSlug}/${p.slug}`));
-
-  // Per-org product count, mirroring the page's `org.products.length` redirect
-  // condition. This payload and org-detail both read the same `productsActive`
-  // view, so the count matches the page's collapse rule exactly (#1636).
   const productCountByOrg = new Map<string, number>();
   for (const p of data.products) {
     productCountByOrg.set(p.orgSlug, (productCountByOrg.get(p.orgSlug) ?? 0) + 1);
   }
 
-  // Products → bare /[org]/[slug] (was /[org]/product/[slug], #1190). Skip
-  // single-product orgs whose bare product URL 308-redirects to /[org] (#1636).
   const productEntries: MetadataRoute.Sitemap = data.products
     .filter((p) => (productCountByOrg.get(p.orgSlug) ?? 0) > 1)
     .map((p) => ({
@@ -116,46 +93,14 @@ export function buildEntitySitemapEntries(
       priority: 0.7,
     }));
 
-  // Sources: each is listed at the one URL the site links it from.
-  //   - Product member (`productId` set) → `/sources/:id` (+ sub-tabs). The
-  //     product page links members there, and the bare `/{org}/{slug}` copy
-  //     canonicals to it, so listing the bare URL would submit a duplicate
-  //     that nothing links to.
-  //   - Orphan whose slug collides with a product → omitted. The bare URL
-  //     resolves to the product (already listed above) and `/sources/:id`
-  //     308s to it, so the source has no URL of its own to submit.
-  //   - Orphan, no collision → bare URL + sub-tabs.
-  // `productId === undefined` means an older payload without the field: fall
-  // back to slug-collision routing (shadowed → `/sources/:id`, else bare).
   const sourceEntries: MetadataRoute.Sitemap = data.sources.flatMap((s) => {
     // Only a real latestDate drives lastmod; no fabricated `now` fallback.
     const lastModified = s.latestDate ? new Date(s.latestDate) : undefined;
-    const shadowed = productKeys.has(`${s.orgSlug}/${s.slug}`);
-    let base: string;
-    let withSubTabs = true;
-    if (s.productId !== undefined) {
-      if (s.productId && s.id) {
-        base = `${baseUrl}/sources/${s.id}`;
-      } else if (shadowed) {
-        return [];
-      } else {
-        base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
-      }
-    } else if (shadowed && s.id) {
-      base = `${baseUrl}/sources/${s.id}`;
-      withSubTabs = false;
-    } else {
-      base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
-    }
+    const base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
     const entries: MetadataRoute.Sitemap = [
-      {
-        url: base,
-        lastModified,
-        changeFrequency: "daily" as const,
-        priority: 0.7,
-      },
+      { url: base, lastModified, changeFrequency: "daily" as const, priority: 0.7 },
     ];
-    if (withSubTabs && s.hasHighlights) {
+    if (s.hasHighlights) {
       entries.push({
         url: `${base}/highlights`,
         lastModified,
@@ -163,7 +108,7 @@ export function buildEntitySitemapEntries(
         priority: 0.6,
       });
     }
-    if (withSubTabs && s.hasChangelog) {
+    if (s.hasChangelog) {
       entries.push({
         url: `${base}/changelog`,
         lastModified,

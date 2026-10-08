@@ -24,7 +24,6 @@ type SitemapResponse = {
     id: string;
     orgSlug: string;
     slug: string;
-    productId?: string | null;
     latestDate: string | null;
     hasChangelog?: boolean;
     hasHighlights?: boolean;
@@ -151,8 +150,6 @@ describe("GET /sitemap", () => {
       latestDate: "2026-03-15T00:00:00Z",
       hasChangelog: false,
       hasHighlights: false,
-      // Orphan source: the web lists it at its bare URL.
-      productId: null,
     });
     expect(result.sources[0].id).toBe(src.id);
   });
@@ -214,18 +211,72 @@ describe("GET /sitemap", () => {
       .values({ name: "Other", slug: "other" })
       .returning()
       .all();
-    db.insert(products)
+    const prods = db
+      .insert(products)
       .values([
         { orgId: o1.id, name: "Next.js", slug: "nextjs" },
         { orgId: o1.id, name: "Turborepo", slug: "turborepo" },
         { orgId: o2.id, name: "Thing", slug: "thing" },
       ])
+      .returning()
+      .all();
+    // Products appear only with at least one visible source (matches org detail).
+    db.insert(sources)
+      .values(
+        prods.map((p) => ({
+          orgId: p.orgId,
+          productId: p.id,
+          name: `${p.name} repo`,
+          slug: `${p.slug}-repo`,
+          type: "github" as const,
+          url: `https://github.com/x/${p.slug}`,
+        })),
+      )
       .run();
 
     const result = await callSitemap();
 
     const pairs = result.products.map((p) => `${p.orgSlug}/${p.slug}`).toSorted();
     expect(pairs).toEqual(["other/thing", "vercel/nextjs", "vercel/turborepo"]);
+  });
+
+  test("omits products with no visible source (none at all, or only hidden ones)", async () => {
+    const db = testDatabase.db;
+    const [org] = db.insert(organizations).values({ name: "Acme", slug: "acme" }).returning().all();
+    const prods = db
+      .insert(products)
+      .values([
+        { orgId: org.id, name: "Shown", slug: "shown" },
+        { orgId: org.id, name: "Empty", slug: "empty" },
+        { orgId: org.id, name: "Hidden Only", slug: "hidden-only" },
+      ])
+      .returning()
+      .all();
+    const byslug = Object.fromEntries(prods.map((p) => [p.slug, p.id]));
+    db.insert(sources)
+      .values([
+        {
+          orgId: org.id,
+          productId: byslug["shown"],
+          name: "S",
+          slug: "shown-src",
+          type: "feed",
+          url: "https://a.test/s",
+        },
+        {
+          orgId: org.id,
+          productId: byslug["hidden-only"],
+          name: "H",
+          slug: "hidden-src",
+          type: "feed",
+          url: "https://a.test/h",
+          isHidden: true,
+        },
+      ])
+      .run();
+
+    const result = await callSitemap();
+    expect(result.products.map((p) => p.slug)).toEqual(["shown"]);
   });
 
   test("carries lastActivity from the max(sources.lastFetchedAt) for each org", async () => {

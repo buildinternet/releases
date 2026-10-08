@@ -11,7 +11,7 @@ import {
   buildSourceEntityJsonLd,
   currentPeriod,
 } from "@/lib/schema-org";
-import { getSourceById } from "./_lib/source-by-id";
+import { getSourceById, sourceHomePath } from "./_lib/source-by-id";
 import { getAppInfo } from "@/lib/app-source";
 import { getVideoInfo } from "@/lib/video-source";
 import { enableOnDemandIsr } from "@/lib/static-params";
@@ -33,11 +33,7 @@ export async function generateMetadata({
     const source = await getSourceById(id);
     const orgSlug = source.org?.slug ?? id;
     const orgName = source.org?.name ?? orgSlug;
-    const canonicalPath = source.productId
-      ? `/sources/${id}`
-      : source.org
-        ? `/${source.org.slug}/${source.slug}`
-        : `/sources/${id}`;
+    const canonicalPath = sourceHomePath(source, id);
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
@@ -116,21 +112,13 @@ export default async function SourceByIdPage({ params }: { params: Promise<{ id:
     throw e;
   }
 
-  // Orphan source (has org, no productId) → redirect to canonical bare URL.
-  if (source.org && !source.productId) {
-    permanentRedirect(`/${source.org.slug}/${source.slug}`);
-  }
+  // A source with an org lives at its bare URL; this path is only an alias.
+  if (source.org) permanentRedirect(sourceHomePath(source, id));
 
-  const orgSlug = source.org?.slug ?? "";
+  // From here on the source has no org.
   const initialCursor = source.pagination.nextCursor;
 
-  // Member sources are canonical at /sources/:id (bare /{org}/{slug} resolves to the
-  // product post-flip); sourceless sources too; only a non-member with an org uses bare.
-  const sourceUrl = source.productId
-    ? `https://releases.sh/sources/${id}`
-    : source.org
-      ? `https://releases.sh/${source.org.slug}/${source.slug}`
-      : `https://releases.sh/sources/${id}`;
+  const sourceUrl = `https://releases.sh/sources/${id}`;
   const releaseListId = `${sourceUrl}#releases`;
 
   const jsonLd = {
@@ -141,17 +129,7 @@ export default async function SourceByIdPage({ params }: { params: Promise<{ id:
         "@type": "BreadcrumbList",
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
-          ...(source.org
-            ? [
-                {
-                  "@type": "ListItem",
-                  position: 2,
-                  name: source.org.name,
-                  item: `https://releases.sh/${source.org.slug}`,
-                },
-                { "@type": "ListItem", position: 3, name: source.name, item: sourceUrl },
-              ]
-            : [{ "@type": "ListItem", position: 2, name: source.name, item: sourceUrl }]),
+          { "@type": "ListItem", position: 2, name: source.name, item: sourceUrl },
         ],
       },
       buildReleaseItemListJsonLd(source.releases, {
@@ -170,7 +148,7 @@ export default async function SourceByIdPage({ params }: { params: Promise<{ id:
     <>
       <JsonLd data={jsonLd} />
       <SourceReleaseList
-        orgSlug={orgSlug}
+        orgSlug=""
         sourceSlug={source.slug}
         initialReleases={withReleaseBodyHtml(
           source.releases,
@@ -183,8 +161,8 @@ export default async function SourceByIdPage({ params }: { params: Promise<{ id:
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}
-        orgSlug={source.org?.slug ?? null}
-        orgName={source.org?.name ?? null}
+        orgSlug={null}
+        orgName={null}
       />
     </>
   );

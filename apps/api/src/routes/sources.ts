@@ -16,7 +16,7 @@ import {
   inArray,
   type SQL,
 } from "drizzle-orm";
-import { findLiveParents } from "@releases/queries/entities";
+import { findLiveParents, isSlugHeldByProduct } from "@releases/queries/entities";
 import { findVisibleReleaseDetail } from "@releases/queries/releases";
 import { createDb } from "../db.js";
 import {
@@ -2470,8 +2470,18 @@ sourceRoutes.post(
     }
 
     // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.
-    // Loop-with-catch is race-safe: no TOCTOU gap between check and insert.
+    // A candidate held by a live product in this org is skipped — products and
+    // sources share the `/{org}/{slug}` namespace — and when the base itself is
+    // product-held, `base-releases` is tried once before the numeric suffixes.
+    // Loop-with-catch is race-safe for the source-vs-source unique index; the
+    // product check is a plain read (no DB constraint spans both tables).
     const MAX_SLUG_ATTEMPTS = 20;
+    const baseHeldByProduct = await isSlugHeldByProduct(db, orgId, baseSlug);
+    const slugCandidates = [
+      baseSlug,
+      ...(baseHeldByProduct ? [`${baseSlug}-releases`] : []),
+      ...Array.from({ length: MAX_SLUG_ATTEMPTS - 1 }, (_, i) => `${baseSlug}-${i + 2}`),
+    ];
     const createdAt = new Date().toISOString();
     const insertValues = (slug: string) => ({
       name: body.name,
@@ -2488,8 +2498,11 @@ sourceRoutes.post(
 
     let source: typeof sources.$inferSelect | undefined;
 
-    for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
-      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    for (const slug of slugCandidates) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential candidate probe
+      if (slug === baseSlug ? baseHeldByProduct : await isSlugHeldByProduct(db, orgId, slug)) {
+        continue;
+      }
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential retry loop: each attempt depends on the previous collision
         const [row] = await db.insert(sources).values(insertValues(slug)).returning();
@@ -2709,6 +2722,16 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
       .where(and(eq(sources.slug, body.slug), orgScope));
     if (existing) {
       return respondError(c, new ConflictError(`Source with slug "${body.slug}" already exists`));
+    }
+    // Products share the `/{org}/{slug}` namespace; a source may not take a
+    // live product's slug in the same org.
+    if (src.orgId && (await isSlugHeldByProduct(db, src.orgId, body.slug))) {
+      return respondError(
+        c,
+        new ConflictError(`Slug "${body.slug}" is already used by a product in this org`, {
+          details: { slug: body.slug, heldBy: "product" },
+        }),
+      );
     }
   }
 

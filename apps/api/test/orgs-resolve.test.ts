@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, it, expect } from "bun:test";
+import { eq } from "drizzle-orm";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { productRoutes } from "../src/routes/products.js";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
@@ -82,8 +83,8 @@ describe("GET /v1/orgs/:org/resolve/:slug", () => {
   });
 });
 
-describe("POST /v1/products shadow guard", () => {
-  it("warns but still creates when the new product slug shadows an existing source", async () => {
+describe("POST /v1/products source-slug guard", () => {
+  it("rejects with 409 when the new product slug is held by an existing source", async () => {
     await testDb.db.insert(organizations).values({
       id: "org_acme",
       name: "Acme",
@@ -104,13 +105,15 @@ describe("POST /v1/products shadow guard", () => {
       slug: "acme-cli",
       orgSlug: "acme",
     });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { slug: string; warning?: string };
-    expect(body.slug).toBe("acme-cli");
-    expect(body.warning).toContain("shadow");
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("conflict");
+    expect(body.error.message).toContain("already used by a source");
+    const rows = await testDb.db.select().from(products).where(eq(products.orgId, "org_acme"));
+    expect(rows).toHaveLength(0);
   });
 
-  it("omits the warning when there is no shadowed source", async () => {
+  it("creates the product when no source holds the slug", async () => {
     await testDb.db.insert(organizations).values({
       id: "org_beta",
       name: "Beta",
@@ -123,7 +126,7 @@ describe("POST /v1/products shadow guard", () => {
       orgSlug: "beta",
     });
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { warning?: string };
-    expect(body.warning).toBeUndefined();
+    const body = (await res.json()) as { slug: string };
+    expect(body.slug).toBe("beta-sdk");
   });
 });

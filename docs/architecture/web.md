@@ -4,30 +4,30 @@ The feature reference for everything user-visible: how URLs resolve on releases.
 
 It's a collection of independent features rather than one narrative — use the table of contents / headings to jump to the one you're touching.
 
-## Product-first URL resolution (#1190)
+## Product and source URLs
 
-The bare second segment is a **product**: `/[org]/[slug]` resolves product-first, falling back to a source. Phases 1–2 (#1187, #1189) made the product the default feed + link unit; #1190 flipped the namespace so products own the clean coordinate and sources are demoted toward an ID-keyed surface.
+One rule: **every product and every source lives at `/[org]/[slug]`.** Products and sources share that namespace, and the API refuses a product or source slug that the other kind already holds in the same org, so the two never compete for a URL. History: #1190 made products resolve product-first and let a product "shadow" a same-slug source, which pushed shadowed and product-member sources to `/sources/:id`. Those state-dependent URLs moved whenever an editor wrapped a source or added a product, and the rules were reimplemented in five places with three definitions of "product", so the sitemap listed redirecting and orphaned duplicate URLs (Ahrefs audit, #2452). The shared namespace replaced them.
 
-**Resolution** (`apps/web/src/app/[orgSlug]/[slug]/page.tsx` calls `GET /v1/orgs/:org/resolve/:slug`, a one-round-trip discriminated `{ kind: "product" | "source" }` payload — `apps/api/src/routes/products.ts`):
+**Resolution** (`apps/web/src/app/[orgSlug]/[slug]/page.tsx` calls `GET /v1/orgs/:org/resolve/:slug`, a discriminated `{ kind: "product" | "source" }` payload, `apps/api/src/routes/products.ts`):
 
-| Path                    | resolves to           | Action                                              |
-| ----------------------- | --------------------- | --------------------------------------------------- |
-| `/[org]/[slug]`         | product               | render product                                      |
-| `/[org]/[slug]`         | source (non-shadowed) | render source                                       |
-| `/[org]/[slug]`         | nothing               | 404                                                 |
-| `/[org]/product/[slug]` | (any)                 | 308 → `/[org]/[slug]`                               |
-| `/sources/[id]`         | member source         | render source (canonical home for shadowed sources) |
-| `/sources/[id]`         | orphan source         | 308 → `/[org]/[sourceSlug]`                         |
+| Path                    | Resolves to                   | Action                        |
+| ----------------------- | ----------------------------- | ----------------------------- |
+| `/[org]/[slug]`         | product, org has 2+ products  | render product                |
+| `/[org]/[slug]`         | product, org has fewer than 2 | 308 → `/[org]`                |
+| `/[org]/[slug]`         | source                        | render source                 |
+| `/[org]/[slug]`         | nothing                       | 404                           |
+| `/[org]/product/[slug]` | (any)                         | 308 → where the bare URL ends |
+| `/sources/[id]`         | source with an org            | 308 → `/[org]/[sourceSlug]`   |
+| `/sources/[id]`         | source with no org (rare)     | render source                 |
 
-Because a **shadowed** source's slug _is_ its product's slug, product-first resolution returns the product directly — no redirect, no broken URL; the bare URL's content just flips from source to product. Of ~71 member sources, ~23 collide; only those need `/sources/:id`. Non-shadowed members and all orphans keep their bare URL.
+The `/sources/[id]` sub-tabs (`/changelog`, `/highlights`) redirect the same way, keeping a changelog deep-link's `path` / `offset`.
 
-- **Seam:** `apps/web/src/lib/links.ts` is the single path builder for the web component tree — `productPath` emits bare, `sourceIdPath(id)` → `/sources/:id`. Server-rendered markdown/XML (`packages/rendering/src/formatters.ts`) and the rename `revalidatePath` construct product URLs independently and were swept to bare alongside the flip.
+- **Slug invariant (API):** product create and adopt return 409 `conflict` when a source in the org holds the slug (adopt also checks every slug it would move in). Source rename returns 409 when a product holds the new slug. Generated source slugs (source create, on-demand lookups, video and App Store materialization) step around a product's slug with a `-releases` suffix; the well-known materializer shares one used-slug set across both kinds. Helpers: `isSlugHeldByProduct` / `isSlugHeldBySource` in `@releases/queries/entities`. To wrap a source into a same-name product, rename the source to `<slug>-releases` first, then create the product.
+- **Single-product collapse:** an org with fewer than two **visible** products (at least one visible source, `PRODUCT_HAS_VISIBLE_SOURCE` in `@releases/queries/orgs`) has no product URLs. The org page (`collapsesToOrg` in `apps/web/src/app/[orgSlug]/_lib/org-data.ts`) and the sitemap count the same set, so they agree on which URLs exist.
+- **Sitemap:** `apps/web/src/lib/sitemap-entries.ts` lists products (minus collapsed orgs) and every source at the bare URL, plus the source's `highlights` / `changelog` sub-tabs when present. No per-state routing.
+- **Seam:** `apps/web/src/lib/links.ts` builds paths for the web component tree. Server-rendered markdown/XML (`packages/rendering/src/formatters.ts`) builds the same bare URLs independently.
 - **Machine format routes stay at `/product/`:** `/api/format/[orgSlug]/product/[productSlug]` (and the matching `Sidebar formatPath`) are download surfaces, intentionally not moved.
-- **Reserved nested slugs** (`@buildinternet/releases-core/reserved-slugs`) gained `product`/`products`/`playbook`/`fetch-log`/`admin` so no slug can shadow a static second-segment route. Creating a product whose slug shadows a same-org source **warns but allows** (the intended "wrap" mechanism).
-
-**Deferred edges:** `/[org]/[productSlug]/changelog` 404s (products have no changelog view); changelog _chunk_ deep-links for the ~11 shadowed-with-changelog sources stay on the bare `sourcePath` (rerouting them to `/sources/:id/changelog` needs a `sourceId`-on-hit wire change). Both ride with the product-scoped-views follow-up (#1191-adjacent).
-
-**Committed destination:** orgs + products own slugs, sources become ID-only. Gated on the catalog becoming product-centric — bridged non-breakingly by selective orphan→product wrapping (same-slug, so URLs are preserved), owned by **#1194**. The resolver's source-fallback is transitional with a sunset. Full reasoning: `docs/superpowers/specs/2026-05-27-product-first-url-resolution-design.md`; build steps: `docs/superpowers/plans/2026-05-27-product-first-url-resolution.md`.
+- **Reserved nested slugs** (`@buildinternet/releases-core/reserved-slugs`) keep any product or source slug off a static second-segment route (`product`, `products`, `playbook`, `fetch-log`, `admin`, …).
 
 ## Changelog range API (Context7-style slicing)
 

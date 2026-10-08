@@ -21,13 +21,9 @@ import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
-import { getSourceById } from "./_lib/source-by-id";
+import { getSourceById, sourceHomePath } from "./_lib/source-by-id";
 
-/**
- * Canonical for this route: member sources (productId set) are authoritative at
- * /sources/:id; orphan sources (no productId, has org) redirect in page.tsx but
- * the layout still emits a canonical for sub-pages (changelog, highlights).
- */
+/** Canonical for sub-pages; every source with an org 308s to its bare path. */
 export async function generateMetadata({
   params,
 }: {
@@ -36,12 +32,7 @@ export async function generateMetadata({
   const { id } = await params;
   try {
     const source = await getSourceById(id);
-    const canonicalPath = source.productId
-      ? `/sources/${id}`
-      : source.org
-        ? `/${source.org.slug}/${source.slug}`
-        : `/sources/${id}`;
-    return { alternates: { canonical: canonicalPath } };
+    return { alternates: { canonical: sourceHomePath(source, id) } };
   } catch {
     return {};
   }

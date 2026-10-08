@@ -4,7 +4,7 @@ import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { HighlightsView } from "@/components/highlights-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
-import { getSourceById } from "../_lib/source-by-id";
+import { getSourceById, sourceHomePath } from "../_lib/source-by-id";
 import { enableOnDemandIsr } from "@/lib/static-params";
 
 // On-demand ISR: render once per source on first request, then serve from cache
@@ -26,8 +26,8 @@ export async function generateMetadata({
     return {
       title: `${source.name} Highlights — ${orgName}`,
       description: `Curated highlights and monthly summaries for ${source.name} by ${orgName}.`,
-      openGraph: { type: "website", url: `/sources/${id}/highlights` },
-      alternates: { canonical: `/sources/${id}/highlights` },
+      openGraph: { type: "website", url: `${sourceHomePath(source, id)}/highlights` },
+      alternates: { canonical: `${sourceHomePath(source, id)}/highlights` },
     };
   } catch {
     return { title: id };
@@ -49,21 +49,14 @@ export default async function SourceByIdHighlightsPage({
     throw err;
   }
 
-  // Orphan source (has org, no productId) → canonical highlights is the bare path.
-  if (source.org && !source.productId) {
-    permanentRedirect(`/${source.org.slug}/${source.slug}/highlights`);
-  }
+  // A source with an org lives at its bare URL; this path is only an alias.
+  if (source.org) permanentRedirect(`${sourceHomePath(source, id)}/highlights`);
 
   const hasContent = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   if (!hasContent) notFound();
 
-  // Member sources are canonical at /sources/:id; sourceless too; only a non-member
-  // with an org uses bare (orphans-with-org are redirected above).
-  const sourceUrl = source.productId
-    ? `https://releases.sh/sources/${id}`
-    : source.org
-      ? `https://releases.sh/${source.org.slug}/${source.slug}`
-      : `https://releases.sh/sources/${id}`;
+  // Only reached for a source with no org (the rest redirected above).
+  const sourceUrl = `https://releases.sh/sources/${id}`;
   const pageUrl = `https://releases.sh/sources/${id}/highlights`;
 
   const jsonLd = {

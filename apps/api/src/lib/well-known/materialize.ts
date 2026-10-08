@@ -723,8 +723,15 @@ export async function reconcileDomainEntities(
     blocked,
   };
   const githubOwners = knownGitHubOwners(manifest, githubAccounts, existingSources);
-  const usedProductSlugs = new Set(existingProducts.map((row) => row.slug));
-  const usedSourceSlugs = new Set(existingSources.map((row) => row.slug));
+  // Products and sources share the public `/{org}/{slug}` namespace, so one
+  // set tracks both kinds: a new source slug avoids existing + new product
+  // slugs and vice versa.
+  const usedSlugs = new Set([
+    ...existingProducts.map((row) => row.slug),
+    ...existingSources.map((row) => row.slug),
+  ]);
+  const usedProductSlugs = usedSlugs;
+  const usedSourceSlugs = usedSlugs;
   const claimedLocators = new Set<string>();
   const hash = configHash(manifest);
   let applied = false;
