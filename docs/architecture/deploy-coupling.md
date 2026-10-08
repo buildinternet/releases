@@ -53,10 +53,10 @@ Replace these values in a fork.
 | Resource                             | Prod identifier                                                         | Workers                                                          |
 | ------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | D1 `released-db`                     | `73be1562-d900-4e25-a62b-650ab74488b7`                                  | api, mcp, webhooks                                               |
-| D1 staging                           | `68d44939-feab-4fcb-8f4f-19778ca1dee8`                                  | api-staging, mcp-staging                                         |
+| D1 staging                           | `68d44939-feab-4fcb-8f4f-19778ca1dee8`                                  | api + mcp staging                                                |
 | Secrets Store                        | `store_id` `a887a71cab084105b79706df23380723`                           | all bound secrets                                                |
 | Flagship prod                        | `2cf02390-e39a-477a-91c1-571d07b987ef`                                  | api, mcp                                                         |
-| Flagship staging                     | `548a95f1-4f8c-402d-8aa2-1b861523d377`                                  | api-staging, mcp-staging                                         |
+| Flagship staging                     | `548a95f1-4f8c-402d-8aa2-1b861523d377`                                  | api + mcp staging                                                |
 | KV `EMBED_CACHE`                     | `93b87ae5e253445cabbaaa7a71264915`                                      | api, mcp                                                         |
 | KV `LATEST_CACHE` / `ALERT_DEDUP_KV` | `178c70f9abd940478d5b5a053bf123bb`                                      | api                                                              |
 | KV `CREDENTIAL_CACHE`                | `bae0fa6a594448d483176fe90a9a0479`                                      | api                                                              |

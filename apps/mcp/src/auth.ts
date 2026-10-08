@@ -38,8 +38,8 @@ const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
  * Resource-server config for verifying "Sign in with Releases" OAuth JWTs
  * (#1483). The MCP worker can't import better-auth (zod-pin), so it verifies
  * locally with jose against the AS JWKS (`${issuer}/api/auth/jwks`). Issuer +
- * audience are overridable per environment (staging points at api-staging /
- * mcp-staging); both default to prod (shared with the discovery metadata in
+ * audience are overridable per environment (staging points at api.releasenotesindex.dev /
+ * mcp.releasenotesindex.dev); both default to prod (shared with the discovery metadata in
  * well-known.ts) so no new config is required there.
  */
 function oauthJwtConfig(env: Env): OAuthJwtConfig {
@@ -451,7 +451,7 @@ export async function resolveMcpAuth(
   if ("rateLimited" in resolved) return { ok: false, response: rateLimited() };
 
   // Staging gate FIRST — it must run before any OAuth discovery challenge so
-  // mcp-staging stays opaque to invalid-credential probes (the generic 401, not
+  // The staging MCP host stays opaque to invalid-credential probes (the generic 401, not
   // the WWW-Authenticate hint). An invalid OAuth JWT cannot bridge the gate (it
   // has no token identity), so on staging it falls to the generic 401 unless a
   // staging key is also presented. In prod (no STAGING_ACCESS_KEY) the gate is
@@ -462,7 +462,7 @@ export async function resolveMcpAuth(
       !("invalidToken" in resolved) &&
       // Only the `relk_` token bridge (raw token present) opens the gate, not a
       // `relu_` user identity — those carry `token: null`, so a user key must
-      // still supply the staging key to reach mcp-staging.
+      // still supply the staging key to reach the staging MCP host.
       ((resolved.kind === "token" && resolved.token !== null) || resolved.kind === "root");
     const passes =
       !stagingSecret ||

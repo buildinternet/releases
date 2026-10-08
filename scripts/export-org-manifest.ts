@@ -28,7 +28,7 @@
  *   bun scripts/export-org-manifest.ts --all [--include-empty] [--concurrency N]
  *
  *   # against staging (sends X-Releases-Staging-Key from env)
- *   RELEASES_API_URL=https://api-staging.releases.sh \
+ *   RELEASES_API_URL=https://api.releasenotesindex.dev \
  *   STAGING_ACCESS_KEY=... \
  *   bun scripts/export-org-manifest.ts vercel
  *

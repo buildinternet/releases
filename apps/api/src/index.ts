@@ -421,6 +421,11 @@ export type Env = {
     // Optional explicit cross-subdomain cookie domain (e.g. ".releases.sh").
     // Absent → derived from BETTER_AUTH_URL's host (strip the leftmost label).
     BETTER_AUTH_COOKIE_DOMAIN?: string;
+    // Optional Better Auth cookie-name prefix. Unset → Better Auth's default
+    // (`better-auth`), which prod and local keep. Staging sets its own so its
+    // `.releasenotesindex.dev` cookies can't collide with local dev's, whose
+    // `.local.releasenotesindex.dev` hosts sit underneath that domain.
+    BETTER_AUTH_COOKIE_PREFIX?: string;
     // Optional comma-separated extra trusted web origins (allowed to call the
     // auth API with credentials), on top of the releases.sh/.localhost family.
     BETTER_AUTH_TRUSTED_ORIGINS?: string;

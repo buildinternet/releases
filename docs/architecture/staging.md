@@ -2,7 +2,8 @@
 
 The `api` and `mcp` workers have a `[env.staging]` block in their `wrangler.jsonc`. Webhooks, crons, and Vectorize are intentionally absent — staging is a read-surface for UI/API iteration, not a full replica.
 
-- **Hosts:** `api-staging.releases.sh`, `mcp-staging.releases.sh`
+- **Hosts:** `api.releasenotesindex.dev`, `mcp.releasenotesindex.dev`
+- **Cookies:** `BETTER_AUTH_COOKIE_PREFIX=releases-staging`, so staging's session cookies (domain `.releasenotesindex.dev`) never share a name with prod's or local dev's.
 - **Deployed as:** `releases-api-staging`, `releases-mcp-staging`
 - **DB:** `released-db-staging` (separate D1), refreshed on demand from prod
 - **Crons:** disabled (`CRON_ENABLED=false`, no cron triggers)
@@ -11,6 +12,20 @@ The `api` and `mcp` workers have a `[env.staging]` block in their `wrangler.json
 - **KV:** reuses the existing preview namespaces, so `wrangler dev` and staging share cache
 - **Indexing:** `INDEXING_DISABLED=true` — every response carries `X-Robots-Tag: noindex, nofollow` and `/robots.txt` returns `Disallow: /`
 - **Access gate:** both hosts require the staging access key on every request. Missing/invalid → 401. The gate runs before routing, so public-read and admin endpoints are equally protected; CORS preflight (OPTIONS) passes through, as does `/api/auth/jwks` (public key material a resource server fetches server-to-server to verify OAuth JWTs — `STAGING_GATE_EXEMPT_PATHS`). The secret is bound via Secrets Store (`STAGING_ACCESS_KEY`) in `apps/api/wrangler.jsonc` and `apps/mcp/wrangler.jsonc` staging blocks. `api-staging` accepts the key via `X-Releases-Staging-Key` only. `mcp-staging` accepts it via `X-Releases-Staging-Key` or `Authorization: Bearer <key>`. Cloudflare Access (SSO) is still the long-term target — see issue #444.
+
+## The `releasenotesindex.dev` domain
+
+Non-production hosts live on `releasenotesindex.dev`, a separate registrable domain from prod's `releases.sh`. Prod cookies (`.releases.sh`) never reach a staging or local host, and prod's CORS allow-list (`*.releases.sh`) never trusts one.
+
+| Environment | Web                                | API                               | MCP                               |
+| ----------- | ---------------------------------- | --------------------------------- | --------------------------------- |
+| Prod        | `releases.sh`                      | `api.releases.sh`                 | `mcp.releases.sh`                 |
+| Staging     | `releasenotesindex.dev` (reserved) | `api.releasenotesindex.dev`       | `mcp.releasenotesindex.dev`       |
+| Local       | `local.releasenotesindex.dev`      | `api.local.releasenotesindex.dev` | `mcp.local.releasenotesindex.dev` |
+
+- **Staging stays one label deep.** Cloudflare's Universal SSL certificate covers only the apex and `*.releasenotesindex.dev`. Proxied hosts go at that depth, not under a `staging.` namespace. Workers custom domains create their own DNS records and certificates on deploy.
+- **Local records are DNS-only.** `local` and `*.local` are `A 127.0.0.1`, never proxied. Portless signs the local certificates, so the deeper names are fine there. See [local-development.md](local-development.md).
+- **Cookie scopes nest.** Staging's `.releasenotesindex.dev` is a parent of every local host, which is why staging sets its own cookie prefix.
 
 Deploy:
 

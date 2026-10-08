@@ -119,7 +119,7 @@ async function handle(
       allowedOriginHostnames: [
         "agents.releases.sh",
         "mcp.releases.sh",
-        "mcp-staging.releases.sh",
+        "mcp.releasenotesindex.dev",
         "mcp.releases.localhost",
         "localhost",
         "127.0.0.1",

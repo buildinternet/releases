@@ -26,7 +26,7 @@ function gatedApp(env: { STAGING_ACCESS_KEY?: { get(): Promise<string> } }) {
   app.use("*", stagingAccessGate());
   app.all("*", (c) => c.text("ok"));
   return (path: string, headers: Record<string, string> = {}) =>
-    app.request(`https://api-staging.releases.sh${path}`, { headers }, env);
+    app.request(`https://api.releasenotesindex.dev${path}`, { headers }, env);
 }
 
 describe("isStagingGateExemptPath", () => {

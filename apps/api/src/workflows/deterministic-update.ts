@@ -61,7 +61,7 @@ export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
   API_SELF?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   RELEASES_API_KEY?: SecretBinding;
   RELEASED_API_KEY?: SecretBinding;
-  /** Staging gate key — attached to self-calls so they clear the gate on api-staging. */
+  /** Staging gate key — attached to self-calls so they clear the staging API gate. */
   STAGING_ACCESS_KEY?: SecretBinding;
   CLOUDFLARE_ACCOUNT_ID?: SecretBinding;
   CLOUDFLARE_API_TOKEN?: SecretBinding;

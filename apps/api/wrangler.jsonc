@@ -718,7 +718,7 @@
     },
   ],
   // ── Staging environment ──────────────────────────────────────────────
-  // Deployed as `releases-api-staging` at api-staging.releases.sh. Points
+  // Deployed as `releases-api-staging` at api.releasenotesindex.dev. Points
   // at a separate D1 (released-db-staging) refreshed from prod via the
   // sync-staging-db workflow. Vectorize is
   // intentionally omitted — the search path degrades to FTS, and cron is
@@ -729,7 +729,7 @@
   "env": {
     "staging": {
       "name": "releases-api-staging",
-      "routes": [{ "pattern": "api-staging.releases.sh", "custom_domain": true }],
+      "routes": [{ "pattern": "api.releasenotesindex.dev", "custom_domain": true }],
       // Explicit disable — env blocks do NOT inherit the top-level `cache`
       // config. Kept off deliberately: staging sits behind STAGING_ACCESS_KEY
       // (middleware/staging-access.ts), and Workers Cache would cache
@@ -758,14 +758,14 @@
         "DIGEST_MAX_PER_RUN": "500",
         "DIGEST_MAX_RELEASES": "50",
         "DIGEST_PUBLISHED_FLOOR_DAYS": "30",
-        "API_BASE_URL": "https://api-staging.releases.sh",
+        "API_BASE_URL": "https://api.releasenotesindex.dev",
         "FEEDBACK_DISABLED": "false",
         // Staging has no FEEDBACK_RATE_LIMITER binding (no `unsafe` block); the
         // handler no-ops the limiter there. Vars kept for parity.
         "FEEDBACK_RATE_LIMIT_ENABLED": "true",
         "WEBHOOK_TEST_RATE_LIMIT_ENABLED": "true",
         "FEEDBACK_NOTIFY_MAX_PER_HOUR": "20",
-        "ADMIN_BASE_URL": "https://api-staging.releases.sh",
+        "ADMIN_BASE_URL": "https://api.releasenotesindex.dev",
         "INVALIDATION_ENABLED": "false",
         // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #575.
         "SEARCH_QUERY_RETENTION_DAYS": "90",
@@ -829,10 +829,15 @@
         // Staging issuer/baseURL — overrides the inherited top-level prod value so
         // createAuth's baseURL and oauthValidAudiences() resolve to the staging
         // origin (OAuth issuer, JWT `aud`, discovery metadata), not api.releases.sh.
-        "BETTER_AUTH_URL": "https://api-staging.releases.sh",
+        "BETTER_AUTH_URL": "https://api.releasenotesindex.dev",
+        // Staging cookies live on `.releasenotesindex.dev`, a parent of the local
+        // dev hosts (`*.local.releasenotesindex.dev`). A distinct prefix keeps a
+        // staging session from colliding with a local one. Prod and local keep
+        // Better Auth's default `better-auth` prefix.
+        "BETTER_AUTH_COOKIE_PREFIX": "releases-staging",
         // Staging MCP host as the accepted JWT audience. Mirrors the prod entry;
         // resource-server verification wired in sub-project 5.
-        "OAUTH_RESOURCE_AUDIENCES": "https://mcp-staging.releases.sh",
+        "OAUTH_RESOURCE_AUDIENCES": "https://mcp.releasenotesindex.dev",
       },
       "d1_databases": [
         {

@@ -90,7 +90,7 @@ const READ_HINTS = {
 } as const;
 
 /** GET a public API route over the service binding. Carries the staging-gate
- *  header so service-bound requests clear `api-staging`'s access gate (inert in
+ *  header so service-bound requests clear the staging API's access gate (inert in
  *  prod). `status: 0` when the binding is absent (local dev). */
 async function callApi(env: Env, path: string): Promise<{ status: number; json: unknown }> {
   if (!env.API) return { status: 0, json: null };

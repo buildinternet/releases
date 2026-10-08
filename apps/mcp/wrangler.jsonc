@@ -120,7 +120,7 @@
     },
   ],
   // ── Staging environment ──────────────────────────────────────────────
-  // Deployed as `releases-mcp-staging` at mcp-staging.releases.sh. Points
+  // Deployed as `releases-mcp-staging` at mcp.releasenotesindex.dev. Points
   // at the staging D1 (released-db-staging); Vectorize is omitted so
   // semantic MCP tools degrade to lexical.
   // Interim access gate: `STAGING_ACCESS_KEY` (see apps/mcp/src/index.ts)
@@ -129,7 +129,7 @@
   "env": {
     "staging": {
       "name": "releases-mcp-staging",
-      "routes": [{ "pattern": "mcp-staging.releases.sh", "custom_domain": true }],
+      "routes": [{ "pattern": "mcp.releasenotesindex.dev", "custom_domain": true }],
       "vars": {
         "USER_API_KEYS_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
@@ -137,8 +137,8 @@
         "EMBEDDING_PROVIDER": "voyage",
         // OAuth resource-server verification (#1483) — staging AS issuer (incl.
         // /api/auth basePath, matching token `iss`) + this worker's audience.
-        "OAUTH_JWT_ISSUER": "https://api-staging.releases.sh/api/auth",
-        "OAUTH_JWT_AUDIENCE": "https://mcp-staging.releases.sh",
+        "OAUTH_JWT_ISSUER": "https://api.releasenotesindex.dev/api/auth",
+        "OAUTH_JWT_AUDIENCE": "https://mcp.releasenotesindex.dev",
         // Staging-only: emit X-Robots-Tag: noindex and serve a deny-all
         // /robots.txt. Belt-and-suspenders against crawling.
         "INDEXING_DISABLED": "true",

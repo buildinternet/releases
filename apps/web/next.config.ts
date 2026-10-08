@@ -15,7 +15,7 @@ try {
 // dev runs the app on a real portless custom-TLD domain (Google/Apple reject
 // `*.localhost`), so those hosts must be allow-listed or the page 403s its own
 // chunks and never hydrates — leaving every button inert. Worktree-prefixed
-// portless hosts (`feat-x.releases.localhost`, `feat-x.releases.local.buildinternet.dev`)
+// portless hosts (`feat-x.releases.localhost`, `feat-x.local.releasenotesindex.dev`)
 // need explicit `allowedDevOrigins` entries below. Extend with
 // NEXT_DEV_ALLOWED_ORIGINS (comma-separated hostnames) for any other dev domain.
 const devAllowedOrigins = [
@@ -24,8 +24,8 @@ const devAllowedOrigins = [
   "releases.localhost",
   "*.releases.localhost",
   // Custom TLD for local OAuth (Google/Apple reject *.localhost).
-  "releases.local.buildinternet.dev",
-  "*.releases.local.buildinternet.dev",
+  "local.releasenotesindex.dev",
+  "*.local.releasenotesindex.dev",
   ...(process.env.NEXT_DEV_ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((s) => s.trim())
