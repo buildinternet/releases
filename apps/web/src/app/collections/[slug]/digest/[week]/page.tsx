@@ -24,10 +24,12 @@ import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
 import { weekOfLabel } from "@/lib/digest-format";
 import { collectionOgImageUrl, ogImageFields } from "@/lib/og-image-urls";
 import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
 // sync with applyCacheInit's default (apps/web/src/lib/api.ts).
 export const revalidate = 86400;
+export const generateStaticParams = enableOnDemandIsr;
 
 const SITE_URL = "https://releases.sh";
 // Search results cut titles off at ~60 characters and descriptions at ~160.
