@@ -495,9 +495,12 @@ describe("digestPagePaths", () => {
     ).toEqual([
       "/collections/ai-labs/digest",
       "/collections/ai-labs/digest/2026-06-08",
+      "/collections/ai-labs/digest/2026-06-08/replay",
       "/collections/ai-labs/digest/2026-06-01",
+      "/collections/ai-labs/digest/2026-06-01/replay",
       "/collections/dev-tools/digest",
       "/collections/dev-tools/digest/2026-06-08",
+      "/collections/dev-tools/digest/2026-06-08/replay",
     ]);
   });
 });
@@ -528,20 +531,26 @@ describe("pingAfterDigests", () => {
     );
     expect(calls).toEqual([
       { paths: ["/", "/collections", "/collections/ai-labs"] },
-      { paths: ["/collections/ai-labs/digest", "/collections/ai-labs/digest/2026-06-08"] },
+      {
+        paths: [
+          "/collections/ai-labs/digest",
+          "/collections/ai-labs/digest/2026-06-08",
+          "/collections/ai-labs/digest/2026-06-08/replay",
+        ],
+      },
     ]);
   });
 
   test("chunks digest pages to the web route's 50-path cap", async () => {
     const { calls, fetchImpl } = fetchRecorder();
-    // 26 collections x 1 week = 52 digest-page paths -> chunks of 50 + 2.
-    const digests = Array.from({ length: 26 }, (_, i) => ({
+    // 17 collections x 1 week = 17 x 3 = 51 digest-page paths -> chunks of 50 + 1.
+    const digests = Array.from({ length: 17 }, (_, i) => ({
       slug: `c${i}`,
       weekStart: "2026-06-08",
     }));
     await pingAfterDigests({ WEB_SERVICE_KEY: REVALIDATE_SECRET }, digests, { fetchImpl });
     const sizes = (calls as { paths: string[] }[]).map((c) => c.paths.length);
-    expect(sizes).toEqual([28, 50, 2]);
+    expect(sizes).toEqual([19, 50, 1]);
   });
 
   test("still sends the digest-page ping when the first ping is rejected", async () => {
@@ -622,7 +631,13 @@ describe("runCollectionWeeklyDigests — revalidation ping (#2331)", () => {
 
     expect(calls).toEqual([
       { paths: ["/", "/collections", "/collections/week"] },
-      { paths: ["/collections/week/digest", "/collections/week/digest/2026-06-08"] },
+      {
+        paths: [
+          "/collections/week/digest",
+          "/collections/week/digest/2026-06-08",
+          "/collections/week/digest/2026-06-08/replay",
+        ],
+      },
     ]);
   });
 

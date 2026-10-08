@@ -187,7 +187,11 @@ describe("handleRevalidateRequest", () => {
 
     it("revalidates a collection's digest index and week pages", async () => {
       const { deps: d, revalidated } = deps();
-      const paths = ["/collections/ai-labs/digest", "/collections/ai-labs/digest/2026-06-08"];
+      const paths = [
+        "/collections/ai-labs/digest",
+        "/collections/ai-labs/digest/2026-06-08",
+        "/collections/ai-labs/digest/2026-06-08/replay",
+      ];
       const res = await handleRevalidateRequest(post({ paths }), d);
       expect(res.status).toBe(200);
       expect(revalidated).toEqual(paths);
@@ -213,6 +217,11 @@ describe("handleRevalidateRequest", () => {
       ["a digest path outside /collections", "/vercel/ai-labs/digest"],
       ["a digest week that isn't a date", "/collections/ai-labs/digest/latest"],
       ["a path below a digest week", "/collections/ai-labs/digest/2026-06-08/og"],
+      [
+        "a replay path with an extra segment",
+        "/collections/ai-labs/digest/2026-06-08/replay/extra",
+      ],
+      ["a replay path for a non-date week", "/collections/ai-labs/digest/latest/replay"],
       ["an unsafe collection slug", "/collections/%2e%2e/digest"],
     ])("rejects %s", async (_label, path) => {
       const { deps: d, revalidated } = deps();

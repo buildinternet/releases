@@ -389,13 +389,15 @@ export interface DigestedWeek {
  * Pure: the digest pages a run made stale. The collection's digest index
  * (`/collections/<slug>/digest`) lists every digest, so a new one is missing
  * from it until revalidated. A week page (`/collections/<slug>/digest/<week>`)
- * is already cached when a digest is regenerated with `force`; for a brand-new
- * week the ping is a harmless no-op.
+ * and its replay page (`.../<week>/replay`, same payload) are already cached
+ * when a digest is regenerated with `force`; for a brand-new week the ping is
+ * a harmless no-op.
  */
 export function digestPagePaths(digests: DigestedWeek[]): string[] {
   const paths = digests.flatMap((d) => [
     `/collections/${d.slug}/digest`,
     `/collections/${d.slug}/digest/${d.weekStart}`,
+    `/collections/${d.slug}/digest/${d.weekStart}/replay`,
   ]);
   return [...new Set(paths)];
 }
