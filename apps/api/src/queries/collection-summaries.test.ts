@@ -296,6 +296,7 @@ describe("resolveDigestCoveredReleases", () => {
     });
     // No metadata → no composition (unsummarized row).
     expect(out[1].composition).toBeNull();
+    expect(out[1].publishedAt).toBe("2026-09-15T00:00:00.000Z");
     expect(out[0].path.startsWith("/release/rel_e")).toBe(true);
   });
 });

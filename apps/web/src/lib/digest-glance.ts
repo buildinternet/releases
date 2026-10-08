@@ -43,7 +43,7 @@ export const RELEASES_COVERED_ANCHOR = "releases-covered";
 
 export type GlanceOrg = DigestCoveredRelease["org"];
 
-interface GlanceProduct {
+export interface GlanceProduct {
   /** `productKeyOf` key, or `others`. */
   key: string;
   name: string;
@@ -56,7 +56,7 @@ interface GlanceProduct {
   flames: (4 | 5)[];
 }
 
-interface GlanceRankedRelease {
+export interface GlanceRankedRelease {
   release: DigestCoveredRelease;
   /** Tile this release belongs to — `others` when its product was folded. */
   groupKey: string;
@@ -124,6 +124,26 @@ function addInto(
   into.flames.push(...src.flames);
 }
 
+/** A release's composition as tile band counts (missing → all zero). */
+export function compositionCounts(
+  c: ReleaseComposition | null | undefined,
+): Record<CatKey, number> {
+  return { features: c?.features ?? 0, enhancements: c?.enhancements ?? 0, fixes: c?.bugs ?? 0 };
+}
+
+/** One release's share of its product tile, given its impact. */
+function releaseContribution(
+  r: DigestCoveredRelease,
+  impact: number,
+): Pick<GlanceProduct, "releaseCount" | "impact" | "composition" | "flames"> {
+  return {
+    releaseCount: 1,
+    impact,
+    composition: compositionCounts(r.composition),
+    flames: r.importance === 4 || r.importance === 5 ? [r.importance] : [],
+  };
+}
+
 export function buildGlance(releases: readonly DigestCoveredRelease[]): {
   /** Impact descending. */
   products: GlanceProduct[];
@@ -139,17 +159,7 @@ export function buildGlance(releases: readonly DigestCoveredRelease[]): {
       p = emptyProduct(keys[i], r.product?.name ?? r.org.name, r.org);
       byKey.set(keys[i], p);
     }
-    const c = r.composition;
-    addInto(p, {
-      releaseCount: 1,
-      impact: impacts[i],
-      composition: {
-        features: c?.features ?? 0,
-        enhancements: c?.enhancements ?? 0,
-        fixes: c?.bugs ?? 0,
-      },
-      flames: r.importance === 4 || r.importance === 5 ? [r.importance] : [],
-    });
+    addInto(p, releaseContribution(r, impacts[i]));
   });
 
   let products = [...byKey.values()].sort((a, b) => b.impact - a.impact);
@@ -176,6 +186,23 @@ export function buildGlance(releases: readonly DigestCoveredRelease[]): {
     );
 
   return { products, ranked };
+}
+
+/**
+ * Roll scored releases up into a fixed set of tiles, in the order given —
+ * never re-sorted. For callers that pin tiles across subsets (the replay keeps
+ * the final week's tiles while only part of the week has shipped).
+ */
+export function rollUpProducts(
+  groups: readonly Pick<GlanceProduct, "key" | "name" | "org">[],
+  entries: readonly { release: DigestCoveredRelease; impact: number; groupKey: string }[],
+): GlanceProduct[] {
+  const byKey = new Map(groups.map((g) => [g.key, emptyProduct(g.key, g.name, g.org)]));
+  for (const e of entries)
+    addInto(byKey.get(e.groupKey)!, releaseContribution(e.release, e.impact));
+  const products = groups.map((g) => byKey.get(g.key)!);
+  for (const p of products) p.flames.sort((a, b) => b - a);
+  return products;
 }
 
 /**

@@ -1,16 +1,11 @@
+import Link from "next/link";
 import type { CollectionWeeklyDigestDetail, DigestCoveredRelease } from "@/lib/api";
-import {
-  buildGlance,
-  COMPOSITION_WEIGHTS,
-  GLANCE_TOP_N,
-  RELEASES_COVERED_ANCHOR,
-  releaseSectionAnchors,
-} from "@/lib/digest-glance";
-import { label } from "@/components/composition-shared";
+import { buildGlance, GLANCE_TOP_N, releaseSectionAnchors } from "@/lib/digest-glance";
 import { ImportanceFlame } from "@/components/importance-marker";
-import { pluralReleases } from "@/lib/formatters";
-import { GlanceSelection, type GlanceRow, type GlanceTile } from "./glance-selection";
-import { rectToPercent, squarify } from "./treemap-layout";
+import { GlanceSelection } from "./glance-selection";
+import type { GlanceRow, GlanceTile } from "./glance-parts";
+import { squarify } from "./treemap-layout";
+import { glanceRow, glanceTile } from "./glance-tiles";
 import { GLANCE_SEGMENTS } from "./glance-colors";
 
 /** Under this many covered releases the prose says it all — no card. */
@@ -26,9 +21,12 @@ const MIN_GLANCE_RELEASES = 3;
 export function DigestWeekGlance({
   releases,
   sections,
+  replayHref,
 }: {
   releases: DigestCoveredRelease[];
   sections?: CollectionWeeklyDigestDetail["sections"];
+  /** The week's replay page. The card (and so the link) needs 3+ releases. */
+  replayHref?: string;
 }) {
   if (releases.length < MIN_GLANCE_RELEASES) return null;
 
@@ -37,36 +35,7 @@ export function DigestWeekGlance({
 
   // One product filling the whole box says nothing — list only.
   const rects = products.length > 1 ? squarify(products.map((p) => p.impact)) : [];
-  const tiles: GlanceTile[] = rects.map((rect, i) => {
-    const p = products[i];
-    // Band segments are sized by their weighted share of impact and labelled
-    // with raw counts.
-    const parts = GLANCE_SEGMENTS.map((s) => ({
-      s,
-      count: p.composition[s.cat.key],
-      weight: p.composition[s.cat.key] * COMPOSITION_WEIGHTS[s.cat.key],
-    })).filter((x) => x.count > 0);
-    const weightTotal = parts.reduce((sum, x) => sum + x.weight, 0);
-    const majors = p.flames.length;
-    return {
-      key: p.key,
-      name: p.name,
-      org: p.org,
-      countLabel: `${p.releaseCount} ${pluralReleases(p.releaseCount)}`,
-      flames: p.flames,
-      position: rectToPercent(rect),
-      segments: parts.map(({ s, count, weight }) => ({
-        key: s.cat.key,
-        share: (weight / weightTotal) * 100,
-        label: label(count, s.cat),
-        background: s.background,
-        ink: s.ink,
-      })),
-      ariaLabel: `${p.name}: ${p.releaseCount} ${pluralReleases(p.releaseCount)}${
-        majors > 0 ? `, ${majors} major or landmark` : ""
-      }. Select to filter the list.`,
-    };
-  });
+  const tiles: GlanceTile[] = rects.map((rect, i) => glanceTile(products[i], rect));
 
   // Ship only rows the island can show: the overall top N plus each tile's top N.
   const perGroup = new Map<string, number>();
@@ -76,27 +45,32 @@ export function DigestWeekGlance({
       perGroup.set(r.groupKey, n);
       return i < GLANCE_TOP_N || n <= GLANCE_TOP_N;
     })
-    .map((r) => ({
-      id: r.release.id,
-      title: r.release.title,
-      importance: r.release.importance ?? null,
-      groupKey: r.groupKey,
-      productName: r.productName,
-      org: r.release.org,
-      href: `#${anchors.get(r.release.id) ?? RELEASES_COVERED_ANCHOR}`,
-    }));
+    .map((r) => glanceRow(r, anchors));
 
   return (
     <section
       aria-labelledby="week-glance-title"
       className="mt-8 flex flex-col gap-3.5 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-[18px]"
     >
-      <h2
-        id="week-glance-title"
-        className="text-[15px] font-semibold tracking-tight text-[var(--fg)]"
-      >
-        The week at a glance
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2
+          id="week-glance-title"
+          className="text-[15px] font-semibold tracking-tight text-[var(--fg)]"
+        >
+          The week at a glance
+        </h2>
+        {replayHref && (
+          <Link
+            href={replayHref}
+            className="inline-flex items-center gap-1.5 rounded-md text-[13px] font-medium text-[var(--fg-2)] transition-colors hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M4.5 2.5v11l9-5.5z" />
+            </svg>
+            Replay the week
+          </Link>
+        )}
+      </div>
       <GlanceSelection tiles={tiles} rows={rows} legend={<GlanceLegend />} />
     </section>
   );

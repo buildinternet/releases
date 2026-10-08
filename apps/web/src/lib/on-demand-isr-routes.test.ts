@@ -17,6 +17,7 @@ const ISR_ROUTES = [
   "app/collections/[slug]/page.tsx",
   "app/collections/[slug]/digest/page.tsx",
   "app/collections/[slug]/digest/[week]/page.tsx",
+  "app/collections/[slug]/digest/[week]/replay/page.tsx",
   "app/updates/[date]/page.tsx",
 ];
 

@@ -72,9 +72,21 @@ describe("DigestWeekGlance", () => {
     expect(html).toContain("Biggest releases");
   });
 
-  test("skips the card under three releases", () => {
+  test("links to the week's replay", () => {
     const html = renderToStaticMarkup(
-      <DigestWeekGlance releases={releases.slice(0, 2)} sections={sections} />,
+      <DigestWeekGlance releases={releases} sections={sections} replayHref="/w/replay" />,
+    );
+    expect(html).toContain('href="/w/replay"');
+    expect(html).toContain("Replay the week");
+  });
+
+  test("skips the card, and so the replay link, under three releases", () => {
+    const html = renderToStaticMarkup(
+      <DigestWeekGlance
+        releases={releases.slice(0, 2)}
+        sections={sections}
+        replayHref="/w/replay"
+      />,
     );
     expect(html).toBe("");
   });

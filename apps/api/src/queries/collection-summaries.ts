@@ -451,6 +451,7 @@ export async function resolveDigestCoveredReleases(
           titleShort: releasesVisible.titleShort,
           version: releasesVisible.version,
           importance: releasesVisible.importance,
+          publishedAt: releasesVisible.publishedAt,
           metadata: releasesVisible.metadata,
           url: releasesVisible.url,
           orgSlug: organizationsPublic.slug,
@@ -496,6 +497,7 @@ export async function resolveDigestCoveredReleases(
           r.productSlug && r.productName ? { slug: r.productSlug, name: r.productName } : null,
         importance: r.importance ?? null,
         composition: parseCompositionFromMetadata(r.metadata),
+        publishedAt: r.publishedAt ?? null,
       },
     ];
   });

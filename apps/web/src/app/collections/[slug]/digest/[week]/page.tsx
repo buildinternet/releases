@@ -308,7 +308,11 @@ export default async function CollectionDigestPage({
           className="mt-4"
         />
 
-        <DigestWeekGlance releases={digest.releases} sections={digest.sections} />
+        <DigestWeekGlance
+          releases={digest.releases}
+          sections={digest.sections}
+          replayHref={`/collections/${slug}/digest/${weekStart}/replay`}
+        />
 
         <div
           className="prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-a:text-stone-600 dark:prose-a:text-stone-400 prose-a:no-underline [&_a:hover]:underline prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono"
