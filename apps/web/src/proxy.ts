@@ -29,6 +29,12 @@ export function proxy(request: NextRequest) {
   const tabRedirect = legacyTabRedirect(request);
   if (tabRedirect) return tabRedirect;
 
+  // Changelog deep links (`?path=` file picker, `?offset=` search hits) are
+  // served by a dynamic sibling route so the plain changelog URL stays ISR —
+  // the same reason as above (#2461). The browser keeps the original URL.
+  const changelogDeepLink = changelogDeepLinkRewrite(request);
+  if (changelogDeepLink) return changelogDeepLink;
+
   // `/auth.md` is the agent-auth instruction file (served from `public/`), not a
   // markdown representation of an `/auth` page. Without this guard the suffix
   // matcher below would rewrite it to `/api/format/auth` and try to render a
@@ -165,6 +171,20 @@ function legacyTabRedirect(request: NextRequest): NextResponse | null {
   }
 
   return null;
+}
+
+/**
+ * `/:org/:slug/changelog?path=…|offset=…` → rewrite to `/:org/:slug/changelog/deep`
+ * (query kept), or `null` when the request isn't a changelog deep link. The
+ * plain URL, without either param, falls through to the cached route.
+ */
+export function changelogDeepLinkRewrite(request: NextRequest): NextResponse | null {
+  const { searchParams } = request.nextUrl;
+  if (!searchParams.has("path") && !searchParams.has("offset")) return null;
+  const parts = request.nextUrl.pathname.slice(1).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[2] !== "changelog") return null;
+  if (RESERVED_FIRST_SEGMENT.has(parts[0])) return null;
+  return rewriteTo(request, `/${parts[0]}/${parts[1]}/changelog/deep`);
 }
 
 function redirectToPath(request: NextRequest, pathname: string) {

@@ -48,23 +48,37 @@ const SAFE_SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
  */
 const MAX_PATHS = 50;
 
-/** A digest week is its canonical ET-Monday date, `YYYY-MM-DD`. */
+/** ISR sub-tabs under a source page. */
+const SOURCE_SUB_TABS = new Set(["changelog", "highlights"]);
+
+/** A digest week is its canonical ET-Monday date, `YYYY-MM-DD`; an updates day uses the same shape. */
 const DIGEST_WEEK = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Allowlist for the `{ paths }` shape: exactly `/`, `/collections`,
  * `/collections/<slug>`, the same one/two-segment slug shapes the
  * orgSlug-based body below already sends (`/<org>`, `/<org>/<source-or-product>`),
- * and a collection's weekly-digest pages (`/collections/<slug>/digest` and
+ * a collection's weekly-digest pages (`/collections/<slug>/digest` and
  * `/collections/<slug>/digest/<YYYY-MM-DD>`), which go stale when a digest is
- * added or regenerated. Nothing else is a valid `revalidatePath()` target for
- * this endpoint.
+ * added or regenerated, a source's ISR sub-tabs (`/<org>/<source>/changelog`,
+ * `/<org>/<source>/highlights`), and an `/updates/<YYYY-MM-DD>` day page — so
+ * an operator can refresh any cached page by hand. Nothing else is a valid
+ * `revalidatePath()` target for this endpoint.
  */
 function isAllowedRevalidatePath(path: string): boolean {
   if (typeof path !== "string" || !path.startsWith("/")) return false;
   const segments = path.split("/").filter(Boolean);
   if (segments.length === 0) return true; // "/"
+  if (segments.length === 2 && segments[0] === "updates") return DIGEST_WEEK.test(segments[1]);
   if (segments.length <= 2) return segments.every((s) => SAFE_SLUG.test(s));
+  if (
+    segments.length === 3 &&
+    SOURCE_SUB_TABS.has(segments[2]) &&
+    SAFE_SLUG.test(segments[0]) &&
+    SAFE_SLUG.test(segments[1])
+  ) {
+    return true;
+  }
   const [root, slug, digest, week] = segments;
   if (root !== "collections" || digest !== "digest" || !SAFE_SLUG.test(slug)) return false;
   if (segments.length === 3) return true;
@@ -148,9 +162,13 @@ export async function handleRevalidateRequest(
   // Dedup: a single-product org often names its source and product the same, and
   // revalidating one path twice is a wasted write on the very budget we are here
   // to protect.
+  // `revalidatePath` only marks the exact path stale, so a source's ISR
+  // sub-tabs are listed too — a fetch can refresh its CHANGELOG file and its
+  // highlights. Marking stale is free: nothing re-renders until the next visit.
+  const sourcePath = body.sourceSlug ? `/${body.orgSlug}/${body.sourceSlug}` : null;
   const paths = [
     `/${body.orgSlug}`,
-    ...(body.sourceSlug ? [`/${body.orgSlug}/${body.sourceSlug}`] : []),
+    ...(sourcePath ? [sourcePath, `${sourcePath}/changelog`, `${sourcePath}/highlights`] : []),
     ...(body.productSlug ? [`/${body.orgSlug}/${body.productSlug}`] : []),
   ];
   const unique = [...new Set(paths)];
