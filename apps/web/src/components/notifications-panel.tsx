@@ -14,6 +14,7 @@ import { setDigestCadence, mintFeedToken, revokeFeedToken } from "@/lib/follows"
 import { listWebhooks, createWebhook, testWebhook, deleteWebhook } from "@/lib/webhooks";
 import { WebhookFormatIcon } from "@/components/webhook-format-icon";
 import { detectChatWebhookFormat, type ChatWebhookFormat } from "@/lib/chat-webhook-url";
+import { CollectionDigestsSection } from "@/components/collection-digests-section";
 import { SemanticAlertsSection } from "@/components/semantic-alerts-section";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { useSettingsBootstrap } from "@/components/account/use-settings-bootstrap";
@@ -510,6 +511,7 @@ export function NotificationsPanel({
     <PanelGrid>
       <div className="flex flex-col gap-9">
         <EmailSection cadence={data.cadence} />
+        <CollectionDigestsSection />
         <FeedTokenSection token={data.feedToken} />
         <ChatSection webhooks={data.webhooks} />
         {data.semanticAlerts != null && (
