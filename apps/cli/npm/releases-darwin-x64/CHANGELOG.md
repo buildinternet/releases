@@ -1,5 +1,7 @@
 # @buildinternet/releases-darwin-x64
 
+## 0.83.2
+
 ## 0.83.1
 
 ## 0.83.0
