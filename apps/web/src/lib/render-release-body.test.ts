@@ -50,3 +50,13 @@ describe("renderReleaseBodyHtml link handling", () => {
     expect(html).toContain('rel="nofollow ugc noopener noreferrer"');
   });
 });
+
+describe("renderReleaseBodyHtml inline images", () => {
+  test("full variant keeps a safe image src; collapsed drops the image", () => {
+    const md = "![shot](https://cdn.vendor.com/a.png)";
+    expect(renderReleaseBodyHtml({ content: md }, "full")).toContain(
+      'src="https://cdn.vendor.com/a.png"',
+    );
+    expect(renderReleaseBodyHtml({ content: md }, "collapsed")).not.toContain("<img");
+  });
+});

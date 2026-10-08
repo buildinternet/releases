@@ -64,6 +64,7 @@ import { RollupBadge } from "./rollup-badge";
 import { ImportanceMarker } from "./importance-marker";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
+import { releaseThumbImage } from "@/lib/media";
 import { productPath, sourcePath, sourceOrProductPath } from "@/lib/links";
 
 import { SEARCH_FILTERS as FILTERS, type SearchFilter } from "@/lib/search-filter";
@@ -350,7 +351,7 @@ function ResultCard({
           // + `chrome` drop a broken poster and its play badge together. #1206
           <div className={video ? "group relative shrink-0" : "shrink-0"}>
             <FallbackImage
-              src={thumbnail.src}
+              {...releaseThumbImage(thumbnail.src, 240)}
               alt={thumbnail.alt}
               width={120}
               height={72}

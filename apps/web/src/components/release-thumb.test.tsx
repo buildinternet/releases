@@ -19,3 +19,13 @@ describe("ReleaseThumb", () => {
     expect(html).toContain("h-8");
   });
 });
+
+describe("ReleaseThumb transform", () => {
+  it("leaves an already-transformed URL untouched (no double wrap)", () => {
+    const url =
+      "https://media.releases.sh/cdn-cgi/image/width=96,quality=80,format=auto/https://media.releases.sh/releases/a.png";
+    const html = renderToStaticMarkup(<ReleaseThumb src={url} alt="x" />);
+    expect(html).toContain(`src="${url}"`);
+    expect(html.match(/cdn-cgi\/image/g)).toHaveLength(1);
+  });
+});

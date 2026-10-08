@@ -7,7 +7,7 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { FallbackImage } from "@/components/fallback-image";
 import { PlayBadge } from "@/components/play-badge";
-import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
+import { releaseThumbUrl, releaseThumbImage, IMG_TRANSFORM_ON } from "@/lib/media";
 
 export interface MediaItem {
   type: "image" | "video" | "gif";
@@ -112,7 +112,7 @@ export function MediaGallery({ media, content }: { media: MediaItem[]; content: 
           return (
             <FallbackImage
               key={i}
-              src={src}
+              {...releaseThumbImage(src, 1200)}
               alt={item.alt || ""}
               width={600}
               height={320}
