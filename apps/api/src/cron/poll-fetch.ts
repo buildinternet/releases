@@ -50,7 +50,11 @@ import {
   buildGitHubHeaders,
   parseOwnerRepo,
 } from "@releases/adapters/github-discovery";
-import { CHANGELOG_MAX_FILES, truncateToByteCap } from "@releases/adapters/github";
+import {
+  CHANGELOG_MAX_FILES,
+  evaluateTagFilter,
+  truncateToByteCap,
+} from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
@@ -2629,7 +2633,42 @@ async function fetchGitHub(
   // existing scrape rows lines up via UNIQUE(source_id, url). See #831.
   const overrideMode = meta.githubUrl != null && meta.githubUrl.length > 0;
 
-  return data.slice(0, 200).map((rel) => {
+  // Per-source tag filter (`metadata.tagDenyPrefixes` / `tagAllowPatterns`,
+  // #923). Same rule as the shared adapter's `github.fetch`: allow-patterns take
+  // sole control when set, otherwise deny-prefixes apply; an invalid pattern is
+  // logged and skipped, never thrown. This path is the production ingest route,
+  // so without it the metadata keys were honoured only by the adapter the CLI
+  // uses — two sources on one repo (e.g. `v*` vs `core@*` tags) could not be
+  // split.
+  const { tagDenyPrefixes, tagAllowPatterns } = meta;
+  const kept = data.filter((rel) => {
+    const verdict = evaluateTagFilter(
+      rel.tag_name,
+      tagDenyPrefixes,
+      tagAllowPatterns,
+      (pattern, err) =>
+        logEvent("warn", {
+          component: "poll-fetch",
+          event: "tag-filter-invalid-pattern",
+          sourceSlug: source.slug,
+          pattern,
+          err,
+        }),
+    );
+    if (verdict === "deny" || verdict === "allow-miss") {
+      logEvent("info", {
+        component: "poll-fetch",
+        event: "tag-filtered",
+        sourceSlug: source.slug,
+        tag: rel.tag_name,
+        reason: verdict === "deny" ? "deny-prefix" : "allow-pattern-miss",
+      });
+      return false;
+    }
+    return true;
+  });
+
+  return kept.slice(0, 200).map((rel) => {
     const url =
       overrideMode && rel.tag_name
         ? synthesizeReleaseUrl({
