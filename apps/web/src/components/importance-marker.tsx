@@ -94,7 +94,11 @@ export function ImportanceMarker({
       <HoverCard.Trigger
         role="img"
         aria-label={copy.label}
-        className={`inline-flex shrink-0 cursor-help self-center ${className ?? ""}`}
+        // No align-self: the flame follows its row. In the usual `items-baseline`
+        // title row its baseline is the SVG's bottom edge, so it sits on the
+        // title's FIRST line even when the title wraps; `items-center` chips
+        // still center it.
+        className={`inline-flex shrink-0 cursor-help ${className ?? ""}`}
       >
         <ImportanceFlame importance={landmark ? 5 : 4} />
       </HoverCard.Trigger>
