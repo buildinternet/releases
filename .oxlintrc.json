@@ -105,6 +105,8 @@
     ".next",
     "apps/web/**",
     "tests/**",
+    "apps/cli/tests/**",
+    "apps/cli/npm/*/bin/**",
     "apps/web/.next",
     "apps/web/next-env.d.ts",
     "apps/web/public/**",

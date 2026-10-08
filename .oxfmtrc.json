@@ -28,6 +28,8 @@
     "packages/api-types/graphql/schema.graphql",
     "CHANGELOG.md",
     "packages/core/fixtures/changelog-publish",
-    "plans"
+    "plans",
+    "apps/cli/npm/*/bin",
+    "apps/cli/.*.bun-build"
   ]
 }

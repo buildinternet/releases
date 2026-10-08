@@ -13,7 +13,7 @@ code, or any MCP client. Readable by you and your agent.
 <p>
   <a href="https://releases.sh"><b>releases.sh</b></a> &nbsp;·&nbsp;
   <a href="https://releases.sh/docs"><b>Docs</b></a> &nbsp;·&nbsp;
-  <a href="https://github.com/buildinternet/releases-cli"><b>CLI repo →</b></a> &nbsp;·&nbsp;
+  <a href="apps/cli"><b>CLI →</b></a> &nbsp;·&nbsp;
   <a href="#use-it">Use it</a> &nbsp;·&nbsp;
   <a href="#whats-in-this-repo">What's in this repo</a> &nbsp;·&nbsp;
   <a href="#local-development">Develop</a>
@@ -21,7 +21,6 @@ code, or any MCP client. Readable by you and your agent.
 
 <p>
   <a href="https://github.com/buildinternet/releases/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/buildinternet/releases/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/buildinternet/releases-cli"><img alt="CLI repo" src="https://img.shields.io/badge/CLI-buildinternet%2Freleases--cli-24292e?logo=github"></a>
   <a href="https://www.npmjs.com/package/@buildinternet/releases"><img alt="npm (CLI)" src="https://img.shields.io/npm/v/@buildinternet/releases?color=cb3837&label=%40buildinternet%2Freleases&logo=npm"></a>
   <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp"><img alt="MCP server" src="https://img.shields.io/badge/exposes-MCP_server-000"></a>
   <a href="https://deepwiki.com/buildinternet/releases"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"></a>
@@ -29,9 +28,8 @@ code, or any MCP client. Readable by you and your agent.
 </p>
 
 <p><sub>
-  This repo is the <b>backend</b> for <a href="https://releases.sh">releases.sh</a> (API · MCP · web · ingest).
-  The user-facing command-line tool lives in its own repo →
-  <a href="https://github.com/buildinternet/releases-cli"><b>buildinternet/releases-cli</b></a>.
+  This repo is the <b>backend</b> for <a href="https://releases.sh">releases.sh</a> (API · MCP · web · ingest)
+  and the source of the <a href="apps/cli"><b>command-line tool</b></a>.
 </sub></p>
 
 </div>
@@ -55,9 +53,8 @@ content.
 This repo is the source of the canonical deployment at
 [releases.sh](https://releases.sh): the API worker (the authoritative data
 plane), the MCP server, the web frontend, and the ingest pipeline + agent
-harness that keep the registry fresh. The user-facing CLI ships separately from
-[buildinternet/releases-cli](https://github.com/buildinternet/releases-cli)
-(npm + Homebrew).
+harness that keep the registry fresh. The user-facing CLI lives in `apps/cli/` and
+ships from this repo (npm + Homebrew).
 
 ## Use it
 

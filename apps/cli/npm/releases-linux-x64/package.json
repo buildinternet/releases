@@ -1,0 +1,24 @@
+{
+  "name": "@buildinternet/releases-linux-x64",
+  "version": "0.83.1",
+  "description": "releases binary for Linux x64",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "releases"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "apps/cli/npm/releases-linux-x64"
+  },
+  "bugs": {
+    "url": "https://github.com/buildinternet/releases/issues"
+  },
+  "homepage": "https://releases.sh"
+}

@@ -132,7 +132,7 @@ Delivery is at-least-once, so the same event may arrive more than once (typicall
 
 ## Self-serve subscriptions
 
-Signed-in users manage webhooks at `/v1/me/webhooks` (browser session, user API key, or Sign in with Releases OAuth token), via the [account notifications UI](https://releases.sh/account/notifications), the [`releases webhook` CLI](https://github.com/buildinternet/releases-cli), or direct API calls. Surfaces: create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
+Signed-in users manage webhooks at `/v1/me/webhooks` (browser session, user API key, or Sign in with Releases OAuth token), via the [account notifications UI](https://releases.sh/account/notifications), the [`releases webhook` CLI](https://github.com/buildinternet/releases/tree/main/apps/cli), or direct API calls. Surfaces: create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
 
 ### Org-scoped (default)
 

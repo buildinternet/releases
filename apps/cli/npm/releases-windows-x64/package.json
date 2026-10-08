@@ -1,0 +1,24 @@
+{
+  "name": "@buildinternet/releases-windows-x64",
+  "version": "0.83.1",
+  "description": "releases binary for Windows x64",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "releases.exe"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "apps/cli/npm/releases-windows-x64"
+  },
+  "bugs": {
+    "url": "https://github.com/buildinternet/releases/issues"
+  },
+  "homepage": "https://releases.sh"
+}

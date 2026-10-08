@@ -1,0 +1,48 @@
+{
+  "name": "@releases/cli",
+  "version": "0.83.1",
+  "private": true,
+  "description": "The `releases` CLI (published as @buildinternet/releases) — source and build scripts.",
+  "type": "module",
+  "bin": {
+    "releases": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "rm -f .*.bun-build && bun build --compile src/index.ts --outfile dist/releases",
+    "build:linux": "bun build --compile src/index.ts --outfile dist/releases --target=bun-linux-x64",
+    "build:linux-arm64": "bun build --compile src/index.ts --outfile dist/releases --target=bun-linux-arm64",
+    "build:darwin-x64": "bun build --compile src/index.ts --outfile dist/releases --target=bun-darwin-x64",
+    "build:windows-x64": "bun build --compile src/index.ts --outfile dist/releases.exe --target=bun-windows-x64",
+    "dev": "bun --watch src/index.ts",
+    "sync:version": "bun scripts/sync-version.ts",
+    "test": "bun test"
+  },
+  "keywords": [
+    "cli",
+    "changelog",
+    "releases",
+    "mcp",
+    "ai-agents"
+  ],
+  "author": "Build Internet",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://releases.sh",
+  "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*",
+    "@buildinternet/releases-core": "workspace:*",
+    "@buildinternet/releases-lib": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "chalk": "^5.6.2",
+    "commander": "^15.0.0",
+    "string-width": "^7",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0"
+  }
+}

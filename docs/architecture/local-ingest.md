@@ -78,7 +78,7 @@ The default `/batch` upsert is **fill-don't-clobber** (`RELEASE_URL_UPSERT`, #95
 - Skill: `.claude/skills/local-ingest/SKILL.md` + `preflight.ts`.
 - Batch / single-insert / PATCH handlers: `apps/api/src/routes/sources.ts`.
 - Extract libs + smoke: `packages/adapters/src/extract/`, `scripts/smoke-toolloop.ts`.
-- CLI `--local` handoff (separate repo): `buildinternet/releases-cli`, `src/cli/commands/fetch.ts`.
+- CLI `--local` handoff: `apps/cli/src/cli/commands/fetch.ts`.
 
 ## Backfill workflow
 

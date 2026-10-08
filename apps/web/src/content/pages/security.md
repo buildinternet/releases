@@ -9,7 +9,7 @@ If you've found a security issue in the Release Notes Index web app, API, CLI, o
 
 We do not offer a bug bounty or paid reward program, and we have no plans to do so.
 
-For issues in the open-source CLI, you're also welcome to open a pull request or issue directly at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli). If the issue is sensitive, please email instead.
+For issues in the open-source CLI, you're also welcome to open a pull request or issue directly at [buildinternet/releases](https://github.com/buildinternet/releases). If the issue is sensitive, please email instead.
 
 ## What to include
 
@@ -24,7 +24,7 @@ In scope:
 
 - `releases.sh` and its subdomains (`api.releases.sh`, `*.releases.sh`).
 - Account and authentication features — sign-in, sessions, password reset, and API keys.
-- The open-source CLI at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli).
+- The open-source CLI at [buildinternet/releases](https://github.com/buildinternet/releases).
 - The remote MCP server.
 
 Out of scope:

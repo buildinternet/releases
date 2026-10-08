@@ -1,0 +1,41 @@
+{
+  "name": "@buildinternet/releases",
+  "version": "0.83.1",
+  "description": "CLI for Release Notes Index — the changelog & release-notes registry for developers and AI agents",
+  "bin": {
+    "releases": "bin/releases"
+  },
+  "scripts": {
+    "prepack": "cp ../../README.md ./README.md"
+  },
+  "files": [
+    "bin/releases",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@buildinternet/releases-darwin-arm64": "0.83.1",
+    "@buildinternet/releases-darwin-x64": "0.83.1",
+    "@buildinternet/releases-linux-x64": "0.83.1",
+    "@buildinternet/releases-linux-arm64": "0.83.1",
+    "@buildinternet/releases-windows-x64": "0.83.1"
+  },
+  "keywords": [
+    "changelog",
+    "releases",
+    "mcp",
+    "ai"
+  ],
+  "homepage": "https://releases.sh",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "apps/cli/npm/releases"
+  },
+  "bugs": {
+    "url": "https://github.com/buildinternet/releases/issues"
+  }
+}

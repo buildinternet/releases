@@ -1,0 +1,28 @@
+{
+  "name": "@buildinternet/releases-lib",
+  "version": "0.83.1",
+  "description": "Runtime-neutral helpers for the Releases Index CLI — logger, errors, config.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "packages/releases-lib"
+  },
+  "exports": {
+    "./config": "./src/config.ts",
+    "./legacy-env": "./src/legacy-env.ts",
+    "./logger": "./src/logger.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/buildinternet/releases/issues"
+  },
+  "homepage": "https://releases.sh"
+}

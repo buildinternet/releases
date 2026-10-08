@@ -1,8 +1,8 @@
 # Contributing
 
-Build, run, deploy, and operate the monorepo behind [releases.sh](https://releases.sh) — the API worker, MCP server, web frontend, and shared packages. The user-facing CLI lives separately in [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) and ships through npm + Homebrew; this repo talks to the world over HTTP.
+Build, run, deploy, and operate the monorepo behind [releases.sh](https://releases.sh) — the API worker, MCP server, web frontend, and shared packages. The user-facing CLI lives in `apps/cli/` and ships through npm + Homebrew from this repo (see [Working on the CLI](#working-on-the-cli)).
 
-The conventions below cover the shape of changes so PRs stay easy to review and the published packages (`@buildinternet/releases-core`, `@buildinternet/releases-api-types`, `@buildinternet/releases-lib/logger`) behave consistently for the OSS CLI.
+The conventions below cover the shape of changes so PRs stay easy to review and the published packages (`@buildinternet/releases-core`, `@buildinternet/releases-api-types`, `@buildinternet/releases-lib/logger`) behave consistently for the CLI and other consumers.
 
 ## What you can run without any accounts
 
@@ -27,13 +27,23 @@ Both live in [`scripts/bootstrap.sh`](scripts/bootstrap.sh) and [`scripts/doctor
 
 Working in a git worktree? Claude Code worktrees are self-bootstrapping: env files (`.env`, `apps/web/.env.local`, `.dev.vars`) are copied from the main checkout via [`.worktreeinclude`](.worktreeinclude), and the dependency install runs automatically via a `SessionStart` hook. For terminal-driven worktrees created with a plain `git worktree add` (where neither hook fires), run `./scripts/setup-worktree.sh` once to install dependencies and copy the same env files.
 
-The monorepo no longer ships a local CLI. If you need `releases <cmd>` while working on backend changes, clone [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) alongside this repo and point it at a local API worker (`bun run dev:api`) via `RELEASES_API_URL=http://localhost:8787`.
+If you need `releases <cmd>` while working on backend changes, run the in-tree CLI with `bun apps/cli/src/index.ts <cmd>` and point it at a local API worker (`bun run dev:api`) via `RELEASES_API_URL=http://localhost:8787`.
 
 ### Claude Code plugins
 
 Everything under `.claude/` auto-loads on a trusted clone with no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the repo-local commands in `.claude/commands/`, and the hosted MCP tools from the repo-root `.mcp.json`.
 
-On top of that, the repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. The operator skills (source management, maintenance, overviews, backfills) are the ones under `.claude/skills/`; the separate `releases-admin` plugin was retired in [releases-cli#370](https://github.com/buildinternet/releases-cli/pull/370). The monorepo's own skills load natively and take precedence over same-named plugin skills, so installing the `releases` plugin won't shadow them.
+On top of that, the repo's `.claude/settings.json` registers the public [plugin marketplace](https://github.com/buildinternet/releases) (this repo) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. The operator skills (source management, maintenance, overviews, backfills) are the ones under `.claude/skills/`; the separate `releases-admin` plugin was retired in [releases-cli#370](https://github.com/buildinternet/releases-cli/pull/370) (that repo is now archived). The monorepo's own skills load natively and take precedence over same-named plugin skills, so installing the `releases` plugin won't shadow them.
+
+## Working on the CLI
+
+The `releases` CLI lives in `apps/cli/` and is published as `@buildinternet/releases` (plus five platform packages and `@buildinternet/releases-lib`). It is a thin HTTP client for the hosted API. Ship flow and publishing setup: [cli-distribution.md](docs/architecture/cli-distribution.md).
+
+- **Run from source:** `bun apps/cli/src/index.ts search "next"`. Reader commands hit `https://api.releases.sh` by default; set `RELEASES_API_URL=http://localhost:8787` to target a local `bun run dev:api`. Admin commands need `RELEASES_API_KEY`. Set `RELEASES_TELEMETRY_DISABLED=1` (or `DO_NOT_TRACK=1`) to opt out of anonymous usage pings.
+- **Test:** `bun test apps/cli` (Bun's built-in runner). Bug fixes and features should include a test; when fixing a GitHub issue, leave the issue URL in a comment above the test.
+- **Build a binary:** `cd apps/cli && bun run build` compiles `dist/releases`. Release builds are done by `publish-cli.yml`, not locally.
+- **Changesets:** anything that ships in a published package needs one (`bun run changeset`). The seven CLI packages are a fixed group and bump together, so target `@buildinternet/releases` (the npm package is not named `releases-cli`) and pick the bump by user impact: `patch` for fixes, `minor` for new commands or flags, `major` for breaking changes. `@buildinternet/releases-core` and `@buildinternet/releases-api-types` are published separately and are not in the group; a CLI change that depends on a core or api-types change gets its own changeset for each.
+- **Issues and security:** file CLI bugs in this repo's issues. Report vulnerabilities through [private vulnerability reporting](https://github.com/buildinternet/releases/security/advisories/new), not a public issue.
 
 ## Environment variables
 
@@ -116,7 +126,7 @@ Eval suites measure the quality of AI-powered features — changelog parsing and
 bun run eval:evaluation      # URL evaluation evals (~30 sec, no API key needed)
 ```
 
-Parsing + discovery evals used to live in this repo but followed the CLI into [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli); the parser and discovery harness there own their own eval suites.
+Parsing + discovery evals used to live in this repo but followed the CLI; the parser and discovery harness in `apps/cli/` own their own eval suites.
 
 **Fixtures** live in `tests/evals/fixtures/`. Fixture `.expected.json` files are grading specs with fields like `contentContains` and `isBreaking` that enable code-based grading of structured AI output. **Results** are saved to `tests/evals/results/` (gitignored) as timestamped JSON.
 
@@ -159,7 +169,7 @@ chore(api-types): publish 0.9.0 with collection write types
 A few project-specific things to keep in mind:
 
 - **Workers auto-deploy from `main` on merge** — every PR ships to production the moment it lands. Treat reviews accordingly.
-- **Schema changes land in `packages/core/` first**, not under `apps/api/migrations/`. The OSS CLI consumes `@buildinternet/releases-core` from npm, so the shared schema is the source of truth.
+- **Schema changes land in `packages/core/` first**, not under `apps/api/migrations/`. The in-tree CLI consumes `@buildinternet/releases-core` via `workspace:*`, so the shared schema is the source of truth and the CLI update lands in the same PR.
 - **Wire-protocol changes** (request/response shapes the API serves) land in `packages/api-types/` first. Additive by default — renames or removals go through a one-minor-version deprecation alias before the field disappears.
 - **Drizzle migrations are mandatory** for any new table or column. Schema-only changes that skip the migration crash local DBs on the next `db:migrate:local`.
 - **D1's 100-bind limit** is real. Batch inserts chunk at `floor(100 / binds_per_row)` per statement; raising without re-checking surfaces as a 500 in production.
