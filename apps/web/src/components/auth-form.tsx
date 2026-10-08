@@ -8,6 +8,7 @@ import {
   signUp,
   sendVerificationEmail,
   oneTap,
+  hasSessionHint,
   getLastUsedLoginMethod,
 } from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/auth-redirect";
@@ -191,6 +192,9 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   // GSI error (blocked third-party context, no Google session) is non-fatal.
   useEffect(() => {
     if (!GOOGLE_ONE_TAP_ENABLED || typeof oneTap !== "function") return;
+    // Already signed in (session hint cookie present): don't prompt.
+    if (hasSessionHint()) return;
+    const dev = process.env.NODE_ENV !== "production";
     void oneTap({
       fetchOptions: {
         onSuccess: () => {
@@ -198,8 +202,13 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
           router.refresh();
         },
       },
-      onPromptNotification: () => {},
-    }).catch(() => {});
+      onPromptNotification: (notification) => {
+        // Dev-only visibility into why Google skipped/didn't show the prompt.
+        if (dev) console.debug("[one-tap] prompt notification", notification);
+      },
+    }).catch((err: unknown) => {
+      if (dev) console.warn("[one-tap] failed", err);
+    });
   }, [router, target]);
 
   // Passkey conditional UI (autofill). On the login surface, if the browser
