@@ -15,7 +15,7 @@ const MAX_MESSAGE = 4000;
 const POST_TIMEOUT_MS = 10_000;
 const FEEDBACK_TYPES = ["bug", "idea", "other"] as const;
 const FEEDBACK_TYPES_SET = new Set<string>(FEEDBACK_TYPES);
-const ISSUES_URL = "https://github.com/buildinternet/releases-cli/issues";
+const ISSUES_URL = "https://github.com/buildinternet/releases/issues";
 
 export type ValidateResult = { ok: true; message: string } | { ok: false; error: string };
 

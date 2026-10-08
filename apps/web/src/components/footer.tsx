@@ -1,7 +1,6 @@
 import Link from "next/link";
 
-// Primary project repo — the open-source backend monorepo. The CLI ships from
-// its own repo (buildinternet/releases-cli), reachable from the docs.
+// Primary project repo — the open-source monorepo; the CLI ships from apps/cli.
 const GITHUB_REPO_URL = "https://github.com/buildinternet/releases";
 
 // Sibling tool in the Build Internet family — hosts agent-captured screenshots
