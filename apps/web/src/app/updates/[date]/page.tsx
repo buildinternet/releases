@@ -53,7 +53,7 @@ export async function generateMetadata({
     return {
       // The root layout's title template appends the site name.
       title: `${heading} · What's New`,
-      description: `What shipped on Releases Index on ${release.title}.`,
+      description: `What shipped on Release Notes Index on ${release.title}.`,
       alternates: { canonical: `/updates/${date}` },
       openGraph: {
         title: `${heading} · Release Notes Index`,
@@ -80,7 +80,7 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
     headline: heading,
     url: `https://releases.sh/updates/${date}`,
     ...(release.publishedAt ? { datePublished: release.publishedAt } : {}),
-    publisher: { "@type": "Organization", name: "Releases Index", url: "https://releases.sh" },
+    publisher: { "@type": "Organization", name: "Release Notes Index", url: "https://releases.sh" },
   };
 
   return (

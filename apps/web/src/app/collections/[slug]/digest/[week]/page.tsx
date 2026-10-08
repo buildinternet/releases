@@ -19,6 +19,7 @@ import { ReleaseLink } from "@/components/release-link";
 import { ExternalArrow } from "@/components/digest-icons";
 import { AI_DIGEST_DISCLAIMER } from "@/lib/copy";
 import { weekOfLabel } from "@/lib/digest-format";
+import { collectionOgImageUrl, ogImageFields } from "@/lib/og-image-urls";
 import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
 
 // Content is immutable-ish once generated — standard ISR window, kept in
@@ -124,6 +125,8 @@ export async function generateMetadata({
     const title = clampMetaTitle(`${detail.name}: ${digest.title}`);
     const description = clampMetaDescription(digest.intro);
     const path = `/collections/${slug}/digest/${weekStart}`;
+    // One card per COLLECTION (~12), not per week (~230, growing) — see og-image-urls.ts.
+    const img = ogImageFields(collectionOgImageUrl(slug));
     return {
       title: { absolute: title },
       description,
@@ -139,7 +142,8 @@ export async function generateMetadata({
           ],
         },
       },
-      openGraph: { type: "article", url: path, title, description },
+      openGraph: { type: "article", url: path, title, description, ...img.openGraph },
+      twitter: img.twitter,
     };
   } catch {
     return { title: "Digest" };

@@ -19,7 +19,8 @@ import { ORG_FEED_PAGE_LIMIT, buildArchiveMonths, collectOrgFeed } from "./updat
 // docs/superpowers/specs/2026-06-10-self-published-changelog-design.md).
 const ORG_SLUG = "releases-sh";
 const TITLE = "What's New";
-const DESCRIPTION = "Everything shipped on Releases Index — published through our own registry.";
+const DESCRIPTION =
+  "Everything shipped on Release Notes Index — published through our own registry.";
 
 // The org release feed caps `?limit=` at 100 server-side (REST and GraphQL
 // alike); requesting more than that is a no-op clamp, not a bigger page. The
@@ -39,7 +40,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/updates",
     types: {
-      "application/atom+xml": [{ url: `/${ORG_SLUG}.atom`, title: "Releases Index changelog" }],
+      "application/atom+xml": [
+        { url: `/${ORG_SLUG}.atom`, title: "Release Notes Index changelog" },
+      ],
     },
   },
   openGraph: {
@@ -83,7 +86,7 @@ export default async function UpdatesPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: `${TITLE} — Releases Index`,
+    name: `${TITLE} — Release Notes Index`,
     url: "https://releases.sh/updates",
     description: DESCRIPTION,
   };

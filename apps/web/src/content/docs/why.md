@@ -1,12 +1,12 @@
 ---
 title: "Why Release Notes Index"
-description: "Releases Index is changelog infrastructure built for agents — the Context7-equivalent for what shipped. One registry across GitHub releases, CHANGELOG files, marketing blogs, RSS, and more."
+description: "Release Notes Index is changelog infrastructure built for agents — the Context7-equivalent for what shipped. One registry across GitHub releases, CHANGELOG files, marketing blogs, RSS, and more."
 adminOnly: false
 ---
 
 # Why Release Notes Index
 
-Releases Index is a changelog index built for agents. Add the MCP server to Claude, ChatGPT, Cursor, or your own agent, and "what changed in X since Y" becomes one cheap tool call, as easy as fetching docs. Think of it as the [Context7](https://context7.com) of what shipped.
+Release Notes Index is a changelog index built for agents. Add the MCP server to Claude, ChatGPT, Cursor, or your own agent, and "what changed in X since Y" becomes one cheap tool call, as easy as fetching docs. Think of it as the [Context7](https://context7.com) of what shipped.
 
 This matters because changelogs have no standard. Teams publish in GitHub releases, CHANGELOG files, marketing blogs, in-app "what's new" panels, and vendor newsletters. The interesting parts rarely live where you'd guess. The Index pulls them into one registry so you can see the full story.
 

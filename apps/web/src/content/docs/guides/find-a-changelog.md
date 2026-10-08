@@ -8,7 +8,7 @@ adminOnly: false
 
 Changelogs have no standard home. Teams publish in GitHub releases, `CHANGELOG.md` files, marketing blogs, documentation sites, in-app "what's new" panels, and vendor newsletters — and the interesting entries rarely live where you'd guess. This guide gives you a repeatable method for finding the best source for any product, whether you're a person hunting for release notes or an agent that needs structured data.
 
-The short version: guess the obvious URLs first, then look for a feed, then check GitHub, and only scrape a rendered page as a last resort. Or skip the hunt — [Releases Index](/) has already run this method across hundreds of products, and you can [query the result](#the-shortcut-query-an-index-that-already-did-this) for free.
+The short version: guess the obvious URLs first, then look for a feed, then check GitHub, and only scrape a rendered page as a last resort. Or skip the hunt — [Release Notes Index](/) has already run this method across hundreds of products, and you can [query the result](#the-shortcut-query-an-index-that-already-did-this) for free.
 
 ## The method, in priority order
 

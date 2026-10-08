@@ -19,9 +19,9 @@ export default function BotPage() {
       <article className="max-w-3xl w-full mx-auto px-6 py-10 flex-1 prose prose-stone dark:prose-invert prose-headings:tracking-tight prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono">
         <h1>The Releases Index crawler</h1>
         <p>
-          Releases Index (<a href="https://releases.sh">releases.sh</a>) is a changelog indexer and
-          registry for AI agents and developers. Our crawler fetches publicly available changelog
-          and release-note pages so they can be searched and summarized.
+          Release Notes Index (<a href="https://releases.sh">releases.sh</a>) is a changelog indexer
+          and registry for AI agents and developers. Our crawler fetches publicly available
+          changelog and release-note pages so they can be searched and summarized.
         </p>
 
         <h2>How to identify our requests</h2>

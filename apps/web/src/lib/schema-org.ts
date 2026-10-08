@@ -33,6 +33,12 @@ export function lastModifiedAt(entity: {
  * - `feed`    → WebSite
  * - `scrape`  → WebSite
  * - `agent`   → CreativeWork
+ * - `appstore` → MobileApplication
+ * - anything else → CreativeWork
+ *
+ * Every mapping is a CreativeWork subtype, so the entity can carry
+ * `publisher` / `dateModified` and is a valid `isPartOf` target for the page's
+ * release list (a bare `Thing` is neither).
  */
 export function sourceJsonLdType(sourceType: SourceType): string {
   switch (sourceType) {
@@ -41,10 +47,10 @@ export function sourceJsonLdType(sourceType: SourceType): string {
     case "feed":
     case "scrape":
       return "WebSite";
-    case "agent":
-      return "CreativeWork";
+    case "appstore":
+      return "MobileApplication";
     default:
-      return "Thing";
+      return "CreativeWork";
   }
 }
 
@@ -141,8 +147,9 @@ type ReleaseListItemInput = {
  * upstream when it has an http(s) `url` (the #2218 link policy — `/release/*`
  * pages are noindexed and robots-disallowed), falling back to the release
  * page; rows with neither a usable target are skipped. `isPartOfId` ties each
- * release back to the page's primary entity node (Organization / source
- * entity) via schema.org `isPartOf`. Capped at `limit` (default 20) — the
+ * release back to the page's CreativeWork node (the `CollectionPage`, or the
+ * source entity) via schema.org `isPartOf` — never an Organization, which
+ * `isPartOf` doesn't accept. Capped at `limit` (default 20) — the
  * list is an SEO signal, not a full feed mirror.
  */
 export function buildReleaseItemListJsonLd(
@@ -322,8 +329,8 @@ export function buildDigestJsonLd(
         url: opts.pageUrl,
         datePublished: digest.weekEndDate,
         dateModified: digest.generatedAt,
-        author: { "@type": "Organization", name: "Releases Index", url: SITE_URL },
-        publisher: { "@type": "Organization", name: "Releases Index", url: SITE_URL },
+        author: { "@type": "Organization", name: "Release Notes Index", url: SITE_URL },
+        publisher: { "@type": "Organization", name: "Release Notes Index", url: SITE_URL },
         about: { "@type": "CollectionPage", name: opts.collectionName, url: opts.collectionUrl },
         ...(digest.releaseUrls.length > 0
           ? { mentions: digest.releaseUrls.map((url) => ({ "@type": "TechArticle", url })) }

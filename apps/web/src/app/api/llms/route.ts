@@ -18,7 +18,7 @@ const API_BASE_URL = "https://api.releases.sh";
 // generated from the manifest so they can't drift from the sidebar;
 // everything else is static.
 
-const SUMMARY = `${SITE_TAGLINE} Releases Index tracks release notes, changelogs, and version updates across hundreds of developer tools and services, normalizes them into one registry, and serves them over a REST API, a hosted MCP server, an open-source CLI, and this site. Most reads are public — no account or API key required.`;
+const SUMMARY = `${SITE_TAGLINE} Release Notes Index tracks release notes, changelogs, and version updates across hundreds of developer tools and services, normalizes them into one registry, and serves them over a REST API, a hosted MCP server, an open-source CLI, and this site. Most reads are public — no account or API key required.`;
 
 const CONTEXT = `Quick facts:
 

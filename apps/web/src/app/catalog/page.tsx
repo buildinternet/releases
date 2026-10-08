@@ -14,7 +14,7 @@ import { buildOrgCatalogJsonLd } from "@/lib/schema-org";
 
 const TITLE = "Catalog";
 const DESCRIPTION =
-  "Every organization tracked on Releases Index, A to Z. Browse the full registry of companies whose changelogs and release notes we index.";
+  "Every organization tracked on Release Notes Index, A to Z. Browse the full registry of companies whose changelogs and release notes we index.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -22,12 +22,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/catalog" },
   openGraph: {
     type: "website",
-    title: `${TITLE} — Releases Index`,
+    title: `${TITLE} — Release Notes Index`,
     description: DESCRIPTION,
     url: "/catalog",
   },
   twitter: {
-    title: `${TITLE} — Releases Index`,
+    title: `${TITLE} — Release Notes Index`,
     description: DESCRIPTION,
   },
 };

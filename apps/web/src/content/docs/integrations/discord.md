@@ -6,7 +6,7 @@ description: Post new releases to a Discord channel whenever something you follo
 # Send releases to Discord
 
 Get a Discord message every time an org or product you follow ships a release. There's no bot to
-install. You paste a Discord **incoming webhook URL** and Releases Index posts to it.
+install. You paste a Discord **incoming webhook URL** and Release Notes Index posts to it.
 
 ## 1. Create a Discord incoming webhook
 

@@ -1,6 +1,6 @@
 ---
 title: "Turn Any Changelog Into an RSS Feed"
-description: "Get an Atom feed for any product's changelog — even ones that don't publish a feed. Append .atom to any Releases Index org, source, or collection page. Free, no account."
+description: "Get an Atom feed for any product's changelog — even ones that don't publish a feed. Append .atom to any Release Notes Index org, source, or collection page. Free, no account."
 adminOnly: false
 ---
 

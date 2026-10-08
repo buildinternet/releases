@@ -1,6 +1,6 @@
 ---
 title: "Terms of Service"
-description: "Accounts, acceptable use, rate limits, and takedown policy for the Releases Index web app, API, and MCP server."
+description: "Accounts, acceptable use, rate limits, and takedown policy for the Release Notes Index web app, API, and MCP server."
 effectiveDate: "June 5, 2026"
 ---
 
@@ -8,7 +8,7 @@ effectiveDate: "June 5, 2026"
 
 _Effective June 5, 2026_
 
-These terms cover use of Releases Index (the website at [releases.sh](https://releases.sh)), the public API, the remote MCP server, and the open-source CLI. By using any of these, you agree to the terms below. If you don't agree, please don't use the service.
+These terms cover use of Release Notes Index (the website at [releases.sh](https://releases.sh)), the public API, the remote MCP server, and the open-source CLI. By using any of these, you agree to the terms below. If you don't agree, please don't use the service.
 
 ## The service
 
