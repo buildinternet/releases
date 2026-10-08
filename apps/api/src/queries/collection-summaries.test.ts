@@ -277,6 +277,7 @@ describe("resolveDigestCoveredReleases", () => {
         content: "b",
         url: null,
         publishedAt: "2026-09-16T00:00:00.000Z",
+        metadata: JSON.stringify({ composition: { bugs: 3, features: 1, enhancements: 0 } }),
       },
     ]);
 
@@ -288,7 +289,13 @@ describe("resolveDigestCoveredReleases", () => {
       product: { slug: "prod_d", name: "Product prod_d" },
       org: { slug: "org_d", avatarUrl: "https://media.example.com/org_d.png" },
     });
-    expect(out[0]).toMatchObject({ url: null, product: null });
+    expect(out[0]).toMatchObject({
+      url: null,
+      product: null,
+      composition: { bugs: 3, features: 1, enhancements: 0 },
+    });
+    // No metadata → no composition (unsummarized row).
+    expect(out[1].composition).toBeNull();
     expect(out[0].path.startsWith("/release/rel_e")).toBe(true);
   });
 });

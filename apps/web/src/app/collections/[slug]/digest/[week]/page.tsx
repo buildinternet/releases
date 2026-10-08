@@ -11,6 +11,9 @@ import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
 import { DigestFormatLinks } from "@/components/digest-format-links";
+import { DigestWeekGlance } from "@/components/digest-week-glance/digest-week-glance";
+import { OpenDetailsOnHash } from "@/components/open-details-on-hash";
+import { RELEASES_COVERED_ANCHOR } from "@/lib/digest-glance";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderDigestMarkdownToHtml } from "@/lib/render-digest-body";
@@ -303,6 +306,8 @@ export default async function CollectionDigestPage({
           className="mt-4"
         />
 
+        <DigestWeekGlance releases={digest.releases} sections={digest.sections} />
+
         <div
           className="prose prose-stone dark:prose-invert mt-8 max-w-none text-[15px] leading-relaxed prose-headings:tracking-tight prose-headings:scroll-mt-24 prose-a:text-stone-600 dark:prose-a:text-stone-400 prose-a:no-underline [&_a:hover]:underline prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono"
           // Sanitized server-side — see the renderDigestMarkdownToHtml call above.
@@ -314,10 +319,15 @@ export default async function CollectionDigestPage({
           {AI_DIGEST_DISCLAIMER}
         </div>
 
+        {/* The glance list links uncited releases here; expand the block on arrival. */}
+        <OpenDetailsOnHash id={RELEASES_COVERED_ANCHOR} />
         {orgGroups.length > 0 && (
           // Native <details>: starts collapsed (less visual clutter) but the
           // full link list stays in the HTML for crawlers and expand-on-demand.
-          <details className="group mt-12 border-t border-[var(--line-2)] pt-6">
+          <details
+            id={RELEASES_COVERED_ANCHOR}
+            className="group mt-12 scroll-mt-24 border-t border-[var(--line-2)] pt-6"
+          >
             <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-semibold text-[var(--fg)] transition-colors hover:text-[var(--fg-2)] [&::-webkit-details-marker]:hidden">
               <svg
                 width="9"

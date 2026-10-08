@@ -42,6 +42,41 @@ export function importanceMarkerLabel(importance: number | null | undefined): st
 const FLAME_PATH =
   "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z";
 
+/** Text color for the flame at a given score (amber major, orange landmark). */
+export function importanceFlameColor(importance: 4 | 5): string {
+  return importance === 5
+    ? "text-orange-500 dark:text-orange-400"
+    : "text-amber-500 dark:text-amber-400";
+}
+
+/**
+ * The bare flame glyph — decorative (`aria-hidden`), no hover card. For places
+ * where a surrounding label already states the score (treemap tiles, legend).
+ */
+export function ImportanceFlame({
+  importance,
+  className,
+}: {
+  importance: 4 | 5;
+  className?: string;
+}) {
+  const landmark = importance === 5;
+  return (
+    <svg
+      className={`h-3 w-3 shrink-0 ${importanceFlameColor(importance)} ${className ?? ""}`}
+      viewBox="0 0 24 24"
+      fill={landmark ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={landmark ? 1.5 : 2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={FLAME_PATH} />
+    </svg>
+  );
+}
+
 export function ImportanceMarker({
   importance,
   className,
@@ -59,22 +94,9 @@ export function ImportanceMarker({
       <HoverCard.Trigger
         role="img"
         aria-label={copy.label}
-        className={`inline-flex shrink-0 cursor-help self-center ${
-          landmark ? "text-orange-500 dark:text-orange-400" : "text-amber-500 dark:text-amber-400"
-        } ${className ?? ""}`}
+        className={`inline-flex shrink-0 cursor-help self-center ${className ?? ""}`}
       >
-        <svg
-          className="h-3 w-3"
-          viewBox="0 0 24 24"
-          fill={landmark ? "currentColor" : "none"}
-          stroke="currentColor"
-          strokeWidth={landmark ? 1.5 : 2.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d={FLAME_PATH} />
-        </svg>
+        <ImportanceFlame importance={landmark ? 5 : 4} />
       </HoverCard.Trigger>
       <HoverCard.Content side="top" align="center" sideOffset={4}>
         <div className="max-w-[220px] rounded-lg border border-stone-200 bg-white px-3 py-2 shadow-lg dark:border-stone-700 dark:bg-stone-900">
