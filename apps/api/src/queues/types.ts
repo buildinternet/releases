@@ -16,6 +16,27 @@ export interface DigestDeliveryMessage {
   after: string | null;
 }
 
+/**
+ * One collection weekly digest email for one subscriber (#2459). Rides the same
+ * queue as the follows digest; the consumer tells them apart by `kind`.
+ */
+export interface CollectionDigestDeliveryMessage {
+  kind: "collection-digest";
+  userId: string;
+  collectionId: string;
+  /** ET-Monday week key (YYYY-MM-DD) of the digest to send. */
+  weekStart: string;
+}
+
+/** Everything the digest-delivery queue carries. Follows messages predate `kind`. */
+export type DigestQueueMessage = DigestDeliveryMessage | CollectionDigestDeliveryMessage;
+
+export function isCollectionDigestMessage(
+  m: DigestQueueMessage,
+): m is CollectionDigestDeliveryMessage {
+  return (m as { kind?: unknown }).kind === "collection-digest";
+}
+
 export interface ReleaseFanoutOwner {
   releaseId: string;
   orgId: string;

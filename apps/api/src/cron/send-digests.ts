@@ -14,11 +14,11 @@ import { sendDigestEmail, type DigestEmailEnv } from "../lib/email/digest-email.
 import { parsePositiveInt } from "./feed-enrich.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 import { sendDigestBatch } from "../queues/enqueue-release-fanout.js";
-import type { DigestDeliveryMessage } from "../queues/types.js";
+import type { DigestDeliveryMessage, DigestQueueMessage } from "../queues/types.js";
 
 export interface SendDigestsEnv {
   DB: D1Database;
-  DIGEST_DELIVERY_QUEUE?: Queue<DigestDeliveryMessage>;
+  DIGEST_DELIVERY_QUEUE?: Queue<DigestQueueMessage>;
   AUTH_EMAIL?: AuthEmailBinding;
   DIGEST_EMAIL_FROM?: string;
   WEB_BASE_URL?: string;

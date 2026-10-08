@@ -36,8 +36,14 @@ import {
   resolveCollectionWeeklyDigestModel,
   type TextModelEnv,
 } from "../lib/ai/text-model.js";
+import {
+  sendCollectionDigests,
+  type NewCollectionDigest,
+  type SendCollectionDigestsEnv,
+} from "./send-collection-digests.js";
 
-export interface CollectionSummariesEnv extends TextModelEnv, WebRevalidateEnv {
+export interface CollectionSummariesEnv
+  extends TextModelEnv, WebRevalidateEnv, SendCollectionDigestsEnv {
   DB: D1Database;
   CRON_ENABLED?: string;
   /** How many recent ET days to back-fill if a row is missing (default 2). */
@@ -258,6 +264,15 @@ export function collectionWeeklyDigestCatchupWeeks(
 }
 
 /**
+ * The only week whose new digests get emailed to subscribers (#2459): the one that
+ * closed yesterday. Catch-up weeks, `force` regens, and the backfill route never
+ * email anyone.
+ */
+export function justClosedDigestWeek(todayEt: string): string {
+  return collectionWeeklyDigestCatchupWeeks(todayEt, 1)[0];
+}
+
+/**
  * Generate the weekly digest for one collection + week. Per-collection
  * failures are contained here so the sweep never aborts on one bad week.
  * Applies the quality floor (`MIN_SUBSTANTIVE_RELEASES`) before calling the
@@ -464,11 +479,16 @@ export async function runCollectionWeeklyDigests(
 
   const catchup = Math.max(1, Number(env.COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS ?? "1") || 1);
   const digested: DigestedWeek[] = [];
+  const toEmail: NewCollectionDigest[] = [];
+  const emailWeek = justClosedDigestWeek(todayEt);
 
   let totals = { generated: 0, skipped: 0, failed: 0 };
   for (const weekStart of collectionWeeklyDigestCatchupWeeks(todayEt, catchup)) {
     const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
-      onGenerated: (col) => digested.push({ slug: col.slug, weekStart }),
+      onGenerated: (col) => {
+        digested.push({ slug: col.slug, weekStart });
+        if (weekStart === emailWeek) toEmail.push({ collectionId: col.id, weekStart });
+      },
     });
     totals = {
       generated: totals.generated + r.generated,
@@ -485,4 +505,5 @@ export async function runCollectionWeeklyDigests(
   });
 
   await pingAfterDigests(env, digested, { fetchImpl: env._revalidateFetchOverride });
+  await sendCollectionDigests(env, toEmail, { db });
 }

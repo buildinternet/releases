@@ -5,6 +5,8 @@
  */
 
 import type {
+  CollectionDigestSubscriptionResponse,
+  CollectionDigestSubscriptionsResponse,
   DigestCadence,
   DigestPrefsResponse,
   FeedToken,
@@ -105,4 +107,39 @@ export async function setDigestCadence(cadence: DigestCadence): Promise<DigestCa
   if (!res.ok)
     throw new Error(await errorMessage(res, `Failed to update digest setting (${res.status})`));
   return ((await res.json()) as DigestPrefsResponse).cadence;
+}
+
+// ── Collection digest email subscriptions (/v1/me/collection-digests) ───────
+
+export async function listCollectionDigestSubscriptions(): Promise<
+  CollectionDigestSubscriptionsResponse["subscriptions"]
+> {
+  const res = await fetch(`${apiBase()}/v1/me/collection-digests`, { credentials: "include" });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to load digest subscriptions (${res.status})`));
+  return ((await res.json()) as CollectionDigestSubscriptionsResponse).subscriptions;
+}
+
+export async function subscribeCollectionDigest(
+  slug: string,
+): Promise<CollectionDigestSubscriptionResponse> {
+  const res = await fetch(`${apiBase()}/v1/me/collection-digests/${encodeURIComponent(slug)}`, {
+    method: "PUT",
+    credentials: "include",
+  });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to subscribe to digest (${res.status})`));
+  return (await res.json()) as CollectionDigestSubscriptionResponse;
+}
+
+export async function unsubscribeCollectionDigest(
+  slug: string,
+): Promise<CollectionDigestSubscriptionResponse> {
+  const res = await fetch(`${apiBase()}/v1/me/collection-digests/${encodeURIComponent(slug)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to unsubscribe from digest (${res.status})`));
+  return (await res.json()) as CollectionDigestSubscriptionResponse;
 }

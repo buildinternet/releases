@@ -25,9 +25,16 @@ import {
   feedAtomUrl,
 } from "../queries/feed-tokens.js";
 import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
+import {
+  listCollectionDigestSubs,
+  subscribeCollectionDigest,
+  unsubscribeCollectionDigest,
+} from "../queries/collection-digest-subs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import type {
+  CollectionDigestSubscriptionResponse,
+  CollectionDigestSubscriptionsResponse,
   DeveloperSettingsResponse,
   FeedToken,
   NotificationSettingsResponse,
@@ -318,6 +325,39 @@ meHandlers.put("/me/digest", async (c) => {
   const db = createDb(c.env.DB);
   const row = await setDigestCadence(db, session.user.id, cadence as DigestCadence);
   return c.json({ cadence: row.cadence });
+});
+
+// ── Collection weekly digest emails (#2459) ──────────────────────────────────
+
+meHandlers.get("/me/collection-digests", async (c) => {
+  const session = c.get("session");
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+  const db = createDb(c.env.DB);
+  const body: CollectionDigestSubscriptionsResponse = {
+    subscriptions: await listCollectionDigestSubs(db, session.user.id),
+  };
+  return privateJson(c, body);
+});
+
+/** Subscribe to a collection's weekly digest email. Idempotent; 404 when the collection has no weekly digest. */
+meHandlers.put("/me/collection-digests/:slug", async (c) => {
+  const session = c.get("session");
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+  const db = createDb(c.env.DB);
+  const res = await subscribeCollectionDigest(db, session.user.id, c.req.param("slug"));
+  if (!res) return respondError(c, new NotFoundError("Collection has no weekly digest"));
+  const body: CollectionDigestSubscriptionResponse = { ...res, subscribed: true };
+  return c.json(body);
+});
+
+meHandlers.delete("/me/collection-digests/:slug", async (c) => {
+  const session = c.get("session");
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  await unsubscribeCollectionDigest(db, session.user.id, slug);
+  const body: CollectionDigestSubscriptionResponse = { collectionSlug: slug, subscribed: false };
+  return c.json(body);
 });
 
 /** Production composition: session-or-Bearer principal gate, then the handlers. */

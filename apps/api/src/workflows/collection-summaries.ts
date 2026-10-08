@@ -24,10 +24,16 @@ import {
   summarizeCollectionForDay,
   generateWeeklyDigestForCollection,
   pingAfterDigests,
+  justClosedDigestWeek,
   type DigestedWeek,
   type CollectionSummaryTarget,
 } from "../cron/collection-summaries.js";
 import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
+import {
+  sendCollectionDigests,
+  type NewCollectionDigest,
+  type SendCollectionDigestsEnv,
+} from "../cron/send-collection-digests.js";
 
 export type CollectionSummariesWorkflowParams = {
   scheduledTime: number;
@@ -40,7 +46,8 @@ export type CollectionSummariesWorkflowParams = {
 };
 
 export type CollectionSummariesWorkflowEnv = TextModelEnv &
-  WebRevalidateEnv & {
+  WebRevalidateEnv &
+  SendCollectionDigestsEnv & {
     DB: D1Database;
     COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
     COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS?: string;
@@ -229,6 +236,8 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
     let skipped = 0;
     let failed = 0;
     const digested: DigestedWeek[] = [];
+    const toEmail: NewCollectionDigest[] = [];
+    const emailWeek = justClosedDigestWeek(todayEt);
 
     for (let i = 0; i < plan.tasks.length; i++) {
       const task = plan.tasks[i];
@@ -253,6 +262,9 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
       if (outcome === "generated") {
         generated++;
         digested.push({ slug: task.collectionSlug, weekStart: task.weekStart });
+        if (task.weekStart === emailWeek) {
+          toEmail.push({ collectionId: task.collectionId, weekStart: task.weekStart });
+        }
       } else if (outcome === "skipped") skipped++;
       else failed++;
     }
@@ -274,6 +286,15 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
         await pingAfterDigests(this.env, digested);
         return { pinged: true, digests: digested };
       });
+    }
+
+    // Email subscribers the just-closed week's new digests (#2459). Its own step
+    // so a replay-on-wake can't fan out twice; the per-(user, collection, week)
+    // claim in the consumer is the backstop. sendCollectionDigests never throws.
+    if (toEmail.length > 0) {
+      await step.do("email digest subscribers", RETRY_REVALIDATE, async () =>
+        sendCollectionDigests(this.env, toEmail),
+      );
     }
   }
 }

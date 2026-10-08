@@ -102,7 +102,7 @@ export type Env = {
     ORG_ACTOR?: DurableObjectNamespace<import("./org-actor.js").OrgActor>;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     /** Per-recipient follow digest send (cron enqueues; API worker consumes). */
-    DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestDeliveryMessage>;
+    DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestQueueMessage>;
     /** Release.created fan-out before webhook-delivery (publish enqueues). */
     RELEASE_EVENTS_QUEUE?: Queue<import("./queues/types.js").ReleaseFanoutMessage>;
     MEDIA: R2Bucket;
@@ -985,7 +985,7 @@ export default {
   fetch: app.fetch,
   async queue(
     batch: MessageBatch<
-      | import("./queues/types.js").DigestDeliveryMessage
+      | import("./queues/types.js").DigestQueueMessage
       | import("./queues/types.js").ReleaseFanoutMessage
     >,
     env: Env["Bindings"],
@@ -1113,6 +1113,11 @@ export default {
         // workflow path gets the same binding automatically as part of its env.
         WEB_SERVICE_KEY: env.WEB_SERVICE_KEY,
         WEB_BASE_URL: env.WEB_BASE_URL,
+        // Collection digest emails (#2459), same inline-only caveat as above.
+        DIGEST_DELIVERY_QUEUE: env.DIGEST_DELIVERY_QUEUE,
+        AUTH_EMAIL: env.AUTH_EMAIL,
+        DIGEST_EMAIL_FROM: env.DIGEST_EMAIL_FROM,
+        API_BASE_URL: env.API_BASE_URL,
       };
       if (env.COLLECTION_SUMMARIES_WORKFLOW) {
         ctx.waitUntil(

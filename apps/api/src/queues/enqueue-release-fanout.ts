@@ -104,14 +104,10 @@ export async function fanoutWebhooks(
   await inlineWebhookFanout(env, events, eventOwners);
 }
 
-/** Chunked sendBatch for digest cron enqueue. */
-export async function sendDigestBatch(
-  queue: {
-    sendBatch: (
-      messages: { body: import("./types.js").DigestDeliveryMessage }[],
-    ) => Promise<unknown>;
-  },
-  messages: import("./types.js").DigestDeliveryMessage[],
+/** Chunked sendBatch for the digest-delivery queue (follows + collection digests). */
+export async function sendDigestBatch<M extends import("./types.js").DigestQueueMessage>(
+  queue: { sendBatch: (messages: { body: M }[]) => Promise<unknown> },
+  messages: M[],
 ): Promise<void> {
   for (let i = 0; i < messages.length; i += QUEUE_BATCH_LIMIT) {
     const chunk = messages.slice(i, i + QUEUE_BATCH_LIMIT);
