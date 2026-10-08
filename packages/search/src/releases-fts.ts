@@ -150,7 +150,7 @@ export async function searchReleasesFts(
     WHERE releases_fts MATCH ${ftsQuery}
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
-      ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
+      ${opts.includeCoverage ? sql`` : sql`AND EXISTS (SELECT 1 FROM releases_visible rv WHERE rv.id = r.id)`}
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
       ${sourceIdClause}
       ${opts.orgCategory ? sql`AND o.category = ${opts.orgCategory}` : sql``}

@@ -262,7 +262,7 @@ async function ftsReleaseIds(
       WHERE releases_fts MATCH ${toFtsMatchQuery(query)}
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
         AND (r.suppressed IS NULL OR r.suppressed = 0)
-        ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
+        ${opts.includeCoverage ? sql`` : sql`AND EXISTS (SELECT 1 FROM releases_visible rv WHERE rv.id = r.id)`}
         ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
       ORDER BY rank LIMIT ${limit}
     `);

@@ -96,6 +96,20 @@ describe("?type filter", () => {
   });
 });
 
+describe("release stats under a whereClause", () => {
+  it("a filtered lookup reports the same stats as the unfiltered list", async () => {
+    const all = await getSourcesWithStats(tdb.db as never);
+    const [one] = await getSourcesWithStats(tdb.db as never, eq(sources.slug, "a2"));
+    const fromAll = all.find((r) => r.id === "src_2");
+    if (!fromAll) throw new Error("src_2 missing from the unfiltered list");
+    expect(one.id).toBe("src_2");
+    expect(one.release_count).toBe(1);
+    expect(one.latest_date).toBe(STALE_ISO);
+    expect(one.release_count).toBe(fromAll.release_count);
+    expect(one.latest_date).toBe(fromAll.latest_date);
+  });
+});
+
 describe("?stale filter (staleOnly)", () => {
   it("countSourcesForList includes never-released sources as stale", async () => {
     const count = await countSourcesForList(tdb.db as never, undefined, { staleOnly: true });

@@ -179,6 +179,12 @@ export async function getSourcesWithStats(
     : null;
   const filterExtras = changelogActivityJoinAndWhere(opts ?? {});
   const combinedWhere = andWhere([whereClause, staleWhere, filterExtras.where]);
+  // SQLite can't push the outer source filter into the GROUP BY subquery, so
+  // without this a one-slug lookup aggregates every release first. The caller's
+  // `whereClause` only references `sources` columns, so it scopes the inner set.
+  const releaseStatsScope = whereClause
+    ? sql`WHERE r.source_id IN (SELECT sources.id FROM ${fromView} sources WHERE ${whereClause})`
+    : sql``;
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -219,6 +225,7 @@ export async function getSourcesWithStats(
           )
         ) AS latest_version
       FROM releases_visible r
+      ${releaseStatsScope}
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
     ${filterExtras.join}
