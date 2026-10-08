@@ -15,6 +15,9 @@ import {
 // and resolveTraceDir's default branch is getRunsDir() — so a static import is
 // safe as long as the env var is set before any helper runs, which it is.
 const dataDir = mkdtempSync(join(tmpdir(), "rel-trace-data-"));
+// The canonical name wins over the legacy one and bun autoloads the repo-root .env,
+// so drop any inherited value before pointing the data dir at a temp dir.
+delete process.env.RELEASES_DATA_DIR;
 process.env.RELEASED_DATA_DIR = dataDir;
 
 const baseSession: Session = {

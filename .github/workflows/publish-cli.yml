@@ -146,6 +146,13 @@ jobs:
       # token-based ~/.npmrc that is incompatible with OIDC). Trusted publishing
       # supplies the credential and attaches provenance. Order: lib + platform
       # binaries first, the meta package (which depends on them) last.
+      # The meta package is a Node shim that execs the platform binary. If it is
+      # missing, npm publishes a tarball with no `releases` command and only
+      # warns. Fail here instead.
+      - name: Check meta package launcher
+        if: steps.check.outputs.already == 'false'
+        run: test -x apps/cli/npm/releases/bin/releases || { echo "::error::apps/cli/npm/releases/bin/releases is missing or not executable"; exit 1; }
+
       - name: Publish to npm (OIDC trusted publishing)
         if: steps.check.outputs.already == 'false'
         env:
@@ -222,6 +229,7 @@ jobs:
 
           gh release create "v${VERSION}" \
             --target "${GITHUB_SHA}" \
+            --latest \
             --title "v${VERSION}" \
             --notes "${NOTES:-CLI v${VERSION}. Install via brew or npm.}" \
             dist/release/releases-darwin-arm64.gz \

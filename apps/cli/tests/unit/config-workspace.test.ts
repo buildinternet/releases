@@ -8,6 +8,9 @@ import { getWorkDir, getRunsDir, expandHome } from "@buildinternet/releases-lib/
 // import), so a static import is safe as long as the env var is set before any
 // of the helpers below run — which it is (top-level assignment, then tests).
 const dir = mkdtempSync(join(tmpdir(), "rel-work-"));
+// The canonical name wins over the legacy one and bun autoloads the repo-root .env,
+// so drop any inherited value before pointing the data dir at a temp dir.
+delete process.env.RELEASES_DATA_DIR;
 process.env.RELEASED_DATA_DIR = dir;
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));

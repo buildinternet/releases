@@ -44,7 +44,7 @@
     "typecheck": "oxlint",
     "check": "bun run lint && bun run format:check",
     "clean:worktrees": "./scripts/clean-worktrees.sh",
-    "test": "bun test packages/ && bun test tests/ apps/web/ apps/mcp apps/webhooks && bun test apps/api && bun test apps/cli",
+    "test": "bun test packages/ && bun test ./tests/ apps/web/ apps/mcp apps/webhooks && bun test apps/api && bun test apps/cli",
     "eval:article-extract": "bun tests/evals/article-extract.eval.ts",
     "eval:breaking": "bun tests/evals/breaking.eval.ts",
     "eval:collection-summary": "bun tests/evals/collection-summary.eval.ts",

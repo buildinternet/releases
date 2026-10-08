@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "rel-creds-"));
+// The canonical name wins over the legacy one and bun autoloads the repo-root .env,
+// so drop any inherited value before pointing the data dir at a temp dir.
+delete process.env.RELEASES_DATA_DIR;
 process.env.RELEASED_DATA_DIR = dir;
 
 const { readCredential, writeCredential, clearCredential } =

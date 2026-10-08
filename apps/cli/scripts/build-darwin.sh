@@ -5,7 +5,7 @@
 # invalidates that signature. macOS kills (SIGKILL, exit 137) a binary whose
 # signature doesn't match its contents, and Linux has no `codesign` to fix it.
 # v0.77.0/v0.78.0 were cross-compiled on Linux and are killed on launch on
-# macOS 27. release.yml ships what this script builds, and test.yml runs it on
+# macOS 27. publish-cli.yml ships what this script builds, and ci.yml runs it on
 # every PR, so a signing regression fails CI instead of `brew upgrade`.
 set -euo pipefail
 
