@@ -138,7 +138,7 @@ export interface Env {
   /**
    * "Sign in with Releases" OAuth resource-server verification (#1483). The AS
    * origin (issuer + JWKS host) and this worker's expected audience. Both
-   * default to prod in code; staging overrides them to api-staging / mcp-staging.
+   * default to prod in code; staging overrides them to the releasenotesindex.dev hosts.
    */
   OAUTH_JWT_ISSUER?: string;
   OAUTH_JWT_AUDIENCE?: string;

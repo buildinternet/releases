@@ -332,10 +332,10 @@ describe("authTrustedOrigins", () => {
     // trustedOrigins (which wildcard-matches it) AND the CORS layer (matchesTrustedOrigin).
     const origins = authTrustedOrigins({
       BETTER_AUTH_TRUSTED_ORIGINS:
-        "https://releases.local.buildinternet.dev, *.releases.local.buildinternet.dev",
+        "https://local.releasenotesindex.dev, *.local.releasenotesindex.dev",
     } as never);
-    expect(origins).toContain("https://releases.local.buildinternet.dev");
-    expect(origins).toContain("*.releases.local.buildinternet.dev");
+    expect(origins).toContain("https://local.releasenotesindex.dev");
+    expect(origins).toContain("*.local.releasenotesindex.dev");
   });
 
   it("excludes loopback origins in production (family only)", () => {
@@ -496,28 +496,28 @@ describe("apiCorsMiddleware origin policy", () => {
   });
 
   it("matches a wildcard BETTER_AUTH_TRUSTED_ORIGINS entry against subdomains (incl. worktree hosts)", async () => {
-    const wild = "*.releases.local.buildinternet.dev";
+    const wild = "*.local.releasenotesindex.dev";
     expect(
-      await preflightOrigin("https://feat-x.releases.local.buildinternet.dev", {
+      await preflightOrigin("https://feat-x.local.releasenotesindex.dev", {
         ENVIRONMENT: "development",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
-    ).toBe("https://feat-x.releases.local.buildinternet.dev");
+    ).toBe("https://feat-x.local.releasenotesindex.dev");
     expect(
-      await preflightOrigin("https://deep.nested.releases.local.buildinternet.dev", {
+      await preflightOrigin("https://deep.nested.local.releasenotesindex.dev", {
         ENVIRONMENT: "production",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
-    ).toBe("https://deep.nested.releases.local.buildinternet.dev");
+    ).toBe("https://deep.nested.local.releasenotesindex.dev");
     // Apex not matched by `*.` → untrusted → public `*`.
     expect(
-      await preflightOrigin("https://releases.local.buildinternet.dev", {
+      await preflightOrigin("https://local.releasenotesindex.dev", {
         ENVIRONMENT: "development",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
     ).toBe("*");
     expect(
-      await preflightOrigin("https://evil-buildinternet.dev", {
+      await preflightOrigin("https://evil-releasenotesindex.dev", {
         ENVIRONMENT: "development",
         BETTER_AUTH_TRUSTED_ORIGINS: wild,
       }),
@@ -823,6 +823,25 @@ describe("session-presence hint cookie", () => {
     // A positive Max-Age (mirrors the session cookie) — not an immediate expiry.
     const maxAge = Number(/max-age=(-?\d+)/i.exec(hint!)?.[1]);
     expect(maxAge).toBeGreaterThan(0);
+  });
+
+  it("names the session cookie with BETTER_AUTH_COOKIE_PREFIX when set", async () => {
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(
+      { ...(env as object), BETTER_AUTH_COOKIE_PREFIX: "releases-staging" } as never,
+      undefined,
+      {
+        db: createTestDb(),
+        sendEmail: (m) => {
+          captured.push(m);
+        },
+      },
+    );
+
+    const { headers } = await verifiedSession(auth, captured);
+    const names = headers.getSetCookie().map((c) => c.split("=")[0]!.replace(/^__Secure-/, ""));
+    expect(names).toContain("releases-staging.session_token");
+    expect(names).not.toContain("better-auth.session_token");
   });
 
   it("is cleared on sign-out", async () => {

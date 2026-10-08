@@ -1177,6 +1177,12 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       crossSubDomainCookies: cookieDomain
         ? { enabled: true, domain: cookieDomain }
         : { enabled: false },
+      // Per-environment cookie names. Only staging sets one: its cookie domain
+      // (`.releasenotesindex.dev`) is a parent of the local dev hosts
+      // (`*.local.releasenotesindex.dev`), so with the default names a staging
+      // session would ride along to the local API. Prod keeps the default so
+      // existing sessions survive.
+      ...(env.BETTER_AUTH_COOKIE_PREFIX ? { cookiePrefix: env.BETTER_AUTH_COOKIE_PREFIX } : {}),
     },
   });
 }

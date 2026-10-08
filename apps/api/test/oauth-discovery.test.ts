@@ -10,10 +10,10 @@ import { buildApiProtectedResourceMetadata } from "../src/oauth-discovery";
 describe("buildApiProtectedResourceMetadata", () => {
   it("derives resource + authorization_servers from BETTER_AUTH_URL origin", () => {
     const doc = buildApiProtectedResourceMetadata({
-      BETTER_AUTH_URL: "https://api-staging.releases.sh/api/auth",
+      BETTER_AUTH_URL: "https://api.releasenotesindex.dev/api/auth",
     });
-    expect(doc.resource).toBe("https://api-staging.releases.sh");
-    expect(doc.authorization_servers).toEqual(["https://api-staging.releases.sh/api/auth"]);
+    expect(doc.resource).toBe("https://api.releasenotesindex.dev");
+    expect(doc.authorization_servers).toEqual(["https://api.releasenotesindex.dev/api/auth"]);
     expect(doc.scopes_supported).toEqual(["read", "write", "admin"]);
     expect(doc.bearer_methods_supported).toEqual(["header"]);
   });

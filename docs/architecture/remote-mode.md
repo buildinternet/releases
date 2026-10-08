@@ -293,7 +293,7 @@ grants `read`/`write`/`admin` on those surfaces.
 - **Additive, fail-consistent.** A JWT principal carries no forwardable
   credential (`token: null`), so MCP downstream `/v1/lookups` calls fall back to
   the root key (same as the `relu_` lane) and a JWT identity does **not** open
-  the mcp-staging access gate. A verification failure is ignored on a public
+  the staging MCP access gate. A verification failure is ignored on a public
   read (stays public) and rejected on a write/admin route — never a new mandatory
   gate on the previously-unauthenticated MCP path (constraint carried from
   #1482). JWT principals have no `api_tokens` row, so the `last_used_at` machine

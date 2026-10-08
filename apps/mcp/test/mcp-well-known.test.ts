@@ -25,12 +25,12 @@ describe("buildProtectedResourceMetadata", () => {
   it("derives resource + authorization_servers from the OAuth env vars", () => {
     const doc = buildProtectedResourceMetadata(
       env({
-        OAUTH_JWT_AUDIENCE: "https://mcp-staging.releases.sh",
-        OAUTH_JWT_ISSUER: "https://api-staging.releases.sh/api/auth",
+        OAUTH_JWT_AUDIENCE: "https://mcp.releasenotesindex.dev",
+        OAUTH_JWT_ISSUER: "https://api.releasenotesindex.dev/api/auth",
       }),
     );
-    expect(doc.resource).toBe("https://mcp-staging.releases.sh");
-    expect(doc.authorization_servers).toEqual(["https://api-staging.releases.sh/api/auth"]);
+    expect(doc.resource).toBe("https://mcp.releasenotesindex.dev");
+    expect(doc.authorization_servers).toEqual(["https://api.releasenotesindex.dev/api/auth"]);
     expect(doc.scopes_supported).toEqual(["read", "write", "admin"]);
     expect(doc.bearer_methods_supported).toEqual(["header"]);
   });
@@ -84,8 +84,8 @@ describe("protectedResourceMetadataUrl", () => {
     expect(protectedResourceMetadataUrl("https://mcp.releases.sh/mcp")).toBe(
       `https://mcp.releases.sh${PROTECTED_RESOURCE_PATH}`,
     );
-    expect(protectedResourceMetadataUrl("https://mcp-staging.releases.sh/mcp")).toBe(
-      `https://mcp-staging.releases.sh${PROTECTED_RESOURCE_PATH}`,
+    expect(protectedResourceMetadataUrl("https://mcp.releasenotesindex.dev/mcp")).toBe(
+      `https://mcp.releasenotesindex.dev${PROTECTED_RESOURCE_PATH}`,
     );
   });
 });

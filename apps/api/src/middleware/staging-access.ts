@@ -28,7 +28,7 @@ export function isStagingGateExemptPath(pathname: string): boolean {
  * `STAGING_GATE_EXEMPT_PATHS` (public, secret-free endpoints). CORS preflight is
  * handled earlier by `apiCorsMiddleware`, so OPTIONS never reaches this middleware.
  *
- * Holdover until Cloudflare Access is in front of `*-staging.releases.sh`
+ * Holdover until Cloudflare Access is in front of the staging hosts (`api.releasenotesindex.dev`, `mcp.releasenotesindex.dev`)
  * (see issue #444). Skipping the binding in prod/local leaves behavior unchanged.
  */
 export function stagingAccessGate(): MiddlewareHandler<{

@@ -199,7 +199,7 @@ describe("staging gate precedes the sign-in challenge", () => {
   it("no staging key -> generic 401, no WWW-Authenticate leaked", async () => {
     const stagingEnv = baseEnv({ STAGING_ACCESS_KEY: mockSecret("stage-key") as never });
     const r = await resolveMcpAuth(
-      toolCallReq("https://mcp-staging.releases.sh/mcp", "follow"),
+      toolCallReq("https://mcp.releasenotesindex.dev/mcp", "follow"),
       stagingEnv,
     );
     expect(r.ok).toBe(false);
@@ -212,7 +212,7 @@ describe("staging gate precedes the sign-in challenge", () => {
   it("with the staging key -> the gate passes and the sign-in challenge fires", async () => {
     const stagingEnv = baseEnv({ STAGING_ACCESS_KEY: mockSecret("stage-key") as never });
     const r = await resolveMcpAuth(
-      toolCallReq("https://mcp-staging.releases.sh/mcp", "follow", {
+      toolCallReq("https://mcp.releasenotesindex.dev/mcp", "follow", {
         "X-Releases-Staging-Key": "stage-key",
       }),
       stagingEnv,

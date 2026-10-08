@@ -102,8 +102,8 @@ describe("defaultJwksUrl", () => {
     expect(defaultJwksUrl("https://api.releases.sh/api/auth")).toBe(
       "https://api.releases.sh/api/auth/jwks",
     );
-    expect(defaultJwksUrl("https://api-staging.releases.sh/api/auth")).toBe(
-      "https://api-staging.releases.sh/api/auth/jwks",
+    expect(defaultJwksUrl("https://api.releasenotesindex.dev/api/auth")).toBe(
+      "https://api.releasenotesindex.dev/api/auth/jwks",
     );
   });
   it("derives the same URL from a bare origin (robust either way)", () => {
@@ -299,9 +299,9 @@ describe("mcpResourceAndOrigin", () => {
   });
 
   it("treats a trailing slash on /mcp the same as /mcp", () => {
-    expect(mcpResourceAndOrigin("https://mcp-staging.releases.sh/mcp/")).toEqual([
-      "https://mcp-staging.releases.sh/mcp/",
-      "https://mcp-staging.releases.sh",
+    expect(mcpResourceAndOrigin("https://mcp.releasenotesindex.dev/mcp/")).toEqual([
+      "https://mcp.releasenotesindex.dev/mcp/",
+      "https://mcp.releasenotesindex.dev",
     ]);
   });
 

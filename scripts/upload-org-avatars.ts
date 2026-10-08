@@ -21,7 +21,7 @@
  *     --manifest /path/to/manifest.csv
  *
  *   # apply against staging (sets X-Releases-Staging-Key from env)
- *   RELEASES_API_URL=https://api-staging.releases.sh \
+ *   RELEASES_API_URL=https://api.releasenotesindex.dev \
  *   RELEASES_API_KEY=... \
  *   STAGING_ACCESS_KEY=... \
  *   bun scripts/upload-org-avatars.ts --manifest /path/to/manifest.csv --apply

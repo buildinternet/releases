@@ -128,7 +128,7 @@ export function mountOpenApi(v1: Hono<Env>) {
           servers: isStaging
             ? [
                 {
-                  url: "https://api-staging.releases.sh",
+                  url: "https://api.releasenotesindex.dev",
                   description: "Staging (access-key gated)",
                 },
               ]
@@ -151,7 +151,7 @@ export function mountOpenApi(v1: Hono<Env>) {
                   in: "header",
                   name: "X-Releases-Staging-Key",
                   description:
-                    "Staging hosts gate every request behind this header. Bearer alternative also accepted on mcp-staging.",
+                    "Staging hosts gate every request behind this header. Bearer alternative also accepted on the staging MCP host.",
                 },
               }),
             },

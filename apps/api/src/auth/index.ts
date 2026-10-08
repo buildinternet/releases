@@ -401,7 +401,7 @@ function globToHostRegExp(pattern: string): RegExp {
  * `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds explicit extras — a Vercel
  * preview origin, or the portless custom-TLD dev host (Google/Apple OAuth accept a
  * real TLD where the `*.releases.localhost` portless hosts are rejected). Entries
- * may be exact origins OR host wildcards (`*.releases.local.buildinternet.dev`),
+ * may be exact origins OR host wildcards (`*.local.releasenotesindex.dev`),
  * which Better Auth's origin check and {@link matchesTrustedOrigin} both honor — a
  * single wildcard entry covers worktree-prefixed dev hosts. The dev origin lives in
  * config (`.dev.vars`), not hard-coded here, so nothing org-specific ships in code.
@@ -780,6 +780,7 @@ async function authCacheKey(env: Bindings): Promise<string> {
     BETTER_AUTH_URL: env.BETTER_AUTH_URL ?? "",
     WEB_BASE_URL: env.WEB_BASE_URL ?? "",
     BETTER_AUTH_COOKIE_DOMAIN: env.BETTER_AUTH_COOKIE_DOMAIN ?? "",
+    BETTER_AUTH_COOKIE_PREFIX: env.BETTER_AUTH_COOKIE_PREFIX ?? "",
     BETTER_AUTH_TRUSTED_ORIGINS: env.BETTER_AUTH_TRUSTED_ORIGINS ?? "",
     BETTER_AUTH_IDENTIFY_URL: env.BETTER_AUTH_IDENTIFY_URL ?? "",
     OAUTH_RESOURCE_AUDIENCES: env.OAUTH_RESOURCE_AUDIENCES ?? "",
