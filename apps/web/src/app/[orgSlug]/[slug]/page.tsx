@@ -2,14 +2,13 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { currentPeriod } from "@/lib/schema-org";
-import { getOrg } from "../_lib/org-data";
+import { collapsesToOrg, getOrg } from "../_lib/org-data";
 import { getResolved } from "./_lib/resolve";
 import { getSource } from "./_lib/source-data";
 import { getProductPage } from "./_lib/product-data";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
-import { sourceCanonicalPath } from "@/lib/links";
 
 // On-demand ISR: render once per product/source on first request, then serve
 // from cache (regenerated on ingest via POST /api/revalidate; 24h backstop).
@@ -58,7 +57,7 @@ export async function generateMetadata({
     const source = resolved.source;
     const orgName = source.org?.name ?? orgSlug;
     const shouldNoIndex = source.isHidden || source.discovery === "on_demand" || orgIsHidden;
-    const canonical = sourceCanonicalPath(source, orgSlug, slug);
+    const canonical = `/${orgSlug}/${slug}`;
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
@@ -101,12 +100,8 @@ export default async function OrgSlugPage({
   }
 
   if (resolved.kind === "product") {
-    // Single-product collapse: with ≤1 product the org page is already this
-    // product's feed, so the product page would be duplicate content. 308 home.
     const org = await getOrg(orgSlug);
-    if (org.products.length <= 1) {
-      permanentRedirect(`/${orgSlug}`);
-    }
+    if (collapsesToOrg(org)) permanentRedirect(`/${orgSlug}`);
     // Critical path via ProductPage GraphQL: identity + sources + collections
     // + first product-scoped feed page. Overview / activity / heatmap stay on
     // fail-open REST inside ProductView (#2047). REST fallback inside

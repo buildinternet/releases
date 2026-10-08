@@ -5,7 +5,7 @@ import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
-import { getSourceById } from "../_lib/source-by-id";
+import { getSourceById, sourceHomePath } from "../_lib/source-by-id";
 
 export async function generateMetadata({
   params,
@@ -19,8 +19,8 @@ export async function generateMetadata({
     return {
       title: `${source.name} Changelog File — ${orgName}`,
       description: `Read the CHANGELOG.md file from the ${source.name} repository by ${orgName}.`,
-      openGraph: { type: "website", url: `/sources/${id}/changelog` },
-      alternates: { canonical: `/sources/${id}/changelog` },
+      openGraph: { type: "website", url: `${sourceHomePath(source, id)}/changelog` },
+      alternates: { canonical: `${sourceHomePath(source, id)}/changelog` },
     };
   } catch {
     return { title: id };
@@ -59,21 +59,21 @@ export default async function SourceByIdChangelogPage({
     throw err;
   }
 
-  // Orphan source (has org, no productId) → canonical changelog is the bare path.
-  if (source.org && !source.productId) {
-    permanentRedirect(`/${source.org.slug}/${source.slug}/changelog`);
+  // A source with an org lives at its bare URL; this path is only an alias.
+  if (source.org) {
+    // Keep a search deep-link's `path` / `offset` across the hop.
+    const qs = new URLSearchParams();
+    if (changelogPath) qs.set("path", changelogPath);
+    if (offsetParam) qs.set("offset", offsetParam);
+    const query = qs.size ? `?${qs}` : "";
+    permanentRedirect(`${sourceHomePath(source, id)}/changelog${query}`);
   }
 
   if (!source.hasChangelogFile) notFound();
 
-  const orgSlug = source.org?.slug ?? "";
-  // Member sources are canonical at /sources/:id; sourceless too; only a non-member
-  // with an org uses bare (orphans-with-org are redirected above).
-  const sourceUrl = source.productId
-    ? `https://releases.sh/sources/${id}`
-    : source.org
-      ? `https://releases.sh/${source.org.slug}/${source.slug}`
-      : `https://releases.sh/sources/${id}`;
+  const orgSlug = "";
+  // Only reached for a source with no org (the rest redirected above).
+  const sourceUrl = `https://releases.sh/sources/${id}`;
   const pageUrl = `https://releases.sh/sources/${id}/changelog`;
 
   const jsonLd = {

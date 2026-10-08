@@ -14,15 +14,6 @@ export const SitemapSourceSchema = z.object({
   id: z.string().optional(),
   orgSlug: z.string(),
   slug: z.string(),
-  /**
-   * Owning product id, or `null` for an orphan source. Drives where the web
-   * sitemap lists the source: product members are canonical at
-   * `/sources/:id` (where the product page links them), orphans at the bare
-   * `/{org}/{slug}`. `.optional()` for backwards compatibility — an
-   * older/cached response omits it and the web keeps its slug-collision
-   * routing.
-   */
-  productId: z.string().nullable().optional(),
   latestDate: z.string().nullable(),
   /**
    * Whether this source has a stored GitHub CHANGELOG file. Used by the web

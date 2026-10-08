@@ -20,24 +20,9 @@ export function productPath(orgSlug: string | null, productSlug: string): string
   return orgSlug ? `/${orgSlug}/${productSlug}` : `/product/${productSlug}`;
 }
 
-/** ID-keyed source page. The stable home for product-member / shadowed sources. */
+/** ID-keyed source URL: a 308 alias to the bare `/{org}/{slug}` (canonical only for an org-less source). */
 export function sourceIdPath(sourceId: string): string {
   return `/sources/${sourceId}`;
-}
-
-/**
- * Canonical base path for a source reached at its bare `/{org}/{slug}` URL. A
- * product member is canonical at `/sources/:id` (where the product page links
- * it, and where the sitemap lists it); an orphan keeps the bare path. Without
- * this the bare copy and `/sources/:id` each self-canonicalize — two indexable
- * URLs for one page.
- */
-export function sourceCanonicalPath(
-  source: { id: string; productId?: string | null },
-  orgSlug: string,
-  slug: string,
-): string {
-  return source.productId ? sourceIdPath(source.id) : `/${orgSlug}/${slug}`;
 }
 
 /**

@@ -135,6 +135,13 @@ export async function listOrgDirectoryPage(
 }
 
 /**
+ * "Product is surfaced publicly": at least one visible source. Single
+ * definition shared by org detail (`listOrgVisibleProducts`) and the sitemap
+ * so the two product sets can't drift.
+ */
+export const PRODUCT_HAS_VISIBLE_SOURCE = sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = products_active.id)`;
+
+/**
  * An org's products for its detail read (`GET /v1/orgs/:slug`, MCP
  * `get_organization`): live products with at least one visible source,
  * ordered by name. Counts are visible-only, so a product whose sources are
@@ -153,11 +160,6 @@ export async function listOrgVisibleProducts(db: AnyDb, orgId: string) {
       releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_visible sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
     })
     .from(productsActive)
-    .where(
-      and(
-        eq(productsActive.orgId, orgId),
-        sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = products_active.id)`,
-      ),
-    )
+    .where(and(eq(productsActive.orgId, orgId), PRODUCT_HAS_VISIBLE_SOURCE))
     .orderBy(productsActive.name);
 }

@@ -29,6 +29,7 @@ import {
   type EffectiveCategoryDb,
 } from "@releases/core-internal/effective-category";
 import { logEvent } from "@releases/lib/log-event";
+import { isSlugHeldByProduct, isSlugHeldBySource } from "@releases/queries/entities";
 import type { createDb } from "../../db.js";
 
 type Db = ReturnType<typeof drizzle>;
@@ -202,12 +203,21 @@ export async function materializeAppStoreSource(
   // Product (curated, always). Prefer caller-supplied slug, else app name.
   const kind = coord.platform === "macos" ? "desktop" : "mobile";
   const icon = listing.artworkUrl512 ? upscaleArtwork(listing.artworkUrl512) : null;
-  const productSlug = (params.productSlug ?? toSlug(listing.trackName)).toLowerCase();
+  let productSlug = (params.productSlug ?? toSlug(listing.trackName)).toLowerCase();
   const [existingProduct] = await db
     .select()
     .from(productsActive)
     .where(and(eq(productsActive.orgId, resolvedOrgId), eq(productsActive.slug, productSlug)))
     .limit(1);
+  // Products and sources share the `/{org}/{slug}` namespace: a new product may
+  // not take a slug an existing source in the org already holds.
+  if (!existingProduct) {
+    const baseProductSlug = productSlug;
+    // oxlint-disable-next-line no-await-in-loop -- sequential candidate probe
+    for (let n = 1; await isSlugHeldBySource(db, resolvedOrgId, productSlug); n++) {
+      productSlug = n === 1 ? `${baseProductSlug}-app` : `${baseProductSlug}-app-${n}`;
+    }
+  }
   let productId: string;
   if (existingProduct) {
     productId = existingProduct.id;
@@ -226,9 +236,13 @@ export async function materializeAppStoreSource(
     });
   }
 
-  // Source (curated, visible). Slug is `<product>-<platform>`.
+  // Source (curated, visible). Slug is `<product>-<platform>`, or
+  // `<product>-<platform>-releases` if a product already owns that slug.
   const sourceId = newSourceId();
-  const sourceSlug = `${productSlug}-${coord.platform}`;
+  const platformSlug = `${productSlug}-${coord.platform}`;
+  const sourceSlug = (await isSlugHeldByProduct(db, resolvedOrgId, platformSlug))
+    ? `${platformSlug}-releases`
+    : platformSlug;
   // NOTE: concurrent POSTs for the same new trackId both clear the idempotency
   // check above, then race on UNIQUE(org_id, slug) for the product/source inserts.
   // This endpoint is admin-gated + low-concurrency, so a rare 500 on a true race is

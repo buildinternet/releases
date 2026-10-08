@@ -20,6 +20,7 @@ import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate"
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
 import { loadReleaseLocations } from "@releases/queries/release-locations";
+import { isSlugHeldByProduct } from "@releases/queries/entities";
 import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/search/lookup-related-org.js";
 import { readNegCache, writeNegCache } from "../lib/search/lookup-neg-cache.js";
 import { createDb } from "../db.js";
@@ -270,7 +271,13 @@ export async function runLookup(
     // safe to use directly — an org by definition can't have two repos with
     // the same name. The only remaining race is a concurrent request for the
     // same coordinate; on UNIQUE error we re-read by URL.
-    const repoSlug = parsed.repo.toLowerCase();
+    // Products and sources share `/{org}/{slug}`: if a product already owns
+    // the repo name, the source takes `<repo>-releases` (same rule as source
+    // create).
+    const bareRepoSlug = parsed.repo.toLowerCase();
+    const repoSlug = (await isSlugHeldByProduct(db, orgId, bareRepoSlug))
+      ? `${bareRepoSlug}-releases`
+      : bareRepoSlug;
     const repoName = probe.repoName ?? parsed.repo;
     try {
       const [row] = await db

@@ -18,6 +18,7 @@ import {
   products,
   productsActive,
   sources,
+  sourcesActive,
 } from "@buildinternet/releases-core/schema";
 import type { AnyDb } from "@releases/lib/db";
 
@@ -208,4 +209,33 @@ export async function findLiveParents(
       : Promise.resolve([]),
   ]);
   return { org: orgRows[0] ?? null, product: productRows[0] ?? null };
+}
+
+/**
+ * Products and sources share the public `/{org}/{slug}` namespace, so within
+ * one org a product slug and a source slug may never be equal. These two
+ * lookups back that invariant at every write path. Soft-deleted rows (their
+ * slugs are tombstoned to `<slug>--<id>`) do not hold a slug; hidden sources do.
+ */
+export async function isSlugHeldByProduct(
+  db: AnyDb,
+  orgId: string,
+  slug: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: productsActive.id })
+    .from(productsActive)
+    .where(and(eq(productsActive.orgId, orgId), eq(productsActive.slug, slug)))
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Sibling of `isSlugHeldByProduct`: is the slug held by a live source in the org? */
+export async function isSlugHeldBySource(db: AnyDb, orgId: string, slug: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: sourcesActive.id })
+    .from(sourcesActive)
+    .where(and(eq(sourcesActive.orgId, orgId), eq(sourcesActive.slug, slug)))
+    .limit(1);
+  return Boolean(row);
 }

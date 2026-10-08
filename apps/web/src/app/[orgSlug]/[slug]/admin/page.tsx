@@ -4,7 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { ProductAdminPanel } from "@/components/product-admin-panel";
 import { isAdminViewer } from "@/lib/server-session";
 import { ApiNotFoundError, ApiSetupError } from "@/lib/api";
-import { getOrg } from "../../_lib/org-data";
+import { collapsesToOrg, getOrg } from "../../_lib/org-data";
 import { getResolved } from "../_lib/resolve";
 import { getProductById } from "../_lib/product-data";
 
@@ -44,9 +44,7 @@ export default async function ProductAdminPage({
   } catch {
     notFound();
   }
-  if (org.products.length <= 1) {
-    permanentRedirect(`/${orgSlug}/admin`);
-  }
+  if (collapsesToOrg(org)) permanentRedirect(`/${orgSlug}/admin`);
 
   const product = await getProductById({
     id: resolved.product.id,

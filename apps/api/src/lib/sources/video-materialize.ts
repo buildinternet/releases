@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { isSlugHeldByProduct } from "@releases/queries/entities";
 import type { createDb } from "../../db.js";
 import { organizationsActive, sources, sourcesActive } from "@buildinternet/releases-core/schema";
 import { newSourceId } from "@buildinternet/releases-core/id";
@@ -42,7 +43,8 @@ async function ensureUniqueSourceSlug(
       .from(sources)
       .where(and(eq(sources.orgId, orgId), eq(sources.slug, candidate)))
       .limit(1);
-    if (!hit) return candidate;
+    // Products and sources share `/{org}/{slug}`: a product's slug is taken too.
+    if (!hit && !(await isSlugHeldByProduct(db, orgId, candidate))) return candidate;
   }
   // 50 same-named sources in one org is implausible; fall back to a unique id.
   return `${root}-${newSourceId()}`;

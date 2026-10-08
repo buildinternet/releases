@@ -6,7 +6,6 @@ import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
 import { getSource } from "../_lib/source-data";
-import { sourceCanonicalPath } from "@/lib/links";
 import { getResolved } from "../_lib/resolve";
 
 export async function generateMetadata({
@@ -18,7 +17,7 @@ export async function generateMetadata({
   try {
     const source = await getSource(orgSlug, slug);
     const orgName = source.org?.name ?? orgSlug;
-    const canonical = `${sourceCanonicalPath(source, orgSlug, slug)}/changelog`;
+    const canonical = `/${orgSlug}/${slug}/changelog`;
     return {
       title: `${source.name} Changelog File — ${orgName}`,
       description: `Read the CHANGELOG.md file from the ${source.name} repository by ${orgName}.`,

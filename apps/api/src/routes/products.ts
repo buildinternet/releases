@@ -6,6 +6,7 @@ import { and, count, eq, inArray, max, min, sql, type SQL } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
 import { listProductSources } from "@releases/queries/catalog";
+import { isSlugHeldByProduct, isSlugHeldBySource } from "@releases/queries/entities";
 import { createDb } from "../db.js";
 import {
   products,
@@ -83,18 +84,45 @@ const stripProductMetadata = <T extends { metadata?: string | null }>(
   return rest;
 };
 
-async function detectSourceSlugShadow(
+/** 409 for a product slug already held by a source (shared `/{org}/{slug}` namespace). */
+const sourceSlugConflict = (slug: string) =>
+  new ConflictError(`Slug "${slug}" is already used by a source in this org`, {
+    details: { slug, heldBy: "source" },
+  });
+
+/**
+ * Adopt moves every source of the absorbed org into the target org. Each moved
+ * slug must stay free in the target org's shared `/{org}/{slug}` namespace —
+ * not the new product's slug, not an existing product's, not an existing
+ * source's. Returns the clashing slugs (empty when the move is safe) so the
+ * caller can refuse with all of them at once rather than failing mid-move.
+ */
+async function adoptSlugClashes(
   db: ReturnType<typeof createDb>,
-  orgId: string,
-  slug: string,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ id: sources.id })
-    .from(sources)
-    .where(and(eq(sources.orgId, orgId), eq(sources.slug, slug)))
-    .limit(1);
-  return Boolean(row);
+  targetOrgId: string,
+  movedSlugs: readonly string[],
+  newProductSlug: string | null,
+): Promise<string[]> {
+  const clashes: string[] = [];
+  for (const slug of movedSlugs) {
+    if (
+      slug === newProductSlug ||
+      // oxlint-disable-next-line no-await-in-loop -- a handful of sources per adopted org
+      (await isSlugHeldByProduct(db, targetOrgId, slug)) ||
+      // oxlint-disable-next-line no-await-in-loop -- same
+      (await isSlugHeldBySource(db, targetOrgId, slug))
+    ) {
+      clashes.push(slug);
+    }
+  }
+  return clashes;
 }
+
+const adoptClashConflict = (slugs: string[]) =>
+  new ConflictError(
+    `Moving these sources would reuse a slug already taken in the target org: ${slugs.join(", ")}. Rename them first.`,
+    { details: { slugs } },
+  );
 
 /**
  * Shared product-list query for the bare `GET /products` collection and the
@@ -337,6 +365,14 @@ productRoutes.post(
         );
       }
 
+      const mergeClashes = await adoptSlugClashes(
+        db,
+        targetOrg.id,
+        sourcesToMove.map((src) => src.slug),
+        null,
+      );
+      if (mergeClashes.length > 0) return respondError(c, adoptClashConflict(mergeClashes));
+
       if (body.dryRun) {
         return c.json({
           dryRun: true,
@@ -372,6 +408,17 @@ productRoutes.post(
         ),
       );
     }
+
+    if (await isSlugHeldBySource(db, targetOrg.id, productSlug)) {
+      return respondError(c, sourceSlugConflict(productSlug));
+    }
+    const clashes = await adoptSlugClashes(
+      db,
+      targetOrg.id,
+      sourcesToMove.map((src) => src.slug),
+      productSlug,
+    );
+    if (clashes.length > 0) return respondError(c, adoptClashConflict(clashes));
 
     const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
@@ -614,14 +661,8 @@ productRoutes.post(
       );
     }
 
-    const shadowed = await detectSourceSlugShadow(db, org.id, slug);
-    if (shadowed) {
-      logEvent("warn", {
-        component: "products",
-        event: "slug-shadows-source",
-        orgId: org.id,
-        slug,
-      });
+    if (await isSlugHeldBySource(db, org.id, slug)) {
+      return respondError(c, sourceSlugConflict(slug));
     }
 
     try {
@@ -654,15 +695,7 @@ productRoutes.post(
       }
 
       c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
-      return c.json(
-        shadowed
-          ? {
-              ...stripProductMetadata(created),
-              warning: `Product slug "${slug}" shadows an existing source in this org; the product will win the bare URL.`,
-            }
-          : stripProductMetadata(created),
-        201,
-      );
+      return c.json(stripProductMetadata(created), 201);
     } catch (err) {
       if (isConflictError(err)) {
         return respondError(c, new ConflictError(`Product with slug "${slug}" already exists`));

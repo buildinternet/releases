@@ -57,73 +57,7 @@ describe("buildEntitySitemapEntries", () => {
     expect(result).toEqual([]);
   });
 
-  test("shadowed source in a multi-product org (slug collides, has id) → exactly one /sources/:id, no sub-tabs", () => {
-    const payload: SitemapPayload = {
-      orgs: [],
-      products: [
-        { orgSlug: "vercel", slug: "turborepo" },
-        { orgSlug: "vercel", slug: "next-js" },
-      ],
-      sources: [
-        {
-          id: "src_abc123",
-          orgSlug: "vercel",
-          slug: "turborepo",
-          latestDate: "2026-03-15T00:00:00Z",
-          hasChangelog: true,
-          hasHighlights: true,
-        },
-      ],
-      collections: [],
-    };
-
-    const result = urls(payload);
-    // The product owns the bare /vercel/turborepo URL; the shadowed source is
-    // routed to /sources/:id and emits nothing else.
-    expect(result).toContain(`${BASE}/sources/src_abc123`);
-    // Exactly one entry for the shadowed source's id.
-    expect(result.filter((u) => u === `${BASE}/sources/src_abc123`)).toHaveLength(1);
-    // No sub-tabs for the shadowed source despite hasChangelog/hasHighlights.
-    expect(result.some((u) => u.endsWith("/sources/src_abc123/changelog"))).toBe(false);
-    expect(result.some((u) => u.endsWith("/sources/src_abc123/highlights"))).toBe(false);
-    // The product (multi-product org) still claims the bare org/slug URL exactly once.
-    expect(result.filter((u) => u === `${BASE}/vercel/turborepo`)).toHaveLength(1);
-  });
-
-  test("shadowed source in a SINGLE-product org → still routed to /sources/:id even though the product entry is filtered", () => {
-    // Regression guard for the single-product filter: shadow detection
-    // (`productKeys`) must be built from the FULL product set, not the
-    // filtered/emitted set. Otherwise filtering the single product would
-    // un-shadow its colliding source, which would then wrongly claim the bare
-    // /[org]/[slug] URL — the same URL that resolves product-first and
-    // 308-redirects at runtime.
-    const payload: SitemapPayload = {
-      orgs: [],
-      products: [{ orgSlug: "vercel", slug: "turborepo" }],
-      sources: [
-        {
-          id: "src_abc123",
-          orgSlug: "vercel",
-          slug: "turborepo",
-          latestDate: "2026-03-15T00:00:00Z",
-          hasChangelog: true,
-          hasHighlights: true,
-        },
-      ],
-      collections: [],
-    };
-
-    const result = urls(payload);
-    // Source is still shadowed → /sources/:id (a real, non-redirecting page).
-    expect(result).toContain(`${BASE}/sources/src_abc123`);
-    // The product entry is filtered AND the source does not fall back to the
-    // bare URL, so the redirecting /vercel/turborepo never appears.
-    expect(result.some((u) => u === `${BASE}/vercel/turborepo`)).toBe(false);
-    // No sub-tabs for the shadowed source.
-    expect(result).toEqual([`${BASE}/sources/src_abc123`]);
-  });
-
-  test("non-shadowed source with hasChangelog/hasHighlights → bare URL + both sub-tabs", () => {
+  test("source with hasChangelog/hasHighlights → bare URL + both sub-tabs", () => {
     const payload: SitemapPayload = {
       orgs: [],
       products: [
@@ -171,100 +105,29 @@ describe("buildEntitySitemapEntries", () => {
     const result = urls(payload);
     expect(result).toEqual([`${BASE}/solo/only-source`]);
   });
-
-  test("shadowed source in a multi-product org missing an id → degrades to bare URL + sub-tabs (no /sources/undefined)", () => {
-    const payload: SitemapPayload = {
-      orgs: [],
-      products: [
-        { orgSlug: "vercel", slug: "turborepo" },
-        { orgSlug: "vercel", slug: "next-js" },
-      ],
-      sources: [
-        {
-          // id omitted — simulates a stale/cached payload from an older worker.
-          orgSlug: "vercel",
-          slug: "turborepo",
-          latestDate: null,
-          hasChangelog: true,
-          hasHighlights: false,
-        },
-      ],
-      collections: [],
-    };
-
-    const result = urls(payload);
-    // Never emit /sources/undefined.
-    expect(result.some((u) => u.includes("/sources/"))).toBe(false);
-    // Falls back to the bare URL + the flagged sub-tab. (Two bare /vercel/turborepo
-    // entries are fine: one from the product, one from the degraded source.)
-    expect(result).toContain(`${BASE}/vercel/turborepo`);
-    expect(result).toContain(`${BASE}/vercel/turborepo/changelog`);
-    expect(result.some((u) => u.endsWith("/highlights"))).toBe(false);
-  });
 });
 
-describe("buildEntitySitemapEntries — productId routing", () => {
-  const products = [
-    { orgSlug: "openai", slug: "chatgpt" },
-    { orgSlug: "openai", slug: "codex" },
-  ];
-
-  test("product member → /sources/:id + sub-tabs, never the bare URL nothing links to", () => {
-    // The product page links members at /sources/:id and the bare copy
-    // canonicals there, so the bare URL would be an orphaned duplicate.
+describe("buildEntitySitemapEntries — one URL per source", () => {
+  test("a product member is listed at its bare URL, never /sources/:id", () => {
     const result = urls({
       orgs: [],
-      products,
+      products: [
+        { orgSlug: "openai", slug: "chatgpt" },
+        { orgSlug: "openai", slug: "codex" },
+      ],
       sources: [
         {
           id: "src_ios",
           orgSlug: "openai",
           slug: "chatgpt-ios",
-          productId: "prod_chatgpt",
           latestDate: null,
           hasChangelog: true,
-          hasHighlights: true,
         },
       ],
       collections: [],
     });
-    expect(result).toContain(`${BASE}/sources/src_ios`);
-    expect(result).toContain(`${BASE}/sources/src_ios/changelog`);
-    expect(result).toContain(`${BASE}/sources/src_ios/highlights`);
-    expect(result).not.toContain(`${BASE}/openai/chatgpt-ios`);
-  });
-
-  test("orphan source whose slug collides with a product → omitted (both its URLs redirect to the product)", () => {
-    const result = urls({
-      orgs: [],
-      products,
-      sources: [
-        { id: "src_codex", orgSlug: "openai", slug: "codex", productId: null, latestDate: null },
-      ],
-      collections: [],
-    });
-    expect(result).not.toContain(`${BASE}/sources/src_codex`);
-    expect(result.filter((u) => u === `${BASE}/openai/codex`)).toHaveLength(1);
-  });
-
-  test("orphan source without a collision → bare URL + sub-tabs", () => {
-    const result = urls({
-      orgs: [],
-      products,
-      sources: [
-        {
-          id: "src_news",
-          orgSlug: "openai",
-          slug: "openai-news",
-          productId: null,
-          latestDate: null,
-          hasHighlights: true,
-        },
-      ],
-      collections: [],
-    });
-    expect(result).toContain(`${BASE}/openai/openai-news`);
-    expect(result).toContain(`${BASE}/openai/openai-news/highlights`);
+    expect(result).toContain(`${BASE}/openai/chatgpt-ios`);
+    expect(result).toContain(`${BASE}/openai/chatgpt-ios/changelog`);
     expect(result.some((u) => u.includes("/sources/"))).toBe(false);
   });
 });

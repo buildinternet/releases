@@ -33,7 +33,7 @@ The `search` tool echoes the applied `kind` (and `type` section) filter back on 
 
 ## Products
 
-Products are an **optional** grouping layer between orgs and sources (nullable `productId`). Multi-product orgs (e.g. Vercel → Next.js, Turborepo) use them; simple orgs skip the layer. Once an org has 2+ products, the product becomes the primary UI unit — see [web.md → Product-first URL resolution](web.md).
+Products are an **optional** grouping layer between orgs and sources (nullable `productId`). Multi-product orgs (e.g. Vercel → Next.js, Turborepo) use them; simple orgs skip the layer. Once an org has 2+ products, the product becomes the primary UI unit — see [web.md → Product and source URLs](web.md#product-and-source-urls).
 
 ## Release type
 
