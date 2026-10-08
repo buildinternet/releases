@@ -1,0 +1,8 @@
+-- Marker migration: no DDL.
+-- packages/core/src/schema.ts changed `collections.weekly_digest_enabled` from
+-- `.default(false)` to `.$defaultFn(() => true)`, so new collections generate
+-- weekly digests by default. The default is supplied app-side by drizzle on
+-- insert; the column's DDL DEFAULT stays 0 (SQLite can't alter a column default
+-- without rebuilding `collections`, which other tables reference). Existing rows
+-- are intentionally untouched. The CI schema-pairing gate requires a migration
+-- for any schema-file edit; this file satisfies it without changing the schema.

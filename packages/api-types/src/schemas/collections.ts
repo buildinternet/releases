@@ -171,6 +171,8 @@ export const UpdateCollectionRequestSchema = z.object({
   isFeatured: z.boolean().optional(),
   /** Enable or disable the nightly daily-summary generation for this collection. */
   dailySummaryEnabled: z.boolean().optional(),
+  /** Enable or disable the nightly weekly-digest generation for this collection (on by default for new collections). */
+  weeklyDigestEnabled: z.boolean().optional(),
 });
 
 /**

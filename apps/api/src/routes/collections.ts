@@ -1006,6 +1006,9 @@ collectionRoutes.patch(
     if (body.dailySummaryEnabled !== undefined) {
       updates.dailySummaryEnabled = body.dailySummaryEnabled;
     }
+    if (body.weeklyDigestEnabled !== undefined) {
+      updates.weeklyDigestEnabled = body.weeklyDigestEnabled;
+    }
 
     if (Object.keys(updates).length === 0) {
       return c.json(rowToWire(existing));

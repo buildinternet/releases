@@ -236,19 +236,19 @@ describe("collections", () => {
     expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["anthropic", "openai"]);
   });
 
-  it("exposes weeklyDigestEnabled on detail (default false, true once enabled)", async () => {
+  it("exposes weeklyDigestEnabled on detail (reflects the column)", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
     const url = "http://test/v1/collections/test-frontier-labs";
-    const off = (await (await fetch(new Request(url))).json()) as any;
-    expect(off.weeklyDigestEnabled).toBe(false);
+    const on0 = (await (await fetch(new Request(url))).json()) as any;
+    expect(on0.weeklyDigestEnabled).toBe(true);
     await db
       .update(collections)
-      .set({ weeklyDigestEnabled: true })
+      .set({ weeklyDigestEnabled: false })
       .where(eq(collections.slug, "test-frontier-labs"));
-    const on = (await (await fetch(new Request(url))).json()) as any;
-    expect(on.weeklyDigestEnabled).toBe(true);
+    const off = (await (await fetch(new Request(url))).json()) as any;
+    expect(off.weeklyDigestEnabled).toBe(false);
   });
 
   it("404s on unknown collection", async () => {
@@ -374,6 +374,37 @@ describe("collections (writes)", () => {
     expect(created.name).toBe("Inference Providers");
     expect(created.description).toBe("API-first inference.");
     expect(created.id.startsWith("col_")).toBe(true);
+    // New collections generate weekly digests by default (drizzle app-side default).
+    const [row] = await db.select().from(collections).where(eq(collections.id, created.id));
+    expect(row.weeklyDigestEnabled).toBe(true);
+  });
+
+  it("PATCH { weeklyDigestEnabled } turns weekly digests off and back on", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const slug = "test-empty-set";
+    const read = async () =>
+      (await db.select().from(collections).where(eq(collections.slug, slug)))[0]
+        .weeklyDigestEnabled;
+
+    const off = await fetch(
+      new Request(
+        `http://test/v1/collections/${slug}`,
+        json("PATCH", { weeklyDigestEnabled: false }),
+      ),
+    );
+    expect(off.status).toBe(200);
+    expect(await read()).toBe(false);
+
+    const on = await fetch(
+      new Request(
+        `http://test/v1/collections/${slug}`,
+        json("PATCH", { weeklyDigestEnabled: true }),
+      ),
+    );
+    expect(on.status).toBe(200);
+    expect(await read()).toBe(true);
   });
 
   it("rejects malformed slug with 400", async () => {
