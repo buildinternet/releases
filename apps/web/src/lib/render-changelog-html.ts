@@ -1,5 +1,6 @@
 import "server-only";
 import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
+import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 
 /**
  * Server-only. Renders a CHANGELOG slice's markdown to an HTML string.
@@ -22,8 +23,13 @@ import { renderBodyMarkdownToHtml } from "@/lib/render-release-body";
  * file virtually never carries these, and `rehype-stringify` emits the same
  * *sanitized* markup `react-markdown` did, so `dangerouslySetInnerHTML` adds no
  * injection surface.
+ *
+ * `fileUrl` is the file's upstream URL. Relative links in the file are
+ * absolutized against its origin, the same as release bodies — otherwise a
+ * root-relative `/docs/…` resolves against releases.sh and 404s.
  */
-export function renderChangelogHtml(content: string): string {
+export function renderChangelogHtml(content: string, fileUrl?: string | null): string {
   if (!content.trim()) return "";
-  return renderBodyMarkdownToHtml(content, "full");
+  const base = originFromUrl(fileUrl);
+  return renderBodyMarkdownToHtml(base ? rewriteRelativeLinks(content, base) : content, "full");
 }

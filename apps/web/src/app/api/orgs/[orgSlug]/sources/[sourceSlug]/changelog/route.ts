@@ -23,7 +23,7 @@ export async function GET(
     // signal the stream needs, so the raw markdown no longer has to ride along.
     const { content, ...rest } = file;
     return NextResponse.json(
-      { ...rest, contentHtml: renderChangelogHtml(content) },
+      { ...rest, contentHtml: renderChangelogHtml(content, file.url) },
       { headers: { "Cache-Control": "public, max-age=3600, s-maxage=86400" } },
     );
   } catch {

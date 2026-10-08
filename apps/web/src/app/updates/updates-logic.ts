@@ -205,3 +205,35 @@ type FetchOrgFeedPage<T> = (
 export function collectOrgFeed<T>(fetchPage: FetchOrgFeedPage<T>): Promise<T[]> {
   return collectCursorPages(fetchPage, (p) => p.releases);
 }
+
+// ── Day archive (crawlable links to older `/updates/<date>` pages) ──
+
+/**
+ * Day keys (`YYYY-MM-DD`, newest first) for the server-rendered archive under
+ * the feed, grouped by UTC month. Excludes days already present in the first
+ * feed page (`shownPublishedAt`) — those rows link their own day — so the
+ * archive only carries days reachable otherwise via client-side "load more",
+ * which crawlers don't run. Without it those day pages are orphans.
+ */
+export function buildArchiveMonths(
+  allPublishedAt: readonly (string | null | undefined)[],
+  shownPublishedAt: readonly (string | null | undefined)[],
+): { key: string; label: string; days: string[] }[] {
+  const dayOf = (v: string | null | undefined) => {
+    const d = (v ?? "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+  };
+  const shown = new Set(shownPublishedAt.map(dayOf).filter(Boolean));
+  const days = [...new Set(allPublishedAt.map(dayOf))]
+    .filter((d): d is string => d !== null && !shown.has(d))
+    .sort()
+    .reverse();
+  const months = new Map<string, string[]>();
+  for (const d of days) {
+    const key = d.slice(0, 7);
+    const list = months.get(key) ?? [];
+    list.push(d);
+    months.set(key, list);
+  }
+  return [...months].map(([key, list]) => ({ key, label: monthLabelOf(key), days: list }));
+}

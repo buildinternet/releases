@@ -84,6 +84,9 @@ const nextConfig: NextConfig = {
     // greedy-match top-level routes like /status or /docs and dead-end them.
     return [
       { source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 },
+      // Our own product changelog lives at /updates; `releases.sh/changelog` is
+      // the URL people (and the indexed product-changelog source) reach for.
+      { source: "/changelog", destination: "/updates", permanent: true },
       { source: "/status", destination: "/admin/status", permanent: true },
       { source: "/status/:path*", destination: "/admin/status/:path*", permanent: true },
       // Account settings reorg: panels merged in the settings redesign. These old

@@ -45,23 +45,24 @@ export async function generateMetadata({
   params: Promise<{ date: string }>;
 }): Promise<Metadata> {
   const { date } = await params;
-  if (!isDateKey(date)) return { title: "What's New · Releases Index" };
+  if (!isDateKey(date)) return { title: "What's New" };
   try {
     const release = await findReleaseForDate(date);
-    if (!release) return { title: "What's New · Releases Index" };
+    if (!release) return { title: "What's New" };
     const heading = releaseHeading(release);
     return {
-      title: `${heading} · What's New · Releases Index`,
+      // The root layout's title template appends the site name.
+      title: `${heading} · What's New`,
       description: `What shipped on Releases Index on ${release.title}.`,
       alternates: { canonical: `/updates/${date}` },
       openGraph: {
-        title: `${heading} · Releases Index`,
+        title: `${heading} · Release Notes Index`,
         url: `/updates/${date}`,
         type: "article",
       },
     };
   } catch {
-    return { title: "What's New · Releases Index" };
+    return { title: "What's New" };
   }
 }
 

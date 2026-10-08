@@ -77,7 +77,7 @@ export async function ChangelogView({
   // hash-target scrolling lands the user on it automatically — the range API
   // already snapped the offset forward to the nearest heading, so the first
   // element is the start of the matched section.
-  const bodyHtml = renderChangelogHtml(file.content);
+  const bodyHtml = renderChangelogHtml(file.content, file.url);
   const initialHtml = hasDeepLink
     ? `<div id="chunk" style="scroll-margin-top:5rem">${bodyHtml}</div>`
     : bodyHtml;

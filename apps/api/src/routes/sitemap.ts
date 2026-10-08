@@ -105,6 +105,7 @@ sitemapRoutes.get(
               orgId: sourcesActive.orgId,
               slug: sourcesActive.slug,
               id: sourcesActive.id,
+              productId: sourcesActive.productId,
               isHidden: sourcesActive.isHidden,
             })
             .from(sourcesActive)
@@ -185,6 +186,7 @@ sitemapRoutes.get(
               id: s.id,
               orgSlug: orgIdToSlug.get(s.orgId)!,
               slug: s.slug,
+              productId: s.productId ?? null,
               latestDate: latestBySource.get(s.id) ?? null,
               hasChangelog: sourcesWithChangelog.has(s.id),
               hasHighlights: sourcesWithSummaries.has(s.id),

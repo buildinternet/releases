@@ -48,6 +48,9 @@ export function isSafeImgSrc(src: string | undefined | null): src is string {
 
 /** Returns true if the image URL can be optimized via next/image (matches our remotePatterns). */
 export function isOptimizableImage(url: string): boolean {
+  // A video URL (ingest stores transcoded GIFs as `.mp4`) is never an image
+  // the optimizer can decode — `/_next/image` answers 400 for it.
+  if (/\.(?:mp4|webm|mov)(?:$|[?#])/i.test(url)) return false;
   return (
     url.includes("githubusercontent.com") ||
     url.includes("media.releases.sh") ||

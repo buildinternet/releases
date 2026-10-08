@@ -116,23 +116,37 @@ export function buildEntitySitemapEntries(
       priority: 0.7,
     }));
 
-  // Sources: shadowed (slug collides with a product in the same org) → /sources/:id
-  // with no sub-tabs; non-shadowed/orphan sources keep the bare URL + sub-tabs.
+  // Sources: each is listed at the one URL the site links it from.
+  //   - Product member (`productId` set) → `/sources/:id` (+ sub-tabs). The
+  //     product page links members there, and the bare `/{org}/{slug}` copy
+  //     canonicals to it, so listing the bare URL would submit a duplicate
+  //     that nothing links to.
+  //   - Orphan whose slug collides with a product → omitted. The bare URL
+  //     resolves to the product (already listed above) and `/sources/:id`
+  //     308s to it, so the source has no URL of its own to submit.
+  //   - Orphan, no collision → bare URL + sub-tabs.
+  // `productId === undefined` means an older payload without the field: fall
+  // back to slug-collision routing (shadowed → `/sources/:id`, else bare).
   const sourceEntries: MetadataRoute.Sitemap = data.sources.flatMap((s) => {
     // Only a real latestDate drives lastmod; no fabricated `now` fallback.
     const lastModified = s.latestDate ? new Date(s.latestDate) : undefined;
     const shadowed = productKeys.has(`${s.orgSlug}/${s.slug}`);
-    if (shadowed && s.id) {
-      return [
-        {
-          url: `${baseUrl}/sources/${s.id}`,
-          lastModified,
-          changeFrequency: "daily" as const,
-          priority: 0.7,
-        },
-      ];
+    let base: string;
+    let withSubTabs = true;
+    if (s.productId !== undefined) {
+      if (s.productId && s.id) {
+        base = `${baseUrl}/sources/${s.id}`;
+      } else if (shadowed) {
+        return [];
+      } else {
+        base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
+      }
+    } else if (shadowed && s.id) {
+      base = `${baseUrl}/sources/${s.id}`;
+      withSubTabs = false;
+    } else {
+      base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
     }
-    const base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
     const entries: MetadataRoute.Sitemap = [
       {
         url: base,
@@ -141,7 +155,7 @@ export function buildEntitySitemapEntries(
         priority: 0.7,
       },
     ];
-    if (s.hasHighlights) {
+    if (withSubTabs && s.hasHighlights) {
       entries.push({
         url: `${base}/highlights`,
         lastModified,
@@ -149,7 +163,7 @@ export function buildEntitySitemapEntries(
         priority: 0.6,
       });
     }
-    if (s.hasChangelog) {
+    if (withSubTabs && s.hasChangelog) {
       entries.push({
         url: `${base}/changelog`,
         lastModified,

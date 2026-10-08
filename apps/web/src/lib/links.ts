@@ -26,6 +26,21 @@ export function sourceIdPath(sourceId: string): string {
 }
 
 /**
+ * Canonical base path for a source reached at its bare `/{org}/{slug}` URL. A
+ * product member is canonical at `/sources/:id` (where the product page links
+ * it, and where the sitemap lists it); an orphan keeps the bare path. Without
+ * this the bare copy and `/sources/:id` each self-canonicalize — two indexable
+ * URLs for one page.
+ */
+export function sourceCanonicalPath(
+  source: { id: string; productId?: string | null },
+  orgSlug: string,
+  slug: string,
+): string {
+  return source.productId ? sourceIdPath(source.id) : `/${orgSlug}/${slug}`;
+}
+
+/**
  * Source detail page URL. Falls back to the global `/source/:slug` redirect
  * shim when the org isn't known.
  */

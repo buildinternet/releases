@@ -5,6 +5,7 @@ import { JsonLd } from "@/components/json-ld";
 import { HighlightsView } from "@/components/highlights-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
 import { getSource } from "../_lib/source-data";
+import { sourceCanonicalPath } from "@/lib/links";
 import { enableOnDemandIsr } from "@/lib/static-params";
 
 // On-demand ISR: render once per source on first request, then serve from cache
@@ -23,11 +24,12 @@ export async function generateMetadata({
   try {
     const source = await getSource(orgSlug, slug);
     const orgName = source.org?.name ?? orgSlug;
+    const canonical = `${sourceCanonicalPath(source, orgSlug, slug)}/highlights`;
     return {
       title: `${source.name} Highlights — ${orgName}`,
       description: `Curated highlights and monthly summaries for ${source.name} by ${orgName}.`,
-      openGraph: { type: "website", url: `/${orgSlug}/${slug}/highlights` },
-      alternates: { canonical: `/${orgSlug}/${slug}/highlights` },
+      openGraph: { type: "website", url: canonical },
+      alternates: { canonical },
     };
   } catch {
     return { title: slug };

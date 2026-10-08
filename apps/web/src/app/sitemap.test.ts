@@ -203,6 +203,72 @@ describe("buildEntitySitemapEntries", () => {
   });
 });
 
+describe("buildEntitySitemapEntries — productId routing", () => {
+  const products = [
+    { orgSlug: "openai", slug: "chatgpt" },
+    { orgSlug: "openai", slug: "codex" },
+  ];
+
+  test("product member → /sources/:id + sub-tabs, never the bare URL nothing links to", () => {
+    // The product page links members at /sources/:id and the bare copy
+    // canonicals there, so the bare URL would be an orphaned duplicate.
+    const result = urls({
+      orgs: [],
+      products,
+      sources: [
+        {
+          id: "src_ios",
+          orgSlug: "openai",
+          slug: "chatgpt-ios",
+          productId: "prod_chatgpt",
+          latestDate: null,
+          hasChangelog: true,
+          hasHighlights: true,
+        },
+      ],
+      collections: [],
+    });
+    expect(result).toContain(`${BASE}/sources/src_ios`);
+    expect(result).toContain(`${BASE}/sources/src_ios/changelog`);
+    expect(result).toContain(`${BASE}/sources/src_ios/highlights`);
+    expect(result).not.toContain(`${BASE}/openai/chatgpt-ios`);
+  });
+
+  test("orphan source whose slug collides with a product → omitted (both its URLs redirect to the product)", () => {
+    const result = urls({
+      orgs: [],
+      products,
+      sources: [
+        { id: "src_codex", orgSlug: "openai", slug: "codex", productId: null, latestDate: null },
+      ],
+      collections: [],
+    });
+    expect(result).not.toContain(`${BASE}/sources/src_codex`);
+    expect(result.filter((u) => u === `${BASE}/openai/codex`)).toHaveLength(1);
+  });
+
+  test("orphan source without a collision → bare URL + sub-tabs", () => {
+    const result = urls({
+      orgs: [],
+      products,
+      sources: [
+        {
+          id: "src_news",
+          orgSlug: "openai",
+          slug: "openai-news",
+          productId: null,
+          latestDate: null,
+          hasHighlights: true,
+        },
+      ],
+      collections: [],
+    });
+    expect(result).toContain(`${BASE}/openai/openai-news`);
+    expect(result).toContain(`${BASE}/openai/openai-news/highlights`);
+    expect(result.some((u) => u.includes("/sources/"))).toBe(false);
+  });
+});
+
 describe("buildUpdatesSitemapEntries", () => {
   test("multiple releases on the same day collapse to one /updates/<date> entry", () => {
     // Regression guard: the naive per-release map used to emit one duplicate

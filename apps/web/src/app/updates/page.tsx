@@ -10,6 +10,8 @@ import { getOrg, getOrgOverview } from "@/app/[orgSlug]/_lib/org-data";
 import { getOrgReleases } from "@/app/[orgSlug]/_lib/org-releases-data";
 import { UpdatesBriefing } from "./updates-briefing";
 import { UpdatesFeed } from "./updates-feed";
+import { api } from "@/lib/api";
+import { ORG_FEED_PAGE_LIMIT, buildArchiveMonths, collectOrgFeed } from "./updates-logic";
 
 // releases.sh publishes its own product changelog through its own registry.
 // The `releases-sh` org is the canonical home; `/updates` is the branded face
@@ -31,7 +33,8 @@ const FIRST_PAGE_LIMIT = 100;
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: `${TITLE} · Releases Index`,
+  // The root layout's title template appends the site name.
+  title: TITLE,
   description: DESCRIPTION,
   alternates: {
     canonical: "/updates",
@@ -40,12 +43,12 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: `${TITLE} · Releases Index`,
+    title: `${TITLE} · Release Notes Index`,
     description: DESCRIPTION,
     url: "/updates",
     type: "website",
   },
-  twitter: { title: `${TITLE} · Releases Index`, description: DESCRIPTION },
+  twitter: { title: `${TITLE} · Release Notes Index`, description: DESCRIPTION },
 };
 
 export default async function UpdatesPage() {
@@ -60,6 +63,11 @@ export default async function UpdatesPage() {
     }),
     getOrgOverview(ORG_SLUG),
   ]);
+  // Every day in the changelog, for the archive below the feed. Soft-fails to
+  // an empty archive; the sitemap walks the same feed.
+  const allReleases = await collectOrgFeed((cursor) =>
+    api.orgReleases(ORG_SLUG, { limit: ORG_FEED_PAGE_LIMIT, cursor }),
+  ).catch(() => []);
 
   if (orgResult.error instanceof ApiSetupError) {
     return (
@@ -142,7 +150,57 @@ export default async function UpdatesPage() {
           initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
           initialCursor={initialReleases.nextCursor}
         />
+
+        <UpdatesArchive
+          months={buildArchiveMonths(
+            allReleases.map((r) => r.publishedAt),
+            initialReleases.releases.map((r) => r.publishedAt),
+          )}
+        />
       </div>
     </div>
+  );
+}
+
+/**
+ * Plain links to every older day page. The feed loads past its first page
+ * client-side, so without this list those `/updates/<date>` pages have no
+ * crawlable inbound link.
+ */
+function UpdatesArchive({ months }: { months: ReturnType<typeof buildArchiveMonths> }) {
+  if (months.length === 0) return null;
+  return (
+    <section
+      aria-labelledby="updates-archive"
+      className="mt-12 border-t border-stone-200 pb-16 pt-6 dark:border-stone-800"
+    >
+      <h2
+        id="updates-archive"
+        className="text-[13px] font-medium text-stone-500 dark:text-stone-400"
+      >
+        Archive
+      </h2>
+      <div className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        {months.map((month) => (
+          <div key={month.key}>
+            <h3 className="text-[13px] font-medium text-stone-700 dark:text-stone-300">
+              {month.label}
+            </h3>
+            <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[12px]">
+              {month.days.map((day) => (
+                <li key={day}>
+                  <Link
+                    href={`/updates/${day}`}
+                    className="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                  >
+                    {day.slice(8)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

@@ -19,6 +19,10 @@ export async function generateMetadata({
     return {
       title: tag.name,
       description: `Organizations and products tagged ${tag.name}`,
+      // Tag pages are thin cross-links (a name plus a list of orgs/products)
+      // and aren't in the sitemap. Keep them out of the index; `follow` lets
+      // crawlers still pass through to the org and product pages they list.
+      robots: { index: false, follow: true },
       alternates: { canonical: `/tags/${slug}` },
       openGraph: { type: "website", url: `/tags/${slug}` },
     };

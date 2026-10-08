@@ -26,7 +26,11 @@ import { getDigestIndex, getDigestPage } from "../_lib/digest-data";
 export const revalidate = 86400;
 
 const SITE_URL = "https://releases.sh";
-const MAX_TITLE_LEN = 70;
+// Search results cut titles off at ~60 characters and descriptions at ~160.
+// Digest titles are set `absolute` (no site-name suffix), so this is the whole
+// <title>.
+const MAX_TITLE_LEN = 65;
+const MAX_DESCRIPTION_LEN = 160;
 
 // Same base as docs / markdown pages (`markdown-page.tsx`, docs layout): let
 // `@tailwindcss/typography` own heading scale; only override code chips.
@@ -53,6 +57,14 @@ function weekRangeLabel(weekStart: string): string {
 
 function clampMetaTitle(title: string): string {
   return title.length > MAX_TITLE_LEN ? `${title.slice(0, MAX_TITLE_LEN - 1)}…` : title;
+}
+
+/** Trim to `MAX_DESCRIPTION_LEN` at a word boundary. */
+function clampMetaDescription(text: string): string {
+  if (text.length <= MAX_DESCRIPTION_LEN) return text;
+  const cut = text.slice(0, MAX_DESCRIPTION_LEN - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 80 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.]+$/, "")}…`;
 }
 
 /**
@@ -107,13 +119,14 @@ export async function generateMetadata({
 
   try {
     const { detail, digest } = await getDigestPage(slug, weekStart);
-    const title = clampMetaTitle(
-      `What's new in ${detail.name}: ${digest.title} — ${weekOfLabel(weekStart)}`,
-    );
+    // The headline is unique per week, so it leads; the week label and site
+    // name pushed every digest title past what search results show.
+    const title = clampMetaTitle(`${detail.name}: ${digest.title}`);
+    const description = clampMetaDescription(digest.intro);
     const path = `/collections/${slug}/digest/${weekStart}`;
     return {
-      title,
-      description: digest.intro,
+      title: { absolute: title },
+      description,
       alternates: {
         canonical: path,
         // Point at the aggregate digests feed (no single-item Atom).
@@ -126,7 +139,7 @@ export async function generateMetadata({
           ],
         },
       },
-      openGraph: { type: "article", url: path, title, description: digest.intro },
+      openGraph: { type: "article", url: path, title, description },
     };
   } catch {
     return { title: "Digest" };

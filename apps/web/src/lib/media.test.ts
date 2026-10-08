@@ -16,6 +16,12 @@ describe("thumbUrl", () => {
     expect(thumbUrl(src, 240, { enabled: false, origin })).toBe(src);
   });
 
+  it("passes same-origin AVIF and MP4 through untransformed (the transform answers 415)", () => {
+    for (const src of [`${origin}/releases/abc.avif`, `${origin}/releases/abc.mp4`]) {
+      expect(thumbUrl(src, 240, { enabled: true, origin })).toBe(src);
+    }
+  });
+
   it("transforms a same-origin (R2-hosted) image when enabled", () => {
     expect(thumbUrl(`${origin}/releases/abc.png`, 240, { enabled: true, origin })).toBe(
       `${origin}/cdn-cgi/image/width=240,quality=80,format=auto/${origin}/releases/abc.png`,
@@ -79,6 +85,17 @@ describe("shouldRenderAsVideo", () => {
     expect(shouldRenderAsVideo({ type: "image", src: sameOriginGif, enabled: true, origin })).toBe(
       true,
     );
+  });
+
+  it("is true for a same-origin .mp4 src stored as type image (an <img> can't play it)", () => {
+    expect(
+      shouldRenderAsVideo({
+        type: "image",
+        src: `${origin}/releases/x.mp4`,
+        enabled: true,
+        origin,
+      }),
+    ).toBe(true);
   });
 
   it("is false for a third-party gif (same-origin gate — renders as <img> until mirrored)", () => {

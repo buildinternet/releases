@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { productPath, sourcePath, sourceOrProductPath, sourceIdPath } from "./links";
+import {
+  productPath,
+  sourcePath,
+  sourceOrProductPath,
+  sourceIdPath,
+  sourceCanonicalPath,
+} from "./links";
 
 describe("link helpers", () => {
   it("productPath builds a bare org-scoped product URL", () => {
@@ -37,5 +43,19 @@ describe("link helpers", () => {
     it("builds a sources/:id URL", () => {
       expect(sourceIdPath("src_abc123")).toBe("/sources/src_abc123");
     });
+  });
+});
+
+describe("sourceCanonicalPath", () => {
+  it("a product member is canonical at /sources/:id", () => {
+    expect(sourceCanonicalPath({ id: "src_a", productId: "prod_b" }, "openai", "chatgpt-ios")).toBe(
+      "/sources/src_a",
+    );
+  });
+
+  it("an orphan keeps the bare path", () => {
+    expect(sourceCanonicalPath({ id: "src_a", productId: null }, "openai", "openai-news")).toBe(
+      "/openai/openai-news",
+    );
   });
 });
