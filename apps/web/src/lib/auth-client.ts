@@ -12,10 +12,9 @@ import { dashClient, sentinelClient } from "@better-auth/infra/client";
 /**
  * Client plugins whose `getActions` / `getAtoms` signatures lag the core's
  * `BetterAuthClientPlugin` (extra `options` arg + stricter `BetterFetch`
- * generics as of better-auth 1.6.25). Today that is:
- *   - `@better-auth/infra` dash/sentinel (types still built against an older
- *     core, #1620)
- *   - first-party `oneTap` under 1.6.25
+ * generics). Today that is `@better-auth/infra` dash/sentinel (types still
+ * built against an older core, #1620). First-party `oneTap` conforms under
+ * better-auth 1.7.x and is no longer wrapped.
  * A single non-conforming element in the `plugins` tuple poisons the whole
  * client's inferred type — stripping `passkey`, `magicLink`, `device`, etc. —
  * and breaks `next build`'s type check.
@@ -25,8 +24,7 @@ import { dashClient, sentinelClient } from "@better-auth/infra/client";
  * `pathMethods` so session and action inference for the rest of the client
  * stay intact (a blanket cast to `BetterAuthClientPlugin` instead erases
  * `$InferServerPlugin` and collapses `useSession()` to `never`). Safe for
- * plugins we never call action methods on (dash/sentinel), and for oneTap
- * whose `oneTap()` action is still re-exported via `$InferServerPlugin`.
+ * plugins we never call action methods on (dash/sentinel).
  * Do NOT wrap passkey/magicLink/device — their client-side getActions methods
  * (`addPasskey`, `signIn.passkey`, …) would be erased from inference.
  */
@@ -67,7 +65,7 @@ const SENTINEL_IDENTIFY_URL = process.env.NEXT_PUBLIC_BETTER_AUTH_IDENTIFY_URL;
 const LOGGED_IN_HINT_COOKIE = "releases.logged_in";
 
 /** True when the session-presence hint cookie is set on this document. */
-function hasSessionHint(): boolean {
+export function hasSessionHint(): boolean {
   // SSR / non-browser: never short-circuit — let the request proceed normally.
   if (typeof document === "undefined") return true;
   return document.cookie
@@ -150,11 +148,7 @@ export const authClient = createAuthClient({
     // server seam: the worker registers oneTap() only when Google's secrets resolve,
     // and this bundle reveals it only when the public id is present. Omitted → no
     // Google GSI script loads and `authClient.oneTap` stays undefined.
-    // asClientPlugin: oneTap's getActions/getAtoms lag better-auth 1.6.25's
-    // BetterAuthClientPlugin (see asClientPlugin note above).
-    ...(GOOGLE_ONE_TAP_CLIENT_ID
-      ? [asClientPlugin(oneTapClient({ clientId: GOOGLE_ONE_TAP_CLIENT_ID }))]
-      : []),
+    ...(GOOGLE_ONE_TAP_CLIENT_ID ? [oneTapClient({ clientId: GOOGLE_ONE_TAP_CLIENT_ID })] : []),
     // Device authorization (RFC 8628) — the browser half of `releases login`.
     // Registers `authClient.device()` (verify a user code) plus `device.approve` /
     // `device.deny`, used by the /device and /device/approve pages. Takes no options
