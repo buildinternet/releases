@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.35.2
+
+### Patch Changes
+
+- c3291ac: Declare an `idx_releases_url` index on `releases.url` so lookups by url alone use an index instead of scanning the table.
+
 ## 0.35.1
 
 ### Patch Changes
