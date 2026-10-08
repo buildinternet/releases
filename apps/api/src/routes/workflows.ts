@@ -67,6 +67,7 @@ import {
 } from "../cron/poll-fetch.js";
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
+import { resolveModel } from "@releases/lib/resolve-model";
 import { flag, FLAGS } from "@releases/lib/flags";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
@@ -2401,8 +2402,8 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
 //   - `dryRun` (default) previews current vs. proposed without writing.
 //
 // Body: { releaseId, url?, dryRun? }
+// Extraction uses the extraction role (`resolveModel("extraction")`).
 
-const REFETCH_EXTRACT_MODEL = "claude-haiku-5-5";
 // Shrink guard (#2077): refuse a write that shrinks the body below this
 // fraction of its current size, unless the current body is already tiny
 // (below the min) — re-fetching a thin teaser SHOULD be allowed to land a
@@ -2550,7 +2551,7 @@ workflowsRoutes.post("/workflows/refetch-release", async (c) => {
       src,
       {
         anthropicClient,
-        agentModel: REFETCH_EXTRACT_MODEL,
+        agentModel: resolveModel("extraction"),
         logger: backfillLogger,
         logUsageFn: (entry) => logUsage(db, { ...entry, sourceId: src.id }, "refetch-release"),
       },
@@ -2745,8 +2746,6 @@ const BACKFILL_MAX_MAX_WINDOWS = 200;
 // MAX_AUTOGEN_ROWS_PER_FIRE (20) in poll-and-fetch.ts; chunk under it so a
 // large backfill still gets every row summarized.
 const BACKFILL_SUMMARY_CHUNK = 20;
-// Matches FirecrawlIngestWorkflow's FIRECRAWL_EXTRACT_MODEL (Haiku 5.5).
-const BACKFILL_EXTRACT_MODEL = "claude-haiku-5-5";
 
 const backfillLogger = {
   info: (msg: string) =>
@@ -2816,7 +2815,7 @@ async function executeWindowedBackfill(
       src,
       {
         anthropicClient: anthropicClient!,
-        agentModel: BACKFILL_EXTRACT_MODEL,
+        agentModel: resolveModel("extraction"),
         logger: backfillLogger,
         logUsageFn: (entry) => logUsage(db, { ...entry, sourceId: src.id }, "backfill-source"),
       },

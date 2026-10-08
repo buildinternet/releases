@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
+import { modelId } from "@releases/lib/models";
 import { extractWithTools } from "./extract-with-tools.js";
 import { MAX_ROUNDS } from "./shared.js";
 import { mockAnthropicClient } from "./test-helpers/anthropic-mock.js";
@@ -11,7 +12,7 @@ const silentLogger: ExtractLogger = {
   debug: () => {},
 };
 
-function makeDeps(client: unknown, agentModel = "claude-sonnet-5-5"): ExtractDeps {
+function makeDeps(client: unknown, agentModel = modelId("extractionAgent")): ExtractDeps {
   return {
     anthropicClient: client as never,
     agentModel,

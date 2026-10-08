@@ -15,13 +15,15 @@
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { isBreakingLevel, type BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { isImportanceScore } from "@buildinternet/releases-core/importance";
+import { modelId } from "@releases/lib/models";
 import type { TextModel } from "./text-model";
 
 export type { ReleaseComposition };
 
-/** Model id used by the live and batch release-content paths. Exported so the
- *  backfill script can submit identical request shapes through the Batches API. */
-export const MODEL = "claude-haiku-5-5";
+/** Anthropic model for the live and batch release-content paths. The `summarize`
+ *  role in `@releases/lib/models`. Exported so the backfill script can submit
+ *  identical request shapes through the Batches API. */
+export const MODEL = modelId("summarize");
 
 /** Maximum characters of release body sent to the model (truncated at this length). */
 export const MAX_BODY_CHARS = 8000;

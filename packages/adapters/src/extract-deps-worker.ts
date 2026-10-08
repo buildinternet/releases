@@ -6,6 +6,7 @@
 
 import { buildAnthropicClient } from "@releases/lib/anthropic-client";
 import { logEvent } from "@releases/lib/log-event";
+import { resolveModel } from "@releases/lib/resolve-model";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { resolveToolLoopAiSdkModel } from "@releases/adapters/extract";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -20,7 +21,7 @@ export interface WorkerDepsEnv {
   cloudflareAccountId?: string;
   cloudflareApiToken?: string;
   agentModel?: string;
-  /** Override for the single-call body-extraction model (see DEFAULT_ONESHOT_MODEL). */
+  /** Override for the single-call body-extraction model (default: the `extraction` role). */
   oneShotModel?: string;
   incrementalModel?: string;
   apiFetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
@@ -42,24 +43,6 @@ export interface WorkerDepsEnv {
   openRouterBaseURL?: string;
   extractModel?: string;
 }
-
-/**
- * Default model for the AGENTIC extraction paths (web_fetch loop, large-body
- * tool-use loop). Sonnet-class — these are multi-turn tool loops where Haiku
- * degrades, and they run on small inputs (the loop slices the body) so the
- * cost is already low.
- */
-const DEFAULT_AGENT_MODEL = "claude-sonnet-5-5";
-
-/**
- * Default model for the SINGLE-CALL body extraction (crawl one-shot,
- * direct-fetch, seed/Cloudflare-render fallback). These inline the whole body
- * into one forced-tool-call request — the largest, most expensive extraction
- * we run (crawl bodies hit 100K+ tokens). Haiku-class parses them reliably at
- * ~⅓ the cost; the agentic loops above stay on Sonnet. Override per env via
- * `oneShotModel`.
- */
-const DEFAULT_ONESHOT_MODEL = "claude-haiku-5-5";
 
 /**
  * Build an org-scoped sub-resource path for a source. We pass `source.id`
@@ -214,7 +197,7 @@ export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<Extrac
   // Tool-loop tier: falls back to the agentic (Sonnet-class) model.
   const aiSdk = resolveAiSdkExtractModelFor(
     env,
-    env.agentModel ?? DEFAULT_AGENT_MODEL,
+    env.agentModel ?? resolveModel("extractionAgent"),
     openRouterApiKey,
     "extract-deps",
   );
@@ -224,7 +207,7 @@ export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<Extrac
   // `extractModel` (`EXTRACT_MODEL`) / OpenRouter key when that branch is usable.
   const oneShotAiSdk = resolveAiSdkExtractModelFor(
     env,
-    env.oneShotModel ?? DEFAULT_ONESHOT_MODEL,
+    env.oneShotModel ?? resolveModel("extraction"),
     openRouterApiKey,
     "extract-deps:oneshot",
   );
@@ -242,8 +225,8 @@ export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<Extrac
 
   return {
     anthropicClient: anthropicClient as unknown as ExtractDeps["anthropicClient"],
-    agentModel: env.agentModel ?? DEFAULT_AGENT_MODEL,
-    oneShotModel: env.oneShotModel ?? DEFAULT_ONESHOT_MODEL,
+    agentModel: env.agentModel ?? resolveModel("extractionAgent"),
+    oneShotModel: env.oneShotModel ?? resolveModel("extraction"),
     incrementalModel: env.incrementalModel,
     logger: workerLogger,
     cloudflare,

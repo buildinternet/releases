@@ -10,6 +10,7 @@ import {
   type TextModelEnv,
 } from "./text-model.js";
 import type { FlagshipBinding } from "@releases/lib/flags";
+import { modelId } from "@releases/lib/models";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { classifyMarketing } from "@releases/ai-internal/marketing-classifier";
 import { marketingDecisionResponse } from "../../../../../tests/marketing-decision-fixture";
@@ -171,7 +172,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
           ...overrides,
         }),
       );
-      expect(model?.id).toBe("anthropic:claude-haiku-5-5");
+      expect(model?.id).toBe(`anthropic:${modelId("marketing")}`);
       expect(model).toHaveProperty("complete");
     });
   }

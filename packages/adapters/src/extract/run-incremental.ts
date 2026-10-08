@@ -7,9 +7,10 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { resolveModel } from "@releases/lib/resolve-model";
+import { thinkingParams } from "@releases/lib/models";
 import {
   extractReleasesToolIncremental,
-  haikuThinkingParam,
   INCREMENTAL_SYSTEM,
   findContentStart,
   formatKnownReleases,
@@ -39,8 +40,6 @@ export interface IncrementalOptions {
   lineCap?: number;
 }
 
-const DEFAULT_INCREMENTAL_MODEL = "claude-haiku-5-5";
-
 export interface IncrementalResult {
   releases: MappedEntry[];
   totalInput: number;
@@ -55,7 +54,7 @@ export async function runIncrementalExtraction(
   deps: ExtractDeps,
 ): Promise<IncrementalResult> {
   const { anthropicClient, logger } = deps;
-  const model = opts.model ?? deps.incrementalModel ?? DEFAULT_INCREMENTAL_MODEL;
+  const model = opts.model ?? deps.incrementalModel ?? resolveModel("extraction");
 
   // Incremental is designed for "we already know most of this source" —
   // running it against an empty known-list would bias toward few results.
@@ -73,10 +72,9 @@ export async function runIncrementalExtraction(
   const response = await anthropicClient.messages.create({
     model,
     max_tokens: opts.maxOutputTokens ?? 8192,
-    // Haiku 5.5 thinks by default; those tokens would eat this output budget.
-    // No temperature: Haiku 5.5 400s on a non-default value, and this path
-    // never sent one.
-    ...haikuThinkingParam(model),
+    // Models that think by default would spend this output budget before the
+    // tool call. This path never sent temperature.
+    ...thinkingParams(model),
     system: [
       {
         type: "text",

@@ -10,10 +10,9 @@ import {
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
   EXTRACTION_TEMPERATURE,
-  haikuThinkingParam,
-  modelAcceptsTemperature,
   type ExtractionGuidance,
 } from "./shared.js";
+import { samplingParams, thinkingParams } from "@releases/lib/models";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
 import { formatRejectionMessage, validateRecords } from "./record-validate.js";
 import type { ExtractDeps, ExtractedEntry, ExtractLogger } from "./types.js";
@@ -173,14 +172,10 @@ export async function extractWithTools(
     const stream = deps.anthropicClient.beta.messages.stream({
       model: deps.agentModel,
       max_tokens: 16_384,
-      // Deterministic parse on models that still accept it; omitted on Sonnet 5.5 /
-      // Opus 4.7+ / Fable / Haiku 5.5, which 400 on a non-default temperature. See
-      // EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
-      ...(modelAcceptsTemperature(deps.agentModel)
-        ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
-          { temperature: EXTRACTION_TEMPERATURE }
-        : {}),
-      ...haikuThinkingParam(deps.agentModel),
+      // Deterministic parse on models that still accept a non-default
+      // temperature; omitted when the registry says the model rejects sampling.
+      ...samplingParams(deps.agentModel, { temperature: EXTRACTION_TEMPERATURE }),
+      ...thinkingParams(deps.agentModel),
       system: systemBlocks,
       tools,
       messages,

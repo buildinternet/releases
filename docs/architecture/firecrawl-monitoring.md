@@ -88,7 +88,7 @@ This is the load-bearing, easy-to-get-wrong detail. Firecrawl's **published docs
 
 1. **load-source** — refuses to run if `metadata.firecrawl.enabled` is false.
 2. **resolve-body** — if `delta` is present, return it and **skip the paid full-page re-scrape** (steady state). Only a `new`/baseline event (or an empty delta) calls `client.scrapeOnce(url)` for the full markdown.
-3. **extract** — `extractFirecrawlMarkdown` → `extractFromBody`, one-shot, model **Haiku 5.5** (`FIRECRAWL_EXTRACT_MODEL`). Haiku 5.5 rejects a non-default temperature, so the request omits it and sends `thinking: { type: "disabled" }` (`packages/adapters/src/extract/shared.ts`). Inputs over `DEFAULT_CHANGELOG_SLICE_TOKENS` (10 K) are windowed to the newest entries via `sliceChangelog`, logging `input-windowed` + `droppedChars` (no silent caps).
+3. **extract** — `extractFirecrawlMarkdown` → `extractFromBody`, one-shot, the extraction role from `@releases/lib/models`. Sampling and thinking params come from that model's capabilities. Inputs over `DEFAULT_CHANGELOG_SLICE_TOKENS` (10 K) are windowed to the newest entries via `sliceChangelog`, logging `input-windowed` + `droppedChars` (no silent caps).
 4. **dedup-insert** — `ingestRawReleases`, the shared poll-fetch tail: marketing classify → feed-enrich → media pre-pass → chunked insert (dedup on `UNIQUE(source_id, url)`) → coverage clustering → publish events → web revalidate ping.
 5. **embed + generate-content** — only when new rows landed (embeddings + Haiku summaries/titles).
 6. **bookkeep** — write a `fetch_log` row (`sessionId = firecrawl:<checkId>`, status `success`/`no_change`), stamp `lastCheckId`/`lastChangeAt`, reset `consecutiveErrors`/`consecutiveNoChange`.

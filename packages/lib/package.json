@@ -21,6 +21,8 @@
     "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
+    "./models": "./src/models.ts",
+    "./resolve-model": "./src/resolve-model.ts",
     "./oauth-jwt": "./src/oauth-jwt.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
     "./provider-quota": "./src/provider-quota.ts",

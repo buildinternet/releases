@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { modelId } from "@releases/lib/models";
 import { buildAgentUsageRows } from "./run-agent.js";
 import type { ExtractFromBodyResult } from "./extract-from-body.js";
 
-const AGENT_MODEL = "claude-sonnet-5-5";
-const ONESHOT_MODEL = "claude-haiku-5-5";
+const AGENT_MODEL = modelId("extractionAgent");
+const ONESHOT_MODEL = modelId("extraction");
 
 function makeResult(over: Partial<ExtractFromBodyResult> = {}): ExtractFromBodyResult {
   return {

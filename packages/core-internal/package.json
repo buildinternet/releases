@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",
+    "@releases/lib": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "@releases/rendering": "workspace:*"

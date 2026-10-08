@@ -40,11 +40,12 @@ import { spawn } from "node:child_process";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { estimateCost } from "@releases/lib/anthropic-pricing";
+import { OPENROUTER_MODELS, thinkingParams } from "@releases/lib/models";
+import { resolveModel } from "@releases/lib/resolve-model";
 import {
   buildReleaseBlock,
   isEmptyContent,
   MAX_OUTPUT_TOKENS,
-  MODEL,
   parseReleaseContent,
   summarizeRelease,
   SYSTEM_PROMPT,
@@ -53,7 +54,6 @@ import {
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
-import { haikuThinkingParam } from "@releases/adapters/extract/shared";
 import { buildLaneAnthropicModel, buildLaneOpenRouterModel } from "@releases/adapters/lane-model";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 import { adminPatch, adminPost } from "./lib/admin-client.js";
@@ -93,12 +93,13 @@ function resolveProviderPath(): ProviderPath {
 const providerPath = resolveProviderPath();
 const useAnthropicBatch = providerPath === "anthropic-batch";
 
-/** Same model id as apps/api wrangler.jsonc SUMMARIZE_MODEL. */
-const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4.1-flash";
+/** Anthropic summarize role. `RELEASES_SUMMARY_MODEL` overrides the pin. */
+const anthropicModel = resolveModel("summarize");
+/** Code default matches `OPENROUTER_MODELS.summarize`; wrangler `SUMMARIZE_MODEL` overrides in prod. */
 const openRouterModel =
   process.env.RELEASE_CONTENT_MODEL?.trim() ||
   process.env.SUMMARIZE_MODEL?.trim() ||
-  DEFAULT_OPENROUTER_MODEL;
+  OPENROUTER_MODELS.summarize;
 
 const orgs = !orgsArg
   ? ["openai", "anthropic"]
@@ -389,9 +390,9 @@ async function runBatch(
     eligible.map(({ row, input }) => ({
       custom_id: row.id,
       params: {
-        model: MODEL,
+        model: anthropicModel,
         max_tokens: MAX_OUTPUT_TOKENS,
-        ...haikuThinkingParam(MODEL),
+        ...thinkingParams(anthropicModel),
         system: [
           {
             type: "text" as const,
@@ -409,7 +410,7 @@ async function runBatch(
   const persistResult = await adminPost("/admin/batch-runs", {
     anthropicBatchId: submitted.id,
     caller: "script",
-    model: MODEL,
+    model: anthropicModel,
     requestCountTotal: eligible.length,
     estCostUsd: opts.estCostUsd,
     callerContext: {
@@ -542,18 +543,18 @@ const realtimeModel =
     : aisdkTextModel(
         buildLaneAnthropicModel({
           apiKey: anthropicApiKey!,
-          model: MODEL,
+          model: anthropicModel,
           ...anthropicGateway,
         }),
-        `anthropic:${MODEL}`,
+        `anthropic:${anthropicModel}`,
       );
 
 const pathLabel =
   providerPath === "openrouter-realtime"
     ? `openrouter realtime (${openRouterModel})`
     : providerPath === "anthropic-batch"
-      ? `anthropic batch (${MODEL})`
-      : `anthropic realtime (${MODEL})`;
+      ? `anthropic batch (${anthropicModel})`
+      : `anthropic realtime (${anthropicModel})`;
 const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${pathLabel})`;
 
 logger.info(`mode: ${mode}`);
@@ -576,8 +577,8 @@ let estCostLabel = "";
 if (useAnthropicBatch || providerPath === "anthropic-realtime") {
   const estCost = estimateCost(
     { inputTokens: estInputTokens, outputTokens: estOutputTokens },
-    MODEL,
-    // Sum of many sub-100K prompts — stay on the ≤100K Haiku 5.5 rate.
+    anthropicModel,
+    // Sum of many sub-100K prompts — stay on the standard (non-long-context) rate.
     { batch: useAnthropicBatch, longContext: false },
   );
   estCostUsd = estCost?.totalUsd ?? 0;
@@ -703,7 +704,7 @@ const finalCost =
           cacheReadTokens: totalCacheRead,
           outputTokens: totalOutput,
         },
-        MODEL,
+        anthropicModel,
         { batch: useAnthropicBatch, longContext: false },
       )
     : {

@@ -17,6 +17,7 @@
  * caller is responsible for fail-open behavior on any thrown error.
  */
 
+import { modelId } from "@releases/lib/models";
 import { extractTagged } from "./release-content";
 import type { TextModel, TextModelUsage } from "./text-model";
 import {
@@ -25,7 +26,8 @@ import {
   type DecisionModel,
 } from "./decision-model";
 
-export const MODEL = "claude-haiku-5-5";
+/** Anthropic fallback for the marketing classifier. The `marketing` role. */
+export const MODEL = modelId("marketing");
 export type MarketingModel = TextModel | DecisionModel;
 
 /**

@@ -29,8 +29,9 @@
  *   CLOUDFLARE_ACCOUNT_ID  — for the cf-* providers (Workers AI)
  *   CLOUDFLARE_API_TOKEN   — for the cf-* providers (Workers AI)
  *
- * Model ID overrides (defaults shown — reset via env when provider-side IDs shift):
- *   ANTHROPIC_MODEL=claude-haiku-5-5
+ * Model ID overrides (Anthropic defaults to the summarize role in
+ * `@releases/lib/models`; reset via env when provider-side IDs shift):
+ *   ANTHROPIC_MODEL=<anthropic id>
  *   CF_KIMI_MODEL=@cf/moonshotai/kimi-k2.6
  *   CF_GLM_MODEL=@cf/zai-org/glm-4.7-flash
  *   CF_QWEN_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
@@ -41,7 +42,8 @@
  * verify with each provider's pricing page before quoting in roadmap docs.
  */
 
-import { haikuThinkingParam } from "@releases/adapters/extract/shared";
+import { ANTHROPIC_PRICING } from "@releases/lib/anthropic-pricing";
+import { modelId, thinkingParams } from "@releases/lib/models";
 import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "node:child_process";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -167,14 +169,17 @@ const CF_MODELS: CfModelEntry[] = [
   },
 ];
 
+const anthropicModel = process.env.ANTHROPIC_MODEL ?? modelId("summarize");
+const anthropicPrice = ANTHROPIC_PRICING[anthropicModel.replace(/-\d{8}$/, "")];
+
 const PROVIDERS: ProviderConfig[] = [
   {
     id: "anthropic-haiku",
-    label: "Anthropic Haiku 5.5",
-    model: process.env.ANTHROPIC_MODEL ?? "claude-haiku-5-5",
+    label: `Anthropic ${anthropicModel}`,
+    model: anthropicModel,
     apiKey: process.env.ANTHROPIC_API_KEY,
-    inputPricePerM: 0.1,
-    outputPricePerM: 0.5,
+    inputPricePerM: anthropicPrice?.inputUsdPerMillion ?? 0,
+    outputPricePerM: anthropicPrice?.outputUsdPerMillion ?? 0,
   },
   ...CF_MODELS.map((m) => ({
     id: m.id,
@@ -335,7 +340,7 @@ async function callAnthropic(cfg: ProviderConfig, userBlock: string): Promise<Pr
       model: cfg.model,
       max_tokens: maxTokens,
       // Haiku 5.5 thinks by default; this lane's output cap is a few hundred tokens.
-      ...haikuThinkingParam(cfg.model),
+      ...thinkingParams(cfg.model),
       system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userBlock }],
     });

@@ -8,7 +8,7 @@
  * the model emits inline citations linking each claim back to its source (#846).
  */
 
-import { haikuThinkingProviderOptions } from "@releases/adapters/extract/shared";
+import { modelId, thinkingProviderOptions } from "@releases/lib/models";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   generateText,
@@ -25,8 +25,8 @@ import {
   type RawOverviewCitation,
 } from "./overview-citations";
 
-/** Default model — Haiku is fine per the skill ("not a heavy reasoning task"). */
-export const MODEL = "claude-haiku-5-5";
+/** Anthropic fallback for org overviews. Same `summarize` role as release content. */
+export const MODEL = modelId("summarize");
 
 /** `modelId` off an AI SDK `LanguageModel`, or "" when it doesn't carry one. */
 function languageModelId(model: LanguageModel): string {
@@ -418,7 +418,7 @@ export async function generateOverview(
     prompt: string,
   ): Promise<{ body: string; citations: RawOverviewCitation[]; truncated: boolean }> => {
     let finalProviderMetadata: Record<string, unknown> | undefined;
-    const thinking = haikuThinkingProviderOptions(languageModelId(model));
+    const thinking = thinkingProviderOptions(languageModelId(model));
     try {
       const res = await generateText({
         model,

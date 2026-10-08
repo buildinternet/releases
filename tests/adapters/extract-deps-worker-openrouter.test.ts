@@ -10,6 +10,10 @@
  */
 import { describe, it, expect } from "bun:test";
 import { buildWorkerExtractDeps, type WorkerDepsEnv } from "@releases/adapters/extract-deps-worker";
+import { modelId } from "@releases/lib/models";
+
+const agentFallback = modelId("extractionAgent");
+const oneShotFallback = modelId("extraction");
 
 function baseEnv(overrides: Partial<WorkerDepsEnv> = {}): WorkerDepsEnv {
   return {
@@ -47,7 +51,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     );
 
     expect(deps.aiSdkModel).toBeDefined();
-    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5-5");
+    expect(deps.aiSdkModelLabel).toBe(agentFallback);
   });
 
   it("falls back to Anthropic AI SDK when extractModel is empty", async () => {
@@ -60,7 +64,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     );
 
     expect(deps.aiSdkModel).toBeDefined();
-    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5-5");
+    expect(deps.aiSdkModelLabel).toBe(agentFallback);
   });
 
   it("falls back to Anthropic AI SDK when the OpenRouter key does not resolve", async () => {
@@ -73,7 +77,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     );
 
     expect(deps.aiSdkModel).toBeDefined();
-    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5-5");
+    expect(deps.aiSdkModelLabel).toBe(agentFallback);
   });
 
   it("falls back to Anthropic AI SDK when no OpenRouter key binding is provided", async () => {
@@ -85,7 +89,7 @@ describe("resolveAiSdkExtractModel (via buildWorkerExtractDeps)", () => {
     );
 
     expect(deps.aiSdkModel).toBeDefined();
-    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5-5");
+    expect(deps.aiSdkModelLabel).toBe(agentFallback);
   });
 
   it("uses a custom agentModel for the Anthropic fallback label", async () => {
@@ -145,11 +149,11 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     );
 
     expect(deps.oneShotAiSdkModel).toBeDefined();
-    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-5-5");
+    expect(deps.oneShotAiSdkModelLabel).toBe(oneShotFallback);
     expect(deps.oneShotAiSdkProvider).toBe("anthropic");
     // And the tool-loop resolution must stay on its OWN (Sonnet) fallback —
     // the two tiers must never collapse onto the same Anthropic fallback model.
-    expect(deps.aiSdkModelLabel).toBe("claude-sonnet-5-5");
+    expect(deps.aiSdkModelLabel).toBe(agentFallback);
   });
 
   it("falls back to the custom oneShotModel when set, not the default", async () => {
@@ -174,7 +178,7 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     );
 
     expect(deps.oneShotAiSdkModel).toBeDefined();
-    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-5-5");
+    expect(deps.oneShotAiSdkModelLabel).toBe(oneShotFallback);
     expect(deps.oneShotAiSdkProvider).toBe("anthropic");
   });
 

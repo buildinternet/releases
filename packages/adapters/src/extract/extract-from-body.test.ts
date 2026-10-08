@@ -1,5 +1,6 @@
 import { describe, expect, test, spyOn } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
+import { modelId } from "@releases/lib/models";
 import { extractFromBody } from "./extract-from-body.js";
 import { anthropicSpikeModel } from "./extract-with-tools-aisdk.js";
 import { mockAnthropicClient } from "./test-helpers/anthropic-mock.js";
@@ -10,7 +11,7 @@ const silentLogger: ExtractLogger = { info: () => {}, warn: () => {}, debug: () 
 function makeDeps(client: unknown, overrides?: Partial<ExtractDeps>): ExtractDeps {
   return {
     anthropicClient: client as never,
-    agentModel: "claude-sonnet-5-5",
+    agentModel: modelId("extractionAgent"),
     logger: silentLogger,
     cloudflare: null,
     repo: {} as never,
@@ -207,12 +208,12 @@ describe("extractFromBody — model selection", () => {
         fetchUrl: "https://x.test/feed.json",
         useToolLoop: false,
       },
-      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-5-5" }),
+      makeDeps(capturingClient(params), { oneShotModel: modelId("extraction") }),
     );
 
     expect(params).toHaveLength(1);
-    expect(params[0]!.model).toBe("claude-haiku-5-5");
-    expect(result.modelUsed).toBe("claude-haiku-5-5");
+    expect(params[0]!.model).toBe(modelId("extraction"));
+    expect(result.modelUsed).toBe(modelId("extraction"));
   });
 
   test("one-shot falls back to agentModel when oneShotModel is unset (back-compat)", async () => {
@@ -229,11 +230,11 @@ describe("extractFromBody — model selection", () => {
       makeDeps(capturingClient(params)), // no oneShotModel
     );
 
-    expect(params[0]!.model).toBe("claude-sonnet-5-5");
-    expect(result.modelUsed).toBe("claude-sonnet-5-5");
+    expect(params[0]!.model).toBe(modelId("extractionAgent"));
+    expect(result.modelUsed).toBe(modelId("extractionAgent"));
   });
 
-  test("tool-loop path stays on agentModel even when oneShotModel is Haiku", async () => {
+  test("tool-loop path stays on agentModel even when oneShotModel is set", async () => {
     const params: Anthropic.MessageCreateParams[] = [];
     const result = await extractFromBody(
       {
@@ -244,15 +245,15 @@ describe("extractFromBody — model selection", () => {
         fetchUrl: "https://x.test/feed.json",
         useToolLoop: true,
       },
-      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-5-5" }),
+      makeDeps(capturingClient(params), { oneShotModel: modelId("extraction") }),
     );
 
     // Agentic loop must not be downgraded — every call runs on agentModel.
     // Guard against a vacuous `.every` pass: assert calls were actually made.
     expect(params.length).toBeGreaterThan(0);
-    expect(params.every((p) => p.model === "claude-sonnet-5-5")).toBe(true);
+    expect(params.every((p) => p.model === modelId("extractionAgent"))).toBe(true);
     expect(result.mode).toBe("toolloop");
-    expect(result.modelUsed).toBe("claude-sonnet-5-5");
+    expect(result.modelUsed).toBe(modelId("extractionAgent"));
   });
 });
 
@@ -356,8 +357,9 @@ describe("extractFromBody — deterministic extraction", () => {
 
   test("oneshot path omits temperature when it falls back to Sonnet 5.5 (rejects it)", async () => {
     const { captured, client } = captureOneShotParams("claude-sonnet-5-5");
-    // No oneShotModel → falls back to agentModel (claude-sonnet-5-5).
-    await extractFromBody(oneShotOpts, makeDeps(client));
+    // No oneShotModel → falls back to agentModel. Pin Sonnet 5.5 explicitly:
+    // this case is about that generation rejecting temperature, not the current pin.
+    await extractFromBody(oneShotOpts, makeDeps(client, { agentModel: "claude-sonnet-5-5" }));
     expect(captured.length).toBe(1);
     expect(captured[0]!.model).toBe("claude-sonnet-5-5");
     expect(captured[0]!.temperature).toBeUndefined();
