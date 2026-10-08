@@ -60,7 +60,7 @@ Each archive ships with a matching `.sha256` file, plus a top-level `checksums.t
 
 ```bash
 # Pick the archive that matches your platform
-curl -fsSL -o releases.gz https://github.com/buildinternet/releases-cli/releases/latest/download/releases-darwin-arm64.gz
+curl -fsSL -o releases.gz https://github.com/buildinternet/releases/releases/latest/download/releases-darwin-arm64.gz
 gunzip releases.gz
 chmod +x releases
 mv releases /usr/local/bin/
@@ -69,7 +69,7 @@ mv releases /usr/local/bin/
 **Windows (PowerShell):**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/buildinternet/releases-cli/releases/latest/download/releases-windows-x64.zip" -OutFile "releases.zip"
+Invoke-WebRequest -Uri "https://github.com/buildinternet/releases/releases/latest/download/releases-windows-x64.zip" -OutFile "releases.zip"
 Expand-Archive -Path "releases.zip" -DestinationPath "."
 # Move releases-windows-x64.exe somewhere on your PATH and rename to releases.exe
 ```

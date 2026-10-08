@@ -52,7 +52,7 @@ const MACHINE_ENDPOINTS = `## Machine-readable endpoints
 const OPTIONAL = `## Optional
 
 - [llms-full.txt](${BASE_URL}/llms-full.txt): All documentation pages concatenated into one file, for single-context ingestion.
-- [CLI source repository](https://github.com/buildinternet/releases-cli): The open-source CLI, agent skills, and Claude Code plugins.
+- [CLI source](https://github.com/buildinternet/releases/tree/main/apps/cli): The open-source CLI; agent skills and the Claude Code plugin live in the same repo under plugins/claude/releases.
 - [MCP Registry listing](https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp): The hosted server's entry in the official MCP Registry (\`sh.releases/mcp\`).
 - [Claude connector directory](${CLAUDE_DIRECTORY_URL}): Add the hosted MCP server to Claude on the web, desktop, and mobile.`;
 

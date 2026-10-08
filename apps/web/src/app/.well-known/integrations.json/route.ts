@@ -88,7 +88,7 @@ const body = {
       type: "cli",
       slug: "releases-cli",
       name: "Releases CLI",
-      docs: "https://github.com/buildinternet/releases-cli#readme",
+      docs: "https://github.com/buildinternet/releases/tree/main/apps/cli#readme",
       command: "releases",
       packages: [
         {
