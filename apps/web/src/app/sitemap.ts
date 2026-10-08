@@ -5,6 +5,7 @@ import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
 import { buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
+import { UPDATES_ORG_SLUG } from "@/lib/updates-org";
 import { ORG_FEED_PAGE_LIMIT, collectOrgFeed } from "./updates/updates-logic";
 
 // Render on-demand (not during `next build`) so a cold worker / slow D1 can't
@@ -46,7 +47,6 @@ const ALWAYS_PUBLIC: StaticRoute[] = [
 // The self-changelog org (see the /updates page). Per-day rollup permalinks
 // live at /updates/<date>; enumerate them so each entry is independently
 // indexable. Kept to its own guarded fetch so a failure degrades gracefully.
-const UPDATES_ORG_SLUG = "releases-sh";
 
 async function updatesEntries(): Promise<MetadataRoute.Sitemap> {
   try {

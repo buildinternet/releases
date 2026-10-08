@@ -3,11 +3,13 @@
 // statically analyze route-segment config through an `export … from`. (#1646)
 import { OG_CONTENT_TYPE, OG_SIZE } from "@/lib/og";
 import orgOgImage from "../opengraph-image";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
 export const alt = "Organization on Release Notes Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
+export const generateStaticParams = enableOnDemandIsr;
 
 export default function Image(ctx: { params: Promise<{ orgSlug: string }> }) {
   return orgOgImage(ctx);

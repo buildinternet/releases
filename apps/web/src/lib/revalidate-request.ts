@@ -14,6 +14,7 @@
  */
 
 import { verifyServiceKey } from "./service-auth";
+import { UPDATES_ORG_SLUG } from "./updates-org";
 
 export interface RevalidateDeps {
   /**
@@ -170,6 +171,9 @@ export async function handleRevalidateRequest(
     `/${body.orgSlug}`,
     ...(sourcePath ? [sourcePath, `${sourcePath}/changelog`, `${sourcePath}/highlights`] : []),
     ...(body.productSlug ? [`/${body.orgSlug}/${body.productSlug}`] : []),
+    // `/updates` is our own org's feed under another URL. Its day pages are
+    // left to the backstop: the ping doesn't say which day a release lands on.
+    ...(body.orgSlug === UPDATES_ORG_SLUG ? ["/updates"] : []),
   ];
   const unique = [...new Set(paths)];
 

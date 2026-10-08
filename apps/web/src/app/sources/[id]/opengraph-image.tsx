@@ -7,11 +7,13 @@ import {
   renderOgImage,
   resolveAvatarUrl,
 } from "@/lib/og";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
 export const alt = "Source on Release Notes Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
+export const generateStaticParams = enableOnDemandIsr;
 
 // Stays on REST (out of scope for #1978 slice 3 — see PR description): the
 // `_lib/source-by-id.ts` helper other routes under this segment share is now
