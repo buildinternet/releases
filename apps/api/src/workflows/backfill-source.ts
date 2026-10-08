@@ -54,8 +54,9 @@ import {
   type SourceBackfillReport,
 } from "../lib/ingest/source-backfill.js";
 
-// Haiku at temperature 0 — cheap + deterministic for structured extraction.
-const BACKFILL_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+// Haiku 5.5 — cheap structured extraction. Sampling params are omitted
+// (the model 400s on a non-default temperature) and thinking is disabled.
+const BACKFILL_EXTRACT_MODEL = "claude-haiku-5-5";
 
 // Per-batch summary chunk — mirrors BACKFILL_SUMMARY_CHUNK in workflows.ts.
 // generateContentForReleases bails above MAX_AUTOGEN_ROWS_PER_FIRE (20) in

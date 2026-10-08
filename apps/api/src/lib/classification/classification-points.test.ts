@@ -15,7 +15,7 @@ function record(
     failureCategory: null,
     verdict: null,
     provider: "anthropic",
-    model: "claude-haiku-4-5",
+    model: "claude-haiku-5-5",
     durationMs: 10,
     ...overrides,
   };

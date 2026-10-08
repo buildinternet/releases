@@ -187,7 +187,8 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
             outputTokens: rows.length * EST_OUTPUT_TOKENS_PER_ITEM,
           },
           ARTICLE_MODEL,
-          { batch: true },
+          // Sum of many sub-100K prompts — don't trip Haiku 5.5's long-context tier.
+          { batch: true, longContext: false },
         );
         const est = costEst?.totalUsd ?? 0;
 
@@ -470,7 +471,8 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
               outputTokens: u.output,
             },
             ARTICLE_MODEL,
-            { batch: true },
+            // Per-source rollup of many articles, not one prompt.
+            { batch: true, longContext: false },
           );
           actualCostUsd += cost?.totalUsd ?? 0;
           // oxlint-disable-next-line no-await-in-loop -- per-source, bounded by sourceIds.length

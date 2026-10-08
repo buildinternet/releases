@@ -1,6 +1,6 @@
 /**
  * Generate `title_generated`, `title_short`, and `summary`
- * for a release row via Anthropic Haiku 4.5 + a tuned system prompt.
+ * for a release row via Anthropic Haiku 5.5 + a tuned system prompt.
  *
  * Used by:
  *   - `scripts/generate-release-content.ts` — operational backfill / rerun
@@ -21,7 +21,7 @@ export type { ReleaseComposition };
 
 /** Model id used by the live and batch release-content paths. Exported so the
  *  backfill script can submit identical request shapes through the Batches API. */
-export const MODEL = "claude-haiku-4-5";
+export const MODEL = "claude-haiku-5-5";
 
 /** Maximum characters of release body sent to the model (truncated at this length). */
 export const MAX_BODY_CHARS = 8000;

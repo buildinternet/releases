@@ -58,7 +58,7 @@ function anthropicMessage(text: string): Response {
       id: "msg_test",
       type: "message",
       role: "assistant",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       content: [{ type: "text", text }],
       stop_reason: "end_turn",
       stop_sequence: null,

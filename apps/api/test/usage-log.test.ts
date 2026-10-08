@@ -75,7 +75,7 @@ describe("POST /v1/admin/logs/usage — sourceSlug → sourceId resolution", () 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           operation: "agent-ingest",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           inputTokens: 1000,
           outputTokens: 200,
           sourceSlug: "lone-tool",
@@ -101,7 +101,7 @@ describe("POST /v1/admin/logs/usage — sourceSlug → sourceId resolution", () 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           operation: "agent-ingest",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           inputTokens: 1000,
           outputTokens: 200,
           sourceSlug: "my-tool",
@@ -125,7 +125,7 @@ describe("POST /v1/admin/logs/usage — sourceSlug → sourceId resolution", () 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           operation: "agent-ingest",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           inputTokens: 500,
           outputTokens: 100,
           sourceId: "src_b1",
@@ -149,7 +149,7 @@ describe("POST /v1/admin/logs/usage — sourceSlug → sourceId resolution", () 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           operation: "agent-ingest",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           inputTokens: 100,
           outputTokens: 20,
           sourceSlug: "deleted-source",

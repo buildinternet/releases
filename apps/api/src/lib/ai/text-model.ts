@@ -88,8 +88,9 @@ const APP_TITLE = "Releases";
  * lanes cap output at a few hundred tokens, so a reasoning model would spend the
  * whole budget thinking and return empty content (#1633). Disable reasoning
  * unconditionally — inert on non-reasoning models like gemini-flash-lite, correct
- * on DeepSeek V4. Only applies on the OpenRouter path; the Anthropic Haiku
- * fallback is non-reasoning and ignores it.
+ * on DeepSeek V4. OpenRouter-only. The Anthropic Haiku 5.5 fallback thinks by
+ * default; `aisdkTextModel` sends `thinking: { type: "disabled" }` so the small
+ * output cap is not spent on reasoning.
  */
 const SUMMARIZE_REASONING: OpenRouterReasoning = { enabled: false };
 

@@ -45,7 +45,7 @@ call. Honest caveats:
 - Instruction-heavy prompts can **degrade inside the agent-tool loop**, so a
   sub-agent run tends to _underperform_ the metered path on hard cases.
 - The model snapshot and params (temperature, `max_tokens`, prompt caching) are
-  not guaranteed identical to the production `claude-haiku-4-5` call.
+  not guaranteed identical to the production `claude-haiku-5-5` call.
 - The Workflows use a **schema**, which forces clean structured output — so,
   unlike a raw free-text agent, there is no XML-tag/prose leakage to parse
   around. For the summary eval this means the run smoke-tests the model's
@@ -91,7 +91,7 @@ flattens them to plain `<release>` text.)
 _smoke test_ ("is the prompt followable? does it ever refuse?") but a poor
 _instrument_ for a satisfied-rate delta. There is no "subscription raw-completion"
 primitive exposed locally: the only way to exercise the exact production code path
-(prompt-as-system, `search_result` blocks, pinned `claude-haiku-4-5`, production
+(prompt-as-system, `search_result` blocks, pinned `claude-haiku-5-5`, production
 params) is the billable `client.messages.create` call. Detecting a small
 satisfied-rate change therefore needs **multiple metered samples per fixture**
 (single samples are inside the noise band), not the free path.

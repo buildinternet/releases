@@ -207,7 +207,7 @@ describe("summarize-skip logging", () => {
           id: "msg_test",
           type: "message",
           role: "assistant",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           stop_reason: "end_turn",
           content: [{ type: "text", text }],
           usage: { input_tokens: 10, output_tokens: 8 },

@@ -43,8 +43,10 @@ import {
   EXTRACTION_TEMPERATURE,
   extractReleasesToolFull,
   getSliceTool,
+  haikuThinkingProviderOptions,
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
+  modelAcceptsTemperature,
   queryJsonTool,
   TOOLLOOP_SYSTEM_PROMPT,
   withGuidance,
@@ -203,6 +205,13 @@ export async function extractWithToolsAiSdk(
     { role: "user", content: `${opts.userMessage}\n\n${preview.message}` },
   ];
 
+  // `LanguageModel` has no plain id field the temperature / thinking gates can
+  // read. Empty when a test double doesn't set `modelId` — that keeps the
+  // historical temperature-0 behavior for those doubles. OpenRouter model ids
+  // don't match the reject list, so DeepSeek still gets temperature 0.
+  const modelId = languageModelId(deps.model);
+  const thinking = haikuThinkingProviderOptions(modelId);
+
   // Thunk so the result type is inferred from the concrete tool set (a bare
   // `Awaited<ReturnType<typeof generateText>>` annotation collapses to the
   // generic `ToolSet` and won't accept the typed call's return).
@@ -212,7 +221,11 @@ export async function extractWithToolsAiSdk(
       instructions: instructions as Parameters<typeof generateText>[0]["instructions"],
       messages: baseMessages,
       tools,
-      temperature: EXTRACTION_TEMPERATURE,
+      // Sonnet 5.5 and Haiku 5.5 400 on temperature 0. The AI SDK also strips
+      // sampling params for those ids, but DeepSeek (which still wants 0) must
+      // not depend on that strip.
+      ...(modelAcceptsTemperature(modelId) ? { temperature: EXTRACTION_TEMPERATURE } : {}),
+      ...(thinking ? { providerOptions: thinking } : {}),
       maxOutputTokens: 16_384,
       // Stop on the terminal tool call OR when the round budget is spent. The
       // +1 leaves room for the "force extract_releases now" final turn the
@@ -302,6 +315,13 @@ export async function extractWithToolsAiSdk(
     throw new LoopFallbackError("max_rounds", makePartial());
   }
   throw new LoopFallbackError("no_terminal_call", makePartial());
+}
+
+/** `modelId` off an AI SDK `LanguageModel`, or "" when the object doesn't carry one. */
+function languageModelId(model: LanguageModel): string {
+  if (typeof model === "string") return model;
+  const id = (model as { modelId?: unknown }).modelId;
+  return typeof id === "string" ? id : "";
 }
 
 /** Test-only: build an Anthropic AI-SDK model that captures wire requests via an

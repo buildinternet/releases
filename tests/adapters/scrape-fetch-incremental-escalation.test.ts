@@ -121,7 +121,7 @@ let escalationResult: {
   fallbackReason: null,
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
-  modelUsed: "claude-haiku-4-5",
+  modelUsed: "claude-haiku-5-5",
 };
 let escalationShouldThrow = false;
 
@@ -250,7 +250,7 @@ describe("scrapeFetch incremental-window escalation (#2193)", () => {
       fallbackReason: null,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      modelUsed: "claude-haiku-4-5",
+      modelUsed: "claude-haiku-5-5",
     };
     globalThis.fetch = (async () => new Response("", { status: 200 })) as unknown as typeof fetch;
   });

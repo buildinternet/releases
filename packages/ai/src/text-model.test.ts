@@ -8,9 +8,9 @@ const ZERO = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 };
 
 describe("withUsageLogging", () => {
   it("preserves id and returns the inner result unchanged", async () => {
-    const inner = fakeModel("anthropic:claude-haiku-4-5", { ...ZERO, input: 5, output: 2 });
+    const inner = fakeModel("anthropic:claude-haiku-5-5", { ...ZERO, input: 5, output: 2 });
     const wrapped = withUsageLogging(inner, { lane: "x", sink: () => {} });
-    expect(wrapped.id).toBe("anthropic:claude-haiku-4-5");
+    expect(wrapped.id).toBe("anthropic:claude-haiku-5-5");
     const res = await wrapped.complete({ system: "s", user: "u", maxTokens: 1 });
     expect(res).toEqual({ text: "OUT", usage: { ...ZERO, input: 5, output: 2 } });
   });
@@ -51,7 +51,7 @@ describe("withUsageLogging", () => {
   it("normalizes Anthropic promptTokens to include cache reads/writes for a comparable hit rate", async () => {
     let rec: UsageRecord | undefined;
     // Anthropic `input_tokens` EXCLUDES cache → promptTokens = 10 + 30 read + 60 write = 100.
-    const inner = fakeModel("anthropic:claude-haiku-4-5", {
+    const inner = fakeModel("anthropic:claude-haiku-5-5", {
       input: 10,
       output: 5,
       cacheCreate: 60,
@@ -84,7 +84,7 @@ describe("withUsageLogging", () => {
 
   it("derives cost via deriveCost when the provider reports none", async () => {
     let rec: UsageRecord | undefined;
-    const inner = fakeModel("anthropic:claude-haiku-4-5", { ...ZERO, input: 100, output: 20 });
+    const inner = fakeModel("anthropic:claude-haiku-5-5", { ...ZERO, input: 100, output: 20 });
     const wrapped = withUsageLogging(inner, {
       lane: "summarize-release",
       sink: (r) => {
@@ -138,9 +138,9 @@ describe("withUsageLogging", () => {
 
 describe("splitModelId", () => {
   it("splits a provider:model id on the first colon", () => {
-    expect(splitModelId("anthropic:claude-haiku-4-5")).toEqual({
+    expect(splitModelId("anthropic:claude-haiku-5-5")).toEqual({
       provider: "anthropic",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
     });
   });
 
@@ -152,9 +152,9 @@ describe("splitModelId", () => {
   });
 
   it("returns provider 'unknown' when there is no colon", () => {
-    expect(splitModelId("claude-haiku-4-5")).toEqual({
+    expect(splitModelId("claude-haiku-5-5")).toEqual({
       provider: "unknown",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
     });
   });
 });

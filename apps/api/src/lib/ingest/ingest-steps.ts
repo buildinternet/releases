@@ -103,16 +103,17 @@ export function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneE
 const MAX_AUTOGEN_ROWS_PER_FIRE = 20;
 
 /**
- * Per-row body cap (chars). Haiku 4.5 input is $1/M tokens (~4 chars/token),
- * so 50k chars ≈ 12.5k tokens ≈ $0.013 per call before output. Above that we
- * skip the row — outlier bodies don't summarize well and they dominate cost.
+ * Per-row body cap (chars). Haiku 5.5 input is $0.10/M tokens on the ≤100K
+ * tier. The previous tokenizer was ~4 chars/token; Haiku 5.5 counts ~30% more,
+ * and 50k chars still stays under the 100K-token long-context tier. Above the
+ * cap we skip the row — outlier bodies don't summarize well and they dominate cost.
  */
 const MAX_AUTOGEN_BODY_CHARS = 50_000;
 
 /**
  * Per-org opt-in: when the source's org has `auto_generate_content = true`
  * and the source isn't hidden, run freshly-inserted releases through Haiku
- * 4.5 to populate `title_generated` / `title_short` / `summary`. A source can
+ * 5.5 to populate `title_generated` / `title_short` / `summary`. A source can
  * opt out individually via `metadata.summarize = false` (see
  * `summarizeNotOptedOut`) — useful for App Store apps whose notes are always
  * boilerplate. The opt-out lives in the SELECT predicate so it holds for the
@@ -324,7 +325,7 @@ export async function generateContentForReleases(
           {
             operation: "summarize",
             // usage_log.model historically stores the bare model id (e.g.
-            // "claude-haiku-4-5") so Anthropic rollups stay continuous with the
+            // "claude-haiku-5-5") so Anthropic rollups stay continuous with the
             // batch path. The TextModel id is "<provider>:<model>"; strip the
             // provider tag via the shared parser (OpenRouter ids like "google/…"
             // carry no further colon, so the bare model is unambiguous and, while

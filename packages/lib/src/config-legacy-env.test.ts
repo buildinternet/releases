@@ -29,7 +29,7 @@ describe("config accessors honor both prefixes", () => {
 
   test("ingestModel falls back, keeps default", async () => {
     const { config } = await import("@releases/lib/config");
-    expect(config.ingestModel()).toBe("claude-haiku-4-5-20251001");
+    expect(config.ingestModel()).toBe("claude-haiku-5-5");
     process.env.RELEASED_INGEST_MODEL = "x";
     expect(config.ingestModel()).toBe("x");
   });

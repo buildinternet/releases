@@ -29,7 +29,7 @@ it("resolves the marketing eval candidate via Decisions without running the eval
   }) as typeof fetch;
   expect(resolvers).toHaveProperty("resolveMarketingEvalModel");
   const picked = resolvers.resolveMarketingEvalModel({
-    anthropicModel: "claude-haiku-4-5",
+    anthropicModel: "claude-haiku-5-5",
     generationName: "marketing-classifier-eval",
     orModelEnvVar: "EVAL_MODEL",
   });
@@ -52,10 +52,10 @@ it("retains the Anthropic eval baseline when JEV has no key", () => {
   process.env.ANTHROPIC_API_KEY = "test-key";
   expect(resolvers).toHaveProperty("resolveMarketingEvalModel");
   const picked = resolvers.resolveMarketingEvalModel({
-    anthropicModel: "claude-haiku-4-5",
+    anthropicModel: "claude-haiku-5-5",
     generationName: "marketing-classifier-eval",
     orModelEnvVar: "EVAL_MODEL",
   });
-  expect(picked?.model.id).toBe("anthropic:claude-haiku-4-5");
+  expect(picked?.model.id).toBe("anthropic:claude-haiku-5-5");
   expect(picked?.model).toHaveProperty("complete");
 });

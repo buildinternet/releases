@@ -13,6 +13,7 @@ const silentLogger = { info: () => {}, warn: () => {}, debug: () => {}, error: (
 interface AnthropicWireBody {
   system?: Array<{ type: string; text: string; cache_control?: { type: string } }> | string;
   temperature?: number;
+  thinking?: { type: string };
   tool_choice?: { type: string; name?: string };
   max_tokens?: number;
 }
@@ -23,7 +24,7 @@ function anthropicResponse(content: unknown[], usage: Record<string, number> = {
       id: "msg_test",
       type: "message",
       role: "assistant",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       stop_reason: "tool_use",
       stop_sequence: null,
       content,
@@ -82,7 +83,7 @@ describe("runOneShotAiSdk", () => {
 
     const result = await runOneShotAiSdk(
       baseOpts,
-      makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch }),
+      makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch }),
     );
 
     expect(requests).toHaveLength(1);
@@ -104,6 +105,20 @@ describe("runOneShotAiSdk", () => {
     await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch }));
 
     expect(requests[0]!.temperature).toBe(0);
+    expect(requests[0]!.thinking).toBeUndefined();
+  });
+
+  it("omits temperature and disables thinking on Haiku 5.5", async () => {
+    const requests: AnthropicWireBody[] = [];
+    const mockFetch = (async (_url: string, init: RequestInit) => {
+      requests.push(JSON.parse(init.body as string) as AnthropicWireBody);
+      return anthropicResponse(terminalContent);
+    }) as unknown as typeof globalThis.fetch;
+
+    await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch }));
+
+    expect(requests[0]!.temperature).toBeUndefined();
+    expect(requests[0]!.thinking).toEqual({ type: "disabled" });
   });
 
   it("omits temperature on a model that rejects it (Sonnet 5.5)", async () => {
@@ -116,6 +131,7 @@ describe("runOneShotAiSdk", () => {
     await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-sonnet-5-5", mockFetch }));
 
     expect(requests[0]!.temperature).toBeUndefined();
+    expect(requests[0]!.thinking).toBeUndefined();
   });
 
   it("places the static cache_control breakpoint on the system prefix", async () => {
@@ -125,7 +141,7 @@ describe("runOneShotAiSdk", () => {
       return anthropicResponse(terminalContent);
     }) as unknown as typeof globalThis.fetch;
 
-    await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch }));
+    await runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch }));
 
     const sys = requests[0]!.system as Array<{ text: string; cache_control?: { type: string } }>;
     expect(Array.isArray(sys)).toBe(true);
@@ -143,7 +159,7 @@ describe("runOneShotAiSdk", () => {
 
     await runOneShotAiSdk(
       { ...baseOpts, guardrail: "GUARDRAIL_TEXT" },
-      makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch }),
+      makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch }),
     );
 
     const sys = requests[0]!.system as Array<{ text: string; cache_control?: { type: string } }>;
@@ -160,7 +176,7 @@ describe("runOneShotAiSdk", () => {
           id: "msg_len",
           type: "message",
           role: "assistant",
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-5-5",
           stop_reason: "max_tokens",
           stop_sequence: null,
           content: [],
@@ -176,7 +192,7 @@ describe("runOneShotAiSdk", () => {
 
     const result = await runOneShotAiSdk(
       baseOpts,
-      makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch: lengthMockFetch }),
+      makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch: lengthMockFetch }),
     );
 
     expect(result.hitMaxTokens).toBe(true);
@@ -188,7 +204,7 @@ describe("runOneShotAiSdk", () => {
   it("still rejects a missing required tool when the response was not truncated", async () => {
     const mockFetch = (async () => anthropicResponse([])) as unknown as typeof fetch;
     await expect(
-      runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch })),
+      runOneShotAiSdk(baseOpts, makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch })),
     ).rejects.toThrow(/required tool/);
   });
 
@@ -200,7 +216,7 @@ describe("runOneShotAiSdk", () => {
 
     const result = await runOneShotAiSdk(
       baseOpts,
-      makeDeps({ modelLabel: "claude-haiku-4-5", mockFetch }),
+      makeDeps({ modelLabel: "claude-haiku-5-5", mockFetch }),
     );
 
     expect(result.entries).toHaveLength(0);

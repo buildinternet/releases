@@ -79,11 +79,11 @@ describe("usage_log — feed enrichment (enrich-extract)", () => {
           usage: { input: number; output: number; cacheCreate: number; cacheRead: number },
           _model: string,
         ) => {
-          usageCalls.push({ ...usage, model: "claude-haiku-4-5" });
+          usageCalls.push({ ...usage, model: "claude-haiku-5-5" });
           try {
             await db.insert(usageLog).values({
               operation: "enrich-extract",
-              model: "claude-haiku-4-5",
+              model: "claude-haiku-5-5",
               inputTokens: usage.input,
               outputTokens: usage.output,
               cacheReadTokens: usage.cacheRead,
@@ -129,7 +129,7 @@ describe("usage_log — feed enrichment (enrich-extract)", () => {
     const rows = await db.select().from(usageLog).where(eq(usageLog.operation, "enrich-extract"));
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0].operation).toBe("enrich-extract");
-    expect(rows[0].model).toBe("claude-haiku-4-5");
+    expect(rows[0].model).toBe("claude-haiku-5-5");
     expect(rows[0].sourceId).toBe("src_feed");
   });
 
@@ -176,7 +176,7 @@ describe("usage_log — feed enrichment (enrich-extract)", () => {
           try {
             await db.insert(usageLog).values({
               operation: "enrich-extract",
-              model: "claude-haiku-4-5",
+              model: "claude-haiku-5-5",
               inputTokens: usage.input,
               outputTokens: usage.output,
               cacheReadTokens: usage.cacheRead,
@@ -228,7 +228,7 @@ describe("usage_log — firecrawl extract (firecrawl-extract)", () => {
       url: "https://enrichco.test/blog",
     } as unknown as Source;
 
-    const fakeModel = "claude-haiku-4-5-test";
+    const fakeModel = "claude-haiku-5-5-test";
 
     // Minimal fake Anthropic client matching the pattern used in firecrawl-extract.test.ts
     const fakeAnthropicClient = {

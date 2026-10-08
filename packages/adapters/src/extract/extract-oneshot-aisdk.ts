@@ -28,6 +28,7 @@ import {
   EXTRACTION_TEMPERATURE,
   extractReleasesToolCrawl,
   extractReleasesToolFull,
+  haikuThinkingProviderOptions,
   modelAcceptsTemperature,
 } from "./shared.js";
 import type { ExtractedEntry, ExtractLogger } from "./types.js";
@@ -85,6 +86,7 @@ export async function runOneShotAiSdk(
   // the provider stopped on length before producing a tool call. Retain that
   // call's usage and the existing hitMaxTokens retry signal.
   let callUsage: LanguageModelUsage | undefined;
+  const thinking = haikuThinkingProviderOptions(deps.modelLabel);
   const result = await generateText({
     model: deps.model,
     instructions: instructions as Parameters<typeof generateText>[0]["instructions"],
@@ -99,9 +101,11 @@ export async function runOneShotAiSdk(
     },
     toolChoice: { type: "tool", toolName: "extract_releases" },
     // Deterministic parse on models that still accept a non-default temperature
-    // (Haiku one-shot, most OpenRouter models); omitted on Sonnet 5.5 /
-    // Opus 4.7+ / Fable, which 400 on it. Mirrors the legacy runOneShot gate.
+    // (Haiku 4.5, most OpenRouter models); omitted on Sonnet 5.5 / Opus 4.7+ /
+    // Fable / Haiku 5.5, which 400 on it. Mirrors the legacy runOneShot gate.
     ...(modelAcceptsTemperature(deps.modelLabel) ? { temperature: EXTRACTION_TEMPERATURE } : {}),
+    // Haiku 5.5 thinks by default and those tokens count against maxOutputTokens.
+    ...(thinking ? { providerOptions: thinking } : {}),
     maxOutputTokens: opts.maxOutputTokens,
     onLanguageModelCallEnd: ({ usage }) => {
       callUsage = usage;

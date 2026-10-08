@@ -101,7 +101,7 @@ export const organizations = sqliteTable(
     // surfaced only on admin read surfaces, never in public api-types.
     trackingRequestedAt: text("tracking_requested_at"),
     // Per-org opt-in for ingest-time release content generation. When true,
-    // the poll-fetch / scrape-agent workflows call Haiku 4.5 to populate
+    // the poll-fetch / scrape-agent workflows call Haiku 5.5 to populate
     // title_generated / title_short / summary on newly-inserted releases.
     // Default false — every existing org is opted out; toggle in via SQL
     // for the initial roster.

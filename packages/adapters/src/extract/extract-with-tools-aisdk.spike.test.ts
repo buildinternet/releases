@@ -30,6 +30,8 @@ const silentLogger = {
 
 interface AnthropicWireBody {
   system?: Array<{ type: string; text: string; cache_control?: { type: string } }> | string;
+  temperature?: number;
+  thinking?: { type: string };
   messages: Array<{
     role: string;
     content:
@@ -44,7 +46,7 @@ function anthropicResponse(content: unknown[], usage: Record<string, number>): R
       id: "msg_test",
       type: "message",
       role: "assistant",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       stop_reason: "tool_use",
       stop_sequence: null,
       content,
@@ -105,7 +107,7 @@ describe("extractWithToolsAiSdk (spike) — cache-breakpoint parity", () => {
     const deps: AiSdkExtractDeps = {
       model: anthropicSpikeModel({
         apiKey: "sk-test",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         fetch: mockFetch,
       }),
       logger: silentLogger,
@@ -126,6 +128,11 @@ describe("extractWithToolsAiSdk (spike) — cache-breakpoint parity", () => {
 
     // ── Two requests captured (round 1 + terminal round). ──
     expect(requests).toHaveLength(2);
+    // Haiku 5.5 rejects temperature 0 and thinks by default.
+    for (const req of requests) {
+      expect(req.temperature).toBeUndefined();
+      expect(req.thinking).toEqual({ type: "disabled" });
+    }
 
     // STATIC breakpoint: every request's system prefix block is cached.
     for (const req of requests) {
@@ -197,7 +204,7 @@ describe("extractWithToolsAiSdk (spike) — cache-breakpoint parity", () => {
     const deps: AiSdkExtractDeps = {
       model: anthropicSpikeModel({
         apiKey: "sk-test",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         fetch: mockFetch,
       }),
       logger: silentLogger,
@@ -207,5 +214,36 @@ describe("extractWithToolsAiSdk (spike) — cache-breakpoint parity", () => {
     expect(forcedSeen).toBe(true);
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]!.title).toBe("forced");
+  });
+
+  it("omits temperature on Sonnet 5.5 and does not disable thinking", async () => {
+    const requests: AnthropicWireBody[] = [];
+    const mockFetch = (async (_url: string, init: RequestInit) => {
+      requests.push(JSON.parse(init.body as string) as AnthropicWireBody);
+      return anthropicResponse(
+        [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "extract_releases",
+            input: { releases: [{ title: "v1.0", content: "First release.", isBreaking: false }] },
+          },
+        ],
+        { input_tokens: 10, output_tokens: 5 },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    await extractWithToolsAiSdk(makeOpts(), {
+      model: anthropicSpikeModel({
+        apiKey: "sk-test",
+        model: "claude-sonnet-5-5",
+        fetch: mockFetch,
+      }),
+      logger: silentLogger,
+    });
+
+    expect(requests.length).toBeGreaterThanOrEqual(1);
+    expect(requests[0]!.temperature).toBeUndefined();
+    expect(requests[0]!.thinking).toBeUndefined();
   });
 });

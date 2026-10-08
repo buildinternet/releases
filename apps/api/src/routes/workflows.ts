@@ -2402,7 +2402,7 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
 //
 // Body: { releaseId, url?, dryRun? }
 
-const REFETCH_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+const REFETCH_EXTRACT_MODEL = "claude-haiku-5-5";
 // Shrink guard (#2077): refuse a write that shrinks the body below this
 // fraction of its current size, unless the current body is already tiny
 // (below the min) — re-fetching a thin teaser SHOULD be allowed to land a
@@ -2745,8 +2745,8 @@ const BACKFILL_MAX_MAX_WINDOWS = 200;
 // MAX_AUTOGEN_ROWS_PER_FIRE (20) in poll-and-fetch.ts; chunk under it so a
 // large backfill still gets every row summarized.
 const BACKFILL_SUMMARY_CHUNK = 20;
-// Matches FirecrawlIngestWorkflow's FIRECRAWL_EXTRACT_MODEL: cheap, deterministic.
-const BACKFILL_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+// Matches FirecrawlIngestWorkflow's FIRECRAWL_EXTRACT_MODEL (Haiku 5.5).
+const BACKFILL_EXTRACT_MODEL = "claude-haiku-5-5";
 
 const backfillLogger = {
   info: (msg: string) =>

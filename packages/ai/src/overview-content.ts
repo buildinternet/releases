@@ -8,6 +8,7 @@
  * the model emits inline citations linking each claim back to its source (#846).
  */
 
+import { haikuThinkingProviderOptions } from "@releases/adapters/extract/shared";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   generateText,
@@ -25,7 +26,14 @@ import {
 } from "./overview-citations";
 
 /** Default model — Haiku is fine per the skill ("not a heavy reasoning task"). */
-export const MODEL = "claude-haiku-4-5";
+export const MODEL = "claude-haiku-5-5";
+
+/** `modelId` off an AI SDK `LanguageModel`, or "" when it doesn't carry one. */
+function languageModelId(model: LanguageModel): string {
+  if (typeof model === "string") return model;
+  const id = (model as { modelId?: unknown }).modelId;
+  return typeof id === "string" ? id : "";
+}
 
 /** Per-release content cap (chars) — matches the skill's truncation rule. */
 const RELEASE_CONTENT_CHARS = 1000;
@@ -410,12 +418,15 @@ export async function generateOverview(
     prompt: string,
   ): Promise<{ body: string; citations: RawOverviewCitation[]; truncated: boolean }> => {
     let finalProviderMetadata: Record<string, unknown> | undefined;
+    const thinking = haikuThinkingProviderOptions(languageModelId(model));
     try {
       const res = await generateText({
         model,
         instructions: SYSTEM_PROMPT,
         prompt,
         maxOutputTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
+        // Haiku 5.5's default thinking counts against this 4000-token cap.
+        ...(thinking ? { providerOptions: thinking } : {}),
         output: Output.object({ schema: OVERVIEW_OUTPUT_SCHEMA }),
         // The AI SDK retries internally by default; disable it so the caller's
         // `generateOverviewWithRetry` stays the single retry authority (one extra

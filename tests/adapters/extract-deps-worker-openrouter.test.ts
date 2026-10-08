@@ -145,7 +145,7 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     );
 
     expect(deps.oneShotAiSdkModel).toBeDefined();
-    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-4-5-20251001");
+    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-5-5");
     expect(deps.oneShotAiSdkProvider).toBe("anthropic");
     // And the tool-loop resolution must stay on its OWN (Sonnet) fallback —
     // the two tiers must never collapse onto the same Anthropic fallback model.
@@ -174,7 +174,7 @@ describe("resolveAiSdkExtractModel — one-shot tier (via buildWorkerExtractDeps
     );
 
     expect(deps.oneShotAiSdkModel).toBeDefined();
-    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-4-5-20251001");
+    expect(deps.oneShotAiSdkModelLabel).toBe("claude-haiku-5-5");
     expect(deps.oneShotAiSdkProvider).toBe("anthropic");
   });
 

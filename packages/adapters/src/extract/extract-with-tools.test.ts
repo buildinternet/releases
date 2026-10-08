@@ -131,10 +131,10 @@ describe("extractWithTools — happy path", () => {
 });
 
 describe("extractWithTools — deterministic extraction", () => {
-  // The determinism knob (temperature 0) is model-gated: models released after
-  // Opus 4.6 (Sonnet 5.5, Opus 4.7+, Fable) reject a non-default temperature with a
-  // 400, so it's omitted there and kept on models that still accept it (Haiku
-  // 4.5). See modelAcceptsTemperature in shared.ts.
+  // The determinism knob (temperature 0) is model-gated: Sonnet 5.5, Opus 4.7+,
+  // Fable, and Haiku 5.5 reject a non-default temperature with a 400, so it's
+  // omitted there and kept on models that still accept it (Haiku 4.5). Haiku 5.5
+  // also needs thinking disabled. See modelAcceptsTemperature in shared.ts.
   function captureToolLoopParams(agentModel: string) {
     const captured: Array<Record<string, unknown>> = [];
     const client = capturingBetaClient(captured, [
@@ -173,6 +173,17 @@ describe("extractWithTools — deterministic extraction", () => {
     await extractWithTools(loopOpts, makeDeps(client, "claude-sonnet-5-5"));
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured.every((p) => p.temperature === undefined)).toBe(true);
+    expect(captured.every((p) => p.thinking === undefined)).toBe(true);
+  });
+
+  test("tool-loop rounds omit temperature and disable thinking on Haiku 5.5", async () => {
+    const { captured, client } = captureToolLoopParams("claude-haiku-5-5");
+    await extractWithTools(loopOpts, makeDeps(client, "claude-haiku-5-5"));
+    expect(captured.length).toBeGreaterThanOrEqual(1);
+    expect(captured.every((p) => p.temperature === undefined)).toBe(true);
+    expect(
+      captured.every((p) => (p.thinking as { type?: string } | undefined)?.type === "disabled"),
+    ).toBe(true);
   });
 
   test("tool-loop rounds request temperature 0 on models that still accept it", async () => {
@@ -180,6 +191,7 @@ describe("extractWithTools — deterministic extraction", () => {
     await extractWithTools(loopOpts, makeDeps(client, "claude-haiku-4-5"));
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured.every((p) => p.temperature === 0)).toBe(true);
+    expect(captured.every((p) => p.thinking === undefined)).toBe(true);
   });
 });
 

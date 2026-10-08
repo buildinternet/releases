@@ -25,7 +25,7 @@ import {
   type DecisionModel,
 } from "./decision-model";
 
-export const MODEL = "claude-haiku-4-5";
+export const MODEL = "claude-haiku-5-5";
 export type MarketingModel = TextModel | DecisionModel;
 
 /**

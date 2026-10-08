@@ -22,7 +22,7 @@ import { getEvalsDir } from "@releases/lib/config";
 export interface EvalRunInput {
   /** Short eval name, used as the filename prefix (e.g. "marketing", "summary"). */
   eval: string;
-  /** Model under test (e.g. "claude-haiku-4-5"). */
+  /** Model under test (e.g. "claude-haiku-5-5"). */
   model: string;
   /** Did the run pass its gate? */
   pass: boolean;

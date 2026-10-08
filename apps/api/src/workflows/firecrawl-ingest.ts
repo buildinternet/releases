@@ -43,9 +43,9 @@ import type { PollAndFetchWorkflowEnv } from "./poll-and-fetch.js";
 // in steady state the workflow extracts only the diff delta (a few new
 // entries), and even a baseline scrape is windowed to a recent slice, so the
 // input is small and structured — Haiku parses it reliably at a fraction of
-// Sonnet's cost. Extraction runs at temperature 0 (see extract-from-body) for
-// reproducible parses.
-const FIRECRAWL_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+// Sonnet's cost. Haiku 5.5 rejects a non-default temperature, so the request
+// omits it and disables adaptive thinking (see extract-from-body).
+const FIRECRAWL_EXTRACT_MODEL = "claude-haiku-5-5";
 
 // record-failure writes a fetch_log row + bumps consecutiveErrors — neither is
 // idempotent, so it runs as a single best-effort attempt (no retries). Retrying

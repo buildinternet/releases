@@ -122,7 +122,7 @@ function anthropicJson(verdict: { marketing: boolean; reason: string }): Respons
       id: "msg_test",
       type: "message",
       role: "assistant",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       content: [
         {
           type: "text",
@@ -463,7 +463,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
             id: "msg_test",
             type: "message",
             role: "assistant",
-            model: "claude-haiku-4-5",
+            model: "claude-haiku-5-5",
             content: [{ type: "text", text: "this is not the format we asked for" }],
             stop_reason: "end_turn",
             stop_sequence: null,
@@ -646,7 +646,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
             id: "msg_test",
             type: "message",
             role: "assistant",
-            model: "claude-haiku-4-5",
+            model: "claude-haiku-5-5",
             content: [{ type: "text", text: "this is not the format we asked for" }],
             stop_reason: "end_turn",
             stop_sequence: null,

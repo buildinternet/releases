@@ -30,6 +30,7 @@ import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { haikuThinkingParam } from "@releases/adapters/extract/shared";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import {
   MODEL,
@@ -101,8 +102,9 @@ const MAX_ELIGIBLE_ROWS = 2_000;
 
 /**
  * Tokens per row for cost estimation: SYSTEM_PROMPT chars / 4 + per-row block.
- * We estimate 3.5 chars/token as a conservative approximation (Haiku 4.5 uses
- * ~4 chars/token on average; code-heavy content runs lower). The SYSTEM_PROMPT
+ * We estimate 3.5 chars/token as a conservative approximation (the previous
+ * Claude tokenizer was ~4 chars/token; Haiku 5.5 counts ~30% more, and
+ * code-heavy content runs lower still). The SYSTEM_PROMPT
  * is counted for every request — this is conservative because the Batches API
  * does honor cache_control (ephemeral), so cache hits will reduce the actual
  * charge. The over-estimate is intentional for the budget guard.
@@ -235,7 +237,8 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         const costEst = estimateCost(
           { inputTokens: totalEstInputTokens, outputTokens: estOutputTokens },
           MODEL,
-          { batch: true },
+          // Sum of many sub-100K prompts — don't trip Haiku 5.5's long-context tier.
+          { batch: true, longContext: false },
         );
         const estCostUsd = costEst?.totalUsd ?? 0;
 
@@ -306,6 +309,8 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           params: {
             model: MODEL,
             max_tokens: MAX_OUTPUT_TOKENS,
+            // 440-token cap; default Haiku 5.5 thinking would return empty text.
+            ...haikuThinkingParam(MODEL),
             system: [
               {
                 type: "text" as const,

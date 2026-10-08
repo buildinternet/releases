@@ -1,6 +1,8 @@
 /**
  * Token counting via js-tiktoken `cl100k_base`. Used as a proxy for
- * Claude's proprietary tokenizer (empirically within ~5% on English prose).
+ * Claude's tokenizer. It tracked Haiku 4.5 within ~5% on English prose;
+ * Haiku 5.5's tokenizer counts ~30% more for the same text, so this
+ * undercounts billed Haiku 5.5 tokens. The chars/4 heuristic is unchanged.
  * The encoder is lazy-loaded so non-changelog CLI commands don't pay the
  * ~1MB ranks cost; `lite` + a direct rank import avoids the 11MB bundle.
  */
