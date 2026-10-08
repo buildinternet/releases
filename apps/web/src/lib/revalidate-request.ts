@@ -60,8 +60,9 @@ const DIGEST_WEEK = /^\d{4}-\d{2}-\d{2}$/;
  * `/collections/<slug>`, the same one/two-segment slug shapes the
  * orgSlug-based body below already sends (`/<org>`, `/<org>/<source-or-product>`),
  * a collection's weekly-digest pages (`/collections/<slug>/digest` and
- * `/collections/<slug>/digest/<YYYY-MM-DD>`), which go stale when a digest is
- * added or regenerated, a source's ISR sub-tabs (`/<org>/<source>/changelog`,
+ * `/collections/<slug>/digest/<YYYY-MM-DD>`, and that week's
+ * `/collections/<slug>/digest/<YYYY-MM-DD>/replay`), which go stale when a
+ * digest is added or regenerated, a source's ISR sub-tabs (`/<org>/<source>/changelog`,
  * `/<org>/<source>/highlights`), and an `/updates/<YYYY-MM-DD>` day page — so
  * an operator can refresh any cached page by hand. Nothing else is a valid
  * `revalidatePath()` target for this endpoint.
@@ -83,7 +84,9 @@ function isAllowedRevalidatePath(path: string): boolean {
   const [root, slug, digest, week] = segments;
   if (root !== "collections" || digest !== "digest" || !SAFE_SLUG.test(slug)) return false;
   if (segments.length === 3) return true;
-  return segments.length === 4 && DIGEST_WEEK.test(week);
+  if (!DIGEST_WEEK.test(week)) return false;
+  if (segments.length === 4) return true;
+  return segments.length === 5 && segments[4] === "replay";
 }
 
 interface RevalidatePathsBody {
