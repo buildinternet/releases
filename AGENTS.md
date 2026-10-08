@@ -1,6 +1,6 @@
 # Releases
 
-Changelog indexer and registry for AI agents and developers. The user-facing CLI lives out-of-tree at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli); this monorepo is the backend (API worker + D1), the remote MCP server, and the web frontend.
+Changelog indexer and registry for AI agents and developers. The user-facing CLI lives in this monorepo at `apps/cli/` (published as `@buildinternet/releases`); alongside it are the backend (API worker + D1), the remote MCP server, and the web frontend.
 
 ## Stack
 
@@ -16,10 +16,11 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 ```
 apps/
   web/            Next.js frontend (Vercel)
+  cli/            the `releases` CLI (published as @buildinternet/releases)
   api/            REST API (Cloudflare Worker, Hono + D1)
   mcp/            remote MCP server (Cloudflare Worker)
   webhooks/       webhook delivery queue consumer (Cloudflare Worker)
-packages/         shared code: published @buildinternet/releases-* and private @releases/*
+packages/         shared code: published @buildinternet/releases-* (incl. releases-lib) and private @releases/*
 actions/          GitHub Actions (publish-changelog)
 skills/           published agent skills
 scripts/          operational + maintenance scripts
@@ -34,9 +35,9 @@ Per-directory details: [apps/README.md](apps/README.md) and [packages/README.md]
 - Lint + format + type-check: `bun run check` (oxlint with `typeCheck` via `oxlint-tsgolint`, then `oxfmt --check`)
 - Lint only: `bun run lint` (`bun run typecheck` is an alias)
 - Format: `bun run format:check`
-- Tests: `bun run test` (not part of `check`; runs the root script below — a bare `bun test` puts every suite in one process)
+- Tests: `bun run test` (not part of `check`; runs the root script below — a bare `bun test` puts every suite in one process; `bun test apps/cli` is the last process in it)
 - Targeted `tsc`: `apps/mcp` still uses `npx tsc --noEmit` in CI (carved-out workspace; excluded from root oxlint). `apps/web` and `tests/` have their own tsconfigs for local runs.
-- **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live in the OSS CLI repo.
+- **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live with the CLI (`apps/cli/`).
 
 ## Local development
 
@@ -52,14 +53,15 @@ The root `test` script is `bun test packages/ && bun test tests/ apps/web/ apps/
 
 Shared code is split between published npm packages (`@buildinternet/releases-*`) and private in-tree packages (`packages/`):
 
-- `packages/core/` → published as **`@buildinternet/releases-core`** from this monorepo. Pure, runtime-neutral helpers shared with the OSS CLI: DB schema (source of truth), `categories`, `dates`, `changelog-range`, `changelog-slice`, `overview`, `id`, `slug`, `tokens`, `cli-contracts`, `lookup-coordinate`, `fts` (FTS5 query sanitizer — wraps tokens in phrase quotes so `org/repo` and similar punctuation don't error). Consumed here via `workspace:*`; the OSS CLI pulls the published npm version. Schema changes land here first, then get picked up by the CLI on the next version bump.
+- `packages/core/` → published as **`@buildinternet/releases-core`** from this monorepo. Pure, runtime-neutral helpers shared with the CLI: DB schema (source of truth), `categories`, `dates`, `changelog-range`, `changelog-slice`, `overview`, `id`, `slug`, `tokens`, `cli-contracts`, `lookup-coordinate`, `fts` (FTS5 query sanitizer — wraps tokens in phrase quotes so `org/repo` and similar punctuation don't error). Consumed here and by the in-tree CLI via `workspace:*`, so schema changes and their CLI updates land in one PR.
 - `packages/core-internal/` → imported as **`@releases/core-internal`**. Private, workspace-only. DB-coupled / worker-only helpers the thin client doesn't need: `release-upsert` (drizzle upsert config), `hash` (node crypto), webhook surface (`webhook-sign`, `webhook-resilience`, `webhook-url-safety`, `webhook-delivery`, `webhook-alert-format`, plus `release-event` wire types), `schema-coverage` (the `release_coverage` table, part of the drizzle composite schema).
-- `packages/api-types/` → published as **`@buildinternet/releases-api-types`** from this monorepo. Wire protocol — request/response shapes served by the API worker, consumed by the MCP worker, web frontend, and the OSS CLI. Consumed here via `workspace:*`; the OSS CLI pulls the published npm version. Wire changes land here first; the CLI bumps its pin when adopting new shapes. Additive by default — renames/removals go through a one-minor-version deprecation alias before removal.
+- `packages/api-types/` → published as **`@buildinternet/releases-api-types`** from this monorepo. Wire protocol — request/response shapes served by the API worker, consumed by the MCP worker, web frontend, and the OSS CLI. Consumed here and by the in-tree CLI via `workspace:*`; wire changes and the CLI that adopts them ship together. Additive by default — renames/removals go through a one-minor-version deprecation alias before removal.
 - `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, `crawl`, and `feed` adapters, plus the shared scrape/agent fetch orchestration (`scrape-fetch` / `extract-deps-worker` / `deterministic-update`, persisting via an injected API fetcher — used by the API worker's update workflow, #1946). All pure / worker-safe.
 - `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table), `release-content` (Haiku 5.5 summarization for `title_generated` / `title_short` / `summary` — shared by `scripts/generate-release-content.ts` and the ingest-time hook), `marketing-classifier` (Haiku 5.5 binary verdict on whether a feed item is real product news vs. marketing — used by `fetchOne` when `metadata.marketingFilter` is set). Worker-safe; caller passes the Anthropic client.
 - `packages/rendering/` → imported as **`@releases/rendering/*`**. Atom feed helpers, markdown/JSON formatters, and media URL helpers.
 - `packages/search/` → imported as **`@releases/search/*`**. Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
 - `packages/lib/` — slim private utilities (`config`, `errors`, `source-edit`, Anthropic client/error helpers, managed-agent rate limits, `anthropic-pricing` for list-price cost estimates on managed-agent sessions, `spend-cap` daily-spend KV gate, `session-error-classify`). `logger` is published as `@buildinternet/releases-lib/logger`.
+- `packages/releases-lib/` → published as **`@buildinternet/releases-lib`** (CLI helpers: `config`, `legacy-env`, `logger`), part of the CLI's fixed release group. A workspace here; the CLI and `@releases/*` packages consume it via `workspace:*`.
 
 Onboarding is agent-driven, not a remote harness: a local Claude Code session runs the local-ingest skill, self-serve listing, or on-demand `/v1/lookups` to add orgs/products/sources by hand. See [agents.md](docs/architecture/agents.md).
 
@@ -102,6 +104,7 @@ The `release_coverage` schema lives with the rest of the DB-coupled internals in
 - **Feature flags via Cloudflare Flagship (Tier 1).** Boolean kill switches / rollout gates evaluate at runtime through the `FLAGS` binding; registry is `@releases/lib/flags` (`flag(binding, varValue, def)`); order is Flagship → wrangler var → default, failing open to the var. Adding a flag: add a `FLAGS` entry, convert the read to `await flag(...)`, and create the same kebab-case key in BOTH Flagship apps (`releases-platform{,-staging}`). Numeric tunables and secrets are intentionally NOT in Flagship. See [feature-flags.md](docs/architecture/feature-flags.md).
 - **Be judicious with feature flags — do NOT add one by default.** Every flag is permanent maintenance surface: a registry entry, a runtime branch on every read, a key that must be created and kept in sync across BOTH Flagship apps, and a dead code path to eventually retire. A flag per feature is how a flag registry rots into dozens nobody dares delete. **Default to shipping a feature enabled, with no flag.** Reach for one ONLY when there's a concrete reason runtime toggling earns its keep: a genuine kill switch for something risky/expensive/external-facing, a staged rollout you actually intend to ramp, or an operational lever you'd pull without a redeploy. If you can't name which of those applies, you don't need a flag. When unsure, ship it on and add the flag later if a real need appears — adding is cheap, a sprawl of stale flags is not. Prefer one well-scoped kill switch over several fine-grained per-feature toggles.
 - Extract tier: `extractFromBody()` branches on body token count — ≤50K one-shot `/v1/messages`, >50K a multi-round tool-use loop via AI SDK (`extract-with-tools-aisdk.ts`; legacy Anthropic SDK loop in `extract-with-tools.ts` only when no `aiSdkModel`), gated behind `EXTRACT_TOOLLOOP_ENABLED` (per-source `metadata.extractStrategy = "toolloop"`); falls back to one-shot on any error. See [extract.md](docs/architecture/extract.md).
+- **CLI (`apps/cli/`, #2445):** `releases` is built and published from this monorepo as a 7-package changesets fixed group (`@buildinternet/releases`, 5 platform binaries, `@buildinternet/releases-lib`); `publish-cli.yml` ships npm + GitHub release + Homebrew tap. Ship flow and trusted-publisher setup: [cli-distribution.md](docs/architecture/cli-distribution.md).
 - **Classification taxonomy** — source `kind` enum, products, release type (`feature`/`rollup`), tags, categories, collections, and how these axes differ (`kind` vs `type` vs `category`): [taxonomy.md](docs/architecture/taxonomy.md).
 - **REST route surface** — route-naming buckets (#494), org-scoped routes + dual-registration + `bare_slug_rejected` (#690/#698), the `/v1/lookups` family (coordinate POST + on-demand materialization, by-domain, slug resolvers), org catalog, entity resolution (IDs over slugs), pagination shape, and the OpenAPI coverage gate (#894): [routing.md](docs/architecture/routing.md).
 - **Inbound provider webhooks live at `/v1/inbound/<provider>`** (`firecrawl`, `github`): a namespace with no shared auth middleware, where each handler checks its own secret. Never put a receiver under a gated namespace (`/v1/integrations`, `/v1/webhooks`). A router's `.use("/prefix/*")` gates other routers' routes too, which `apps/api/test/route-gate-isolation.test.ts` guards (#2428). See [routing.md](docs/architecture/routing.md).

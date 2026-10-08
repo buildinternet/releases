@@ -8,7 +8,7 @@ effectiveDate: "June 5, 2026"
 
 _Effective June 5, 2026_
 
-This page explains what data Release Notes Index collects when you use the web app, the public API, a Releases Index account, the [releases CLI](https://github.com/buildinternet/releases-cli), or the MCP server, and who we share it with. The project is run by [Build Internet](https://buildinternet.com). The service is hosted at [releases.sh](https://releases.sh).
+This page explains what data Release Notes Index collects when you use the web app, the public API, a Releases Index account, the [releases CLI](https://github.com/buildinternet/releases/tree/main/apps/cli), or the MCP server, and who we share it with. The project is run by [Build Internet](https://buildinternet.com). The service is hosted at [releases.sh](https://releases.sh).
 
 ## What we collect
 

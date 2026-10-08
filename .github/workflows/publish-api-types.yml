@@ -98,6 +98,8 @@ jobs:
       # Provenance marker: tag the exact commit each npm version shipped from and
       # surface it in the repo's Releases sidebar. `gh release create` creates the
       # tag at --target; idempotent via the already-published gate above.
+      # --latest=false: the CLI release (publish-cli.yml) owns the repo's
+      # "latest" marker that /releases/latest/download/... resolves against.
       - name: Tag + GitHub release
         if: steps.check.outputs.already == 'false' && inputs.dry-run != true
         env:
@@ -105,6 +107,7 @@ jobs:
           API_TYPES_VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "api-types@${API_TYPES_VERSION}" \
+            --latest=false \
             --target "${GITHUB_SHA}" \
             --title "@buildinternet/releases-api-types@${API_TYPES_VERSION}" \
             --notes "Published [@buildinternet/releases-api-types@${API_TYPES_VERSION}](https://www.npmjs.com/package/@buildinternet/releases-api-types/v/${API_TYPES_VERSION}) to npm from ${GITHUB_SHA}."

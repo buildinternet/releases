@@ -13,7 +13,7 @@ Releases tracks what software vendors ship. The pipeline, end to end:
 3. **Hard cases get agents.** A local Claude Code session onboards or backfills a source it can't parse deterministically — see [agents.md](architecture/agents.md); pages behind anti-bot challenges go through Firecrawl.
 4. **Serving:** the API worker exposes everything over public REST; the MCP worker gives AI agents the same data as tools; the web frontend renders it for people; webhooks and a WebSocket stream push new releases out in real time; hybrid lexical + vector search sits across all of it.
 
-The one structural rule to internalize: **the API worker is the only data plane.** The CLI (in a [separate repo](https://github.com/buildinternet/releases-cli)), the web app, the MCP server, and any local agent session are all clients of it.
+The one structural rule to internalize: **the API worker is the only data plane.** The CLI (`apps/cli/`), the web app, the MCP server, and any local agent session are all clients of it.
 
 ## Start here, by task
 
@@ -81,7 +81,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 ### Everything else
 
 - **[firecrawl-monitoring.md](architecture/firecrawl-monitoring.md)** — the external fetch backend for challenge-blocked pages, its unusual diff-not-markdown webhook format, and the backfill/re-extract workflows built on it.
-- **[cli-distribution.md](architecture/cli-distribution.md)** — which npm packages publish from which repo, and the schema-change shipping path to the CLI.
+- **[cli-distribution.md](architecture/cli-distribution.md)** — where the CLI lives, the 7-package fixed release group, and how a CLI change ships (npm, GitHub release, Homebrew).
 - **[storage-portability.md](architecture/storage-portability.md)** — where SQLite/D1 assumptions live, the entity-ID invariant (single typed nanoid), lexical-search ownership, backend capability map, and what a future optional Postgres backend would cost. Aspirational, not in progress; read before touching the DB construction seam.
 - **[shared-queries.md](architecture/shared-queries.md)** — `packages/queries`, the read layer the API and MCP workers share: what has moved, the MCP-vs-API filter differences still open, and the order of the next slices.
 - **[emails.md](architecture/emails.md)** — the shared transactional-email shell: lanes, email-client constraints, Gmail annotations, admin preview.

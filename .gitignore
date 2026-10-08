@@ -89,3 +89,11 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# apps/cli compiled binaries (built in CI)
+apps/cli/npm/*/releases
+apps/cli/npm/*/releases.exe
+apps/cli/npm/releases/README.md
+apps/cli/dist
+*.bun-build
+.*.bun-build

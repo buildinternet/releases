@@ -29,7 +29,7 @@ flowchart LR
 
 ## Why the home dir (and not CWD)
 
-- **Reachable from any checkout.** You run these skills from the monorepo and admin commands from the `releases-cli` repo. A home-dir workspace gives one audit trail both reach, instead of artifacts stranded in whichever directory happened to be CWD that session.
+- **Reachable from any checkout.** You run these skills from the monorepo and admin commands from the CLI checkout or any other directory. A home-dir workspace gives one audit trail both reach, instead of artifacts stranded in whichever directory happened to be CWD that session.
 - **Survives worktree churn.** Worktrees come and go; `~/.releases/work/` persists, so the trail isn't lost when an isolated checkout is cleaned up.
 - **Consistent with the CLI's data dir.** It uses the same root as `getDataDir()` (`RELEASES_DATA_DIR` || `~/.releases`), so maintenance artifacts sit next to the per-day `logs/`, `credentials`, and caches the CLI already owns — one place for per-user state.
 - **Not committed, by design.** It's outside any repo — these are working artifacts, not source. Promote anything durable (a recurring task definition, a notable finding) into `.context/` or an issue deliberately.
@@ -136,4 +136,4 @@ The trade-off: these runs do not show up in `work status` (no pointer), which is
 
 **What this does NOT capture: sub-agent generation cost.** The mutation log and session traces cover CLI writes and server-side managed sessions. The parallel _generation_ sub-agents a skill fans out (e.g. one per org in a `maintaining-orgs` regen sweep) are usually the dominant spend, but they are not CLI sessions: **no automatic CLI/session log appears in `runs/` for them.** The only record is manual — the parent reads each sub-agent's completion summary and writes the per-sub-agent token totals into the run's `summary.md` by hand. So the "local sub-agent cost" figure in the templates above is a parent-recorded estimate in `summary.md`, not an auto-logged value alongside `mutations.jsonl` / the session traces.
 
-Because the workspace is per-user, a session triggered from the `releases-cli` repo and a playbook batch run from the monorepo land in the same `runs/` — a single, greppable cost + mutation ledger for the money-spending operations, defense-in-depth alongside the server-side spend cap.
+Because the workspace is per-user, a session running the CLI from another directory and a playbook batch run from the monorepo land in the same `runs/` — a single, greppable cost + mutation ledger for the money-spending operations, defense-in-depth alongside the server-side spend cap.

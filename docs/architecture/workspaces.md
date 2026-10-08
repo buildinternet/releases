@@ -89,7 +89,7 @@ live session's `activeOrganizationId` on both session create and session update 
 explicit workspace switch) — so it's accurate without a second `getSession()` call, and it
 resolves for Bearer principals too, which have no session row. Read-only: creating,
 renaming, and switching workspaces stay on Better Auth. Added to unblock workspace-scoped
-webhooks for the CLI and MCP server (#2326, buildinternet/releases-cli#406), which
+webhooks for the CLI and MCP server (#2326, releases-cli#406), which
 authenticate by Bearer and have no browser session to read the active workspace from.
 
 ## Out of scope (follow-ups)

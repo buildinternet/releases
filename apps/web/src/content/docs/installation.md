@@ -44,7 +44,7 @@ The script detects your platform, downloads the correct binary from npm, and ins
 
 ## GitHub Releases (precompiled binaries)
 
-Every version ships precompiled binaries for each supported platform on the [`buildinternet/releases-cli` releases page](https://github.com/buildinternet/releases-cli/releases). Use these for air-gapped installs, pinning to a specific version, or machines where npm and Homebrew aren't an option.
+Every version ships precompiled binaries for each supported platform on the [`buildinternet/releases` releases page](https://github.com/buildinternet/releases/releases). Use these for air-gapped installs, pinning to a specific version, or machines where npm and Homebrew aren't an option.
 
 Available archives per release:
 
@@ -60,7 +60,7 @@ Each archive ships with a matching `.sha256` file, plus a top-level `checksums.t
 
 ```bash
 # Pick the archive that matches your platform
-curl -fsSL -o releases.gz https://github.com/buildinternet/releases-cli/releases/latest/download/releases-darwin-arm64.gz
+curl -fsSL -o releases.gz https://github.com/buildinternet/releases/releases/latest/download/releases-darwin-arm64.gz
 gunzip releases.gz
 chmod +x releases
 mv releases /usr/local/bin/
@@ -69,20 +69,20 @@ mv releases /usr/local/bin/
 **Windows (PowerShell):**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/buildinternet/releases-cli/releases/latest/download/releases-windows-x64.zip" -OutFile "releases.zip"
+Invoke-WebRequest -Uri "https://github.com/buildinternet/releases/releases/latest/download/releases-windows-x64.zip" -OutFile "releases.zip"
 Expand-Archive -Path "releases.zip" -DestinationPath "."
 # Move releases-windows-x64.exe somewhere on your PATH and rename to releases.exe
 ```
 
 ## From source (development)
 
-The CLI source lives at [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli). Requires [Bun](https://bun.sh) v1.1+ (Bun supports macOS, Linux, and Windows).
+The CLI source lives in the [`buildinternet/releases`](https://github.com/buildinternet/releases) monorepo under `apps/cli/`. Requires [Bun](https://bun.sh) v1.1+ (Bun supports macOS, Linux, and Windows).
 
 ```bash
-git clone https://github.com/buildinternet/releases-cli.git
-cd releases-cli
+git clone https://github.com/buildinternet/releases.git
+cd releases
 bun install
-bun src/index.ts --help
+bun apps/cli/src/index.ts --help
 ```
 
 ## Verify

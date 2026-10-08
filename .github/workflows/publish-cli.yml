@@ -1,0 +1,317 @@
+name: Publish CLI (@buildinternet/releases)
+
+# Publishes the `releases` CLI family from apps/cli + packages/releases-lib:
+#   @buildinternet/releases (meta), @buildinternet/releases-{darwin-arm64,
+#   darwin-x64,linux-x64,linux-arm64,windows-x64} (platform binaries), and
+#   @buildinternet/releases-lib. All seven share one changesets `fixed` group,
+#   so they carry the same version; the meta package's version is the gate.
+#
+# Triggered by the "chore: version packages" PR merge changing the meta
+# package.json. Also creates the consolidated `v<version>` GitHub release
+# (binaries + checksums, marked latest) and updates the Homebrew tap.
+#
+# npm trusted publishers (OIDC) MUST be registered for ALL 7 packages against
+# repo `buildinternet/releases` + workflow file `publish-cli.yml`, e.g.
+#   npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml
+# A newly added trusted publisher expires if unused within 2 days, so register
+# them shortly before the first release, not weeks ahead.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/cli/npm/releases/package.json"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry-run only (no npm publish, no GitHub release, no tap push)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-cli
+  cancel-in-progress: false
+
+permissions:
+  contents: write # tag + GitHub release after a successful publish
+  id-token: write # OIDC: mint a short-lived npm publish credential (no NPM_TOKEN)
+
+env:
+  BUN_VERSION: "1.4.2"
+
+jobs:
+  build-darwin:
+    name: Build + sign macOS binaries
+    # Darwin targets must be built and signed on macOS — see
+    # apps/cli/scripts/build-darwin.sh. The publish job ships these exact files.
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build, sign, and verify
+        working-directory: apps/cli
+        run: scripts/build-darwin.sh
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: darwin-binaries
+          path: |
+            apps/cli/npm/releases-darwin-arm64/releases
+            apps/cli/npm/releases-darwin-x64/releases
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish CLI packages to npm
+    needs: build-darwin
+    runs-on: ubuntu-latest
+    # Cross-compile (3 targets) + 7 npm publishes + GitHub release + tap push.
+    # Generous, but bounded — a hung publish step shouldn't burn the 6h default.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # OIDC trusted publishing needs npm >= 11.5.1 / Node >= 22.14.0. Node 24
+      # bundles npm 11.12.1, clearing the bar without an in-place
+      # `npm i -g npm@latest` self-upgrade (that races and dies with
+      # MODULE_NOT_FOUND 'promise-retry'). bun runs install/builds; npm does the
+      # publish + OIDC token exchange. No registry-url here on purpose — an
+      # empty _authToken line breaks OIDC (npm/cli#8976).
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.15.0 # pinned: bundles npm 11.12.1 (see comment above)
+
+      - run: bun install --frozen-lockfile
+
+      - name: Read version
+        id: version
+        run: echo "version=$(jq -r .version apps/cli/npm/releases/package.json)" >> "$GITHUB_OUTPUT"
+
+      # The meta package is published LAST, so "meta on npm" means every
+      # package shipped. A partially failed run re-runs cleanly: the per-package
+      # check in the publish step skips whatever already landed.
+      - name: Check if version already published
+        id: check
+        env:
+          CLI_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if npm view "@buildinternet/releases@${CLI_VERSION}" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${CLI_VERSION} already on npm — skipping publish." >&2
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download signed macOS binaries
+        if: steps.check.outputs.already == 'false'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: darwin-binaries
+          path: apps/cli/npm
+
+      - name: Build binaries
+        if: steps.check.outputs.already == 'false'
+        working-directory: apps/cli
+        run: |
+          bun build --compile src/index.ts --outfile npm/releases-linux-x64/releases --target=bun-linux-x64
+          bun build --compile src/index.ts --outfile npm/releases-linux-arm64/releases --target=bun-linux-arm64
+          bun build --compile src/index.ts --outfile npm/releases-windows-x64/releases.exe --target=bun-windows-x64
+          # bun --compile on a Linux runner produces 0644 outputs for cross-targets;
+          # set +x so gzip preserves the bit and downstream installers (Homebrew,
+          # curl|sh, manual gunzip) get an executable file. Artifact downloads
+          # drop the bit too, so the darwin binaries need it as well.
+          chmod +x npm/releases-darwin-arm64/releases
+          chmod +x npm/releases-darwin-x64/releases
+          chmod +x npm/releases-linux-x64/releases
+          chmod +x npm/releases-linux-arm64/releases
+
+      # Plain `npm publish` per package (not `changeset publish`, which writes a
+      # token-based ~/.npmrc that is incompatible with OIDC). Trusted publishing
+      # supplies the credential and attaches provenance. Order: lib + platform
+      # binaries first, the meta package (which depends on them) last.
+      - name: Publish to npm (OIDC trusted publishing)
+        if: steps.check.outputs.already == 'false'
+        env:
+          CLI_VERSION: ${{ steps.version.outputs.version }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          # Source repo is public — npm provenance attestations are supported.
+          NPM_CONFIG_PROVENANCE: "true"
+        run: |
+          set -euo pipefail
+          dirs=(
+            packages/releases-lib
+            apps/cli/npm/releases-darwin-arm64
+            apps/cli/npm/releases-darwin-x64
+            apps/cli/npm/releases-linux-x64
+            apps/cli/npm/releases-linux-arm64
+            apps/cli/npm/releases-windows-x64
+            apps/cli/npm/releases
+          )
+          for dir in "${dirs[@]}"; do
+            name=$(jq -r .name "${dir}/package.json")
+            ver=$(jq -r .version "${dir}/package.json")
+            if [ "${ver}" != "${CLI_VERSION}" ]; then
+              echo "::error::${name} is at ${ver}, expected ${CLI_VERSION} (fixed group drifted)" >&2
+              exit 1
+            fi
+            if npm view "${name}@${ver}" version >/dev/null 2>&1; then
+              echo "${name}@${ver} already on npm — skipping."
+              continue
+            fi
+            echo "Publishing ${name}@${ver}"
+            if [ "${DRY_RUN}" = "true" ]; then
+              (cd "${dir}" && npm publish --access public --dry-run)
+            else
+              (cd "${dir}" && npm publish --access public)
+            fi
+          done
+
+      - name: Prepare release assets
+        if: steps.check.outputs.already == 'false' && inputs.dry-run != true
+        working-directory: apps/cli
+        run: |
+          mkdir -p dist/release
+          for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            cp "npm/releases-${target}/releases" "dist/release/releases-${target}"
+            gzip -k "dist/release/releases-${target}"
+            sha256sum "dist/release/releases-${target}.gz" | awk '{print $1}' > "dist/release/releases-${target}.gz.sha256"
+          done
+          # Windows ships the .exe inside a .zip (the conventional Windows
+          # archive format) rather than a single-binary .gz like the others.
+          cp "npm/releases-windows-x64/releases.exe" "dist/release/releases-windows-x64.exe"
+          (cd dist/release && zip -q "releases-windows-x64.zip" "releases-windows-x64.exe")
+          sha256sum "dist/release/releases-windows-x64.zip" | awk '{print $1}' > "dist/release/releases-windows-x64.zip.sha256"
+          sha256sum dist/release/*.gz dist/release/*.zip > dist/release/checksums.txt
+
+      # This is the repo's "latest" release: install scripts and docs resolve
+      # /releases/latest/download/... against it. publish-core / publish-api-types
+      # pass --latest=false so they never steal the marker.
+      - name: Publish binaries to GitHub Releases
+        if: steps.check.outputs.already == 'false' && inputs.dry-run != true
+        working-directory: apps/cli
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Extract the current version's section from the meta package's
+          # CHANGELOG (generated by `changeset version`) so the consolidated
+          # v* release carries the real change notes. Falls back to a short
+          # note if extraction came up empty (shouldn't happen in practice).
+          NOTES=$(awk -v v="## ${VERSION}" '
+            $0 == v { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' npm/releases/CHANGELOG.md)
+
+          gh release create "v${VERSION}" \
+            --target "${GITHUB_SHA}" \
+            --title "v${VERSION}" \
+            --notes "${NOTES:-CLI v${VERSION}. Install via brew or npm.}" \
+            dist/release/releases-darwin-arm64.gz \
+            dist/release/releases-darwin-arm64.gz.sha256 \
+            dist/release/releases-darwin-x64.gz \
+            dist/release/releases-darwin-x64.gz.sha256 \
+            dist/release/releases-linux-x64.gz \
+            dist/release/releases-linux-x64.gz.sha256 \
+            dist/release/releases-linux-arm64.gz \
+            dist/release/releases-linux-arm64.gz.sha256 \
+            dist/release/releases-windows-x64.zip \
+            dist/release/releases-windows-x64.zip.sha256 \
+            dist/release/checksums.txt
+
+      - name: Update Homebrew tap
+        # Pushes an updated Formula/releases.rb to the buildinternet/homebrew-tap repo.
+        # Requires TAP_PUBLISH_TOKEN secret (fine-grained PAT with write access to
+        # buildinternet/homebrew-tap). The download URLs below point to this repo's
+        # releases — adjust if the tap's formula points elsewhere.
+        if: steps.check.outputs.already == 'false' && inputs.dry-run != true
+        working-directory: apps/cli
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_PUBLISH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          DARWIN_ARM64=$(cat dist/release/releases-darwin-arm64.gz.sha256)
+          DARWIN_X64=$(cat dist/release/releases-darwin-x64.gz.sha256)
+          LINUX_ARM64=$(cat dist/release/releases-linux-arm64.gz.sha256)
+          LINUX_X64=$(cat dist/release/releases-linux-x64.gz.sha256)
+
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/buildinternet/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cat > tap/Formula/releases.rb <<'FORMULA'
+          class Releases < Formula
+            desc "Changelog and release-notes registry for developers and AI agents"
+            homepage "https://releases.sh"
+            version "__VERSION__"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-darwin-arm64.gz"
+                sha256 "__DARWIN_ARM64__"
+              else
+                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-darwin-x64.gz"
+                sha256 "__DARWIN_X64__"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-linux-arm64.gz"
+                sha256 "__LINUX_ARM64__"
+              else
+                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-linux-x64.gz"
+                sha256 "__LINUX_X64__"
+              end
+            end
+
+            def install
+              # Single-binary .gz decompresses to a platform-suffixed filename
+              # (e.g. releases-darwin-arm64). Rename to "releases" on install.
+              binary = Dir["releases-*"].find { |f| File.file?(f) }
+              chmod 0755, binary
+              bin.install binary => "releases"
+
+              generate_completions_from_executable(bin/"releases", "completion", shells: [:bash, :zsh, :fish])
+            end
+
+            test do
+              assert_match "releases", shell_output("#{bin}/releases --version")
+              assert_match "complete -F _releases releases", shell_output("#{bin}/releases completion bash")
+            end
+          end
+          FORMULA
+
+          sed -i 's/^          //' tap/Formula/releases.rb
+          sed -i "s|__VERSION__|${VERSION}|" tap/Formula/releases.rb
+          sed -i "s|__DARWIN_ARM64__|${DARWIN_ARM64}|" tap/Formula/releases.rb
+          sed -i "s|__DARWIN_X64__|${DARWIN_X64}|" tap/Formula/releases.rb
+          sed -i "s|__LINUX_ARM64__|${LINUX_ARM64}|" tap/Formula/releases.rb
+          sed -i "s|__LINUX_X64__|${LINUX_X64}|" tap/Formula/releases.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/releases.rb
+          if git diff --cached --quiet; then
+            echo "Formula unchanged — skipping push"
+          else
+            git commit -m "chore: release v${VERSION}"
+            git push origin HEAD:main
+          fi

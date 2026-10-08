@@ -1,17 +1,49 @@
 # CLI Distribution
 
-The CLI is published from the public OSS repo at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) — not from this monorepo. That repo owns `@buildinternet/releases{,-darwin-*,-linux-*}` on npm, the GitHub Release binaries, and the Homebrew tap (`buildinternet/homebrew-tap`).
+The `releases` CLI is built and published from this monorepo (#2445). The source is `apps/cli/` (private workspace `@releases/cli`, run from source with `bun apps/cli/src/index.ts`). It used to live in `buildinternet/releases-cli`; that repo is archived. Its history and old GitHub releases stay there; its open issues move here.
 
-Shared npm packages are split by where they're published from:
+## Packages
 
-- **`@buildinternet/releases-core`** — published from this monorepo (`packages/core/`). DB schema + pure runtime-neutral helpers. Consumed here via `workspace:*`; the OSS CLI pulls the published version from npm.
-- **`@buildinternet/releases-lib`** — published from the OSS CLI repo, consumed here as a regular npm dep (pinned version in `package.json`). (`@buildinternet/releases-skills` is retired — skills ship from each repo's tree via `npx skills add`, not npm; ownership split in [agents.md](agents.md).)
-- **`@releases/core-internal`** — private workspace (`packages/core-internal/`) for DB-coupled / worker-only helpers the thin OSS CLI doesn't need: `release-upsert`, `hash`, `webhook-sign`.
+Seven packages ship together as one changesets `fixed` group (see `.changeset/config.json`), so they always carry the same version:
 
-**If a schema change needs to ship to the CLI:** edit `packages/core/src/schema.ts` here, publish a new `@buildinternet/releases-core` version, then bump the pin in the OSS CLI repo.
+| Package                                                                                             | Source                    | What it is                                                      |
+| --------------------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------- |
+| `@buildinternet/releases`                                                                           | `apps/cli/npm/releases`   | Meta package: README, launcher, optional deps on the five below |
+| `@buildinternet/releases-darwin-arm64`, `-darwin-x64`, `-linux-x64`, `-linux-arm64`, `-windows-x64` | `apps/cli/npm/releases-*` | Platform packages, each holding one compiled binary             |
+| `@buildinternet/releases-lib`                                                                       | `packages/releases-lib`   | CLI helpers (`config`, `legacy-env`, `logger`)                  |
 
-**If a CLI-only change needs to ship:** land it in `buildinternet/releases-cli`, run `bun run changeset` there, and merge. The OSS repo's own workflow handles the version PR + publish.
+`@buildinternet/releases-lib` is owned by this repo and is a workspace; the CLI and other packages consume it via `workspace:*`.
 
-The monorepo does not carry CLI binary scaffolds or Homebrew releases — if you see those in an old PR, don't restore them.
+`@buildinternet/releases-core` and `@buildinternet/releases-api-types` are still published to npm for outside consumers, from `publish-core.yml` and `publish-api-types.yml`. They are not in the fixed group. The CLI consumes both through `workspace:*`, so a schema or wire change and the CLI code that adopts it land in one PR, with no version bump to chase. `@releases/core-internal` stays private (DB-coupled and worker-only helpers). Skills ship from the repo tree via `npx skills add`, not npm; the `releases` Claude Code plugin lives at `plugins/claude/releases/`.
 
-The `releases` Claude Code plugin (`plugins/claude/releases/`: hosted MCP connection, `/releases` command, reader skills) now lives in this monorepo and is installed via `npx skills add buildinternet/releases` or `/plugin marketplace add buildinternet/releases`. The CLI code and its npm/Homebrew publishing still live in releases-cli pending #2445.
+## How a CLI change ships
+
+```mermaid
+flowchart LR
+  pr["PR with a changeset<br/>(target @buildinternet/releases)"] --> main["merge to main"]
+  main --> vpr["release.yml opens<br/>'chore: version packages' PR"]
+  vpr --> merge["merge version PR<br/>(bumps apps/cli/npm/releases/package.json)"]
+  merge --> wf["publish-cli.yml<br/>(path-triggered)"]
+  wf --> mac["build + sign darwin<br/>binaries on macOS"]
+  wf --> cross["cross-compile linux<br/>+ windows on Linux"]
+  mac --> npm["npm publish x7 (OIDC)<br/>meta package last"]
+  cross --> npm
+  npm --> gh["GitHub release v&lt;version&gt;<br/>on buildinternet/releases"]
+  gh --> tap["update formula in<br/>buildinternet/homebrew-tap"]
+```
+
+1. Add a changeset with `bun run changeset`, targeting `@buildinternet/releases`. The fixed group cascades the bump to all seven packages.
+2. Merging to `main` makes `release.yml` open (or update) the "chore: version packages" PR. Version PRs opened by the bot need a manual workflow approval before CI runs.
+3. Merging the version PR changes `apps/cli/npm/releases/package.json`, which triggers `.github/workflows/publish-cli.yml`. The workflow also has a dry-run `workflow_dispatch`.
+4. `publish-cli.yml` builds and signs the darwin binaries on macOS (a Linux cross-compile breaks Bun's signature and the binary is killed on launch), cross-compiles linux and windows on Linux, and publishes the seven packages with OIDC trusted publishing. The meta package goes last, so "meta on npm" means everything shipped, and a partial failure re-runs cleanly.
+5. It then creates the GitHub release `v<version>` on this repo with the binaries and checksums, and updates the Homebrew formula in `buildinternet/homebrew-tap`.
+
+`.../releases/latest/download/<asset>` URLs (used by the install docs and the shell installer) resolve against this repo's "latest" release. The core and api-types publish workflows create their GitHub releases with `--latest=false` so they never take that marker; only the CLI release does.
+
+## Trusted publishers
+
+npm trusted publishing (OIDC) must be registered for all seven packages: repo `buildinternet/releases`, workflow file `publish-cli.yml`, for example `npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml`. A newly added trusted publisher expires if it goes unused for two days, so register them shortly before the first release, not weeks ahead. Missing one package fails the publish part-way; fix the publisher and re-run, and the per-package "already published" check skips what landed.
+
+## Homebrew
+
+`brew install buildinternet/tap/releases` installs from the formula in `buildinternet/homebrew-tap`. `publish-cli.yml` regenerates the formula from the new release's binaries and checksums on every CLI release. The formula installs shell completions automatically; other install paths run `releases completion install`. The shell installer at `releases.sh/install` and the npm package both use the same release binaries.

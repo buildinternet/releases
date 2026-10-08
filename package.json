@@ -44,7 +44,7 @@
     "typecheck": "oxlint",
     "check": "bun run lint && bun run format:check",
     "clean:worktrees": "./scripts/clean-worktrees.sh",
-    "test": "bun test packages/ && bun test tests/ apps/web/ apps/mcp apps/webhooks && bun test apps/api",
+    "test": "bun test packages/ && bun test tests/ apps/web/ apps/mcp apps/webhooks && bun test apps/api && bun test apps/cli",
     "eval:article-extract": "bun tests/evals/article-extract.eval.ts",
     "eval:breaking": "bun tests/evals/breaking.eval.ts",
     "eval:collection-summary": "bun tests/evals/collection-summary.eval.ts",
@@ -61,7 +61,7 @@
     "flags:docs": "bun scripts/gen-flag-docs.ts",
     "smoke:catalog-web": "bun scripts/smoke-catalog-web.ts",
     "changeset": "changeset",
-    "changeset:version": "changeset version && bun install",
+    "changeset:version": "changeset version && bun apps/cli/scripts/sync-version.ts && bun install",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -77,6 +77,8 @@
   },
   "workspaces": [
     "apps/api",
+    "apps/cli",
+    "apps/cli/npm/*",
     "apps/web",
     "apps/webhooks",
     "packages/*"
@@ -104,7 +106,7 @@
     "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
-    "@buildinternet/releases-lib": "^0.68.0",
+    "@buildinternet/releases-lib": "workspace:*",
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",

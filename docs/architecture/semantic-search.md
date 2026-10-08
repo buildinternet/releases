@@ -104,6 +104,6 @@ Optional KV binding `EMBED_CACHE` (both workers) caches single-query embeddings 
 - Shared RRF + provider abstraction: `packages/search/src/vector-search.ts`, `packages/search/src/embeddings.ts`
 - Worker hybrid orchestrators: `apps/api/src/lib/search/search-hybrid.ts`, `apps/mcp/src/lib/search-hybrid.ts`
 - Ingest helpers: `packages/search/src/embed-releases.ts`, `packages/search/src/embed-entities.ts`, `packages/search/src/embed-changelog-pipeline.ts`
-- Backfill CLI: `releases admin embed status|releases|entities|changelogs` — lives in the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli), `src/cli/commands/admin/embed.ts`)
+- Backfill CLI: `releases admin embed status|releases|entities|changelogs` — lives in the CLI (`apps/cli/src/cli/commands/admin/embed.ts`)
 - Status route: `apps/api/src/routes/admin-embed-status.ts` (`GET /v1/admin/embed/status`)
 - Backfill routes: `apps/api/src/routes/workflows.ts` (`POST /v1/workflows/embed-{releases,entities,changelogs}`)

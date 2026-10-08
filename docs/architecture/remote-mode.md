@@ -1,6 +1,6 @@
 # The API worker (remote mode)
 
-This is the reference for the API worker at `apps/api/` — the heart of the backend. Every read and write in the system goes through it: the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) is a pure HTTP client talking to `RELEASES_API_URL` (default `https://api.releases.sh`), the web frontend and MCP server are clients too, and the internal workers (MCP, webhooks, cron) bind directly to the same D1 database. There is no local-SQLite path anymore; "remote mode" — everything served from Cloudflare — is the only mode.
+This is the reference for the API worker at `apps/api/` — the heart of the backend. Every read and write in the system goes through it: the CLI (`apps/cli/`) is a pure HTTP client talking to `RELEASES_API_URL` (default `https://api.releases.sh`), the web frontend and MCP server are clients too, and the internal workers (MCP, webhooks, cron) bind directly to the same D1 database. There is no local-SQLite path anymore; "remote mode" — everything served from Cloudflare — is the only mode.
 
 It's the longest doc in this directory because the worker owns a lot. Jump to what you need:
 

@@ -41,6 +41,6 @@ Each source has a `slug`, a short unique name. Most CLI commands and API endpoin
 | **[Skills](/docs/skills)**      | Auto-triggering playbooks for Claude Code, Codex, Cursor, OpenCode |
 | **Web UI**                      | Browsing the catalog at [releases.sh](https://releases.sh)         |
 
-The CLI is open source — see [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli).
+The CLI is open source — see [github.com/buildinternet/releases](https://github.com/buildinternet/releases) (`apps/cli/`).
 
 Maintained by [Zach Dunn](https://zachdunn.com) / [Build Internet](https://buildinternet.com).

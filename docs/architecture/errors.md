@@ -25,7 +25,7 @@ Every non-2xx response from the API uses one wire shape — a nested envelope �
 ## Consumers
 
 - **Web** — `apps/web/src/lib/api.ts` decodes the nested envelope; the `/submit` proxy (`apps/web/src/app/api/recommendations/route.ts`) flattens it to its local flat vocab.
-- **CLI** — `releases-cli` `src/lib/errors.ts` reads `error.message`.
+- **CLI** — `apps/cli/src/lib/errors.ts` reads `error.message`.
 - Both currently **inline** an equivalent decoder rather than importing the published `decodeApiError` — the pinned api-types predates the errors module and web can't runtime-import the api-types barrel under Next's bundler (#1840).
 
 ## Adding a code

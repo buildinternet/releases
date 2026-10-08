@@ -6,7 +6,7 @@ Wire protocol types for the [Releases](https://releases.sh) registry API.
 
 Pure TypeScript types — zero runtime dependencies — describing request/response
 shapes for the public HTTP API served at `api.releases.sh`. Consumed by the web
-frontend, the remote MCP server, and the [Releases CLI](https://github.com/buildinternet/releases-cli).
+frontend, the remote MCP server, and the [Releases CLI](../../apps/cli).
 
 ## Install
 

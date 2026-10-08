@@ -1,8 +1,8 @@
 # @buildinternet/releases-core
 
-**Scope:** pure, runtime-neutral helpers shared by this monorepo and the OSS CLI — schema, categories, dates, slicing, IDs/slugs, tokens, CLI contracts. Nothing DB-coupled beyond schema definitions and nothing worker-only lives here — that goes in `core-internal`.
+**Scope:** pure, runtime-neutral helpers shared by this monorepo and the CLI — schema, categories, dates, slicing, IDs/slugs, tokens, CLI contracts. Nothing DB-coupled beyond schema definitions and nothing worker-only lives here — that goes in `core-internal`.
 
-Pure helpers shared by the Releases registry and the [Releases CLI](https://github.com/buildinternet/releases-cli) — schema, categories, slicing, IDs, slugs, tokens, CLI contracts.
+Pure helpers shared by the Releases registry and the [Releases CLI](../../apps/cli) — schema, categories, slicing, IDs, slugs, tokens, CLI contracts.
 
 ## Exports
 
@@ -23,7 +23,7 @@ Imported as `@buildinternet/releases-core/<subpath>`.
 | `cli-contracts`     | Shared `--json` envelope types for the CLI.                                                                                                                            |
 | `d1-limits`         | Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) for single-column `IN` chunking.                                                               |
 
-Published from the [`buildinternet/releases`](https://github.com/buildinternet/releases) monorepo. The upstream `packages/core/` directory is the single source of truth; both the monorepo and the OSS CLI consume this package from npm.
+Published from the [`buildinternet/releases`](https://github.com/buildinternet/releases) monorepo. The upstream `packages/core/` directory is the single source of truth; the monorepo and the in-tree CLI consume it via `workspace:*`; other consumers use npm.
 
 Changelog-publish fixtures (single-file markdown and directory MDX) ship in `fixtures/changelog-publish/` for the CLI to reuse.
 
