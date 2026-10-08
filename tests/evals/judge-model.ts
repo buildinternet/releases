@@ -30,6 +30,7 @@ import { MARKETING_DECISION_MODEL } from "@releases/core-internal/ai-lane-models
 import { aisdkTextModel } from "@releases/ai-internal/aisdk-text-model";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import type { LanguageModel } from "ai";
+import { modelId } from "@releases/lib/models";
 
 const EVAL_REFERER = "https://releases.sh";
 const EVAL_TITLE = "Releases";
@@ -180,7 +181,7 @@ export function resolveOverviewEvalModel(
 }
 
 /** Default judge: a cheap OpenRouter model. Override with the `JUDGE_MODEL` env var. */
-export const DEFAULT_JUDGE_MODEL = "google/gemini-2.5-flash";
+export const DEFAULT_JUDGE_MODEL = modelId("evalJudge");
 
 /**
  * Resolve the judge model. Defaults to {@link DEFAULT_JUDGE_MODEL} on OpenRouter;

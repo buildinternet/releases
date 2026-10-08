@@ -10,6 +10,7 @@
  */
 
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { resolveModel } from "@releases/lib/resolve-model";
 import { extractFromBody } from "@releases/adapters/extract";
 import { DIRECT_FETCH_SYSTEM_PROMPT } from "../packages/adapters/src/extract/shared.js";
 import type { ExtractDeps, ExtractRepo } from "../packages/adapters/src/extract/types.js";
@@ -51,7 +52,7 @@ const deps: ExtractDeps = {
     baseURL: process.env.ANTHROPIC_BASE_URL,
     gatewayToken: process.env.AI_GATEWAY_TOKEN,
   }),
-  agentModel: "claude-sonnet-5-5",
+  agentModel: resolveModel("extractionAgent"),
   logger: {
     info: (m) => console.error(`[info] ${m}`),
     warn: (m) => console.error(`[warn] ${m}`),

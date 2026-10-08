@@ -28,6 +28,7 @@ import { extractFirecrawlMarkdown } from "../lib/ingest/firecrawl-extract.js";
 import { logUsage } from "../lib/ai/usage-log.js";
 import { saveRawSnapshot } from "../lib/ingest/raw-snapshot.js";
 import { classifyProviderQuota } from "@releases/lib/provider-quota";
+import { resolveModel } from "@releases/lib/resolve-model";
 import { ingestRawReleases, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
@@ -38,14 +39,9 @@ import {
 } from "../lib/ingest/ingest-steps.js";
 import type { PollAndFetchWorkflowEnv } from "./poll-and-fetch.js";
 
-// Model for Firecrawl extraction. Matches the standard cron ingest model
-// (config.ingestModel default) rather than the heavier discovery agentModel:
-// in steady state the workflow extracts only the diff delta (a few new
-// entries), and even a baseline scrape is windowed to a recent slice, so the
-// input is small and structured — Haiku parses it reliably at a fraction of
-// Sonnet's cost. Haiku 5.5 rejects a non-default temperature, so the request
-// omits it and disables adaptive thinking (see extract-from-body).
-const FIRECRAWL_EXTRACT_MODEL = "claude-haiku-5-5";
+// Firecrawl extraction uses the `extraction` role (cheap one-shot), not the
+// web_fetch agent. Steady state extracts a diff delta, and a baseline scrape
+// is windowed to a recent slice. Sampling and thinking follow the pin.
 
 // record-failure writes a fetch_log row + bumps consecutiveErrors — neither is
 // idempotent, so it runs as a single best-effort attempt (no retries). Retrying
@@ -278,17 +274,17 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           ...(await resolveGatewayOpts(env)),
         });
         // OpenRouter/Anthropic-AI-SDK extraction lane (issue #1536 / #2166) — the
-        // Anthropic fallback here is FIRECRAWL_EXTRACT_MODEL (Haiku), matching
-        // this path's one-shot-only extraction (it never opts into the
-        // tool-loop). Threaded into `oneShotAiSdkModel` so EXTRACT_MODEL governs
-        // this ingest path too.
-        const aiSdk = await resolveExtractAiSdkModel(env, FIRECRAWL_EXTRACT_MODEL);
+        // Anthropic fallback is the `extraction` role, matching this path's
+        // one-shot-only extraction (it never opts into the tool-loop). Threaded
+        // into `oneShotAiSdkModel` so EXTRACT_MODEL governs this ingest path too.
+        const extractModel = resolveModel("extraction");
+        const aiSdk = await resolveExtractAiSdkModel(env, extractModel);
         const result = await extractFirecrawlMarkdown(
           markdown,
           source,
           {
             anthropicClient,
-            agentModel: FIRECRAWL_EXTRACT_MODEL,
+            agentModel: extractModel,
             logger: workerLogger,
             logUsageFn: (entry) => logUsage(db, { ...entry, sourceId }, "firecrawl-ingest"),
             ...(aiSdk

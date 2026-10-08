@@ -28,8 +28,10 @@ export interface ModelPricing {
 }
 
 /**
- * Pricing keyed by Anthropic API model id. Add new models here when they ship —
- * unknown models fall through to a `null` estimate (UI should hide the dollar
+ * Pricing keyed by Anthropic API model id. A model bump adds a row here for
+ * the new id (the pin itself lives in `./models.ts`) and keeps every older
+ * row — historical sessions estimate cost against the model they ran on.
+ * Unknown models fall through to a `null` estimate (UI should hide the dollar
  * figure but keep token counts visible).
  */
 export const ANTHROPIC_PRICING: Record<string, ModelPricing> = {

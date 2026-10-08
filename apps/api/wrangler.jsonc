@@ -98,8 +98,10 @@
     // authenticated mode — the AI_GATEWAY_TOKEN secret below must be bound.
     // OpenRouter cheap-call model for the marketing classifier. Consulted only
     // when the `openrouter-enabled` flag is on; otherwise the classifier stays on
-    // Anthropic Haiku. OpenRouter is called directly (not fronted by the CF AI
-    // Gateway — no double-hop, per docs/architecture/ai-gateway.md Layer 1).
+    // the Anthropic marketing role. OpenRouter is called directly (not fronted by
+    // the CF AI Gateway — no double-hop, per docs/architecture/ai-gateway.md Layer 1).
+    // These four ids match OPENROUTER_MODELS in packages/lib/src/models.ts, which
+    // is the code default when a var is empty. This file is the deployed override.
     "MARKETING_CLASSIFIER_MODEL": "typesafe/jev-1.13",
     // OpenRouter cheap-call model for the *live* poll-fetch summarizer AND the
     // nightly collection-daily-summary cron (both consume SUMMARIZE_MODEL).

@@ -15,7 +15,7 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { releases } from "@buildinternet/releases-core/schema";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { contentHash } from "@releases/adapters/content-hash";
-import { haikuThinkingParam } from "@releases/adapters/extract/shared";
+import { thinkingParams } from "@releases/lib/models";
 import { extractMediaFromMarkdown } from "@releases/adapters/feed.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
@@ -64,7 +64,7 @@ export function buildEnrichBatchRequests(
     params: {
       model: ARTICLE_MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
-      ...haikuThinkingParam(ARTICLE_MODEL),
+      ...thinkingParams(ARTICLE_MODEL),
       system: [
         {
           type: "text" as const,

@@ -23,6 +23,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/ai/anthropic.js";
 import { resolveExtractAiSdkModel } from "../lib/ai/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { resolveModel } from "@releases/lib/resolve-model";
 import { planWindowOffsets } from "../lib/ingest/firecrawl-extract.js";
 import { logUsage } from "../lib/ai/usage-log.js";
 import {
@@ -53,10 +54,6 @@ import {
   type BackfillBodyVia,
   type SourceBackfillReport,
 } from "../lib/ingest/source-backfill.js";
-
-// Haiku 5.5 — cheap structured extraction. Sampling params are omitted
-// (the model 400s on a non-default temperature) and thinking is disabled.
-const BACKFILL_EXTRACT_MODEL = "claude-haiku-5-5";
 
 // Per-batch summary chunk — mirrors BACKFILL_SUMMARY_CHUNK in workflows.ts.
 // generateContentForReleases bails above MAX_AUTOGEN_ROWS_PER_FIRE (20) in
@@ -220,11 +217,11 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
 
     // OpenRouter/Anthropic-AI-SDK extraction lane (issue #1536 / #2166). Resolved
     // ONCE here, not per window — the flag + secret reads shouldn't repeat each
-    // iteration. The Anthropic fallback is BACKFILL_EXTRACT_MODEL (Haiku),
-    // matching this path's one-shot-only extraction (backfill never sets
-    // `useToolLoop`) — threaded into `oneShotAiSdkModel` below so EXTRACT_MODEL
-    // governs backfill extraction too.
-    const aiSdk = await resolveExtractAiSdkModel(env, BACKFILL_EXTRACT_MODEL);
+    // iteration. The Anthropic fallback is the extraction role (one-shot; backfill
+    // never sets `useToolLoop`) — threaded into `oneShotAiSdkModel` below so
+    // EXTRACT_MODEL governs backfill extraction too.
+    const extractModel = resolveModel("extraction");
+    const aiSdk = await resolveExtractAiSdkModel(env, extractModel);
 
     // ── Steps 4+: extract-window-N ──────────────────────────────────────────
     // Each window is its own step.do so Cloudflare can retry or resume at the
@@ -256,7 +253,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
             });
             const extractDeps: ExtractDeps = {
               anthropicClient,
-              agentModel: BACKFILL_EXTRACT_MODEL,
+              agentModel: extractModel,
               logger: backfillLogger,
               cloudflare: null,
               extractToolLoopEnabled: false,
@@ -292,7 +289,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               db,
               {
                 operation: "firecrawl-extract",
-                model: BACKFILL_EXTRACT_MODEL,
+                model: extractModel,
                 inputTokens: result.totalInput,
                 outputTokens: result.totalOutput,
                 cacheReadTokens: result.cacheReadTokens,

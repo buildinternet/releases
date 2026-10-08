@@ -184,6 +184,7 @@
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "@releases/adapters": "workspace:*",
+        "@releases/lib": "workspace:*",
         "ai": "^7.0.103",
         "yaml": "^2.8.3",
         "zod": "^4.4.3",
@@ -212,6 +213,7 @@
       "dependencies": {
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
+        "@releases/lib": "workspace:*",
         "@releases/rendering": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },

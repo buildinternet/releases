@@ -23,10 +23,9 @@ import {
   HUGE_BODY_MAX_OUTPUT_TOKENS,
   MAX_BODY_CHARS_TOOLLOOP,
   EXTRACTION_TEMPERATURE,
-  haikuThinkingParam,
-  modelAcceptsTemperature,
   type ExtractionGuidance,
 } from "./shared.js";
+import { samplingParams, thinkingParams } from "@releases/lib/models";
 import { extractWithTools, LoopFallbackError } from "./extract-with-tools.js";
 
 export interface ExtractFromBodyOpts {
@@ -213,14 +212,11 @@ async function runOneShot(
   const stream = deps.anthropicClient.messages.stream({
     model,
     max_tokens: maxOutputTokens,
-    // Deterministic parse on models that still accept it (Haiku 4.5);
-    // omitted on Sonnet 5.5 / Opus 4.7+ / Fable / Haiku 5.5, which 400 on a
-    // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
-    ...(modelAcceptsTemperature(model)
-      ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
-        { temperature: EXTRACTION_TEMPERATURE }
-      : {}),
-    ...haikuThinkingParam(model),
+    // Deterministic parse on models that still accept a non-default
+    // temperature; omitted (with top_p / top_k) when the registry says the
+    // model rejects sampling. See EXTRACTION_TEMPERATURE.
+    ...samplingParams(model, { temperature: EXTRACTION_TEMPERATURE }),
+    ...thinkingParams(model),
     system: systemBlocks,
     tools: [toolDef],
     tool_choice: { type: "tool", name: "extract_releases" },

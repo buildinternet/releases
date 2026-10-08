@@ -35,12 +35,8 @@ import type {
   OpenRouterProviderPrefs,
   OpenRouterReasoning,
 } from "@releases/ai-internal/openrouter-client";
-import {
-  MODEL as ANTHROPIC_MARKETING_MODEL,
-  type MarketingModel,
-} from "@releases/ai-internal/marketing-classifier";
-import { MODEL as ANTHROPIC_SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
-import { MODEL as ANTHROPIC_ARTICLE_MODEL } from "@releases/ai-internal/article-extract";
+import { type MarketingModel } from "@releases/ai-internal/marketing-classifier";
+import { resolveModel } from "@releases/lib/resolve-model";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { estimateCost } from "@releases/lib/anthropic-pricing";
@@ -309,7 +305,7 @@ export async function resolveMarketingModel(env: TextModelEnv): Promise<Marketin
     {
       lane: "marketing",
       orModel: env.MARKETING_CLASSIFIER_MODEL,
-      anthropicModel: ANTHROPIC_MARKETING_MODEL,
+      anthropicModel: resolveModel("marketing"),
       generationName: "marketing-classifier",
     },
     !enabled || selected === MARKETING_DECISION_MODEL,
@@ -320,7 +316,7 @@ export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | nu
   return resolveTextModel(env, {
     lane: "summarize",
     orModel: env.SUMMARIZE_MODEL,
-    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    anthropicModel: resolveModel("summarize"),
     generationName: "summarize-release",
     reasoning: SUMMARIZE_REASONING,
     provider: SUMMARIZE_PROVIDER,
@@ -331,7 +327,7 @@ export function resolveArticleExtractModel(env: TextModelEnv): Promise<TextModel
   return resolveTextModel(env, {
     lane: "feed-enrich",
     orModel: env.FEED_ENRICH_MODEL,
-    anthropicModel: ANTHROPIC_ARTICLE_MODEL,
+    anthropicModel: resolveModel("articleExtract"),
     generationName: "feed-enrich",
   });
 }
@@ -344,7 +340,7 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
   return resolveTextModel(env, {
     lane: "summarize",
     orModel: env.SUMMARIZE_MODEL,
-    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    anthropicModel: resolveModel("summarize"),
     generationName: "collection-daily-summary",
     reasoning: SUMMARIZE_REASONING,
     provider: SUMMARIZE_PROVIDER,
@@ -360,7 +356,7 @@ export function resolveCollectionWeeklyDigestModel(env: TextModelEnv): Promise<T
   return resolveTextModel(env, {
     lane: "summarize",
     orModel: env.SUMMARIZE_MODEL,
-    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    anthropicModel: resolveModel("summarize"),
     generationName: "collection-weekly-digest",
     reasoning: SUMMARIZE_REASONING,
     provider: SUMMARIZE_PROVIDER,
@@ -484,14 +480,15 @@ export async function resolveOverviewModel(
 
   const [apiKey, gatewayOpts] = await Promise.all([getAnthropicKey(env), resolveGatewayOpts(env)]);
   if (!apiKey) return null;
+  const anthropicModel = resolveModel("summarize");
   return {
     model: buildLaneAnthropicModel({
       apiKey,
-      model: ANTHROPIC_SUMMARIZE_MODEL,
+      model: anthropicModel,
       ...(gatewayOpts.baseURL ? { baseURL: gatewayOpts.baseURL } : {}),
       ...(gatewayOpts.gatewayToken ? { gatewayToken: gatewayOpts.gatewayToken } : {}),
     }),
-    onUsage: overviewUsageSink("anthropic", ANTHROPIC_SUMMARIZE_MODEL, env),
+    onUsage: overviewUsageSink("anthropic", anthropicModel, env),
     timeoutMs: OVERVIEW_TIMEOUT_MS,
   };
 }

@@ -30,10 +30,14 @@ import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { haikuThinkingParam } from "@releases/adapters/extract/shared";
+import { thinkingParams } from "@releases/lib/models";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
+import { resolveModel } from "@releases/lib/resolve-model";
+
+function summarizeModel(): string {
+  return resolveModel("summarize");
+}
 import {
-  MODEL,
   MAX_OUTPUT_TOKENS,
   SYSTEM_PROMPT,
   buildReleaseBlock,
@@ -236,7 +240,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         const estOutputTokens = rows.length * MAX_OUTPUT_TOKENS;
         const costEst = estimateCost(
           { inputTokens: totalEstInputTokens, outputTokens: estOutputTokens },
-          MODEL,
+          summarizeModel(),
           // Sum of many sub-100K prompts — don't trip Haiku 5.5's long-context tier.
           { batch: true, longContext: false },
         );
@@ -307,10 +311,10 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         const messageRequests = rows.map((row) => ({
           custom_id: row.id,
           params: {
-            model: MODEL,
+            model: summarizeModel(),
             max_tokens: MAX_OUTPUT_TOKENS,
-            // 440-token cap; default Haiku 5.5 thinking would return empty text.
-            ...haikuThinkingParam(MODEL),
+            // 440-token cap; a model that thinks by default would return empty text.
+            ...thinkingParams(summarizeModel()),
             system: [
               {
                 type: "text" as const,
@@ -340,7 +344,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         const batchRunId = await recordBatchSubmit(db, {
           anthropicBatchId: submitted.id,
           caller: "workflow",
-          model: MODEL,
+          model: summarizeModel(),
           estCostUsd,
           requestCountTotal: rows.length,
           callerContext: {
@@ -505,7 +509,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
               cacheWriteTokens: usage.cacheCreate,
               outputTokens: usage.output,
             },
-            MODEL,
+            summarizeModel(),
             { batch: true },
           );
           updateRows.push({

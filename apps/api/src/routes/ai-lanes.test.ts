@@ -23,6 +23,7 @@ import { aiLaneRoutes } from "./ai-lanes.js";
 import { clearAiLaneModelCache } from "../lib/ai/ai-lane-models.js";
 import { respondError } from "../lib/error-response.js";
 import { marketingDecisionResponse } from "../../../../tests/marketing-decision-fixture";
+import { modelId } from "@releases/lib/models";
 import type { ClassificationDataPoint } from "../lib/classification/classification-schema.js";
 
 let testDatabase: TestDatabase;
@@ -292,7 +293,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
     };
     expect(body.lane).toBe("marketing");
     expect(body.provider).toBe("anthropic");
-    expect(body.model).toBe("claude-haiku-5-5");
+    expect(body.model).toBe(modelId("marketing"));
     expect(body.applied).toBe(false);
     expect(body.result.isMarketing).toBe(false);
     expect(body.usage.input).toBe(10);

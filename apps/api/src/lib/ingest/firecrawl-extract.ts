@@ -38,9 +38,8 @@ export interface FirecrawlExtractDeps {
    * extraction never opts into the tool-loop (`useToolLoop` is unset), so it
    * always takes the one-shot tier — this is what lets `EXTRACT_MODEL` govern
    * it (threaded into `ExtractDeps.oneShotAiSdkModel`, not `aiSdkModel`, since
-   * that field's Anthropic fallback is scoped to the one-shot Haiku model
-   * (`FIRECRAWL_EXTRACT_MODEL` / `BACKFILL_EXTRACT_MODEL`), not the tool-loop's
-   * Sonnet-class `agentModel`).
+   * that field's Anthropic fallback is the extraction role
+   * (`resolveModel("extraction")`), not the tool-loop's `extractionAgent`).
    */
   oneShotAiSdkModel?: unknown;
   oneShotAiSdkModelLabel?: string;

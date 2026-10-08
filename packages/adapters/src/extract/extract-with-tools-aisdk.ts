@@ -37,16 +37,15 @@ import {
   type ModelMessage,
   type ToolResultPart,
 } from "ai";
+import { samplingParams, thinkingProviderOptions } from "@releases/lib/models";
 import { agentTelemetry } from "../agent-telemetry.js";
 import { buildPreview } from "./preview-builder.js";
 import {
   EXTRACTION_TEMPERATURE,
   extractReleasesToolFull,
   getSliceTool,
-  haikuThinkingProviderOptions,
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
-  modelAcceptsTemperature,
   queryJsonTool,
   TOOLLOOP_SYSTEM_PROMPT,
   withGuidance,
@@ -210,7 +209,7 @@ export async function extractWithToolsAiSdk(
   // historical temperature-0 behavior for those doubles. OpenRouter model ids
   // don't match the reject list, so DeepSeek still gets temperature 0.
   const modelId = languageModelId(deps.model);
-  const thinking = haikuThinkingProviderOptions(modelId);
+  const thinking = thinkingProviderOptions(modelId);
 
   // Thunk so the result type is inferred from the concrete tool set (a bare
   // `Awaited<ReturnType<typeof generateText>>` annotation collapses to the
@@ -221,10 +220,10 @@ export async function extractWithToolsAiSdk(
       instructions: instructions as Parameters<typeof generateText>[0]["instructions"],
       messages: baseMessages,
       tools,
-      // Sonnet 5.5 and Haiku 5.5 400 on temperature 0. The AI SDK also strips
-      // sampling params for those ids, but DeepSeek (which still wants 0) must
-      // not depend on that strip.
-      ...(modelAcceptsTemperature(modelId) ? { temperature: EXTRACTION_TEMPERATURE } : {}),
+      // Models that reject a non-default temperature 400 on it. The AI SDK also
+      // strips sampling params for those ids, but DeepSeek (which still wants 0)
+      // must not depend on that strip — the registry still accepts it.
+      ...samplingParams(modelId, { temperature: EXTRACTION_TEMPERATURE }),
       ...(thinking ? { providerOptions: thinking } : {}),
       maxOutputTokens: 16_384,
       // Stop on the terminal tool call OR when the round budget is spent. The

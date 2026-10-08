@@ -373,10 +373,10 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
 export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
 
 /**
- * Sampling temperature for changelog-extraction model calls, applied ONLY to
- * models that still accept it (see {@link modelAcceptsTemperature}) — the oneshot
- * path in `extract-from-body` and both rounds of the large-body tool loop in
- * `extract-with-tools`.
+ * Sampling temperature for changelog-extraction model calls. Spread via
+ * `samplingParams(model, { temperature: EXTRACTION_TEMPERATURE })` — the
+ * registry omits it (and `top_p` / `top_k`) on models that 400 on a
+ * non-default value.
  *
  * WHY 0: extraction is a parse, not a generation — the same page must always
  * yield the same entries. At the SDK default (1.0) a forced/structured
@@ -384,70 +384,23 @@ export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
  * identical input (measured ~1-in-4 on the OpenAI changelog), silently dropping
  * a whole fetch. Steady-state ingest masks this via poll-retry cadence; a
  * one-shot backfill has nothing to hide behind, which is how it surfaced. 0
- * removes the variance (0 misses across 5+5 validation runs).
- *
- * MODEL-GATED: models that reject a non-default `temperature` (≠1), `top_p`
- * (≠0.99), or any `top_k` with a 400 — Sonnet 5.5, Opus 4.7+, Fable 5, Mythos,
- * and Haiku 5.5 — are deterministic enough not to need the knob. Haiku 4.5 and
- * earlier still accept temperature 0, which is what suppresses the spurious-empty
- * tool call. Callers gate on `modelAcceptsTemperature(model)` before sending it.
- * Do not send `top_p` / `top_k` on those models either; nothing in this repo does.
+ * removes the variance (0 misses across 5+5 validation runs). Models that
+ * reject the knob are deterministic enough not to need it; Haiku 4.5 and
+ * earlier still accept it, which is what suppresses the spurious-empty tool
+ * call on those ids.
  */
 export const EXTRACTION_TEMPERATURE = 0;
 
-/**
- * Whether a model still accepts the `temperature` sampling parameter. Models
- * that 400 on a non-default value (Sonnet 5.5, Opus 4.7/4.8, Fable 5, Mythos,
- * Haiku 5.5) must omit `temperature` and rely on the model's own determinism;
- * Haiku 4.5 and earlier still honor it. Substring match so `claude-sonnet-5-5`
- * and the earlier `claude-sonnet-5` id are both covered, and so `claude-haiku-5-5`
- * matches without catching Haiku 4.5. Add a family here when a new
- * temperature-rejecting model ships.
- */
-const TEMPERATURE_UNSUPPORTED_FRAGMENTS = [
-  "sonnet-5",
-  "opus-4-7",
-  "opus-4-8",
-  "fable-5",
-  "mythos-",
-  "haiku-5",
-] as const;
-
-export function modelAcceptsTemperature(model: string): boolean {
-  return !TEMPERATURE_UNSUPPORTED_FRAGMENTS.some((frag) => model.includes(frag));
-}
-
-/**
- * Haiku 5.5 turns adaptive thinking on by default (medium effort). Thinking
- * tokens count against `max_tokens`, so a 40–440 token lane returns empty text
- * and a tight extraction budget can stop before the tool call. `thinking:
- * { type: "disabled" }` is accepted at the default effort (not at `xhigh` /
- * `max`, which we never set). Sonnet 5.5 does not use this shape — it turns
- * up-front thinking off with `between_tools` — so this stays Haiku-only.
- * Substring match covers a provider-prefixed id (`anthropic:claude-haiku-5-5`).
- */
-export function modelRequiresThinkingDisabled(model: string): boolean {
-  return model.includes("haiku-5");
-}
-
-/** Spread into a Messages API `create` / `stream` / batch `params` object. */
-export function haikuThinkingParam(
-  model: string,
-): { thinking: { type: "disabled" } } | Record<string, never> {
-  return modelRequiresThinkingDisabled(model) ? { thinking: { type: "disabled" } } : {};
-}
-
-/**
- * AI SDK `providerOptions` for `generateText`. `@ai-sdk/anthropic` forwards
- * `thinking.type: "disabled"` onto the request body. Undefined for every other
- * model so OpenRouter and Sonnet calls are left alone.
- */
-export function haikuThinkingProviderOptions(
-  model: string,
-): { anthropic: { thinking: { type: "disabled" } } } | undefined {
-  if (!modelRequiresThinkingDisabled(model)) return undefined;
-  return { anthropic: { thinking: { type: "disabled" } } };
-}
+export {
+  modelAcceptsTemperature,
+  modelCapabilities,
+  modelRequiresThinkingDisabled,
+  samplingParams,
+  thinkingParams,
+  thinkingProviderOptions,
+  thinkingParams as haikuThinkingParam,
+  thinkingProviderOptions as haikuThinkingProviderOptions,
+} from "@releases/lib/models";
 
 export function buildBodyGuardrail(approxTokens: number): string {
   const rounded = Math.round(approxTokens / 1000) * 1000;

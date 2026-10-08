@@ -13,13 +13,14 @@
  * this is one known article, so a single one-shot text call with a verbatim
  * (extract-not-rewrite) instruction is cheaper and higher-fidelity.
  */
+import { modelId } from "@releases/lib/models";
 import { extractTagged } from "./release-content";
 import type { TextModel, TextModelUsage } from "./text-model";
 
-/** Anthropic default the caller builds the fallback `TextModel` from. The async
- *  Message-Batches enrichment path (`enrich-apply.ts`) also reuses it directly —
- *  OpenRouter has no Batches API, so that 50%-off lane stays on Anthropic. */
-export const MODEL = "claude-haiku-5-5";
+/** Anthropic model for single-article extraction (`articleExtract` role). The
+ *  async Message-Batches path (`enrich-apply.ts`) reuses it directly —
+ *  OpenRouter has no Batches API, so that lane stays on Anthropic. */
+export const MODEL = modelId("articleExtract");
 
 /** Cap on page markdown sent to the model. Article pages are small; this guards
  *  against the occasional page that inlines a huge nav tree or comment thread. */
