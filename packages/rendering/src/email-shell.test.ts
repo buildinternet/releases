@@ -141,6 +141,30 @@ describe("renderEmail", () => {
     expect(text).not.toContain("**");
   });
 
+  it("keeps a post's meta line in the text part, between summary and URL", () => {
+    const { html, text } = renderEmail({
+      ...base,
+      blocks: [
+        {
+          t: "orgGroup",
+          name: "Acme",
+          posts: [
+            {
+              title: "Ship it",
+              url: "https://releases.test/r/1",
+              summary: "Faster.",
+              meta: "Acme CLI",
+            },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain("Acme CLI");
+    expect(text).toContain(
+      "  - Ship it\n      Faster.\n      Acme CLI\n      https://releases.test/r/1",
+    );
+  });
+
   it("aligns data rows in the text part", () => {
     const { text } = renderEmail({
       ...base,

@@ -565,6 +565,7 @@ function blockText(b: EmailBlock): string[] {
       for (const p of b.posts) {
         lines.push(`  ${p.highSignal ? "* " : "- "}${stripMarkdown(p.title)}`);
         if (p.summary) lines.push(`      ${stripMarkdown(p.summary)}`);
+        if (p.meta) lines.push(`      ${p.meta}`);
         lines.push(`      ${p.url}`);
       }
       for (const r of b.rollups ?? []) {
