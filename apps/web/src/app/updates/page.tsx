@@ -11,13 +11,9 @@ import { getOrgReleases } from "@/app/[orgSlug]/_lib/org-releases-data";
 import { UpdatesBriefing } from "./updates-briefing";
 import { UpdatesFeed } from "./updates-feed";
 import { api } from "@/lib/api";
+import { UPDATES_ORG_SLUG as ORG_SLUG } from "@/lib/updates-org";
 import { ORG_FEED_PAGE_LIMIT, buildArchiveMonths, collectOrgFeed } from "./updates-logic";
 
-// releases.sh publishes its own product changelog through its own registry.
-// The `releases-sh` org is the canonical home; `/updates` is the branded face
-// of it. Keep the slug here in sync with the seeded org (see
-// docs/superpowers/specs/2026-06-10-self-published-changelog-design.md).
-const ORG_SLUG = "releases-sh";
 const TITLE = "What's New";
 const DESCRIPTION =
   "Everything shipped on Release Notes Index — published through our own registry.";

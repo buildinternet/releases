@@ -66,6 +66,13 @@ describe("handleRevalidateRequest", () => {
     expect(await res.json()).toEqual({ revalidated: ["/vercel"] });
   });
 
+  it("also revalidates /updates when our own changelog org ingests", async () => {
+    const { deps: d, revalidated } = deps();
+    const res = await handleRevalidateRequest(post({ orgSlug: "releases-sh" }), d);
+    expect(res.status).toBe(200);
+    expect(revalidated).toEqual(["/releases-sh", "/updates"]);
+  });
+
   it("revalidates the org, source (with its sub-tabs) and product pages together", async () => {
     const { deps: d, revalidated } = deps();
     const res = await handleRevalidateRequest(

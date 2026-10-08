@@ -1,11 +1,13 @@
 import { categoryDisplayName, isValidCategory } from "@buildinternet/releases-core/categories";
 import { api } from "@/lib/api";
 import { OG_CONTENT_TYPE, OG_SIZE, formatCount, renderOgFallback, renderOgImage } from "@/lib/og";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
 export const alt = "Category on Release Notes Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
+export const generateStaticParams = enableOnDemandIsr;
 
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
