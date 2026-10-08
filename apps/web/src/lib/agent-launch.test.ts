@@ -71,6 +71,6 @@ describe("agent-launch", () => {
   test("the CLI setup prompt names the install command, llms.txt, and skill", () => {
     expect(CLI_SETUP_PROMPT).toContain("npm install -g @buildinternet/releases");
     expect(CLI_SETUP_PROMPT).toContain("https://releases.sh/llms.txt");
-    expect(CLI_SETUP_PROMPT).toContain("npx skills add buildinternet/releases-cli");
+    expect(CLI_SETUP_PROMPT).toContain("npx skills add buildinternet/releases");
   });
 });

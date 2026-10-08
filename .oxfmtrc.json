@@ -21,7 +21,7 @@
     "bun.lock",
     "package-lock.json",
     "**/migrations/**/*.sql",
-    "plugins/claude-code/skills",
+    "plugins/claude/releases/skills",
     "skills",
     "packages/*/dist",
     "tests/evals/fixtures/tool-ux/runs",

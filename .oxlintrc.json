@@ -110,7 +110,7 @@
     "apps/web/public/**",
     "**/migrations/**",
     "**/*.d.ts",
-    "plugins/claude-code/skills/**",
+    "plugins/claude/releases/**",
     "skills/**",
     "packages/*/dist/**",
     "scripts/**",

@@ -89,7 +89,7 @@ releases tail --org vercel        # latest across an org
 claude mcp add --transport http releases https://agents.releases.sh/mcp
 ```
 
-Or install the [agent skills](/docs/skills) so Claude Code, Codex, Cursor, and OpenCode reach for the CLI on their own: `npx skills add buildinternet/releases-cli`.
+Or install the [agent skills](/docs/skills) so Claude Code, Codex, Cursor, and OpenCode reach for the CLI on their own: `npx skills add buildinternet/releases`.
 
 **As a feed:** every org, source, and collection page serves Atom — append `.atom` to its URL. See [Turn any changelog into an RSS feed](/docs/guides/changelog-rss-feed).
 

@@ -95,7 +95,7 @@ reader skills — search, MCP lookups, and release analysis — which is what al
 everyone wants:
 
 ```bash
-npx skills add buildinternet/releases-cli   # reader skills — search, MCP, release analysis
+npx skills add buildinternet/releases   # reader skills — search, MCP, release analysis
 
 # just the skill that writes a releases.json manifest for your own product
 npx skills add buildinternet/releases --skill creating-releases-json
@@ -105,7 +105,7 @@ On Claude Code, the CLI repo also installs as a plugin — the reader skills plu
 a bundled MCP connection and a `/releases` command:
 
 ```
-/plugin marketplace add buildinternet/releases-cli
+/plugin marketplace add buildinternet/releases
 /plugin install releases@releases
 ```
 
@@ -205,5 +205,6 @@ breakdown live in [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [Apache-2.0](LICENSE). The published npm packages
-([`releases-core`](packages/core), [`api-types`](packages/api-types)) are
+([`releases-core`](packages/core), [`api-types`](packages/api-types)) and the
+Claude Code plugin ([`plugins/claude/releases`](plugins/claude/releases)) are
 deliberately MIT for maximum reuse.

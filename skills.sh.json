@@ -3,6 +3,11 @@
   "notGrouped": "bottom",
   "groupings": [
     {
+      "title": "Reader",
+      "description": "Search changelogs and read release notes from the Release Notes Index — the hosted MCP, the releases CLI, and cross-company release analysis. Ships in the `releases` Claude Code plugin.",
+      "skills": ["releases-mcp", "releases-cli", "analyzing-releases"]
+    },
+    {
       "title": "Listing",
       "description": "Owner-facing skills for declaring products and release-note locations on releases.sh.",
       "skills": ["creating-releases-json"]

@@ -46,7 +46,7 @@ export const CLI_SETUP_PROMPT =
   "Set up the Releases Index CLI so you can look up product changelogs and release notes on demand. " +
   "Run: npm install -g @buildinternet/releases. " +
   "Then read https://releases.sh/llms.txt and follow it to set up the skill " +
-  "(npx skills add buildinternet/releases-cli).";
+  "(npx skills add buildinternet/releases).";
 
 const encodedCliPrompt = encodeURIComponent(CLI_SETUP_PROMPT);
 

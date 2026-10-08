@@ -12,7 +12,7 @@ const cliOptions = [
 ] as const;
 type CliId = (typeof cliOptions)[number]["id"];
 
-const SKILL_CMD = "npx skills add buildinternet/releases-cli";
+const SKILL_CMD = "npx skills add buildinternet/releases";
 
 const HELP = {
   cli: { text: "Query releases from your terminal.", href: "/docs/cli/browsing" },

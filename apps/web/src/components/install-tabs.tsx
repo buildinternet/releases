@@ -28,7 +28,7 @@ const tabs = [
   {
     id: "skills",
     label: "Skills",
-    commands: ["npx skills add buildinternet/releases-cli"],
+    commands: ["npx skills add buildinternet/releases"],
   },
 ] as const;
 

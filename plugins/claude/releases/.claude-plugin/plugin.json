@@ -1,0 +1,25 @@
+{
+  "name": "releases",
+  "version": "1.0.0",
+  "displayName": "Release Notes Index",
+  "description": "Search changelogs and look up releases via the hosted Release Notes Index. Bundles the hosted MCP connection, the /releases lookup command, and auto-triggering skills for release/changelog questions.",
+  "author": {
+    "name": "Build Internet",
+    "url": "https://github.com/buildinternet"
+  },
+  "homepage": "https://releases.sh",
+  "documentationUrl": "https://releases.sh/docs",
+  "supportUrl": "https://github.com/buildinternet/releases/issues",
+  "privacyPolicyUrl": "https://releases.sh/privacy",
+  "termsOfServiceUrl": "https://releases.sh/terms",
+  "repository": "https://github.com/buildinternet/releases",
+  "license": "MIT",
+  "keywords": [
+    "changelog",
+    "release-notes",
+    "releases",
+    "version-updates",
+    "breaking-changes",
+    "mcp"
+  ]
+}
