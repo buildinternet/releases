@@ -9,8 +9,10 @@ import { DigestFormatLinks } from "@/components/digest-format-links";
 import { weekOfLabel } from "@/lib/digest-format";
 import { collectionOgImageUrl, ogImageFields } from "@/lib/og-image-urls";
 import { getDigestIndex } from "./_lib/digest-data";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
 export const revalidate = 86400;
+export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
   params,
