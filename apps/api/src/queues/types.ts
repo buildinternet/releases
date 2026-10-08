@@ -8,6 +8,8 @@ export const RELEASE_EVENTS_QUEUE = "release-events";
 
 /** One digest email for one user from one cron run. */
 export interface DigestDeliveryMessage {
+  /** Absent on follows messages (they predate the collection kind). */
+  kind?: undefined;
   userId: string;
   cadence: "daily" | "weekly";
   /** ISO timestamp — cron run upper bound (`before`). */
@@ -28,14 +30,8 @@ export interface CollectionDigestDeliveryMessage {
   weekStart: string;
 }
 
-/** Everything the digest-delivery queue carries. Follows messages predate `kind`. */
+/** Everything the digest-delivery queue carries, discriminated by `kind`. */
 export type DigestQueueMessage = DigestDeliveryMessage | CollectionDigestDeliveryMessage;
-
-export function isCollectionDigestMessage(
-  m: DigestQueueMessage,
-): m is CollectionDigestDeliveryMessage {
-  return (m as { kind?: unknown }).kind === "collection-digest";
-}
 
 export interface ReleaseFanoutOwner {
   releaseId: string;

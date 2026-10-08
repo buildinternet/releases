@@ -2,9 +2,9 @@ import type {
   CollectionWeeklyDigestDetail,
   DigestCoveredRelease,
 } from "@buildinternet/releases-api-types";
-import { logEvent } from "@releases/lib/log-event";
+import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { renderEmail, type EmailBlock } from "@releases/rendering/email-shell";
-import type { DigestEmailEnv } from "./digest-email.js";
+import { sendDigestMail, type DigestEmailEnv } from "./digest-email.js";
 
 /**
  * The collection weekly digest email (#2459): a short teaser for one week's
@@ -14,17 +14,13 @@ import type { DigestEmailEnv } from "./digest-email.js";
  */
 
 /** Rows in the "Biggest releases" list, matching the web card's GLANCE_TOP_N. */
-export const COLLECTION_DIGEST_TOP_N = 5;
+const TOP_N = 5;
 
 /** The web card (and so the replay link) needs at least this many releases. */
 const MIN_RELEASES_FOR_REPLAY = 3;
 
 /** Anchor of the digest page's "Releases covered" block (web RELEASES_COVERED_ANCHOR). */
 const RELEASES_COVERED_ANCHOR = "releases-covered";
-
-const DEFAULT_FROM = "digests@releases.sh";
-const FROM_NAME = "Releases Index";
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface CollectionDigestEmailContent {
   collection: { slug: string; name: string };
@@ -40,21 +36,21 @@ export interface CollectionDigestEmailContent {
 export type CollectionDigestEmailInput = CollectionDigestEmailContent & { to: string };
 
 let monthDayFmt: Intl.DateTimeFormat | undefined;
-function monthDay(d: Date): string {
+function monthDay(dateKey: string): string {
   monthDayFmt ??= new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     timeZone: "UTC",
   });
-  return monthDayFmt.format(d);
+  return monthDayFmt.format(new Date(`${dateKey}T00:00:00Z`));
 }
 
-/** "Sep 28 – Oct 4" for an ET-Monday `weekStart` (YYYY-MM-DD). */
+/** "Sep 28 – Oct 4" (or "Sep 14 – 20") for an ET-Monday `weekStart` (YYYY-MM-DD). */
 export function weekRangeShort(weekStart: string): string {
-  const start = new Date(`${weekStart}T00:00:00Z`);
-  const end = new Date(start.getTime() + 6 * DAY_MS);
-  const to = start.getUTCMonth() === end.getUTCMonth() ? String(end.getUTCDate()) : monthDay(end);
-  return `${monthDay(start)} – ${to}`;
+  const end = addDaysToDateKey(weekStart, 6);
+  const to =
+    end.slice(0, 7) === weekStart.slice(0, 7) ? String(Number(end.slice(8))) : monthDay(end);
+  return `${monthDay(weekStart)} – ${to}`;
 }
 
 /**
@@ -62,11 +58,8 @@ export function weekRangeShort(weekStart: string): string {
  * citation order. The web card ranks by its impact score; this is the plain
  * importance ranking the issue allows so the API doesn't need the web's math.
  */
-export function biggestReleases(
-  releases: readonly DigestCoveredRelease[],
-  n = COLLECTION_DIGEST_TOP_N,
-): DigestCoveredRelease[] {
-  return releases.toSorted((a, b) => (b.importance ?? 0) - (a.importance ?? 0)).slice(0, n);
+export function biggestReleases(releases: readonly DigestCoveredRelease[]): DigestCoveredRelease[] {
+  return releases.toSorted((a, b) => (b.importance ?? 0) - (a.importance ?? 0)).slice(0, TOP_N);
 }
 
 /** First section that cites the release, else the "Releases covered" block. */
@@ -128,50 +121,19 @@ export function buildCollectionDigestEmail(content: CollectionDigestEmailContent
   return { subject, text, html };
 }
 
-/**
- * Render + send one collection digest. Never throws: a missing binding or send
- * error comes back as `{ sent: false }`. Adds RFC 8058 one-click unsubscribe
- * headers scoped to this collection.
- */
+/** Render + send one collection digest. Never throws (see `sendDigestMail`). */
 export async function sendCollectionDigestEmail(
   env: DigestEmailEnv,
   input: CollectionDigestEmailInput,
 ): Promise<{ sent: boolean; reason?: "no_binding" | "error" }> {
   const { subject, text, html } = buildCollectionDigestEmail(input);
-  const from = `${FROM_NAME} <${env.DIGEST_EMAIL_FROM || DEFAULT_FROM}>`;
-
-  if (!env.AUTH_EMAIL) {
-    logEvent("warn", {
+  return sendDigestMail(
+    env,
+    { to: input.to, subject, text, html, unsubscribeUrl: input.unsubscribeUrl },
+    {
       component: "collection-digest-email",
-      event: "email-no-binding",
-      collection: input.collection.slug,
-      environment: env.ENVIRONMENT,
-    });
-    return { sent: false, reason: "no_binding" };
-  }
-
-  try {
-    await env.AUTH_EMAIL.send({
-      to: input.to,
-      from,
-      subject,
-      text,
-      html,
-      headers: {
-        "List-Unsubscribe": `<${input.unsubscribeUrl}>`,
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-      },
-    });
-    return { sent: true };
-  } catch (err) {
-    logEvent("error", {
-      component: "collection-digest-email",
-      event: "email-send-failed",
       collection: input.collection.slug,
       weekStart: input.digest.weekStart,
-      error: err instanceof Error ? err.message : String(err),
-      environment: env.ENVIRONMENT,
-    });
-    return { sent: false, reason: "error" };
-  }
+    },
+  );
 }

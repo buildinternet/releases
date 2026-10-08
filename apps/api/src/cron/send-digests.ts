@@ -51,10 +51,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Build the absolute unsubscribe URL. Points at the API worker (it serves
- * /v1/digest/unsubscribe/:token). Falls back to the prod host.
+ * /v1/digest/unsubscribe/:token). With a collection slug, the URL unsubscribes
+ * from that collection's weekly digest only (#2459).
  */
-function unsubscribeUrlFor(apiOrigin: string, token: string): string {
-  return `${apiOrigin}/v1/digest/unsubscribe/${token}`;
+export function unsubscribeUrlFor(
+  apiOrigin: string,
+  token: string,
+  collectionSlug?: string,
+): string {
+  const base = `${apiOrigin}/v1/digest/unsubscribe/${token}`;
+  return collectionSlug ? `${base}/collections/${encodeURIComponent(collectionSlug)}` : base;
 }
 
 /** The render/send knobs shared by every recipient in a run. */

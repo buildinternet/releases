@@ -17,7 +17,7 @@ function newDigestPrefsId(): string {
  * store Unix seconds, so a sub-second in-memory Date would not equal a round-tripped
  * DB read. Use this for every timestamp written by this module.
  */
-function nowSeconds(): Date {
+export function nowSeconds(): Date {
   return new Date(Math.floor(Date.now() / 1000) * 1000);
 }
 

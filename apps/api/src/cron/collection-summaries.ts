@@ -36,11 +36,7 @@ import {
   resolveCollectionWeeklyDigestModel,
   type TextModelEnv,
 } from "../lib/ai/text-model.js";
-import {
-  sendCollectionDigests,
-  type NewCollectionDigest,
-  type SendCollectionDigestsEnv,
-} from "./send-collection-digests.js";
+import { sendCollectionDigests, type SendCollectionDigestsEnv } from "./send-collection-digests.js";
 
 export interface CollectionSummariesEnv
   extends TextModelEnv, WebRevalidateEnv, SendCollectionDigestsEnv {
@@ -264,15 +260,6 @@ export function collectionWeeklyDigestCatchupWeeks(
 }
 
 /**
- * The only week whose new digests get emailed to subscribers (#2459): the one that
- * closed yesterday. Catch-up weeks, `force` regens, and the backfill route never
- * email anyone.
- */
-export function justClosedDigestWeek(todayEt: string): string {
-  return collectionWeeklyDigestCatchupWeeks(todayEt, 1)[0];
-}
-
-/**
  * Generate the weekly digest for one collection + week. Per-collection
  * failures are contained here so the sweep never aborts on one bad week.
  * Applies the quality floor (`MIN_SUBSTANTIVE_RELEASES`) before calling the
@@ -396,9 +383,13 @@ export function digestRevalidatePaths(collectionSlugs: string[]): string[] {
 
 /** One digest written by a run: its collection and ET week. */
 export interface DigestedWeek {
+  collectionId: string;
   slug: string;
   weekStart: string;
 }
+
+/** What the revalidation pings need from a written digest. */
+type DigestedPage = Pick<DigestedWeek, "slug" | "weekStart">;
 
 /**
  * Pure: the digest pages a run made stale. The collection's digest index
@@ -408,7 +399,7 @@ export interface DigestedWeek {
  * when a digest is regenerated with `force`; for a brand-new week the ping is
  * a harmless no-op.
  */
-export function digestPagePaths(digests: DigestedWeek[]): string[] {
+export function digestPagePaths(digests: DigestedPage[]): string[] {
   const paths = digests.flatMap((d) => [
     `/collections/${d.slug}/digest`,
     `/collections/${d.slug}/digest/${d.weekStart}`,
@@ -437,7 +428,7 @@ export function digestPagePaths(digests: DigestedWeek[]): string[] {
  */
 export async function pingAfterDigests(
   env: WebRevalidateEnv,
-  digests: DigestedWeek[],
+  digests: DigestedPage[],
   opts?: { fetchImpl?: typeof fetch },
 ): Promise<void> {
   if (digests.length === 0) return;
@@ -479,16 +470,11 @@ export async function runCollectionWeeklyDigests(
 
   const catchup = Math.max(1, Number(env.COLLECTION_WEEKLY_DIGEST_CATCHUP_WEEKS ?? "1") || 1);
   const digested: DigestedWeek[] = [];
-  const toEmail: NewCollectionDigest[] = [];
-  const emailWeek = justClosedDigestWeek(todayEt);
 
   let totals = { generated: 0, skipped: 0, failed: 0 };
   for (const weekStart of collectionWeeklyDigestCatchupWeeks(todayEt, catchup)) {
     const r = await generateCollectionWeeklyDigestsForWeek(db, model, weekStart, {
-      onGenerated: (col) => {
-        digested.push({ slug: col.slug, weekStart });
-        if (weekStart === emailWeek) toEmail.push({ collectionId: col.id, weekStart });
-      },
+      onGenerated: (col) => digested.push({ collectionId: col.id, slug: col.slug, weekStart }),
     });
     totals = {
       generated: totals.generated + r.generated,
@@ -505,5 +491,5 @@ export async function runCollectionWeeklyDigests(
   });
 
   await pingAfterDigests(env, digested, { fetchImpl: env._revalidateFetchOverride });
-  await sendCollectionDigests(env, toEmail, { db });
+  await sendCollectionDigests({ ...env, _drizzleOverride: db }, digested, todayEt);
 }

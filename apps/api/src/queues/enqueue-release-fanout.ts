@@ -8,7 +8,7 @@ import {
 import { createDb } from "../db.js";
 import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookEventOwner } from "../webhooks/subscription-match.js";
-import type { ReleaseFanoutMessage } from "./types.js";
+import type { DigestQueueMessage, ReleaseFanoutMessage } from "./types.js";
 
 const QUEUE_BATCH_LIMIT = 100;
 
@@ -105,9 +105,9 @@ export async function fanoutWebhooks(
 }
 
 /** Chunked sendBatch for the digest-delivery queue (follows + collection digests). */
-export async function sendDigestBatch<M extends import("./types.js").DigestQueueMessage>(
-  queue: { sendBatch: (messages: { body: M }[]) => Promise<unknown> },
-  messages: M[],
+export async function sendDigestBatch(
+  queue: { sendBatch: (messages: { body: DigestQueueMessage }[]) => Promise<unknown> },
+  messages: DigestQueueMessage[],
 ): Promise<void> {
   for (let i = 0; i < messages.length; i += QUEUE_BATCH_LIMIT) {
     const chunk = messages.slice(i, i + QUEUE_BATCH_LIMIT);

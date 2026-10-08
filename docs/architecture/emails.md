@@ -78,6 +78,13 @@ collapsed and blanks dropped:
 | webhook DLQ       | `[alert] webhook DLQ: 3 messages — Acme Inc`                                           |
 | search no-results | `[alert] search no-results: 24.0% zero-hit (29/120) — "sample zero hit" +1 more`       |
 
+A healthy cron run names nobody — there is no affected entity and the counts are
+the whole story. Operator subjects keep their `[alert]` / `[feedback]` prefixes
+(operators filter on them) and carry no dates; the inbox timestamp already does.
+Account mail carries the fact the reader needs instead: the new address on an
+email change, the expiry when it is short, the domain they submitted, the
+org/source that was added.
+
 ## Collection weekly digest
 
 Signed-in readers opt in per collection ("Email me this digest weekly" on the
@@ -94,17 +101,10 @@ enqueues one `collection-digest` message per verified subscriber on the existing
 `POST /v1/workflows/backfill-weekly-digests` never email. Each send claims
 `(user, collection, week)` by moving `last_sent_week` forward first, so a queue
 redelivery or workflow replay can't mail twice; a failed send releases the claim
-for the retry. Unsubscribe reuses the reader's `reld_` token with
-`?collection=<slug>`, which removes only that subscription and leaves the follows
+for the retry. Unsubscribe reuses the reader's `reld_` token at
+`/v1/digest/unsubscribe/:token/collections/:slug`, which removes only that subscription and leaves the follows
 digest alone. It sends alongside the weekly follows digest; the two are not
 merged.
-
-— there is no affected entity and the counts are
-the whole story. Operator subjects keep their `[alert]` / `[feedback]` prefixes
-(operators filter on them) and carry no dates; the inbox timestamp already does.
-Account mail carries the fact the reader needs instead: the new address on an
-email change, the expiry when it is short, the domain they submitted, the
-org/source that was added.
 
 ## Gmail annotations
 

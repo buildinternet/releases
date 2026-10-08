@@ -401,7 +401,7 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
           sections: [{ anchor: "self-review", releaseIds: ["rel_sample1"] }],
         },
         baseUrl: web,
-        unsubscribeUrl: `${api}/v1/digest/unsubscribe/reld_sample?collection=coding-agents`,
+        unsubscribeUrl: `${api}/v1/digest/unsubscribe/reld_sample/collections/coding-agents`,
       });
     }
     case "alert.semantic-match":

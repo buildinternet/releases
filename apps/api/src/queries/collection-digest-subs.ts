@@ -6,7 +6,7 @@ import type { AnyDb } from "../db.js";
 import { userCollectionDigestSubs } from "../db/schema-collection-digest-subs.js";
 import { userDigestPrefs } from "../db/schema-digest-prefs.js";
 import { user } from "../db/schema-auth.js";
-import { ensureDigestPrefs } from "./digest-prefs.js";
+import { ensureDigestPrefs, nowSeconds } from "./digest-prefs.js";
 
 /**
  * Per-collection weekly digest email subscriptions (#2459). Subscribing reuses
@@ -14,10 +14,6 @@ import { ensureDigestPrefs } from "./digest-prefs.js";
  * every digest email has one unsubscribe lane; a collection link carries the
  * collection slug and removes only that subscription.
  */
-
-function nowSeconds(): Date {
-  return new Date(Math.floor(Date.now() / 1000) * 1000);
-}
 
 /** A collection a reader can subscribe to: it exists and generates weekly digests. */
 async function findDigestCollection(
@@ -178,17 +174,15 @@ export async function getCollectionDigestRecipient(
 
 /**
  * Claim the send for (user, collection, week) by moving `last_sent_week` forward.
- * Only one caller wins: a queue redelivery or a concurrent consumer sees no row
- * updated and must not send. `previous` is the `last_sent_week` the caller read;
- * pass it to `releaseCollectionDigestSend` if the email then fails. Returns
- * false when the row moved on (already claimed) or is gone.
+ * Only one caller wins: a queue redelivery or a concurrent consumer finds the
+ * week already claimed and must not send. Returns false in that case (or when
+ * the subscription is gone).
  */
 export async function claimCollectionDigestSend(
   db: AnyDb,
   userId: string,
   collectionId: string,
   weekStart: string,
-  previous: string | null,
 ): Promise<boolean> {
   const updated = await db
     .update(userCollectionDigestSubs)
@@ -197,9 +191,6 @@ export async function claimCollectionDigestSend(
       and(
         eq(userCollectionDigestSubs.userId, userId),
         eq(userCollectionDigestSubs.collectionId, collectionId),
-        previous === null
-          ? isNull(userCollectionDigestSubs.lastSentWeek)
-          : eq(userCollectionDigestSubs.lastSentWeek, previous),
         or(
           isNull(userCollectionDigestSubs.lastSentWeek),
           lt(userCollectionDigestSubs.lastSentWeek, weekStart),

@@ -17,10 +17,8 @@ import {
   unsubscribeCollectionDigest,
 } from "../src/queries/collection-digest-subs.js";
 import { upsertCollectionWeeklyDigest } from "../src/queries/collection-summaries.js";
-import {
-  processCollectionDigestMessage,
-  sendCollectionDigests,
-} from "../src/cron/send-collection-digests.js";
+import { sendCollectionDigests } from "../src/cron/send-collection-digests.js";
+import { processCollectionDigestMessage } from "../src/queues/collection-digest-consumer.js";
 import {
   biggestReleases,
   buildCollectionDigestEmail,
@@ -32,6 +30,8 @@ let h: TestDatabase;
 let sent: Array<{ to: string; subject: string; text: string; headers: Record<string, string> }>;
 
 const WEEK = "2026-09-28";
+/** ET Monday the week after WEEK, so WEEK is the just-closed week. */
+const TODAY = "2026-10-05";
 
 function env(over: Record<string, unknown> = {}) {
   sent = [];
@@ -146,7 +146,7 @@ describe("collection digest subscriptions", () => {
   });
 });
 
-describe("/digest/unsubscribe/:token?collection=", () => {
+describe("/digest/unsubscribe/:token/collections/:slug", () => {
   function request(path: string) {
     const a = new Hono();
     a.route("/", digestRoutes);
@@ -158,14 +158,14 @@ describe("/digest/unsubscribe/:token?collection=", () => {
   it("removes only that collection and leaves the follows digest on", async () => {
     const prefs = await setDigestCadence(h.db, "u1", "weekly");
     await subscribeCollectionDigest(h.db, "u1", "coding-agents");
-    const res = await request(`/digest/unsubscribe/${prefs.manageToken}?collection=coding-agents`);
+    const res = await request(`/digest/unsubscribe/${prefs.manageToken}/collections/coding-agents`);
     expect(res.status).toBe(200);
     expect(await listCollectionDigestSubs(h.db, "u1")).toEqual([]);
     expect((await getDigestPrefs(h.db, "u1"))?.cadence).toBe("weekly");
   });
 
   it("404s on a bad token", async () => {
-    const res = await request(`/digest/unsubscribe/reld_nope?collection=coding-agents`);
+    const res = await request(`/digest/unsubscribe/reld_nope/collections/coding-agents`);
     expect(res.status).toBe(404);
   });
 });
@@ -177,14 +177,22 @@ describe("sendCollectionDigests", () => {
     await subscribeCollectionDigest(h.db, "u2", "coding-agents");
     const e = env();
 
-    const first = await sendCollectionDigests(e, [{ collectionId: "col_ca", weekStart: WEEK }]);
+    const first = await sendCollectionDigests(
+      e,
+      [{ collectionId: "col_ca", weekStart: WEEK }],
+      TODAY,
+    );
     expect(first).toEqual({ enqueued: 1, mode: "inline" });
     expect(sent.map((m) => m.to)).toEqual(["one@example.com"]);
     expect(sent[0].subject).toBe("Agents ship self-review — Coding Agents · Sep 28 – Oct 4");
-    expect(sent[0].headers["List-Unsubscribe"]).toContain("?collection=coding-agents");
+    expect(sent[0].headers["List-Unsubscribe"]).toContain("/collections/coding-agents>");
 
     // A workflow replay or a second run finds nobody left for this week.
-    const again = await sendCollectionDigests(e, [{ collectionId: "col_ca", weekStart: WEEK }]);
+    const again = await sendCollectionDigests(
+      e,
+      [{ collectionId: "col_ca", weekStart: WEEK }],
+      TODAY,
+    );
     expect(again.enqueued).toBe(0);
     expect(sent).toHaveLength(1);
   });
@@ -197,7 +205,7 @@ describe("sendCollectionDigests", () => {
         sendBatch: async (msgs: { body: unknown }[]) => queued.push(...msgs.map((m) => m.body)),
       },
     });
-    await sendCollectionDigests(e, [{ collectionId: "col_ca", weekStart: WEEK }]);
+    await sendCollectionDigests(e, [{ collectionId: "col_ca", weekStart: WEEK }], TODAY);
     expect(queued).toEqual([
       { kind: "collection-digest", userId: "u1", collectionId: "col_ca", weekStart: WEEK },
     ]);
@@ -206,9 +214,11 @@ describe("sendCollectionDigests", () => {
 
   it("does nothing when crons are disabled", async () => {
     await subscribeCollectionDigest(h.db, "u1", "coding-agents");
-    const res = await sendCollectionDigests(env({ CRON_ENABLED: "false" }), [
-      { collectionId: "col_ca", weekStart: WEEK },
-    ]);
+    const res = await sendCollectionDigests(
+      env({ CRON_ENABLED: "false" }),
+      [{ collectionId: "col_ca", weekStart: WEEK }],
+      TODAY,
+    );
     expect(res.mode).toBe("disabled");
     expect(sent).toHaveLength(0);
   });
@@ -292,7 +302,7 @@ describe("buildCollectionDigestEmail", () => {
       },
       baseUrl: "https://releases.sh",
       unsubscribeUrl:
-        "https://api.releases.sh/v1/digest/unsubscribe/reld_x?collection=coding-agents",
+        "https://api.releases.sh/v1/digest/unsubscribe/reld_x/collections/coding-agents",
     });
     const digestUrl = "https://releases.sh/collections/coding-agents/digest/2026-09-28";
     expect(text).toContain("The intro.");

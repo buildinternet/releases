@@ -25,16 +25,14 @@ export function CollectionDigestSubscribe({
   const follows = useFollows();
   const router = useRouter();
   const pathname = usePathname();
-  const [subscribed, setSubscribed] = useState(false);
+  const [subscribedState, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const signedIn = Boolean(follows?.ready && follows.signedIn);
+  const subscribed = signedIn && subscribedState;
 
   useEffect(() => {
-    if (!signedIn) {
-      setSubscribed(false);
-      return;
-    }
+    if (!signedIn) return;
     let cancelled = false;
     listCollectionDigestSubscriptions()
       .then((subs) => {

@@ -718,6 +718,7 @@ v1.use("/feed/:token", publicRateLimitMiddleware);
 // which the default middleware waves through (#2158). Anonymous + emailed token
 // means per-IP is the only handle there is.
 v1.use("/digest/unsubscribe/:token", publicRateLimit({ unsafeMethods: true }));
+v1.use("/digest/unsubscribe/:token/collections/:slug", publicRateLimit({ unsafeMethods: true }));
 // Gmail one-click action handlers. These deliberately DON'T use the tiered
 // public limiter: they consume a real auth credential, so they limit themselves
 // against AUTH_RATE_LIMITER — the tighter per-IP edge limiter that fronts
