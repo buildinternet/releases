@@ -6,7 +6,6 @@ import {
   OTHERS_KEY,
   releaseImpacts,
   releaseSectionAnchors,
-  topReleases,
 } from "./digest-glance";
 
 const org = (slug: string) => ({
@@ -106,14 +105,12 @@ describe("buildGlance", () => {
     ]);
     expect(products.map((p) => p.key)).toEqual(["big", "small"]);
     expect(products[0].composition).toEqual({ features: 3, enhancements: 1, fixes: 4 });
-    expect(products[0].hasComposition).toBe(true);
     expect(products[0].flames).toEqual([5, 4]);
     expect(products[1].flames).toEqual([]);
   });
 
-  test("null composition everywhere leaves hasComposition false", () => {
+  test("null composition everywhere sums to zero counts", () => {
     const { products } = buildGlance([rel("a", "p", 3), rel("b", "p", 1)]);
-    expect(products[0].hasComposition).toBe(false);
     expect(products[0].composition).toEqual({ features: 0, enhancements: 0, fixes: 0 });
   });
 
@@ -148,21 +145,6 @@ describe("buildGlance", () => {
         .map((r) => r.release.id)
         .sort(),
     ).toEqual(["r7", "r8", "r9"]);
-  });
-});
-
-describe("topReleases", () => {
-  test("slices the top n, optionally within one group", () => {
-    const { ranked } = buildGlance([
-      rel("a", "p", 5),
-      rel("b", "q", 4),
-      rel("c", "p", 3),
-      rel("d", "q", 2),
-      rel("e", "p", 1),
-      rel("f", "q", 1),
-    ]);
-    expect(topReleases(ranked, null).map((r) => r.release.id)).toEqual(["a", "b", "c", "d", "e"]);
-    expect(topReleases(ranked, "q").map((r) => r.release.id)).toEqual(["b", "d", "f"]);
   });
 });
 

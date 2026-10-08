@@ -11,10 +11,8 @@ import { DigestAdjacentNav } from "@/components/digest-adjacent-nav";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFacepile, orgsFromCoveredReleases } from "@/components/digest-facepile";
 import { DigestFormatLinks } from "@/components/digest-format-links";
-import {
-  DigestWeekGlance,
-  RELEASES_COVERED_ANCHOR,
-} from "@/components/digest-week-glance/digest-week-glance";
+import { DigestWeekGlance } from "@/components/digest-week-glance/digest-week-glance";
+import { RELEASES_COVERED_ANCHOR } from "@/lib/digest-glance";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { buildDigestJsonLd } from "@/lib/schema-org";
 import { renderDigestMarkdownToHtml } from "@/lib/render-digest-body";

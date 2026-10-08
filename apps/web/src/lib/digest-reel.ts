@@ -30,6 +30,14 @@ export interface SectionProduct<TOrg> {
   org: TOrg;
 }
 
+/** Grouping key for a release's product: the product slug, else `org:<slug>`. */
+export function productKeyOf(r: {
+  product?: { slug: string } | null;
+  org: { slug: string };
+}): string {
+  return r.product?.slug ?? `org:${r.org.slug}`;
+}
+
 /** Distinct products a section covers (by product slug, falling back to the
  *  org for product-less releases), labelled with the product name when there
  *  is one. First-seen order. Takes any section with hydrated `releases` —
@@ -39,7 +47,7 @@ export function sectionProducts<TOrg extends { slug: string; name: string }>(sec
 }): SectionProduct<TOrg>[] {
   const out = new Map<string, SectionProduct<TOrg>>();
   for (const r of section.releases) {
-    const key = r.product?.slug ?? `org:${r.org.slug}`;
+    const key = productKeyOf(r);
     if (!out.has(key)) out.set(key, { key, name: r.product?.name ?? r.org.name, org: r.org });
   }
   return [...out.values()];

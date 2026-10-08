@@ -1,15 +1,20 @@
 import type { CollectionWeeklyDigestDetail, DigestCoveredRelease } from "@/lib/api";
-import { buildGlance, releaseSectionAnchors } from "@/lib/digest-glance";
+import {
+  buildGlance,
+  COMPOSITION_WEIGHTS,
+  GLANCE_TOP_N,
+  RELEASES_COVERED_ANCHOR,
+  releaseSectionAnchors,
+} from "@/lib/digest-glance";
+import { label } from "@/components/composition-shared";
 import { ImportanceFlame } from "@/components/importance-marker";
+import { pluralReleases } from "@/lib/formatters";
 import { GlanceSelection, type GlanceRow, type GlanceTile } from "./glance-selection";
 import { rectToPercent, squarify } from "./treemap-layout";
 import { GLANCE_SEGMENTS } from "./glance-colors";
 
 /** Under this many covered releases the prose says it all — no card. */
-export const MIN_GLANCE_RELEASES = 3;
-
-/** Anchor of the page's "Releases covered" block — fallback for uncited rows. */
-export const RELEASES_COVERED_ANCHOR = "releases-covered";
+const MIN_GLANCE_RELEASES = 3;
 
 /**
  * "The week at a glance" card on a weekly collection digest: a treemap of who
@@ -29,51 +34,57 @@ export function DigestWeekGlance({
 
   const { products, ranked } = buildGlance(releases);
   const anchors = releaseSectionAnchors(sections ?? []);
-  // One product filling the whole box says nothing — list only.
-  const showTreemap = products.length > 1;
 
-  const rects = squarify(products.map((p) => p.impact));
-  const tiles: GlanceTile[] = products.map((p, i) => {
+  // One product filling the whole box says nothing — list only.
+  const rects = products.length > 1 ? squarify(products.map((p) => p.impact)) : [];
+  const tiles: GlanceTile[] = rects.map((rect, i) => {
+    const p = products[i];
+    // Band segments are sized by their weighted share of impact and labelled
+    // with raw counts.
+    const parts = GLANCE_SEGMENTS.map((s) => ({
+      s,
+      count: p.composition[s.cat.key],
+      weight: p.composition[s.cat.key] * COMPOSITION_WEIGHTS[s.cat.key],
+    })).filter((x) => x.count > 0);
+    const weightTotal = parts.reduce((sum, x) => sum + x.weight, 0);
     const majors = p.flames.length;
-    const counts = p.composition;
-    // Band segments are sized by their weighted share of impact (the same
-    // weights as the composition factor) and labelled with raw counts.
-    const weights = {
-      features: counts.features,
-      enhancements: 0.75 * counts.enhancements,
-      fixes: 0.5 * counts.fixes,
-    };
-    const weightTotal = weights.features + weights.enhancements + weights.fixes;
     return {
       key: p.key,
       name: p.name,
       org: p.org,
-      releaseCount: p.releaseCount,
+      countLabel: `${p.releaseCount} ${pluralReleases(p.releaseCount)}`,
       flames: p.flames,
-      position: rectToPercent(rects[i]),
-      segments:
-        weightTotal > 0
-          ? GLANCE_SEGMENTS.filter((s) => counts[s.key] > 0).map((s) => ({
-              key: s.key,
-              share: (weights[s.key] / weightTotal) * 100,
-              label: `${counts[s.key]} ${counts[s.key] === 1 ? s.one : s.many}`,
-            }))
-          : [],
-      ariaLabel: `${p.name}: ${p.releaseCount} ${p.releaseCount === 1 ? "release" : "releases"}${
+      position: rectToPercent(rect),
+      segments: parts.map(({ s, count, weight }) => ({
+        key: s.cat.key,
+        share: (weight / weightTotal) * 100,
+        label: label(count, s.cat),
+        background: s.background,
+        ink: s.ink,
+      })),
+      ariaLabel: `${p.name}: ${p.releaseCount} ${pluralReleases(p.releaseCount)}${
         majors > 0 ? `, ${majors} major or landmark` : ""
       }. Select to filter the list.`,
     };
   });
 
-  const rows: GlanceRow[] = ranked.map((r) => ({
-    id: r.release.id,
-    title: r.release.title,
-    importance: r.release.importance ?? null,
-    groupKey: r.groupKey,
-    productName: r.productName,
-    org: r.release.org,
-    href: `#${anchors.get(r.release.id) ?? RELEASES_COVERED_ANCHOR}`,
-  }));
+  // Ship only rows the island can show: the overall top N plus each tile's top N.
+  const perGroup = new Map<string, number>();
+  const rows: GlanceRow[] = ranked
+    .filter((r, i) => {
+      const n = (perGroup.get(r.groupKey) ?? 0) + 1;
+      perGroup.set(r.groupKey, n);
+      return i < GLANCE_TOP_N || n <= GLANCE_TOP_N;
+    })
+    .map((r) => ({
+      id: r.release.id,
+      title: r.release.title,
+      importance: r.release.importance ?? null,
+      groupKey: r.groupKey,
+      productName: r.productName,
+      org: r.release.org,
+      href: `#${anchors.get(r.release.id) ?? RELEASES_COVERED_ANCHOR}`,
+    }));
 
   return (
     <section
@@ -86,11 +97,7 @@ export function DigestWeekGlance({
       >
         The week at a glance
       </h2>
-      <GlanceSelection
-        tiles={showTreemap ? tiles : []}
-        rows={rows}
-        legend={showTreemap ? <GlanceLegend /> : null}
-      />
+      <GlanceSelection tiles={tiles} rows={rows} legend={<GlanceLegend />} />
     </section>
   );
 }
@@ -99,13 +106,13 @@ function GlanceLegend() {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-[var(--fg-2)]">
       {GLANCE_SEGMENTS.map((s) => (
-        <span key={s.key} className="inline-flex items-center gap-1.5">
+        <span key={s.cat.key} className="inline-flex items-center gap-1.5">
           <span
             aria-hidden="true"
             className="h-2.5 w-2.5 rounded-[2px]"
             style={{
               background: s.background,
-              boxShadow: s.key === "fixes" ? "inset 0 0 0 1px var(--line-2)" : undefined,
+              boxShadow: s.cat.key === "fixes" ? "inset 0 0 0 1px var(--line-2)" : undefined,
             }}
           />
           {s.legend}

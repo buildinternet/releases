@@ -3,19 +3,18 @@
 import { useState, type ReactNode } from "react";
 import { OrgAvatar } from "@/components/org-avatar";
 import { ImportanceFlame, ImportanceMarker } from "@/components/importance-marker";
-import type { GlanceOrg } from "@/lib/digest-glance";
-import { GLANCE_SEGMENT_BY_KEY, type GlanceSegmentKey } from "./glance-colors";
+import { GLANCE_TOP_N, type GlanceOrg } from "@/lib/digest-glance";
 
 export interface GlanceTile {
   key: string;
   name: string;
   org: GlanceOrg | null;
-  releaseCount: number;
+  countLabel: string;
   flames: (4 | 5)[];
   /** CSS percentages inside the treemap box. */
   position: { left: string; top: string; width: string; height: string };
   /** Empty when no release in the tile carried composition counts. */
-  segments: { key: GlanceSegmentKey; share: number; label: string }[];
+  segments: { key: string; share: number; label: string; background: string; ink: string }[];
   ariaLabel: string;
 }
 
@@ -28,8 +27,6 @@ export interface GlanceRow {
   org: GlanceOrg;
   href: string;
 }
-
-const TOP_N = 5;
 
 /**
  * Selection island for the week-at-a-glance card: clicking a tile filters the
@@ -47,24 +44,29 @@ export function GlanceSelection({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const selectedTile = selected ? tiles.find((t) => t.key === selected) : undefined;
-  const shown = (selected ? rows.filter((r) => r.groupKey === selected) : rows).slice(0, TOP_N);
+  const shown = (selected ? rows.filter((r) => r.groupKey === selected) : rows).slice(
+    0,
+    GLANCE_TOP_N,
+  );
 
   return (
     <>
       {tiles.length > 0 && (
-        <div className="relative w-full aspect-[712/300] max-[520px]:aspect-[4/3]">
-          {tiles.map((t) => (
-            <Tile
-              key={t.key}
-              tile={t}
-              pressed={selected === t.key}
-              dimmed={selected != null && selected !== t.key}
-              onSelect={() => setSelected(selected === t.key ? null : t.key)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="relative w-full aspect-[712/300] max-[520px]:aspect-[4/3]">
+            {tiles.map((t) => (
+              <Tile
+                key={t.key}
+                tile={t}
+                pressed={selected === t.key}
+                dimmed={selected != null && selected !== t.key}
+                onSelect={() => setSelected(selected === t.key ? null : t.key)}
+              />
+            ))}
+          </div>
+          {legend}
+        </>
       )}
-      {legend}
 
       <div className="flex flex-col gap-0.5 border-t border-[var(--line)] pt-3">
         <div className="ml-2 flex min-h-8 items-center justify-between gap-3">
@@ -148,23 +150,20 @@ function Tile({
         {tile.segments.length === 0 ? (
           <span className="flex-1 bg-[var(--surface-2)]" />
         ) : (
-          tile.segments.map((s) => {
-            const style = GLANCE_SEGMENT_BY_KEY[s.key];
-            return (
+          tile.segments.map((s) => (
+            <span
+              key={s.key}
+              className="@container relative flex items-end overflow-hidden"
+              style={{ flex: `0 0 ${s.share.toFixed(2)}%`, background: s.background }}
+            >
               <span
-                key={s.key}
-                className="@container relative flex items-end overflow-hidden"
-                style={{ flex: `0 0 ${s.share.toFixed(2)}%`, background: style.background }}
+                className="hidden whitespace-nowrap pb-1.5 pl-[7px] font-mono text-[11px] @min-[96px]:inline"
+                style={{ color: s.ink }}
               >
-                <span
-                  className="hidden whitespace-nowrap pb-1.5 pl-[7px] font-mono text-[11px] @min-[96px]:inline"
-                  style={{ color: style.ink }}
-                >
-                  {s.label}
-                </span>
+                {s.label}
               </span>
-            );
-          })
+            </span>
+          ))
         )}
       </span>
       <span className="absolute inset-x-0 top-0 flex h-9 items-center gap-[7px] overflow-hidden px-2">
@@ -180,7 +179,7 @@ function Tile({
           {tile.name}
         </span>
         <span className="hidden whitespace-nowrap font-mono text-[11px] text-[var(--fg-3)] @min-[150px]:inline">
-          {tile.releaseCount} {tile.releaseCount === 1 ? "release" : "releases"}
+          {tile.countLabel}
         </span>
         {tile.flames.map((f, i) => (
           <ImportanceFlame key={i} importance={f} />

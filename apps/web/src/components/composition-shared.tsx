@@ -15,7 +15,7 @@ import type { ReleaseComposition } from "@buildinternet/releases-api-types";
  * keep them unambiguous without color.
  */
 
-type CatKey = "features" | "enhancements" | "fixes";
+export type CatKey = "features" | "enhancements" | "fixes";
 
 export interface CatMeta {
   key: CatKey;

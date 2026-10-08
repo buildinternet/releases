@@ -1,4 +1,4 @@
-import { CATS } from "@/components/composition-shared";
+import { CATS, type CatMeta } from "@/components/composition-shared";
 
 /**
  * Treemap band colors, derived from the shared composition palette so the
@@ -8,49 +8,19 @@ import { CATS } from "@/components/composition-shared";
  * green/blue fills (they don't change between themes) and `--fg-2` on the
  * softened red, which does.
  */
-
-export type GlanceSegmentKey = "features" | "enhancements" | "fixes";
-
 export interface GlanceSegmentStyle {
-  key: GlanceSegmentKey;
-  one: string;
-  many: string;
+  cat: CatMeta;
   legend: string;
   background: string;
   ink: string;
 }
 
-const color = (key: GlanceSegmentKey) => CATS.find((c) => c.key === key)!.color;
-
-export const FIXES_SOFTENED = `color-mix(in oklch, ${color("fixes")} 30%, var(--surface-2))`;
-
-export const GLANCE_SEGMENTS: GlanceSegmentStyle[] = [
-  {
-    key: "features",
-    one: "feature",
-    many: "features",
-    legend: "Features",
-    background: color("features"),
-    ink: "#0c0a09",
-  },
-  {
-    key: "enhancements",
-    one: "enhancement",
-    many: "enhancements",
-    legend: "Enhancements",
-    background: color("enhancements"),
-    ink: "#0c0a09",
-  },
-  {
-    key: "fixes",
-    one: "fix",
-    many: "fixes",
-    legend: "Fixes",
-    background: FIXES_SOFTENED,
-    ink: "var(--fg-2)",
-  },
-];
-
-export const GLANCE_SEGMENT_BY_KEY = Object.fromEntries(
-  GLANCE_SEGMENTS.map((s) => [s.key, s]),
-) as Record<GlanceSegmentKey, GlanceSegmentStyle>;
+export const GLANCE_SEGMENTS: GlanceSegmentStyle[] = CATS.map((cat) => {
+  const fixes = cat.key === "fixes";
+  return {
+    cat,
+    legend: cat.many[0].toUpperCase() + cat.many.slice(1),
+    background: fixes ? `color-mix(in oklch, ${cat.color} 30%, var(--surface-2))` : cat.color,
+    ink: fixes ? "var(--fg-2)" : "#0c0a09",
+  };
+});
