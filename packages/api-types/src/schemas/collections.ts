@@ -297,6 +297,12 @@ export const DigestCoveredReleaseSchema = z.object({
    * digest page's week-at-a-glance treemap.
    */
   composition: ReleaseCompositionSchema.nullable().optional(),
+  /**
+   * ISO publish timestamp, as stored. Null when the source gave none;
+   * optional for older servers. A date-only source is stored at exactly
+   * `T00:00:00.000Z`. Powers the digest week replay's day placement.
+   */
+  publishedAt: z.string().nullable().optional(),
 });
 
 /** One `###` section of a digest body, parsed server-side. */

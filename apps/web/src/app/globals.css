@@ -194,6 +194,32 @@
   }
 }
 
+/* Digest replay scrubber: a transparent native range over the tick strip,
+   with a thin playhead thumb. */
+.replay-scrub::-webkit-slider-runnable-track {
+  height: 40px;
+  background: transparent;
+}
+.replay-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 3px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--fg);
+}
+.replay-scrub::-moz-range-track {
+  height: 40px;
+  background: transparent;
+}
+.replay-scrub::-moz-range-thumb {
+  width: 3px;
+  height: 40px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--fg);
+}
+
 /* ── View transitions ── */
 /* Tighten the default crossfade so navigation feels responsive rather than sluggish. */
 ::view-transition-old(root),

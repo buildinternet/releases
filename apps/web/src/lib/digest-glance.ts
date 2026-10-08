@@ -43,7 +43,7 @@ export const RELEASES_COVERED_ANCHOR = "releases-covered";
 
 export type GlanceOrg = DigestCoveredRelease["org"];
 
-interface GlanceProduct {
+export interface GlanceProduct {
   /** `productKeyOf` key, or `others`. */
   key: string;
   name: string;
@@ -56,7 +56,7 @@ interface GlanceProduct {
   flames: (4 | 5)[];
 }
 
-interface GlanceRankedRelease {
+export interface GlanceRankedRelease {
   release: DigestCoveredRelease;
   /** Tile this release belongs to — `others` when its product was folded. */
   groupKey: string;
@@ -99,7 +99,7 @@ export function releaseImpacts(
   });
 }
 
-function emptyProduct(key: string, name: string, org: GlanceOrg | null): GlanceProduct {
+export function emptyProduct(key: string, name: string, org: GlanceOrg | null): GlanceProduct {
   return {
     key,
     name,
@@ -112,7 +112,7 @@ function emptyProduct(key: string, name: string, org: GlanceOrg | null): GlanceP
 }
 
 /** Fold `src` (a product, or one release's contribution) into `into`. */
-function addInto(
+export function addInto(
   into: GlanceProduct,
   src: Pick<GlanceProduct, "releaseCount" | "impact" | "composition" | "flames">,
 ) {
@@ -122,6 +122,24 @@ function addInto(
     into.composition[k] += src.composition[k];
   }
   into.flames.push(...src.flames);
+}
+
+/** One release's share of its product tile, given its impact. */
+export function releaseContribution(
+  r: DigestCoveredRelease,
+  impact: number,
+): Pick<GlanceProduct, "releaseCount" | "impact" | "composition" | "flames"> {
+  const c = r.composition;
+  return {
+    releaseCount: 1,
+    impact,
+    composition: {
+      features: c?.features ?? 0,
+      enhancements: c?.enhancements ?? 0,
+      fixes: c?.bugs ?? 0,
+    },
+    flames: r.importance === 4 || r.importance === 5 ? [r.importance] : [],
+  };
 }
 
 export function buildGlance(releases: readonly DigestCoveredRelease[]): {
@@ -139,17 +157,7 @@ export function buildGlance(releases: readonly DigestCoveredRelease[]): {
       p = emptyProduct(keys[i], r.product?.name ?? r.org.name, r.org);
       byKey.set(keys[i], p);
     }
-    const c = r.composition;
-    addInto(p, {
-      releaseCount: 1,
-      impact: impacts[i],
-      composition: {
-        features: c?.features ?? 0,
-        enhancements: c?.enhancements ?? 0,
-        fixes: c?.bugs ?? 0,
-      },
-      flames: r.importance === 4 || r.importance === 5 ? [r.importance] : [],
-    });
+    addInto(p, releaseContribution(r, impacts[i]));
   });
 
   let products = [...byKey.values()].sort((a, b) => b.impact - a.impact);

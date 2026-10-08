@@ -86,34 +86,7 @@ export function GlanceSelection({
         <ol className="flex flex-col gap-0.5">
           {shown.map((r, i) => (
             <li key={r.id}>
-              <a
-                href={r.href}
-                className="flex gap-3 rounded-lg p-2 text-[var(--fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-              >
-                <span className="pt-0.5 font-mono text-[11px] text-[var(--fg-3)]">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="flex items-start gap-1.5 text-[14px] leading-snug">
-                    {/* Line-height box keeps the flame on the first line of a wrapped title. */}
-                    {(r.importance ?? 0) >= 4 && (
-                      <span className="flex h-[1.375em] shrink-0 items-center">
-                        <ImportanceMarker importance={r.importance} />
-                      </span>
-                    )}
-                    <span>{r.title}</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--fg-2)]">
-                    <OrgAvatar
-                      avatarUrl={r.org.avatarUrl ?? null}
-                      githubHandle={r.org.githubHandle ?? null}
-                      name={r.productName}
-                      size={14}
-                    />
-                    {r.productName}
-                  </span>
-                </span>
-              </a>
+              <GlanceRowLink row={r} n={i + 1} />
             </li>
           ))}
         </ol>
@@ -146,6 +119,49 @@ function Tile({
       } ${dimmed ? "opacity-35" : "opacity-100"}`}
       style={tile.position}
     >
+      <GlanceTileBody tile={tile} />
+    </button>
+  );
+}
+
+/** One "Biggest releases" row (the hero row style), numbered `n`. */
+export function GlanceRowLink({ row, n }: { row: GlanceRow; n: number }) {
+  return (
+    <a
+      href={row.href}
+      className="flex gap-3 rounded-lg p-2 text-[var(--fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+    >
+      <span className="pt-0.5 font-mono text-[11px] text-[var(--fg-3)]">
+        {String(n).padStart(2, "0")}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex items-start gap-1.5 text-[14px] leading-snug">
+          {/* Line-height box keeps the flame on the first line of a wrapped title. */}
+          {(row.importance ?? 0) >= 4 && (
+            <span className="flex h-[1.375em] shrink-0 items-center">
+              <ImportanceMarker importance={row.importance} />
+            </span>
+          )}
+          <span>{row.title}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--fg-2)]">
+          <OrgAvatar
+            avatarUrl={row.org.avatarUrl ?? null}
+            githubHandle={row.org.githubHandle ?? null}
+            name={row.productName}
+            size={14}
+          />
+          {row.productName}
+        </span>
+      </span>
+    </a>
+  );
+}
+
+/** A tile's composition band and header, inside whatever positioned wrapper holds it. */
+export function GlanceTileBody({ tile }: { tile: GlanceTile }) {
+  return (
+    <>
       <span aria-hidden="true" className="absolute inset-x-0 bottom-0 top-9 flex gap-px">
         {tile.segments.length === 0 ? (
           <span className="flex-1 bg-[var(--surface-2)]" />
@@ -185,6 +201,6 @@ function Tile({
           <ImportanceFlame key={i} importance={f} />
         ))}
       </span>
-    </button>
+    </>
   );
 }
