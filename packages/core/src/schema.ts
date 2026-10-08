@@ -719,6 +719,8 @@ export const releases = sqliteTable(
   },
   (table) => [
     uniqueIndex("idx_releases_source_url").on(table.sourceId, table.url),
+    // Url-only lookups (no source in hand) can't use the pair above.
+    index("idx_releases_url").on(table.url),
     index("idx_releases_source_published").on(table.sourceId, table.publishedAt),
     index("idx_releases_published").on(table.publishedAt),
     // Covers `(published_at DESC, id DESC)` cursor walks — GraphQL `latestReleases`

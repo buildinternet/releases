@@ -65,7 +65,15 @@ export async function findVisibleReleaseDetail(db: AnyDb, id: string) {
     .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
     .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
     .leftJoin(productsActive, eq(sourcesVisible.productId, productsActive.id))
-    .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`))
+    // Correlated EXISTS, not `id IN (SELECT id FROM releases_visible)`: the
+    // IN form builds the full list of visible ids (every release) before
+    // checking this one row.
+    .where(
+      and(
+        eq(releases.id, id),
+        sql`EXISTS (SELECT 1 FROM releases_visible rv WHERE rv.id = ${releases.id})`,
+      ),
+    )
     .limit(1);
   return row ?? null;
 }
