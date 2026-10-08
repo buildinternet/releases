@@ -6,12 +6,9 @@ import type { DigestCoveredRelease } from "@/lib/api";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { OrgAvatar } from "@/components/org-avatar";
 import {
-  arrivalAgeMs,
+  arrivalFade,
   buildReplay,
   frameAt,
-  MARK_FADE_MS,
-  nextDayStop,
-  prevDayStop,
   REPLAY_DAY_MS,
   REPLAY_DAYS,
   type ReplayCaption as Caption,
@@ -19,7 +16,8 @@ import {
 import { glanceRow } from "@/components/digest-week-glance/glance-tiles";
 import { ReplayRiver } from "./replay-river";
 import { ReplayImpactMap } from "./replay-impact-map";
-import { IconButton, ReplayTransport } from "./replay-transport";
+import { ReplayTransport } from "./replay-transport";
+import { IconButton, RestartIcon } from "./replay-controls";
 import { dayLabel, timeLabel } from "./replay-format";
 
 /** Longest real-time step one animation frame may take (a backgrounded tab resumes cleanly). */
@@ -80,12 +78,11 @@ export function ReplayStage({
     autoplayed.current = true;
     if (!reduced && !startAtEnd) setPlaying(true);
   }, [reduced, startAtEnd]);
-  useEffect(() => {
-    if (reduced) setPlaying(false);
-  }, [reduced]);
+  // Playing is a request; the clock runs only while motion is allowed and the week isn't over.
+  const active = playing && !still && t < REPLAY_DAYS;
 
   useEffect(() => {
-    if (!playing) return;
+    if (!active) return;
     let last = performance.now();
     let id = requestAnimationFrame(function step(now) {
       const dt = Math.min(MAX_FRAME_MS, now - last);
@@ -94,13 +91,14 @@ export function ReplayStage({
       id = requestAnimationFrame(step);
     });
     return () => cancelAnimationFrame(id);
-  }, [playing, speed]);
-  useEffect(() => {
-    if (t >= REPLAY_DAYS) setPlaying(false);
-  }, [t]);
+  }, [active, speed]);
 
   const frame = useMemo(() => frameAt(replay, t), [replay, t]);
-  const rows = frame.top.map((r) => glanceRow(r, anchorMap, digestHref));
+  // frame.top only changes when a release lands.
+  const rows = useMemo(
+    () => frame.top.map((r) => glanceRow(r, anchorMap, digestHref)),
+    [frame.top, anchorMap, digestHref],
+  );
   const restart = () => {
     setT(0);
     setPlaying(!still);
@@ -142,18 +140,18 @@ export function ReplayStage({
           </div>
         </div>
 
-        <ReplayImpactMap frame={frame} rows={rows} still={still} />
+        <ReplayImpactMap frame={frame} rows={rows} />
       </div>
 
       <ReplayTransport
         replay={replay}
-        t={t}
-        playing={playing}
+        frame={frame}
+        playing={active}
         speed={speed}
         still={still}
         onTogglePlay={() => {
-          if (t >= REPLAY_DAYS) restart();
-          else setPlaying(!playing);
+          if (frame.ended) restart();
+          else setPlaying(!active);
         }}
         onSeek={(next) => {
           setPlaying(false);
@@ -161,12 +159,6 @@ export function ReplayStage({
         }}
         onToggleSpeed={() => setSpeed(speed === 1 ? 2 : 1)}
         onRestart={restart}
-        onSkipEnd={() => {
-          setPlaying(false);
-          setT(REPLAY_DAYS);
-        }}
-        onPrevDay={() => setT(prevDayStop(t))}
-        onNextDay={() => setT(nextDayStop(t))}
       />
     </section>
   );
@@ -175,7 +167,7 @@ export function ReplayStage({
 function ReplayCaption({ caption, t, still }: { caption: Caption; t: number; still: boolean }) {
   const { item, kicker, moreCount } = caption;
   const r = item.release;
-  const fade = still ? 1 : Math.max(0, Math.min(1, arrivalAgeMs(t, item.at) / MARK_FADE_MS));
+  const fade = still ? 1 : arrivalFade(t, item.at);
   const when = item.stamp
     ? `${dayLabel(item.stamp.dayKey)}${item.stamp.hasTime ? ` · ${timeLabel(r.publishedAt!)}` : ""}`
     : null;
@@ -223,8 +215,7 @@ function EndState({ digestHref, onReplay }: { digestHref: string; onReplay: () =
       </div>
       <div className="flex items-center gap-2">
         <IconButton label="Replay the week" tip="Replay" onClick={onReplay}>
-          <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-          <path d="M3 3v5h5" />
+          <RestartIcon />
         </IconButton>
         <Link
           href={digestHref}

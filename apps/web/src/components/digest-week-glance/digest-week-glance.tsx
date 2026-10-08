@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { CollectionWeeklyDigestDetail, DigestCoveredRelease } from "@/lib/api";
 import { buildGlance, GLANCE_TOP_N, releaseSectionAnchors } from "@/lib/digest-glance";
 import { ImportanceFlame } from "@/components/importance-marker";
-import { GlanceSelection, type GlanceRow, type GlanceTile } from "./glance-selection";
+import { GlanceSelection } from "./glance-selection";
+import type { GlanceRow, GlanceTile } from "./glance-parts";
 import { squarify } from "./treemap-layout";
 import { glanceRow, glanceTile } from "./glance-tiles";
 import { GLANCE_SEGMENTS } from "./glance-colors";
@@ -34,10 +35,7 @@ export function DigestWeekGlance({
 
   // One product filling the whole box says nothing — list only.
   const rects = products.length > 1 ? squarify(products.map((p) => p.impact)) : [];
-  const tiles: GlanceTile[] = rects.map((rect, i) => {
-    const tile = glanceTile(products[i], rect);
-    return { ...tile, ariaLabel: `${tile.ariaLabel}. Select to filter the list.` };
-  });
+  const tiles: GlanceTile[] = rects.map((rect, i) => glanceTile(products[i], rect));
 
   // Ship only rows the island can show: the overall top N plus each tile's top N.
   const perGroup = new Map<string, number>();

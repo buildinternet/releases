@@ -15,6 +15,8 @@ const atNoon = (dayKey: string) => new Date(`${dayKey}T12:00:00Z`);
 
 /** "Tue, Sep 29" */
 export const dayLabel = (dayKey: string) => DAY_LONG.format(atNoon(dayKey));
+/** "Tue Sep 29" — scrubber end labels. */
+export const dayLabelShort = (dayKey: string) => dayLabel(dayKey).replace(",", "");
 /** "Tue 29" — river column header. */
 export const columnLabel = (dayKey: string) =>
   `${WEEKDAY.format(atNoon(dayKey))} ${DAY_NUM.format(atNoon(dayKey))}`;

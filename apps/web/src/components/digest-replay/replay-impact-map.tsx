@@ -1,9 +1,10 @@
+import { useMemo } from "react";
 import type { ReplayFrame } from "@/lib/digest-replay";
 import {
   GlanceRowLink,
   GlanceTileBody,
   type GlanceRow,
-} from "@/components/digest-week-glance/glance-selection";
+} from "@/components/digest-week-glance/glance-parts";
 import { glanceTile } from "@/components/digest-week-glance/glance-tiles";
 import { squarify } from "@/components/digest-week-glance/treemap-layout";
 
@@ -17,23 +18,21 @@ const BOX = { width: 340, height: 230 };
 export function ReplayImpactMap({
   frame,
   rows,
-  still,
 }: {
   frame: ReplayFrame;
   /** `frame.top` as linked rows. */
   rows: GlanceRow[];
-  /** Reduced motion: tiles jump instead of growing. */
-  still: boolean;
 }) {
-  // Values stay in the final ranking's order, so tiles grow in place.
-  const rects = squarify(
-    frame.products.map((p) => p.impact),
-    BOX.width,
-    BOX.height,
-  );
-  const tiles = frame.products.flatMap((p, i) =>
-    p.impact > 0 ? [glanceTile(p, rects[i], BOX)] : [],
-  );
+  // Values stay in the final ranking's order, so tiles grow in place. The
+  // products array only changes when a release lands.
+  const tiles = useMemo(() => {
+    const rects = squarify(
+      frame.products.map((p) => p.impact),
+      BOX.width,
+      BOX.height,
+    );
+    return frame.products.flatMap((p, i) => (p.impact > 0 ? [glanceTile(p, rects[i], BOX)] : []));
+  }, [frame.products]);
 
   return (
     <aside aria-label="Impact so far" className="flex min-w-0 flex-col gap-3">
@@ -49,11 +48,7 @@ export function ReplayImpactMap({
             key={tile.key}
             role="img"
             aria-label={tile.ariaLabel}
-            className={`@container absolute overflow-hidden rounded-md bg-[var(--surface-2)] ${
-              still
-                ? ""
-                : "transition-[left,top,width,height] duration-[600ms] ease-out motion-reduce:transition-none"
-            }`}
+            className="@container absolute overflow-hidden rounded-md bg-[var(--surface-2)] transition-[left,top,width,height] duration-[600ms] ease-out motion-reduce:transition-none"
             style={tile.position}
           >
             <GlanceTileBody tile={tile} />

@@ -99,7 +99,7 @@ export function releaseImpacts(
   });
 }
 
-export function emptyProduct(key: string, name: string, org: GlanceOrg | null): GlanceProduct {
+function emptyProduct(key: string, name: string, org: GlanceOrg | null): GlanceProduct {
   return {
     key,
     name,
@@ -112,7 +112,7 @@ export function emptyProduct(key: string, name: string, org: GlanceOrg | null): 
 }
 
 /** Fold `src` (a product, or one release's contribution) into `into`. */
-export function addInto(
+function addInto(
   into: GlanceProduct,
   src: Pick<GlanceProduct, "releaseCount" | "impact" | "composition" | "flames">,
 ) {
@@ -124,20 +124,22 @@ export function addInto(
   into.flames.push(...src.flames);
 }
 
+/** A release's composition as tile band counts (missing → all zero). */
+export function compositionCounts(
+  c: ReleaseComposition | null | undefined,
+): Record<CatKey, number> {
+  return { features: c?.features ?? 0, enhancements: c?.enhancements ?? 0, fixes: c?.bugs ?? 0 };
+}
+
 /** One release's share of its product tile, given its impact. */
-export function releaseContribution(
+function releaseContribution(
   r: DigestCoveredRelease,
   impact: number,
 ): Pick<GlanceProduct, "releaseCount" | "impact" | "composition" | "flames"> {
-  const c = r.composition;
   return {
     releaseCount: 1,
     impact,
-    composition: {
-      features: c?.features ?? 0,
-      enhancements: c?.enhancements ?? 0,
-      fixes: c?.bugs ?? 0,
-    },
+    composition: compositionCounts(r.composition),
     flames: r.importance === 4 || r.importance === 5 ? [r.importance] : [],
   };
 }
@@ -184,6 +186,23 @@ export function buildGlance(releases: readonly DigestCoveredRelease[]): {
     );
 
   return { products, ranked };
+}
+
+/**
+ * Roll scored releases up into a fixed set of tiles, in the order given —
+ * never re-sorted. For callers that pin tiles across subsets (the replay keeps
+ * the final week's tiles while only part of the week has shipped).
+ */
+export function rollUpProducts(
+  groups: readonly Pick<GlanceProduct, "key" | "name" | "org">[],
+  entries: readonly { release: DigestCoveredRelease; impact: number; groupKey: string }[],
+): GlanceProduct[] {
+  const byKey = new Map(groups.map((g) => [g.key, emptyProduct(g.key, g.name, g.org)]));
+  for (const e of entries)
+    addInto(byKey.get(e.groupKey)!, releaseContribution(e.release, e.impact));
+  const products = groups.map((g) => byKey.get(g.key)!);
+  for (const p of products) p.flames.sort((a, b) => b - a);
+  return products;
 }
 
 /**

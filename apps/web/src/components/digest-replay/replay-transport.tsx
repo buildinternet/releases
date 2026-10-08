@@ -1,25 +1,29 @@
-import type { ReactNode } from "react";
 import { ImportanceFlame } from "@/components/importance-marker";
-import { REPLAY_DAYS, type Replay } from "@/lib/digest-replay";
-import { dayLabel, weekPct } from "./replay-format";
+import {
+  nextDayStop,
+  prevDayStop,
+  REPLAY_DAYS,
+  type Replay,
+  type ReplayFrame,
+} from "@/lib/digest-replay";
+import { IconButton, RestartIcon, Tip } from "./replay-controls";
+import { dayLabel, dayLabelShort, weekPct } from "./replay-format";
 
 /** Scrubber resolution: one step per minute of week time. */
 const STEPS_PER_DAY = 24 * 60;
 
 export interface ReplayTransportProps {
   replay: Replay;
-  t: number;
+  frame: ReplayFrame;
   playing: boolean;
   speed: 1 | 2;
   /** Reduced motion: day step buttons replace play, speed, restart and skip. */
   still: boolean;
   onTogglePlay: () => void;
+  /** Jump to week time `t` and pause. */
   onSeek: (t: number) => void;
   onToggleSpeed: () => void;
   onRestart: () => void;
-  onSkipEnd: () => void;
-  onPrevDay: () => void;
-  onNextDay: () => void;
 }
 
 /**
@@ -29,19 +33,18 @@ export interface ReplayTransportProps {
  * tooltips also show on focus.
  */
 export function ReplayTransport(props: ReplayTransportProps) {
-  const { replay, t, playing, speed, still } = props;
-  const ended = t >= REPLAY_DAYS;
-  const dayIndex = Math.min(REPLAY_DAYS - 1, Math.floor(t));
+  const { replay, frame, playing, speed, still, onSeek } = props;
+  const { t, ended, dayIndex } = frame;
   const playLabel = playing ? "Pause" : ended ? "Replay" : "Play";
 
   return (
     <div className="flex flex-wrap items-center gap-3.5 border-t border-[var(--line)] pt-3.5">
       {still ? (
         <div className="flex gap-1.5">
-          <IconButton label="Previous day" onClick={props.onPrevDay}>
+          <IconButton label="Previous day" onClick={() => onSeek(prevDayStop(t))}>
             <path d="m15 18-6-6 6-6" />
           </IconButton>
-          <IconButton label="Next day" onClick={props.onNextDay}>
+          <IconButton label="Next day" onClick={() => onSeek(nextDayStop(t))}>
             <path d="m9 18 6-6-6-6" />
           </IconButton>
         </div>
@@ -105,15 +108,15 @@ export function ReplayTransport(props: ReplayTransportProps) {
             max={REPLAY_DAYS * STEPS_PER_DAY}
             step={1}
             value={Math.round(t * STEPS_PER_DAY)}
-            onChange={(e) => props.onSeek(Number(e.target.value) / STEPS_PER_DAY)}
+            onChange={(e) => onSeek(Number(e.target.value) / STEPS_PER_DAY)}
             aria-label="Scrub through the week"
             aria-valuetext={ended ? "End of week" : dayLabel(replay.dayKeys[dayIndex])}
             className="replay-scrub absolute inset-0 m-0 h-full w-full cursor-ew-resize appearance-none bg-transparent focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[var(--accent)]"
           />
         </div>
         <div className="flex justify-between font-mono text-[11px] text-[var(--fg-3)]">
-          <span>{dayLabel(replay.dayKeys[0]).replace(",", "")}</span>
-          <span>{dayLabel(replay.dayKeys[REPLAY_DAYS - 1]).replace(",", "")}</span>
+          <span>{dayLabelShort(replay.dayKeys[0])}</span>
+          <span>{dayLabelShort(replay.dayKeys[REPLAY_DAYS - 1])}</span>
         </div>
       </div>
 
@@ -126,70 +129,14 @@ export function ReplayTransport(props: ReplayTransportProps) {
             text={`${speed}×`}
           />
           <IconButton label="Restart" onClick={props.onRestart}>
-            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-            <path d="M3 3v5h5" />
+            <RestartIcon />
           </IconButton>
-          <IconButton label="Skip to end" onClick={props.onSkipEnd}>
+          <IconButton label="Skip to end" onClick={() => onSeek(REPLAY_DAYS)}>
             <path d="M5 4l10 8-10 8z" />
             <path d="M19 5v14" />
           </IconButton>
         </div>
       )}
     </div>
-  );
-}
-
-/** Hover/focus tooltip for an icon button. Decorative: the button has `aria-label`. */
-function Tip({ children }: { children: ReactNode }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-[var(--fg)] px-2 py-1.5 font-sans text-[12px] font-medium leading-none text-[var(--page)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-    >
-      {children}
-    </span>
-  );
-}
-
-export function IconButton({
-  label,
-  tip = label,
-  onClick,
-  text,
-  children,
-}: {
-  label: string;
-  tip?: string;
-  onClick: () => void;
-  /** Short text in place of an icon (the speed toggle). */
-  text?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="group relative grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[var(--fg-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-    >
-      {text ? (
-        <span className="font-mono text-[12px] font-medium">{text}</span>
-      ) : (
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          {children}
-        </svg>
-      )}
-      <Tip>{tip}</Tip>
-    </button>
   );
 }

@@ -1,11 +1,10 @@
 import type { DigestCoveredRelease } from "@/lib/api";
 import { addDaysToDateKey, etDayKey } from "@buildinternet/releases-core/dates";
+import { DAY_MS } from "@/lib/cadence";
 import {
-  addInto,
   buildGlance,
-  emptyProduct,
   GLANCE_TOP_N,
-  releaseContribution,
+  rollUpProducts,
   type GlanceOrg,
   type GlanceProduct,
   type GlanceRankedRelease,
@@ -43,10 +42,9 @@ export const MAX_MARK_ROWS = 3;
 const PACK_TRACK_PX = 560;
 const MARK_GAP_PX = 4;
 /** Extra width a leading flame takes in front of an importance 4–5 mark. */
-export const MARK_FLAME_PX = 14;
+const MARK_FLAME_PX = 14;
 
 const DATE_ONLY_SUFFIX = "T00:00:00.000Z";
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface ReplayDayInfo {
   /** Calendar day the release belongs to, `YYYY-MM-DD`. */
@@ -91,6 +89,8 @@ export interface ReplayItem {
   row: number;
   /** Mark band width in px at full size (flame excluded). */
   markWidth: number;
+  /** Mark width in px including its leading flame, if any. */
+  extent: number;
 }
 
 export interface ReplayLane {
@@ -110,6 +110,21 @@ export interface Replay {
   items: ReplayItem[];
   /** One lane per final tile, in the final ranking. */
   lanes: ReplayLane[];
+  /** Tiles and rankings after the first k landings, k = 0…items.length. */
+  states: ReplayState[];
+}
+
+/**
+ * Everything that changes only when a release lands, computed once per
+ * landing so a 60fps clock re-renders from stable objects.
+ */
+export interface ReplayState {
+  /** Running tile per lane, in the FINAL ranking (never re-sorted, so tiles grow in place). */
+  products: GlanceProduct[];
+  /** Top {@link LIVE_TOP_N} so far. */
+  liveTop: GlanceRankedRelease[];
+  /** Top {@link GLANCE_TOP_N} so far — the end state's list. */
+  top: GlanceRankedRelease[];
 }
 
 function dayIndexOf(dayKey: string, weekStart: string): number {
@@ -125,7 +140,7 @@ function orderStamp(r: DigestCoveredRelease, stamp: ReplayDayInfo | null): numbe
 }
 
 /** Mark band width in px: wider for more impact. */
-export function markWidth(finalImpact: number): number {
+function markWidth(finalImpact: number): number {
   return 10 + finalImpact * 9;
 }
 
@@ -139,20 +154,12 @@ export function buildReplay(releases: readonly DigestCoveredRelease[], weekStart
     // Outside the week (the digest windows on fetch time) clamps to the
     // nearest edge; no stamp lands on the last day.
     const raw = stamp ? dayIndexOf(stamp.dayKey, weekStart) : REPLAY_DAYS - 1;
-    const day = Math.min(REPLAY_DAYS - 1, Math.max(0, raw));
-    const ranked = byRelease.get(release)!;
     return {
       release,
       index,
-      day,
-      at: 0,
       stamp,
-      groupKey: ranked.groupKey,
-      productName: ranked.productName,
-      finalImpact: ranked.impact,
-      row: 0,
-      markWidth: markWidth(ranked.impact),
-      sortKey: orderStamp(release, stamp),
+      day: Math.min(REPLAY_DAYS - 1, Math.max(0, raw)),
+      order: orderStamp(release, stamp),
     };
   });
 
@@ -162,13 +169,26 @@ export function buildReplay(releases: readonly DigestCoveredRelease[], weekStart
       .filter((p) => p.day === d)
       .sort(
         (a, b) =>
-          a.sortKey - b.sortKey ||
+          a.order - b.order ||
           (b.release.importance ?? 0) - (a.release.importance ?? 0) ||
           a.index - b.index,
       );
-    today.forEach((p, j) => {
-      const { sortKey: _sortKey, ...item } = p;
-      items.push({ ...item, at: d + (j + 0.5) / today.length });
+    today.forEach(({ release, index, stamp, day }, j) => {
+      const ranked = byRelease.get(release)!;
+      const width = markWidth(ranked.impact);
+      items.push({
+        release,
+        index,
+        day,
+        at: d + (j + 0.5) / today.length,
+        stamp,
+        groupKey: ranked.groupKey,
+        productName: ranked.productName,
+        finalImpact: ranked.impact,
+        row: 0,
+        markWidth: width,
+        extent: width + ((release.importance ?? 0) >= 4 ? MARK_FLAME_PX : 0),
+      });
     });
   }
 
@@ -184,16 +204,42 @@ export function buildReplay(releases: readonly DigestCoveredRelease[], weekStart
   for (const lane of lanes) {
     const ends: number[] = Array.from({ length: MAX_MARK_ROWS }, () => -Infinity);
     for (const it of lane.items) {
-      const w = it.markWidth + ((it.release.importance ?? 0) >= 4 ? MARK_FLAME_PX : 0);
       const x = (it.at / REPLAY_DAYS) * PACK_TRACK_PX;
-      let row = ends.findIndex((e) => e + MARK_GAP_PX <= x - w / 2);
+      let row = ends.findIndex((e) => e + MARK_GAP_PX <= x - it.extent / 2);
       if (row < 0) row = ends.indexOf(Math.min(...ends));
-      ends[row] = x + w / 2;
+      ends[row] = x + it.extent / 2;
       it.row = row;
     }
   }
 
-  return { weekStart, dayKeys, items, lanes };
+  const states = Array.from({ length: items.length + 1 }, (_, k) => stateAfter(items, lanes, k));
+  return { weekStart, dayKeys, items, lanes, states };
+}
+
+/**
+ * Impact after the first `k` landings: buildGlance on that subset in input
+ * order, so the minor pool saturates per subset and the last state IS
+ * buildGlance(all). Rolled up into the final lanes rather than the subset's
+ * own grouping — a product the subset folds into "Others" may hold its own
+ * lane by the end.
+ */
+function stateAfter(items: ReplayItem[], lanes: ReplayLane[], k: number): ReplayState {
+  const shipped = items.slice(0, k).sort((a, b) => a.index - b.index);
+  const glance = buildGlance(shipped.map((it) => it.release));
+  const impactOf = new Map(glance.ranked.map((r) => [r.release, r.impact]));
+  const products = rollUpProducts(
+    lanes,
+    shipped.map((it) => ({
+      release: it.release,
+      impact: impactOf.get(it.release)!,
+      groupKey: it.groupKey,
+    })),
+  );
+  return {
+    products,
+    liveTop: glance.ranked.slice(0, LIVE_TOP_N),
+    top: glance.ranked.slice(0, GLANCE_TOP_N),
+  };
 }
 
 export type ReplayKicker = "Landmark" | "Major release" | "Today" | "Latest";
@@ -212,10 +258,7 @@ export interface ReplayFrame {
   dayIndex: number;
   /** Releases landed so far, by `at`. */
   shipped: ReplayItem[];
-  /**
-   * Running tile per lane, in the FINAL ranking (never re-sorted, so tiles
-   * grow in place). Lanes with nothing shipped yet have impact 0.
-   */
+  /** Running tiles in the final ranking (see {@link ReplayState}). */
   products: GlanceProduct[];
   /** Top {@link LIVE_TOP_N} so far, {@link GLANCE_TOP_N} once ended. */
   top: GlanceRankedRelease[];
@@ -223,38 +266,23 @@ export interface ReplayFrame {
   caption: ReplayCaption | null;
 }
 
-const clampT = (t: number) => Math.min(REPLAY_DAYS, Math.max(0, t));
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 export function frameAt(replay: Replay, tIn: number): ReplayFrame {
-  const t = clampT(tIn);
+  const t = Math.min(REPLAY_DAYS, Math.max(0, tIn));
   const ended = t >= REPLAY_DAYS;
   const dayIndex = Math.min(REPLAY_DAYS - 1, Math.floor(t));
-  const shipped = replay.items.filter((it) => it.at <= t);
-
-  // Impact so far: buildGlance on the shipped subset in input order, so the
-  // minor pool saturates per subset and the last frame IS buildGlance(all).
-  const inInputOrder = [...shipped].sort((a, b) => a.index - b.index);
-  const glance = buildGlance(inInputOrder.map((it) => it.release));
-  const impactOf = new Map(glance.ranked.map((r) => [r.release, r.impact]));
-
-  // Roll up into the final lanes rather than the subset's own grouping: a
-  // product the subset folds into "Others" may hold its own lane by the end.
-  const byKey = new Map(replay.lanes.map((l) => [l.key, emptyProduct(l.key, l.name, l.org)]));
-  for (const it of inInputOrder) {
-    addInto(byKey.get(it.groupKey)!, releaseContribution(it.release, impactOf.get(it.release)!));
-  }
-  const products = replay.lanes.map((l) => byKey.get(l.key)!);
-  for (const p of products) p.flames.sort((a, b) => b - a);
-
-  const top = glance.ranked.slice(0, ended ? GLANCE_TOP_N : LIVE_TOP_N);
-
+  let count = 0;
+  while (count < replay.items.length && replay.items[count].at <= t) count++;
+  const shipped = replay.items.slice(0, count);
+  const state = replay.states[count];
   return {
     t,
     ended,
     dayIndex,
     shipped,
-    products,
-    top,
+    products: state.products,
+    top: ended ? state.top : state.liveTop,
     caption: ended ? null : captionAt(shipped, dayIndex),
   };
 }
@@ -282,11 +310,16 @@ function captionAt(shipped: ReplayItem[], dayIndex: number): ReplayCaption | nul
 }
 
 /**
- * Week time → real ms elapsed at 1× since `at`. Fades and glows derive from
- * this (never from wall-clock arrival), so any `t` renders the same frame.
+ * How far a landed mark has faded in (0–1) and how much arrival glow is left
+ * (1–0), from week time alone — never wall-clock arrival — so any `t` renders
+ * the same frame. Real time is measured at 1×.
  */
-export function arrivalAgeMs(t: number, at: number): number {
-  return (t - at) * REPLAY_DAY_MS;
+export function arrivalFade(t: number, at: number): number {
+  return clamp01(((t - at) * REPLAY_DAY_MS) / MARK_FADE_MS);
+}
+
+export function arrivalGlow(t: number, at: number): number {
+  return 1 - clamp01(((t - at) * REPLAY_DAY_MS) / MARK_GLOW_MS);
 }
 
 /** Reduced-motion stepping: each stop is the end of a day. */

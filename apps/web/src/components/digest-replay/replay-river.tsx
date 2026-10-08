@@ -1,11 +1,10 @@
+import { memo } from "react";
 import { ImportanceFlame } from "@/components/importance-marker";
 import { OrgAvatar } from "@/components/org-avatar";
-import { releaseContribution } from "@/lib/digest-glance";
+import { compositionCounts } from "@/lib/digest-glance";
 import {
-  arrivalAgeMs,
-  MARK_FADE_MS,
-  MARK_FLAME_PX,
-  MARK_GLOW_MS,
+  arrivalFade,
+  arrivalGlow,
   type Replay,
   type ReplayFrame,
   type ReplayItem,
@@ -19,8 +18,6 @@ const ROW_TOP = [11, 30, 49];
 /** Label column width; collapses to the avatar at phone width. */
 const LABEL_COL = "grid-cols-[150px_minmax(0,1fr)] max-[520px]:grid-cols-[32px_minmax(0,1fr)]";
 const TRACK_INSET = "left-[150px] max-[520px]:left-[32px]";
-
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 /**
  * The river: one lane per product in the final ranking, day columns, a mark
@@ -37,7 +34,6 @@ export function ReplayRiver({
   /** Reduced motion: marks appear at full size with no fade or glow. */
   still: boolean;
 }) {
-  const shipped = new Set(frame.shipped);
   return (
     <div className={`relative grid ${LABEL_COL}`}>
       <div />
@@ -63,7 +59,7 @@ export function ReplayRiver({
         <Lane
           key={lane.key}
           lane={lane}
-          items={lane.items.filter((it) => shipped.has(it))}
+          items={lane.items.filter((it) => it.at <= frame.t)}
           t={frame.t}
           still={still}
         />
@@ -123,7 +119,13 @@ function Lane({
       </div>
       <div className="relative h-[72px] border-t border-[var(--line)]" aria-hidden="true">
         {items.map((it) => (
-          <Mark key={it.release.id} item={it} t={t} still={still} />
+          <Mark
+            key={it.release.id}
+            item={it}
+            // Rounded so settled marks get identical props and skip re-rendering.
+            fade={still ? 1 : round2(arrivalFade(t, it.at))}
+            glow={still || (it.release.importance ?? 0) < 4 ? 0 : round2(arrivalGlow(t, it.at))}
+          />
         ))}
       </div>
     </>
@@ -148,14 +150,23 @@ function LaneAvatar({ lane }: { lane: ReplayLane }) {
   );
 }
 
-function Mark({ item, t, still }: { item: ReplayItem; t: number; still: boolean }) {
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+const Mark = memo(function Mark({
+  item,
+  fade,
+  glow,
+}: {
+  item: ReplayItem;
+  /** 0 → 1 as the mark fades in. */
+  fade: number;
+  /** 1 → 0 as the arrival glow (importance 4–5) wears off. */
+  glow: number;
+}) {
   const importance = item.release.importance ?? 0;
-  const age = arrivalAgeMs(t, item.at);
-  const fade = still ? 1 : clamp01(age / MARK_FADE_MS);
-  const glow = still || importance < 4 ? 0 : 1 - clamp01(age / MARK_GLOW_MS);
-  const segments = bandSegments(releaseContribution(item.release, 0).composition);
+  const segments = bandSegments(compositionCounts(item.release.composition));
   // Keep edge marks (early Monday, late Sunday) inside the track.
-  const half = (item.markWidth + (importance >= 4 ? MARK_FLAME_PX : 0)) / 2;
+  const half = item.extent / 2;
   return (
     <span
       title={item.release.title}
@@ -185,4 +196,4 @@ function Mark({ item, t, still }: { item: ReplayItem; t: number; still: boolean 
       </span>
     </span>
   );
-}
+});

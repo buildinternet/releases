@@ -7,7 +7,7 @@ import {
 import { label, type CatKey } from "@/components/composition-shared";
 import { pluralReleases } from "@/lib/formatters";
 import { GLANCE_SEGMENTS } from "./glance-colors";
-import type { GlanceRow, GlanceTile } from "./glance-selection";
+import type { GlanceRow, GlanceTile } from "./glance-parts";
 import { rectToPercent, TREEMAP_HEIGHT, TREEMAP_WIDTH, type Rect } from "./treemap-layout";
 
 /**

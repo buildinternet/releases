@@ -190,6 +190,15 @@ describe("frameAt", () => {
     expect(f.caption).toBeNull();
   });
 
+  test("frames between landings share one state object", () => {
+    const [a, b] = replay.items;
+    const mid1 = frameAt(replay, a.at + (b.at - a.at) * 0.25);
+    const mid2 = frameAt(replay, a.at + (b.at - a.at) * 0.75);
+    expect(mid1.products).toBe(mid2.products);
+    expect(mid1.top).toBe(mid2.top);
+    expect(frameAt(replay, b.at).products).not.toBe(mid1.products);
+  });
+
   test("lists the top three while playing", () => {
     expect(frameAt(replay, 6.5).top).toHaveLength(LIVE_TOP_N);
   });
