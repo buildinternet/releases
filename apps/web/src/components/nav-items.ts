@@ -14,9 +14,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Docs", href: "/docs" },
 ] as const;
 
-// Primary project repo — the open-source backend monorepo (API worker, MCP
-// server, web frontend, ingest pipeline). The user-facing CLI has its own repo
-// (buildinternet/releases-cli), linked from the docs.
+// Primary project repo — the open-source monorepo (API worker, MCP server,
+// web frontend, ingest pipeline, and the CLI under apps/cli).
 export const GITHUB_REPO_URL = "https://github.com/buildinternet/releases";
 
 export function visibleNavItems(options?: { mobile?: boolean }): readonly NavItem[] {
