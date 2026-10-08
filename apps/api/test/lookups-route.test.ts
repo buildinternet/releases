@@ -900,6 +900,9 @@ describe("GET /v1/lookups/by-domain", () => {
   });
 
   test("excludes tombstoned orgs", async () => {
+    // A tombstone is a lookup miss, which probes the live manifest. Answer
+    // that fetch immediately so a slow host cannot burn the test timeout.
+    mockFetch(() => new Response("no", { status: 404 }));
     await testDb.db.insert(organizations).values({
       id: "org_dead",
       name: "Dead",
