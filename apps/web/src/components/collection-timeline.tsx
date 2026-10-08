@@ -1115,8 +1115,10 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
   return (
     <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <ImportanceMarker importance={release.importance} />
+        {/* Inline, so the flame stays with the title's first line when the
+            title wraps onto its own flex line (same as updates-feed). */}
         <span className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+          <ImportanceMarker importance={release.importance} className="mr-1.5 align-baseline" />
           <ReleaseTitleLink release={release}>{headline}</ReleaseTitleLink>
         </span>
         {versionTag && (

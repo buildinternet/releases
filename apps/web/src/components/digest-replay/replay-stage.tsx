@@ -200,12 +200,8 @@ function ReplayCaption({ caption, t, still }: { caption: Caption; t: number; sti
         <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--fg-3)]">
           {kicker}
         </span>
-        <span className="flex items-start gap-1.5 text-balance text-[18px] font-semibold leading-snug tracking-tight">
-          {(r.importance ?? 0) >= 4 && (
-            <span className="flex h-[1.375em] shrink-0 items-center">
-              <ImportanceMarker importance={r.importance} />
-            </span>
-          )}
+        <span className="flex items-baseline gap-1.5 text-balance text-[18px] font-semibold leading-snug tracking-tight">
+          <ImportanceMarker importance={r.importance} />
           <span>{r.title}</span>
         </span>
         <span className="text-[13px] text-[var(--fg-2)]">{byline}</span>

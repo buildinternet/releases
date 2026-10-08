@@ -135,13 +135,8 @@ export function GlanceRowLink({ row, n }: { row: GlanceRow; n: number }) {
         {String(n).padStart(2, "0")}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex items-start gap-1.5 text-[14px] leading-snug">
-          {/* Line-height box keeps the flame on the first line of a wrapped title. */}
-          {(row.importance ?? 0) >= 4 && (
-            <span className="flex h-[1.375em] shrink-0 items-center">
-              <ImportanceMarker importance={row.importance} />
-            </span>
-          )}
+        <span className="flex items-baseline gap-1.5 text-[14px] leading-snug">
+          <ImportanceMarker importance={row.importance} />
           <span>{row.title}</span>
         </span>
         <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--fg-2)]">

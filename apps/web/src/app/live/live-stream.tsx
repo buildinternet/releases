@@ -200,8 +200,10 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
 
       {/* Headline + version */}
       <div className="mt-2.5 flex items-baseline gap-2 flex-wrap">
-        <ImportanceMarker importance={release.importance} />
         <h3 className="m-0 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+          {/* Inline, so the flame stays with the title's first line when the
+              heading wraps onto its own flex line (same as updates-feed). */}
+          <ImportanceMarker importance={release.importance} className="mr-1.5 align-baseline" />
           {/* Default click → upstream source when the release has one (see
               release-link.ts); the on-site page stays on the Details link. */}
           <Link
