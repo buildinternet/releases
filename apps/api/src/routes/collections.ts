@@ -419,6 +419,7 @@ collectionRoutes.get(
       description: collection.description,
       isFeatured: collection.isFeatured,
       dailySummaryEnabled: collection.dailySummaryEnabled,
+      weeklyDigestEnabled: collection.weeklyDigestEnabled,
       members,
       orgs,
     };

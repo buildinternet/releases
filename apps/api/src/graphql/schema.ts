@@ -197,6 +197,7 @@ builder.queryType({
           memberCount: 0,
           isFeatured: row.isFeatured,
           dailySummaryEnabled: row.dailySummaryEnabled,
+          weeklyDigestEnabled: row.weeklyDigestEnabled,
           previewMembers: [],
         };
       },

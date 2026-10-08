@@ -87,6 +87,8 @@ export const CollectionDetailSchema = z.object({
   isFeatured: z.boolean(),
   /** Per-collection enable toggle for the nightly daily-summary generation. */
   dailySummaryEnabled: z.boolean(),
+  /** Whether the collection generates weekly digests (gates the email-subscribe toggle). */
+  weeklyDigestEnabled: z.boolean(),
   members: z.array(CollectionMemberSchema),
   /** @deprecated Use `members`. Org-only subset, kept for back-compat. */
   orgs: z.array(CollectionMemberOrgSchema),

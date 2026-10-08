@@ -258,6 +258,17 @@ export const CollectionType = builder.objectType("Collection", {
         return row?.dailySummaryEnabled ?? false;
       },
     }),
+    weeklyDigestEnabled: t.field({
+      type: "Boolean",
+      description:
+        "Whether the collection generates weekly digests (gates the email-subscribe toggle). " +
+        "Defaults false when the parent was loaded as a list preview without the column.",
+      resolve: async (c, _args, ctx) => {
+        if (typeof c.weeklyDigestEnabled === "boolean") return c.weeklyDigestEnabled;
+        const row = await getCollectionBySlug(ctx.db, c.slug);
+        return row?.weeklyDigestEnabled ?? false;
+      },
+    }),
     previewMembers: t.field({
       type: [CollectionMemberUnion],
       description: "Up to 3 interleaved org/product members, for inline avatar chips.",

@@ -135,6 +135,7 @@ async function getCollectionPageGraphql(slug: string): Promise<CollectionPageDat
       description: c.description,
       isFeatured: c.isFeatured,
       dailySummaryEnabled: c.dailySummaryEnabled,
+      weeklyDigestEnabled: c.weeklyDigestEnabled,
       members,
       // Legacy org-only subset for CollectionDetail back-compat.
       orgs: members
