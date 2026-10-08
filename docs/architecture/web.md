@@ -158,6 +158,8 @@ A brief per-(collection, Eastern-Time day) rollup — a headline `title`, a one-
 
 ### Weekly digest routes
 
+Weekly digests generate for every collection with `weekly_digest_enabled` on, and that is the default for new collections. The default is applied app-side (drizzle `$defaultFn` on insert in `packages/core/src/schema.ts`); the column's DDL `DEFAULT` stays 0 because SQLite can't change a default without rebuilding `collections`, so a raw-SQL insert that omits the column gets 0. Turn a collection off with `PATCH /v1/collections/:slug { weeklyDigestEnabled: false }`.
+
 Weekly collection digests are read over three REST routes and one GraphQL field:
 
 - `GET /v1/collections/:slug/digests` lists digests newest-first, cursor-paginated, without `body`/`releaseIds`.

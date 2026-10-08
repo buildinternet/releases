@@ -305,13 +305,16 @@ export const collections = sqliteTable("collections", {
   dailySummaryEnabled: integer("daily_summary_enabled", { mode: "boolean" })
     .notNull()
     .default(true),
-  // Per-collection on/off for the nightly weekly-digest generation. Default
-  // false — collections opt IN (rollout is a manual D1 UPDATE per collection,
-  // see the weekly-digest generation module). Toggle via
-  // PATCH /v1/collections/:slug.
+  // Per-collection on/off for the nightly weekly-digest generation. New
+  // collections are ON by default: the default is supplied app-side by drizzle
+  // on insert (`$defaultFn`), NOT by the DDL. The DB-level DEFAULT stays 0
+  // because SQLite can't alter a column default without rebuilding the table
+  // (which four other tables reference), so a raw-SQL insert that omits the
+  // column still gets 0. Turn a collection off with
+  // PATCH /v1/collections/:slug { weeklyDigestEnabled: false }.
   weeklyDigestEnabled: integer("weekly_digest_enabled", { mode: "boolean" })
     .notNull()
-    .default(false),
+    .$defaultFn(() => true),
 });
 
 // A member is either an org (`org_id` set, `product_id` null) or a single

@@ -101,7 +101,7 @@ beforeEach(async () => {
   ]);
   await h.db.insert(collections).values([
     { id: "col_ca", slug: "coding-agents", name: "Coding Agents", weeklyDigestEnabled: true },
-    { id: "col_off", slug: "no-digest", name: "No Digest" },
+    { id: "col_off", slug: "no-digest", name: "No Digest", weeklyDigestEnabled: false },
   ]);
   await h.db.insert(collectionMembers).values({ collectionId: "col_ca", orgId: "org_a" });
   await upsertCollectionWeeklyDigest(h.db, {
