@@ -26,7 +26,11 @@ import type {
 } from "@buildinternet/releases-api-types";
 import { apiFetch, SCOPE_RESOURCE } from "./core.js";
 import { assertCleanIdentifier, assertSafeReadPath } from "../lib/validate-input.js";
-import { type ListResponse } from "@buildinternet/releases-core/cli-contracts";
+import {
+  computePagination,
+  DEFAULT_PAGE_SIZE,
+  type ListResponse,
+} from "@buildinternet/releases-core/cli-contracts";
 import { findBlockedUrl, findIgnoredUrl } from "./orgs.js";
 import type { Organization } from "@buildinternet/releases-core/schema";
 
@@ -284,9 +288,38 @@ export async function listSourcesWithOrg(
   if (opts?.envelope) params.set("envelope", "true");
   const qs = params.toString();
 
-  return apiFetch<SourceWithOrg[] | ListResponse<SourceWithOrg>>(
+  const raw = await apiFetch<SourceWithOrg[] | ListResponse<SourceWithOrg> | null>(
     `/v1/sources${qs ? `?${qs}` : ""}`,
   );
+  if (!opts?.envelope) return raw ?? [];
+  return normalizeSourcesEnvelope(raw, opts);
+}
+
+/**
+ * Coerce a `/v1/sources?envelope=true` response into the `ListResponse` shape
+ * callers destructure. Older API deploys short-circuited unknown `?orgSlug=` /
+ * `?productSlug=` filters with a bare `[]` even under `?envelope=true`, which
+ * made `releases list --org <unknown>` throw on `items.length`. A bare array
+ * (or an empty body) becomes a single-page envelope so those callers print a
+ * clean "no sources" instead of a TypeError.
+ */
+export function normalizeSourcesEnvelope(
+  raw: SourceWithOrg[] | ListResponse<SourceWithOrg> | null | undefined,
+  opts: { limit?: number; page?: number } = {},
+): ListResponse<SourceWithOrg> {
+  if (raw && !Array.isArray(raw) && Array.isArray(raw.items) && raw.pagination) return raw;
+  const items = Array.isArray(raw) ? raw : [];
+  const page = opts.page ?? 1;
+  const pageSize = opts.limit ?? Math.max(items.length, DEFAULT_PAGE_SIZE);
+  return {
+    items,
+    pagination: computePagination({
+      page,
+      pageSize,
+      returned: items.length,
+      totalItems: items.length,
+    }),
+  };
 }
 
 // ── Stats ──
