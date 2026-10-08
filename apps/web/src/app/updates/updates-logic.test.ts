@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildArchiveMonths,
   collectOrgFeed,
   monthKeyOf,
   monthLabelOf,
@@ -233,5 +234,30 @@ describe("collectOrgFeed", () => {
     const { calls, fetchPage } = makeFetch();
     expect((await collectOrgFeed(fetchPage)).map((r) => r.id)).toEqual(["a", "b", "c", "d"]);
     expect(calls).toEqual([undefined, "c2"]);
+  });
+});
+
+describe("buildArchiveMonths", () => {
+  test("lists days not in the first feed page, newest first, grouped by month", () => {
+    const months = buildArchiveMonths(
+      [
+        "2026-07-02T12:00:00Z",
+        "2026-07-02T15:00:00Z",
+        "2026-06-30T12:00:00Z",
+        "2026-06-01T12:00:00Z",
+        "2026-07-10T12:00:00Z",
+        null,
+        "garbage",
+      ],
+      ["2026-07-10T12:00:00Z"],
+    );
+    expect(months).toEqual([
+      { key: "2026-07", label: "July 2026", days: ["2026-07-02"] },
+      { key: "2026-06", label: "June 2026", days: ["2026-06-30", "2026-06-01"] },
+    ]);
+  });
+
+  test("is empty when the first page already covers every day", () => {
+    expect(buildArchiveMonths(["2026-07-02T12:00:00Z"], ["2026-07-02T09:00:00Z"])).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isFragmentHref, isInternalHref, isSafeHref } from "./sanitize";
+import { isFragmentHref, isInternalHref, isOptimizableImage, isSafeHref } from "./sanitize";
 
 // Same-page fragment links (`#section`) must survive the markdown link
 // sanitizer so heading anchors / TOC targets work (#1912). They carry no
@@ -51,5 +51,16 @@ describe("isInternalHref", () => {
     expect(isInternalHref("#section")).toBe(false);
     expect(isInternalHref(undefined)).toBe(false);
     expect(isInternalHref("")).toBe(false);
+  });
+});
+
+describe("isOptimizableImage", () => {
+  test("a media-origin image goes through the optimizer", () => {
+    expect(isOptimizableImage("https://media.releases.sh/releases/a.png")).toBe(true);
+  });
+
+  test("a video never does (the optimizer answers 400)", () => {
+    expect(isOptimizableImage("https://media.releases.sh/releases/a.mp4")).toBe(false);
+    expect(isOptimizableImage("https://media.releases.sh/releases/a.webm?v=1")).toBe(false);
   });
 });

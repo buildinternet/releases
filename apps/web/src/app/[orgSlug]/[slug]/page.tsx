@@ -9,6 +9,7 @@ import { getProductPage } from "./_lib/product-data";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
+import { sourceCanonicalPath } from "@/lib/links";
 
 // On-demand ISR: render once per product/source on first request, then serve
 // from cache (regenerated on ingest via POST /api/revalidate; 24h backstop).
@@ -57,13 +58,14 @@ export async function generateMetadata({
     const source = resolved.source;
     const orgName = source.org?.name ?? orgSlug;
     const shouldNoIndex = source.isHidden || source.discovery === "on_demand" || orgIsHidden;
+    const canonical = sourceCanonicalPath(source, orgSlug, slug);
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
-      openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
+      openGraph: { type: "website", url: canonical },
       alternates: {
-        canonical: `/${orgSlug}/${slug}`,
+        canonical,
         types: {
           "application/atom+xml": [
             {

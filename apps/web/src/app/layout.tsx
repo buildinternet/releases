@@ -40,7 +40,7 @@ const geistPixel = localFont({
 export const metadata: Metadata = {
   title: {
     default: "Release Notes Index - Product releases and changelogs, indexed for agents",
-    template: "%s — Releases Index",
+    template: "%s — Release Notes Index",
   },
   description:
     "The latest product releases, indexed for agents. Release Notes Index is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",

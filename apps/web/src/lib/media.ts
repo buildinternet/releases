@@ -55,7 +55,25 @@ export function thumbUrl(
 ): string {
   if (!opts.enabled) return src;
   if (!isSameOrigin(src, opts.origin)) return src; // third-party → passthrough
+  if (!isTransformableImageSrc(src)) return src;
   return cfImageUrl(src, { origin: opts.origin, width });
+}
+
+/**
+ * Extensions `/cdn-cgi/image/` refuses as input: it answers 415 for AVIF and
+ * for MP4 (ingest stores transcoded GIFs as `.mp4`, sometimes still typed
+ * `image`). Those render broken behind the transform, so they pass through
+ * untransformed instead.
+ */
+const UNTRANSFORMABLE_IMAGE_EXT = /\.(avif|mp4|webm|mov)$/i;
+
+/** True when `src` is a format the Cloudflare image transform accepts as input. */
+export function isTransformableImageSrc(src: string): boolean {
+  try {
+    return !UNTRANSFORMABLE_IMAGE_EXT.test(new URL(src).pathname);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -117,7 +135,9 @@ export function shouldRenderAsVideo(opts: {
 }): boolean {
   if (!opts.enabled) return false;
   if (!isSameOrigin(opts.src, opts.origin ?? MEDIA_ORIGIN)) return false;
-  return opts.type === "gif" || isGifSrc(opts.src);
+  // A same-origin `.mp4` is an already-transcoded GIF that an `<img>` can't
+  // play, whatever its stored `type` says.
+  return opts.type === "gif" || isGifSrc(opts.src) || isMp4Src(opts.src);
 }
 
 /**

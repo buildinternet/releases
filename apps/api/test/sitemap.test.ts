@@ -24,6 +24,7 @@ type SitemapResponse = {
     id: string;
     orgSlug: string;
     slug: string;
+    productId?: string | null;
     latestDate: string | null;
     hasChangelog?: boolean;
     hasHighlights?: boolean;
@@ -150,6 +151,8 @@ describe("GET /sitemap", () => {
       latestDate: "2026-03-15T00:00:00Z",
       hasChangelog: false,
       hasHighlights: false,
+      // Orphan source: the web lists it at its bare URL.
+      productId: null,
     });
     expect(result.sources[0].id).toBe(src.id);
   });

@@ -127,7 +127,7 @@ See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specif
 
 ## Environment variables
 
-All variables are optional. You don't need any of them for read-only use. Admin commands need a token, which you can also store with `releases auth login` (see [Source Management](/docs/cli/admin)).
+All variables are optional. You don't need any of them for read-only use. Admin commands need a token, which you can also store with `releases auth login`.
 
 | Variable                              | Default                   | Description                                                                                                                                           |
 | ------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
