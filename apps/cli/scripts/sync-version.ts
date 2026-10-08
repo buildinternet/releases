@@ -2,7 +2,6 @@
 // Runs after `changeset version`. Mirrors the bumped version from
 // npm/releases/package.json (the source of truth for the published CLI)
 // back to the places the build needs it:
-//   - apps/cli/package.json (displayed by `releases --version`)
 //   - src/cli/version.ts (compiled into the binary; also re-exported
 //     as the MCP server identifier via src/mcp/server.ts)
 //   - npm/releases-*/package.json (platform packages)
@@ -41,10 +40,11 @@ function replaceInFile(path: string, pattern: RegExp, replacement: string) {
 
 console.log(`Syncing version → ${newVersion}`);
 
-// apps/cli/package.json (ROOT is apps/cli, not the monorepo root)
-updateJson("package.json", (j) => {
-  j.version = newVersion;
-});
+// apps/cli/package.json (@releases/cli) is a private workspace package and is
+// deliberately NOT synced: changesets/action reads <pkg>/CHANGELOG.md for every
+// workspace package whose version changed when it builds the version PR body,
+// and private packages have no changelog. It stays at 0.0.0 like the other
+// private workspaces; `releases --version` reads src/cli/version.ts.
 
 // Platform npm packages — keep in sync with meta package optionalDependencies
 for (const pkg of [
