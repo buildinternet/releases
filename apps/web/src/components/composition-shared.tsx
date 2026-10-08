@@ -31,7 +31,7 @@ export interface CatMeta {
 }
 
 // Visual order: new → improved → fixed.
-const CATS: CatMeta[] = [
+export const CATS: CatMeta[] = [
   {
     key: "features",
     one: "feature",

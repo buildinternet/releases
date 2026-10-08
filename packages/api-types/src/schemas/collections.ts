@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ImportanceScoreSchema, ReleaseItemSchema } from "./shared.js";
+import { ImportanceScoreSchema, ReleaseCompositionSchema, ReleaseItemSchema } from "./shared.js";
 
 /**
  * One org as it appears inside a collection's preview list or detail page.
@@ -291,6 +291,12 @@ export const DigestCoveredReleaseSchema = z.object({
    * marker on the collapsed "Releases covered" list.
    */
   importance: ImportanceScoreSchema,
+  /**
+   * Per-category item counts from the AI release-content pass. Null when the
+   * row hasn't been summarized; optional for older servers. Powers the
+   * digest page's week-at-a-glance treemap.
+   */
+  composition: ReleaseCompositionSchema.nullable().optional(),
 });
 
 /** One `###` section of a digest body, parsed server-side. */

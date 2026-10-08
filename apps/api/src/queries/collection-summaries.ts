@@ -13,6 +13,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseDigestSections, type ParsedDigestSection } from "@releases/rendering/digest-sections";
 import type { AnyDb } from "../db.js";
 import { githubHandleSubquery } from "./shared.js";
@@ -422,7 +423,8 @@ const IN_LOOKUP_CHUNK = 90;
 
 /**
  * Resolve a digest's cited `releaseIds` to minimal display info (title, org,
- * upstream url, product, canonical `/release/*` fallback path) for the
+ * upstream url, product, importance, composition, canonical `/release/*`
+ * fallback path) for the
  * "Releases covered" section, server-side so the web page never N+1s. IDs
  * that no longer resolve (deleted/suppressed since generation) are silently
  * dropped — never surfaced as a dead link. Preserves the input `releaseIds`
@@ -449,6 +451,7 @@ export async function resolveDigestCoveredReleases(
           titleShort: releasesVisible.titleShort,
           version: releasesVisible.version,
           importance: releasesVisible.importance,
+          metadata: releasesVisible.metadata,
           url: releasesVisible.url,
           orgSlug: organizationsPublic.slug,
           orgName: organizationsPublic.name,
@@ -492,6 +495,7 @@ export async function resolveDigestCoveredReleases(
         product:
           r.productSlug && r.productName ? { slug: r.productSlug, name: r.productName } : null,
         importance: r.importance ?? null,
+        composition: parseCompositionFromMetadata(r.metadata),
       },
     ];
   });
