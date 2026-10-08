@@ -4,7 +4,7 @@
 import { OG_CONTENT_TYPE, OG_SIZE } from "@/lib/og";
 import entityOgImage from "../opengraph-image";
 
-export const alt = "On Releases Index";
+export const alt = "On Release Notes Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;

@@ -2,15 +2,23 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { loadPage } from "@/lib/docs";
+import { ogImageFields, siteOgImageUrl } from "@/lib/og-image-urls";
 
 export function staticPageMetadata(slug: string): Metadata {
-  const { frontmatter } = loadPage(slug);
-  const { title, description } = frontmatter;
+  return buildStaticPageMetadata(slug, loadPage(slug).frontmatter);
+}
+
+/** Pure half of {@link staticPageMetadata} (no filesystem read) so it is unit-testable. */
+export function buildStaticPageMetadata(
+  slug: string,
+  { title, description }: { title: string; description?: string },
+): Metadata {
   // A static page lives at its own top-level path (`/privacy`, `/terms`, …).
   // Emit a complete openGraph block — a page that sets `openGraph` replaces the
   // root layout's wholesale, so `type`/`url` must be set here, and the canonical
   // keeps og:url honest (Ahrefs flagged both missing across these pages, June 2026).
   const url = `/${slug}`;
+  const img = ogImageFields(siteOgImageUrl());
   return {
     title,
     description,
@@ -19,10 +27,12 @@ export function staticPageMetadata(slug: string): Metadata {
       url,
       title,
       ...(description ? { description } : {}),
+      ...img.openGraph,
     },
     twitter: {
       title,
       ...(description ? { description } : {}),
+      ...img.twitter,
     },
     alternates: { canonical: url },
   };

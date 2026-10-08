@@ -1,6 +1,6 @@
 import { OG_CONTENT_TYPE, OG_SIZE, renderOgImage } from "@/lib/og";
 
-export const alt = "Live releases on Releases Index";
+export const alt = "Live releases on Release Notes Index";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const dynamic = "force-static";

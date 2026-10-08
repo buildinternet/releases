@@ -134,6 +134,7 @@ export default async function OrgReleasesPage({
     "@graph": [
       {
         "@type": "CollectionPage",
+        "@id": `${orgUrl}#page`,
         name: `${org.name} Releases`,
         url: orgUrl,
         ...(lastModified ? { dateModified: lastModified } : {}),
@@ -156,7 +157,7 @@ export default async function OrgReleasesPage({
       buildReleaseItemListJsonLd(initialReleases.releases, {
         listId: releaseListId,
         name: `${org.name} Releases`,
-        isPartOfId: orgNodeId,
+        isPartOfId: `${orgUrl}#page`,
       }),
     ],
   };

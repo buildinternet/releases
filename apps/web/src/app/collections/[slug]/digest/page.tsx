@@ -7,6 +7,7 @@ import { BreadcrumbHome } from "@/components/breadcrumb-home";
 import { DigestBetaNote } from "@/components/digest-beta-note";
 import { DigestFormatLinks } from "@/components/digest-format-links";
 import { weekOfLabel } from "@/lib/digest-format";
+import { collectionOgImageUrl, ogImageFields } from "@/lib/og-image-urls";
 import { getDigestIndex } from "./_lib/digest-data";
 
 export const revalidate = 86400;
@@ -20,6 +21,7 @@ export async function generateMetadata({
   try {
     const { detail } = await getDigestIndex(slug);
     const path = `/collections/${slug}/digest`;
+    const img = ogImageFields(collectionOgImageUrl(slug));
     return {
       title: `${detail.name} weekly digests`,
       description: `Past weekly digests summarizing what shipped across ${detail.name}.`,
@@ -30,7 +32,8 @@ export async function generateMetadata({
           "application/atom+xml": [{ url: `${path}.atom`, title: `${detail.name} weekly digests` }],
         },
       },
-      openGraph: { type: "website", url: path },
+      openGraph: { type: "website", url: path, ...img.openGraph },
+      twitter: img.twitter,
     };
   } catch {
     return { title: "Weekly digests" };

@@ -4,7 +4,7 @@ import { WorkspaceDetailPanel } from "@/components/workspace-detail-panel";
 
 export const metadata: Metadata = {
   title: "Workspace",
-  description: "Manage workspace members and invitations on Releases Index.",
+  description: "Manage workspace members and invitations on Release Notes Index.",
   robots: { index: false, follow: false },
 };
 

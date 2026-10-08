@@ -7,7 +7,7 @@ import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Set a new password",
-  description: "Set a new password for your Releases Index account.",
+  description: "Set a new password for your Release Notes Index account.",
   alternates: { canonical: "/reset-password" },
   robots: { index: false, follow: false },
 };

@@ -1,6 +1,6 @@
 ---
 title: "Documentation"
-description: "Overview of Releases Index — a changelog index with a CLI, REST API, MCP server, and agent skills."
+description: "Overview of Release Notes Index — a changelog index with a CLI, REST API, MCP server, and agent skills."
 adminOnly: false
 ---
 

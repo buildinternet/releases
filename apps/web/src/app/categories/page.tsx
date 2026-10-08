@@ -7,7 +7,7 @@ import { SetupMessage } from "@/components/setup-message";
 
 const TITLE = "Categories";
 const DESCRIPTION =
-  "Browse releases by category on Releases Index — every changelog is bucketed into one of a fixed set of topics so you can follow a slice of the industry at a glance.";
+  "Browse releases by category on Release Notes Index — every changelog is bucketed into one of a fixed set of topics so you can follow a slice of the industry at a glance.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -15,12 +15,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/categories" },
   openGraph: {
     type: "website",
-    title: `${TITLE} — Releases Index`,
+    title: `${TITLE} — Release Notes Index`,
     description: DESCRIPTION,
     url: "/categories",
   },
   twitter: {
-    title: `${TITLE} — Releases Index`,
+    title: `${TITLE} — Release Notes Index`,
     description: DESCRIPTION,
   },
 };

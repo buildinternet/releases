@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { buildOverviewCitationJsonLd, buildReleaseItemListJsonLd } from "./schema-org";
+import {
+  buildOverviewCitationJsonLd,
+  buildReleaseItemListJsonLd,
+  sourceJsonLdType,
+} from "./schema-org";
 
 describe("buildReleaseItemListJsonLd", () => {
   test("items link upstream when the release has an http url, else the release page", () => {
@@ -55,5 +59,16 @@ describe("buildOverviewCitationJsonLd", () => {
       opts,
     );
     expect(ld?.citation).toEqual([{ "@type": "WebPage", url: "https://example.com/a" }]);
+  });
+});
+
+describe("sourceJsonLdType", () => {
+  test("every source type maps to a CreativeWork subtype, never a bare Thing", () => {
+    // A bare Thing can't carry publisher/dateModified and isn't a valid
+    // isPartOf target for the page's release list.
+    expect(sourceJsonLdType("github")).toBe("SoftwareApplication");
+    expect(sourceJsonLdType("appstore")).toBe("MobileApplication");
+    expect(sourceJsonLdType("video")).toBe("CreativeWork");
+    expect(sourceJsonLdType("feed")).toBe("WebSite");
   });
 });

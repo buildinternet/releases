@@ -1,6 +1,6 @@
 ---
-title: "Search Releases Index"
-description: "How to search the Releases Index registry programmatically via WebMCP, MCP, CLI, and the REST API."
+title: "Search Release Notes Index"
+description: "How to search the Release Notes Index registry programmatically via WebMCP, MCP, CLI, and the REST API."
 ---
 
 # Search

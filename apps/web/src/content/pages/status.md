@@ -1,6 +1,6 @@
 ---
 title: "Status"
-description: "How to check the operational health of Releases Index."
+description: "How to check the operational health of Release Notes Index."
 ---
 
 # Status

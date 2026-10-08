@@ -1,6 +1,6 @@
 ---
 title: Publish from any CI
-description: Post changelog entries to Releases Index from GitLab, Buildkite, or any other CI with the same batch write the GitHub Action uses.
+description: Post changelog entries to Release Notes Index from GitLab, Buildkite, or any other CI with the same batch write the GitHub Action uses.
 ---
 
 # Publish from any CI

@@ -3,7 +3,15 @@ import path from "node:path";
 import { cache } from "react";
 import matter from "gray-matter";
 
-const CONTENT_ROOT = path.join(process.cwd(), "src", "content");
+// Resolved from the process cwd: `apps/web/` under `next dev` / `next build`
+// (the bundled module has no stable path of its own). The repo root is
+// accepted too, so the root multi-dir `bun test` finds the same files no matter
+// which test file imports this module first.
+const CONTENT_ROOT =
+  [
+    path.join(process.cwd(), "src", "content"),
+    path.join(process.cwd(), "apps", "web", "src", "content"),
+  ].find((dir) => fs.existsSync(dir)) ?? path.join(process.cwd(), "src", "content");
 
 export type DocFrontmatter = {
   title: string;

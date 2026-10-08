@@ -168,10 +168,10 @@ export default async function OrgOverviewPage({
         url: orgUrl,
         ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
         ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
-        ...(lastModified ? { dateModified: lastModified } : {}),
       },
       {
         "@type": "CollectionPage",
+        "@id": `${pageUrl}#page`,
         name: `${org.name} Overview`,
         url: pageUrl,
         ...(lastModified ? { dateModified: lastModified } : {}),
@@ -192,7 +192,7 @@ export default async function OrgOverviewPage({
             buildReleaseItemListJsonLd(releaseItems, {
               listId: releaseListId,
               name: `${org.name} Releases`,
-              isPartOfId: orgNodeId,
+              isPartOfId: `${pageUrl}#page`,
             }),
           ]
         : []),

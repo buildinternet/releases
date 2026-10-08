@@ -7,7 +7,7 @@ import { oauthCallbackErrorCopy } from "@/lib/oauth-callback-error";
 
 export const metadata: Metadata = {
   title: "Sign-in didn't complete",
-  description: "Something went wrong while signing in to Releases Index.",
+  description: "Something went wrong while signing in to Release Notes Index.",
   alternates: { canonical: "/auth/error" },
   robots: { index: false, follow: false },
 };

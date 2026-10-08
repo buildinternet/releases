@@ -3,7 +3,7 @@ import { AcceptInvitation } from "@/components/accept-invitation";
 
 export const metadata: Metadata = {
   title: "Accept invitation",
-  description: "Accept your workspace invitation on Releases Index.",
+  description: "Accept your workspace invitation on Release Notes Index.",
   robots: { index: false, follow: false },
 };
 

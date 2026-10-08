@@ -34,7 +34,7 @@ const body = {
         {
           href: `${BASE_URL}/docs/api`,
           type: "text/html",
-          title: "Releases Index API documentation",
+          title: "Release Notes Index API documentation",
         },
       ],
     },
@@ -47,19 +47,20 @@ const body = {
         {
           href: OPENAPI_URL,
           type: "application/openapi+json",
-          title: "Releases Index REST API — OpenAPI 3.1 description",
+          title: "Release Notes Index REST API — OpenAPI 3.1 description",
         },
       ],
       "service-doc": [
         {
           href: `${BASE_URL}/docs/api/rest`,
           type: "text/html",
-          title: "Releases Index REST API — interactive reference",
+          title: "Release Notes Index REST API — interactive reference",
         },
         {
           href: SCALAR_DOCS_URL,
           type: "text/html",
-          title: "Releases Index REST API — interactive reference (direct, no marketing chrome)",
+          title:
+            "Release Notes Index REST API — interactive reference (direct, no marketing chrome)",
         },
       ],
     },
@@ -69,7 +70,7 @@ const body = {
         {
           href: `${BASE_URL}/docs/api/mcp`,
           type: "text/html",
-          title: "Releases Index MCP server",
+          title: "Release Notes Index MCP server",
         },
       ],
     },
@@ -83,12 +84,12 @@ const body = {
         {
           href: OIDC_DISCOVERY_URL,
           type: "application/json",
-          title: "Releases Index authorization server — OpenID Connect discovery",
+          title: "Release Notes Index authorization server — OpenID Connect discovery",
         },
         {
           href: OAUTH_AS_METADATA_URL,
           type: "application/json",
-          title: "Releases Index authorization server — OAuth 2.0 metadata (RFC 8414)",
+          title: "Release Notes Index authorization server — OAuth 2.0 metadata (RFC 8414)",
         },
       ],
     },
