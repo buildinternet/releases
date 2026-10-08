@@ -312,11 +312,22 @@ sourceRoutes.get(
       conditions.push(eq(sources.orgId, orgId));
     }
 
+    // Early-exit shape for filters that resolve to nothing (unknown org or
+    // product). Must match what the main path returns for zero rows: the
+    // `{ items: [], pagination }` envelope when `?envelope=true`, a bare `[]`
+    // otherwise — a bare `[]` under `?envelope=true` breaks CLI callers that
+    // destructure `items` (`releases list --org <unknown>`).
+    const wantsEnvelope = c.req.query("envelope") === "true";
+    const emptyResult = () =>
+      wantsEnvelope
+        ? c.json(buildListResponse<SourceWithOrg>([], { page, pageSize: limit, offset }, 0))
+        : c.json([]);
+
     // Resolve org by slug
     let resolvedOrgId: string | undefined;
     if (orgSlug) {
       const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
-      if (!org) return c.json([]);
+      if (!org) return emptyResult();
       resolvedOrgId = org.id;
       conditions.push(eq(sources.orgId, org.id));
     }
@@ -335,7 +346,7 @@ sourceRoutes.get(
           .from(products)
           .where(and(eq(products.id, productSlug), isNull(products.deletedAt)))
           .limit(1);
-        if (!product) return c.json([]);
+        if (!product) return emptyResult();
         conditions.push(eq(sources.productId, product.id));
       } else {
         const slugMatch = resolvedOrgId
@@ -345,7 +356,7 @@ sourceRoutes.get(
           .select({ id: products.id })
           .from(products)
           .where(and(slugMatch, isNull(products.deletedAt)));
-        if (matches.length === 0) return c.json([]);
+        if (matches.length === 0) return emptyResult();
         if (matches.length === 1) {
           conditions.push(eq(sources.productId, matches[0]!.id));
         } else {
@@ -418,7 +429,6 @@ sourceRoutes.get(
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-    const wantsEnvelope = c.req.query("envelope") === "true";
 
     const sort = parseEnumParam(c.req.query("sort"), SOURCE_SORT_FIELDS, "name");
     const dir = parseSortDir(c.req.query("dir"), "asc");
