@@ -6,6 +6,9 @@ import {
   shouldRenderAsVideo,
   videoUrl,
   pickReleaseThumb,
+  releaseThumbImage,
+  releaseBodyImageUrl,
+  BODY_IMAGE_WIDTH,
 } from "./media";
 
 const origin = "https://media.releases.sh";
@@ -36,6 +39,13 @@ describe("thumbUrl", () => {
   it("does not treat a host that merely prefixes the origin as same-origin", () => {
     const src = "https://media.releases.sh.evil.com/releases/abc.png";
     expect(thumbUrl(src, 240, { enabled: true, origin })).toBe(src);
+  });
+
+  it("is idempotent: an already-transformed URL is not wrapped again", () => {
+    const once = thumbUrl(`${origin}/releases/abc.png`, 96, { enabled: true, origin });
+    expect(thumbUrl(once, 96, { enabled: true, origin })).toBe(once);
+    expect(thumbUrl(once, 1320, { enabled: true, origin })).toBe(once);
+    expect(once.match(/cdn-cgi\/image/g)).toHaveLength(1);
   });
 
   it("passes a relative/non-absolute src through", () => {
@@ -155,5 +165,18 @@ describe("videoUrl", () => {
   it("does not skip the transform for an mp4 on a look-alike host", () => {
     const src = "https://media.releases.sh.evil.com/releases/abc.mp4";
     expect(videoUrl(src, origin)).toBe(`${origin}/cdn-cgi/media/mode=video/${src}`);
+  });
+});
+
+describe("releaseThumbImage / releaseBodyImageUrl (flag off in tests)", () => {
+  it("returns the src untouched with no unoptimized override when no transform applied", () => {
+    const src = `${origin}/releases/abc.png`;
+    expect(releaseThumbImage(src, 240)).toEqual({ src, unoptimized: undefined });
+  });
+
+  it("caps body images at BODY_IMAGE_WIDTH and passes third-party URLs through", () => {
+    expect(BODY_IMAGE_WIDTH).toBe(1320);
+    const src = "https://cdn.vendor.com/hero.png";
+    expect(releaseBodyImageUrl(src)).toBe(src);
   });
 });

@@ -9,7 +9,7 @@ import {
 import { HeadingAnchor } from "./heading-anchor";
 import { docsTableComponents } from "./docs-table";
 import { youtubeEmbedUrl, youtubeVideoId } from "@/lib/video-source";
-import { MEDIA_VIDEO_ON, shouldRenderAsVideo } from "@/lib/media";
+import { MEDIA_VIDEO_ON, releaseBodyImageUrl, shouldRenderAsVideo } from "@/lib/media";
 import { FallbackPlainImage } from "./fallback-image";
 import { GifVideo } from "./gif-video";
 
@@ -88,7 +88,13 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
       if (shouldRenderAsVideo({ src: src!, enabled: MEDIA_VIDEO_ON })) {
         return <GifVideo src={src!} alt={props.alt || ""} className={className} />;
       }
-      return <FallbackPlainImage src={src!} alt={props.alt || ""} className={className} />;
+      return (
+        <FallbackPlainImage
+          src={releaseBodyImageUrl(src!)}
+          alt={props.alt || ""}
+          className={className}
+        />
+      );
     },
     a: (props: any) => {
       const href = props.href as string | undefined;

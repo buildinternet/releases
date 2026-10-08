@@ -13,7 +13,7 @@ import { PlayBadge } from "@/components/play-badge";
 import { releaseLinkProps } from "@/lib/release-link";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { deriveFeedTitle } from "@/lib/release-title";
-import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
+import { releaseThumbUrl, releaseThumbImage, IMG_TRANSFORM_ON } from "@/lib/media";
 import { isOptimizableImage } from "@/lib/sanitize";
 import { useFaviconBadge } from "@/hooks/use-favicon-badge";
 import { useReleaseStream, type LiveRelease } from "@/hooks/use-release-stream";
@@ -75,7 +75,7 @@ function MediaPreview({ release, heading }: { release: LiveRelease; heading: str
   // Margin lives on the image so `fallback="hide"` leaves no empty wrapper.
   return (
     <FallbackImage
-      src={img.r2Url ?? img.url}
+      {...releaseThumbImage(img.r2Url ?? img.url, 960)}
       alt={img.alt || heading}
       width={480}
       height={300}

@@ -7,6 +7,7 @@ import { OrgAvatar } from "./org-avatar";
 import { SourceTypeIcon } from "./source-type-icon";
 import { ClusterChip } from "./cluster-chip";
 import { FallbackImage } from "./fallback-image";
+import { releaseThumbImage } from "@/lib/media";
 import { ExternalLinkIcon } from "./external-link-icon";
 import {
   type CollectionMember,
@@ -1047,7 +1048,7 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
       {showThumb && thumbnail && (
         <div className="bg-stone-50 dark:bg-stone-950/50 p-4 flex items-center justify-center">
           <FallbackImage
-            src={thumbnail.r2Url ?? thumbnail.url}
+            {...releaseThumbImage(thumbnail.r2Url ?? thumbnail.url, 800)}
             alt={thumbnail.alt || heading}
             width={400}
             height={260}
@@ -1156,7 +1157,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
         {showThumb && thumbnail && (
           <div className="flex items-start justify-center">
             <FallbackImage
-              src={thumbnail.r2Url ?? thumbnail.url}
+              {...releaseThumbImage(thumbnail.r2Url ?? thumbnail.url, 400)}
               alt={thumbnail.alt || headline}
               width={200}
               height={130}
@@ -1278,7 +1279,7 @@ function CommitLogRow({ release }: { release: CollectionReleaseItemView }) {
       <div className="flex items-center gap-2">
         {thumbnail && (
           <FallbackImage
-            src={thumbnail.r2Url ?? thumbnail.url}
+            {...releaseThumbImage(thumbnail.r2Url ?? thumbnail.url, 112)}
             alt={thumbnail.alt || versionLabel}
             width={56}
             height={32}

@@ -92,6 +92,35 @@ export function releaseThumbUrl(src: string, width: number): string {
   return thumbUrl(src, width, { enabled: IMG_TRANSFORM_ON, origin: MEDIA_ORIGIN });
 }
 
+/** Intrinsic width (px) for compact 40px `ReleaseThumb` boxes (2x DPR, plus headroom). */
+export const COMPACT_THUMB_WIDTH = 96;
+
+/**
+ * Width cap (px) for inline body images: roughly the 660px content column at 2x
+ * DPR, matching the updates-feed hero image.
+ */
+export const BODY_IMAGE_WIDTH = 1320;
+
+/**
+ * `{ src, unoptimized }` for a release-media image rendered with next/image.
+ * When the Cloudflare transform actually applied, `unoptimized` is true so
+ * Vercel doesn't re-optimize an already-optimized variant (billing). Otherwise
+ * it is left undefined so `FallbackImage` keeps its own default decision.
+ * Idempotent: an already-transformed `src` is returned as-is.
+ */
+export function releaseThumbImage(
+  src: string,
+  width: number,
+): { src: string; unoptimized: true | undefined } {
+  const out = releaseThumbUrl(src, width);
+  return { src: out, unoptimized: out !== src ? true : undefined };
+}
+
+/** Width-capped URL for an inline release-body image (see {@link BODY_IMAGE_WIDTH}). */
+export function releaseBodyImageUrl(src: string): string {
+  return releaseThumbUrl(src, BODY_IMAGE_WIDTH);
+}
+
 /**
  * Rollout flag for serving heavy animated GIFs as Cloudflare Media
  * Transformations MP4 (`<video>`) instead of full-size GIF `<img>`. Default OFF:
@@ -195,5 +224,5 @@ export function pickReleaseThumb(
   if (!first) return null;
   const src = first.r2Url ?? first.url;
   if (!src) return null;
-  return { url: releaseThumbUrl(src, 96), alt: first.alt ?? "" };
+  return { url: releaseThumbUrl(src, COMPACT_THUMB_WIDTH), alt: first.alt ?? "" };
 }

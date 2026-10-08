@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { COMPACT_THUMB_WIDTH, releaseThumbUrl } from "@/lib/media";
 
 /**
  * Shared compact release-media thumbnail. One treatment reused across the home
@@ -9,6 +10,10 @@ import { useState } from "react";
  * related-rail card thumbnail. Renders nothing when `src` is falsy **or the
  * image fails to load**, so broken media never leaves a jagged placeholder on
  * marketing/compact surfaces.
+ *
+ * `src` is routed through {@link releaseThumbUrl} here (the single place compact
+ * thumbs are downscaled); it is idempotent, so callers may pass raw originals
+ * or already-transformed URLs (`pickReleaseThumb`).
  *
  * Placement: sit the thumb in the **content** row (left or right of the title),
  * never in the attribution chrome next to a relative timestamp — that reads as
@@ -29,7 +34,7 @@ export function ReleaseThumb({
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
-      src={src}
+      src={releaseThumbUrl(src, COMPACT_THUMB_WIDTH)}
       alt={alt}
       className={`shrink-0 ${box} rounded-md object-cover bg-stone-100 dark:bg-stone-800 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10`}
       loading="lazy"

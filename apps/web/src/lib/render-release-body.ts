@@ -7,6 +7,7 @@ import rehypeStringify from "rehype-stringify";
 import { visit, SKIP } from "unist-util-visit";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
+import { releaseBodyImageUrl } from "@/lib/media";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
@@ -110,7 +111,11 @@ export function rehypeReleaseBody(opts: RehypeBodyOpts) {
           parent.children.splice(index, 1);
           return [SKIP, index];
         }
-        node.properties = { ...node.properties, className: IMG_CLASS };
+        node.properties = {
+          ...node.properties,
+          src: releaseBodyImageUrl(src),
+          className: IMG_CLASS,
+        };
         return;
       }
 
