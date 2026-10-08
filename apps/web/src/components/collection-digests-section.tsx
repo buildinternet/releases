@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { CollectionDigestSubscription } from "@buildinternet/releases-api-types";
 import { listCollectionDigestSubscriptions, unsubscribeCollectionDigest } from "@/lib/follows";
+import { VerifyEmailHint } from "@/components/verify-email-hint";
 import { useSession } from "@/lib/auth-client";
 import { ErrorText, listCardClass, listRowClass, dangerLinkClass } from "@releases/design-system";
 
@@ -101,10 +102,12 @@ export function CollectionDigestsSection() {
               </div>
             ))}
           </div>
-          {unverified && (
-            <p className="mt-2.5 text-[12.5px] text-stone-400 dark:text-stone-500">
-              Verify your email to start getting these digests.
-            </p>
+          {unverified && session?.user && (
+            <VerifyEmailHint
+              email={session.user.email}
+              message="Verify your email to start getting these digests."
+              className="mt-2.5 block"
+            />
           )}
         </>
       )}

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { VerifyEmailHint } from "./verify-email-hint";
 import { useSession } from "@/lib/auth-client";
 import { useFollows } from "./follows-provider";
 import {
@@ -98,14 +98,7 @@ export function CollectionDigestSubscribe({
         {subscribed ? "Emailing you weekly" : "Email me this digest weekly"}
         {subscribed && <span className="font-normal text-[var(--fg-3)]">· Turn off</span>}
       </button>
-      {unverified && (
-        <Link
-          href="/account"
-          className="text-[12px] text-[var(--fg-3)] underline underline-offset-2 hover:text-[var(--fg-2)]"
-        >
-          Verify your email to start getting this digest.
-        </Link>
-      )}
+      {unverified && session?.user && <VerifyEmailHint email={session.user.email} />}
       {error && (
         <span role="alert" className="text-[12px] text-[var(--fg-3)]">
           Couldn&apos;t update. Try again.
