@@ -107,37 +107,37 @@
     },
     "apps/cli/npm/releases": {
       "name": "@buildinternet/releases",
-      "version": "0.83.2",
+      "version": "0.83.3",
       "bin": {
         "releases": "bin/releases",
       },
       "optionalDependencies": {
-        "@buildinternet/releases-darwin-arm64": "0.83.1",
-        "@buildinternet/releases-darwin-x64": "0.83.1",
-        "@buildinternet/releases-linux-arm64": "0.83.1",
-        "@buildinternet/releases-linux-x64": "0.83.1",
-        "@buildinternet/releases-windows-x64": "0.83.1",
+        "@buildinternet/releases-darwin-arm64": "0.83.3",
+        "@buildinternet/releases-darwin-x64": "0.83.3",
+        "@buildinternet/releases-linux-arm64": "0.83.3",
+        "@buildinternet/releases-linux-x64": "0.83.3",
+        "@buildinternet/releases-windows-x64": "0.83.3",
       },
     },
     "apps/cli/npm/releases-darwin-arm64": {
       "name": "@buildinternet/releases-darwin-arm64",
-      "version": "0.83.2",
+      "version": "0.83.3",
     },
     "apps/cli/npm/releases-darwin-x64": {
       "name": "@buildinternet/releases-darwin-x64",
-      "version": "0.83.2",
+      "version": "0.83.3",
     },
     "apps/cli/npm/releases-linux-arm64": {
       "name": "@buildinternet/releases-linux-arm64",
-      "version": "0.83.2",
+      "version": "0.83.3",
     },
     "apps/cli/npm/releases-linux-x64": {
       "name": "@buildinternet/releases-linux-x64",
-      "version": "0.83.2",
+      "version": "0.83.3",
     },
     "apps/cli/npm/releases-windows-x64": {
       "name": "@buildinternet/releases-windows-x64",
-      "version": "0.83.2",
+      "version": "0.83.3",
     },
     "apps/web": {
       "name": "releases-web",
@@ -315,7 +315,7 @@
     },
     "packages/releases-lib": {
       "name": "@buildinternet/releases-lib",
-      "version": "0.83.2",
+      "version": "0.83.3",
     },
     "packages/rendering": {
       "name": "@releases/rendering",

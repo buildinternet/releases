@@ -1,5 +1,11 @@
 # @buildinternet/releases
 
+## 0.83.3
+
+### Patch Changes
+
+- 747a9ba: `releases feedback` now opens issues on `buildinternet/releases`, where the CLI lives.
+
 ## 0.83.2
 
 ### Patch Changes
