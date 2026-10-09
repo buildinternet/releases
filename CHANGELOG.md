@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 8, 2026
+
+**Added**
+- Collection weekly digests — collections now email a weekly summary to subscribers; sign up from Account → Notifications, and new collections have weekly digests enabled by default.
+- Weekly digest replay — past collection digests are viewable on the web, each with a week-at-a-glance card summarizing that week's releases and organizations.
+
+**Fixed**
+- Collection, digest, source changelog, and updates pages now refresh automatically when new releases land, instead of serving stale content.
+- Release thumbnails in AVIF or MP4 format now display correctly; they were returning errors from Cloudflare's image transform and showing as broken.
+- GitHub tag filters (`tagAllowPatterns`, `tagDenyPrefixes`) now apply correctly in production; they were only being checked on the local CLI path, so all tags were imported regardless of the configured filter.
+- `releases list --org <slug>` no longer crashes when the org or product slug is not found.
+- CHANGELOG file viewer now resolves relative links against the source's upstream URL; they were 404ing on releases.sh.
+
 ## October 5, 2026
 
 **Fixed**
