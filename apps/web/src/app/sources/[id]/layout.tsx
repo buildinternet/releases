@@ -21,6 +21,7 @@ import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
+import { sourceLastActivityAt } from "@/lib/source-last-activity";
 import { getSourceById, sourceHomePath } from "./_lib/source-by-id";
 
 /** Canonical for sub-pages; every source with an org 308s to its bare path. */
@@ -185,7 +186,7 @@ export default async function SourceByIdLayout({
           <Sidebar
             sections={sidebarSections}
             formatPath={`/${orgSlug}/${sourceSlug}`}
-            lastCheckedAt={source.lastPolledAt ?? source.lastFetchedAt}
+            lastCheckedAt={sourceLastActivityAt(source, pushFed)}
             lastFetchedAt={source.lastFetchedAt}
             trackingSince={source.trackingSince}
             pushFed={pushFed}
