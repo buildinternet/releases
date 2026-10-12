@@ -7,17 +7,19 @@
  * a provider-agnostic `TextModel` from env — OpenRouter when a candidate model is
  * configured, the Anthropic production baseline otherwise.
  *
- * The judge runs on a cheap OpenRouter model by default (Gemini 2.5 Flash via
- * the provider-agnostic `TextModel` seam) — a spike found it ~15x cheaper and
- * ~4x faster than Sonnet while catching every objective faithfulness violation
- * and emitting clean JSON. Its only divergence from Sonnet is a stricter reading
- * of the subjective "lead-with-the-user-outcome" criteria, so eval pass-rates
- * are baselined against it, not against Sonnet history.
+ * The judge defaults to OpenRouter `openai/gpt-6-luna` (the `evalJudge` pin in
+ * `@releases/lib/models`) through the provider-agnostic `TextModel` seam. It
+ * lists at $0.10/$0.50 per million tokens, cheaper than the Gemini 2.5 Flash
+ * judge it replaces ($0.30/$2.50; Google retires that model on 2026-10-20).
+ * Summaries under test are written by Haiku, so this judge scores another
+ * model's output. Pass rates are baselined against the current judge, so a
+ * judge change shifts that baseline. Luna reasons by default; the `maxTokens`
+ * passed to {@link runJudge} has to cover reasoning tokens plus the JSON verdict.
  *
  * Override via `JUDGE_MODEL`: an Anthropic id (`claude-…`) judges with the SDK
  * (needs `ANTHROPIC_API_KEY`); anything else is treated as an OpenRouter model
- * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-5-5` to go
- * back to Sonnet, or `JUDGE_MODEL=google/gemini-2.5-flash-lite` for cheaper.
+ * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-5-5` to
+ * judge with Sonnet.
  */
 import {
   buildLaneOpenRouterModel,

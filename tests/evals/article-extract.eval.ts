@@ -5,7 +5,7 @@
  *
  * Default provider is Anthropic Haiku (the production baseline). To evaluate a
  * cheap OpenRouter candidate for the feed-enrich lane, set `OPENROUTER_API_KEY` +
- * `EVAL_OPENROUTER_MODEL` (e.g. `EVAL_OPENROUTER_MODEL=google/gemini-2.5-flash-lite`)
+ * `EVAL_OPENROUTER_MODEL` (e.g. `EVAL_OPENROUTER_MODEL=deepseek/deepseek-v4.1-flash`)
  * — the prompt + fixtures are held constant so the run is a clean cross-model
  * comparison. Optionally set `OPENROUTER_BASE_URL` to route through an AI Gateway.
  *

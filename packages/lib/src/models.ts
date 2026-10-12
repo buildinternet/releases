@@ -96,8 +96,8 @@ export const MODEL_ROLES = {
   extraction: HAIKU,
   /** web_fetch agent loop and the large-body tool loop. */
   extractionAgent: SONNET,
-  /** Eval-harness judge. `JUDGE_MODEL` overrides this in `tests/evals/judge-model.ts`. */
-  evalJudge: unpricedPin("google/gemini-2.5-flash", DEFAULT_CAPABILITIES),
+  /** Eval-harness judge on OpenRouter. `JUDGE_MODEL` overrides this in `tests/evals/judge-model.ts`. */
+  evalJudge: unpricedPin("openai/gpt-6-luna", DEFAULT_CAPABILITIES),
 } as const satisfies Record<string, ModelPin>;
 
 export type ModelRole = keyof typeof MODEL_ROLES;

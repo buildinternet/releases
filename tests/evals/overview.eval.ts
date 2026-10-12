@@ -2,7 +2,7 @@
  * Org-overview regression eval. LOCAL, AD-HOC ONLY — calls the real Anthropic
  * API. Run: `bun run eval:overview` (Tier-1 structural + citation integrity) or
  * `bun run eval:overview -- --judge` (adds the rubric faithfulness check against
- * tests/evals/rubrics/overview.md — judged by Gemini 2.5 Flash via OpenRouter by
+ * tests/evals/rubrics/overview.md — judged by `openai/gpt-6-luna` via OpenRouter by
  * default; see ./judge-model.ts). Never part of `bun test`.
  *
  * Each fixture is a single JSON file under fixtures/overviews/ carrying the
@@ -78,7 +78,7 @@ async function main() {
   console.error(`generation model: ${resolved.label}`);
 
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
-  // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
+  // Judge defaults to openai/gpt-6-luna on OpenRouter; JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-5-5 for Anthropic). See ./judge-model.ts.
   const judgeModel = useJudge ? resolveJudgeModel() : null;
 
