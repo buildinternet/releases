@@ -7,7 +7,7 @@ description: Push changelog markdown from a Git repo into Release Notes Index on
 
 If your release notes live in git — `CHANGELOG.md`, Keep a Changelog, a dated product log, or one MDX file per release — a GitHub Action can create or update the matching releases in Release Notes Index the moment the file lands on your default branch. You don't wait for us to check your changelog.
 
-Not on GitHub? The Action posts a normal batch write. [Publish from any CI](/docs/integrations/ci) has the `curl` recipe and a GitLab example. `releases publish` will run the same plan from the CLI.
+Not on GitHub? The Action posts a normal batch write. [Publish from any CI](/docs/integrations/ci) has the `curl` recipe and a GitLab example. `releases publish` runs the same plan from the [CLI](/docs/installation) (0.83.0 or later).
 
 Re-running the same commit is safe. Each entry is keyed by a stable URL, and the batch upsert only writes when the body actually changed.
 
@@ -21,7 +21,7 @@ The Action has two modes:
 The Action calls `POST /v1/sources/…/releases/batch`. Two kinds of `relk_…` token work:
 
 - **A publish token** (the usual choice). If you've verified you own your domain (an ownership claim through the listing flow), you can mint one yourself. It can publish to one source and nothing else: no source edits, no other sources. It stops working if you revoke it or lose the claim.
-- **A write-scoped machine token**, issued by a Releases Index admin.
+- **A write-scoped machine token**, issued by a Release Notes Index admin.
 
 To mint a publish token, sign in and open [Account → Webhooks & API](/account/webhooks). Under **Publish tokens**, pick the source and create the token. Copy it right away. It won't be shown again. The panel also gives you the workflow step to paste, lists your tokens with when each was last used, and revokes them.
 
