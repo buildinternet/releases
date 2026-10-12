@@ -9,14 +9,14 @@ The [GitHub Action](/docs/integrations/github-actions) is one client of a single
 
 Re-running the same entries is safe. Each release is keyed by a stable URL, and the batch upsert only writes when the body actually changed. An identical re-run returns `inserted: 0`.
 
-`releases publish` (in the [CLI](/docs/installation)) will build this body for you — single-file `##` sections or one MDX file per entry, `--dry-run` to print the JSON, `--since <sha>` to diff. It uses the same planner as the Action. Until that command ships, post the JSON yourself with `curl`.
+`releases publish` (in the [CLI](/docs/installation), 0.83.0 or later) builds this body for you. It reads a single file of `##` sections or one MDX file per entry, diffs with `--since <sha>`, and prints the JSON with `--dry-run`. It uses the same planner as the Action. If you can't install the CLI in your job, post the JSON yourself with `curl` (step 4).
 
 ## 1. Create a token
 
 The request needs a Bearer token that can write this source:
 
 - **A publish token** (the usual choice). After you verify domain ownership, mint one under [Account → Webhooks & API](/account/webhooks). It can publish to one source and nothing else.
-- **A write-scoped machine token**, issued by a Releases Index admin.
+- **A write-scoped machine token**, issued by a Release Notes Index admin.
 
 Read-only user keys (`relu_…`, including `releases login`) are rejected. Store the token as `RELEASES_API_TOKEN` in CI. Treat it like a password.
 
@@ -40,7 +40,24 @@ If the changelog lives in a git repo, say so in [`releases.json`](/docs/listing)
 
 We create that source only after the domain ownership claim is verified. An unverified manifest leaves the locator declared and does not flip an existing source to push. `path` with a `*` is directory mode (`changelog-glob` on the Action); a path with no wildcard is one file (`changelog-path`).
 
-## 3. POST the batch
+## 3. Publish with the CLI
+
+`releases publish` reads `RELEASES_API_TOKEN` and posts only the entries that changed since the commit you pass:
+
+```bash
+releases publish --source "$RELEASES_SOURCE" --since "$CI_COMMIT_BEFORE_SHA" \
+  --url-template "https://gitlab.com/acme/app/-/blob/main/CHANGELOG.md#{key}"
+```
+
+- `--source` takes a `src_…` id, an `org/slug` coordinate, or a slug with `--org`.
+- `--changelog <path>` picks the file (default `CHANGELOG.md`). `--glob "changelog/**/*.mdx"` switches to one file per entry. `--cwd` points at a subdirectory in a monorepo.
+- `--url-template` sets each entry's permalink. Placeholders: `{key}`, `{version}`, `{date}`, `{path}`, `{slug}`.
+- Leave out `--since` to publish every entry. That is safe to repeat — unchanged entries are not rewritten.
+- `--dry-run` prints the batch body and does not need a token. Add `--json` for a machine-readable summary.
+
+Run `releases publish --help` for the full list.
+
+## 4. Or POST the batch yourself
 
 ```bash
 curl --fail-with-body --silent --show-error \
@@ -84,7 +101,24 @@ Send only the entries that changed. The Action and `releases publish` do that by
 
 ## GitLab CI
 
-Variables: `RELEASES_API_TOKEN` (masked) and `RELEASES_SOURCE` (`src_…`). The job below posts one entry. Swap the JSON for the batch your changelog diff produced, or for the file `releases publish --dry-run` writes once that command is available.
+Variables: `RELEASES_API_TOKEN` (masked) and `RELEASES_SOURCE` (`src_…`). The job below installs the CLI and publishes what changed in the push. GitLab's checkout is shallow by default, so set `GIT_DEPTH: 0` for `--since` to find the previous commit:
+
+```yaml
+publish-changelog:
+  stage: deploy
+  image: node:22
+  variables:
+    GIT_DEPTH: 0
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - CHANGELOG.md
+  script:
+    - npm install -g @buildinternet/releases
+    - releases publish --source "$RELEASES_SOURCE" --since "$CI_COMMIT_BEFORE_SHA"
+```
+
+Without the CLI, `curl` posts the body directly. This job posts one entry. Swap the JSON for your own batch, or for the output of `releases publish --dry-run`:
 
 ```yaml
 publish-changelog:
@@ -104,7 +138,7 @@ publish-changelog:
       --data '{"mode":"upsert-content","releases":[{"title":"1.4.0","content":"### Added\n- JSON export","url":"https://example.com/changelog#1.4.0","publishedAt":"2026-05-01T12:00:00Z","version":"1.4.0","type":"feature"}]}'
 ```
 
-The same `curl` works on Buildkite, CircleCI, or a script step. Checkout depth does not matter for the HTTP call. It matters only for the client that diffs the changelog (the Action needs `fetch-depth: 0`; `releases publish --since` needs the commit you name to be present).
+Both jobs work the same way on Buildkite, CircleCI, or a script step. Checkout depth does not matter for the HTTP call. It matters only for the client that diffs the changelog (the Action needs `fetch-depth: 0`; `releases publish --since` needs the commit you name to be present).
 
 ## GitHub Actions
 
