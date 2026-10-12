@@ -1,7 +1,7 @@
 /**
  * Release-summary regression eval. LOCAL, AD-HOC ONLY — calls the real Anthropic
  * API. Run: `bun run eval:summary` (Tier-1 structural) or `bun run eval:summary -- --judge`
- * (adds the rubric faithfulness check — judged by Gemini 2.5 Flash via OpenRouter
+ * (adds the rubric faithfulness check — judged by `openai/gpt-6-luna` via OpenRouter
  * by default; see ./judge-model.ts). Never part of `bun test`.
  */
 import { readFileSync, readdirSync } from "fs";
@@ -78,7 +78,7 @@ async function main() {
   const rubric = useJudge
     ? readFileSync(join(import.meta.dir, "rubrics", "release-summary.md"), "utf8")
     : "";
-  // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
+  // Judge defaults to openai/gpt-6-luna on OpenRouter; JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-5-5 for Anthropic). See ./judge-model.ts.
   const judgeModel = useJudge ? resolveJudgeModel() : null;
   if (judgeModel) console.error(`judge model: ${judgeModel.id}`);
