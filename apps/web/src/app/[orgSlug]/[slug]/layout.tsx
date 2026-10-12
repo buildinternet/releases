@@ -22,6 +22,7 @@ import { EntityNotice } from "@/components/entity-notice";
 import { ReportIssue } from "@/components/report-issue";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
+import { sourceLastActivityAt } from "@/lib/source-last-activity";
 import { getResolved } from "./_lib/resolve";
 import { getSource } from "./_lib/source-data";
 
@@ -201,7 +202,7 @@ export default async function OrgSlugLayout({
           <Sidebar
             sections={sidebarSections}
             formatPath={base}
-            lastCheckedAt={source.lastPolledAt ?? source.lastFetchedAt}
+            lastCheckedAt={sourceLastActivityAt(source, pushFed)}
             lastFetchedAt={source.lastFetchedAt}
             trackingSince={source.trackingSince}
             pushFed={pushFed}
