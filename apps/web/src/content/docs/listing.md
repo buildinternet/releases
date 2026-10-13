@@ -135,6 +135,16 @@ Repo-root `releases.json` binds **that repo** only (`product` + `releases[]`). U
 
 No manifest yet? [Suggest a changelog URL](/submit) for curator review.
 
+## Add a badge
+
+Once you verify your domain, the claim panel on your organization's page offers a small Release Notes Index badge, in light and dark, with a Markdown snippet for your README and an HTML snippet for your site. The badge links to your organization's page:
+
+```md
+[![Release Notes Index](https://releases.sh/badges/listed.svg)](https://releases.sh/your-org)
+```
+
+Replace `your-org` with your organization's slug, or copy the snippet from the claim panel. Use `listed-dark.svg` for dark backgrounds.
+
 ## Reference
 
 - **`version: 2` required.** v1 is no longer read.

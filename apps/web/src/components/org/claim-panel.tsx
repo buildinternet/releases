@@ -17,6 +17,7 @@ import {
   type LocatorPreview,
 } from "@/lib/listing-locations";
 import { InlineCopyCode } from "@/components/inline-copy-code";
+import { ListedBadge } from "@/components/org/listed-badge";
 import type {
   OrgClaim,
   ClaimVerifyResult,
@@ -222,6 +223,7 @@ export function VerifiedBody({
         >
           Create a publish token
         </Link>
+        <ListedBadge orgUrl={claim.org.webUrl} />
       </div>
     );
   }

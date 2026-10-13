@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="118" height="24" viewBox="0 0 118 24" role="img" aria-label="Release Notes Index">
+  <title>Release Notes Index</title>
+  <rect x="0.5" y="0.5" width="117" height="23" rx="5.5" fill="#1c1917" stroke="#44403c"/>
+  <g transform="translate(5 4)">
+    <rect width="16" height="16" rx="3.6" fill="#292524"/>
+    <rect x="3.5" y="4.5" width="7" height="1.5" rx="0.4" fill="#f5f5f4"/>
+    <rect x="3.5" y="7.25" width="5.5" height="1.5" rx="0.4" fill="#a8a29e"/>
+    <rect x="3.5" y="10" width="9" height="1.5" rx="0.4" fill="#0081e7"/>
+  </g>
+  <text x="27" y="16.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#f5f5f4" textLength="83" lengthAdjust="spacingAndGlyphs">Release Notes</text>
+</svg>

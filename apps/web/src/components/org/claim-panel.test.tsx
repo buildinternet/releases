@@ -34,6 +34,9 @@ describe("VerifiedBody", () => {
     expect(html).toContain("Verified via DNS TXT record.");
     expect(html).toContain('href="/account/webhooks"');
     expect(html).not.toContain("Enable tracking");
+    // Badge snippet links the org's canonical page.
+    expect(html).toContain("Add a badge");
+    expect(html).toContain("(https://releases.sh/acme)");
   });
 
   it("keeps the promotion CTA for a stub", () => {
