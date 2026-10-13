@@ -8,7 +8,7 @@
 import { describe, test, expect } from "bun:test";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
 import {
-  buildEntitySitemapEntries,
+  buildProductSitemapEntries,
   buildOrgSitemapEntries,
   buildUpdatesSitemapEntries,
 } from "@/lib/sitemap-entries";
@@ -22,10 +22,10 @@ function indexedOrg(slug: string): SitemapPayload["orgs"][number] {
 }
 
 function urls(payload: SitemapPayload): string[] {
-  return buildEntitySitemapEntries(payload, BASE).map((e) => String(e.url));
+  return buildProductSitemapEntries(payload, BASE).map((e) => String(e.url));
 }
 
-describe("buildEntitySitemapEntries", () => {
+describe("buildProductSitemapEntries", () => {
   test("product in a multi-product org emits a bare /[org]/[slug] URL (no /product/ segment)", () => {
     const payload: SitemapPayload = {
       orgs: [indexedOrg("vercel")],
@@ -62,7 +62,7 @@ describe("buildEntitySitemapEntries", () => {
     expect(result).toEqual([]);
   });
 
-  test("source with hasChangelog/hasHighlights → bare URL only (sub-views are noindex)", () => {
+  test("source pages are never listed (they are noindex inputs to org/product views)", () => {
     const payload: SitemapPayload = {
       orgs: [indexedOrg("orgX")],
       products: [
@@ -83,60 +83,12 @@ describe("buildEntitySitemapEntries", () => {
     };
 
     const result = urls(payload);
-    expect(result).toContain(`${BASE}/orgX/sourceY`);
-    expect(result).not.toContain(`${BASE}/orgX/sourceY/highlights`);
-    expect(result).not.toContain(`${BASE}/orgX/sourceY/changelog`);
-    // Never routed to /sources/:id since it isn't shadowed.
-    expect(result.some((u) => u.startsWith(`${BASE}/sources/`))).toBe(false);
-  });
-
-  test("orphan source (no matching product) → bare URL", () => {
-    const payload: SitemapPayload = {
-      orgs: [indexedOrg("solo")],
-      products: [],
-      sources: [
-        {
-          id: "src_orphan",
-          orgSlug: "solo",
-          slug: "only-source",
-          latestDate: null,
-          hasChangelog: false,
-          hasHighlights: false,
-        },
-      ],
-      collections: [],
-    };
-
-    const result = urls(payload);
-    expect(result).toEqual([`${BASE}/solo/only-source`]);
+    expect(result.sort()).toEqual([`${BASE}/orgX/other-product`, `${BASE}/orgX/some-product`]);
+    expect(result.some((u) => u.includes("sourceY"))).toBe(false);
   });
 });
 
-describe("buildEntitySitemapEntries — one URL per source", () => {
-  test("a product member is listed at its bare URL, never /sources/:id", () => {
-    const result = urls({
-      orgs: [indexedOrg("openai")],
-      products: [
-        { orgSlug: "openai", slug: "chatgpt" },
-        { orgSlug: "openai", slug: "codex" },
-      ],
-      sources: [
-        {
-          id: "src_ios",
-          orgSlug: "openai",
-          slug: "chatgpt-ios",
-          latestDate: null,
-          hasChangelog: true,
-        },
-      ],
-      collections: [],
-    });
-    expect(result).toContain(`${BASE}/openai/chatgpt-ios`);
-    expect(result.some((u) => u.includes("/sources/"))).toBe(false);
-  });
-});
-
-describe("buildEntitySitemapEntries — org index bar", () => {
+describe("buildProductSitemapEntries — org index bar", () => {
   const payload = (org: SitemapPayload["orgs"][number]): SitemapPayload => ({
     orgs: [org],
     products: [
@@ -147,11 +99,10 @@ describe("buildEntitySitemapEntries — org index bar", () => {
     collections: [],
   });
 
-  test("an org with an overview and enough releases lists its products and sources", () => {
+  test("an org with an overview and enough releases lists its products", () => {
     expect(urls(payload(indexedOrg("acme"))).sort()).toEqual([
       `${BASE}/acme/api`,
       `${BASE}/acme/app`,
-      `${BASE}/acme/app-releases`,
     ]);
   });
 
@@ -167,11 +118,11 @@ describe("buildEntitySitemapEntries — org index bar", () => {
 
   test("the release minimum is inclusive", () => {
     const org = { slug: "acme", lastActivity: null, releaseCount: 10, hasOverview: true };
-    expect(urls(payload(org))).toHaveLength(3);
+    expect(urls(payload(org))).toHaveLength(2);
   });
 
   test("a payload without the index fields keeps the org (older API response)", () => {
-    expect(urls(payload({ slug: "acme", lastActivity: null }))).toHaveLength(3);
+    expect(urls(payload({ slug: "acme", lastActivity: null }))).toHaveLength(2);
   });
 });
 
@@ -203,13 +154,16 @@ describe("buildUpdatesSitemapEntries", () => {
 });
 
 describe("sitemap uniqueness (full-entry-list assertion)", () => {
-  test("buildEntitySitemapEntries + buildUpdatesSitemapEntries together never emit a duplicate <loc>", () => {
+  test("buildProductSitemapEntries + buildUpdatesSitemapEntries together never emit a duplicate <loc>", () => {
     // Simulates the same mixed payload the default sitemap() export would
     // assemble (entity entries + updates entries), asserting the combined
     // URL list — the shape the acceptance criteria call out — has no dupes.
     const payload: SitemapPayload = {
       orgs: [indexedOrg("acme")],
-      products: [{ orgSlug: "acme", slug: "widgets" }],
+      products: [
+        { orgSlug: "acme", slug: "widgets" },
+        { orgSlug: "acme", slug: "gadgets" },
+      ],
       sources: [
         {
           id: "src_1",
