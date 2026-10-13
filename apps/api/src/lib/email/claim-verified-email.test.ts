@@ -57,6 +57,13 @@ describe("formatClaimVerifiedEmail", () => {
     expect(html).toContain("https://releases.sh/acme");
   });
 
+  it("points the owner at the badge docs in both html and text", () => {
+    const { text, html } = formatClaimVerifiedEmail({ ...base, method: "well-known" });
+    expect(text).toContain("Release Notes Index badge");
+    expect(text).toContain("https://releases.sh/docs/listing#add-a-badge");
+    expect(html).toContain('href="https://releases.sh/docs/listing#add-a-badge"');
+  });
+
   it("includes a footer reason", () => {
     const { text } = formatClaimVerifiedEmail({ ...base, method: "well-known" });
     expect(text).toContain("You received this because you verified ownership of acme.com");
