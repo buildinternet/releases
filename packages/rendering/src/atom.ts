@@ -104,6 +104,24 @@ function releaseAlternateHref(
   return releaseWebUrl(baseUrl, { ...release, id: release.id });
 }
 
+/**
+ * Entry `<title>`: our generated headline when there is one (short, then long,
+ * the same order the web feed rows use), with the version appended when the
+ * headline doesn't already name it, so a reader still sees which release it is.
+ * Falls back to the raw title, then the version.
+ */
+export function atomEntryTitle(
+  release: Pick<ReleaseItem, "title" | "version" | "titleShort" | "titleGenerated">,
+): string {
+  const generated = release.titleShort?.trim() || release.titleGenerated?.trim();
+  const version = release.version?.trim();
+  if (generated) {
+    const bare = version?.replace(/^v/i, "");
+    return version && bare && !generated.includes(bare) ? `${generated} (${version})` : generated;
+  }
+  return release.title?.trim() || version || "Untitled release";
+}
+
 // ── Entry builder ────────────────────────────────────────────────────
 
 interface EntryInput {
@@ -125,8 +143,7 @@ function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated:
 
   const parts: string[] = ["  <entry>"];
   parts.push(`    <id>${escapeXml(entryId(release, sourceSlug, baseUrl))}</id>`);
-  const titleText = release.title?.trim() || release.version || "Untitled release";
-  parts.push(`    <title>${escapeXml(titleText)}</title>`);
+  parts.push(`    <title>${escapeXml(atomEntryTitle(release))}</title>`);
   if (linkHref) {
     parts.push(`    <link rel="alternate" type="text/html" href="${escapeAttr(linkHref)}" />`);
   }
