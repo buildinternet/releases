@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 12, 2026
+
+**Fixed**
+- Push-fed sources now show the time of the last published update on the source page; they previously displayed a last-polled time, which doesn't apply to sources updated via the GitHub Action publisher.
+
 ## October 8, 2026
 
 **Added**
