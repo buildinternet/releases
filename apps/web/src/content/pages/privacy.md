@@ -63,7 +63,7 @@ We use a small number of service providers to host and operate Releases Index. T
 - **Cloudflare** — hosts the API and supporting infrastructure, stores the database, and sends account-related email.
 - **Vercel** — hosts the web frontend.
 - **Better Auth Infrastructure** — hosted administration tooling for account management. Your account data is stored in our database; this service can access account and session metadata for operational support.
-- **Anthropic and OpenRouter** — provide the AI models our indexing pipeline uses to parse and summarize public changelogs. These models receive only the public content we are indexing, never your account data. If you create an interest alert, its text is sent to a model through OpenRouter to match it against new releases.
+- **OpenRouter and Anthropic** — provide the AI models our indexing pipeline uses to parse and summarize public changelogs. Most model requests go through OpenRouter; some go to Anthropic directly. These models receive only the public content we are indexing, never your account data. If you create an interest alert, its text is sent to a model through OpenRouter to match it against new releases.
 - **Voyage AI** — turns search queries into embeddings for semantic search. It receives the query text only, with no account data.
 
 If you sign in with a third-party provider (where offered), that provider also processes your sign-in according to its own privacy policy.
