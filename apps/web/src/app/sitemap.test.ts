@@ -122,6 +122,27 @@ describe("buildProductSitemapEntries — org index bar", () => {
   });
 });
 
+describe("buildProductSitemapEntries — product release minimum", () => {
+  test("a product below the minimum is left out; unknown counts are kept", () => {
+    const result = urls({
+      orgs: [indexedOrg("acme")],
+      products: [
+        { orgSlug: "acme", slug: "busy", releaseCount: 40 },
+        { orgSlug: "acme", slug: "edge", releaseCount: 10 },
+        { orgSlug: "acme", slug: "thin", releaseCount: 9 },
+        { orgSlug: "acme", slug: "legacy" },
+      ],
+      sources: [],
+      collections: [],
+    });
+    expect(result.sort()).toEqual([
+      `${BASE}/acme/busy`,
+      `${BASE}/acme/edge`,
+      `${BASE}/acme/legacy`,
+    ]);
+  });
+});
+
 describe("buildOrgSitemapEntries", () => {
   test("each indexed org emits only its bare URL, lastmod only from lastActivity", () => {
     const entries = buildOrgSitemapEntries(

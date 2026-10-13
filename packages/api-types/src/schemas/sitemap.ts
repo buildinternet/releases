@@ -51,7 +51,18 @@ export const SitemapPayloadSchema = z.object({
     }),
   ),
   sources: z.array(SitemapSourceSchema),
-  products: z.array(z.object({ orgSlug: z.string(), slug: z.string() })),
+  products: z.array(
+    z.object({
+      orgSlug: z.string(),
+      slug: z.string(),
+      /**
+       * Visible releases across the product's visible sources — the same count
+       * org detail reports per product. Drives the web's product index bar.
+       * `.optional()` for backwards compatibility with older cached responses.
+       */
+      releaseCount: z.number().int().optional(),
+    }),
+  ),
   collections: z.array(z.object({ slug: z.string(), updatedAt: z.string() })),
   /**
    * Weekly collection digest permalinks (`/collections/:slug/digest/:week`),

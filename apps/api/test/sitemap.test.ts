@@ -34,7 +34,7 @@ type SitemapResponse = {
     hasChangelog?: boolean;
     hasHighlights?: boolean;
   }[];
-  products: { orgSlug: string; slug: string }[];
+  products: { orgSlug: string; slug: string; releaseCount?: number }[];
   collections: { slug: string; updatedAt: string }[];
   digests: { collectionSlug: string; weekStart: string; generatedAt: string | null }[];
 };
@@ -249,6 +249,56 @@ describe("GET /sitemap", () => {
 
     const pairs = result.products.map((p) => `${p.orgSlug}/${p.slug}`).toSorted();
     expect(pairs).toEqual(["other/thing", "vercel/nextjs", "vercel/turborepo"]);
+  });
+
+  test("carries each product's visible release count", async () => {
+    const db = testDatabase.db;
+    const [org] = db.insert(organizations).values({ name: "Acme", slug: "acme" }).returning().all();
+    const [busy, quiet] = db
+      .insert(products)
+      .values([
+        { orgId: org.id, name: "Busy", slug: "busy" },
+        { orgId: org.id, name: "Quiet", slug: "quiet" },
+      ])
+      .returning()
+      .all();
+    const [busySrc] = db
+      .insert(sources)
+      .values([
+        {
+          orgId: org.id,
+          productId: busy.id,
+          name: "Busy repo",
+          slug: "busy-repo",
+          type: "github",
+          url: "https://github.com/acme/busy",
+        },
+        {
+          orgId: org.id,
+          productId: quiet.id,
+          name: "Quiet repo",
+          slug: "quiet-repo",
+          type: "github",
+          url: "https://github.com/acme/quiet",
+        },
+      ])
+      .returning()
+      .all();
+    db.insert(releases)
+      .values(
+        [1, 2, 3].map((i) => ({
+          sourceId: busySrc.id,
+          url: `https://example.com/busy/${i}`,
+          title: `v${i}`,
+          content: "",
+          publishedAt: "2026-01-02T00:00:00Z",
+        })),
+      )
+      .run();
+
+    const result = await callSitemap();
+    const bySlug = Object.fromEntries(result.products.map((p) => [p.slug, p.releaseCount]));
+    expect(bySlug).toEqual({ busy: 3, quiet: 0 });
   });
 
   test("omits products with no visible source (none at all, or only hidden ones)", async () => {

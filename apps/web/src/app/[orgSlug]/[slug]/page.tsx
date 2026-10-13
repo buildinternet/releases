@@ -9,7 +9,7 @@ import { getProductPage } from "./_lib/product-data";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
-import { NOINDEX_FOLLOW } from "@/lib/index-policy";
+import { NOINDEX_FOLLOW, productMeetsIndexBar } from "@/lib/index-policy";
 
 // On-demand ISR: render once per product/source on first request, then serve
 // from cache (regenerated on ingest via POST /api/revalidate; 24h backstop).
@@ -35,6 +35,10 @@ export async function generateMetadata({
     const orgNoIndex = org?.isHidden === true || org?.discovery === "on_demand" || orgBelowBar;
     if (resolved.kind === "product") {
       const product = resolved.product;
+      // The org detail already carries each product's release count.
+      const productBelowBar = !productMeetsIndexBar({
+        releaseCount: org?.products.find((p) => p.slug === product.slug)?.releaseCount,
+      });
       // Product canonical is the BARE form now (links.ts is flipped). The
       // bare `.atom` route resolves product-first (#1210), so advertise the
       // product's cross-source feed the same way the source branch does.
@@ -43,7 +47,7 @@ export async function generateMetadata({
         description:
           product.description ??
           `Release notes, changelog, and updates for ${product.name} — refreshed ${currentPeriod()}.`,
-        ...(orgNoIndex ? { robots: { index: false, follow: true } } : {}),
+        ...(orgNoIndex || productBelowBar ? { robots: { index: false, follow: true } } : {}),
         openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
         alternates: {
           canonical: `/${orgSlug}/${slug}`,
