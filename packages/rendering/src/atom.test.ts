@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { sourceToAtom, orgReleasesToAtom, productReleasesToAtom, userFeedToAtom } from "./atom.js";
+import {
+  atomEntryTitle,
+  sourceToAtom,
+  orgReleasesToAtom,
+  productReleasesToAtom,
+  userFeedToAtom,
+} from "./atom.js";
 import type {
   SourceDetail,
   OrgReleaseItem,
@@ -323,5 +329,54 @@ describe("userFeedToAtom", () => {
     expect(xml).toContain("<feed");
     expect(xml).toContain("</feed>");
     expect(xml).not.toContain("<entry>");
+  });
+});
+
+describe("atomEntryTitle", () => {
+  it("prefers the short generated headline and appends the version", () => {
+    expect(
+      atomEntryTitle({
+        title: "v1.30.8",
+        version: "v1.30.8",
+        titleShort: "Fair task GC now conditional on range ID",
+        titleGenerated: "Temporal Server makes fair task garbage collection conditional",
+      }),
+    ).toBe("Fair task GC now conditional on range ID (v1.30.8)");
+  });
+
+  it("falls back to the long generated headline", () => {
+    expect(
+      atomEntryTitle({
+        title: "2.0",
+        version: "2.0",
+        titleShort: null,
+        titleGenerated: "Turborepo 2.0 adds a TUI",
+      }),
+    ).toBe("Turborepo 2.0 adds a TUI");
+  });
+
+  it("doesn't repeat a version the headline already names, with or without a v prefix", () => {
+    expect(
+      atomEntryTitle({
+        title: "x",
+        version: "v15.0",
+        titleShort: "Next.js 15.0 is stable",
+        titleGenerated: null,
+      }),
+    ).toBe("Next.js 15.0 is stable");
+  });
+
+  it("uses the raw title, then the version, when there's no generated headline", () => {
+    expect(
+      atomEntryTitle({
+        title: "Shipped a thing",
+        version: null,
+        titleShort: null,
+        titleGenerated: null,
+      }),
+    ).toBe("Shipped a thing");
+    expect(
+      atomEntryTitle({ title: "", version: "1.2.3", titleShort: null, titleGenerated: null }),
+    ).toBe("1.2.3");
   });
 });
