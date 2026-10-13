@@ -73,22 +73,21 @@ export function buildOrgSitemapEntries(
 }
 
 /**
- * Pure construction of the product + source sitemap entries from a
- * `/v1/sitemap` payload. Side-effect-free (no Next.js app imports) so it's unit
- * testable apart from the sitemap route.
+ * Pure construction of the product sitemap entries from a `/v1/sitemap`
+ * payload. Side-effect-free (no Next.js app imports) so it's unit testable apart
+ * from the sitemap route.
  *
- * One rule: products and sources live at the bare `/{org}/{slug}`. Product and
- * source slugs never collide within an org (the API rejects it), so the two
- * never compete for a URL. The single exception is the single-product collapse:
- * an org with fewer than two products has no product URLs (they 308 to
- * `/{org}`, see `collapsesToOrg`). `data.products` holds visible products only,
- * the same set the page counts, so the sitemap and the redirect agree.
+ * Products live at the bare `/{org}/{slug}`, except in the single-product
+ * collapse: an org with fewer than two products has no product URLs (they 308
+ * to `/{org}`, see `collapsesToOrg`). `data.products` holds visible products
+ * only, the same set the page counts, so the sitemap and the redirect agree.
+ * Products are listed only when their org clears the index bar
+ * (`orgInSitemap`).
  *
- * Products and sources are listed only when their org clears the index bar
- * (`orgInSitemap`). A source's `/highlights` and `/changelog` views are
- * `noindex` and never listed.
+ * Source pages are never listed: they are `noindex` inputs to the org and
+ * product views (see `NOINDEX_FOLLOW` in `index-policy.ts`).
  */
-export function buildEntitySitemapEntries(
+export function buildProductSitemapEntries(
   data: SitemapPayload,
   baseUrl: string,
 ): MetadataRoute.Sitemap {
@@ -98,7 +97,7 @@ export function buildEntitySitemapEntries(
     productCountByOrg.set(p.orgSlug, (productCountByOrg.get(p.orgSlug) ?? 0) + 1);
   }
 
-  const productEntries: MetadataRoute.Sitemap = data.products
+  return data.products
     .filter((p) => indexedOrgs.has(p.orgSlug) && (productCountByOrg.get(p.orgSlug) ?? 0) > 1)
     .map((p) => ({
       url: `${baseUrl}/${p.orgSlug}/${p.slug}`,
@@ -106,16 +105,4 @@ export function buildEntitySitemapEntries(
       changeFrequency: "daily",
       priority: 0.7,
     }));
-
-  const sourceEntries: MetadataRoute.Sitemap = data.sources
-    .filter((s) => indexedOrgs.has(s.orgSlug))
-    .map((s) => ({
-      url: `${baseUrl}/${s.orgSlug}/${s.slug}`,
-      // Only a real latestDate drives lastmod; no fabricated `now` fallback.
-      lastModified: s.latestDate ? new Date(s.latestDate) : undefined,
-      changeFrequency: "daily" as const,
-      priority: 0.7,
-    }));
-
-  return [...productEntries, ...sourceEntries];
 }

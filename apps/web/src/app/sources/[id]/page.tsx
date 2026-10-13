@@ -15,6 +15,7 @@ import { getSourceById, sourceHomePath } from "./_lib/source-by-id";
 import { getAppInfo } from "@/lib/app-source";
 import { getVideoInfo } from "@/lib/video-source";
 import { enableOnDemandIsr } from "@/lib/static-params";
+import { NOINDEX_FOLLOW } from "@/lib/index-policy";
 
 // On-demand ISR: render once per source on first request, then serve from cache
 // (regenerated on ingest via POST /api/revalidate; 24h backstop). (#1607)
@@ -37,6 +38,7 @@ export async function generateMetadata({
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
+      robots: NOINDEX_FOLLOW,
       openGraph: { type: "website", url: canonicalPath },
       alternates: {
         canonical: canonicalPath,

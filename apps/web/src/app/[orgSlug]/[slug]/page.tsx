@@ -9,6 +9,7 @@ import { getProductPage } from "./_lib/product-data";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
+import { NOINDEX_FOLLOW } from "@/lib/index-policy";
 
 // On-demand ISR: render once per product/source on first request, then serve
 // from cache (regenerated on ingest via POST /api/revalidate; 24h backstop).
@@ -60,12 +61,13 @@ export async function generateMetadata({
     }
     const source = resolved.source;
     const orgName = source.org?.name ?? orgSlug;
-    const shouldNoIndex = source.isHidden || source.discovery === "on_demand" || orgNoIndex;
     const canonical = `/${orgSlug}/${slug}`;
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
-      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
+      // Sources are inputs to the org and product views, which are the pages we
+      // offer for indexing. A source page stays reachable and linked.
+      robots: NOINDEX_FOLLOW,
       openGraph: { type: "website", url: canonical },
       alternates: {
         canonical,
