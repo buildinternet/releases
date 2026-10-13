@@ -22,6 +22,17 @@ export function orgMeetsIndexBar(org: OrgIndexSignals): boolean {
 }
 
 /**
+ * A product page is indexable when its org clears the bar and the product has
+ * enough releases of its own; a thin product's releases still show on the org
+ * page. An unknown count (older API response) doesn't block indexing.
+ */
+export const PRODUCT_INDEX_MIN_RELEASES = 10;
+
+export function productMeetsIndexBar(product: { releaseCount?: number | null }): boolean {
+  return product.releaseCount == null || product.releaseCount >= PRODUCT_INDEX_MIN_RELEASES;
+}
+
+/**
  * Pages that feed the org and product views rather than standing on their own:
  * source pages (one input feed each), their `/highlights` and `/changelog`
  * views, and the `/{org}/sources` directory. Always `noindex, follow`; they stay

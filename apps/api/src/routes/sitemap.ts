@@ -122,6 +122,8 @@ sitemapRoutes.get(
             .select({
               orgId: productsActive.orgId,
               slug: productsActive.slug,
+              // Same per-product count as org detail (`listOrgVisibleProducts`).
+              releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_visible sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
             })
             .from(productsActive)
             .where(and(inArray(productsActive.orgId, chunk), PRODUCT_HAS_VISIBLE_SOURCE)),
@@ -227,7 +229,9 @@ sitemapRoutes.get(
     );
 
     const productsOut = productRows.flatMap((p) =>
-      !p.orgId ? [] : [{ orgSlug: orgIdToSlug.get(p.orgId)!, slug: p.slug }],
+      !p.orgId
+        ? []
+        : [{ orgSlug: orgIdToSlug.get(p.orgId)!, slug: p.slug, releaseCount: p.releaseCount }],
     );
 
     return c.json({

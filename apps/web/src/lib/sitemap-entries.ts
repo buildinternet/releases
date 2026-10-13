@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
-import { orgMeetsIndexBar } from "./index-policy";
+import { orgMeetsIndexBar, productMeetsIndexBar } from "./index-policy";
 
 type SitemapOrg = SitemapPayload["orgs"][number];
 
@@ -49,7 +49,8 @@ export function buildOrgSitemapEntries(
  * to `/{org}`, see `collapsesToOrg`). `data.products` holds visible products
  * only, the same set the page counts, so the sitemap and the redirect agree.
  * Products are listed only when their org clears the index bar
- * (`orgInSitemap`).
+ * (`orgInSitemap`) and the product has enough releases of its own
+ * (`productMeetsIndexBar`).
  *
  * Source pages are never listed: they are `noindex` inputs to the org and
  * product views (see `NOINDEX_FOLLOW` in `index-policy.ts`).
@@ -65,7 +66,12 @@ export function buildProductSitemapEntries(
   }
 
   return data.products
-    .filter((p) => indexedOrgs.has(p.orgSlug) && (productCountByOrg.get(p.orgSlug) ?? 0) > 1)
+    .filter(
+      (p) =>
+        indexedOrgs.has(p.orgSlug) &&
+        (productCountByOrg.get(p.orgSlug) ?? 0) > 1 &&
+        productMeetsIndexBar(p),
+    )
     .map((p) => ({
       url: `${baseUrl}/${p.orgSlug}/${p.slug}`,
       // No stored product updatedAt signal — omit lastmod rather than fake it.
