@@ -29,6 +29,7 @@ import { PlayBadge } from "./play-badge";
 import { useLightboxImage, type LightboxEntry } from "./lightbox";
 import { releaseLinkProps, isExternalReleaseLink } from "@/lib/release-link";
 import { ReleaseLink } from "./release-link";
+import { CopyReleaseLink } from "./copy-release-link";
 
 /** Release context shared by every previewable image in one feed row. */
 type RowMeta = Pick<
@@ -215,7 +216,8 @@ export function ReleaseListItem({
 
   // Default click target: the upstream source URL when the release has one,
   // the on-site /release/{id} page only as fallback (see release-link.ts).
-  // The internal page stays reachable via "Read more →" and the lightbox.
+  // The internal page stays reachable via the lightbox, the "Copy link"
+  // permalink, and as the fallback target when a release has no upstream URL.
   const linkProps = releaseLinkProps(release);
 
   // Heading link shared by the App Store / video / standard row layouts.
@@ -557,12 +559,20 @@ export function ReleaseListItem({
                 </div>
               )}
               {release.id && markdownContent.trim() && (
-                <Link
-                  href={`/release/${release.id}`}
-                  className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
-                >
-                  Read more →
-                </Link>
+                <div className="mt-2 flex items-center gap-3">
+                  {/* Read more goes where the heading goes: upstream when the
+                      release has its own URL, the on-site page only as a
+                      fallback. The permalink is offered as a copy action. */}
+                  {linkProps && (
+                    <ReleaseLink
+                      linkProps={linkProps}
+                      className="text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+                    >
+                      Read more {isExternalReleaseLink(linkProps) ? "↗" : "→"}
+                    </ReleaseLink>
+                  )}
+                  <CopyReleaseLink release={{ ...release, id: release.id }} />
+                </div>
               )}
             </div>
           </>
