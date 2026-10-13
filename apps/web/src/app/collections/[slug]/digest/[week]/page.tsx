@@ -140,6 +140,7 @@ export async function generateMetadata({
         canonical: path,
         // Point at the aggregate digests feed (no single-item Atom).
         types: {
+          "text/markdown": `${path}.md`,
           "application/atom+xml": [
             {
               url: `/collections/${slug}/digest.atom`,

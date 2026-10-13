@@ -54,6 +54,7 @@ export async function generateMetadata({
       alternates: {
         canonical: `/${orgSlug}/overview`,
         types: {
+          "text/markdown": `/${orgSlug}/overview.md`,
           "application/atom+xml": [{ url: `/${orgSlug}.atom`, title: `${org.name} release notes` }],
         },
       },

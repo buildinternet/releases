@@ -42,6 +42,7 @@ export async function generateMetadata({
       alternates: {
         canonical: `/collections/${slug}`,
         types: {
+          "text/markdown": `/collections/${slug}.md`,
           "application/atom+xml": [
             { url: `/collections/${slug}.atom`, title: `${detail.name} release notes` },
           ],
