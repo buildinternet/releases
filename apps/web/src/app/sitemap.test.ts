@@ -7,11 +7,7 @@
 
 import { describe, test, expect } from "bun:test";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
-import {
-  buildProductSitemapEntries,
-  buildOrgSitemapEntries,
-  buildUpdatesSitemapEntries,
-} from "@/lib/sitemap-entries";
+import { buildProductSitemapEntries, buildOrgSitemapEntries } from "@/lib/sitemap-entries";
 import { renderSitemapXml } from "@/lib/sitemap-xml";
 
 const BASE = "https://releases.sh";
@@ -123,67 +119,6 @@ describe("buildProductSitemapEntries — org index bar", () => {
 
   test("a payload without the index fields keeps the org (older API response)", () => {
     expect(urls(payload({ slug: "acme", lastActivity: null }))).toHaveLength(2);
-  });
-});
-
-describe("buildUpdatesSitemapEntries", () => {
-  test("multiple releases on the same day collapse to one /updates/<date> entry", () => {
-    // Regression guard: the naive per-release map used to emit one duplicate
-    // /updates/<date> URL per release (~43 duplicates in the live sitemap).
-    const entries = buildUpdatesSitemapEntries(
-      ["2026-07-01T10:00:00Z", "2026-07-01T14:00:00Z", "2026-07-01T18:00:00Z"],
-      BASE,
-    );
-    expect(entries.map((e) => String(e.url))).toEqual([`${BASE}/updates/2026-07-01`]);
-  });
-
-  test("distinct days each get their own entry, still no duplicates", () => {
-    const entries = buildUpdatesSitemapEntries(
-      ["2026-07-01T10:00:00Z", "2026-07-02T10:00:00Z", "2026-07-01T18:00:00Z"],
-      BASE,
-    );
-    const urls = entries.map((e) => String(e.url));
-    expect(new Set(urls).size).toBe(urls.length);
-    expect(urls.sort()).toEqual([`${BASE}/updates/2026-07-01`, `${BASE}/updates/2026-07-02`]);
-  });
-
-  test("null / malformed publishedAt values are dropped, not sitemapped as bogus dates", () => {
-    const entries = buildUpdatesSitemapEntries([null, undefined, "", "not-a-date"], BASE);
-    expect(entries).toEqual([]);
-  });
-});
-
-describe("sitemap uniqueness (full-entry-list assertion)", () => {
-  test("buildProductSitemapEntries + buildUpdatesSitemapEntries together never emit a duplicate <loc>", () => {
-    // Simulates the same mixed payload the default sitemap() export would
-    // assemble (entity entries + updates entries), asserting the combined
-    // URL list — the shape the acceptance criteria call out — has no dupes.
-    const payload: SitemapPayload = {
-      orgs: [indexedOrg("acme")],
-      products: [
-        { orgSlug: "acme", slug: "widgets" },
-        { orgSlug: "acme", slug: "gadgets" },
-      ],
-      sources: [
-        {
-          id: "src_1",
-          orgSlug: "acme",
-          slug: "widgets-feed",
-          latestDate: "2026-07-01T00:00:00Z",
-          hasChangelog: false,
-          hasHighlights: false,
-        },
-      ],
-      collections: [],
-    };
-    const entityUrls = urls(payload);
-    const updatesUrls = buildUpdatesSitemapEntries(
-      ["2026-07-01T10:00:00Z", "2026-07-01T14:00:00Z"],
-      BASE,
-    ).map((e) => String(e.url));
-
-    const all = [...entityUrls, ...updatesUrls];
-    expect(new Set(all).size).toBe(all.length);
   });
 });
 

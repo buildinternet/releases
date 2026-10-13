@@ -119,8 +119,8 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   new queries; the slug is a request-time string transform.
 - **Sitemap + indexing:** the sitemap is split by page class for per-file GSC
   index-coverage reporting — `sitemap.xml` (static/editorial core: home,
-  docs, categories, `/updates` days), `sitemap-orgs.xml` (orgs, products,
-  sources), `sitemap-collections.xml` (collections + digests), all listed in
+  docs, categories, the `/updates` index; day pages are noindex),
+  `sitemap-orgs.xml` (orgs, overviews, products; source pages are noindex), `sitemap-collections.xml` (collections + digests), all listed in
   robots.txt. Release pages are excluded from every sitemap and
   always render `robots: noindex, follow` — they are stubs of upstream
   content, useful for direct links but not worth crawl budget (#1601
