@@ -29,8 +29,8 @@ export async function generateMetadata({
       description: `Past weekly digests summarizing what shipped across ${detail.name}.`,
       alternates: {
         canonical: path,
-        // Atom only — same as org/collection pages. md/json are export chips.
         types: {
+          "text/markdown": `${path}.md`,
           "application/atom+xml": [{ url: `${path}.atom`, title: `${detail.name} weekly digests` }],
         },
       },
