@@ -32,6 +32,10 @@ We send account-related email (verification, password reset, and sign-in links) 
 
 Requests to the API are logged with basic metadata — IP address, user agent, request path, response status, and timing — for operational and abuse-prevention purposes. We use these logs to diagnose errors, detect abuse, and enforce rate limits. Request logs are retained for up to 30 days. We do not sell them or share them for any independent third-party use; they are processed only by the infrastructure providers that host and route the service (chiefly Cloudflare) for those operational purposes — see [Service providers](#service-providers) below.
 
+### Search queries
+
+Searches made through the site, the API, or the MCP server are logged so we can see what people look for and improve results. Each entry holds the query text (up to 200 characters), the search mode, result counts, timing, the surface it came from, the user agent, and an anonymous session identifier. Entries are not linked to your account. Search logs are kept for 90 days and then deleted.
+
 ### CLI and MCP telemetry
 
 The open-source CLI and the local MCP stdio server send anonymous usage events — command name, version, OS, exit code, duration, and a random UUID — to the public API. Telemetry is documented in full, including an exhaustive list of what is _not_ collected, at [/docs/privacy](/docs/privacy). Telemetry events are retained for 90 days and then deleted. You can opt out at any time.
@@ -46,6 +50,7 @@ Releases Index aggregates publicly available release notes, changelogs, and feed
 - To create and maintain your account, authenticate you, and let you manage API keys.
 - To send account-related email (verification, password reset, and sign-in links).
 - To enforce rate limits and prevent abuse of the API, accounts, and MCP server.
+- To improve search results.
 - To understand aggregate usage patterns for the CLI and MCP.
 - To respond to your questions and takedown requests.
 
@@ -73,6 +78,7 @@ We follow standard security practices for a service of this kind. Traffic is ser
 - Sessions and verification/sign-in tokens: expire automatically and are pruned after they lapse.
 - CLI and MCP telemetry: 90 days, then deleted.
 - API request logs: up to 30 days.
+- Search query logs: 90 days, then deleted.
 - Indexed public content: retained indefinitely unless removed on request.
 
 ## Takedowns and content removal
