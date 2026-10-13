@@ -1,16 +1,11 @@
 import type { MetadataRoute } from "next";
-import { api } from "@/lib/api";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
-import { buildUpdatesSitemapEntries } from "@/lib/sitemap-entries";
-import { UPDATES_ORG_SLUG } from "@/lib/updates-org";
-import { ORG_FEED_PAGE_LIMIT, collectOrgFeed } from "./updates/updates-logic";
 
-// Render on-demand (not during `next build`) so a cold worker / slow D1 can't
-// time out the Vercel export. The API response already carries Cache-Control,
-// so crawlers hitting this route repeatedly still land on a CDN-cached body.
+// Render on-demand (not during `next build`) so the flag-gated docs and status
+// entries reflect the deployed flags; `revalidate` keeps it CDN-cached.
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
@@ -24,7 +19,7 @@ type StaticRoute = {
 
 // The sitemap is split by page class so GSC reports index coverage per
 // submitted file: this one carries the static/editorial core (home, docs,
-// categories, /updates days); `sitemap-orgs.xml` carries the registry surface
+// categories, the /updates index); `sitemap-orgs.xml` carries the registry surface
 // (orgs, products, sources); `sitemap-collections.xml` carries collections +
 // digests. All three are listed in robots.txt.
 //
@@ -34,6 +29,8 @@ type StaticRoute = {
 //   - /live — a real-time feed whose content duplicates the homepage + /updates;
 //     it carries no unique indexable value, and a `changeFrequency: "always"`
 //     entry just burns crawl budget. Still reachable in-nav, just not submitted.
+//   - /updates/<date> — one short entry of our own changelog per day; the
+//     /updates index carries the same entries, so the day pages are noindex.
 //   - /release/* — individual release pages are noindexed stubs of upstream
 //     content (release/[id]/page.tsx) and robots.txt-blocked; the retired
 //     sitemap-releases.xml is gone. Crawl budget goes to
@@ -43,26 +40,6 @@ const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/updates", changeFrequency: "daily", priority: 0.7 },
   { path: "/categories", changeFrequency: "weekly", priority: 0.5 },
 ];
-
-// The self-changelog org (see the /updates page). Per-day rollup permalinks
-// live at /updates/<date>; enumerate them so each entry is independently
-// indexable. Kept to its own guarded fetch so a failure degrades gracefully.
-
-async function updatesEntries(): Promise<MetadataRoute.Sitemap> {
-  try {
-    // Walk every page — the feed caps at 100 rows, and older days would
-    // otherwise drop out of the sitemap as the changelog grows.
-    const releases = await collectOrgFeed((cursor) =>
-      api.orgReleases(UPDATES_ORG_SLUG, { limit: ORG_FEED_PAGE_LIMIT, cursor }),
-    );
-    return buildUpdatesSitemapEntries(
-      releases.map((r) => r.publishedAt),
-      BASE_URL,
-    );
-  } catch {
-    return [];
-  }
-}
 
 const STATUS_ROUTES: StaticRoute[] = [
   { path: "/admin/status", changeFrequency: "daily", priority: 0.4 },
@@ -77,7 +54,7 @@ function docsRoutes(): StaticRoute[] {
   }));
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes: StaticRoute[] = [
     ...ALWAYS_PUBLIC,
     ...docsRoutes(),
@@ -106,5 +83,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // considered for this PR and deferred (candidate rule: only tags with
   // >=5 releases). Revisit as its own decision.
 
-  return [...staticEntries, ...categoryEntries, ...(await updatesEntries())];
+  return [...staticEntries, ...categoryEntries];
 }

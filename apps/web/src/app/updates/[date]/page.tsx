@@ -61,6 +61,9 @@ export async function generateMetadata({
       // The root layout's title template appends the site name.
       title: `${heading} · What's New`,
       description: `What shipped on Release Notes Index on ${release.title}.`,
+      // One short changelog entry per day; the /updates index carries the same
+      // entries, so the day page is a permalink, not a search landing page.
+      robots: { index: false, follow: true },
       alternates: { canonical: `/updates/${date}` },
       openGraph: {
         title: `${heading} · Release Notes Index`,

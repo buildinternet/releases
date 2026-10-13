@@ -2,32 +2,6 @@ import type { MetadataRoute } from "next";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
 import { orgMeetsIndexBar } from "./index-policy";
 
-/**
- * Pure construction of the `/updates/<date>` sitemap entries from a list of
- * release `publishedAt` values. One entry per DISTINCT date, not per release
- * — the naive per-release map used to emit one duplicate `/updates/<date>`
- * URL for every release published that day (~43 duplicates in the live
- * sitemap for one moderately active day). Dedupe via a `Set` before mapping.
- * `publishedAtValues` may contain nulls/malformed strings; anything that
- * doesn't match `YYYY-MM-DD` after slicing is dropped.
- */
-export function buildUpdatesSitemapEntries(
-  publishedAtValues: (string | null | undefined)[],
-  baseUrl: string,
-): MetadataRoute.Sitemap {
-  const dates = new Set(
-    publishedAtValues
-      .map((v) => (v ?? "").slice(0, 10))
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
-  );
-  return [...dates].map((d) => ({
-    url: `${baseUrl}/updates/${d}`,
-    lastModified: new Date(`${d}T12:00:00Z`),
-    changeFrequency: "monthly" as const,
-    priority: 0.5,
-  }));
-}
-
 type SitemapOrg = SitemapPayload["orgs"][number];
 
 /**
