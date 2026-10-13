@@ -35,7 +35,21 @@ export const SitemapSourceSchema = z.object({
  * excluded.
  */
 export const SitemapPayloadSchema = z.object({
-  orgs: z.array(z.object({ slug: z.string(), lastActivity: z.string().nullable() })),
+  orgs: z.array(
+    z.object({
+      slug: z.string(),
+      lastActivity: z.string().nullable(),
+      /**
+       * Total releases across the org's sources — the same count org detail
+       * reports as `releaseCount`. With `hasOverview`, drives the web's index
+       * bar for the org and its products/sources. `.optional()` for backwards
+       * compatibility with older cached responses.
+       */
+      releaseCount: z.number().int().optional(),
+      /** Whether the org has a generated overview page. */
+      hasOverview: z.boolean().optional(),
+    }),
+  ),
   sources: z.array(SitemapSourceSchema),
   products: z.array(z.object({ orgSlug: z.string(), slug: z.string() })),
   collections: z.array(z.object({ slug: z.string(), updatedAt: z.string() })),

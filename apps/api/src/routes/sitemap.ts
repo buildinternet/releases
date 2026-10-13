@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { eq, inArray, max, and, sql } from "drizzle-orm";
+import { eq, inArray, max, and, sql, count } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   organizationsPublic,
+  sources,
   sourcesActive,
   productsActive,
   releases,
@@ -12,6 +13,7 @@ import {
   sourceChangelogFiles,
   collections,
   collectionWeeklyDigests,
+  knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import { SitemapPayloadSchema } from "@buildinternet/releases-api-types";
 import { PRODUCT_HAS_VISIBLE_SOURCE } from "@releases/queries/orgs";
@@ -26,7 +28,7 @@ sitemapRoutes.get(
     tags: ["Sitemap"],
     summary: "Bulk URL payload for the web sitemap generator",
     description:
-      "Lists every visible org / source / product / collection slug paired with the timestamp the web uses to drive `<lastmod>`. Joined through `*_active` views, so soft-deleted and hidden (`is_hidden = 1`) rows are excluded; stub-tier orgs (#1947) are excluded too (their pages are `noindex`). Products are listed only when they have at least one visible source — the same definition as org detail (`PRODUCT_HAS_VISIBLE_SOURCE`) — so a product the org page hides never appears here. Sources also carry `hasChangelog` and `hasHighlights` flags so the web only emits `/{org}/{src}/changelog` and `/{org}/{src}/highlights` URLs when the corresponding routes resolve (#875).\n\nOrg id lookups are chunked to 90 at a time to stay under D1's 100-bound-parameter cap on prepared statements.",
+      "Lists every visible org / source / product / collection slug paired with the timestamp the web uses to drive `<lastmod>`. Joined through `*_active` views, so soft-deleted and hidden (`is_hidden = 1`) rows are excluded; stub-tier orgs (#1947) are excluded too (their pages are `noindex`). Products are listed only when they have at least one visible source — the same definition as org detail (`PRODUCT_HAS_VISIBLE_SOURCE`) — so a product the org page hides never appears here. Orgs carry `releaseCount` and `hasOverview`, which the web uses to decide which org, product, and source pages are indexable. Sources also carry `hasChangelog` and `hasHighlights` flags (#875).\n\nOrg id lookups are chunked to 90 at a time to stay under D1's 100-bound-parameter cap on prepared statements.",
     responses: {
       200: {
         description: "Bulk URL payload",
@@ -98,6 +100,8 @@ sitemapRoutes.get(
       latestReleaseRowsByChunk,
       summarySourceIdsByChunk,
       changelogSourceIdsByChunk,
+      releaseCountRowsByChunk,
+      overviewOrgIdsByChunk,
     ] = await Promise.all([
       Promise.all(
         orgIdChunks.map((chunk) =>
@@ -156,6 +160,27 @@ sitemapRoutes.get(
             .where(inArray(sourcesActive.orgId, chunk)),
         ),
       ),
+      // Per-org release total, counted the same way org detail counts its
+      // `releaseCount` (every source, suppressed included) so the web's index
+      // bar agrees between the page and the sitemap.
+      Promise.all(
+        orgIdChunks.map((chunk) =>
+          db
+            .select({ orgId: sources.orgId, n: count() })
+            .from(releases)
+            .innerJoin(sources, eq(releases.sourceId, sources.id))
+            .where(inArray(sources.orgId, chunk))
+            .groupBy(sources.orgId),
+        ),
+      ),
+      Promise.all(
+        orgIdChunks.map((chunk) =>
+          db
+            .selectDistinct({ orgId: knowledgePages.orgId })
+            .from(knowledgePages)
+            .where(and(eq(knowledgePages.scope, "org"), inArray(knowledgePages.orgId, chunk))),
+        ),
+      ),
     ]);
 
     const sourceRows = sourceRowsByChunk.flat();
@@ -171,9 +196,17 @@ sitemapRoutes.get(
 
     const orgIdToSlug = new Map(orgRows.map((o) => [o.id, o.slug]));
 
+    const releaseCountByOrg = new Map<string, number>();
+    for (const row of releaseCountRowsByChunk.flat()) {
+      if (row.orgId) releaseCountByOrg.set(row.orgId, row.n);
+    }
+    const orgsWithOverview = new Set(overviewOrgIdsByChunk.flat().map((r) => r.orgId));
+
     const orgs = orgRows.map((o) => ({
       slug: o.slug,
       lastActivity: o.lastActivity ?? null,
+      releaseCount: releaseCountByOrg.get(o.id) ?? 0,
+      hasOverview: orgsWithOverview.has(o.id),
     }));
 
     // Every row here was fetched via inArray(orgId, orgIds) so orgIdToSlug.get

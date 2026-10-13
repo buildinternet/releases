@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
+import { orgMeetsIndexBar } from "./index-policy";
 
 /**
  * Pure construction of the `/updates/<date>` sitemap entries from a list of
@@ -27,18 +28,32 @@ export function buildUpdatesSitemapEntries(
   }));
 }
 
+type SitemapOrg = SitemapPayload["orgs"][number];
+
+/**
+ * Whether an org (and so its products and sources) belongs in the sitemap.
+ * Same bar the pages use for `noindex` (`orgMeetsIndexBar`). A payload from an
+ * API that predates the `releaseCount` / `hasOverview` fields keeps every org,
+ * so a deploy-order gap can't empty the sitemap.
+ */
+export function orgInSitemap(org: SitemapOrg): boolean {
+  if (org.releaseCount === undefined && org.hasOverview === undefined) return true;
+  return orgMeetsIndexBar(org);
+}
+
 /**
  * Pure construction of the org sitemap entries from a `/v1/sitemap` payload.
- * Each org emits the bare URL (Releases feed — the default landing) plus
- * Overview and Sources tabs. `/:org/releases` 308s to the bare URL and is
- * deliberately omitted so the sitemap only lists canonical paths. Only a real
- * `lastActivity` drives lastmod; no fabricated `now` fallback.
+ * Each org that clears the index bar emits the bare URL (Releases feed — the
+ * default landing) plus the Overview tab. The Sources tab is `noindex` and
+ * omitted, as is `/:org/releases` (a 308 to the bare URL), so the sitemap only
+ * lists canonical, indexable paths. Only a real `lastActivity` drives lastmod;
+ * no fabricated `now` fallback.
  */
 export function buildOrgSitemapEntries(
   orgs: SitemapPayload["orgs"],
   baseUrl: string,
 ): MetadataRoute.Sitemap {
-  return orgs.flatMap((org) => {
+  return orgs.filter(orgInSitemap).flatMap((org) => {
     const lastModified = org.lastActivity ? new Date(org.lastActivity) : undefined;
     return [
       {
@@ -49,12 +64,6 @@ export function buildOrgSitemapEntries(
       },
       {
         url: `${baseUrl}/${org.slug}/overview`,
-        lastModified,
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      },
-      {
-        url: `${baseUrl}/${org.slug}/sources`,
         lastModified,
         changeFrequency: "weekly" as const,
         priority: 0.6,
@@ -74,18 +83,23 @@ export function buildOrgSitemapEntries(
  * an org with fewer than two products has no product URLs (they 308 to
  * `/{org}`, see `collapsesToOrg`). `data.products` holds visible products only,
  * the same set the page counts, so the sitemap and the redirect agree.
+ *
+ * Products and sources are listed only when their org clears the index bar
+ * (`orgInSitemap`). A source's `/highlights` and `/changelog` views are
+ * `noindex` and never listed.
  */
 export function buildEntitySitemapEntries(
   data: SitemapPayload,
   baseUrl: string,
 ): MetadataRoute.Sitemap {
+  const indexedOrgs = new Set(data.orgs.filter(orgInSitemap).map((o) => o.slug));
   const productCountByOrg = new Map<string, number>();
   for (const p of data.products) {
     productCountByOrg.set(p.orgSlug, (productCountByOrg.get(p.orgSlug) ?? 0) + 1);
   }
 
   const productEntries: MetadataRoute.Sitemap = data.products
-    .filter((p) => (productCountByOrg.get(p.orgSlug) ?? 0) > 1)
+    .filter((p) => indexedOrgs.has(p.orgSlug) && (productCountByOrg.get(p.orgSlug) ?? 0) > 1)
     .map((p) => ({
       url: `${baseUrl}/${p.orgSlug}/${p.slug}`,
       // No stored product updatedAt signal — omit lastmod rather than fake it.
@@ -93,31 +107,15 @@ export function buildEntitySitemapEntries(
       priority: 0.7,
     }));
 
-  const sourceEntries: MetadataRoute.Sitemap = data.sources.flatMap((s) => {
-    // Only a real latestDate drives lastmod; no fabricated `now` fallback.
-    const lastModified = s.latestDate ? new Date(s.latestDate) : undefined;
-    const base = `${baseUrl}/${s.orgSlug}/${s.slug}`;
-    const entries: MetadataRoute.Sitemap = [
-      { url: base, lastModified, changeFrequency: "daily" as const, priority: 0.7 },
-    ];
-    if (s.hasHighlights) {
-      entries.push({
-        url: `${base}/highlights`,
-        lastModified,
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      });
-    }
-    if (s.hasChangelog) {
-      entries.push({
-        url: `${base}/changelog`,
-        lastModified,
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      });
-    }
-    return entries;
-  });
+  const sourceEntries: MetadataRoute.Sitemap = data.sources
+    .filter((s) => indexedOrgs.has(s.orgSlug))
+    .map((s) => ({
+      url: `${baseUrl}/${s.orgSlug}/${s.slug}`,
+      // Only a real latestDate drives lastmod; no fabricated `now` fallback.
+      lastModified: s.latestDate ? new Date(s.latestDate) : undefined,
+      changeFrequency: "daily" as const,
+      priority: 0.7,
+    }));
 
   return [...productEntries, ...sourceEntries];
 }

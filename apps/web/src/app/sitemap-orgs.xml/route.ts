@@ -12,7 +12,7 @@ export const revalidate = 3600;
 const BASE_URL = getStaticBaseUrl();
 
 /**
- * Registry-surface sitemap: org pages (+ overview/sources tabs), products,
+ * Registry-surface sitemap: org pages (+ overview tab), products,
  * and sources. Split from the main `sitemap.xml` purely for GSC
  * observability — each submitted sitemap gets its own page-indexing
  * breakdown, so "are the org pages indexing?" is a number rather than a

@@ -16,6 +16,11 @@ import { renderSitemapXml } from "@/lib/sitemap-xml";
 
 const BASE = "https://releases.sh";
 
+/** An org that clears the index bar (overview + enough releases). */
+function indexedOrg(slug: string): SitemapPayload["orgs"][number] {
+  return { slug, lastActivity: null, releaseCount: 50, hasOverview: true };
+}
+
 function urls(payload: SitemapPayload): string[] {
   return buildEntitySitemapEntries(payload, BASE).map((e) => String(e.url));
 }
@@ -23,7 +28,7 @@ function urls(payload: SitemapPayload): string[] {
 describe("buildEntitySitemapEntries", () => {
   test("product in a multi-product org emits a bare /[org]/[slug] URL (no /product/ segment)", () => {
     const payload: SitemapPayload = {
-      orgs: [],
+      orgs: [indexedOrg("vercel")],
       products: [
         { orgSlug: "vercel", slug: "turborepo" },
         { orgSlug: "vercel", slug: "next-js" },
@@ -45,7 +50,7 @@ describe("buildEntitySitemapEntries", () => {
     // would put a redirecting URL in the sitemap. The /[org] entry (emitted
     // by the org-entry builder in sitemap.ts) already covers the content.
     const payload: SitemapPayload = {
-      orgs: [],
+      orgs: [indexedOrg("vercel")],
       products: [{ orgSlug: "vercel", slug: "turborepo" }],
       sources: [],
       collections: [],
@@ -57,9 +62,9 @@ describe("buildEntitySitemapEntries", () => {
     expect(result).toEqual([]);
   });
 
-  test("source with hasChangelog/hasHighlights → bare URL + both sub-tabs", () => {
+  test("source with hasChangelog/hasHighlights → bare URL only (sub-views are noindex)", () => {
     const payload: SitemapPayload = {
-      orgs: [],
+      orgs: [indexedOrg("orgX")],
       products: [
         { orgSlug: "orgX", slug: "some-product" },
         { orgSlug: "orgX", slug: "other-product" },
@@ -79,15 +84,15 @@ describe("buildEntitySitemapEntries", () => {
 
     const result = urls(payload);
     expect(result).toContain(`${BASE}/orgX/sourceY`);
-    expect(result).toContain(`${BASE}/orgX/sourceY/highlights`);
-    expect(result).toContain(`${BASE}/orgX/sourceY/changelog`);
+    expect(result).not.toContain(`${BASE}/orgX/sourceY/highlights`);
+    expect(result).not.toContain(`${BASE}/orgX/sourceY/changelog`);
     // Never routed to /sources/:id since it isn't shadowed.
     expect(result.some((u) => u.startsWith(`${BASE}/sources/`))).toBe(false);
   });
 
   test("orphan source (no matching product) → bare URL", () => {
     const payload: SitemapPayload = {
-      orgs: [],
+      orgs: [indexedOrg("solo")],
       products: [],
       sources: [
         {
@@ -110,7 +115,7 @@ describe("buildEntitySitemapEntries", () => {
 describe("buildEntitySitemapEntries — one URL per source", () => {
   test("a product member is listed at its bare URL, never /sources/:id", () => {
     const result = urls({
-      orgs: [],
+      orgs: [indexedOrg("openai")],
       products: [
         { orgSlug: "openai", slug: "chatgpt" },
         { orgSlug: "openai", slug: "codex" },
@@ -127,8 +132,46 @@ describe("buildEntitySitemapEntries — one URL per source", () => {
       collections: [],
     });
     expect(result).toContain(`${BASE}/openai/chatgpt-ios`);
-    expect(result).toContain(`${BASE}/openai/chatgpt-ios/changelog`);
     expect(result.some((u) => u.includes("/sources/"))).toBe(false);
+  });
+});
+
+describe("buildEntitySitemapEntries — org index bar", () => {
+  const payload = (org: SitemapPayload["orgs"][number]): SitemapPayload => ({
+    orgs: [org],
+    products: [
+      { orgSlug: org.slug, slug: "app" },
+      { orgSlug: org.slug, slug: "api" },
+    ],
+    sources: [{ id: "src_1", orgSlug: org.slug, slug: "app-releases", latestDate: null }],
+    collections: [],
+  });
+
+  test("an org with an overview and enough releases lists its products and sources", () => {
+    expect(urls(payload(indexedOrg("acme"))).sort()).toEqual([
+      `${BASE}/acme/api`,
+      `${BASE}/acme/app`,
+      `${BASE}/acme/app-releases`,
+    ]);
+  });
+
+  test("an org without an overview lists nothing", () => {
+    const org = { slug: "acme", lastActivity: null, releaseCount: 500, hasOverview: false };
+    expect(urls(payload(org))).toEqual([]);
+  });
+
+  test("an org below the release minimum lists nothing", () => {
+    const org = { slug: "acme", lastActivity: null, releaseCount: 9, hasOverview: true };
+    expect(urls(payload(org))).toEqual([]);
+  });
+
+  test("the release minimum is inclusive", () => {
+    const org = { slug: "acme", lastActivity: null, releaseCount: 10, hasOverview: true };
+    expect(urls(payload(org))).toHaveLength(3);
+  });
+
+  test("a payload without the index fields keeps the org (older API response)", () => {
+    expect(urls(payload({ slug: "acme", lastActivity: null }))).toHaveLength(3);
   });
 });
 
@@ -165,7 +208,7 @@ describe("sitemap uniqueness (full-entry-list assertion)", () => {
     // assemble (entity entries + updates entries), asserting the combined
     // URL list — the shape the acceptance criteria call out — has no dupes.
     const payload: SitemapPayload = {
-      orgs: [],
+      orgs: [indexedOrg("acme")],
       products: [{ orgSlug: "acme", slug: "widgets" }],
       sources: [
         {
@@ -191,25 +234,32 @@ describe("sitemap uniqueness (full-entry-list assertion)", () => {
 });
 
 describe("buildOrgSitemapEntries", () => {
-  test("each org emits bare URL + overview + sources tabs, lastmod only from lastActivity", () => {
+  test("each indexed org emits bare URL + overview, lastmod only from lastActivity", () => {
     const entries = buildOrgSitemapEntries(
-      [
-        { slug: "acme", lastActivity: "2026-08-01T00:00:00Z" },
-        { slug: "quiet-co", lastActivity: null },
-      ] as SitemapPayload["orgs"],
+      [{ ...indexedOrg("acme"), lastActivity: "2026-08-01T00:00:00Z" }, indexedOrg("quiet-co")],
       BASE,
     );
     expect(entries.map((e) => String(e.url))).toEqual([
       `${BASE}/acme`,
       `${BASE}/acme/overview`,
-      `${BASE}/acme/sources`,
       `${BASE}/quiet-co`,
       `${BASE}/quiet-co/overview`,
-      `${BASE}/quiet-co/sources`,
     ]);
     expect(entries[0]?.lastModified).toEqual(new Date("2026-08-01T00:00:00Z"));
     // No fabricated `now` fallback for orgs without activity.
-    expect(entries[3]?.lastModified).toBeUndefined();
+    expect(entries[2]?.lastModified).toBeUndefined();
+  });
+
+  test("orgs below the index bar are omitted; the sources tab is never listed", () => {
+    const entries = buildOrgSitemapEntries(
+      [
+        indexedOrg("acme"),
+        { slug: "thin", lastActivity: null, releaseCount: 3, hasOverview: true },
+        { slug: "no-overview", lastActivity: null, releaseCount: 300, hasOverview: false },
+      ],
+      BASE,
+    );
+    expect(entries.map((e) => String(e.url))).toEqual([`${BASE}/acme`, `${BASE}/acme/overview`]);
   });
 });
 

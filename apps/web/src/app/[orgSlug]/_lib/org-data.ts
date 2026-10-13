@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { orgMeetsIndexBar } from "@/lib/index-policy";
 import type {
   CollectionListItem,
   OrgDetail,
@@ -209,6 +210,22 @@ export const getOrgCollections = cache(async (slug: string): Promise<CollectionL
  * Uses the thin REST `GET /v1/orgs/:slug/overview` — not the full orgDetail
  * shell (#2047). Only used by the org overview page and `/updates`.
  */
+const fetchOrgOverview = cache((slug: string) => api.orgOverview(slug));
+
 export const getOrgOverview = cache(async (slug: string): Promise<OverviewPageItem | null> => {
-  return api.orgOverview(slug).catch(() => null);
+  return fetchOrgOverview(slug).catch(() => null);
 });
+
+/**
+ * True when the org is known to fall below the index bar (`orgMeetsIndexBar`).
+ * The overview route answers `null` for an org without one; a failed lookup
+ * leaves the page indexable rather than caching a guess for a day.
+ */
+export async function isOrgBelowIndexBar(org: OrgPageData): Promise<boolean> {
+  const hasOverview = await fetchOrgOverview(org.slug).then(
+    (overview) => overview != null,
+    () => null,
+  );
+  if (hasOverview === null) return false;
+  return !orgMeetsIndexBar({ releaseCount: org.releaseCount, hasOverview });
+}

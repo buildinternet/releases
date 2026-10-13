@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { currentPeriod } from "@/lib/schema-org";
-import { collapsesToOrg, getOrg } from "../_lib/org-data";
+import { collapsesToOrg, getOrg, isOrgBelowIndexBar } from "../_lib/org-data";
 import { getResolved } from "./_lib/resolve";
 import { getSource } from "./_lib/source-data";
 import { getProductPage } from "./_lib/product-data";
@@ -28,7 +28,10 @@ export async function generateMetadata({
       getResolved(orgSlug, slug),
       getOrg(orgSlug).catch(() => null),
     ]);
-    const orgIsHidden = org?.isHidden === true || org?.discovery === "on_demand";
+    // Products and sources follow their org's index bar. A failed org lookup
+    // leaves the page indexable rather than guessing.
+    const orgBelowBar = org != null && (await isOrgBelowIndexBar(org));
+    const orgNoIndex = org?.isHidden === true || org?.discovery === "on_demand" || orgBelowBar;
     if (resolved.kind === "product") {
       const product = resolved.product;
       // Product canonical is the BARE form now (links.ts is flipped). The
@@ -39,7 +42,7 @@ export async function generateMetadata({
         description:
           product.description ??
           `Release notes, changelog, and updates for ${product.name} — refreshed ${currentPeriod()}.`,
-        ...(orgIsHidden ? { robots: { index: false, follow: true } } : {}),
+        ...(orgNoIndex ? { robots: { index: false, follow: true } } : {}),
         openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
         alternates: {
           canonical: `/${orgSlug}/${slug}`,
@@ -56,7 +59,7 @@ export async function generateMetadata({
     }
     const source = resolved.source;
     const orgName = source.org?.name ?? orgSlug;
-    const shouldNoIndex = source.isHidden || source.discovery === "on_demand" || orgIsHidden;
+    const shouldNoIndex = source.isHidden || source.discovery === "on_demand" || orgNoIndex;
     const canonical = `/${orgSlug}/${slug}`;
     return {
       title: `${source.name} — ${orgName}`,
