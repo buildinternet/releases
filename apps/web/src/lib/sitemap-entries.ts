@@ -17,11 +17,10 @@ export function orgInSitemap(org: SitemapOrg): boolean {
 
 /**
  * Pure construction of the org sitemap entries from a `/v1/sitemap` payload.
- * Each org that clears the index bar emits the bare URL (Releases feed — the
- * default landing) plus the Overview tab. The Sources tab is `noindex` and
- * omitted, as is `/:org/releases` (a 308 to the bare URL), so the sitemap only
- * lists canonical, indexable paths. Only a real `lastActivity` drives lastmod;
- * no fabricated `now` fallback.
+ * Each org that clears the index bar emits its bare URL, which leads with the
+ * org overview. The Overview and Sources tabs are `noindex` and omitted, as is
+ * `/:org/releases` (a 308 to the bare URL). Only a real `lastActivity` drives
+ * lastmod; no fabricated `now` fallback.
  */
 export function buildOrgSitemapEntries(
   orgs: SitemapPayload["orgs"],
@@ -35,12 +34,6 @@ export function buildOrgSitemapEntries(
         lastModified,
         changeFrequency: "daily" as const,
         priority: 0.8,
-      },
-      {
-        url: `${baseUrl}/${org.slug}/overview`,
-        lastModified,
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
       },
     ];
   });

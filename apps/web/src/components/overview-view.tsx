@@ -18,7 +18,15 @@ interface OverviewViewProps {
    * styling. The markdown/citation pipeline is identical across both.
    */
   variant?: "default" | "org";
+  /**
+   * Short card for a page where the overview leads into other content (the org
+   * landing page): clamps the body behind "Show more" from the first render and
+   * leaves the Sources footer to the full overview page.
+   */
+  compact?: boolean;
 }
+
+const COMPACT_CLAMP_HEIGHT_PX = 220;
 
 const CHROME = {
   default: {
@@ -51,7 +59,7 @@ const proseClasses =
  * body as `children`, and {@link OverviewSourceChips} (the collapsible Sources
  * footer) is rendered in place of the GFM footnotes section.
  */
-export function OverviewView({ page, variant = "default" }: OverviewViewProps) {
+export function OverviewView({ page, variant = "default", compact = false }: OverviewViewProps) {
   const chrome = CHROME[variant];
 
   // Deterministic per-entity id: unique across the (at most one) org and one
@@ -88,6 +96,7 @@ export function OverviewView({ page, variant = "default" }: OverviewViewProps) {
           fadeClass={chrome.fade}
           disclaimerClass={chrome.disclaimer}
           disclaimer={AI_SUMMARY_DISCLAIMER}
+          {...(compact ? { clampHeightPx: COMPACT_CLAMP_HEIGHT_PX } : {})}
         >
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
@@ -97,7 +106,7 @@ export function OverviewView({ page, variant = "default" }: OverviewViewProps) {
             {renderedContent}
           </ReactMarkdown>
         </OverviewClamp>
-        <OverviewSourceChips citations={page.citations} />
+        {!compact && <OverviewSourceChips citations={page.citations} />}
       </div>
     </div>
   );

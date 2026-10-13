@@ -18,7 +18,7 @@ import {
 } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
 import { enableOnDemandIsr } from "@/lib/static-params";
-import { getOrg, isOrgBelowIndexBar, getOrgOverview } from "../../_lib/org-data";
+import { getOrg, getOrgOverview } from "../../_lib/org-data";
 import { getOrgReleases } from "../../_lib/org-releases-data";
 
 // On-demand ISR: render once per org on first request, then serve from cache
@@ -37,19 +37,14 @@ export async function generateMetadata({
   try {
     const org = await getOrg(orgSlug);
     const lastModified = lastModifiedAt(org);
-    // A stub is a thin, near-duplicate page (no releases yet) — noindex AND
-    // nofollow it (#1947), stronger than the index:false/follow:true posture
-    // used for on_demand / hidden orgs.
+    // A stub is a thin, near-duplicate page (no releases yet) — nofollow too (#1947).
     const isStub = org.status === "stub";
-    const shouldNoIndex =
-      isStub ||
-      org.discovery === "on_demand" ||
-      org.isHidden === true ||
-      (await isOrgBelowIndexBar(org));
     return {
       title: `${org.name} Overview · ${currentPeriod()}`,
       description: `AI overview, release activity, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
-      ...(shouldNoIndex ? { robots: { index: false, follow: !isStub } } : {}),
+      // The org landing page (`/{org}`) leads with this same overview, so it is
+      // the page offered for indexing; this tab is the full-width view of it.
+      robots: { index: false, follow: !isStub },
       openGraph: {
         type: "website",
         url: `/${orgSlug}/overview`,

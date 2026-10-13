@@ -27,6 +27,7 @@ export function OverviewClamp({
   fadeClass,
   disclaimerClass,
   disclaimer,
+  clampHeightPx = CLAMP_HEIGHT_PX,
 }: {
   children: ReactNode;
   contentId: string;
@@ -34,22 +35,28 @@ export function OverviewClamp({
   fadeClass: string;
   disclaimerClass: string;
   disclaimer: string;
+  /**
+   * Height to clamp at. A compact clamp (below the default) starts clamped in
+   * the server render so the page doesn't jump shorter after hydration; the
+   * full text is still in the HTML either way.
+   */
+  clampHeightPx?: number;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [overflows, setOverflows] = useState(false);
+  const [overflows, setOverflows] = useState(clampHeightPx < CLAMP_HEIGHT_PX);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
     const check = () => {
-      setOverflows(el.scrollHeight > CLAMP_HEIGHT_PX + CLAMP_BUFFER_PX);
+      setOverflows(el.scrollHeight > clampHeightPx + CLAMP_BUFFER_PX);
     };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [clampHeightPx]);
 
   const clamped = overflows && !expanded;
 
@@ -60,7 +67,7 @@ export function OverviewClamp({
           ref={contentRef}
           id={contentId}
           className={proseClasses}
-          style={clamped ? { maxHeight: `${CLAMP_HEIGHT_PX}px`, overflow: "hidden" } : undefined}
+          style={clamped ? { maxHeight: `${clampHeightPx}px`, overflow: "hidden" } : undefined}
         >
           {children}
         </div>
