@@ -9,13 +9,11 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: ["/", "/.well-known/http-message-signatures-directory"],
       // /release/ is blocked outright: the pages are noindexed stubs of
-      // upstream content (see release/[id]/page.tsx) and GSC (2026-08-12)
-      // showed Google had already deindexed virtually all of them (~11.4K
-      // crawled-not-indexed vs 373 indexed pages SITEWIDE) while still
-      // burning crawl budget re-fetching them. The usual "stay crawlable so
-      // the noindex is seen" sequencing is moot when there's nothing left to
-      // drain; the meta noindex stays as belt-and-suspenders for any
-      // non-robots.txt-respecting crawler.
+      // upstream content (see release/[id]/page.tsx), and blocking them keeps
+      // crawlers from spending requests re-fetching tens of thousands of
+      // pages that will never be indexed. Feed surfaces link release titles
+      // upstream rather than here. The meta noindex stays as
+      // belt-and-suspenders for any crawler that ignores robots.txt.
       disallow: ["/api/", "/.well-known/", "/release/"],
     },
     // Curated sitemaps of durable landing pages, split by page class so GSC

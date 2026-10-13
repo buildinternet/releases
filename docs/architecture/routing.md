@@ -130,10 +130,9 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   the `SitemapRelease`/`SitemapReleasesPayload` schemas stay in
   `@buildinternet/releases-api-types`, `@deprecated`, through the
   one-minor deprecation lane). `robots.txt` also carries
-  `Disallow: /release/` — GSC showed Google had already deindexed the
-  release pages wholesale while still recrawling them, so there was no
-  indexed cohort left that needed to see the noindex before blocking
-  crawl outright. Friendly URLs propagate via shared links, OG tags, and
+  `Disallow: /release/`, so crawlers don't spend requests on pages that
+  will never be indexed; the meta noindex stays for crawlers that ignore
+  robots.txt. Friendly URLs propagate via shared links, OG tags, and
   crawls of org/feed pages.
 - **Default feed links go to the source.** Web feed surfaces (org/product/
   source feeds, homepage ticker, `/updates`, `/live`, `/following`,
