@@ -1,12 +1,12 @@
 ---
 title: "Privacy Policy"
 description: "How Release Notes Index handles data collected from the web, API, accounts, CLI, and MCP server."
-effectiveDate: "June 5, 2026"
+effectiveDate: "October 13, 2026"
 ---
 
 # Privacy Policy
 
-_Effective June 5, 2026_
+_Effective October 13, 2026_
 
 This page explains what data Release Notes Index collects when you use the web app, the public API, a Releases Index account, the [releases CLI](https://github.com/buildinternet/releases/tree/main/apps/cli), or the MCP server, and who we share it with. The project is run by [Build Internet](https://buildinternet.com). The service is hosted at [releases.sh](https://releases.sh).
 
@@ -32,6 +32,10 @@ We send account-related email (verification, password reset, and sign-in links) 
 
 Requests to the API are logged with basic metadata — IP address, user agent, request path, response status, and timing — for operational and abuse-prevention purposes. We use these logs to diagnose errors, detect abuse, and enforce rate limits. Request logs are retained for up to 30 days. We do not sell them or share them for any independent third-party use; they are processed only by the infrastructure providers that host and route the service (chiefly Cloudflare) for those operational purposes — see [Service providers](#service-providers) below.
 
+### Search queries
+
+Searches made through the site, the API, or the MCP server are logged so we can see what people look for and improve results. Each entry holds the query text (up to 200 characters), the search mode, result counts, timing, the surface it came from, the user agent, and an anonymous session identifier. Entries are not linked to your account. Search logs are kept for 90 days and then deleted.
+
 ### CLI and MCP telemetry
 
 The open-source CLI and the local MCP stdio server send anonymous usage events — command name, version, OS, exit code, duration, and a random UUID — to the public API. Telemetry is documented in full, including an exhaustive list of what is _not_ collected, at [/docs/privacy](/docs/privacy). Telemetry events are retained for 90 days and then deleted. You can opt out at any time.
@@ -46,6 +50,7 @@ Releases Index aggregates publicly available release notes, changelogs, and feed
 - To create and maintain your account, authenticate you, and let you manage API keys.
 - To send account-related email (verification, password reset, and sign-in links).
 - To enforce rate limits and prevent abuse of the API, accounts, and MCP server.
+- To improve search results.
 - To understand aggregate usage patterns for the CLI and MCP.
 - To respond to your questions and takedown requests.
 
@@ -58,7 +63,8 @@ We use a small number of service providers to host and operate Releases Index. T
 - **Cloudflare** — hosts the API and supporting infrastructure, stores the database, and sends account-related email.
 - **Vercel** — hosts the web frontend.
 - **Better Auth Infrastructure** — hosted administration tooling for account management. Your account data is stored in our database; this service can access account and session metadata for operational support.
-- **Anthropic** — provides the AI models our indexing pipeline uses to parse and summarize public changelogs. These models receive only the public content we are indexing, never your account data, queries, or other personal data.
+- **OpenRouter and Anthropic** — provide the AI models our indexing pipeline uses to parse and summarize public changelogs. Most model requests go through OpenRouter; some go to Anthropic directly. These models receive only the public content we are indexing, never your account data. If you create an interest alert, its text is sent to a model through OpenRouter to match it against new releases.
+- **Voyage AI** — turns search queries into embeddings for semantic search. It receives the query text only, with no account data.
 
 If you sign in with a third-party provider (where offered), that provider also processes your sign-in according to its own privacy policy.
 
@@ -72,6 +78,7 @@ We follow standard security practices for a service of this kind. Traffic is ser
 - Sessions and verification/sign-in tokens: expire automatically and are pruned after they lapse.
 - CLI and MCP telemetry: 90 days, then deleted.
 - API request logs: up to 30 days.
+- Search query logs: 90 days, then deleted.
 - Indexed public content: retained indefinitely unless removed on request.
 
 ## Takedowns and content removal

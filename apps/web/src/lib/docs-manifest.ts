@@ -50,6 +50,8 @@ const ENTRIES: readonly Seed[] = [
   { slug: "api/webhooks", section: "API", label: "Webhooks" },
   { slug: "api/mcp", section: "API", label: "MCP Server" },
 
+  { slug: "methodology", section: "About", label: "Methodology" },
+  { slug: "data", section: "About", label: "Data" },
   { slug: "privacy", section: "About", label: "Privacy & Telemetry" },
 
   { slug: "cli/fetching", section: "Admin CLI", label: "Fetching Releases" },

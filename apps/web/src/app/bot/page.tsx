@@ -56,7 +56,7 @@ export default function BotPage() {
         <h2>Contact and exclusion</h2>
         <p>
           To request that we stop crawling a source, email{" "}
-          <a href="mailto:hello@buildinternet.com">hello@buildinternet.com</a> or disallow{" "}
+          <a href="mailto:abuse@releases.sh">abuse@releases.sh</a> or disallow{" "}
           <code>{USER_AGENT}</code> in your <code>robots.txt</code>.
         </p>
       </article>
