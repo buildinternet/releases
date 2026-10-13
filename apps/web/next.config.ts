@@ -138,6 +138,16 @@ const nextConfig: NextConfig = {
         destination: "/cloudflare",
         permanent: true,
       },
+      // Retired org: `google-gemini` was merged into `google`, and its sources
+      // kept their slugs, so the old org, its formats, and its source pages map
+      // one-to-one onto the `google` org.
+      { source: "/google-gemini", destination: "/google", permanent: true },
+      {
+        source: "/google-gemini.:format(atom|json|md)",
+        destination: "/google.:format",
+        permanent: true,
+      },
+      { source: "/google-gemini/:path*", destination: "/google/:path*", permanent: true },
     ];
   },
   async rewrites() {
