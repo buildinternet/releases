@@ -5,6 +5,7 @@ import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
+import { NOINDEX_FOLLOW } from "@/lib/index-policy";
 import { getSource } from "../../_lib/source-data";
 import { getResolved } from "../../_lib/resolve";
 
@@ -22,11 +23,12 @@ export async function changelogMetadata(orgSlug: string, slug: string): Promise<
     return {
       title: `${source.name} Changelog File — ${orgName}`,
       description: `Read the CHANGELOG.md file from the ${source.name} repository by ${orgName}.`,
+      robots: NOINDEX_FOLLOW,
       openGraph: { type: "website", url: canonical },
       alternates: { canonical },
     };
   } catch {
-    return { title: slug };
+    return { title: slug, robots: NOINDEX_FOLLOW };
   }
 }
 

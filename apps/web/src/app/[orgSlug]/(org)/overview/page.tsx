@@ -18,7 +18,7 @@ import {
 } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
 import { enableOnDemandIsr } from "@/lib/static-params";
-import { getOrg, getOrgOverview } from "../../_lib/org-data";
+import { getOrg, isOrgBelowIndexBar, getOrgOverview } from "../../_lib/org-data";
 import { getOrgReleases } from "../../_lib/org-releases-data";
 
 // On-demand ISR: render once per org on first request, then serve from cache
@@ -41,7 +41,11 @@ export async function generateMetadata({
     // nofollow it (#1947), stronger than the index:false/follow:true posture
     // used for on_demand / hidden orgs.
     const isStub = org.status === "stub";
-    const shouldNoIndex = isStub || org.discovery === "on_demand" || org.isHidden === true;
+    const shouldNoIndex =
+      isStub ||
+      org.discovery === "on_demand" ||
+      org.isHidden === true ||
+      (await isOrgBelowIndexBar(org));
     return {
       title: `${org.name} Overview · ${currentPeriod()}`,
       description: `AI overview, release activity, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,

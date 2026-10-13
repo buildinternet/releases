@@ -6,6 +6,7 @@ import { OrgSourcesByProduct } from "@/components/org/org-sources-by-product";
 import { JsonLd } from "@/components/json-ld";
 import { getOrg } from "../../_lib/org-data";
 import { enableOnDemandIsr } from "@/lib/static-params";
+import { NOINDEX_FOLLOW } from "@/lib/index-policy";
 
 // On-demand ISR: render once per org on first request, then serve from cache
 // (regenerated on ingest via POST /api/revalidate; 24h backstop). (#1607)
@@ -25,11 +26,12 @@ export async function generateMetadata({
     return {
       title: `${org.name} Sources`,
       description: `Every changelog source tracked for ${org.name} — GitHub repos, marketing posts, RSS feeds, and more.`,
+      robots: NOINDEX_FOLLOW,
       openGraph: { type: "website", url: `/${orgSlug}/sources` },
       alternates: { canonical: `/${orgSlug}/sources` },
     };
   } catch {
-    return { title: orgSlug };
+    return { title: orgSlug, robots: NOINDEX_FOLLOW };
   }
 }
 

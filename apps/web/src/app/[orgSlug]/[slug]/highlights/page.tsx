@@ -6,6 +6,7 @@ import { HighlightsView } from "@/components/highlights-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
 import { getSource } from "../_lib/source-data";
 import { enableOnDemandIsr } from "@/lib/static-params";
+import { NOINDEX_FOLLOW } from "@/lib/index-policy";
 
 // On-demand ISR: render once per source on first request, then serve from cache
 // (regenerated on ingest via POST /api/revalidate; 24h backstop). (#1607)
@@ -27,11 +28,12 @@ export async function generateMetadata({
     return {
       title: `${source.name} Highlights — ${orgName}`,
       description: `Curated highlights and monthly summaries for ${source.name} by ${orgName}.`,
+      robots: NOINDEX_FOLLOW,
       openGraph: { type: "website", url: canonical },
       alternates: { canonical },
     };
   } catch {
-    return { title: slug };
+    return { title: slug, robots: NOINDEX_FOLLOW };
   }
 }
 

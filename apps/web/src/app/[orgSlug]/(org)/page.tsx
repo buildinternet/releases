@@ -10,7 +10,7 @@ import { orgAvatarSrc } from "@/components/org-avatar";
 import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
-import { getOrg } from "../_lib/org-data";
+import { getOrg, isOrgBelowIndexBar } from "../_lib/org-data";
 import { getOrgReleases } from "../_lib/org-releases-data";
 import { enableOnDemandIsr } from "@/lib/static-params";
 
@@ -35,7 +35,11 @@ export async function generateMetadata({
     // nofollow it (#1947), stronger than the index:false/follow:true posture
     // used for on_demand / hidden orgs.
     const isStub = org.status === "stub";
-    const shouldNoIndex = isStub || org.discovery === "on_demand" || org.isHidden === true;
+    const shouldNoIndex =
+      isStub ||
+      org.discovery === "on_demand" ||
+      org.isHidden === true ||
+      (await isOrgBelowIndexBar(org));
     return {
       title: `${org.name} Release Notes & Changelog · ${period}`,
       description: `Every ${org.name} release note, changelog, and product update across all tracked sources — version history refreshed ${period}.`,

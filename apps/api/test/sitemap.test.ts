@@ -12,6 +12,7 @@ import {
   products,
   releases,
   collections,
+  knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import { sitemapRoutes } from "../src/routes/sitemap.js";
 
@@ -19,7 +20,12 @@ let testDatabase: TestDatabase;
 let app: Hono;
 
 type SitemapResponse = {
-  orgs: { slug: string; lastActivity: string | null }[];
+  orgs: {
+    slug: string;
+    lastActivity: string | null;
+    releaseCount?: number;
+    hasOverview?: boolean;
+  }[];
   sources: {
     id: string;
     orgSlug: string;
@@ -95,7 +101,9 @@ describe("GET /sitemap", () => {
     db.insert(organizations).values({ name: "Solo", slug: "solo" }).run();
 
     const result = await callSitemap();
-    expect(result.orgs).toEqual([{ slug: "solo", lastActivity: null }]);
+    expect(result.orgs).toEqual([
+      { slug: "solo", lastActivity: null, releaseCount: 0, hasOverview: false },
+    ]);
     expect(result.sources).toEqual([]);
     expect(result.products).toEqual([]);
   });
@@ -142,7 +150,10 @@ describe("GET /sitemap", () => {
 
     const result = await callSitemap();
 
-    expect(result.orgs).toEqual([{ slug: "acme", lastActivity: null }]);
+    // Every release counts toward the index bar, dated or not.
+    expect(result.orgs).toEqual([
+      { slug: "acme", lastActivity: null, releaseCount: 3, hasOverview: false },
+    ]);
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]).toMatchObject({
       orgSlug: "acme",
@@ -304,6 +315,32 @@ describe("GET /sitemap", () => {
       .run();
 
     const result = await callSitemap();
-    expect(result.orgs).toEqual([{ slug: "org", lastActivity: "2026-04-15T09:00:00Z" }]);
+    expect(result.orgs).toEqual([
+      { slug: "org", lastActivity: "2026-04-15T09:00:00Z", releaseCount: 0, hasOverview: false },
+    ]);
+  });
+
+  test("flags orgs with an org-scope overview; a playbook page does not count", async () => {
+    const db = testDatabase.db;
+    const [withOverview] = db
+      .insert(organizations)
+      .values({ name: "With", slug: "with" })
+      .returning()
+      .all();
+    const [productOnly] = db
+      .insert(organizations)
+      .values({ name: "Product only", slug: "product-only" })
+      .returning()
+      .all();
+    db.insert(knowledgePages)
+      .values([
+        { scope: "org", orgId: withOverview.id, content: "Overview" },
+        { scope: "playbook", orgId: productOnly.id, content: "Playbook" },
+      ])
+      .run();
+
+    const result = await callSitemap();
+    const bySlug = Object.fromEntries(result.orgs.map((o) => [o.slug, o.hasOverview]));
+    expect(bySlug).toEqual({ with: true, "product-only": false });
   });
 });
