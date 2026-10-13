@@ -1,5 +1,12 @@
 # @buildinternet/releases-api-types
 
+## 0.58.3
+
+### Patch Changes
+
+- 603a69b: Add optional `releaseCount` and `hasOverview` to the org rows of `SitemapPayload`.
+- ab56937: Add optional `releaseCount` to the product rows of `SitemapPayload`.
+
 ## 0.58.2
 
 ### Patch Changes
