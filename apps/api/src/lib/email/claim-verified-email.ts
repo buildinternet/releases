@@ -75,6 +75,10 @@ export function formatClaimVerifiedEmail(input: {
         ],
       },
       { t: "button", label: "View organization", url: orgUrl },
+      {
+        t: "fine",
+        text: `You can also add a Release Notes Index badge to your README or website. It links to your organization's page. Copy the snippet from the claim panel there, or see [Add a badge](${input.webOrigin}/docs/listing#add-a-badge).`,
+      },
     ],
     footer: {
       reason: `You received this because you verified ownership of ${input.domain} on Releases Index.`,
