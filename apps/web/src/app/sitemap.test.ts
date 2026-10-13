@@ -123,23 +123,18 @@ describe("buildProductSitemapEntries — org index bar", () => {
 });
 
 describe("buildOrgSitemapEntries", () => {
-  test("each indexed org emits bare URL + overview, lastmod only from lastActivity", () => {
+  test("each indexed org emits only its bare URL, lastmod only from lastActivity", () => {
     const entries = buildOrgSitemapEntries(
       [{ ...indexedOrg("acme"), lastActivity: "2026-08-01T00:00:00Z" }, indexedOrg("quiet-co")],
       BASE,
     );
-    expect(entries.map((e) => String(e.url))).toEqual([
-      `${BASE}/acme`,
-      `${BASE}/acme/overview`,
-      `${BASE}/quiet-co`,
-      `${BASE}/quiet-co/overview`,
-    ]);
+    expect(entries.map((e) => String(e.url))).toEqual([`${BASE}/acme`, `${BASE}/quiet-co`]);
     expect(entries[0]?.lastModified).toEqual(new Date("2026-08-01T00:00:00Z"));
     // No fabricated `now` fallback for orgs without activity.
-    expect(entries[2]?.lastModified).toBeUndefined();
+    expect(entries[1]?.lastModified).toBeUndefined();
   });
 
-  test("orgs below the index bar are omitted; the sources tab is never listed", () => {
+  test("orgs below the index bar are omitted; overview and sources tabs are never listed", () => {
     const entries = buildOrgSitemapEntries(
       [
         indexedOrg("acme"),
@@ -148,7 +143,7 @@ describe("buildOrgSitemapEntries", () => {
       ],
       BASE,
     );
-    expect(entries.map((e) => String(e.url))).toEqual([`${BASE}/acme`, `${BASE}/acme/overview`]);
+    expect(entries.map((e) => String(e.url))).toEqual([`${BASE}/acme`]);
   });
 });
 

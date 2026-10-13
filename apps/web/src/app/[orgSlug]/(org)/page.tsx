@@ -10,7 +10,8 @@ import { orgAvatarSrc } from "@/components/org-avatar";
 import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
-import { getOrg, isOrgBelowIndexBar } from "../_lib/org-data";
+import { getOrg, getOrgOverview, isOrgBelowIndexBar } from "../_lib/org-data";
+import { OverviewView } from "@/components/overview-view";
 import { getOrgReleases } from "../_lib/org-releases-data";
 import { enableOnDemandIsr } from "@/lib/static-params";
 
@@ -122,8 +123,12 @@ export default async function OrgReleasesPage({
   }
 
   let initialReleases: Awaited<ReturnType<typeof getOrgReleases>>;
+  let overview: Awaited<ReturnType<typeof getOrgOverview>>;
   try {
-    initialReleases = await getOrgReleases(orgSlug);
+    [initialReleases, overview] = await Promise.all([
+      getOrgReleases(orgSlug),
+      getOrgOverview(orgSlug),
+    ]);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     if (err instanceof ApiNotFoundError) notFound();
@@ -170,6 +175,9 @@ export default async function OrgReleasesPage({
   return (
     <>
       <JsonLd data={jsonLd} />
+      {/* The overview is the part of this page we write ourselves, so it leads
+          the landing page; the full version also lives at /{org}/overview. */}
+      {overview && <OverviewView page={overview} variant="org" compact />}
       <OrgReleaseList
         orgSlug={orgSlug}
         initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
