@@ -57,7 +57,7 @@ Companies often announce one launch in several places: a blog post, a changelog 
 
 ## AI-generated fields
 
-AI models write the parts below. The site labels them, and the original release text and its source link stay next to them.
+AI models write the parts below. The models come from Anthropic and from other providers through OpenRouter, and they only see the public release content. The site labels these parts, and the original release text and its source link stay next to them.
 
 - **Titles and summaries.** A generated title, a short title, and a summary of the release. On a release page the summary sits above the original text, with a note that AI-generated summaries may contain mistakes.
 - **Importance score.** A score from 1 to 5 for how significant a release is for that company. The site marks releases that score 4 or 5. When the model cannot score a release, it has no score; the index never fills in a guess.

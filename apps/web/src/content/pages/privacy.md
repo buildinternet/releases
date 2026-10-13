@@ -1,12 +1,12 @@
 ---
 title: "Privacy Policy"
 description: "How Release Notes Index handles data collected from the web, API, accounts, CLI, and MCP server."
-effectiveDate: "June 5, 2026"
+effectiveDate: "October 13, 2026"
 ---
 
 # Privacy Policy
 
-_Effective June 5, 2026_
+_Effective October 13, 2026_
 
 This page explains what data Release Notes Index collects when you use the web app, the public API, a Releases Index account, the [releases CLI](https://github.com/buildinternet/releases/tree/main/apps/cli), or the MCP server, and who we share it with. The project is run by [Build Internet](https://buildinternet.com). The service is hosted at [releases.sh](https://releases.sh).
 
@@ -58,7 +58,8 @@ We use a small number of service providers to host and operate Releases Index. T
 - **Cloudflare** — hosts the API and supporting infrastructure, stores the database, and sends account-related email.
 - **Vercel** — hosts the web frontend.
 - **Better Auth Infrastructure** — hosted administration tooling for account management. Your account data is stored in our database; this service can access account and session metadata for operational support.
-- **Anthropic** — provides the AI models our indexing pipeline uses to parse and summarize public changelogs. These models receive only the public content we are indexing, never your account data, queries, or other personal data.
+- **Anthropic and OpenRouter** — provide the AI models our indexing pipeline uses to parse and summarize public changelogs. These models receive only the public content we are indexing, never your account data. If you create an interest alert, its text is sent to a model through OpenRouter to match it against new releases.
+- **Voyage AI** — turns search queries into embeddings for semantic search. It receives the query text only, with no account data.
 
 If you sign in with a third-party provider (where offered), that provider also processes your sign-in according to its own privacy policy.
 
