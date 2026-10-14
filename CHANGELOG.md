@@ -3,6 +3,22 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 13, 2026
+
+**Added**
+- Verified-owner badge — verified domain owners can copy a Markdown (README) or HTML (website) snippet from the claim panel to add a "Release Notes Index" badge to their site, linking back to their org page.
+- Methodology and data docs — new pages at `/docs/methodology` and `/docs/data` explain how the index is built and every way to read it (web, REST API, MCP, CLI, feeds, webhooks).
+- Markdown alternates in page head — org, product, source, collection, and docs pages now include a `<link rel="alternate" type="text/markdown">` in the HTML head so agents and tools can discover the `.md` twin without guessing the URL.
+
+**Changed**
+- Org overview on the landing page — the AI overview now opens every org's main page, clamped behind "Show more"; it was previously only visible on the `/overview` tab.
+- Atom feed entries use generated headlines — entries now show the generated headline with the version appended when it isn't already in the title, instead of the raw version string.
+- Feed "Read more" links to the original post — the link under each release summary now opens the upstream changelog in a new tab; a "Copy link" button copies the on-site permalink for sharing.
+
+**Fixed**
+- `/release/<id>.json` now returns JSON — the format route was returning Markdown regardless of the extension; it now serves `application/json`.
+- `/google-gemini` URLs redirect to `/google` — old org URLs and any sub-paths now redirect permanently instead of returning 404.
+
 ## October 12, 2026
 
 **Fixed**
