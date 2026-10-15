@@ -20,6 +20,7 @@
     "./effective-category": "./src/effective-category.ts",
     "./feed-cursor": "./src/feed-cursor.ts",
     "./changesets-cluster": "./src/changesets-cluster.ts",
+    "./version-line-cluster": "./src/version-line-cluster.ts",
     "./release-coverage-sql": "./src/release-coverage-sql.ts",
     "./schema-coverage": "./src/schema-coverage.ts",
     "./batch-run": "./src/batch-run.ts",
