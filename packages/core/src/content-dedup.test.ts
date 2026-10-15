@@ -22,6 +22,13 @@ describe("normalizeReleaseBody", () => {
     );
   });
 
+  it("treats a non-string title or body as empty instead of throwing", () => {
+    expect(normalizeReleaseBody("Notes about the release.", 123 as unknown as string)).toBe(
+      "notes about the release",
+    );
+    expect(normalizeReleaseBody(123 as unknown as string, "Title")).toBe("");
+  });
+
   it("ignores link targets so a new anchor in the body does not change the key", () => {
     const a =
       "Fixed retry behavior for partial batches when the caller sends a cursor.\nSee [docs](https://example.com/changelog#old).";
@@ -38,6 +45,7 @@ describe("publishedDay", () => {
     expect(publishedDay(new Date("2026-10-14T23:30:00-07:00"))).toBe("2026-10-15");
     expect(publishedDay("")).toBeNull();
     expect(publishedDay(null)).toBeNull();
+    expect(publishedDay(123 as unknown as string)).toBeNull();
   });
 });
 
@@ -65,6 +73,7 @@ describe("versionIdentity", () => {
       token: "1.2.0",
     });
     expect(versionIdentity(null, "May 2026 updates")).toBeNull();
+    expect(versionIdentity(123 as unknown as string, 456 as unknown as string)).toBeNull();
   });
 });
 

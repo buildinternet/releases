@@ -22,6 +22,7 @@ export const MIN_NORMALIZED_BODY_CHARS = 80;
  */
 export function publishedDay(value: string | Date | null | undefined): string | null {
   if (value == null) return null;
+  if (typeof value !== "string" && !(value instanceof Date)) return null;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
     return value.toISOString().slice(0, 10);
@@ -42,6 +43,7 @@ export function publishedDay(value: string | Date | null | undefined): string | 
  * notes".
  */
 export function normalizeReleaseBody(content: string, title?: string | null): string {
+  if (typeof content !== "string") return "";
   const withoutTitle = stripLeadingTitle(content, title);
   const text = withoutTitle
     .replace(/```[\w-]*\n?([\s\S]*?)```/g, " $1 ")
@@ -71,7 +73,7 @@ function stripLeadingTitle(content: string, title?: string | null): string {
   const first = lines[i]!.trim();
   const heading = /^#{1,6}\s+(.*)$/.exec(first);
   const firstText = (heading ? heading[1] : first).trim();
-  const titleNorm = title ? norm(title) : "";
+  const titleNorm = typeof title === "string" && title ? norm(title) : "";
   // A leading heading is the anchor title — drop it even when the wording
   // changed. A plain first line is dropped only when it is the title.
   if (heading || (titleNorm && norm(firstText) === titleNorm)) {
@@ -105,8 +107,8 @@ export function versionIdentity(
   version?: string | null,
   title?: string | null,
 ): VersionIdentity | null {
-  const fromVersion = version ? identityFrom(version.trim()) : null;
-  const fromTitle = title ? identityFrom(title.trim()) : null;
+  const fromVersion = typeof version === "string" ? identityFrom(version.trim()) : null;
+  const fromTitle = typeof title === "string" ? identityFrom(title.trim()) : null;
   // A bare `version` column (`0.12.0`) hides the package named in the title
   // (`ollama-python 0.12.0`). Keep the version token and fill the package
   // from the title when that title names the same token.
