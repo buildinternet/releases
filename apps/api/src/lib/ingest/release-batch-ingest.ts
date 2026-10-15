@@ -52,7 +52,11 @@ import { processMediaForR2, selectExistingReleaseUrls } from "../media/media-ing
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { normalizeMediaBind } from "../media/media-bind.js";
-import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../d1-limits.js";
+import {
+  RELEASES_BATCH_CHUNK_SIZE,
+  RELEASES_ID_IN_CHUNK_SIZE,
+  assertStatementBindBudget,
+} from "../d1-limits.js";
 import { clusterAndPersistCascades } from "./cluster-cascades.js";
 import { clusterAndPersistVersionLines } from "./cluster-version-lines.js";
 import { dropRewordedContentDuplicates, releaseBodyHash } from "./content-dedup.js";
@@ -436,8 +440,7 @@ export async function ingestReleaseBatch(
     // rows are the authoritative set of affected ids + content.
     // In enrich mode (#1526) the clobbering RELEASE_CONTENT_UPSERT overwrites
     // content/media on a same-URL collision instead of fill-only.
-    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
-    const rows = await db
+    const statement = db
       .insert(releases)
       .values(chunk)
       .onConflictDoUpdate(enrichMode ? RELEASE_CONTENT_UPSERT : RELEASE_URL_UPSERT)
@@ -452,6 +455,9 @@ export async function ingestReleaseBatch(
         contentTokens: releases.contentTokens,
         type: releases.type,
       });
+    assertStatementBindBudget(statement, "releases batch insert");
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+    const rows = await statement;
     inserted += rows.length;
     for (const r of rows) {
       const { content, ...publishRow } = r;

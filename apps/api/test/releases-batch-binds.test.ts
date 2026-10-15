@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import {
   releases,
   knowledgePages,
@@ -13,6 +13,7 @@ import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import {
   D1_MAX_BINDINGS,
   RELEASES_BATCH_CHUNK_SIZE,
+  RELEASES_INSERT_BINDS_PER_ROW,
   RELEASES_ID_IN_CHUNK_SIZE,
   CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
   RELEASE_COVERAGE_INSERT_CHUNK_SIZE,
@@ -31,38 +32,90 @@ import {
 
 const db = drizzle(new Database(":memory:"));
 
-// Mirrors the heaviest production payload (the sources batch path —
-// apps/api/src/routes/sources.ts) so the budget assertion tracks the
-// largest binding shape the chunk-size constant must cover.
-const mockRow = (i: number) => ({
+// Every column set, including explicit nulls. Drizzle binds each key on the
+// values object; a lighter mock (the pre-fix sources-batch shape) hid the
+// poll-fetch row, which binds 21 parameters and overflowed at 5 rows.
+const releaseColumnKeys = Object.keys(getTableColumns(releases));
+
+const fullReleaseRow = (i: number): typeof releases.$inferInsert => {
+  const row: Record<string, unknown> = {};
+  for (const key of releaseColumnKeys) {
+    if (key === "prerelease" || key === "suppressed") row[key] = false;
+    else if (key === "contentChars" || key === "contentTokens" || key === "importance")
+      row[key] = 1;
+    else if (key === "type") row[key] = "feature";
+    else if (key === "breaking") row[key] = "unknown";
+    else row[key] = `${key}${i}`;
+  }
+  return row as typeof releases.$inferInsert;
+};
+
+// The PollAndFetchWorkflow insert: explicit nulls still count as binds.
+// Five of these is the statement D1 rejected (105 parameters).
+const pollFetchRow = (i: number): typeof releases.$inferInsert => ({
+  id: `rel_${i}`,
   sourceId: "src_x",
   version: `v${i}`,
   versionSort: `vs${i}`,
-  type: "feature" as const,
   title: `t${i}`,
   content: "c",
   url: `https://example.invalid/${i}`,
+  type: "feature",
   contentHash: "h",
   bodyHash: "bh",
   contentChars: 1,
   contentTokens: 1,
-  publishedAt: "2026-01-01",
+  publishedAt: "2026-01-01T00:00:00.000Z",
   prerelease: false,
   media: "[]",
+  effectiveCategory: "developer-tools",
+  metadata: "{}",
+  suppressed: false,
+  suppressedReason: null,
 });
 
 describe("releases batch insert bind budget", () => {
-  it(`chunk of RELEASES_BATCH_CHUNK_SIZE stays under D1's ${D1_MAX_BINDINGS}-bind cap`, () => {
-    const chunk = Array.from({ length: RELEASES_BATCH_CHUNK_SIZE }, (_, i) => mockRow(i));
+  it("sizes the chunk from the column count, one bind per column", () => {
+    expect(RELEASES_INSERT_BINDS_PER_ROW).toBe(releaseColumnKeys.length);
+    expect(RELEASES_BATCH_CHUNK_SIZE * RELEASES_INSERT_BINDS_PER_ROW).toBeLessThanOrEqual(
+      D1_MAX_BINDINGS,
+    );
+    expect(
+      D1_MAX_BINDINGS - RELEASES_BATCH_CHUNK_SIZE * RELEASES_INSERT_BINDS_PER_ROW,
+    ).toBeGreaterThan(0);
+  });
+
+  it(`chunk of RELEASES_BATCH_CHUNK_SIZE fully-bound rows stays under D1's ${D1_MAX_BINDINGS}-bind cap`, () => {
+    const chunk = Array.from({ length: RELEASES_BATCH_CHUNK_SIZE }, (_, i) => fullReleaseRow(i));
     const q = db.insert(releases).values(chunk).onConflictDoUpdate(RELEASE_URL_UPSERT).toSQL();
+    expect(q.params.length).toBe(RELEASES_BATCH_CHUNK_SIZE * RELEASES_INSERT_BINDS_PER_ROW);
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
   });
 
   it("chunk one larger than RELEASES_BATCH_CHUNK_SIZE exceeds the cap", () => {
     // Boundary guard: if this ever passes, the constant can be raised — or
     // Drizzle changed how it generates placeholders. Either way, revisit.
-    const chunk = Array.from({ length: RELEASES_BATCH_CHUNK_SIZE + 1 }, (_, i) => mockRow(i));
+    const chunk = Array.from({ length: RELEASES_BATCH_CHUNK_SIZE + 1 }, (_, i) =>
+      fullReleaseRow(i),
+    );
     const q = db.insert(releases).values(chunk).onConflictDoUpdate(RELEASE_URL_UPSERT).toSQL();
+    expect(q.params.length).toBeGreaterThan(D1_MAX_BINDINGS);
+  });
+
+  it("the poll-fetch row at the chunk size stays under the cap", () => {
+    const chunk = Array.from({ length: RELEASES_BATCH_CHUNK_SIZE }, (_, i) => pollFetchRow(i));
+    const q = db
+      .insert(releases)
+      .values(chunk)
+      .onConflictDoNothing()
+      .returning({ id: releases.id })
+      .toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+
+  it("five poll-fetch rows exceed the cap (the Workers Issues failure)", () => {
+    const chunk = Array.from({ length: 5 }, (_, i) => pollFetchRow(i));
+    const q = db.insert(releases).values(chunk).onConflictDoNothing().toSQL();
     expect(q.params.length).toBeGreaterThan(D1_MAX_BINDINGS);
   });
 });

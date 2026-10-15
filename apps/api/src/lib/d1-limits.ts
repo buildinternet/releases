@@ -1,34 +1,55 @@
 // D1 caps prepared statements at 100 bound parameters. Chunk sizes below are
 // derived from this limit and the per-row bind count Drizzle emits for each
-// statement shape. Changing the schema (adding columns to `releases`) or the
-// Drizzle insert shape means recomputing these — the bind-budget invariant
-// tests in apps/api/test/releases-batch-binds.test.ts fail loudly when a bump
-// would push a statement past the cap.
+// statement shape. `RELEASES_BATCH_CHUNK_SIZE` follows the releases column
+// count via `maxChunkLength`, so adding a column shrinks the chunk. The
+// bind-budget tests in apps/api/test/releases-batch-binds.test.ts still compile
+// the statement with `.toSQL()` and fail when a shape binds more than the
+// column count assumed here.
 //
-// Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) and
-// the shared `chunkArray` helper live in `@buildinternet/releases-core/d1-limits`
-// so packages below the worker (core-internal eligibility / overview-upsert)
-// share one source of truth. Re-exported here so existing worker import
-// paths keep working.
+// Backend capability constants and the shared chunk helpers live in
+// `@buildinternet/releases-core/d1-limits` so packages below the worker
+// (core-internal eligibility / overview-upsert) share one source of truth.
+// Re-exported here so existing worker import paths keep working.
 
+import { getTableColumns } from "drizzle-orm";
+import { releases } from "@buildinternet/releases-core/schema";
 import {
   D1_MAX_BINDINGS,
   IN_ARRAY_CHUNK_SIZE,
+  assertBindBudget,
   chunkArray,
+  chunkForBindBudget,
+  maxChunkLength,
 } from "@buildinternet/releases-core/d1-limits";
 
-export { D1_MAX_BINDINGS, IN_ARRAY_CHUNK_SIZE, chunkArray };
+export {
+  D1_MAX_BINDINGS,
+  IN_ARRAY_CHUNK_SIZE,
+  assertBindBudget,
+  chunkArray,
+  chunkForBindBudget,
+  maxChunkLength,
+};
 
-// `releases` INSERT binds up to 18 placeholders per row when the caller
-// provides the full sources-batch payload. Drizzle binds everything that has
-// either an explicit value, a `$defaultFn`, or a plain `.default(...)`; only
-// nullable columns with no default land as inline `null`. For releases that's
-// 18 binds (id, source_id, version, version_sort, type, title, content, url,
-// content_hash, body_hash, content_chars, content_tokens, metadata, media,
-// published_at, prerelease, suppressed, fetched_at). 5 rows * 18 = 90 binds.
-// Lighter-payload insert sites carry fewer binds per row but share this chunk
-// size to keep the budget guard rail uniform.
-export const RELEASES_BATCH_CHUNK_SIZE = 5;
+// Worst case for a `releases` INSERT: every column is present on the values
+// object. Drizzle binds each of those, including explicit nulls, and also
+// binds omitted columns that have a default or `$defaultFn`. Nullable columns
+// with no default are inlined as `null` only when the key is absent. Poll-fetch
+// sets 21 of these (the `body_hash` dedup column plus `suppressed_reason` and
+// `effective_category`); five such rows bind 105 parameters and D1 rejects the
+// statement with `SQLITE_ERROR: too many SQL variables`. Size the chunk from
+// the column count so a fully-bound row stays under the cap with the remainder
+// as headroom (27 binds/row → 3 rows → 81 binds).
+export const RELEASES_INSERT_BINDS_PER_ROW = Object.keys(getTableColumns(releases)).length;
+export const RELEASES_BATCH_CHUNK_SIZE = maxChunkLength(RELEASES_INSERT_BINDS_PER_ROW);
+
+/** Count the binds Drizzle will send and refuse a statement over the D1 cap. */
+export function assertStatementBindBudget(
+  statement: { toSQL(): { params: readonly unknown[] } },
+  label: string,
+): void {
+  assertBindBudget(statement.toSQL().params.length, label);
+}
 
 // IN-clause chunk for id lookups/updates on releases. An UPDATE adds one
 // SET binding, so IN_ARRAY_CHUNK_SIZE + 1 stays under the cap; a SELECT

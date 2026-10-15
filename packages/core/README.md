@@ -21,7 +21,7 @@ Imported as `@buildinternet/releases-core/<subpath>`.
 | `slug`              | Slug generation.                                                                                                                                                       |
 | `tokens`            | Token counting (tiktoken-backed).                                                                                                                                      |
 | `cli-contracts`     | Shared `--json` envelope types for the CLI.                                                                                                                            |
-| `d1-limits`         | Backend capability constants (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) for single-column `IN` chunking.                                                               |
+| `d1-limits`         | D1 bind cap (`D1_MAX_BINDINGS`, `IN_ARRAY_CHUNK_SIZE`) and chunk helpers (`maxChunkLength`, `chunkForBindBudget`, `assertBindBudget`).                                 |
 
 Published from the [`buildinternet/releases`](https://github.com/buildinternet/releases) monorepo. The upstream `packages/core/` directory is the single source of truth; the monorepo and the in-tree CLI consume it via `workspace:*`; other consumers use npm.
 
