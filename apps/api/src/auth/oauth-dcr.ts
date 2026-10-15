@@ -6,6 +6,9 @@
  * or confidential client: discovery still advertises the full AS scope list
  * (including `write` / `admin`) for first-party use, but a DCR row's stored
  * capability ceiling is {@link DCR_SCOPES} and the client is forced public.
+ * Discovery is clamped separately (`clampDiscoveryMetadata`): the plugin lists
+ * confidential token-auth methods and `client_credentials`, neither of which
+ * this path stores.
  *
  * Applied in two places:
  *  - `hooks.before` on `/oauth2/register` ({@link sanitizeDcrRegistrationBody})

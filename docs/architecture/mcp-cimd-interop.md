@@ -37,6 +37,18 @@ The plugin's Node transport also resolves DNS once and pins the connection, so a
 
 **Do not.** Pass the plugin's Node transport (`@better-auth/cimd/node`) on Workers; it needs `node:dns` and `node:https`. Add a `scope` rewrite to accept documents that ask for `write`/`admin`. Clamp on refresh. Turn DCR off while clients without CIMD support remain.
 
+## Discovery matches open registration
+
+Better Auth 1.7 fills `token_endpoint_auth_methods_supported` from `getSupportedAuthMethods`, which always includes `client_secret_basic`, `client_secret_post`, and `private_key_jwt`, plus `none` when public registration is on. It fills `grant_types_supported` from the grants the token endpoint can issue, including `client_credentials`. `advertisedMetadata` cannot override those keys, and a provider extension cannot overwrite a key the plugin already wrote. Production was advertising all four auth methods and `client_credentials`.
+
+Unauthenticated DCR persists `token_endpoint_auth_method: "none"` and `DCR_GRANT_TYPES` (`authorization_code` + `refresh_token`) only (`sanitizeDcrRegistrationBody`, `clampRegisteredDcrClient`). A client that copies `private_key_jwt` out of discovery — Vercel Connect's Submit-a-Service OAuth test — finishes consent and then fails at the token endpoint with `client is not registered for private_key_jwt authentication`. The same test offers an app-token (`client_credentials`) check that a public DCR client cannot redeem; a user token is enough to submit. Uploads fixed the auth-method half in [uploads#1117](https://github.com/buildinternet/uploads/pull/1117); the grant list is the same class of mismatch.
+
+`clampDiscoveryMetadata` (`apps/api/src/oauth-discovery.ts`) rewrites those two fields on the authorization-server and OIDC documents. It runs on `GET /api/auth/.well-known/{oauth-authorization-server,openid-configuration}` and on the apex plus RFC 8414 path-inserted aliases (`forwardWellKnown`). RFC 8414 treats an omitted auth-method list as `client_secret_basic` and an omitted grant list as `authorization_code` only, so both fields are always set. Introspection and revocation method lists stay on the plugin defaults. `token_endpoint_auth_signing_alg_values_supported` stays as the library emits it.
+
+This is the advertisement only. The token endpoint still issues `client_credentials` for an admin-provisioned client that was registered with that grant. CIMD persistence is unchanged: the plugin still admits a document whose `token_endpoint_auth_method` is `private_key_jwt`, and `cimdClientRowPatch` does not rewrite it. Discovery does not offer that method, or `client_credentials`, as a DCR choice.
+
+**Do not.** Put `private_key_jwt`, the client-secret methods, or `client_credentials` back on those two discovery fields to match the plugin. That is the Connect failure. Do not omit either field. Do not clamp the introspection or revocation lists in this pass. Do not remove `client_credentials` from the token endpoint or from admin client provisioning.
+
 ## 1. `invalid_client_metadata` / unsupported `grant_type` `device_code`
 
 **Error (AS, DCR `POST /oauth2/register`):** oauth-provider's register schema is a closed enum (`authorization_code` | `refresh_token` | `client_credentials`). A body that lists `urn:ietf:params:oauth:grant-type:device_code` fails the parse.

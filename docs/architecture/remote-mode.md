@@ -182,6 +182,11 @@ no `client_secret`), and stored with a fixed capability ceiling of identity
 scopes + `read` (`DCR_SCOPES` in `auth/entitlement.ts`) — never `write` or
 `admin`, never `skip_consent`. Discovery still lists the full ladder on
 `scopes_supported` for first-party clients; DCR does not inherit that list.
+`token_endpoint_auth_methods_supported` and `grant_types_supported` are clamped
+to what open DCR stores (`["none"]`, and `authorization_code` + `refresh_token`)
+so a registering client cannot select `private_key_jwt`, a client secret, or
+`client_credentials` (see [mcp-cimd-interop.md](mcp-cimd-interop.md)).
+Admin-provisioned confidential and M2M clients still use the token endpoint.
 Role-clamp at issuance is a second layer. The endpoint is rate-limited to
 5 registrations/min/IP (explicit in `auth/instance.ts`, enforced in deployed prod).
 The admin route remains the second sanctioned exception to the
