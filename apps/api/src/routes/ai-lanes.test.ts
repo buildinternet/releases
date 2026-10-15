@@ -376,6 +376,46 @@ describe("POST /v1/ai/lanes/:lane", () => {
     expect(row?.importance).toBe(3);
   });
 
+  it("does not call the model or write when the source opted out of summaries", async () => {
+    await testDatabase.db
+      .update(sources)
+      .set({ metadata: JSON.stringify({ summarize: false }) })
+      .where(eq(sources.id, "src_1"));
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response("unexpected", { status: 500 });
+    }) as unknown as typeof fetch;
+
+    const res = await post("/v1/ai/lanes/summarize", { releaseId: "rel_1", apply: true });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      applied: boolean;
+      provider: string | null;
+      result: { skipped: boolean; title: string | null; summary: string | null };
+      usage: {
+        input: number;
+        output: number;
+        cacheCreate: number;
+        cacheRead: number;
+        costUsd: number;
+      };
+    };
+    expect(calls).toBe(0);
+    expect(body.applied).toBe(false);
+    expect(body.provider).toBeNull();
+    expect(body.result.skipped).toBe(true);
+    expect(body.result.title).toBeNull();
+    expect(body.result.summary).toBeNull();
+    expect(body.usage).toEqual({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0, costUsd: 0 });
+
+    const row = await testDatabase.db.query.releases.findFirst({
+      where: (r, { eq: equals }) => equals(r.id, "rel_1"),
+    });
+    expect(row?.titleGenerated).toBeNull();
+    expect(row?.summary).toBeNull();
+  });
+
   it("400s on the summarize lane with no content available", async () => {
     const res = await post("/v1/ai/lanes/summarize", { title: "just a title" });
     expect(res.status).toBe(400);

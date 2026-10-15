@@ -63,10 +63,132 @@ const BOILERPLATE_BODIES = new Set([
   "updated dependencies",
 ]);
 
+/** Short bodies made only of these words are generic filler, not a changelog. */
+const FILLER_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "the",
+  "this",
+  "that",
+  "these",
+  "those",
+  "in",
+  "of",
+  "to",
+  "for",
+  "on",
+  "or",
+  "with",
+  "from",
+  "by",
+  "we",
+  "weve",
+  "our",
+  "us",
+  "bug",
+  "bugs",
+  "bugfix",
+  "bugfixes",
+  "fix",
+  "fixes",
+  "fixed",
+  "fixing",
+  "performance",
+  "improvement",
+  "improvements",
+  "improve",
+  "improved",
+  "stability",
+  "enhancement",
+  "enhancements",
+  "enhanced",
+  "update",
+  "updates",
+  "updated",
+  "updating",
+  "release",
+  "version",
+  "app",
+  "application",
+  "include",
+  "includes",
+  "included",
+  "including",
+  "contain",
+  "contains",
+  "bring",
+  "brings",
+  "made",
+  "make",
+  "making",
+  "squash",
+  "squashed",
+  "squashes",
+  "some",
+  "various",
+  "minor",
+  "general",
+  "small",
+  "other",
+  "several",
+  "plus",
+  "also",
+  "overall",
+  "quality",
+  "experience",
+  "users",
+  "user",
+  "issue",
+  "issues",
+  "addressed",
+  "resolved",
+  "resolve",
+  "resolves",
+  "maintenance",
+  "routine",
+  "miscellaneous",
+  "misc",
+]);
+
+/** Above this, a body is long enough that a filler-word scan would hide real notes. */
+const FILLER_MAX_CHARS = 200;
+/** A filler note is a short phrase, not a changelog. */
+const FILLER_MAX_WORDS = 16;
+
+/**
+ * Whole-body "no changes" notes ("No specific changes in this version").
+ * Must match the entire string so a real note that mentions "no changes to
+ * the API" alongside other work still summarizes.
+ */
+const NO_CHANGE_RE =
+  /^(?:there (?:are|were) )?no\b(?:[\s,'-]+[a-z]+){0,6}\s+(?:changes?|updates?|fixes?|features?|notes?|content)\b(?:[\s,'-]+[a-z]+){0,8}\.?$/;
+
+function fillerLetters(normalized: string): string {
+  return normalized
+    .replace(/['’]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isFillerBody(normalized: string): boolean {
+  if (normalized.length === 0 || normalized.length > FILLER_MAX_CHARS) return false;
+  const letters = fillerLetters(normalized);
+  if (!letters) return false;
+  if (NO_CHANGE_RE.test(letters)) return true;
+  const words = letters.split(" ");
+  if (words.length > FILLER_MAX_WORDS) return false;
+  return words.every((word) => FILLER_WORDS.has(word));
+}
+
 /**
  * True when a body has no real release-note content — used to skip the AI
  * call entirely. Strips markdown, HTML comments, and badge syntax before
- * checking whether any alphabetic words remain.
+ * checking whether any alphabetic words remain. Short generic notes
+ * ("bug fixes and performance improvements", "no specific changes in this
+ * version") skip too, so every caller stores nothing instead of a title
+ * with no summary or a filler summary.
  */
 export function isEmptyContent(raw: string): boolean {
   let s = raw.trim();
@@ -79,6 +201,7 @@ export function isEmptyContent(raw: string): boolean {
   s = s.replace(/\s+/g, " ").trim().toLowerCase();
   if (!s) return true;
   if (BOILERPLATE_BODIES.has(s)) return true;
+  if (isFillerBody(s)) return true;
   const words = s.match(/[a-z]{3,}/g) ?? [];
   return words.length === 0;
 }
