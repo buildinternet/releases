@@ -42,6 +42,7 @@ import {
   UpstreamError,
 } from "@releases/lib/releases-error";
 import { logEvent } from "@releases/lib/log-event";
+import { logSummarizeSkip } from "../lib/ai/summarize-skip.js";
 import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { estimateCost } from "@releases/lib/anthropic-pricing";
 import { splitModelId, type TextModelUsage } from "@releases/ai-internal/text-model";
@@ -114,6 +115,7 @@ interface ResolvedRelease {
 interface ResolvedSource {
   id: string;
   name: string;
+  slug: string;
   metadata: string | null;
   orgSlug: string | null;
   /** Parent product's name, when the source is bound to one. Threaded into the
@@ -151,6 +153,7 @@ async function loadSource(
     .select({
       id: sources.id,
       name: sources.name,
+      slug: sources.slug,
       metadata: sources.metadata,
       orgSlug: organizations.slug,
       productName: products.name,
@@ -475,13 +478,6 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
         ),
       );
     }
-    const model = await resolveSummarizeModel(fetchEnv);
-    if (!model) {
-      return respondError(
-        c,
-        new ServiceUnavailableError("No text-model provider configured for the summarize lane"),
-      );
-    }
     const input: SummarizeReleaseInput = {
       orgSlug,
       sourceName,
@@ -493,6 +489,44 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       sourceId: source?.id,
       releaseId: release?.id,
     };
+    // `metadata.summarize=false` is a hard opt-out. The ingest SELECT honors
+    // it; this lane used to call the model anyway and write the fields back
+    // on `apply: true`. Inline content with no source still runs.
+    if (source && parseSourceMeta(source.metadata).summarize === false) {
+      if (release) {
+        logSummarizeSkip({
+          component: "ai-lanes",
+          reason: "source-opt-out",
+          releaseIds: [release.id],
+          sourceSlug: source.slug,
+        });
+      }
+      return c.json({
+        lane,
+        provider: null,
+        model: null,
+        applied: false,
+        input,
+        result: {
+          title: null,
+          titleShort: null,
+          summary: null,
+          composition: null,
+          breaking: "unknown" as const,
+          migrationNotes: null,
+          importance: null,
+          skipped: true,
+        },
+        usage: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, costUsd: 0 },
+      });
+    }
+    const model = await resolveSummarizeModel(fetchEnv);
+    if (!model) {
+      return respondError(
+        c,
+        new ServiceUnavailableError("No text-model provider configured for the summarize lane"),
+      );
+    }
     const result = await runLane(lane, () => summarizeRelease(model, input));
     const { provider, model: modelName } = splitModelId(model.id);
 

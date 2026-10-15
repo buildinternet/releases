@@ -26,6 +26,20 @@ describe("isEmptyContent", () => {
   it("returns false for real content even when short", () => {
     expect(isEmptyContent("Fixed VSCode bug")).toBe(false);
     expect(isEmptyContent("Adds caching to the Messages API")).toBe(false);
+    expect(
+      isEmptyContent("Fixed the crash on launch and improved startup time for large workspaces."),
+    ).toBe(false);
+  });
+
+  it("returns true for generic App Store and no-change filler", () => {
+    expect(isEmptyContent("Bug fixes and performance improvements.")).toBe(true);
+    expect(isEmptyContent("This update includes bug fixes and performance improvements.")).toBe(
+      true,
+    );
+    expect(isEmptyContent("We've made some bug fixes and performance improvements.")).toBe(true);
+    expect(isEmptyContent("No specific changes in this version.")).toBe(true);
+    expect(isEmptyContent("Bug fixes.")).toBe(true);
+    expect(isEmptyContent("Various bug fixes and stability improvements")).toBe(true);
   });
 
   it("preserves markdown link text when judging emptiness", () => {

@@ -23,6 +23,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import { createDb } from "../db.js";
 import { and, eq, sql } from "drizzle-orm";
+import { selectOptedOutReleaseIds } from "../lib/ai/source-opt-out.js";
 import { releases } from "@buildinternet/releases-core/schema";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
@@ -532,6 +533,22 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         }
       }
 
+      // A source can set `metadata.summarize=false` after this batch was
+      // submitted. Drop those rows before any write. A query error throws so
+      // the step retries instead of applying summaries the source opted out of.
+      const optedOut = await selectOptedOutReleaseIds(
+        db,
+        updateRows.map((row) => row.id) as string[],
+      );
+      if (optedOut.size > 0) {
+        logSummarizeSkip({
+          component: "batch-summarize",
+          reason: "source-opt-out",
+          releaseIds: [...optedOut],
+        });
+      }
+      const writableRows = updateRows.filter((row) => !optedOut.has(row.id));
+
       // Batch UPDATEs: each UPDATE binds at most 5 values (titleGenerated,
       // titleShort, summary, optional compositionJson, id) → D1 hard cap of 100
       // params → chunk at 20 rows per batch. Idempotent: WHERE title_generated
@@ -543,8 +560,8 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
       // call commit or none do. succeeded and actualCostUsd are incremented only
       // after each chunk commits so the counters reflect what actually landed.
       const CHUNK_SIZE = 20; // floor(100 / 5 binds per UPDATE)
-      for (let offset = 0; offset < updateRows.length; offset += CHUNK_SIZE) {
-        const chunk = updateRows.slice(offset, offset + CHUNK_SIZE);
+      for (let offset = 0; offset < writableRows.length; offset += CHUNK_SIZE) {
+        const chunk = writableRows.slice(offset, offset + CHUNK_SIZE);
         const statements = chunk.map((row) => {
           const metadataSet = buildCompositionMetadataSet(row.composition);
           return db
@@ -582,7 +599,9 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         }
       }
 
-      const finalStatus: TerminalBatchStatus = succeeded > 0 ? BATCH_ENDED_STATUS : "failed";
+      const skippedOptOut = optedOut.size;
+      const finalStatus: TerminalBatchStatus =
+        succeeded > 0 || (skippedOptOut > 0 && failed === 0) ? BATCH_ENDED_STATUS : "failed";
       const errorSummary =
         failed > 0
           ? {

@@ -49,7 +49,7 @@ export type SummarizeSkipReason = (typeof SUMMARIZE_SKIP_REASONS)[number];
 /** Cap on `releaseIds` so a backfill skip can't blow up a log line. `count` stays exact. */
 export const SUMMARIZE_SKIP_ID_LIMIT = 20;
 
-export type SummarizeSkipComponent = "auto-generate-content" | "batch-summarize";
+export type SummarizeSkipComponent = "auto-generate-content" | "batch-summarize" | "ai-lanes";
 
 /**
  * Emit one `summarize-skip` event. No-op when `releaseIds` is empty so a quiet

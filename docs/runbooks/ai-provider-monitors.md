@@ -287,16 +287,16 @@ in Axiom; the code signal it can count without inferring from a missing usage ev
 | summarize skips = sum(n) by reason
 ```
 
-| Field                 | Meaning                                                                    |
-| --------------------- | -------------------------------------------------------------------------- |
-| `component`           | `auto-generate-content` (ingest hook) or `batch-summarize` (daily batch)   |
-| `event`               | `summarize-skip`                                                           |
-| `lane`                | `summarize-release` — same string as `ai_usage.lane`                       |
-| `reason`              | Stable code, see below                                                     |
-| `count`               | Releases skipped for that reason on this call. Sum this.                   |
-| `releaseIds`          | First 20 ids. Do not `array_length` this for the total.                    |
-| `releaseIdsTruncated` | `true` when `count` is larger than `releaseIds`                            |
-| `sourceSlug`          | Set on the ingest hook. Omitted on the daily batch, which is cross-source. |
+| Field                 | Meaning                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `component`           | `auto-generate-content` (ingest hook), `batch-summarize` (daily batch), or `ai-lanes` (manual summarize) |
+| `event`               | `summarize-skip`                                                                                         |
+| `lane`                | `summarize-release` — same string as `ai_usage.lane`                                                     |
+| `reason`              | Stable code, see below                                                                                   |
+| `count`               | Releases skipped for that reason on this call. Sum this.                                                 |
+| `releaseIds`          | First 20 ids. Do not `array_length` this for the total.                                                  |
+| `releaseIdsTruncated` | `true` when `count` is larger than `releaseIds`                                                          |
+| `sourceSlug`          | Set on the ingest hook. Omitted on the daily batch, which is cross-source.                               |
 
 Reason codes: `empty`, `too-large`, `opted-out`, `source-opt-out`, `hidden`, `coverage`,
 `row-cap`, `missing`, `ineligible`. Definitions live in `apps/api/src/lib/ai/summarize-skip.ts`.
