@@ -522,7 +522,7 @@ describe("GET /v1/lookups/source-by-slug", () => {
     expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
   });
 
-  test("returns the oldest match deterministically when the slug appears under multiple orgs", async () => {
+  test("returns 409 listing every org when the slug appears under multiple orgs", async () => {
     await testDb.db.insert(organizations).values([
       { id: "org_acme", name: "Acme", slug: "acme", discovery: "curated" },
       { id: "org_beta", name: "Beta", slug: "beta", discovery: "curated" },
@@ -551,12 +551,25 @@ describe("GET /v1/lookups/source-by-slug", () => {
     ]);
 
     const res = await getByslug("cli");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { sourceId: string; orgSlug: string };
-    // The bookmark resolver picks the oldest row by createdAt — the contract
-    // is "deterministic, not necessarily right." Repeated calls land here.
-    expect(body.sourceId).toBe("src_older");
-    expect(body.orgSlug).toBe("acme");
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as {
+      error: {
+        code: string;
+        message: string;
+        details: { candidates: Array<{ sourceId: string; orgSlug: string }> };
+      };
+    };
+    expect(body.error.code).toBe("conflict");
+    expect(body.error.details.candidates.map((c) => c.sourceId).toSorted()).toEqual([
+      "src_newer",
+      "src_older",
+    ]);
+    expect(body.error.details.candidates.map((c) => c.orgSlug).toSorted()).toEqual([
+      "acme",
+      "beta",
+    ]);
+    expect(body.error.message).toContain("acme/cli");
+    expect(body.error.message).toContain("beta/cli");
   });
 
   test("excludes tombstoned (soft-deleted) sources via sourcesActive", async () => {
@@ -772,6 +785,33 @@ describe("GET /v1/lookups/product-by-slug", () => {
       orgSlug: "acme",
     });
     expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
+  });
+
+  test("returns 409 listing every org when the product slug is shared", async () => {
+    await testDb.db.insert(organizations).values([
+      { id: "org_acme", name: "Acme", slug: "acme", discovery: "curated" },
+      { id: "org_beta", name: "Beta", slug: "beta", discovery: "curated" },
+    ]);
+    await testDb.db.insert(products).values([
+      { id: "prod_acme", name: "Widget", slug: "widget", orgId: "org_acme" },
+      { id: "prod_beta", name: "Widget", slug: "widget", orgId: "org_beta" },
+    ]);
+
+    const res = await getByslug("widget");
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as {
+      error: {
+        code: string;
+        message: string;
+        details: { candidates: Array<{ productId: string }> };
+      };
+    };
+    expect(body.error.code).toBe("conflict");
+    expect(body.error.message).toContain("acme/widget");
+    expect(body.error.details.candidates.map((c) => c.productId).toSorted()).toEqual([
+      "prod_acme",
+      "prod_beta",
+    ]);
   });
 });
 

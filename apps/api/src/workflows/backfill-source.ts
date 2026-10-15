@@ -56,8 +56,8 @@ import {
 } from "../lib/ingest/source-backfill.js";
 
 // Per-batch summary chunk — mirrors BACKFILL_SUMMARY_CHUNK in workflows.ts.
-// generateContentForReleases bails above MAX_AUTOGEN_ROWS_PER_FIRE (20) in
-// poll-and-fetch; chunk under it so a large backfill still regenerates every row.
+// generateContentForReleases also chunks internally above 20 rows; this outer
+// slice keeps each workflow step's model wave to one chunk.
 const BACKFILL_SUMMARY_CHUNK = 20;
 
 const backfillLogger = {

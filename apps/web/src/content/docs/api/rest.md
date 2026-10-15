@@ -70,8 +70,8 @@ When you only have a coordinate or a domain:
 | Endpoint                                                          | Resolves                                                                                    |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `GET /v1/lookups/by-domain?domain=…`                              | A normalized domain to its owning org and any products whose alias targets the same domain. |
-| `GET /v1/lookups/source-by-slug?slug=…`                           | The canonical org-scoped home for a bare source slug.                                       |
-| `GET /v1/lookups/product-by-slug?slug=…`                          | The canonical org-scoped home for a bare product slug.                                      |
+| `GET /v1/lookups/source-by-slug?slug=…`                           | The canonical org-scoped home for a unique bare source slug. A shared slug is 409.          |
+| `GET /v1/lookups/product-by-slug?slug=…`                          | The canonical org-scoped home for a unique bare product slug. A shared slug is 409.         |
 | `POST /v1/lookups { provider: "github", coordinate: "org/repo" }` | Materializes a hidden source row from a GitHub coordinate on first call.                    |
 
 ## Upgrade intelligence (Beta)

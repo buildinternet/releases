@@ -20,13 +20,22 @@ import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate"
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain, findProductsByDomain } from "@releases/queries/domain-lookup";
 import { loadReleaseLocations } from "@releases/queries/release-locations";
-import { isSlugHeldByProduct } from "@releases/queries/entities";
+import {
+  isSlugHeldByProduct,
+  listProductsBySlug,
+  listSourcesBySlug,
+} from "@releases/queries/entities";
 import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/search/lookup-related-org.js";
 import { readNegCache, writeNegCache } from "../lib/search/lookup-neg-cache.js";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
-import { ValidationError, NotFoundError, RateLimitedError } from "@releases/lib/releases-error";
+import {
+  ValidationError,
+  NotFoundError,
+  RateLimitedError,
+  ConflictError,
+} from "@releases/lib/releases-error";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
@@ -464,11 +473,10 @@ lookupRoutes.post(
 
 /**
  * Slug → canonical-home lookup for sources. Lets clients that hold a bare
- * slug (legacy bookmarks, the OSS CLI's `findSource(operatorInput)`) translate
- * it to the org-scoped form before the bare API path stops resolving slugs
- * (#698 final piece). Per-org slug uniqueness (#690) means a slug can match
- * multiple sources across orgs; this endpoint returns the oldest match by
- * createdAt for stability so repeated calls land on the same row.
+ * slug (legacy bookmarks, the OSS CLI's `findProduct` path) translate it to
+ * the org-scoped form. A slug owned by one org returns that row. A slug owned
+ * by more than one org is 409 with every candidate (#2525) — never an
+ * oldest-row guess.
  *
  * `Sunset` header is set so callers know this is a migration aid, not a
  * permanent shape — it'll be removed when the bookmark window elapses.
@@ -483,7 +491,7 @@ lookupRoutes.get(
     tags: ["Lookups"],
     summary: "Resolve a bare source slug to its canonical org-scoped home",
     description:
-      "Translation aid for clients holding a bare source slug. Returns the org-scoped tuple `{ sourceId, sourceSlug, orgSlug }` so callers can rewrite to the canonical `/v1/orgs/:orgSlug/sources/:sourceSlug` path before the bare API path stops resolving slugs (#698 final piece).\n\nReturns the **oldest** match by `(createdAt, id)` so repeated calls land on the same row. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` on success.",
+      "Translation aid for clients holding a bare source slug. Returns the org-scoped tuple `{ sourceId, sourceSlug, orgSlug }` so callers can rewrite to the canonical `/v1/orgs/:orgSlug/sources/:sourceSlug` path before the bare API path stops resolving slugs (#698 final piece).\n\nA slug owned by one org returns that row and carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT`. A slug owned by more than one org returns 409 with `details.candidates` (`org/slug` + `src_` id) instead of picking a row (#2525).",
     parameters: [
       {
         name: "slug",
@@ -512,6 +520,10 @@ lookupRoutes.get(
         description: "No source matches the slug",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
+      409: {
+        description: "Slug matches more than one org",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
     },
   }),
   async (c) => {
@@ -523,22 +535,38 @@ lookupRoutes.get(
       );
     }
     const db = createDb(c.env.DB);
-    const [row] = await db
-      .select({
-        sourceId: sourcesActive.id,
-        sourceSlug: sourcesActive.slug,
-        orgSlug: organizationsActive.slug,
-      })
-      .from(sourcesActive)
-      .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
-      .where(eq(sourcesActive.slug, slug))
-      .orderBy(asc(sourcesActive.createdAt), asc(sourcesActive.id))
-      .limit(1);
-    if (!row) {
+    const matches = await listSourcesBySlug(db, slug);
+    if (matches.length === 0) {
       return respondError(c, new NotFoundError(`No source matches slug "${slug}"`));
     }
+    if (matches.length > 1) {
+      const candidates = matches
+        .map((match) => ({
+          sourceId: match.row.id,
+          sourceSlug: match.row.slug,
+          orgSlug: match.orgSlug,
+        }))
+        .toSorted((a, b) =>
+          `${a.orgSlug}/${a.sourceSlug}`.localeCompare(`${b.orgSlug}/${b.sourceSlug}`),
+        );
+      const listed = candidates
+        .map((candidate) => `${candidate.orgSlug}/${candidate.sourceSlug} (${candidate.sourceId})`)
+        .join(", ");
+      return respondError(
+        c,
+        new ConflictError(
+          `Source slug "${slug}" matches ${candidates.length} sources: ${listed}. Pass a src_ id or an org/slug coordinate.`,
+          { details: { candidates } },
+        ),
+      );
+    }
+    const only = matches[0]!;
     c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
-    return c.json(row);
+    return c.json({
+      sourceId: only.row.id,
+      sourceSlug: only.row.slug,
+      orgSlug: only.orgSlug,
+    });
   },
 );
 
@@ -645,7 +673,7 @@ lookupRoutes.get(
     tags: ["Lookups"],
     summary: "Resolve a bare product slug to its canonical org-scoped home",
     description:
-      "Same semantics as `/v1/lookups/source-by-slug` but for products. Returns `{ productId, productSlug, orgSlug }` so callers can rewrite to `/v1/orgs/:orgSlug/products/:productSlug` before the bare path stops resolving slugs. Oldest match by `(createdAt, id)`. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` on success.",
+      "Same semantics as `/v1/lookups/source-by-slug` but for products. Returns `{ productId, productSlug, orgSlug }` when one org owns the slug, with `Sunset: Sun, 01 Nov 2026 00:00:00 GMT`. A slug owned by more than one org returns 409 with `details.candidates` (#2525).",
     parameters: [
       {
         name: "slug",
@@ -674,6 +702,10 @@ lookupRoutes.get(
         description: "No product matches the slug",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
+      409: {
+        description: "Slug matches more than one org",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
     },
   }),
   async (c) => {
@@ -685,22 +717,40 @@ lookupRoutes.get(
       );
     }
     const db = createDb(c.env.DB);
-    const [row] = await db
-      .select({
-        productId: productsActive.id,
-        productSlug: productsActive.slug,
-        orgSlug: organizationsActive.slug,
-      })
-      .from(productsActive)
-      .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
-      .where(eq(productsActive.slug, slug))
-      .orderBy(asc(productsActive.createdAt), asc(productsActive.id))
-      .limit(1);
-    if (!row) {
+    const matches = await listProductsBySlug(db, slug);
+    if (matches.length === 0) {
       return respondError(c, new NotFoundError(`No product matches slug "${slug}"`));
     }
+    if (matches.length > 1) {
+      const candidates = matches
+        .map((match) => ({
+          productId: match.row.id,
+          productSlug: match.row.slug,
+          orgSlug: match.orgSlug,
+        }))
+        .toSorted((a, b) =>
+          `${a.orgSlug}/${a.productSlug}`.localeCompare(`${b.orgSlug}/${b.productSlug}`),
+        );
+      const listed = candidates
+        .map(
+          (candidate) => `${candidate.orgSlug}/${candidate.productSlug} (${candidate.productId})`,
+        )
+        .join(", ");
+      return respondError(
+        c,
+        new ConflictError(
+          `Product slug "${slug}" matches ${candidates.length} products: ${listed}. Pass a prod_ id or an org/slug coordinate.`,
+          { details: { candidates } },
+        ),
+      );
+    }
+    const only = matches[0]!;
     c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
-    return c.json(row);
+    return c.json({
+      productId: only.row.id,
+      productSlug: only.row.slug,
+      orgSlug: only.orgSlug,
+    });
   },
 );
 

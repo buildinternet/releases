@@ -696,6 +696,10 @@ export const releases = sqliteTable(
     importance: integer("importance"),
     url: text("url"),
     contentHash: text("content_hash"),
+    // SHA-256 of the normalized body (`normalizeReleaseBody`). Used to drop
+    // reworded same-day duplicates. Nullable — history is hashed on read.
+    // Not unique: backports and release candidates share a body on purpose.
+    bodyHash: text("body_hash"),
     // Cached size of `content` (in raw chars and cl100k_base tokens) so feed
     // surfaces can advertise "this release is ~1.5K tokens" without round-
     // tripping the body for every row. Computed on write via `withContentSize`
@@ -725,6 +729,7 @@ export const releases = sqliteTable(
     // Url-only lookups (no source in hand) can't use the pair above.
     index("idx_releases_url").on(table.url),
     index("idx_releases_source_published").on(table.sourceId, table.publishedAt),
+    index("idx_releases_source_body_hash").on(table.sourceId, table.bodyHash),
     index("idx_releases_published").on(table.publishedAt),
     // Covers `(published_at DESC, id DESC)` cursor walks — GraphQL `latestReleases`
     // and REST `/v1/orgs/:slug/releases`. Drizzle's index() helper doesn't emit
@@ -1582,6 +1587,9 @@ export const releasesVisible = sqliteView("releases_visible", {
   importance: integer("importance"),
   url: text("url"),
   contentHash: text("content_hash"),
+  // Type-level mirror only — `releases_visible` is `SELECT releases.*`, so the
+  // column added by 20261015160000_releases_body_hash is already exposed.
+  bodyHash: text("body_hash"),
   contentChars: integer("content_chars"),
   contentTokens: integer("content_tokens"),
   metadata: text("metadata"),

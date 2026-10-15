@@ -546,10 +546,9 @@ export const api = {
    * Hits `/v1/lookups/source-by-slug`, the dedicated bookmark-resolver
    * endpoint introduced when the bare API path stopped accepting slugs
    * (#698). It's auth-gated under `adminRoutes` so the call goes through
-   * `adminFetchApi` — server-only, never returned to the client. The
-   * endpoint returns the oldest match for a given slug — a deterministic
-   * answer for bookmarks even when the same slug appears under multiple
-   * orgs after #690.
+   * `adminFetchApi` — server-only, never returned to the client. A unique
+   * slug redirects; a slug shared by several orgs is 409 and this call
+   * returns null (#2525), so the legacy page 404s instead of guessing.
    */
   sourceLegacyResolve: (slug: string) =>
     adminFetchApi<{ sourceId: string; sourceSlug: string; orgSlug: string }>(

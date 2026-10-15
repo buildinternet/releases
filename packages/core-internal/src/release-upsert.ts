@@ -26,6 +26,7 @@ export const RELEASE_URL_UPSERT = {
   set: {
     content: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content ELSE releases.content END`,
     contentHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_hash ELSE releases.content_hash END`,
+    bodyHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.body_hash ELSE releases.body_hash END`,
     contentChars: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_chars ELSE releases.content_chars END`,
     contentTokens: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_tokens ELSE releases.content_tokens END`,
     media: sql`CASE WHEN ${MEDIA_NEEDS_BACKFILL} THEN excluded.media ELSE releases.media END`,
@@ -65,6 +66,7 @@ export const RELEASE_CONTENT_UPSERT = {
   set: {
     content: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content ELSE releases.content END`,
     contentHash: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content_hash ELSE releases.content_hash END`,
+    bodyHash: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.body_hash ELSE releases.body_hash END`,
     contentChars: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content_chars ELSE releases.content_chars END`,
     contentTokens: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content_tokens ELSE releases.content_tokens END`,
     media: sql`CASE WHEN ${MEDIA_CHANGED} THEN excluded.media ELSE releases.media END`,

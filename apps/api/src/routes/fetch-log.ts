@@ -3,7 +3,8 @@ import { eq, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources } from "@buildinternet/releases-core/schema";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
-import { getStatusHub, sourceMatchByIdOrSlug } from "../utils.js";
+import { getStatusHub } from "../utils.js";
+import { requireResolvedSource } from "../lib/sources/resolve-source.js";
 import { getActiveFetchSession } from "../lib/sources/active-fetch-session.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -27,7 +28,9 @@ fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
   const wantsEnvelope = c.req.query("envelope") === "true";
 
   if (sourceSlug) {
-    const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(sourceSlug));
+    const resolved = await requireResolvedSource(db, sourceSlug, { component: "fetch-log" });
+    if (!resolved.ok) return respondError(c, resolved.error);
+    const [src] = await db.select().from(sources).where(eq(sources.id, resolved.sourceId));
     if (!src) return respondError(c, new NotFoundError("Source not found"));
 
     const logs = await db

@@ -28,7 +28,10 @@ export const SUMMARIZE_RELEASE_LANE = "summarize-release";
  * - `source-opt-out` — `metadata.summarize === false`
  * - `hidden` — source `isHidden`
  * - `coverage` — coverage-side row (hidden from read paths)
- * - `row-cap` — eligible candidate count over the per-fire cap (the whole batch is skipped)
+ * - `suppressed` — `releases.suppressed` (marketing classifier or a manual suppress)
+ * - `row-cap` — historical. Oversized fires used to skip the whole batch; they
+ *   are chunked now and this code is no longer emitted. Kept so existing APL
+ *   filters still type-check against the union.
  * - `missing` — inserted id was not in the database
  * - `ineligible` — failed the eligibility SELECT for a reason the probe didn't name
  */
@@ -39,6 +42,7 @@ export const SUMMARIZE_SKIP_REASONS = [
   "source-opt-out",
   "hidden",
   "coverage",
+  "suppressed",
   "row-cap",
   "missing",
   "ineligible",
@@ -49,7 +53,7 @@ export type SummarizeSkipReason = (typeof SUMMARIZE_SKIP_REASONS)[number];
 /** Cap on `releaseIds` so a backfill skip can't blow up a log line. `count` stays exact. */
 export const SUMMARIZE_SKIP_ID_LIMIT = 20;
 
-export type SummarizeSkipComponent = "auto-generate-content" | "batch-summarize";
+export type SummarizeSkipComponent = "auto-generate-content" | "batch-summarize" | "ai-lanes";
 
 /**
  * Emit one `summarize-skip` event. No-op when `releaseIds` is empty so a quiet

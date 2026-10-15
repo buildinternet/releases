@@ -413,7 +413,7 @@ describe("summarize-skip logging", () => {
     ]);
   });
 
-  it("emits reason=row-cap for the whole candidate set and does not call the model", async () => {
+  it("chunks a bulk insert and summarizes every eligible row", async () => {
     const db = mkDb();
     const source = await seed(db);
     const ids = Array.from({ length: 21 }, (_, i) => `rel_${i}`);
@@ -428,28 +428,70 @@ describe("summarize-skip logging", () => {
     );
     const calls: string[] = [];
     mockGlobalFetch((async (input: RequestInfo | URL) => {
-      calls.push(String(input));
-      return new Response("unexpected", { status: 500 });
+      const url = String(input);
+      calls.push(url);
+      if (!url.includes("api.anthropic.com")) {
+        return new Response(`unexpected ${url}`, { status: 500 });
+      }
+      const text =
+        "<title>Supabase CLI fixes the installer</title><title_short>Installer keeps the CLI binary</title_short><summary>The macOS installer no longer drops the CLI binary.</summary>";
+      return new Response(
+        JSON.stringify({
+          id: "msg_test",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-5-5",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text }],
+          usage: { input_tokens: 10, output_tokens: 8 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     }) as typeof fetch);
 
     const generated = await generateContentForReleases(db, modelEnv(), source, ids);
 
+    expect(generated).toBe(21);
+    expect(calls.filter((url) => url.includes("api.anthropic.com"))).toHaveLength(21);
+    const events = parseEvents(lines);
+    expect(events.find((e) => e.event === "chunked")).toMatchObject({
+      candidateCount: 21,
+      chunkSize: 20,
+      sourceSlug: "supabase-cli",
+    });
+    expect(events.find((e) => e.event === "row-cap-tripped")).toBeUndefined();
+    expect(skips(events).find((e) => e.reason === "row-cap")).toBeUndefined();
+    const summaries = events.filter((e) => e.event === "batch-summary");
+    expect(summaries).toHaveLength(2);
+    expect(summaries.map((e) => e.generated)).toEqual([20, 1]);
+    const stored = await db.select().from(releases);
+    expect(stored.every((row) => row.titleGenerated != null && row.summary != null)).toBe(true);
+  });
+
+  it("emits reason=suppressed and does not call the model", async () => {
+    const db = mkDb();
+    const source = await seed(db);
+    await db.insert(releases).values({
+      id: "rel_hidden",
+      sourceId: "src_s",
+      title: "rel_hidden",
+      content: REAL_BODY,
+      url: "https://example.com/rel_hidden",
+      suppressed: true,
+    });
+    const calls: string[] = [];
+    mockGlobalFetch((async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response("unexpected", { status: 500 });
+    }) as typeof fetch);
+
+    const generated = await generateContentForReleases(db, modelEnv(), source, ["rel_hidden"]);
+
     expect(generated).toBe(0);
     expect(calls).toEqual([]);
-    const events = parseEvents(lines);
-    expect(events.find((e) => e.event === "row-cap-tripped")).toMatchObject({
-      candidateCount: 21,
-      cap: 20,
-    });
-    expect(skips(events)).toEqual([
-      expect.objectContaining({
-        reason: "row-cap",
-        count: 21,
-        releaseIdsTruncated: true,
-      }),
+    expect(skips(parseEvents(lines))).toEqual([
+      expect.objectContaining({ reason: "suppressed", count: 1, releaseIds: ["rel_hidden"] }),
     ]);
-    expect(skips(events)[0]?.releaseIds).toHaveLength(20);
-    expect(events.find((e) => e.event === "batch-summary")).toBeUndefined();
   });
 
   it("truncates releaseIds but keeps count exact", () => {

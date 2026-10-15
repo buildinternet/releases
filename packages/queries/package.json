@@ -14,6 +14,7 @@
     "./release-locations": "./src/release-locations.ts",
     "./releases": "./src/releases.ts",
     "./search-entities": "./src/search-entities.ts",
+    "./source-resolve": "./src/source-resolve.ts",
     "./sql-fragments": "./src/sql-fragments.ts"
   },
   "dependencies": {

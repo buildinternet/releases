@@ -184,6 +184,21 @@ describe("parseReleaseContent importance extraction", () => {
 });
 
 describe("summarizeRelease breaking", () => {
+  test("App Store filler short-circuits: no model call", async () => {
+    const { model, calls } = stubModel(response({ breaking: "major" }));
+    for (const content of [
+      "Bug fixes and performance improvements.",
+      "This update includes bug fixes and performance improvements.",
+      "No specific changes in this version.",
+    ]) {
+      const r = await summarizeRelease(model, { ...INPUT, content });
+      expect(r.skipped).toBe(true);
+      expect(r.title).toBeNull();
+      expect(r.summary).toBeNull();
+    }
+    expect(calls.length).toBe(0);
+  });
+
   test("empty body short-circuits: breaking unknown, no model call", async () => {
     const { model, calls } = stubModel(response({ breaking: "major" }));
     const r = await summarizeRelease(model, { ...INPUT, content: "Updated dependencies" });

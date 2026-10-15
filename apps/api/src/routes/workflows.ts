@@ -135,7 +135,8 @@ import {
   ServiceUnavailableError,
   InternalError,
 } from "@releases/lib/releases-error";
-import { startDeterministicUpdate } from "../lib/sources/update-dispatch.js";
+import { startDeterministicUpdate, validateUpdateParams } from "../lib/sources/update-dispatch.js";
+import { requireResolvedSource, resolveUpdateSourceIds } from "../lib/sources/resolve-source.js";
 import { seedSourceActors } from "../lib/sources/source-actor-schedule.js";
 import { queryUnmanagedActiveSources } from "../queries/unmanaged-source-actors.js";
 import type { MediaBackfillKind } from "../workflows/media-backfill.js";
@@ -752,11 +753,11 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
   // diff against existing chunks.
   const fileConditions = [] as ReturnType<typeof eq>[];
   if (body.sourceSlug) {
-    const [src] = await db.select().from(sources).where(eq(sources.slug, body.sourceSlug)).limit(1);
-    if (!src) {
-      return respondError(c, new NotFoundError(`source not found: ${body.sourceSlug}`));
-    }
-    fileConditions.push(eq(sourceChangelogFiles.sourceId, src.id));
+    const resolved = await requireResolvedSource(db, body.sourceSlug, {
+      component: "workflows-embed-changelogs",
+    });
+    if (!resolved.ok) return respondError(c, resolved.error);
+    fileConditions.push(eq(sourceChangelogFiles.sourceId, resolved.sourceId));
   }
 
   // A file needs work if ANY of its chunks have `vector_id IS NULL`, or if
@@ -1314,10 +1315,23 @@ workflowsRoutes.post("/workflows/update", async (c) => {
   }
 
   const identifiers = body.sourceIdentifiers ?? body.sourceSlugs;
+  const validationError = validateUpdateParams(body.company, identifiers);
+  if (validationError) {
+    return respondError(c, new ValidationError(validationError));
+  }
+  const db = createDb(c.env.DB);
+  const resolvedIds = await resolveUpdateSourceIds(db, {
+    company: typeof body.company === "string" ? body.company : undefined,
+    orgId: body.orgId,
+    identifiers: identifiers as string[],
+  });
+  if (!resolvedIds.ok) return respondError(c, resolvedIds.error);
+  const sourceIdentifiers = resolvedIds.sourceIds;
+
   const result = await startDeterministicUpdate(c.env, {
     company: body.company as string,
-    sourceIdentifiers: identifiers as string[],
-    orgId: body.orgId,
+    sourceIdentifiers,
+    orgId: resolvedIds.orgId ?? body.orgId,
     correlationId: body.correlationId,
   });
 
@@ -1352,35 +1366,21 @@ workflowsRoutes.post("/workflows/update", async (c) => {
 
   // CLI `admin source fetch` lands here. Re-arm each resolved source so a
   // successful update does not leave a dead SourceActor unmanaged (#2286).
-  if (c.env.SOURCE_ACTOR && Array.isArray(identifiers)) {
+  if (c.env.SOURCE_ACTOR && sourceIdentifiers.length > 0) {
     const actor = c.env.SOURCE_ACTOR;
     const work = (async () => {
-      const rows: Array<{ id: string }> = [];
-      for (const ident of identifiers) {
-        if (typeof ident !== "string" || ident.length === 0) continue;
-        if (isSourceId(ident)) {
-          rows.push({ id: ident });
-          continue;
-        }
-        const db = createDb(c.env.DB);
-        const [row] = await db
-          .select({ id: sources.id })
-          .from(sources)
-          .where(sourceMatchByIdOrSlug(ident))
-          .limit(1);
-        if (row) rows.push({ id: row.id });
-      }
-      if (rows.length > 0) await seedSourceActors(actor, rows, { force: true });
+      await seedSourceActors(
+        actor,
+        sourceIdentifiers.map((id) => ({ id })),
+        { force: true },
+      );
     })().catch(() => undefined);
     if (typeof c.executionCtx?.waitUntil === "function") {
       c.executionCtx.waitUntil(work);
     }
   }
 
-  return c.json(
-    { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
-    202,
-  );
+  return c.json({ sessionId: result.sessionId, status: "running", sourceIdentifiers }, 202);
 });
 
 // ── POST /workflows/rearm-source-actors ──────────────────────────────────────
@@ -1797,9 +1797,9 @@ export async function runGenerateContent(
 
 /**
  * Standard `deps.generate` for `runGenerateContent`: the live summarizer lane,
- * chunked under MAX_AUTOGEN_ROWS_PER_FIRE (20) — generateContentForReleases
- * bails on a larger batch, same as BatchEnrichWorkflow. Shared by the route
- * below and the post-fetch auto-fill in routes/sources.ts (#1579) so
+ * sliced at 20 so each call is one model wave. `generateContentForReleases`
+ * also chunks a larger list internally, so nothing is dropped. Shared by the
+ * route below and the post-fetch auto-fill in routes/sources.ts (#1579) so
  * generate-content stays the only write path for the generated fields.
  */
 export function buildGenerateContentDeps(
@@ -2742,9 +2742,8 @@ workflowsRoutes.post("/workflows/refetch-release", async (c) => {
 
 const BACKFILL_DEFAULT_MAX_WINDOWS = 50;
 const BACKFILL_MAX_MAX_WINDOWS = 200;
-// Per-call summary chunk. generateContentForReleases bails entirely above
-// MAX_AUTOGEN_ROWS_PER_FIRE (20) in poll-and-fetch.ts; chunk under it so a
-// large backfill still gets every row summarized.
+// Per-call summary chunk. generateContentForReleases also chunks internally
+// above 20 rows; this slice keeps each backfill wave to one model batch.
 const BACKFILL_SUMMARY_CHUNK = 20;
 
 const backfillLogger = {

@@ -7,7 +7,7 @@ description: Onboard or backfill a company's changelog locally in Claude Code by
 
 Onboard a changelog **without dispatching the remote fetch path.** The remote path (`releases admin source fetch` → `POST /v1/workflows/update` → the API worker's `DeterministicUpdateWorkflow`, #1946) runs the body→records extraction server-side (incremental Haiku or the tool-loop) and bills that inference — even when it writes zero releases. A local Claude Code agent is already a capable model with web-fetch + file tools, so it can do the per-page extraction inline (folded into the session you're already in) and only needs a deterministic write path.
 
-**Core principle: the agent is the extractor.** You fetch, you parse, you structure the records, and you POST them to the batch endpoint, which does a plain idempotent upsert with **no AI on insert**. The remote extraction loop never runs.
+**Core principle: the agent is the extractor.** You fetch, you parse, you structure the records, and you POST them to the batch endpoint, which does an idempotent upsert. The remote extraction loop never runs. After the insert, the batch effects enqueue summarization (honoring `metadata.summarize=false`) and, when `metadata.marketingFilter` is set, marketing classification. The HTTP response does not wait on those model calls.
 
 **Local Claude Code only.** This skill uses the `Agent` tool for sub-agent fan-out and assumes a persistent local filesystem and the CLI's `RELEASES_API_*` env. It sits alongside `seeding-playbooks` as a local-only operator skill.
 
@@ -16,8 +16,8 @@ Onboard a changelog **without dispatching the remote fetch path.** The remote pa
 State this explicitly to the operator before a large run, and honor it:
 
 - **Spends:** your agent's own tokens for fetch + extract, plus any sub-agents you fan out (your choice of model — `sonnet` for quality, `haiku` for bulk).
-- **Does NOT spend:** no server-side extraction (the update workflow's incremental-Haiku / tool-loop passes), no remote `web_fetch` extraction. `POST /v1/workflows/update` is **never called**.
-- **The batch endpoint runs no AI on insert** — no summarization, no marketing classifier, no feed enrichment. It does an `insert` plus a fire-and-forget vector embed (`waitUntil`). The AI fields (`title_generated` / `title_short` / `summary`) are intentionally left empty; see _Manual enrichment_ below for the deliberate follow-up paths.
+- **Does NOT spend:** no server-side extraction (the update workflow's incremental-Haiku / tool-loop passes), no remote `web_fetch` extraction, no feed enrichment. `POST /v1/workflows/update` is **never called**.
+- **The batch endpoint does spend on post-insert effects** when the source is eligible: summarization (org `autoGenerateContent` on, and `metadata.summarize` is not `false`) and the marketing classifier (only when `metadata.marketingFilter` is set). Both run in `waitUntil` after the response. Summarization runs in sequential waves of 20; classification runs on every inserted row. A large insert is processed in full. Set `metadata.summarize=false` before a boilerplate backfill if those summary calls should not run. Feed enrichment still does not run on this path. See _Manual enrichment_ below for the deliberate override paths.
 
 The negative signal that confirms no remote run happened: in Axiom `releases-cloudflare-logs` there is **no** `POST .../fetch?sessionId=det-…` and **no** `extract-deps-worker` event for the source.
 
@@ -173,9 +173,9 @@ Local output must match production shape so the source can later be picked up by
 | `media`       | Unwrap `_next/image` / Vercel optimizer wrappers before storing — use `normalizeMediaUrl` from `packages/rendering/src/media-url.ts`.                         |
 | `url`         | **Always populate.** Dedup relies on a stable per-release `url`; without it the upsert can't collapse re-runs.                                                |
 
-## Manual enrichment (out of scope for `/batch`, but available)
+## Manual enrichment
 
-The batch path intentionally omits `title_generated` / `title_short` / `summary` and org overviews. When an operator wants them, set them deliberately, case by case:
+Eligible sources get `title_generated` / `title_short` / `summary` from the post-insert summarizer. Org overviews are still a separate step. When you want to set the fields yourself, or the source opted out:
 
 - **Per-release override:** `PATCH /v1/releases/:id` accepts `summary`, `titleGenerated`, `titleShort`, `composition`, `version`, … and re-embeds when content/title/AI-fields change.
 - **At insert time (alternative to `/batch`):** the single-release insert `POST /v1/sources/:slug/releases` accepts `summary?` / `titleGenerated?` / `titleShort?` — use this path instead of `/batch` when you want enrichment set in the same write. It also strips `<UNKNOWN>`/`n/a` versions server-side.

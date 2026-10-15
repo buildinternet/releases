@@ -411,10 +411,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
     expect(result.insertedIds?.length).toBe(0);
   });
 
-  it("still trips the cap when more than the cap's worth of items are genuinely new", async () => {
-    // The cap is retained as a cost backstop — but on the new-item set, not the
-    // re-listed feed window. A burst of >20 brand-new items skips classification
-    // and inserts visibly for operator backfill.
+  it("classifies every genuinely-new item when the wave is larger than 20", async () => {
     let anthropicCalls = 0;
     installFetch((input) => {
       const url = urlOf(input);
@@ -447,10 +444,13 @@ describe("fetchOne — metadata.marketingFilter", () => {
 
     expect(result.status).toBe("success");
     expect(result.releasesInserted).toBe(21);
-    expect(anthropicCalls).toBe(0);
+    expect(anthropicCalls).toBe(21);
+    expect(result.insertedIds).toEqual([]);
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
-    expect(rows.every((r) => r.suppressed === false)).toBe(true);
+    expect(rows).toHaveLength(21);
+    expect(rows.every((r) => r.suppressed === true)).toBe(true);
+    expect(rows.every((r) => r.suppressedReason === "marketing_classifier:case_study")).toBe(true);
   });
 
   it("fails open when the classifier throws — inserts everything visibly", async () => {

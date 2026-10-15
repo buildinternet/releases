@@ -185,7 +185,9 @@ export interface SourceMetadata {
    * improvements"). Absent / `true` keeps the source eligible. Enforced in the
    * row-selection queries via `summarizeNotOptedOut`
    * (`@releases/core-internal/eligibility`), shared by the live cron path
-   * (`generateContentForReleases`) and the batch path (`fetchEligibleReleases`).
+   * (`generateContentForReleases`), the batch path (`fetchEligibleReleases`),
+   * the manual `POST /v1/ai/lanes/summarize` lane, and the batch-summarize
+   * apply step (re-checked in case the flag flipped after submit).
    */
   summarize?: boolean;
 

@@ -94,6 +94,8 @@ import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { notifyWebRevalidate, type WebRevalidateEnv } from "../lib/web-revalidate.js";
 import { clusterAndPersistCascades } from "../lib/ingest/cluster-cascades.js";
+import { clusterAndPersistVersionLines } from "../lib/ingest/cluster-version-lines.js";
+import { dropRewordedContentDuplicates, releaseBodyHash } from "../lib/ingest/content-dedup.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { logSwallowed } from "../lib/log-swallowed.js";
@@ -1177,11 +1179,12 @@ async function recordNoChange(
 }
 
 /**
- * Per-fire cap on marketing-classifier calls, applied to the genuinely-new
- * items in a fire (not the re-listed feed window). A normal feed delta is 0–5
- * items; a first-onboard backfill can be 50+. Above the cap we skip
- * classification and insert visibly — operators can run a one-off backfill via
- * the suppress API.
+ * Log threshold for a large classification wave. A normal feed delta is 0–5
+ * genuinely-new items. A first onboard can be 50+. We used to skip the whole
+ * set above this size and insert everything visibly, which is how a 72-row
+ * blog import landed with no marketing verdicts. Classify every new item;
+ * this number is only the size at which we log that the wave is large.
+ * Calls stay sequential.
  */
 const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
 
@@ -1259,9 +1262,10 @@ function skippedMarketingRecords(
  * disposition for every new index so telemetry can be written after insert.
  * URLs `selectNewReleaseIndices` already dropped are omitted.
  *
- * Fail-open: missing provider, a classifier throw, and the per-fire cap never
- * throw and never suppress. Sequential per-item (vs. parallel) bounds concurrent
+ * Fail-open: a missing provider or a classifier throw never throws and never
+ * suppresses that item. Sequential per-item (vs. parallel) bounds concurrent
  * inference; the prompt cache hit is isolate-wide, so ordering doesn't matter.
+ * A wave larger than MARKETING_CLASSIFIER_MAX_PER_FIRE is still classified.
  */
 async function classifyMarketingForReleases(
   db: D1Db,
@@ -1291,14 +1295,13 @@ async function classifyMarketingForReleases(
   const threshold = await loadMarketingThreshold(env.DB);
 
   if (newIndices.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
-    logEvent("warn", {
+    logEvent("info", {
       component: "cron-poll-fetch",
-      event: "marketing-filter-cap-tripped",
+      event: "marketing-filter-chunked",
       sourceSlug: source.slug,
       candidateCount: newIndices.length,
-      cap: MARKETING_CLASSIFIER_MAX_PER_FIRE,
+      chunkSize: MARKETING_CLASSIFIER_MAX_PER_FIRE,
     });
-    return { hits, records: skippedMarketingRecords(newIndices, "cap_tripped"), threshold };
   }
 
   let suppressedCount = 0;
@@ -1455,6 +1458,15 @@ function writeInsertedMarketingPoints(
   }
 }
 
+function remapIndexMap<V>(map: Map<number, V>, indexMap: Map<number, number>): Map<number, V> {
+  const next = new Map<number, V>();
+  for (const [index, value] of map) {
+    const mapped = indexMap.get(index);
+    if (mapped !== undefined) next.set(mapped, value);
+  }
+  return next;
+}
+
 export interface IngestResult {
   insertedIds: string[];
   found: number;
@@ -1525,6 +1537,23 @@ export async function ingestRawReleases(
     }
   }
 
+  // Same-day body-hash dedup, before the marketing and enrich passes so a
+  // reworded re-fetch never spends inference. A second pass after enrich
+  // (below) catches a short feed summary that only matches once expanded.
+  if (rawReleases.length > 0) {
+    const deduped = await dropRewordedContentDuplicates(db, source.id, rawReleases);
+    if (deduped.dropped > 0) {
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "content-dedup-applied",
+        sourceSlug: source.slug,
+        kept: deduped.kept.length,
+        dropped: deduped.dropped,
+      });
+    }
+    rawReleases = deduped.kept;
+  }
+
   const marketingPass: MarketingClassificationPass =
     meta.marketingFilter === true
       ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
@@ -1533,9 +1562,45 @@ export async function ingestRawReleases(
           records: [],
           threshold: MARKETING_SUPPRESSION_THRESHOLD,
         };
-  const marketingMap = marketingPass.hits;
+  let marketingHits = marketingPass.hits;
+  let marketingRecords = marketingPass.records;
 
-  const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
+  let enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
+
+  if (rawReleases.length > 0) {
+    const finals = rawReleases.map((raw, index) => ({
+      index,
+      title: raw.title,
+      content: enrichMap.get(index)?.content ?? raw.content,
+      url: raw.url ?? null,
+      publishedAt: raw.publishedAt ?? null,
+      version: raw.version ?? null,
+    }));
+    const deduped = await dropRewordedContentDuplicates(db, source.id, finals);
+    if (deduped.dropped > 0) {
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "content-dedup-applied",
+        sourceSlug: source.slug,
+        kept: deduped.kept.length,
+        dropped: deduped.dropped,
+        pass: "enriched",
+      });
+      const indexMap = new Map<number, number>();
+      const nextRaw: typeof rawReleases = [];
+      for (const item of deduped.kept) {
+        indexMap.set(item.index, nextRaw.length);
+        nextRaw.push(rawReleases[item.index]!);
+      }
+      rawReleases = nextRaw;
+      enrichMap = remapIndexMap(enrichMap, indexMap);
+      marketingHits = remapIndexMap(marketingHits, indexMap);
+      marketingRecords = marketingRecords.flatMap((record) => {
+        const index = indexMap.get(record.index);
+        return index === undefined ? [] : [{ ...record, index }];
+      });
+    }
+  }
 
   // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
   // downstream readers see the underlying CDN asset. When the `MEDIA` bucket
@@ -1621,7 +1686,7 @@ export async function ingestRawReleases(
     const enrich = enrichMap.get(index);
     const content = enrich?.content ?? raw.content;
     const size = computeContentSize(content);
-    const verdict = marketingMap.get(index);
+    const verdict = marketingHits.get(index);
     const id = newReleaseId();
     idByIndex.set(index, id);
     return {
@@ -1637,6 +1702,7 @@ export async function ingestRawReleases(
       // leave it unset, so this is a no-op for them (column default `feature`).
       type: raw.type ?? "feature",
       contentHash: contentHash({ ...raw, content }),
+      bodyHash: releaseBodyHash(content, raw.title),
       contentChars: size.contentChars,
       contentTokens: size.contentTokens,
       publishedAt: raw.publishedAt?.toISOString() ?? null,
@@ -1652,6 +1718,13 @@ export async function ingestRawReleases(
   let inserted = 0;
   const publishRows: InsertedReleaseRow[] = [];
   const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
+  const versionLineRows: Array<{
+    id: string;
+    version: string | null;
+    title: string;
+    content: string;
+    publishedAt: string | null;
+  }> = [];
   const suppressedIds = new Set<string>();
   // Every id INSERT … RETURNING actually persisted, including suppressed rows.
   // `insertedIds` drops those, so it cannot decide which points to write.
@@ -1681,12 +1754,19 @@ export async function ingestRawReleases(
       if (suppressed === true) suppressedIds.add(r.id);
       publishRows.push(publishRow);
       clusterRows.push({ id: r.id, version: r.version, content });
+      versionLineRows.push({
+        id: r.id,
+        version: r.version,
+        title: r.title,
+        content,
+        publishedAt: r.publishedAt,
+      });
     }
   }
   writeInsertedMarketingPoints(
     env,
     source.id,
-    marketingPass.records,
+    marketingRecords,
     idByIndex,
     returnedIds,
     marketingPass.threshold,
@@ -1701,10 +1781,18 @@ export async function ingestRawReleases(
     component: "poll-fetch",
     sourceId: source.id,
   });
+  const versionLineResult = await clusterAndPersistVersionLines(db, versionLineRows, {
+    component: "poll-fetch",
+    sourceId: source.id,
+    orgId: source.orgId,
+  });
+  const hiddenIds = new Set<string>([
+    ...cascadeResult.coverageIds,
+    ...versionLineResult.coverageIds,
+    ...suppressedIds,
+  ]);
   const visiblePublishRows =
-    cascadeResult.coverageIds.size > 0 || suppressedIds.size > 0
-      ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id) && !suppressedIds.has(r.id))
-      : publishRows;
+    hiddenIds.size > 0 ? publishRows.filter((r) => !hiddenIds.has(r.id)) : publishRows;
 
   if (visiblePublishRows.length > 0 && env.RELEASE_HUB) {
     // Spread rather than project: `PublishEnv` also carries `WEB_BASE_URL` (the

@@ -199,6 +199,7 @@ export function createLoaders(db: D1Db) {
             importance: releasesVisible.importance,
             url: releasesVisible.url,
             contentHash: releasesVisible.contentHash,
+            bodyHash: releasesVisible.bodyHash,
             contentChars: releasesVisible.contentChars,
             contentTokens: releasesVisible.contentTokens,
             metadata: releasesVisible.metadata,

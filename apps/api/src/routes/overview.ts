@@ -4,8 +4,9 @@ import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq, and } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { knowledgePages, organizations, products } from "@buildinternet/releases-core/schema";
-import { orgWhere, productMatchByIdOrSlug } from "../utils.js";
+import { knowledgePages, organizations } from "@buildinternet/releases-core/schema";
+import { orgWhere } from "../utils.js";
+import { isProductId, listProductsBySlug, findProductById } from "@releases/queries/entities";
 import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
 import { fetchOverviewCitations } from "../lib/overview-citations.js";
 import { validateJson } from "../lib/validate.js";
@@ -17,7 +18,7 @@ import {
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
-import { NotFoundError } from "@releases/lib/releases-error";
+import { ConflictError, NotFoundError } from "@releases/lib/releases-error";
 
 const app = new Hono<Env>();
 
@@ -118,7 +119,7 @@ app.get(
     tags: ["Overviews"],
     summary: "Get product overview",
     description:
-      "Returns the AI-generated knowledge page for the product, or `null` when no overview has been generated yet. The product is resolved by typed `prod_…` ID or slug via `productMatchByIdOrSlug`.",
+      "Returns the AI-generated knowledge page for the product, or `null` when no overview has been generated yet. The product is resolved by typed `prod_…` ID. A bare slug resolves only when one org owns it; a slug shared by several orgs returns 409.",
     responses: {
       200: {
         description: "Product overview page, or null when none exists",
@@ -128,11 +129,35 @@ app.get(
   }),
   async (c) => {
     const db = getDb(c);
-    const [product] = await db
-      .select({ id: products.id })
-      .from(products)
-      .where(productMatchByIdOrSlug(c.req.param("slug")));
-    if (!product) return c.json(null);
+    const ident = c.req.param("slug");
+    let productId: string | null = null;
+    if (isProductId(ident)) {
+      productId = (await findProductById(db, ident))?.id ?? null;
+    } else if (!ident.includes("/")) {
+      const matches = await listProductsBySlug(db, ident);
+      if (matches.length > 1) {
+        return respondError(
+          c,
+          new ConflictError(
+            `Product slug "${ident}" matches ${matches.length} products. Pass a prod_ id or an org/slug coordinate.`,
+            {
+              details: {
+                candidates: matches
+                  .map((match) => ({
+                    productId: match.row.id,
+                    productSlug: match.row.slug,
+                    orgSlug: match.orgSlug,
+                  }))
+                  .toSorted((a, b) => a.orgSlug.localeCompare(b.orgSlug)),
+              },
+            },
+          ),
+        );
+      }
+      productId = matches[0]?.row.id ?? null;
+    }
+    if (!productId) return c.json(null);
+    const product = { id: productId };
 
     const [row] = await db
       .select()

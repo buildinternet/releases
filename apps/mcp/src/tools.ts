@@ -568,15 +568,28 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
     return listVisibleSourceIdsForProduct(db, prod.id);
   }
 
-  // Ambiguous slug: one query against sources joined to their optional
-  // product — matches either directly (source slug) or transitively
-  // (every source under a product with that slug).
-  const rows: { id: string }[] = await db.all<{ id: string }>(sql`
-    SELECT s.id as id FROM sources_visible s
-    LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE s.slug = ${id} OR p.slug = ${id}
-  `);
-  return rows.length > 0 ? rows.map((r) => r.id) : null;
+  // Bare slug. Source and product slugs are unique per org, not globally, so
+  // a mixed id list from every org would scope a read to the wrong catalog.
+  // One match resolves; several matches throw so the caller can qualify it.
+  const sourceMatches = await listSourcesBySlug(db, id);
+  const productMatches = await listProductsBySlug(db, id);
+  if (sourceMatches.length > 1) {
+    throw new AmbiguousEntityError("source", id, toAmbiguousCandidates(sourceMatches));
+  }
+  if (productMatches.length > 1) {
+    throw new AmbiguousEntityError("product", id, toAmbiguousCandidates(productMatches));
+  }
+  if (sourceMatches.length === 1 && productMatches.length === 1) {
+    throw new AmbiguousEntityError("source", id, [
+      ...toAmbiguousCandidates(sourceMatches),
+      ...toAmbiguousCandidates(productMatches),
+    ]);
+  }
+  if (sourceMatches.length === 1) return [sourceMatches[0]!.row.id];
+  if (productMatches.length === 1) {
+    return listVisibleSourceIdsForProduct(db, productMatches[0]!.row.id);
+  }
+  return null;
 }
 
 /**
