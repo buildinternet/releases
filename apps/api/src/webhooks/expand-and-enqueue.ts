@@ -76,7 +76,7 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
       await args.queue.sendBatch(chunk.map((body) => ({ body })));
     }
   } catch (err) {
-    logEvent("warn", {
+    logEvent("error", {
       component: "webhooks",
       event: "expand-and-enqueue-failed",
       err: err instanceof Error ? err : String(err),

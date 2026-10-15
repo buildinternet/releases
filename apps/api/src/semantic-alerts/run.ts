@@ -80,7 +80,9 @@ export async function runSemanticAlertMatch(
   try {
     await matchAndDeliver(env, input, deps);
   } catch (err) {
-    logEvent("warn", {
+    // Error level so Workers Issues records the failure. The message and stack
+    // stay off the log: a thrown query string must not land in Workers Logs.
+    logEvent("error", {
       component: "semantic-alerts",
       event: "semantic-alert-match-failed",
       sourceId: input.sourceId,
@@ -421,11 +423,11 @@ async function enqueueWebhookDeliveries(
       await queue.sendBatch(chunk.map((body) => ({ body })));
     }
   } catch (err) {
-    logEvent("warn", {
+    logEvent("error", {
       component: "semantic-alerts",
       event: "webhook-enqueue-failed",
       count: messages.length,
-      errName: err instanceof Error ? err.name : "Error",
+      err,
     });
   }
 }

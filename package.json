@@ -139,7 +139,7 @@
     "oxlint-tsgolint": "^7.0.2001",
     "portless": "^0.15.5",
     "typescript": "^7.0.2",
-    "wrangler": "^4.125.0",
+    "wrangler": "^4.134.0",
     "yaml": "^2.9.0"
   },
   "engines": {

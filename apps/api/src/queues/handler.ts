@@ -47,7 +47,7 @@ export async function handleQueueBatch(
         await processReleaseFanoutMessage(env, msg.body);
         msg.ack();
       } catch (err) {
-        logEvent("warn", {
+        logEvent("error", {
           component: "release-events-queue",
           event: "fanout-failed",
           attempts: msg.attempts,

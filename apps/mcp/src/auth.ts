@@ -342,11 +342,13 @@ async function resolveUserKey(
       userId,
     };
   } catch (err) {
-    logEvent("warn", {
+    // Fail open to anonymous read, but the introspection failure is a real
+    // error — Issues does not see a successful fallback response.
+    logEvent("error", {
       component: "mcp-auth",
       event: "user-key-introspect-error",
       message: "relu_ introspection failed; treating as anonymous",
-      error: err instanceof Error ? err.message : String(err),
+      err,
     });
     return ANONYMOUS;
   }

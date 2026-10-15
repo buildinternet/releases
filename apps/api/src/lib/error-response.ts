@@ -13,6 +13,16 @@ import { logEvent } from "@releases/lib/log-event";
 import { BareSlugRejected } from "../utils";
 
 /**
+ * Workers Issues records console.error (and 5xx responses) but not a caught
+ * exception that only becomes a response. Log server-class failures here, once,
+ * with the Error object so the stack is in the log line. Expected 4xx paths
+ * stay quiet.
+ */
+function logServerFailure(event: string, err: unknown, extra?: Record<string, unknown>): void {
+  logEvent("error", { component: "api", event, err, ...extra });
+}
+
+/**
  * The API's single error producer. Maps any thrown value to the standardized
  * nested envelope (`{ error: { code, type, message, details? } }`) and the right
  * HTTP status. Registered as `app.onError` (see index.ts). Cascade order matters:
@@ -22,6 +32,9 @@ import { BareSlugRejected } from "../utils";
 export function respondError(c: Context, err: unknown): Response {
   // 1. Typed domain error — trust its code/type/status.
   if (isReleasesError(err)) {
+    if (err.status >= 500) {
+      logServerFailure("server_error", err, { code: err.code, status: err.status });
+    }
     return c.json(err.toWire(), err.status as ContentfulStatusCode);
   }
 
@@ -47,6 +60,7 @@ export function respondError(c: Context, err: unknown): Response {
       code: err.status === 400 ? "invalid_json" : undefined,
       expose,
     }).toWire();
+    if (err.status >= 500) logServerFailure("server_error", err, { status: err.status });
     const res = c.json(wire, err.status);
     if (err.res) {
       err.res.headers.forEach((value, key) => {
@@ -69,6 +83,7 @@ export function respondError(c: Context, err: unknown): Response {
       event: "db_error",
       causeCode: db.code,
       causeTransient: db.transient,
+      err,
     });
     const e = new InternalError("Internal server error", {
       code: dbErrorToWireCode(db.code),
@@ -79,7 +94,7 @@ export function respondError(c: Context, err: unknown): Response {
 
   // 5. Unexpected — generic 500, real message logged but never sent.
   const detail = err instanceof Error ? err.message : String(err);
-  logEvent("error", { component: "api", event: "unhandled_error", error: detail });
+  logEvent("error", { component: "api", event: "unhandled_error", error: detail, err });
   const e = new InternalError();
   return c.json(e.toWire(), e.status as ContentfulStatusCode);
 }

@@ -226,7 +226,7 @@ export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): P
   try {
     await sendDigestBatch(env.DIGEST_DELIVERY_QUEUE, messages);
   } catch (err) {
-    logEvent("warn", {
+    logEvent("error", {
       component: "digest",
       event: "enqueue-failed",
       cadence,

@@ -7,6 +7,7 @@ import {
   type ConsumptionIdentity,
   OAUTH_JWT_TOKEN_PREFIX,
 } from "@releases/lib/consumption-ref";
+import { setIssueContext } from "@releases/lib/issue-context";
 import { logEvent } from "@releases/lib/log-event";
 import {
   type ApiScope,
@@ -106,6 +107,25 @@ type ResolvedAuth =
   | { kind: "rate_limited" }
   // skip=true means "local dev, no secret configured" — preserve open access.
   | { kind: "none"; skip: boolean };
+
+/**
+ * Attach the signed-in user to the active trace span for Workers Issues.
+ * Uses the session row id, never the session token, and the active workspace
+ * id when Better Auth has one. Email stays off the span.
+ */
+function attachSessionIssueContext(
+  session: {
+    user?: { id?: string | null } | null;
+    session?: { id?: string | null; activeOrganizationId?: string | null } | null;
+  } | null,
+): void {
+  if (!session?.user?.id) return;
+  setIssueContext({
+    "user.id": session.user.id,
+    "session.id": session.session?.id,
+    "account.id": session.session?.activeOrganizationId,
+  });
+}
 
 function bearer(c: Context<Env>): string {
   const header = c.req.header("Authorization") ?? "";
@@ -275,7 +295,10 @@ export async function validateAccountCredential(
   if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
     return { valid: false };
   const v = await verifyUserKey(c, presented);
-  if (v.ok && v.userId) return { valid: true, userId: v.userId };
+  if (v.ok && v.userId) {
+    setIssueContext({ "user.id": v.userId });
+    return { valid: true, userId: v.userId };
+  }
   return { valid: false };
 }
 
@@ -396,6 +419,7 @@ async function resolveAuthUncached(
       // out-of-band. An empty result (no read) denies.
       const scopes = clampUserKeyScopes(v.scopes);
       if (scopes.length === 0) return { kind: "none", skip: false };
+      setIssueContext({ "user.id": v.userId });
       return { kind: "token", tokenId: USER_API_KEY_PREFIX + v.keyId, scopes };
     }
     return v.rateLimited ? { kind: "rate_limited" } : { kind: "none", skip: false };
@@ -419,6 +443,7 @@ async function resolveAuthUncached(
         result.principalId,
       );
       if (!bound) return { kind: "none", skip: false };
+      setIssueContext({ "user.id": result.principalId });
       return {
         kind: "token",
         tokenId: result.tokenId,
@@ -427,6 +452,7 @@ async function resolveAuthUncached(
         publishSourceId: result.sourceId,
       };
     }
+    if (result.principalType === "user") setIssueContext({ "user.id": result.principalId });
     return {
       kind: "token",
       tokenId: result.tokenId,
@@ -445,6 +471,7 @@ async function resolveAuthUncached(
   if (isJwtShaped(presented)) {
     const verified = await verifyPresentedJwt(c, presented);
     if (verified && verified.scopes.length > 0) {
+      if (verified.subject) setIssueContext({ "user.id": verified.subject });
       return {
         kind: "token",
         tokenId: `oauth_${verified.subject ?? "m2m"}`,
@@ -648,6 +675,7 @@ const requireSessionBase: MiddlewareHandler<Env> = async (c, next) => {
   if (!session?.user?.id) {
     return respondError(c, new UnauthorizedError("Sign in required"));
   }
+  attachSessionIssueContext(session);
   c.set("session", {
     user: { id: session.user.id, email: session.user.email, name: session.user.name },
   });
@@ -723,6 +751,7 @@ export function requireSessionOnlyWithFlag(
     if (!session?.user?.id) {
       return respondError(c, new UnauthorizedError("Sign in required"));
     }
+    attachSessionIssueContext(session);
     c.set("session", {
       user: { id: session.user.id, email: session.user.email, name: session.user.name },
     });
@@ -806,6 +835,7 @@ async function resolveFollowsPrincipal(c: Context<Env>): Promise<FollowsPrincipa
   const auth = await getOrCreateAuth(c);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (session?.user?.id) {
+    attachSessionIssueContext(session);
     return {
       kind: "user",
       user: { id: session.user.id, email: session.user.email, name: session.user.name },
@@ -814,7 +844,10 @@ async function resolveFollowsPrincipal(c: Context<Env>): Promise<FollowsPrincipa
   const presented = bearer(c);
   if (presented) {
     const resolved = await resolveBearerUser(c, presented);
-    if (resolved.kind === "user") return { kind: "user", user: resolved.user };
+    if (resolved.kind === "user") {
+      setIssueContext({ "user.id": resolved.user.id });
+      return { kind: "user", user: resolved.user };
+    }
     if (resolved.kind === "rate_limited") return { kind: "rate_limited" };
     return { kind: "invalid_credential" };
   }
@@ -853,10 +886,12 @@ export const attachFollowsSession: MiddlewareHandler<Env> = async (c, next) => {
   try {
     const resolved = await resolveFollowsPrincipal(c);
     if (resolved.kind === "user") c.set("session", { user: resolved.user });
-  } catch {
+  } catch (err) {
     // Fail toward anonymous: an auth-layer error must not take down a lane
     // whose handlers gate on `c.get("session")` themselves (they answer 401),
     // and the flag-off 404 must stay reachable without working auth infra.
+    // The failure is still an error — Issues does not see a swallowed throw.
+    logEvent("error", { component: "auth", event: "session-attach-failed", err });
   }
   return next();
 };

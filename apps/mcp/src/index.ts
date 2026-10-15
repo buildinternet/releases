@@ -1,3 +1,7 @@
+import * as cloudflareWorkers from "cloudflare:workers";
+import { bindIssueTracing, setIssueContext } from "@releases/lib/issue-context";
+
+bindIssueTracing(cloudflareWorkers);
 import { createMcpHandler } from "agents/mcp/server";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
@@ -44,6 +48,9 @@ async function handle(
   // caller clears it; per-tool scope enforcement happens inside createServer.
   const auth = await resolveMcpAuth(request, env);
   if (!auth.ok) return auth.response;
+  if (auth.identity.kind === "token" && auth.identity.userId) {
+    setIssueContext({ "user.id": auth.identity.userId });
+  }
   // Staging: the gate has now passed, so serve the (otherwise public) metadata.
   if (wantsMetadata) return protectedResourceMetadataResponse(env, request.url);
   const { identity } = auth;

@@ -18,7 +18,11 @@
       "enabled": true,
       "destinations": ["axiom-traces"],
     },
+    // Workers Issues. Must live in config: a dashboard toggle is cleared by the
+    // next `wrangler deploy` when this is absent. Requires Wrangler >= 4.134.
+    "issues": { "enabled": true },
   },
+  "upload_source_maps": true,
   "vars": {
     "USER_API_KEYS_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
@@ -130,6 +134,21 @@
     "staging": {
       "name": "releases-mcp-staging",
       "routes": [{ "pattern": "mcp.releasenotesindex.dev", "custom_domain": true }],
+      // Observability is inheritable; repeated here so a staging override cannot
+      // drop Issues on the next `--env staging` deploy.
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+        },
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+        },
+        "issues": { "enabled": true },
+      },
+      "upload_source_maps": true,
       "vars": {
         "USER_API_KEYS_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",

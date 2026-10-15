@@ -53,6 +53,13 @@ mock.module("cloudflare:workers", () => ({
       return { success: true, errors: [] };
     },
   },
+  // Workers Issues span context. Tests opt in by setting `__ISSUE_SPAN__`.
+  tracing: {
+    getActiveSpan() {
+      return (globalThis as { __ISSUE_SPAN__?: { setAttribute(k: string, v: string): void } })
+        .__ISSUE_SPAN__;
+    },
+  },
 }));
 
 // Stub cloudflare:workflows. `NonRetryableError` must extend Error and
