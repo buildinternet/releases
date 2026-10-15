@@ -4,8 +4,8 @@ import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releaseSummaries, sources } from "@buildinternet/releases-core/schema";
-import { sourceMatchByIdOrSlug } from "../utils.js";
+import { releaseSummaries } from "@buildinternet/releases-core/schema";
+import { requireResolvedSource } from "../lib/sources/resolve-source.js";
 import { validateJson } from "../lib/validate.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -45,11 +45,9 @@ app.get(
     const year = c.req.query("year");
     const month = c.req.query("month");
 
-    const [source] = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(sourceMatchByIdOrSlug(slug));
-    if (!source) return respondError(c, new NotFoundError("Source not found"));
+    const resolved = await requireResolvedSource(db, slug, { component: "source-summaries" });
+    if (!resolved.ok) return respondError(c, resolved.error);
+    const source = { id: resolved.sourceId };
 
     const conditions = [eq(releaseSummaries.sourceId, source.id)];
     if (type) conditions.push(eq(releaseSummaries.type, type as "rolling" | "monthly"));
@@ -96,11 +94,9 @@ app.post(
     const slug = c.req.param("slug");
     const body = c.req.valid("json");
 
-    const [source] = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(sourceMatchByIdOrSlug(slug));
-    if (!source) return respondError(c, new NotFoundError("Source not found"));
+    const resolved = await requireResolvedSource(db, slug, { component: "source-summaries" });
+    if (!resolved.ok) return respondError(c, resolved.error);
+    const source = { id: resolved.sourceId };
 
     await db
       .insert(releaseSummaries)

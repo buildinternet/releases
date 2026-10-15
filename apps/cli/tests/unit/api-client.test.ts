@@ -614,6 +614,23 @@ describe("resolveProductFeedTarget", () => {
     const target = await client.resolveProductFeedTarget("ghost");
     expect(target).toBeNull();
   });
+
+  it("rejects an ambiguous bare product slug instead of picking an org", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "conflict",
+            type: "conflict",
+            message:
+              'Product slug "widget" matches 2 products: acme/widget (prod_a), beta/widget (prod_b). Pass a prod_ id or an org/slug coordinate.',
+          },
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      )) as any;
+    await expect(client.findProduct("widget")).rejects.toThrow(/acme\/widget/);
+    await expect(client.resolveProductFeedTarget("widget")).rejects.toThrow(/beta\/widget/);
+  });
 });
 
 // ---------------------------------------------------------------------------

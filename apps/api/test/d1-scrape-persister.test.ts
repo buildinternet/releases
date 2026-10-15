@@ -90,6 +90,29 @@ describe("d1ScrapePersister.getSource", () => {
     expect(src!.type).toBe("scrape");
   });
 
+  it("returns null for an ambiguous bare slug instead of another org's source", async () => {
+    const db = createTestDb();
+    await seed(db);
+    await db
+      .insert(organizations)
+      .values([{ id: "org_other", slug: "other", name: "Other", category: "developer-tools" }]);
+    await db.insert(sources).values([
+      {
+        id: "src_other_same_slug",
+        slug: "test-changelog",
+        name: "Other Changelog",
+        type: "scrape",
+        url: "https://other.example/changelog",
+        orgId: "org_other",
+      },
+    ]);
+    expect(await mkPersister(db).getSource("test-changelog")).toBeNull();
+    expect((await mkPersister(db).getSource("testorg/test-changelog"))!.id).toBe(SRC_ID);
+    expect((await mkPersister(db).getSource("other/test-changelog"))!.id).toBe(
+      "src_other_same_slug",
+    );
+  });
+
   it("returns null for an unknown identifier", async () => {
     const db = createTestDb();
     await seed(db);

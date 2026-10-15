@@ -5,11 +5,11 @@
  * `waitUntil`, so every durable write and post-ingest effect is awaited.
  */
 import { and, desc, eq } from "drizzle-orm";
-import { releases, sources, type Source } from "@buildinternet/releases-core/schema";
+import { releases, type Source } from "@buildinternet/releases-core/schema";
 import type { ScrapePersister } from "@releases/adapters/scrape-persister";
 import { logEvent } from "@releases/lib/log-event";
 import type { D1Db } from "../../db.js";
-import { findSourceForOrgSlug, sourceById, sourceMatchByIdOrSlug } from "../../utils.js";
+import { resolveSourceIdentifier } from "@releases/queries/source-resolve";
 import {
   ingestReleaseBatch,
   runBatchIngestEffects,
@@ -34,22 +34,27 @@ export interface D1PersisterEnv extends BatchIngestEnv, BatchEffectsEnv, FetchLo
  */
 async function resolveSource(db: D1Db, identifier: string): Promise<Source | null> {
   try {
-    if (identifier.startsWith("src_")) {
-      const [row] = await db.select().from(sources).where(sourceById(identifier)).limit(1);
-      return row ?? null;
+    const resolved = await resolveSourceIdentifier(db, identifier);
+    if (resolved.status === "ambiguous") {
+      logEvent("error", {
+        component: "d1-scrape-persister",
+        event: "ambiguous-source-slug",
+        identifier,
+        candidates: resolved.candidates,
+      });
+      return null;
     }
-
-    const slash = identifier.indexOf("/");
-    if (slash > 0 && slash < identifier.length - 1) {
-      return await findSourceForOrgSlug(
-        db,
-        identifier.slice(0, slash),
-        identifier.slice(slash + 1),
-      );
+    if (resolved.status !== "found") return null;
+    if (resolved.via === "bare-slug") {
+      logEvent("warn", {
+        component: "d1-scrape-persister",
+        event: "bare-slug-resolved",
+        slug: identifier,
+        sourceId: resolved.source.id,
+        orgId: resolved.source.orgId,
+      });
     }
-
-    const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(identifier)).limit(1);
-    return row ?? null;
+    return resolved.source;
   } catch (err) {
     logEvent("warn", {
       component: "d1-scrape-persister",
