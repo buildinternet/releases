@@ -20,7 +20,11 @@ import {
   oauthSelfServiceGuard,
   OAUTH_SELF_SERVICE_WRITE_PATHS,
 } from "./auth/oauth-self-service-guard.js";
-import { forwardWellKnown, buildApiProtectedResourceMetadata } from "./oauth-discovery.js";
+import {
+  buildApiProtectedResourceMetadata,
+  clampDiscoveryMetadata,
+  forwardWellKnown,
+} from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
 import {
@@ -640,7 +644,11 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     waitUntil = undefined;
   }
   const auth = await createAuth(c.env);
-  const res = await runAuthWithWaitUntil(waitUntil, () => auth.handler(c.req.raw));
+  const raw = await runAuthWithWaitUntil(waitUntil, () => auth.handler(c.req.raw));
+  // Plugin discovery lists confidential token-auth methods and
+  // `client_credentials`. Open DCR persists `none` plus authorization_code and
+  // refresh_token. Non-discovery responses return before the body is read.
+  const res = await clampDiscoveryMetadata(c.req.url, raw);
 
   // Audit failed credential sign-ins. This is the ONLY place a rate-limit (429)
   // rejection is observable — it short-circuits in Better Auth's router before any
