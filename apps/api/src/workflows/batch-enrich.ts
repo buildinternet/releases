@@ -118,7 +118,7 @@ interface FetchStepResult {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_COST_USD = 10;
-/** Chunk under generateContentForReleases' MAX_AUTOGEN_ROWS_PER_FIRE (20). */
+/** One model wave per call. generateContentForReleases chunks a larger list itself. */
 const REGEN_CHUNK = 20;
 /** 360 × 60s sleep = 6h ceiling, matching the poll step timeout. */
 const MAX_POLL_ITERATIONS = 360;

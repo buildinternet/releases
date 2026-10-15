@@ -1177,11 +1177,12 @@ async function recordNoChange(
 }
 
 /**
- * Per-fire cap on marketing-classifier calls, applied to the genuinely-new
- * items in a fire (not the re-listed feed window). A normal feed delta is 0–5
- * items; a first-onboard backfill can be 50+. Above the cap we skip
- * classification and insert visibly — operators can run a one-off backfill via
- * the suppress API.
+ * Log threshold for a large classification wave. A normal feed delta is 0–5
+ * genuinely-new items. A first onboard can be 50+. We used to skip the whole
+ * set above this size and insert everything visibly, which is how a 72-row
+ * blog import landed with no marketing verdicts. Classify every new item;
+ * this number is only the size at which we log that the wave is large.
+ * Calls stay sequential.
  */
 const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
 
@@ -1259,9 +1260,10 @@ function skippedMarketingRecords(
  * disposition for every new index so telemetry can be written after insert.
  * URLs `selectNewReleaseIndices` already dropped are omitted.
  *
- * Fail-open: missing provider, a classifier throw, and the per-fire cap never
- * throw and never suppress. Sequential per-item (vs. parallel) bounds concurrent
+ * Fail-open: a missing provider or a classifier throw never throws and never
+ * suppresses that item. Sequential per-item (vs. parallel) bounds concurrent
  * inference; the prompt cache hit is isolate-wide, so ordering doesn't matter.
+ * A wave larger than MARKETING_CLASSIFIER_MAX_PER_FIRE is still classified.
  */
 async function classifyMarketingForReleases(
   db: D1Db,
@@ -1291,14 +1293,13 @@ async function classifyMarketingForReleases(
   const threshold = await loadMarketingThreshold(env.DB);
 
   if (newIndices.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
-    logEvent("warn", {
+    logEvent("info", {
       component: "cron-poll-fetch",
-      event: "marketing-filter-cap-tripped",
+      event: "marketing-filter-chunked",
       sourceSlug: source.slug,
       candidateCount: newIndices.length,
-      cap: MARKETING_CLASSIFIER_MAX_PER_FIRE,
+      chunkSize: MARKETING_CLASSIFIER_MAX_PER_FIRE,
     });
-    return { hits, records: skippedMarketingRecords(newIndices, "cap_tripped"), threshold };
   }
 
   let suppressedCount = 0;

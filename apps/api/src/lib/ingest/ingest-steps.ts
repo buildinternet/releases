@@ -95,10 +95,11 @@ export function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneE
 }
 
 /**
- * Per-fire row cap. A typical fire is 0–3 rows; anything larger is almost
- * always a monorepo dump or first-onboard backfill, neither of which is a
- * useful target for the per-row LLM call. Bail loudly and let a deliberate
- * `scripts/generate-release-content.ts` invocation mop up if wanted.
+ * Per-call row chunk. A typical fire is 0–3 rows. A bulk insert or first
+ * onboard can be dozens; those used to bail the entire call (`row-cap`) and
+ * leave every row without a summary. Chunk at this size and run each slice
+ * so a large insert still summarizes, while each SELECT / model wave stays
+ * bounded. Callers that already slice (backfill) pass a single chunk.
  */
 const MAX_AUTOGEN_ROWS_PER_FIRE = 20;
 
@@ -126,9 +127,10 @@ const MAX_AUTOGEN_BODY_CHARS = 50_000;
  * Every pre-model short-circuit emits `summarize-skip` (`lane:
  * summarize-release`, stable `reason` code, `count` + `releaseIds`). That
  * includes gates that return before `batch-summary` (hidden, opted-out,
- * source opt-out, coverage, row cap) and the in-loop empty / too-large
+ * source opt-out, suppressed, coverage) and the in-loop empty / too-large
  * skips. `batch-summary.skippedEmpty` / `skippedTooLarge` are unchanged.
- * Who gets a model call is unchanged.
+ * A bulk insert over the per-call chunk size is split and each slice runs;
+ * it is not dropped.
  */
 export async function generateContentForReleases(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
@@ -151,6 +153,27 @@ export async function generateContentForReleases(
       sourceSlug: source.slug,
     });
     return 0;
+  }
+
+  // A bulk insert (the OpenRouter blog's 72-row `/releases/batch`, a first
+  // feed onboard) used to trip the cap below and return 0 for the whole set.
+  // Recurse per chunk so each wave commits its own updates — a timeout keeps
+  // the slices that already landed, and `title_generated IS NULL` makes the
+  // retry fill only the rest. `summarize=false` is applied inside each slice.
+  if (insertedIds.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
+    logEvent("info", {
+      component: "auto-generate-content",
+      event: "chunked",
+      sourceSlug: source.slug,
+      candidateCount: insertedIds.length,
+      chunkSize: MAX_AUTOGEN_ROWS_PER_FIRE,
+    });
+    let total = 0;
+    for (const chunk of chunkArray(insertedIds, MAX_AUTOGEN_ROWS_PER_FIRE)) {
+      // eslint-disable-next-line no-await-in-loop -- sequential waves keep inference cost bounded
+      total += await generateContentForReleases(db, env, source, chunk, opts);
+    }
+    return total;
   }
 
   // Order matters: SELECT before secret-store fetch. Most orgs are opted out,
@@ -232,23 +255,6 @@ export async function generateContentForReleases(
   }
 
   if (rows.length === 0) return 0;
-
-  if (rows.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
-    logEvent("warn", {
-      component: "auto-generate-content",
-      event: "row-cap-tripped",
-      sourceSlug: source.slug,
-      candidateCount: rows.length,
-      cap: MAX_AUTOGEN_ROWS_PER_FIRE,
-    });
-    logSummarizeSkip({
-      component: "auto-generate-content",
-      reason: "row-cap",
-      releaseIds: rows.map((row) => row.id),
-      sourceSlug: source.slug,
-    });
-    return 0;
-  }
 
   // Provider/model decided here: Anthropic Haiku via gateway by default, or a
   // cheap OpenRouter model when `openrouter-enabled` is on + a model is configured.
@@ -452,7 +458,7 @@ export async function generateContentForReleases(
 /**
  * Why an inserted id failed `summarizeEligibilityConds`. One reason per id,
  * first match wins, matching the SELECT's AND order: org opt-in, then
- * per-source opt-out, then coverage.
+ * per-source opt-out, then suppressed, then coverage.
  *
  * Org and source gates apply to every id on this source, so those two reasons
  * are a single PK lookup — the common opted-out fire must not probe each
@@ -499,15 +505,18 @@ async function classifyIneligibleReleases(
 
   const found = new Set<string>();
   const coverage = new Set<string>();
+  const suppressed = new Set<string>();
   for (const chunk of chunkArray(ids, IN_ARRAY_CHUNK_SIZE)) {
     // eslint-disable-next-line no-await-in-loop -- chunked under the D1 bind cap
-    const probes: { id: string; isCoverage: number }[] = await db
+    const probes: { id: string; isCoverage: number; isSuppressed: number }[] = await db
       .select({
         id: releases.id,
         isCoverage:
           sql<number>`CASE WHEN ${releaseCoverage.coverageId} IS NOT NULL THEN 1 ELSE 0 END`.as(
             "is_coverage",
           ),
+        isSuppressed:
+          sql<number>`CASE WHEN ${releases.suppressed} = 1 THEN 1 ELSE 0 END`.as("is_suppressed"),
       })
       .from(releases)
       .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
@@ -515,6 +524,7 @@ async function classifyIneligibleReleases(
     for (const probe of probes) {
       found.add(probe.id);
       if (Number(probe.isCoverage) === 1) coverage.add(probe.id);
+      if (Number(probe.isSuppressed) === 1) suppressed.add(probe.id);
     }
   }
 
@@ -525,6 +535,7 @@ async function classifyIneligibleReleases(
   };
   for (const id of ids) {
     if (!found.has(id)) push("missing", id);
+    else if (suppressed.has(id)) push("suppressed", id);
     else if (coverage.has(id)) push("coverage", id);
     else push("ineligible", id);
   }

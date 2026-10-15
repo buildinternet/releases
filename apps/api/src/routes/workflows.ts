@@ -1797,9 +1797,9 @@ export async function runGenerateContent(
 
 /**
  * Standard `deps.generate` for `runGenerateContent`: the live summarizer lane,
- * chunked under MAX_AUTOGEN_ROWS_PER_FIRE (20) — generateContentForReleases
- * bails on a larger batch, same as BatchEnrichWorkflow. Shared by the route
- * below and the post-fetch auto-fill in routes/sources.ts (#1579) so
+ * sliced at 20 so each call is one model wave. `generateContentForReleases`
+ * also chunks a larger list internally, so nothing is dropped. Shared by the
+ * route below and the post-fetch auto-fill in routes/sources.ts (#1579) so
  * generate-content stays the only write path for the generated fields.
  */
 export function buildGenerateContentDeps(
@@ -2742,9 +2742,8 @@ workflowsRoutes.post("/workflows/refetch-release", async (c) => {
 
 const BACKFILL_DEFAULT_MAX_WINDOWS = 50;
 const BACKFILL_MAX_MAX_WINDOWS = 200;
-// Per-call summary chunk. generateContentForReleases bails entirely above
-// MAX_AUTOGEN_ROWS_PER_FIRE (20) in poll-and-fetch.ts; chunk under it so a
-// large backfill still gets every row summarized.
+// Per-call summary chunk. generateContentForReleases also chunks internally
+// above 20 rows; this slice keeps each backfill wave to one model batch.
 const BACKFILL_SUMMARY_CHUNK = 20;
 
 const backfillLogger = {

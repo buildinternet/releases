@@ -187,4 +187,68 @@ describe("runBatchIngestEffects generate-before-embed", () => {
 
     expect(order).toEqual(["generate", "embed"]);
   });
+
+  it("drops marketing hits from generate and embed", async () => {
+    const db = createTestDb();
+    const src = await seed(db);
+    const kept = REL_ID;
+    const dropped = "rel_bfx00000000000000002";
+    await db.insert(releases).values({
+      id: dropped,
+      sourceId: SRC_ID,
+      title: "Case study",
+      content: "How a customer migrated.",
+      url: "https://batchco.test/blog/case-study",
+    });
+    const g = makeGenerate(db);
+    let embedded: BatchEmbedRow[] = [];
+
+    await runBatchIngestEffects(db as unknown as D1Db, bareEnv, src, resultOf([kept, dropped]), {
+      skipInvalidate: true,
+      classifyInserted: async () => new Set([dropped]),
+      generateContent: g.fn,
+      embedReleases: async (rows) => {
+        embedded = rows;
+      },
+    });
+
+    expect(g.calls).toEqual([[kept]]);
+    expect(embedded.map((row) => row.id)).toEqual([kept]);
+  });
+
+  it("still generates when classification throws", async () => {
+    const db = createTestDb();
+    const src = await seed(db);
+    const g = makeGenerate(db);
+
+    await runBatchIngestEffects(db as unknown as D1Db, bareEnv, src, resultOf(), {
+      skipInvalidate: true,
+      classifyInserted: async () => {
+        throw new Error("classifier down");
+      },
+      generateContent: g.fn,
+      embedReleases: async () => {},
+    });
+
+    expect(g.calls).toEqual([[REL_ID]]);
+  });
+
+  it("skips classification when skipClassify is set", async () => {
+    const db = createTestDb();
+    const src = await seed(db);
+    let classified = false;
+
+    await runBatchIngestEffects(db as unknown as D1Db, bareEnv, src, resultOf(), {
+      skipInvalidate: true,
+      skipSummarize: true,
+      skipEmbed: true,
+      skipClassify: true,
+      classifyInserted: async () => {
+        classified = true;
+        return new Set([REL_ID]);
+      },
+    });
+
+    expect(classified).toBe(false);
+  });
 });
