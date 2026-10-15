@@ -65,11 +65,14 @@ export function summarizeNotOptedOut() {
  * Spread into the caller's `and(...)`; the caller must join `organizations`,
  * `sources`, and `releaseCoverage`. `ignoreAutoGate` drops ONLY the org opt-in
  * (an explicit operator override) — the per-source opt-out always holds.
+ * Suppressed rows (marketing classifier, manual suppress) are skipped too:
+ * summarizing them spends a model call on a row read paths hide.
  */
 export function summarizeEligibilityConds(opts: { ignoreAutoGate?: boolean } = {}): SQL[] {
   return [
     ...(opts.ignoreAutoGate ? [] : [eq(organizations.autoGenerateContent, true)]),
     summarizeNotOptedOut(),
+    eq(releases.suppressed, false),
     sql`${releaseCoverage.coverageId} IS NULL`,
   ];
 }

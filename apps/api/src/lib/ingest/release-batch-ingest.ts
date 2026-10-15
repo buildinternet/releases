@@ -9,15 +9,19 @@
  *   cascade coverage clustering, total count. Everything here is either a
  *   write the caller needs reflected in the response, or a read needed to
  *   decide one.
- * - `runBatchIngestEffects` — the post-insert extras: publish to the ReleaseHub
- *   DO, the web revalidate ping, latest-cache invalidation, generate-content
- *   (same eligibility as poll), then embed + `embeddedAt` marking. Publish /
- *   revalidate / invalidate tolerate failure independently and run concurrently
- *   via `Promise.allSettled`. Generate is awaited *before* embed so the
+ * - `runBatchIngestEffects` — the post-insert extras: marketing classification
+ *   (when `metadata.marketingFilter` is set), publish to the ReleaseHub DO,
+ *   the web revalidate ping, latest-cache invalidation, generate-content
+ *   (same eligibility as poll, including `metadata.summarize=false`, chunked
+ *   so a bulk insert is not dropped), then embed + `embeddedAt` marking.
+ *   Classification runs first and suppresses marketing hits so they are not
+ *   published, summarized, or embedded. Publish / revalidate / invalidate
+ *   tolerate failure independently and run concurrently via
+ *   `Promise.allSettled`. Generate is awaited *before* embed so the
  *   Vectorize payload sees `summary` / `title_generated` when the org is opted
- *   in — matching `runContentAndEmbedSteps`. The scrape persister skips both
+ *   in — matching `runContentAndEmbedSteps`. The scrape persister skips
  *   generate and embed; the DeterministicUpdate workflow runs them as durable
- *   steps later.
+ *   steps later. Classification still runs on that persist.
  *
  * Request-shaped concerns (body parsing, `releases`-array validation, `mode`
  * validation → `enrichMode`) stay in the route handler — they're HTTP
@@ -60,6 +64,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import type { MediaTransformBinding } from "../media/media-ingest.js";
 import { generateContentForReleases } from "./ingest-steps.js";
+import { classifyInsertedReleases, type ClassifyInsertedEnv } from "./classify-inserted.js";
 import type { TextModelEnv } from "../ai/text-model.js";
 
 /**
@@ -130,7 +135,13 @@ export interface BatchIngestEnv {
  * `generateContentForReleases` reads via `resolveSummarizeModel`.
  */
 export interface BatchEffectsEnv
-  extends PublishEnv, WebRevalidateEnv, InvalidationEnv, EmbedEnv, TextModelEnv {
+  extends
+    PublishEnv,
+    WebRevalidateEnv,
+    InvalidationEnv,
+    EmbedEnv,
+    TextModelEnv,
+    ClassifyInsertedEnv {
   // Typed loosely (matches the route's `Env.Bindings` Cloudflare `VectorizeIndex`)
   // and narrowed via cast at the call site below — see the note in
   // embedSourceSideEffect about why the cast is needed.
@@ -159,6 +170,21 @@ export type BatchEffectsOpts = {
    * summarize twice.
    */
   skipSummarize?: boolean;
+  /**
+   * Skip marketing classification. The semantic-alert preview inserts
+   * synthetic rows that must stay visible; production omits this.
+   */
+  skipClassify?: boolean;
+  /**
+   * Test seam. Production omits this and uses `classifyInsertedReleases`.
+   * Returns the release ids it suppressed.
+   */
+  classifyInserted?: (
+    db: D1Db,
+    env: BatchEffectsEnv,
+    src: Source,
+    insertedIds: string[],
+  ) => Promise<Set<string>>;
   /**
    * Test seam. Production omits this and uses `generateContentForReleases`.
    * Same injection style as `runGenerateContent({ generate })`.
@@ -433,17 +459,19 @@ export async function ingestReleaseBatch(
 }
 
 /**
- * The post-insert waitUntil extras: ReleaseHub publish, web revalidate,
- * latest-cache invalidation, generate-content, then embed + `embeddedAt`
- * marking. Awaitable — the caller decides whether to await inline or hand
- * it to `waitUntil`.
+ * The post-insert waitUntil extras: marketing classification, ReleaseHub
+ * publish, web revalidate, latest-cache invalidation, generate-content, then
+ * embed + `embeddedAt` marking. Awaitable — the caller decides whether to
+ * await inline or hand it to `waitUntil`.
  *
- * Publish/revalidate/invalidate already tolerate failure independently (each
- * logs its own error internally), so they run concurrently via
- * `Promise.allSettled` rather than one blocking the others. Generate is
- * sequential with embed (generate first) so the embed SELECT sees
- * `summary` / `title_generated` when the org is opted in. A generate
- * failure is fail-open: we still embed the raw body.
+ * Classification runs first when the source opted in, so marketing hits are
+ * suppressed before they publish, summarize, or embed. Publish / revalidate /
+ * invalidate then tolerate failure independently and run concurrently via
+ * `Promise.allSettled`. Generate is sequential with embed (generate first) so
+ * the embed SELECT sees `summary` / `title_generated` when the org is opted
+ * in. A generate failure is fail-open: we still embed the raw body.
+ * `metadata.summarize=false` is honored inside generate — a bulk insert does
+ * not bypass it.
  */
 export async function runBatchIngestEffects(
   db: D1Db,
@@ -453,15 +481,39 @@ export async function runBatchIngestEffects(
   opts?: BatchEffectsOpts,
 ): Promise<void> {
   const { visiblePublishRows, insertedIds } = result;
+
+  // Classify before publish. A missing provider or a thrown pass leaves every
+  // row visible (fail-open) — the insert already committed.
+  let suppressed = new Set<string>();
+  if (!opts?.skipClassify && insertedIds.length > 0) {
+    try {
+      const classify = opts?.classifyInserted ?? classifyInsertedReleases;
+      suppressed = await classify(db, env, src, insertedIds);
+    } catch (err) {
+      logEvent("warn", {
+        component: "sources-batch",
+        event: "marketing-filter-failed",
+        sourceId: src.id,
+        err: err instanceof Error ? err : String(err),
+      });
+    }
+  }
+  const publishRows =
+    suppressed.size > 0
+      ? visiblePublishRows.filter((row) => !suppressed.has(row.id))
+      : visiblePublishRows;
+  const liveIds =
+    suppressed.size > 0 ? insertedIds.filter((id) => !suppressed.has(id)) : insertedIds;
+
   const tasks: Array<Promise<unknown>> = [];
 
   // Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
   // `tail -f`, the upcoming web live view, webhook delivery) see new
-  // releases in real time. Coverage-side rows are excluded — they're
-  // not shown in default feeds and shouldn't broadcast on the live tail
-  // either. Publish stays concurrent with generate: the live payload
-  // omits `summary` by contract (`events.md`).
-  if (visiblePublishRows.length > 0) {
+  // releases in real time. Coverage-side rows and marketing hits are
+  // excluded — they're not shown in default feeds and shouldn't broadcast
+  // on the live tail either. Publish stays concurrent with generate: the
+  // live payload omits `summary` by contract (`events.md`).
+  if (publishRows.length > 0) {
     tasks.push(
       publishReleaseEvents(env, {
         src: {
@@ -472,13 +524,13 @@ export async function runBatchIngestEffects(
           type: src.type,
           productId: src.productId,
         },
-        inserted: visiblePublishRows,
+        inserted: publishRows,
       }),
     );
     if (!opts?.skipInvalidate) {
       tasks.push(
         invalidateLatestCache(env, {
-          nReleases: visiblePublishRows.length,
+          nReleases: publishRows.length,
           cause: src.id,
         }),
       );
@@ -499,15 +551,15 @@ export async function runBatchIngestEffects(
           productId: src.productId,
           isHidden: src.isHidden,
         },
-        visiblePublishRows.length,
+        publishRows.length,
       ),
     );
   }
 
-  const shouldGenerate = !opts?.skipSummarize && insertedIds.length > 0;
-  const shouldEmbed = !opts?.skipEmbed && insertedIds.length > 0;
+  const shouldGenerate = !opts?.skipSummarize && liveIds.length > 0;
+  const shouldEmbed = !opts?.skipEmbed && liveIds.length > 0;
   if (shouldGenerate || shouldEmbed) {
-    tasks.push(generateThenEmbed(db, env, src, insertedIds, opts));
+    tasks.push(generateThenEmbed(db, env, src, liveIds, opts));
   }
 
   await Promise.allSettled(tasks);

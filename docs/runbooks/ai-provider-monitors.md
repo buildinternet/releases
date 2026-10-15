@@ -299,13 +299,15 @@ in Axiom; the code signal it can count without inferring from a missing usage ev
 | `sourceSlug`          | Set on the ingest hook. Omitted on the daily batch, which is cross-source. |
 
 Reason codes: `empty`, `too-large`, `opted-out`, `source-opt-out`, `hidden`, `coverage`,
-`row-cap`, `missing`, `ineligible`. Definitions live in `apps/api/src/lib/ai/summarize-skip.ts`.
+`suppressed`, `missing`, `ineligible`. `row-cap` is historical and no longer emitted.
+Definitions live in `apps/api/src/lib/ai/summarize-skip.ts`.
 
 `batch-summary` still carries `candidateCount`, `skippedEmpty`, and `skippedTooLarge` for the
 ingest loop that reaches a model resolver. Those two skip fields match the `empty` and
 `too-large` events from the same call — do not add them to `summarize-skip` counts. Hidden,
-opted-out, source opt-out, coverage, and row-cap return before `batch-summary` and only show up
-on `summarize-skip`. A missing provider is not one of these reasons; those candidates stay
+opted-out, source opt-out, suppressed, and coverage return before `batch-summary` and only show
+up on `summarize-skip`. A fire larger than 20 rows logs `event: chunked` and then one
+`batch-summary` per slice. A missing provider is not one of these reasons; those candidates stay
 unexplained so this monitor can still fire.
 
 ---
