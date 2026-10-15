@@ -1,17 +1,23 @@
-import * as cloudflareWorkers from "cloudflare:workers";
-
 /**
  * Request context for Cloudflare Workers Issues.
  *
  * Issues shows attributes on the active trace span with an occurrence
- * (`user.id`, `account.id`, `session.id`). Tracing is already enabled on each
- * worker; `getActiveSpan()` is a no-op outside a request (cron, tests, module
- * scope), so callers can set this as soon as auth resolves.
+ * (`user.id`, `account.id`, `session.id`). Each worker entry calls
+ * `bindIssueTracing()` with the `cloudflare:workers` module. This file does
+ * not import that module: the OpenAPI coverage script loads the API route
+ * graph outside a Worker, where `cloudflare:workers` cannot resolve.
+ *
+ * `getActiveSpan()` is a no-op outside a request (cron, tests, module scope),
+ * so callers can set this as soon as auth resolves.
  *
  * Never put emails, tokens, session tokens, or other secrets here.
  */
 
 type ActiveSpan = { setAttribute(key: string, value: string): void };
+
+export type IssueTracing = {
+  getActiveSpan?: () => ActiveSpan | undefined;
+};
 
 const ISSUE_CONTEXT_KEYS = ["user.id", "account.id", "session.id"] as const;
 
@@ -22,12 +28,19 @@ const MAX_ID_LENGTH = 128;
 
 const CREDENTIAL_PREFIX = /^(?:rel[a-z]_|bearer\s|eyJ)/i;
 
+let tracing: IssueTracing | undefined;
+
+/**
+ * Register the worker's tracing binding. The argument is the `cloudflare:workers`
+ * module namespace. Typed as `unknown` because installed workers-types predate
+ * `getActiveSpan`, and a weak optional type would reject that `Tracing` export.
+ * Pass `undefined` to clear it (tests).
+ */
+export function bindIssueTracing(workers: unknown): void {
+  tracing = (workers as { tracing?: IssueTracing } | null | undefined)?.tracing;
+}
+
 function activeSpan(): ActiveSpan | undefined {
-  const tracing = (
-    cloudflareWorkers as {
-      tracing?: { getActiveSpan?: () => ActiveSpan | undefined };
-    }
-  ).tracing;
   try {
     return tracing?.getActiveSpan?.();
   } catch {

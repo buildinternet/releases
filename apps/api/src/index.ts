@@ -1,4 +1,8 @@
+import * as cloudflareWorkers from "cloudflare:workers";
 import { Hono } from "hono";
+import { bindIssueTracing } from "@releases/lib/issue-context";
+
+bindIssueTracing(cloudflareWorkers);
 import {
   authMiddleware,
   publicReadAuthMiddleware,

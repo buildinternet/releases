@@ -19,7 +19,10 @@ import {
   autoDisableReason,
   shouldAutoDisableWebhook,
 } from "@releases/core-internal/webhook-resilience";
-import { setIssueContext } from "@releases/lib/issue-context";
+import * as cloudflareWorkers from "cloudflare:workers";
+import { bindIssueTracing, setIssueContext } from "@releases/lib/issue-context";
+
+bindIssueTracing(cloudflareWorkers);
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { sendWebhookAlert, type EmailEnv } from "./email.js";

@@ -1,4 +1,7 @@
-import { setIssueContext } from "@releases/lib/issue-context";
+import * as cloudflareWorkers from "cloudflare:workers";
+import { bindIssueTracing, setIssueContext } from "@releases/lib/issue-context";
+
+bindIssueTracing(cloudflareWorkers);
 import { createMcpHandler } from "agents/mcp/server";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";

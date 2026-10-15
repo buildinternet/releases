@@ -1,28 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { setIssueContext } from "./issue-context";
-
-type Span = { setAttribute(key: string, value: string): void };
-
-const spanGlobal = globalThis as { __ISSUE_SPAN__?: Span | null };
+import { bindIssueTracing, setIssueContext } from "./issue-context";
 
 afterEach(() => {
-  spanGlobal.__ISSUE_SPAN__ = undefined;
+  bindIssueTracing(undefined);
 });
 
-function capture(): { span: Span; attrs: Record<string, string> } {
+function capture(): Record<string, string> {
   const attrs: Record<string, string> = {};
-  const span: Span = {
-    setAttribute(key, value) {
-      attrs[key] = value;
+  bindIssueTracing({
+    tracing: {
+      getActiveSpan: () => ({
+        setAttribute(key, value) {
+          attrs[key] = value;
+        },
+      }),
     },
-  };
-  spanGlobal.__ISSUE_SPAN__ = span;
-  return { span, attrs };
+  });
+  return attrs;
 }
 
 describe("setIssueContext", () => {
   test("sets user, account, and session ids on the active span", () => {
-    const { attrs } = capture();
+    const attrs = capture();
     setIssueContext({
       "user.id": "user_123",
       "account.id": "ws_456",
@@ -36,7 +35,7 @@ describe("setIssueContext", () => {
   });
 
   test("skips emails, tokens, and blank values", () => {
-    const { attrs } = capture();
+    const attrs = capture();
     setIssueContext({
       "user.id": "person@example.com",
       "account.id": "relk_lookup_secret",
@@ -46,6 +45,11 @@ describe("setIssueContext", () => {
   });
 
   test("does nothing when there is no active span", () => {
+    bindIssueTracing({ tracing: { getActiveSpan: () => undefined } });
+    expect(() => setIssueContext({ "user.id": "user_123" })).not.toThrow();
+  });
+
+  test("does nothing when tracing is not bound", () => {
     expect(() => setIssueContext({ "user.id": "user_123" })).not.toThrow();
   });
 });
