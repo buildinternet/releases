@@ -11,8 +11,9 @@ Logging splits by runtime. Pick the helper by where the code runs, not by what i
 `apps/api/`, `apps/mcp/`, and `apps/webhooks/` emit structured JSON via `logEvent()` from `@releases/lib/log-event` (worker-safe; no `fs` imports).
 
 - **Payload shape.** Workers Logs indexes the top-level keys of JSON-stringified `console.*` lines as filterable fields, so payloads carry `component` (e.g. `"poll-fetch-workflow"`, `"search-log"`) and `event` (kebab-case, e.g. `"no-change-detected"`, `"insert-failed"`) as top-level keys, plus arbitrary context (`sourceSlug`, `err`, request id, workflow instance id, …).
-- **Severity.** Set by which `console.*` function the helper invokes — `logEvent("info"|"warn"|"error", {...})` dispatches to `console.log` / `console.warn` / `console.error`, which is what Workers Logs reads for the level field. **Don't** put `level` in the payload.
+- **Severity.** Set by which `console.*` function the helper invokes — `logEvent("info"|"warn"|"error", {...})` dispatches to `console.log` / `console.warn` / `console.error`, which is what Workers Logs reads for the level field. **Don't** put `level` in the payload. Workers Issues groups `console.error` (and logs that contain an `Error` or a stack). A caught failure that becomes a fallback response — a retry, an anonymous read, a 503 — is invisible to Issues unless it is logged at `error`. Expected 4xx paths stay at warn or unlogged.
 - **Errors.** The helper unwraps `Error` instances to `{name, message, stack, cause?}` (a default `JSON.stringify(err)` produces `{}`).
+- **Issues context.** `setIssueContext()` (`@releases/lib/issue-context`) sets `user.id`, `account.id` (the workspace id), and `session.id` (the session row id) on the active trace span as soon as auth resolves. Emails, tokens, and other secrets are dropped. A missing span (cron, tests, module scope) is a no-op.
 
 New worker code MUST use `logEvent`; existing plain-string `console.*` call sites migrate per-touch (no one-shot codemod, no lint rule — oxlint doesn't support custom rules and adding ESLint just for this isn't worth it).
 

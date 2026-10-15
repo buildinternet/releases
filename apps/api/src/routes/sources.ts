@@ -3052,6 +3052,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
       c,
       new InternalError("Failed to insert release", {
         code: "internal_error",
+        cause: err,
         ...(classified ? { details: { errorCode: classified.code } } : {}),
       }),
     );

@@ -17,6 +17,7 @@
     "./errors": "./src/errors.ts",
     "./flags": "./src/flags.ts",
     "./flags-docs": "./src/flags-docs.ts",
+    "./issue-context": "./src/issue-context.ts",
     "./legacy-env": "./src/legacy-env.ts",
     "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",

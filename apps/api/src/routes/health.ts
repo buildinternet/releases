@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { logEvent } from "@releases/lib/log-event";
 
 type Env = { Bindings: { DB: D1Database } };
 
@@ -20,7 +21,8 @@ healthRoutes.get("/health", async (c) => {
   try {
     await c.env.DB.prepare("SELECT 1").first();
     return c.json({ ok: true, service: "releases-api", db: "ok" });
-  } catch {
+  } catch (err) {
+    logEvent("error", { component: "api", event: "health_db_failed", err });
     return c.json({ ok: false, service: "releases-api", db: "error" }, 503);
   }
 });

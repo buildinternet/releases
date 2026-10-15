@@ -11,6 +11,8 @@
  * `/api/auth/*` handler.
  */
 import type { MiddlewareHandler } from "hono";
+import { setIssueContext } from "@releases/lib/issue-context";
+import { logEvent } from "@releases/lib/log-event";
 import { ForbiddenError } from "@releases/lib/releases-error";
 import { getOrCreateAuth } from "../middleware/auth.js";
 import { respondError } from "../lib/error-response.js";
@@ -34,9 +36,20 @@ export function oauthSelfServiceGuard(): MiddlewareHandler<Env> {
     let role: string | null | undefined;
     try {
       const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      if (session?.user?.id) {
+        setIssueContext({
+          "user.id": session.user.id,
+          "session.id": session.session?.id,
+          "account.id": (session.session as { activeOrganizationId?: string | null } | undefined)
+            ?.activeOrganizationId,
+        });
+      }
       role = (session?.user as { role?: string | null } | undefined)?.role;
-    } catch {
-      role = undefined; // fail closed on any session-resolution error
+    } catch (err) {
+      // Fail closed (403 below). The throw itself is an unexpected failure, not
+      // a missing admin role — log it so Issues records it.
+      logEvent("error", { component: "auth", event: "oauth-guard-session-failed", err });
+      role = undefined;
     }
     if (role !== "admin") {
       // Standardized `forbidden` envelope. The former one-off `error:

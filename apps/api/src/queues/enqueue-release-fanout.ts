@@ -63,7 +63,7 @@ export async function enqueueReleaseFanout(args: EnqueueReleaseFanoutArgs): Prom
   try {
     await args.queue.send(buildReleaseFanoutMessage(args.events, args.eventOwners));
   } catch (err) {
-    logEvent("warn", {
+    logEvent("error", {
       component: "release-events",
       event: "enqueue-failed",
       err: err instanceof Error ? err : String(err),

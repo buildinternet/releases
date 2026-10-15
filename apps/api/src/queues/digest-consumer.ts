@@ -93,7 +93,7 @@ export async function processDigestDeliveryMessage(
     });
     return "retry";
   } catch (err) {
-    logEvent("warn", {
+    logEvent("error", {
       component: "digest-queue",
       event: "process-failed",
       userId: body.userId,

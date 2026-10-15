@@ -19,6 +19,7 @@ import {
   autoDisableReason,
   shouldAutoDisableWebhook,
 } from "@releases/core-internal/webhook-resilience";
+import { setIssueContext } from "@releases/lib/issue-context";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { sendWebhookAlert, type EmailEnv } from "./email.js";
@@ -161,7 +162,7 @@ export default {
               const resolved = await getWebhookSubscriptionLabels(db, [...bySubId.keys()]);
               labels = new Map(resolved.map((r) => [r.id, r]));
             } catch (err) {
-              logEvent("warn", { component: "webhook-dlq", event: "resolve-labels-failed", err });
+              logEvent("error", { component: "webhook-dlq", event: "resolve-labels-failed", err });
             }
             const entries: DlqEntry[] = [...bySubId].map(([subId, info]) => ({
               subId,
@@ -171,7 +172,9 @@ export default {
             }));
             const { subject, body, html } = formatDlqAlert(entries);
             await sendWebhookAlert(alertEnv, subject, body, html);
-          })().catch(() => undefined),
+          })().catch((err) => {
+            logEvent("error", { component: "webhook-dlq", event: "alert-failed", err });
+          }),
         );
       }
 
@@ -201,6 +204,9 @@ export default {
 
       // oxlint-disable-next-line no-await-in-loop -- webhook delivery; subscription lookup per message must be sequential
       const sub = await getWebhookSubscriptionById(db, body.subscriptionId);
+      if (sub) {
+        setIssueContext({ "user.id": sub.userId, "account.id": sub.workspaceId });
+      }
       if (!sub || !sub.enabled) {
         writeDeliveryAttempt(
           env.WEBHOOK_DELIVERIES_AE,
@@ -262,7 +268,14 @@ export default {
                 fresh,
                 reason,
                 result.errorMessage ?? null,
-              ).catch(() => undefined),
+              ).catch((err) => {
+                logEvent("error", {
+                  component: "webhook-auto-disable",
+                  event: "notify-failed",
+                  subscriptionId: fresh.id,
+                  err,
+                });
+              }),
             );
           }
         }

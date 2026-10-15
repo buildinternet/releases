@@ -209,6 +209,7 @@ export async function ingestFetchLog(
   } catch (err) {
     const classified = classifyDbError(err);
     throw new InternalError("Failed to insert fetch log", {
+      cause: err,
       code: classified ? dbErrorToWireCode(classified.code) : "internal_error",
       ...(classified
         ? { details: { dbCode: classified.code, transient: classified.transient } }

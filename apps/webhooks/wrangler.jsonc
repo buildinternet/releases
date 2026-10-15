@@ -14,7 +14,11 @@
       "enabled": true,
       "destinations": ["axiom-traces"],
     },
+    // Workers Issues. Must live in config: a dashboard toggle is cleared by the
+    // next `wrangler deploy` when this is absent. Requires Wrangler >= 4.134.
+    "issues": { "enabled": true },
   },
+  "upload_source_maps": true,
   "vars": {
     "DELIVERY_TIMEOUT_MS": "10000",
     "AUTO_DISABLE_THRESHOLD": "50",

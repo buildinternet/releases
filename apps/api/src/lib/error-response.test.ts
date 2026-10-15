@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { NotFoundError, ReleasesError } from "@releases/lib/releases-error";
+import { InternalError, NotFoundError, ReleasesError } from "@releases/lib/releases-error";
 import { BareSlugRejected } from "../utils";
 import { respondError } from "./error-response";
 
@@ -13,6 +13,23 @@ function appThrowing(err: unknown) {
   app.onError((e, c) => respondError(c, e));
   return app;
 }
+
+test("server errors are logged for Workers Issues; client errors are not", async () => {
+  const lines: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args.map((arg) => String(arg)).join(" "));
+  };
+  try {
+    await appThrowing(new NotFoundError("Source not found")).request("/boom");
+    expect(lines).toEqual([]);
+    await appThrowing(new InternalError("database offline")).request("/boom");
+    expect(lines.some((line) => line.includes("server_error"))).toBe(true);
+    expect(lines.join("\n")).not.toContain("@");
+  } finally {
+    console.error = original;
+  }
+});
 
 test("a typed ReleasesError serializes to its envelope + derived status", async () => {
   const res = await appThrowing(new NotFoundError("Source not found")).request("/boom");

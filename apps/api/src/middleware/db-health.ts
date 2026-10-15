@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { logEvent } from "@releases/lib/log-event";
 import { respondError } from "../lib/error-response.js";
 import { ServiceUnavailableError } from "@releases/lib/releases-error";
 
@@ -41,7 +42,8 @@ export const dbHealthCheck: MiddlewareHandler<Env> = async (c, next) => {
       return respondError(c, databaseNotInitializedError());
     }
     dbReady = true;
-  } catch {
+  } catch (err) {
+    logEvent("error", { component: "api", event: "db_health_check_failed", err });
     return respondError(c, databaseNotInitializedError());
   }
 

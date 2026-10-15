@@ -567,8 +567,8 @@ describe("publishReleaseEvents semantic alerts", () => {
 
   it("fails closed without logging the query when matching throws", async () => {
     const logs: string[] = [];
-    const warn = console.warn;
-    console.warn = (...args: unknown[]) => {
+    const error = console.error;
+    console.error = (...args: unknown[]) => {
       logs.push(args.map(String).join(" "));
     };
     const db = {
@@ -589,7 +589,7 @@ describe("publishReleaseEvents semantic alerts", () => {
         },
       );
     } finally {
-      console.warn = warn;
+      console.error = error;
     }
     const joined = logs.join("\n");
     expect(joined).toContain("semantic-alert-match-failed");

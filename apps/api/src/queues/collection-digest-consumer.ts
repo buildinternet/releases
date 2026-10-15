@@ -115,7 +115,7 @@ export async function processCollectionDigestMessage(
     logEvent("warn", { ...log, event: "send-failed", reason: res.reason ?? "error" });
     return "retry";
   } catch (err) {
-    logEvent("warn", {
+    logEvent("error", {
       ...log,
       event: "process-failed",
       err: err instanceof Error ? err : String(err),
