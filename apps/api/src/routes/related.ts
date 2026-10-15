@@ -24,7 +24,8 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
-import { sourceMatchByIdOrSlug, firstImageThumbnail } from "../utils.js";
+import { firstImageThumbnail } from "../utils.js";
+import { requireResolvedSource } from "../lib/sources/resolve-source.js";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { logEvent } from "@releases/lib/log-event";
@@ -459,7 +460,10 @@ relatedRoutes.get(
 
     const db = createDb(c.env.DB);
 
-    // Resolve the anchor source (accepts slug or id).
+    const resolved = await requireResolvedSource(db, anchorParam, {
+      component: "related-sources",
+    });
+    if (!resolved.ok) return respondError(c, resolved.error);
     const [anchor] = await db
       .select({
         id: sources.id,
@@ -467,7 +471,7 @@ relatedRoutes.get(
         orgId: sources.orgId,
       })
       .from(sources)
-      .where(sourceMatchByIdOrSlug(anchorParam));
+      .where(eq(sources.id, resolved.sourceId));
     if (!anchor) {
       return respondError(c, new NotFoundError("Source not found"));
     }

@@ -8,7 +8,6 @@ import {
   releases,
   organizations,
   organizationsActive,
-  sources,
   sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
@@ -19,19 +18,14 @@ import {
 } from "@buildinternet/releases-core/importance";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { Env } from "../index.js";
-import {
-  orgWhere,
-  sourceMatchByIdOrSlug,
-  parseBoolParam,
-  parseTimeWindow,
-  firstImageThumbnail,
-} from "../utils.js";
+import { orgWhere, parseBoolParam, parseTimeWindow, firstImageThumbnail } from "../utils.js";
 import {
   getLatestReleasesAcross,
   mapLatestRowToReleaseItem,
   releaseWebBase,
 } from "../queries/releases.js";
 import { parseExcludeSourceTypes } from "../lib/sources/source-types.js";
+import { requireResolvedSource } from "../lib/sources/resolve-source.js";
 import {
   buildLatestCacheKey,
   isCacheableLatestRequest,
@@ -276,14 +270,11 @@ releaseRoutes.get(
     let orgId: string | undefined;
 
     if (sourceParam) {
-      const src = await db
-        .select({ id: sources.id })
-        .from(sources)
-        .where(sourceMatchByIdOrSlug(sourceParam))
-        .get();
-      if (!src)
-        return respondError(c, new NotFoundError("Source not found", { code: "not_found" }));
-      sourceId = src.id;
+      const resolved = await requireResolvedSource(db, sourceParam, {
+        component: "releases-latest",
+      });
+      if (!resolved.ok) return respondError(c, resolved.error);
+      sourceId = resolved.sourceId;
     } else if (orgParam) {
       const org = await db
         .select({ id: organizations.id })

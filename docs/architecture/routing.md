@@ -170,7 +170,7 @@ None of the lookup routes are `adminRoutes`-protected.
 
 ### Slug resolvers (#698)
 
-`GET /v1/lookups/source-by-slug?slug=…` and `GET /v1/lookups/product-by-slug?slug=…` return the canonical home (`{sourceId|productId, sourceSlug|productSlug, orgSlug}`) for old bookmarks and slug-only callers. They pick the oldest match by `(createdAt, id)` and carry `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` (a deprecation signal — these are migration aids, not auth-gated; see auth note above). The oldest-match tie-break makes these unsuitable for disambiguating a bare slug that exists under multiple orgs; the CLI's `findSource` no longer routes through `source-by-slug` and instead enumerates the exact-slug `GET /v1/sources?slug=…` filter to detect that ambiguity (releases-cli#264, above).
+`GET /v1/lookups/source-by-slug?slug=…` and `GET /v1/lookups/product-by-slug?slug=…` return the canonical home (`{sourceId|productId, sourceSlug|productSlug, orgSlug}`) when exactly one org owns the slug, and carry `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` (a deprecation signal — these are migration aids, not auth-gated; see auth note above). A slug owned by more than one org is `409 Conflict` with `details.candidates` (`org/slug` plus the typed id) rather than an oldest-row guess (#2525). The CLI's `findSource` enumerates `GET /v1/sources?slug=…` and throws on that same ambiguity (releases-cli#264, above). `POST /v1/workflows/update` scopes a bare source slug to the named org (`orgId`, or `company` when it matches an org) and returns 404 when that org has no such source.
 
 ### Domain resolution
 
