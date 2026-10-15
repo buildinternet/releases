@@ -163,6 +163,8 @@ import { buildFetchOneEnv } from "../workflows/_fetch-env.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/ingest/title-dedup.js";
+import { clusterAndPersistVersionLines } from "../lib/ingest/cluster-version-lines.js";
+import { dropRewordedContentDuplicates, releaseBodyHash } from "../lib/ingest/content-dedup.js";
 import { respondError } from "../lib/error-response.js";
 import {
   ConflictError,
@@ -2883,7 +2885,7 @@ const postReleaseRoute = describeRoute({
   tags: ["Sources"],
   summary: "Insert a single release",
   description:
-    "Inserts a single release for the source. Unlike the `/batch` endpoint this path is used for data seeding or manual inserts where the caller controls the `id`. On `UNIQUE(source_id, url)` conflict the insert is skipped (`onConflictDoNothing`) and the response is `{ skipped: true }` (200). A `url` matching the source's `feedUrlDeny` is likewise skipped, as `{ skipped: true, reason: \"url_denied\" }` (200) — see #1335. A successful insert returns 201 with the inserted row. LLM-generated version placeholders (`<UNKNOWN>`, `n/a`) are stripped. Body fields: `title`, `content` (required); `id?`, `version?`, `summary?`, `titleGenerated?`, `titleShort?`, `url?`, `contentHash?`, `publishedAt?`, `fetchedAt?`, `type?`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required. Bare-path slugs return 400 `bare_slug_rejected` per #698 — pass a `src_…` ID on the bare path.",
+    'Inserts a single release for the source. Unlike the `/batch` endpoint this path is used for data seeding or manual inserts where the caller controls the `id`. On `UNIQUE(source_id, url)` conflict the insert is skipped (`onConflictDoNothing`) and the response is `{ skipped: true }` (200). A `url` matching the source\'s `feedUrlDeny` is likewise skipped, as `{ skipped: true, reason: "url_denied" }` (200) — see #1335. A same-source same-day reworded duplicate is skipped as `{ skipped: true, reason: "content_duplicate" }` (200). A successful insert returns 201 with the inserted row. LLM-generated version placeholders (`<UNKNOWN>`, `n/a`) are stripped. Body fields: `title`, `content` (required); `id?`, `version?`, `summary?`, `titleGenerated?`, `titleShort?`, `url?`, `contentHash?`, `publishedAt?`, `fetchedAt?`, `type?`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`\'s non-SAFE_METHODS branch — Bearer token required. Bare-path slugs return 400 `bare_slug_rejected` per #698 — pass a `src_…` ID on the bare path.',
   security: [{ bearerAuth: [] }],
   responses: {
     201: {
@@ -3018,6 +3020,31 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
   // the JSON value before .trim() so non-string payloads are safely coerced
   // to null instead of throwing.
   const version = typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
+  const publishedAt = body.publishedAt ?? inferMonthOnlyDate(body.title) ?? null;
+
+  // Same-day body-hash dedup for every source type. A reworded title with a
+  // new anchor misses title dedup; a different version or package is kept so
+  // coverage linking can attach it after insert.
+  const contentDeduped = await dropRewordedContentDuplicates(db, src.id, [
+    {
+      title: body.title,
+      content: body.content,
+      url: body.url ?? null,
+      publishedAt,
+      version,
+    },
+  ]);
+  if (contentDeduped.dropped > 0) {
+    logEvent("info", {
+      component: "sources-release-insert",
+      event: "content-dedup-applied",
+      sourceId: src.id,
+      slug: src.slug,
+      kept: 0,
+      dropped: 1,
+    });
+    return c.json({ skipped: true, reason: "content_duplicate" }, 200);
+  }
 
   const size = computeContentSize(body.content);
   try {
@@ -3036,15 +3063,31 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
         titleShort: body.titleShort ?? null,
         url: body.url ?? null,
         contentHash: body.contentHash ?? null,
+        bodyHash: releaseBodyHash(body.content, body.title),
         contentChars: size.contentChars,
         contentTokens: size.contentTokens,
         metadata: body.metadata ?? "{}",
-        publishedAt: body.publishedAt ?? inferMonthOnlyDate(body.title) ?? null,
+        publishedAt,
         prerelease: isPrereleaseVersion(version),
         fetchedAt: body.fetchedAt ?? new Date().toISOString(),
       })
       .onConflictDoNothing()
       .returning();
+    if (release) {
+      await clusterAndPersistVersionLines(
+        db,
+        [
+          {
+            id: release.id,
+            version: release.version,
+            title: release.title,
+            content: release.content,
+            publishedAt: release.publishedAt,
+          },
+        ],
+        { component: "sources-release-insert", sourceId: src.id, orgId: src.orgId },
+      );
+    }
     return c.json(release ?? { skipped: true }, release ? 201 : 200);
   } catch (err) {
     const classified = classifyDbError(err);

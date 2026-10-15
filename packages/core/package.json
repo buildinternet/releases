@@ -44,6 +44,7 @@
     "./notice": "./src/notice.ts",
     "./site-notice": "./src/site-notice.ts",
     "./title-dedup": "./src/title-dedup.ts",
+    "./content-dedup": "./src/content-dedup.ts",
     "./d1-limits": "./src/d1-limits.ts"
   },
   "files": [

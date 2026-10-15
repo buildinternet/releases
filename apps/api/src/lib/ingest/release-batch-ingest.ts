@@ -5,8 +5,9 @@
  *
  * Split in two:
  * - `ingestReleaseBatch` — the durable core: deny filter, scrape title-dedup,
- *   media R2 mirror + GIF transcode, chunked upsert (D1's 100 bind-param cap),
- *   cascade coverage clustering, total count. Everything here is either a
+ *   same-day body-hash dedup, media R2 mirror + GIF transcode, chunked upsert
+ *   (D1's 100 bind-param cap), cascade and version-line coverage clustering,
+ *   total count. Everything here is either a
  *   write the caller needs reflected in the response, or a read needed to
  *   decide one.
  * - `runBatchIngestEffects` — the post-insert extras: marketing classification
@@ -53,6 +54,8 @@ import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { normalizeMediaBind } from "../media/media-bind.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../d1-limits.js";
 import { clusterAndPersistCascades } from "./cluster-cascades.js";
+import { clusterAndPersistVersionLines } from "./cluster-version-lines.js";
+import { dropRewordedContentDuplicates, releaseBodyHash } from "./content-dedup.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../latest-cache.js";
 import { publishReleaseEvents, type PublishEnv } from "../../events/publish.js";
 import type { InsertedReleaseRow } from "../../events/build-event.js";
@@ -272,6 +275,31 @@ export async function ingestReleaseBatch(
     }
   }
 
+  // Same-day body-hash dedup. A re-extract that rewords the title also mints a
+  // new `#anchor`, so neither UNIQUE(source_id, url) nor title dedup sees it.
+  // Different version tokens and package names stay (coverage links those).
+  // Skipped in enrich mode for the same reason as title dedup: the re-POST is
+  // the update, and the URL upsert is the discriminator.
+  if (!enrichMode && releasesInput.length > 0) {
+    const withDays = releasesInput.map((r) => ({
+      ...r,
+      publishedAt:
+        r.publishedAt ?? (typeof r.title === "string" ? inferMonthOnlyDate(r.title) : null) ?? null,
+    }));
+    const deduped = await dropRewordedContentDuplicates(db, src.id, withDays);
+    if (deduped.dropped > 0) {
+      logEvent("info", {
+        component: "sources-batch",
+        event: "content-dedup-applied",
+        sourceId: src.id,
+        slug: src.slug,
+        kept: deduped.kept.length,
+        dropped: deduped.dropped,
+      });
+    }
+    releasesInput = deduped.kept;
+  }
+
   // D1 caps prepared statements at 100 bound parameters — see
   // `../d1-limits.ts` for the math behind the chunk size.
   let inserted = 0;
@@ -280,6 +308,13 @@ export async function ingestReleaseBatch(
   // clustering. We can't run the clusterer off `publishRows` because
   // those omit `content` (the publish payload doesn't need it).
   const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
+  const versionLineRows: Array<{
+    id: string;
+    version: string | null;
+    title: string;
+    content: string;
+    publishedAt: string | null;
+  }> = [];
 
   // Stamp denormalized category for category-feed seeks (#886). Fail-open:
   // a transient lookup failure shouldn't sink an otherwise-valid batch.
@@ -386,6 +421,7 @@ export async function ingestReleaseBatch(
         content: r.content,
         url: r.url ?? null,
         contentHash: r.contentHash ?? null,
+        bodyHash: releaseBodyHash(r.content, r.title),
         contentChars: size.contentChars,
         contentTokens: size.contentTokens,
         publishedAt: r.publishedAt ?? inferredPublishedAt ?? null,
@@ -421,6 +457,13 @@ export async function ingestReleaseBatch(
       const { content, ...publishRow } = r;
       publishRows.push(publishRow);
       clusterRows.push({ id: r.id, version: r.version, content });
+      versionLineRows.push({
+        id: r.id,
+        version: r.version,
+        title: r.title,
+        content,
+        publishedAt: r.publishedAt,
+      });
     }
   }
   const insertedIds = publishRows.map((r) => r.id);
@@ -433,10 +476,17 @@ export async function ingestReleaseBatch(
     component: "sources-batch",
     sourceId: src.id,
   });
+  const versionLineResult = await clusterAndPersistVersionLines(db, versionLineRows, {
+    component: "sources-batch",
+    sourceId: src.id,
+    orgId: src.orgId,
+  });
+  const coverageIds = new Set<string>([
+    ...cascadeResult.coverageIds,
+    ...versionLineResult.coverageIds,
+  ]);
   const visiblePublishRows =
-    cascadeResult.coverageIds.size > 0
-      ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id))
-      : publishRows;
+    coverageIds.size > 0 ? publishRows.filter((r) => !coverageIds.has(r.id)) : publishRows;
 
   const [{ n: total }] = await db
     .select({ n: count() })

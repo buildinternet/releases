@@ -43,6 +43,7 @@ const mockRow = (i: number) => ({
   content: "c",
   url: `https://example.invalid/${i}`,
   contentHash: "h",
+  bodyHash: "bh",
   contentChars: 1,
   contentTokens: 1,
   publishedAt: "2026-01-01",
