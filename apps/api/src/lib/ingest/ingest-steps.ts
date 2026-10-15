@@ -515,8 +515,9 @@ async function classifyIneligibleReleases(
           sql<number>`CASE WHEN ${releaseCoverage.coverageId} IS NOT NULL THEN 1 ELSE 0 END`.as(
             "is_coverage",
           ),
-        isSuppressed:
-          sql<number>`CASE WHEN ${releases.suppressed} = 1 THEN 1 ELSE 0 END`.as("is_suppressed"),
+        isSuppressed: sql<number>`CASE WHEN ${releases.suppressed} = 1 THEN 1 ELSE 0 END`.as(
+          "is_suppressed",
+        ),
       })
       .from(releases)
       .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))

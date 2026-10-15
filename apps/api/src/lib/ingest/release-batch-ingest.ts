@@ -135,7 +135,8 @@ export interface BatchIngestEnv {
  * `generateContentForReleases` reads via `resolveSummarizeModel`.
  */
 export interface BatchEffectsEnv
-  extends PublishEnv,
+  extends
+    PublishEnv,
     WebRevalidateEnv,
     InvalidationEnv,
     EmbedEnv,

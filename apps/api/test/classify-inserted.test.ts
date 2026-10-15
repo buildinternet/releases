@@ -16,6 +16,7 @@ import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { mockGlobalFetch, restoreGlobalFetch } from "../../../tests/global-fetch";
 import { classifyInsertedReleases } from "../src/lib/ingest/classify-inserted.js";
 import type { ClassifyInsertedEnv } from "../src/lib/ingest/classify-inserted.js";
+import type { D1Db } from "../src/db.js";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -99,7 +100,9 @@ describe("classifyInsertedReleases", () => {
       return new Response("unexpected", { status: 500 });
     }) as typeof fetch);
 
-    const suppressed = await classifyInsertedReleases(db, modelEnv(), source, ["rel_1"]);
+    const suppressed = await classifyInsertedReleases(db as unknown as D1Db, modelEnv(), source, [
+      "rel_1",
+    ]);
 
     expect(suppressed.size).toBe(0);
     expect(calls).toEqual([]);
@@ -134,7 +137,7 @@ describe("classifyInsertedReleases", () => {
       return anthropicMarketing(marketing);
     }) as typeof fetch);
 
-    const suppressed = await classifyInsertedReleases(db, modelEnv(), source, [
+    const suppressed = await classifyInsertedReleases(db as unknown as D1Db, modelEnv(), source, [
       "rel_mkt",
       "rel_news",
     ]);
@@ -167,7 +170,12 @@ describe("classifyInsertedReleases", () => {
       return anthropicMarketing(true);
     }) as typeof fetch);
 
-    const suppressed = await classifyInsertedReleases(db, modelEnv(), source, ids);
+    const suppressed = await classifyInsertedReleases(
+      db as unknown as D1Db,
+      modelEnv(),
+      source,
+      ids,
+    );
 
     expect(calls).toBe(21);
     expect(suppressed.size).toBe(21);
