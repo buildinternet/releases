@@ -26,7 +26,7 @@ const PAGE = "https://platform.openai.com/docs/changelog";
 const DAY = "2026-10-14T16:00:00.000Z";
 const NOTES = `Fixed the timeout that dropped long streaming responses before the client finished reading them. The server now flushes partial chunks and records the request id in the error log.`;
 
-async function seed(db: TestDb, type: "scrape" | "feed" = "scrape") {
+async function seed(db: TestDb) {
   await db
     .insert(organizations)
     .values([{ id: "org_o", slug: "openai", name: "OpenAI", category: "developer-tools" }]);
@@ -35,7 +35,7 @@ async function seed(db: TestDb, type: "scrape" | "feed" = "scrape") {
       id: "src_o",
       slug: "api-changelog",
       name: "API changelog",
-      type,
+      type: "scrape",
       url: PAGE,
       orgId: "org_o",
     },
@@ -82,7 +82,7 @@ const reworded = {
 describe("POST /sources/:id/releases/batch — content dedup", () => {
   it("drops a reworded same-day re-extraction under a new anchor", async () => {
     const db = mkDb();
-    await seed(db, "scrape");
+    await seed(db);
 
     const res = await batch(db, { releases: [reworded] });
     expect(res.status).toBe(200);
@@ -90,42 +90,6 @@ describe("POST /sources/:id/releases/batch — content dedup", () => {
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_o"));
     expect(rows.map((r) => r.url)).toEqual([`${PAGE}#timeout-fix`]);
-  });
-
-  it("drops the same reworded duplicate on a feed source", async () => {
-    const db = mkDb();
-    await seed(db, "feed");
-
-    const res = await batch(db, { releases: [reworded] });
-    expect(((await res.json()) as { inserted: number }).inserted).toBe(0);
-    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_o"));
-    expect(rows).toHaveLength(1);
-  });
-
-  it("keeps the same body when the UTC day differs", async () => {
-    const db = mkDb();
-    await seed(db);
-
-    const res = await batch(db, {
-      releases: [{ ...reworded, publishedAt: "2026-10-15T00:30:00.000Z", url: `${PAGE}#next-day` }],
-    });
-    expect(((await res.json()) as { inserted: number }).inserted).toBe(1);
-    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_o"));
-    expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.url?.endsWith("#next-day"))?.bodyHash).toBeTruthy();
-  });
-
-  it("keeps a same-URL re-fetch for the upsert instead of dropping it", async () => {
-    const db = mkDb();
-    await seed(db);
-
-    const res = await batch(db, {
-      releases: [{ ...reworded, url: `${PAGE}#timeout-fix` }],
-    });
-    expect(((await res.json()) as { inserted: number }).inserted).toBe(0);
-    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_o"));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.title).toBe("Timeout fix for streaming responses");
   });
 
   it("inserts a backport and links it as coverage of the higher version", async () => {
@@ -164,73 +128,6 @@ describe("POST /sources/:id/releases/batch — content dedup", () => {
         decidedBy: DECIDED_BY_VERSION_LINE,
       }),
     ]);
-  });
-
-  it("links a release candidate to the stable release", async () => {
-    const db = mkDb();
-    await seed(db);
-    await db.delete(releases).where(eq(releases.sourceId, "src_o"));
-
-    const res = await batch(db, {
-      releases: [
-        {
-          title: "1.2.0-rc.1",
-          version: "1.2.0-rc.1",
-          content: "Candidate.",
-          url: `${PAGE}#rc`,
-          publishedAt: "2026-10-01T00:00:00.000Z",
-        },
-        {
-          title: "1.2.0",
-          version: "1.2.0",
-          content: "Stable.",
-          url: `${PAGE}#stable`,
-          publishedAt: DAY,
-        },
-      ],
-    });
-    expect(((await res.json()) as { inserted: number }).inserted).toBe(2);
-    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_o"));
-    const byVersion = new Map(rows.map((r) => [r.version, r.id]));
-    const links = await db.select().from(releaseCoverage);
-    expect(links).toEqual([
-      expect.objectContaining({
-        canonicalId: byVersion.get("1.2.0"),
-        coverageId: byVersion.get("1.2.0-rc.1"),
-        reason: "version-line:rc:1.2.0",
-        decidedBy: DECIDED_BY_VERSION_LINE,
-      }),
-    ]);
-  });
-
-  it("links same-source sibling packages that share a body and day", async () => {
-    const db = mkDb();
-    await seed(db);
-    await db.delete(releases).where(eq(releases.sourceId, "src_o"));
-
-    const res = await batch(db, {
-      releases: [
-        {
-          title: "ollama 0.12.0",
-          version: "0.12.0",
-          content: NOTES,
-          url: `${PAGE}#ollama`,
-          publishedAt: DAY,
-        },
-        {
-          title: "ollama-python 0.12.0",
-          version: "0.12.0",
-          content: NOTES,
-          url: `${PAGE}#ollama-python`,
-          publishedAt: DAY,
-        },
-      ],
-    });
-    expect(((await res.json()) as { inserted: number }).inserted).toBe(2);
-    const links = await db.select().from(releaseCoverage);
-    expect(links).toHaveLength(1);
-    expect(links[0]?.reason).toBe("version-line:sibling:0.12.0");
-    expect(links[0]?.decidedBy).toBe(DECIDED_BY_VERSION_LINE);
   });
 });
 

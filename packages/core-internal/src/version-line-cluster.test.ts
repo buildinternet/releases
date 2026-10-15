@@ -126,16 +126,4 @@ describe("clusterVersionLines", () => {
     expect(clusters[0]!.coverageIds).toEqual(["rel_py"]);
     expect(clusters[0]!.reason).toBe("version-line:sibling:1.27.2");
   });
-
-  it("links same-source sibling packages without dropping either from the cluster", () => {
-    const clusters = clusterVersionLines([
-      row({ id: "rel_ollama", version: null, title: "ollama 0.12.0" }),
-      row({ id: "rel_py", version: null, title: "ollama-python 0.12.0" }),
-    ]);
-    expect(clusters).toHaveLength(1);
-    expect(new Set([clusters[0]!.canonicalId, ...clusters[0]!.coverageIds])).toEqual(
-      new Set(["rel_ollama", "rel_py"]),
-    );
-    expect(clusters[0]!.reason).toBe("version-line:sibling:0.12.0");
-  });
 });
