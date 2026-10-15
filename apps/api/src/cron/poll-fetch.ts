@@ -87,6 +87,7 @@ import {
   RELEASES_BATCH_CHUNK_SIZE,
   RELEASES_ID_IN_CHUNK_SIZE,
   CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
+  assertStatementBindBudget,
 } from "../lib/d1-limits.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
@@ -1734,8 +1735,7 @@ export async function ingestRawReleases(
     // Build publish rows from the RETURNING set (not zipped against
     // `chunk`) because onConflictDoNothing skips conflicting rows and
     // RETURNING omits them, so index alignment would drift.
-    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
-    const result = await db.insert(releases).values(chunk).onConflictDoNothing().returning({
+    const statement = db.insert(releases).values(chunk).onConflictDoNothing().returning({
       id: releases.id,
       title: releases.title,
       version: releases.version,
@@ -1747,6 +1747,9 @@ export async function ingestRawReleases(
       type: releases.type,
       suppressed: releases.suppressed,
     });
+    assertStatementBindBudget(statement, "poll-fetch releases insert");
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+    const result = await statement;
     inserted += result.length;
     for (const r of result) {
       returnedIds.add(r.id);

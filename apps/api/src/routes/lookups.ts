@@ -37,7 +37,7 @@ import {
   ConflictError,
 } from "@releases/lib/releases-error";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
-import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { RELEASES_BATCH_CHUNK_SIZE, assertStatementBindBudget } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -377,8 +377,10 @@ export async function runLookup(
       });
       for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
+        const statement = db.insert(releases).values(chunk).onConflictDoUpdate(RELEASE_URL_UPSERT);
+        assertStatementBindBudget(statement, "lookup releases insert");
         // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert
-        await db.insert(releases).values(chunk).onConflictDoUpdate(RELEASE_URL_UPSERT);
+        await statement;
       }
       ingestedReleases = await db
         .select()
