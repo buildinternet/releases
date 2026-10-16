@@ -1,5 +1,12 @@
 # @buildinternet/releases-core
 
+## 0.35.2
+
+### Patch Changes
+
+- 6f645c8: Add normalized body-hash helpers so ingest can drop a reworded same-day duplicate without collapsing a backport or a sibling package.
+- 9c39537: Add bind-budget helpers (`maxChunkLength`, `chunkForBindBudget`, `assertBindBudget`) so a prepared statement can be chunked under D1's 100-parameter cap.
+
 ## 0.35.1
 
 ### Patch Changes
