@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../../queries/source-metadata.js";
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
@@ -88,7 +89,7 @@ export async function refreshAppStoreListing(
     const merged = JSON.stringify({ ...existing, appStore: buildAppStoreBlock(listing, coord) });
     await db
       .update(sources)
-      .set({ name: listing.trackName, metadata: merged })
+      .set({ name: listing.trackName, metadata: preserveLiveSourceDataset(merged) })
       .where(eq(sources.id, source.id));
     if (source.productId && listing.artworkUrl512) {
       await db

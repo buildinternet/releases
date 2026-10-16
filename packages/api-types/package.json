@@ -10,7 +10,8 @@
     "directory": "packages/api-types"
   },
   "exports": {
-    ".": "./src/api-types.ts"
+    ".": "./src/api-types.ts",
+    "./datasets": "./src/schemas/datasets.ts"
   },
   "files": [
     "src",

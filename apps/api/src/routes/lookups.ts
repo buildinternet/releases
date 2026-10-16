@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
@@ -232,7 +233,7 @@ export async function runLookup(
     sourceId = existingStub.id;
     const [updated] = await db
       .update(sources)
-      .set({ metadata: newMeta, ...starsFields })
+      .set({ metadata: preserveLiveSourceDataset(newMeta), ...starsFields })
       .where(eq(sources.id, sourceId))
       .returning();
     insertedSource = updated ?? { ...existingStub, metadata: newMeta, ...starsFields };

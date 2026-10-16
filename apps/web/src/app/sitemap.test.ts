@@ -258,3 +258,30 @@ describe("renderSitemapXml", () => {
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
   });
 });
+
+describe("persisted dataset sitemap selection", () => {
+  test("explicit null removes a default while an operator opt-in adds a nonpilot", () => {
+    const entries = buildSourceDatasetSitemapEntries(
+      {
+        orgs: [indexedOrg("anthropic"), indexedOrg("example")],
+        sources: [
+          { orgSlug: "anthropic", slug: "claude-code-releases", latestDate: null, dataset: null },
+          {
+            orgSlug: "example",
+            slug: "updates",
+            latestDate: null,
+            dataset: {
+              name: "Example dataset",
+              description:
+                "A searchable collection of release notes with source links and publication dates.",
+            },
+          },
+        ],
+        products: [],
+        collections: [],
+      },
+      BASE,
+    );
+    expect(entries.map((entry) => entry.url)).toEqual([`${BASE}/example/updates`]);
+  });
+});

@@ -30,6 +30,7 @@
     "./composition-metadata": "./src/composition-metadata.ts",
     "./webhook-alert-format": "./src/webhook-alert-format.ts",
     "./ai-lane-models": "./src/ai-lane-models.ts",
+    "./source-dataset": "./src/source-dataset.ts",
     "./marketing-classifier-settings": "./src/marketing-classifier-settings.ts"
   },
   "dependencies": {

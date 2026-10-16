@@ -245,3 +245,13 @@ describe("handleRevalidateRequest", () => {
     });
   });
 });
+
+it("revalidates the registry sitemap with source pages after operator dataset changes", async () => {
+  const { deps: d, revalidated } = deps();
+  const accepted = await handleRevalidateRequest(
+    post({ paths: ["/sitemap-orgs.xml", "/example/updates"] }),
+    d,
+  );
+  expect(accepted.status).toBe(200);
+  expect(revalidated).toEqual(["/sitemap-orgs.xml", "/example/updates"]);
+});

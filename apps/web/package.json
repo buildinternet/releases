@@ -17,6 +17,7 @@
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/design-system": "workspace:*",
+    "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@shikijs/langs": "^4.4.1",

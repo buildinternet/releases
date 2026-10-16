@@ -68,7 +68,7 @@ export async function generateMetadata({
     const orgName = source.org?.name ?? orgSlug;
     const canonical = `/${orgSlug}/${slug}`;
     const dataset = sourceDatasetEligible(source)
-      ? getSourceDatasetPilot(orgSlug, slug)
+      ? getSourceDatasetPilot(orgSlug, slug, source)
       : undefined;
     return {
       title: dataset?.name ?? `${source.name} — ${orgName}`,

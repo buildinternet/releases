@@ -1,3 +1,4 @@
+import { resolveSourceDataset } from "@releases/core-internal/source-dataset";
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
@@ -37,6 +38,8 @@ sitemapRoutes.get(
     },
   }),
   async (c) => {
+    // Web caches this projection; an upstream HTTP cache would outlive operator revalidation.
+    c.header("Cache-Control", "private, no-store");
     const db = createDb(c.env.DB);
 
     const orgRows = await db
@@ -110,6 +113,8 @@ sitemapRoutes.get(
               orgId: sourcesActive.orgId,
               slug: sourcesActive.slug,
               id: sourcesActive.id,
+              name: sourcesActive.name,
+              metadata: sourcesActive.metadata,
               isHidden: sourcesActive.isHidden,
               discovery: sourcesActive.discovery,
             })
@@ -223,6 +228,12 @@ sitemapRoutes.get(
               orgSlug: orgIdToSlug.get(s.orgId)!,
               slug: s.slug,
               latestDate: latestBySource.get(s.id) ?? null,
+              dataset:
+                resolveSourceDataset({
+                  ...s,
+                  isHidden: !!s.isHidden,
+                  orgSlug: orgIdToSlug.get(s.orgId)!,
+                }) ?? null,
               hasChangelog: sourcesWithChangelog.has(s.id),
               hasHighlights: sourcesWithSummaries.has(s.id),
             },

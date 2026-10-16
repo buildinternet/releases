@@ -1,3 +1,10 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
+import {
+  validateDatasetPatch,
+  rawDatasetValue,
+  isObjectSourceMetadata,
+  datasetSettingsChanged,
+} from "../lib/source-dataset-settings.js";
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
@@ -168,6 +175,7 @@ import { dropRewordedContentDuplicates, releaseBodyHash } from "../lib/ingest/co
 import { respondError } from "../lib/error-response.js";
 import {
   ConflictError,
+  ForbiddenError,
   InsufficientScopeError,
   InternalError,
   NotFoundError,
@@ -1231,15 +1239,45 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
     );
   }
 
+  const denied = await validateDatasetPatch(c, patch);
+  if (denied) return denied;
   const src = await resolveSourceFromContext(c, db);
   if (!src) return respondError(c, new NotFoundError("Source not found"));
+
+  if (!isObjectSourceMetadata(src.metadata) && !(await isValidBearerAuth(c)))
+    return respondError(
+      c,
+      new ForbiddenError("Admin scope required to repair malformed source metadata."),
+    );
 
   const merged = mergeSourceMetadata(src.metadata, patch);
   const serialized = JSON.stringify(merged);
   if (serialized !== (src.metadata ?? "{}")) {
-    await db.update(sources).set({ metadata: serialized }).where(eq(sources.id, src.id));
+    // Update keys against the live row, preserving concurrent fetch-state writes.
+    // Batch chunks stay below D1's 100-bind statement budget.
+    const entries = Object.entries(patch);
+    const statements = [];
+    for (let i = 0; i < entries.length; i += 25) {
+      let metadata: SQL = sql`CASE WHEN json_valid(${sources.metadata}) THEN CASE WHEN json_type(${sources.metadata}) = 'object' THEN ${sources.metadata} ELSE '{}' END ELSE '{}' END`;
+      for (const [key, value] of entries.slice(i, i + 25)) {
+        const path = `$.${JSON.stringify(key)}`;
+        metadata =
+          value === null
+            ? sql`json_remove(${metadata}, ${path})`
+            : sql`json_set(${metadata}, ${path}, json(${JSON.stringify(value)}))`;
+      }
+      statements.push(db.update(sources).set({ metadata }).where(eq(sources.id, src.id)));
+    }
+    if (statements.length)
+      await db.batch(statements as [(typeof statements)[number], ...typeof statements]);
+    if (Object.hasOwn(patch, "dataset")) await datasetSettingsChanged(c, db, src);
   }
-  return c.json({ metadata: merged });
+  const stored = await db
+    .select({ metadata: sources.metadata })
+    .from(sources)
+    .where(eq(sources.id, src.id))
+    .get();
+  return c.json({ metadata: mergeSourceMetadata(stored?.metadata ?? null, {}) });
 };
 const patchMetadataRoute = describeRoute({
   hide: hideInProduction,
@@ -2392,6 +2430,15 @@ sourceRoutes.post(
     const db = createDb(c.env.DB);
     const body = c.req.valid("json");
 
+    if (body.metadata !== undefined && !isObjectSourceMetadata(body.metadata))
+      return respondError(
+        c,
+        new ValidationError("metadata must contain a JSON object", { code: "bad_request" }),
+      );
+    if (rawDatasetValue(body.metadata) !== null) {
+      const denied = await validateDatasetPatch(c, { dataset: rawDatasetValue(body.metadata) });
+      if (denied) return denied;
+    }
     const baseSlug = body.slug ?? toSlug(body.name);
     if (isReservedSlug(baseSlug, "nested")) {
       return respondError(
@@ -2589,6 +2636,26 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   const src = await resolveSourceFromContext(c, db);
   if (!src) return respondError(c, new NotFoundError("Source not found"));
 
+  if (body.metadata !== undefined && !isObjectSourceMetadata(body.metadata))
+    return respondError(
+      c,
+      new ValidationError("metadata must contain a JSON object", { code: "bad_request" }),
+    );
+  const rawMetadataAdmin = body.metadata !== undefined && (await isValidBearerAuth(c));
+  if (body.metadata !== undefined && !rawMetadataAdmin && !isObjectSourceMetadata(src.metadata))
+    return respondError(
+      c,
+      new ForbiddenError("Admin scope required to repair malformed source metadata."),
+    );
+  const datasetChanged =
+    body.metadata !== undefined &&
+    JSON.stringify(rawDatasetValue(body.metadata)) !==
+      JSON.stringify(rawDatasetValue(src.metadata));
+  if (datasetChanged) {
+    const denied = await validateDatasetPatch(c, { dataset: rawDatasetValue(body.metadata) });
+    if (denied) return denied;
+  }
+
   const UPDATABLE_FIELDS = [
     "name",
     "url",
@@ -2747,8 +2814,20 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     }
   }
 
+  if (typeof updates.metadata === "string" && !(rawMetadataAdmin || (await isValidBearerAuth(c)))) {
+    if (!isObjectSourceMetadata(src.metadata))
+      return respondError(
+        c,
+        new ForbiddenError("Admin scope required to repair malformed source metadata."),
+      );
+    // A fetch-state writer may have read before an operator dataset change.
+    // Preserve the live reserved key in the same statement as the replacement.
+    const supplied = updates.metadata as string;
+    updates.metadata = preserveLiveSourceDataset(supplied);
+  }
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   if (src.orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, src.orgId));
+  if (datasetChanged) await datasetSettingsChanged(c, db, updated);
 
   // Category denorm (#886): product or org re-parenting changes COALESCE(p, o).
   // Fail-open — source re-parent already committed; stale denorm is recoverable.

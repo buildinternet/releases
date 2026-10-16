@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DatasetDescriptionSchema } from "./datasets.js";
 
 /**
  * Per-source row in `GET /v1/sitemap`. `hasChangelog` and `hasHighlights`
@@ -12,6 +13,8 @@ export const SitemapSourceSchema = z.object({
    * may omit it and the web degrades to the bare URL.
    */
   id: z.string().optional(),
+  /** Null explicitly disables; absence supports older API deploys. */
+  dataset: DatasetDescriptionSchema.nullable().optional(),
   orgSlug: z.string(),
   slug: z.string(),
   latestDate: z.string().nullable(),
