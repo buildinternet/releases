@@ -30,7 +30,7 @@ describe("dataset source sitemap pilot", () => {
     collections: [],
   };
 
-  test("submits just the three canonical dataset histories without invented lastmod", () => {
+  test("submits the original cohort without invented lastmod", () => {
     const entries = buildSourceDatasetSitemapEntries(payload, BASE);
     expect(entries.map((entry) => entry.url)).toEqual([
       `${BASE}/anthropic/claude-code-releases`,
@@ -38,6 +38,32 @@ describe("dataset source sitemap pilot", () => {
       `${BASE}/vercel/next-js`,
     ]);
     expect(entries.every((entry) => entry.lastModified === undefined)).toBe(true);
+  });
+
+  test.each([
+    ["openai", "openai-api-changelog"],
+    ["openai", "chatgpt-release-notes"],
+    ["openai", "model-release-notes"],
+    ["xai", "release-notes"],
+    ["xai", "release-notes-2"],
+    ["xai", "grok-build-releases"],
+    ["cloudflare", "cloudflare-application-performance"],
+    ["cloudflare", "cloudflare-application-security"],
+    ["cloudflare", "cloudflare-cloudflare-one"],
+    ["cloudflare", "cloudflare-core-platform"],
+    ["cloudflare", "cloudflare-developer-platform"],
+    ["vercel", "vercel"],
+  ])("submits the requested expansion source %s/%s", (orgSlug, slug) => {
+    const entries = buildSourceDatasetSitemapEntries(
+      {
+        orgs: [indexedOrg(orgSlug)],
+        sources: [{ orgSlug, slug, latestDate: null }],
+        products: [],
+        collections: [],
+      },
+      BASE,
+    );
+    expect(entries.map((entry) => entry.url)).toEqual([`${BASE}/${orgSlug}/${slug}`]);
   });
 
   test("omits unavailable sources, orgs below the index bar, and product collisions", () => {

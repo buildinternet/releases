@@ -75,7 +75,7 @@ export async function generateMetadata({
       description:
         dataset?.description ??
         `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
-      // Only the three dataset pilot histories may join the indexed registry;
+      // Only the selected dataset pilot histories may join the indexed registry;
       // they still follow their org's visibility and editorial quality bar.
       robots: dataset && !orgNoIndex ? { index: true, follow: true } : NOINDEX_FOLLOW,
       openGraph: { type: "website", url: canonical },
