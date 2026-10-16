@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 15, 2026
+
+**Fixed**
+- Duplicate entries from re-publishing changelogs — when a source republishes the same content under a new title or anchor URL, the duplicate is now dropped; release candidates, backports, and sibling packages that ship identical notes are linked as related coverage instead.
+- App Store "bug fixes and performance improvements" releases no longer receive AI-generated summaries; sources configured to opt out of summarization now have that setting honored consistently on every write path.
+- Changelog sources with long publication histories now update reliably — a database parameter limit was causing ingest jobs to fail silently on active feeds.
+- Bulk-published releases (via the GitHub Actions publisher or the batch API) now receive AI headlines and summaries; previously, batches of more than 20 items silently skipped the summarization pass.
+- Connecting apps via OAuth now works correctly with discovery-based clients — the server's discovery document now accurately reflects the authorization code + PKCE flow that self-registering clients use, so clients that read it before registering no longer fail at the token exchange step.
+
 ## October 13, 2026
 
 **Added**
