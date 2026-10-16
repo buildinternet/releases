@@ -885,7 +885,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     {
       ...titled("Get release", READ_ONLY_HINTS),
       description:
-        "Fetch the full content of a single release by id. Release ids are returned by search or get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid.",
+        "Fetch the full content of a single release by id. Release ids are returned by search or get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid. Cite `URL:` (the original source) ahead of `Web:` (the releases.sh copy). Structured `url` and `webUrl` carry the same pair.",
       inputSchema: z.object({
         id: z.string().describe("Release id — 'rel_<nanoid>' or a bare 21-char nanoid"),
       }),

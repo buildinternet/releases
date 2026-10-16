@@ -997,11 +997,11 @@ export interface WhatsChangedEntry {
   summary: string | null;
   breaking: BreakingLevel;
   migrationNotes: string | null;
+  /** Original source URL. Primary citation link; prefer this over `webUrl`. */
   url: string | null;
   /**
-   * Absolute canonical web URL — the slugged `/release/<id>-<slug>` form
-   * (#1906), built from `WEB_BASE_URL`. Distinct from `url` (the upstream
-   * source URL); lets an upgrade-planning agent link the release detail page.
+   * releases.sh detail page — the slugged `/release/<id>-<slug>` form (#1906),
+   * built from `WEB_BASE_URL`. Secondary to `url` (the original source).
    */
   webUrl: string | null;
 }
@@ -1061,10 +1061,11 @@ export interface ReleaseDetail {
    * scored. Additive — older servers omit it.
    */
   importance?: number | null;
+  /** Original source URL. Primary citation link; `webUrl` is the releases.sh copy. */
   url: string | null;
   /**
-   * Canonical releases.sh detail-page URL (friendly form: ID + current
-   * title slug). Additive — older servers omit it.
+   * releases.sh detail-page URL (friendly form: ID + current title slug).
+   * Secondary to `url`. Additive — older servers omit it.
    */
   webUrl?: string;
   media: MediaItem[];

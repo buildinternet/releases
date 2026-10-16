@@ -129,7 +129,11 @@ function renderResolved(r: {
     const head = `- ${e.version ?? "?"}${when}${flag}${importanceFlag}: ${e.title ?? "(untitled)"}`;
     const summary = e.summary && e.summary !== e.title ? `\n    ${e.summary}` : "";
     const migration = e.migrationNotes ? `\n    ↳ migration: ${e.migrationNotes}` : "";
-    const link = e.webUrl ? `\n    Web: ${e.webUrl}` : "";
+    // `URL` is the original source (cite that). `Web` is the releases.sh copy.
+    const links = [e.url ? `    URL: ${e.url}` : "", e.webUrl ? `    Web: ${e.webUrl}` : ""].filter(
+      Boolean,
+    );
+    const link = links.length > 0 ? `\n${links.join("\n")}` : "";
     return `${head}${summary}${migration}${link}`;
   });
   const breakingCount = r.entries.filter(
@@ -222,6 +226,8 @@ export function registerWhatsChangedTool(server: McpServer, env: Env) {
         "Given a package and a `from`/`to` version, return the changelog entries between them — `(from, to]`, from exclusive, to inclusive — with summaries and breaking-change verdicts. One call instead of reading N changelog pages to plan an upgrade.",
         "",
         "`package` is a tracked source slug or a GitHub `owner/repo` coordinate (set `ecosystem: \"github\"` for a bare coordinate). Reads already-indexed releases only. If the package isn't in the catalog you'll get a clear 'not tracked' answer (npm/PyPI names may not be mapped to a source yet).",
+        "",
+        "Each entry prints `URL:` (the original source — cite that) before `Web:` (the releases.sh copy), when present. Structured results still include both `url` and `webUrl`.",
       ].join("\n"),
       inputSchema: z.object({
         package: z

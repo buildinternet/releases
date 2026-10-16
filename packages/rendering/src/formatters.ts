@@ -187,9 +187,9 @@ export interface OrgMarkdownOptions extends FormatOptions {
 
 /**
  * Renders a cross-source "Recent Releases" preview as truncated `<Release>`
- * blocks (summary only, with a `canonical` URL for the full content). Shared
- * by the org and product markdown adapters, both of which aggregate releases
- * across multiple sources.
+ * blocks (summary only). `url` is the original source; `canonical` is the
+ * releases.sh copy of the full content. Shared by the org and product markdown
+ * adapters, both of which aggregate releases across multiple sources.
  */
 function pushRecentReleasesSection(
   lines: string[],
@@ -200,7 +200,7 @@ function pushRecentReleasesSection(
   lines.push("## Recent Releases");
   lines.push("");
   lines.push(
-    "_Summaries below — fetch the release's `canonical` URL for full content, or `url` for the original source._",
+    "_Summaries below — fetch `url` for the original source, or `canonical` for the releases.sh copy of the full content._",
   );
   lines.push("");
   for (const release of releases) {

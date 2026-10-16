@@ -378,11 +378,30 @@ body {
 
 .detail-foot {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 14px;
   flex-wrap: wrap;
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--rl-border);
+}
+.detail-foot-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--rl-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--rl-muted) 45%, transparent);
+  text-underline-offset: 2px;
+}
+.detail-foot-link:hover {
+  color: var(--rl-accent);
+  text-decoration-color: currentColor;
 }
 
 /* ── Rendered markdown (detail body) ─────────────────────────────────── */

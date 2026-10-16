@@ -23,6 +23,7 @@ import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-cor
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { asD1 } from "../../../tests/mcp-test-helpers.js";
 import { getLatestReleases } from "../src/tools.js";
+import { runWhatsChanged } from "../src/whats-changed-tool.js";
 import { createServer, type Env } from "../src/mcp-agent.js";
 
 const TOKEN = "importancefilter";
@@ -248,6 +249,60 @@ function entriesFor(): WhatsChangedEntryStub[] {
     },
   ];
 }
+
+describe("whats_changed — source link", () => {
+  it("prints the original source URL before the releases.sh Web link", async () => {
+    const env = stubEnv({
+      API: {
+        fetch: async () =>
+          new Response(
+            JSON.stringify({
+              status: "resolved",
+              package: "acme",
+              ecosystem: null,
+              from: "1.0.0",
+              to: "1.1.0",
+              source: null,
+              entries: [
+                {
+                  version: "1.1.0",
+                  publishedAt: "2026-04-01T00:00:00Z",
+                  title: "Shipped",
+                  summary: null,
+                  breaking: "unknown",
+                  migrationNotes: null,
+                  url: "https://github.com/acme/releases/tag/v1.1.0",
+                  webUrl: "https://releases.sh/release/rel_abc-shipped",
+                },
+                {
+                  version: "1.0.1",
+                  publishedAt: null,
+                  title: "Patch",
+                  summary: null,
+                  breaking: "unknown",
+                  migrationNotes: null,
+                  url: null,
+                  webUrl: "https://releases.sh/release/rel_patch",
+                },
+              ],
+              count: 2,
+              truncated: false,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      } as Env["API"],
+    });
+    const text = (await runWhatsChanged(env, { package: "acme", from: "1.0.0", to: "1.1.0" }))
+      .content[0].text;
+    const sourceAt = text.indexOf("URL: https://github.com/acme/releases/tag/v1.1.0");
+    const webAt = text.indexOf("Web: https://releases.sh/release/rel_abc-shipped");
+    expect(sourceAt).toBeGreaterThan(-1);
+    expect(sourceAt).toBeLessThan(webAt);
+    const patch = text.slice(text.indexOf("Patch"));
+    expect(patch).toContain("Web: https://releases.sh/release/rel_patch");
+    expect(patch).not.toContain("URL:");
+  });
+});
 
 describe("whats_changed — minImportance", () => {
   it("attaches importance from D1 and renders Importance: N/5, omitted when unscored", async () => {

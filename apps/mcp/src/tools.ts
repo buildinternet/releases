@@ -160,11 +160,11 @@ export interface ReleaseFeedRow {
   /** First ~500 chars of the release body, ready to display under the title. */
   contentPreview: string;
   publishedAt: string | null;
+  /** Original source URL. Primary citation link; the App's "View source" target. */
   url: string | null;
   /**
-   * Absolute canonical web URL — the slugged `/release/<id>-<slug>` form
-   * (#1906), built from `WEB_BASE_URL`. Distinct from `url` (the upstream
-   * source URL). Lets agents cite/link the release detail page directly.
+   * releases.sh detail page — the slugged `/release/<id>-<slug>` form (#1906),
+   * built from `WEB_BASE_URL`. Secondary to `url`.
    */
   webUrl: string;
   /** `type` lets the UI branch GitHub (`org/repo` coordinate) vs. display name. */
@@ -1102,8 +1102,9 @@ export interface ReleaseDetailStructured {
   /** AI-scored importance 1–5 (5=landmark, 1=housekeeping); null when unscored. */
   importance: number | null;
   publishedAt: string | null;
+  /** Original source URL. Primary citation link; the App's "View source" target. */
   url: string | null;
-  /** Absolute slugged canonical web URL (#1906); distinct from upstream `url`. */
+  /** releases.sh detail page. Secondary to `url`. */
   webUrl: string;
   source: { name: string; coordinate: string; type: string };
   org: { name: string; slug: string; avatarUrl: string | null; githubHandle: string | null } | null;

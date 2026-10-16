@@ -75,7 +75,9 @@ interface FeedItem {
   importance?: number | null;
   product?: { name?: string | null } | null;
   source: { name: string };
-  /** Slugged canonical web URL (#1906) — the API populates it on feed items. */
+  /** Original source URL. Primary citation link; `webUrl` is the releases.sh copy. */
+  url?: string | null;
+  /** releases.sh detail page. Secondary to `url`. The API populates it on feed items. */
   webUrl?: string | null;
 }
 
@@ -198,7 +200,7 @@ export function registerFollowsTools(
       title: "Get personalized feed",
       annotations: { title: "Get personalized feed", ...READ_HINTS },
       description: [
-        "Your personalized release feed — recent releases from the organizations and products you follow, newest first. Requires a signed-in user. Same item shape as `get_latest_releases`, scoped to your follows.",
+        "Your personalized release feed — recent releases from the organizations and products you follow, newest first. Requires a signed-in user. Same item shape as `get_latest_releases`, scoped to your follows. Each item prints `URL:` (the original source — cite that) before `Web:` (the releases.sh copy), when present.",
         "",
         "Cursor-paginated: pass `cursor` from a prior response's `_meta.pagination.nextCursor` and optional `limit` (1–100, default 30).",
       ].join("\n"),
@@ -252,7 +254,11 @@ export function registerFollowsTools(
                   const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
                   const importance =
                     it.importance != null ? ` · Importance: ${it.importance}/5` : "";
-                  const link = it.webUrl ? `\n  Web: ${it.webUrl}` : "";
+                  const links = [
+                    it.url ? `  URL: ${it.url}` : "",
+                    it.webUrl ? `  Web: ${it.webUrl}` : "",
+                  ].filter(Boolean);
+                  const link = links.length > 0 ? `\n${links.join("\n")}` : "";
                   return `- ${title} — ${by}${when}${importance} (${it.id})${link}`;
                 })
                 .join("\n")}`;
