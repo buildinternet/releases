@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { z } from "zod";
@@ -161,7 +162,7 @@ firecrawlRoutes.post(
     try {
       await db
         .update(sources)
-        .set({ metadata: JSON.stringify(finalMeta) })
+        .set({ metadata: preserveLiveSourceDataset(JSON.stringify(finalMeta)) })
         .where(eq(sources.id, source.id));
     } catch (err) {
       // Compensation: if we just minted a NEW monitor but failed to persist its

@@ -71,7 +71,7 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Mappe
 
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
   const pilot = sourceDatasetEligible(source)
-    ? getSourceDatasetPilot(orgSlug, sourceSlug)
+    ? getSourceDatasetPilot(orgSlug, sourceSlug, source)
     : undefined;
   const releaseListId = `${sourceUrl}#releases`;
   const jsonLd = {

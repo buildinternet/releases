@@ -228,6 +228,15 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         ready: true,
       },
       {
+        key: "admin-datasets",
+        label: "Datasets",
+        href: "/admin/datasets",
+        group: ADMIN_GROUP_LABEL,
+        description: "Select public source datasets and edit their names and descriptions.",
+        Icon: CollectionsIcon,
+        ready: true,
+      },
+      {
         key: "admin-semantic-alerts",
         label: "Semantic alerts",
         href: "/admin/semantic-alerts",

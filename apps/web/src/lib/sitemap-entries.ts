@@ -94,7 +94,9 @@ export function buildSourceDatasetSitemapEntries(
     .filter(
       (source) =>
         indexedOrgs.has(source.orgSlug) &&
-        getSourceDatasetPilot(source.orgSlug, source.slug) &&
+        (source.dataset === undefined
+          ? getSourceDatasetPilot(source.orgSlug, source.slug, { id: source.id })
+          : source.dataset) &&
         !productPaths.has(`${source.orgSlug}/${source.slug}`),
     )
     .map((source) => ({

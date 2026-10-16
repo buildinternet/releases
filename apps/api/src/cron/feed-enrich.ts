@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 /**
  * Feed content enrichment — follow a summary-only feed item's link, fetch the
  * real article, and return clean body + media. Cheap path first (plain fetch +
@@ -458,6 +459,6 @@ async function persistEnrichmentBreakerState(
   };
   await db
     .update(sources)
-    .set({ metadata: JSON.stringify(merged) })
+    .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
     .where(eq(sources.id, sourceId));
 }

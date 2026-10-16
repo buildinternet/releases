@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 /**
  * BatchEnrichWorkflow — async, batched backfill of feed-content enrichment for
  * the render-heavy / JS-shell summary-only sources that the synchronous backfill
@@ -583,6 +584,6 @@ async function resetEnrichmentBreaker(db: any, src: Source): Promise<void> {
   const merged = { ...meta, enrichment: nextEnrichmentMetadata(meta.enrichment, true) };
   await db
     .update(sources)
-    .set({ metadata: JSON.stringify(merged) })
+    .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
     .where(eq(sources.id, src.id));
 }

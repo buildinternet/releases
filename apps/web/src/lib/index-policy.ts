@@ -1,3 +1,5 @@
+import { DATASET_ORG_INDEX_MIN_RELEASES } from "@releases/core-internal/source-dataset";
+
 /**
  * Which registry pages we ask search engines to index.
  *
@@ -10,7 +12,7 @@
  * Pages below the bar still render and stay linked (`noindex, follow`); they
  * just aren't submitted in the sitemap or offered for indexing.
  */
-export const ORG_INDEX_MIN_RELEASES = 10;
+export const ORG_INDEX_MIN_RELEASES = DATASET_ORG_INDEX_MIN_RELEASES;
 
 export interface OrgIndexSignals {
   releaseCount?: number | null;

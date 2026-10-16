@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
 import { createDb, type D1Db } from "../db.js";
 import {
@@ -501,7 +502,7 @@ export async function pollOne(
 
     if (Object.keys(metaUpdates).length > 0) {
       const merged = { ...meta, ...metaUpdates };
-      updates.metadata = JSON.stringify(merged);
+      updates.metadata = preserveLiveSourceDataset(JSON.stringify(merged));
     }
 
     const changed = result.status === "changed" || result.status === "unknown";
@@ -605,7 +606,7 @@ async function pollScrapeOrAgentByQuirk(
     const flagged = changed || staleFlag;
     const updates: Record<string, unknown> = { lastPolledAt: nowIso };
     if (Object.keys(metaUpdates).length > 0) {
-      updates.metadata = JSON.stringify({ ...meta, ...metaUpdates });
+      updates.metadata = preserveLiveSourceDataset(JSON.stringify({ ...meta, ...metaUpdates }));
     }
     if (flagged) updates.changeDetectedAt = nowIso;
     await db.update(sources).set(updates).where(eq(sources.id, source.id));
@@ -1952,7 +1953,7 @@ export async function fetchOne(
           const merged = { ...meta, ...metaUpdates };
           await db
             .update(sources)
-            .set({ metadata: JSON.stringify(merged) })
+            .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
             .where(eq(sources.id, source.id));
         }
       }
@@ -2085,7 +2086,7 @@ export async function fetchOne(
           const merged = { ...meta, ...metaUpdates };
           await db
             .update(sources)
-            .set({ metadata: JSON.stringify(merged) })
+            .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
             .where(eq(sources.id, source.id));
         }
       }
@@ -2366,7 +2367,7 @@ export async function fetchOne(
         await db
           .update(sources)
           .set({
-            metadata: JSON.stringify(cleared),
+            metadata: preserveLiveSourceDataset(JSON.stringify(cleared)),
             consecutiveErrors: 0,
             nextFetchAfter: null,
           })
@@ -2380,7 +2381,7 @@ export async function fetchOne(
         const merged = { ...meta, feed4xxStreak: streak };
         await db
           .update(sources)
-          .set({ metadata: JSON.stringify(merged) })
+          .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
           .where(eq(sources.id, source.id))
           .catch(
             logSwallowed("cron-poll-fetch", "source-metadata-write-failed", {

@@ -29,7 +29,7 @@
  */
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { RawRelease } from "@releases/adapters/types";
 // NOTE: fetchOne's `instanceof FeedHttpError` checks import the class from
 // `@releases/lib/errors` (poll-fetch.ts) — the adapter throws the same class
@@ -115,6 +115,25 @@ beforeEach(() => {
 });
 
 describe("fetchOne — feed fetch cycle", () => {
+  it("retains an operator dataset disable committed while the feed fetch is in flight", async () => {
+    const db = createTestDb();
+    const source = await seedFeedSource(db);
+    nextFeedImpl = async () => {
+      await db
+        .update(sources)
+        .set({ metadata: sql`json_set(metadata, '$.dataset', json('{"enabled":false}'))` })
+        .where(eq(sources.id, source.id));
+      return { releases: ITEMS, etag: "new-header" };
+    };
+    const result = await fetchOne(db as any, source, {} as never, { skipSideEffects: true });
+    expect(result.status).toBe("success");
+    const row = await db.select().from(sources).where(eq(sources.id, source.id)).get();
+    expect(JSON.parse(row!.metadata!)).toMatchObject({
+      dataset: { enabled: false },
+      feedEtag: "new-header",
+    });
+  });
+
   it("first fetch inserts the feed items as releases with mapped url/title/publishedAt", async () => {
     const db = createTestDb();
     const source = await seedFeedSource(db);

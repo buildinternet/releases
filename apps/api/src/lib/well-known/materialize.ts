@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../../queries/source-metadata.js";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   blockedUrls,
@@ -539,7 +540,7 @@ async function materializeLocation(
       await db
         .update(sources)
         .set({
-          metadata,
+          metadata: preserveLiveSourceDataset(metadata),
           ...(context.productId && !existing.productId ? { productId: context.productId } : {}),
         })
         .where(eq(sources.id, existing.id));

@@ -1,3 +1,4 @@
+import { adminDatasetsRoutes } from "./routes/admin-datasets.js";
 /**
  * Mounts every route module onto a v1 Hono router. Split out of `index.ts` so
  * `scripts/check-openapi-coverage.ts` can introspect the registered routes
@@ -109,6 +110,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", aiLaneRoutes);
   v1.route("/", aiModelRoutes);
   v1.route("/", adminMarketingClassifierRoutes);
+  v1.route("/", adminDatasetsRoutes);
   v1.route("/", adminEmbedStatusRoutes);
   v1.route("/", adminCronRunsRoutes);
   v1.route("/", adminSearchQueriesRoutes);

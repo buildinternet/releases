@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 /**
  * Workflow triggered when Firecrawl detects a change on a monitored source
  * (inbound webhook → POST /v1/inbound/firecrawl). Re-scrapes the
@@ -371,7 +372,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
               consecutiveErrors: 0,
               nextFetchAfter: null,
               changeDetectedAt: null,
-              metadata: JSON.stringify(nextMeta),
+              metadata: preserveLiveSourceDataset(JSON.stringify(nextMeta)),
             })
             .where(eq(sources.id, sourceId)),
         ] as [unknown, ...unknown[]]);

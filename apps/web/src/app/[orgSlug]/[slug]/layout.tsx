@@ -84,7 +84,7 @@ export default async function OrgSlugLayout({
   const sourceSlug = source.slug;
   const base = `/${orgSlug}/${sourceSlug}`;
   const dataset = sourceDatasetEligible(source)
-    ? getSourceDatasetPilot(orgSlug, sourceSlug)
+    ? getSourceDatasetPilot(orgSlug, sourceSlug, source)
     : undefined;
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 

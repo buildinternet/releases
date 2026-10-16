@@ -65,7 +65,7 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@buildinternet/releases-api-types": path.resolve(
+      "@buildinternet/releases-api-types$": path.resolve(
         __dirname,
         "../../packages/api-types/src/api-types.ts",
       ),

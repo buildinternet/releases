@@ -149,6 +149,7 @@
         "@better-auth/passkey": "^1.7.7",
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
+        "@releases/core-internal": "workspace:*",
         "@releases/design-system": "workspace:*",
         "@releases/lib": "workspace:*",
         "@releases/rendering": "workspace:*",

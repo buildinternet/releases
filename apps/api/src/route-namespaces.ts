@@ -67,6 +67,7 @@ export const adminRoutes = [
   "admin/search-queries",
   "admin/classifications",
   "admin/marketing-classifier",
+  "admin/datasets",
   "admin/feedback",
   "admin/recommendations",
   "admin/overviews",

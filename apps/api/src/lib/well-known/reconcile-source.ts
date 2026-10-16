@@ -1,3 +1,4 @@
+import { preserveLiveSourceDataset } from "../../queries/source-metadata.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { products, sources } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -200,7 +201,10 @@ export async function syncSourceRepo(
       source: "github",
       configHash: hash,
     });
-    await db.update(sources).set({ productId, metadata }).where(eq(sources.id, source.id));
+    await db
+      .update(sources)
+      .set({ productId, metadata: preserveLiveSourceDataset(metadata) })
+      .where(eq(sources.id, source.id));
     attached = true;
   } else if (entities.plan.sources.length === 0) {
     const hasDeferredEntity = entities.plan.products.some((item) => item.action === "skip");
@@ -209,7 +213,10 @@ export async function syncSourceRepo(
       source: "github",
       configHash: hasDeferredEntity ? `partial:${hash}` : hash,
     });
-    await db.update(sources).set({ metadata }).where(eq(sources.id, source.id));
+    await db
+      .update(sources)
+      .set({ metadata: preserveLiveSourceDataset(metadata) })
+      .where(eq(sources.id, source.id));
   }
 
   const applied = entities.applied || attached;
