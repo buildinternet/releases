@@ -167,40 +167,51 @@ function ReleasesPreview({
       <ul className="divide-y divide-stone-200 dark:divide-stone-800 border-y border-stone-200 dark:border-stone-800">
         {preview.map((rel) => {
           const linkProps = releaseLinkProps({ id: rel.id, url: rel.url });
+          const row = (
+            <>
+              {rel.thumbnail && (
+                <ReleaseThumb src={rel.thumbnail.url} alt={rel.thumbnail.alt ?? ""} size="md" />
+              )}
+              <div className="min-w-0 flex-1 flex items-baseline gap-2">
+                <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate">
+                  {rel.version ?? rel.title}
+                </span>
+                {rel.version && rel.title && rel.version !== rel.title && (
+                  <span className="text-[12px] text-stone-500 dark:text-stone-400 truncate">
+                    {rel.title}
+                  </span>
+                )}
+                {linkProps && isExternalReleaseLink(linkProps) && (
+                  <>
+                    <ExternalArrow
+                      size={10}
+                      className="shrink-0 text-stone-300 dark:text-stone-600"
+                    />
+                    <span className="sr-only"> (opens in new tab)</span>
+                  </>
+                )}
+              </div>
+              {rel.publishedAt && (
+                <time className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums">
+                  {formatDate(rel.publishedAt)}
+                </time>
+              )}
+            </>
+          );
           return (
             <li key={rel.id}>
-              <ReleaseLink
-                linkProps={linkProps}
-                className="flex items-center justify-between gap-3 py-1.5 hover:bg-white/60 dark:hover:bg-stone-900/60 -mx-2 px-2 rounded"
-              >
-                {rel.thumbnail && (
-                  <ReleaseThumb src={rel.thumbnail.url} alt={rel.thumbnail.alt ?? ""} size="md" />
-                )}
-                <div className="min-w-0 flex-1 flex items-baseline gap-2">
-                  <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate">
-                    {rel.version ?? rel.title}
-                  </span>
-                  {rel.version && rel.title && rel.version !== rel.title && (
-                    <span className="text-[12px] text-stone-500 dark:text-stone-400 truncate">
-                      {rel.title}
-                    </span>
-                  )}
-                  {isExternalReleaseLink(linkProps) && (
-                    <>
-                      <ExternalArrow
-                        size={10}
-                        className="shrink-0 text-stone-300 dark:text-stone-600"
-                      />
-                      <span className="sr-only"> (opens in new tab)</span>
-                    </>
-                  )}
+              {linkProps ? (
+                <ReleaseLink
+                  linkProps={linkProps}
+                  className="flex items-center justify-between gap-3 py-1.5 hover:bg-white/60 dark:hover:bg-stone-900/60 -mx-2 px-2 rounded"
+                >
+                  {row}
+                </ReleaseLink>
+              ) : (
+                <div className="flex items-center justify-between gap-3 py-1.5 -mx-2 px-2">
+                  {row}
                 </div>
-                {rel.publishedAt && (
-                  <time className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums">
-                    {formatDate(rel.publishedAt)}
-                  </time>
-                )}
-              </ReleaseLink>
+              )}
             </li>
           );
         })}

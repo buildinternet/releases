@@ -208,12 +208,12 @@ function ResultCard({
   kindLabel?: string;
   title: string;
   titleBadge?: React.ReactNode;
-  /** Internal href for hits with no upstream `url` (e.g. changelog chunks). */
-  titleHref: string;
-  /** When present, the title links through {@link ReleaseLink} instead of the
-   *  plain internal `titleHref` — upstream `url` first, `/release/<id>` as
-   *  fallback (see `releaseLinkProps()`). Release hits set this; chunk hits
-   *  don't and fall back to `titleHref`. */
+  /** Internal href for hits that aren't releases (changelog chunks). */
+  titleHref?: string;
+  /** When present, the title links through {@link ReleaseLink} to the
+   *  release's upstream `url` (see `releaseLinkProps()`). Release hits set
+   *  this when they have a url. Chunk hits pass `titleHref` instead. With
+   *  neither, the title is plain text — never a `/release/<id>` link. */
   titleLinkProps?: ReleaseLinkProps;
   date?: string | null;
   sourceName: string;
@@ -277,18 +277,17 @@ function ResultCard({
               </>
             )}
           </ReleaseLink>
-        ) : (
+        ) : titleHref ? (
           <Link
             href={titleHref}
             className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
           >
-            <Highlight text={title} tokens={tokens} />
-            {appStore && version && (
-              <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
-                v{version}
-              </span>
-            )}
+            {titleContent}
           </Link>
+        ) : (
+          <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 min-w-0 truncate">
+            {titleContent}
+          </span>
         )}
         {titleBadge}
       </div>
@@ -394,16 +393,14 @@ export function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; toke
   const baseTitle = (hit.type === "rollup" && hit.titleShort) || hit.title;
   const heading = appStore ? appStore.appName : video ? hit.title : hit.version || baseTitle;
   const rehypePlugins = useMarkdownHighlight(tokens);
-  // Default click target: the upstream source URL when the release has one,
-  // the on-site /release/{id} page only as fallback (see release-link.ts).
+  // Upstream source URL when the release has one. No /release/{id} fallback.
   const linkProps = releaseLinkProps({ id: hit.id, url: hit.url });
 
   return (
     <ResultCard
       title={heading}
       titleBadge={<RollupBadge type={hit.type} />}
-      titleHref={`/release/${hit.id}`}
-      titleLinkProps={linkProps}
+      titleLinkProps={linkProps ?? undefined}
       date={formatDate(hit.publishedAt)}
       sourceName={hit.sourceName}
       sourceSlug={hit.sourceSlug}

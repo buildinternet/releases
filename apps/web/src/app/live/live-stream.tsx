@@ -204,14 +204,15 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
           {/* Inline, so the flame stays with the title's first line when the
               heading wraps onto its own flex line (same as updates-feed). */}
           <ImportanceMarker importance={release.importance} className="mr-1.5 align-baseline" />
-          {/* Default click → upstream source when the release has one (see
-              release-link.ts); the on-site page stays on the Details link. */}
-          <Link
-            {...(linkProps ?? { href: `/release/${release.id}` })}
-            className="hover:underline underline-offset-2"
-          >
-            {heading}
-          </Link>
+          {/* Upstream source when the release has one. No /release/<id>
+              fallback — those pages are noindexed. */}
+          {linkProps ? (
+            <Link {...linkProps} className="hover:underline underline-offset-2">
+              {heading}
+            </Link>
+          ) : (
+            heading
+          )}
         </h3>
         {versionTag && (
           <span className="font-mono text-[11.5px] text-stone-400 dark:text-stone-500">
@@ -230,11 +231,10 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
 
       <div className="mt-2.5 flex items-center gap-2 text-stone-400 dark:text-stone-500">
         {release.source.type && <SourceTypeIcon type={release.source.type} size={12} />}
-        {/* The heading now links to the source, so this slot carries the
-            on-site permalink instead of a duplicate outbound link. */}
-        {release.id && (
+        {/* Same destination as the heading: the upstream URL, or nothing. */}
+        {linkProps && (
           <Link
-            href={`/release/${release.id}`}
+            {...linkProps}
             className="inline-flex items-center gap-1 text-[11px] hover:text-stone-700 dark:hover:text-stone-200"
           >
             Details

@@ -4,8 +4,8 @@ import { releaseLinkProps, type ReleaseLinkInput } from "@/lib/release-link";
 
 /**
  * Title link for a release row: upstream source URL when the release has a
- * referenceable one, `/release/<id>` as fallback, plain children when
- * neither exists (see release-link.ts for the rationale).
+ * referenceable one, plain children otherwise (see release-link.ts). No
+ * `/release/<id>` fallback — those pages are noindexed.
  */
 export function ReleaseTitleLink({
   release,

@@ -129,8 +129,7 @@ interface ReleaseCardProps {
 // Exported for render tests (`related-rail.test.tsx`); the async `RelatedRail`
 // wrapper is not directly renderable in a unit test.
 export function ReleaseCard({ item }: ReleaseCardProps) {
-  // Default click target: the upstream source URL when the release has one,
-  // the on-site /release/{id} page only as fallback (see release-link.ts).
+  // Upstream source URL when the release has one. No /release/{id} fallback.
   const linkProps = releaseLinkProps(item);
   // Prefer the product name over the bare source/feed name when the release's
   // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
@@ -186,9 +185,13 @@ export function ReleaseCard({ item }: ReleaseCardProps) {
     // inside an <a> (same rule as feed cards: flame sibling of title link).
     <div className={`${CARD_CLASS} items-start`}>
       <ImportanceMarker importance={item.importance} className="mt-0.5" />
-      <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full">
-        {cardContent}
-      </ReleaseLink>
+      {linkProps ? (
+        <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full">
+          {cardContent}
+        </ReleaseLink>
+      ) : (
+        <div className="flex flex-1 gap-3 min-w-0 h-full">{cardContent}</div>
+      )}
     </div>
   );
 }
@@ -206,7 +209,7 @@ function AppReleaseCard({
   app,
 }: {
   item: RelatedReleaseItem;
-  linkProps: ReleaseLinkProps;
+  linkProps: ReleaseLinkProps | null;
   app: { label: "iOS" | "macOS"; iconUrl: string | null; appName: string };
 }) {
   const cardContent = (
@@ -236,9 +239,13 @@ function AppReleaseCard({
   return (
     <div className={`${CARD_CLASS} items-start`}>
       <ImportanceMarker importance={item.importance} className="mt-0.5" />
-      <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full items-start">
-        {cardContent}
-      </ReleaseLink>
+      {linkProps ? (
+        <ReleaseLink linkProps={linkProps} className="flex flex-1 gap-3 min-w-0 h-full items-start">
+          {cardContent}
+        </ReleaseLink>
+      ) : (
+        <div className="flex flex-1 gap-3 min-w-0 h-full items-start">{cardContent}</div>
+      )}
     </div>
   );
 }
