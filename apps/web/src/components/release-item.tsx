@@ -214,10 +214,9 @@ export function ReleaseListItem({
   // layout below. See `.context/2026-05-29-feed-version-title-hierarchy.md`.
   const { descriptive, versionLabel } = deriveFeedTitle(release);
 
-  // Default click target: the upstream source URL when the release has one,
-  // the on-site /release/{id} page only as fallback (see release-link.ts).
-  // The internal page stays reachable via the lightbox, the "Copy link"
-  // permalink, and as the fallback target when a release has no upstream URL.
+  // Title click goes to the upstream source URL. No /release/{id} fallback
+  // (see release-link.ts). The on-site page stays reachable from the lightbox
+  // and the "Copy link" permalink, which aren't crawlable card links.
   const linkProps = releaseLinkProps(release);
 
   // Heading link shared by the App Store / video / standard row layouts.
@@ -560,9 +559,9 @@ export function ReleaseListItem({
               )}
               {release.id && markdownContent.trim() && (
                 <div className="mt-2 flex items-center gap-3">
-                  {/* Read more goes where the heading goes: upstream when the
-                      release has its own URL, the on-site page only as a
-                      fallback. The permalink is offered as a copy action. */}
+                  {/* Read more follows the heading: upstream when the release has
+                      its own URL, omitted otherwise. The permalink is a copy
+                      action, not a crawlable /release link. */}
                   {linkProps && (
                     <ReleaseLink
                       linkProps={linkProps}

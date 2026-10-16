@@ -145,12 +145,11 @@ type ReleaseListItemInput = {
  * Builds an `ItemList` of release (`TechArticle`) nodes for a feed page's JSON-LD
  * `@graph` (org / source / category / collection feeds). Each release links
  * upstream when it has an http(s) `url` (the #2218 link policy — `/release/*`
- * pages are noindexed and robots-disallowed), falling back to the release
- * page; rows with neither a usable target are skipped. `isPartOfId` ties each
- * release back to the page's CreativeWork node (the `CollectionPage`, or the
- * source entity) via schema.org `isPartOf` — never an Organization, which
- * `isPartOf` doesn't accept. Capped at `limit` (default 20) — the
- * list is an SEO signal, not a full feed mirror.
+ * pages are noindexed and robots-disallowed). Rows without a referenceable
+ * upstream url are skipped. `isPartOfId` ties each release back to the page's
+ * CreativeWork node (the `CollectionPage`, or the source entity) via schema.org
+ * `isPartOf` — never an Organization, which `isPartOf` doesn't accept. Capped at
+ * `limit` (default 20) — the list is an SEO signal, not a full feed mirror.
  */
 export function buildReleaseItemListJsonLd(
   releases: readonly ReleaseListItemInput[],
@@ -166,8 +165,7 @@ export function buildReleaseItemListJsonLd(
       return [
         {
           // `SoftwareRelease` is not a real schema.org type — each release note
-          // is a `TechArticle` (and the `/release/{id}` page it links to is one
-          // too, per #1630). `version` is the valid CreativeWork property here;
+          // is a `TechArticle`. `version` is the valid CreativeWork property here;
           // `softwareVersion` only exists on `SoftwareApplication`.
           "@type": "TechArticle",
           name: release.title,

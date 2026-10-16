@@ -6,7 +6,7 @@ import {
 } from "./schema-org";
 
 describe("buildReleaseItemListJsonLd", () => {
-  test("items link upstream when the release has an http url, else the release page", () => {
+  test("items link upstream when the release has an http url and skip rows without one", () => {
     const ld = buildReleaseItemListJsonLd(
       [
         { id: "rel_a", url: "https://example.com/changelog#a", title: "A" },
@@ -15,7 +15,7 @@ describe("buildReleaseItemListJsonLd", () => {
       { listId: "https://releases.sh/x#list", name: "X" },
     );
     const urls = (ld.itemListElement as any[]).map((e) => e.item?.url);
-    expect(urls).toEqual(["https://example.com/changelog#a", "https://releases.sh/release/rel_b"]);
+    expect(urls).toEqual(["https://example.com/changelog#a"]);
   });
 });
 

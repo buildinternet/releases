@@ -75,9 +75,9 @@ function clampMetaDescription(text: string): string {
 }
 
 /**
- * A "Releases covered" row's link: goes to the release's upstream url when it
- * has one (new tab, ↗), falling back to the on-site `/release/<id>` page.
- * Mirrors `releaseLinkTarget()` (`apps/web/src/lib/release-link.ts`).
+ * A "Releases covered" row's link: the release's upstream url when it has one
+ * (new tab, ↗), else the explicit slugged `path` the digest payload already
+ * carries. Mirrors `releaseLinkTarget()` (`apps/web/src/lib/release-link.ts`).
  */
 function CoveredReleaseLink({
   release,
@@ -87,6 +87,7 @@ function CoveredReleaseLink({
   className: string;
 }) {
   const linkProps = releaseLinkProps(release);
+  if (!linkProps) return <span className={className}>{release.title}</span>;
   const external = isExternalReleaseLink(linkProps);
   return (
     <ReleaseLink

@@ -73,9 +73,10 @@ describe("RelatedRail ReleaseCard — link target", () => {
     expect(html).toContain(`data-release-id="${feedItem.id}"`);
   });
 
-  it("falls back to the release page without a url", () => {
+  it("renders an unlinked card without a url", () => {
     const html = renderToStaticMarkup(<ReleaseCard item={{ ...feedItem, url: null }} />);
-    expect(html).toContain(`href="/release/${feedItem.id}"`);
-    expect(html).toContain(`data-release-id="${feedItem.id}"`);
+    expect(html).toContain("Next.js 15.1");
+    expect(html).not.toContain("/release/");
+    expect(html).not.toContain(`data-release-id="${feedItem.id}"`);
   });
 });

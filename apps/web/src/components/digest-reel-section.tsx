@@ -161,12 +161,10 @@ export function DigestSectionPreview({
       <div className="flex flex-col gap-0.5 border-t border-stone-200 pt-2 dark:border-stone-700">
         {section.releases.map((r) => {
           const linkProps = releaseLinkProps(r);
-          return (
-            <a
-              key={r.id}
-              {...linkProps}
-              className="-mx-1.5 flex h-[26px] items-center gap-2 rounded px-1.5 text-[12px] text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
-            >
+          const rowClass =
+            "-mx-1.5 flex h-[26px] items-center gap-2 rounded px-1.5 text-[12px] text-stone-700 dark:text-stone-300";
+          const row = (
+            <>
               <OrgAvatar
                 avatarUrl={r.org.avatarUrl}
                 githubHandle={r.org.githubHandle}
@@ -174,7 +172,7 @@ export function DigestSectionPreview({
                 size={14}
               />
               <span className="min-w-0 flex-1 truncate">{r.title}</span>
-              {isExternalReleaseLink(linkProps) && (
+              {linkProps && isExternalReleaseLink(linkProps) && (
                 <>
                   <ExternalArrow
                     size={11}
@@ -183,7 +181,22 @@ export function DigestSectionPreview({
                   <span className="sr-only"> (opens in new tab)</span>
                 </>
               )}
+            </>
+          );
+          // Digest payloads carry an explicit slugged `path`, so a missing
+          // upstream url still links on-site. No path and no url → plain text.
+          return linkProps ? (
+            <a
+              key={r.id}
+              {...linkProps}
+              className={`${rowClass} hover:bg-stone-100 dark:hover:bg-stone-800`}
+            >
+              {row}
             </a>
+          ) : (
+            <span key={r.id} className={rowClass}>
+              {row}
+            </span>
           );
         })}
         <div className="mt-0.5 flex items-center justify-between">

@@ -27,13 +27,13 @@ describe("ReleaseResultCard — link target (#2330)", () => {
     expect(html).toContain("opens in new tab");
   });
 
-  it("falls back to the internal /release/<id> page when the hit has no url", () => {
+  it("renders an unlinked title when the hit has no url", () => {
     const html = renderToStaticMarkup(
       <ReleaseResultCard hit={{ ...baseHit, url: null }} tokens={[]} />,
     );
-    expect(html).toContain(`href="/release/${baseHit.id}"`);
-    expect(html).toContain(`data-release-id="${baseHit.id}"`);
+    expect(html).toContain("1.0.0");
+    expect(html).not.toContain("/release/");
+    expect(html).not.toContain(`data-release-id="${baseHit.id}"`);
     expect(html).not.toContain('target="_blank"');
-    expect(html).not.toContain("opens in new tab");
   });
 });

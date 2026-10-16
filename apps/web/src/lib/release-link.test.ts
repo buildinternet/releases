@@ -17,23 +17,16 @@ describe("releaseLinkTarget", () => {
     });
   });
 
-  test("falls back to the internal release page without a URL", () => {
-    expect(releaseLinkTarget({ id: "rel_1", url: null })).toEqual({
-      href: "/release/rel_1",
-      external: false,
-    });
-    expect(releaseLinkTarget({ id: "rel_1", url: "   " })).toEqual({
-      href: "/release/rel_1",
-      external: false,
-    });
+  test("returns null without a referenceable URL", () => {
+    expect(releaseLinkTarget({ id: "rel_1", url: null })).toBeNull();
+    expect(releaseLinkTarget({ id: "rel_1", url: "   " })).toBeNull();
+    expect(releaseLinkTarget({ id: "rel_1" })).toBeNull();
   });
 
-  test("non-http(s) URLs fall back to the internal page", () => {
-    // javascript:/data:/ftp: etc. must never become the row's href.
-    expect(releaseLinkTarget({ id: "rel_1", url: "javascript:alert(1)" })).toEqual({
-      href: "/release/rel_1",
-      external: false,
-    });
+  test("non-http(s) URLs are not link targets", () => {
+    // javascript:/data:/ftp: etc. must never become the row's href, and must
+    // not fall through to a /release/<id> page either.
+    expect(releaseLinkTarget({ id: "rel_1", url: "javascript:alert(1)" })).toBeNull();
   });
 
   test("returns null with neither URL nor id", () => {
@@ -41,17 +34,14 @@ describe("releaseLinkTarget", () => {
     expect(releaseLinkTarget({})).toBeNull();
   });
 
-  test("prefers a slugged internal path over the bare id fallback", () => {
+  test("uses an explicit slugged path when there is no upstream URL", () => {
     expect(
       releaseLinkTarget({ id: "rel_1", url: null, path: "/release/rel_1-voice-conversations" }),
     ).toEqual({ href: "/release/rel_1-voice-conversations", external: false });
   });
 
   test("ignores a path that isn't a /release/ path", () => {
-    expect(releaseLinkTarget({ id: "rel_1", url: null, path: "/collections/x" })).toEqual({
-      href: "/release/rel_1",
-      external: false,
-    });
+    expect(releaseLinkTarget({ id: "rel_1", url: null, path: "/collections/x" })).toBeNull();
   });
 
   test("an upstream URL still wins over a slugged path", () => {
@@ -74,11 +64,8 @@ describe("releaseLinkProps", () => {
       "data-release-id": "rel_a",
     });
   });
-  test("fallback link: internal path, still tagged", () => {
-    expect(releaseLinkProps({ id: "rel_b", url: null })).toEqual({
-      href: "/release/rel_b",
-      "data-release-id": "rel_b",
-    });
+  test("no url → null, even when an id is present", () => {
+    expect(releaseLinkProps({ id: "rel_b", url: null })).toBeNull();
   });
   test("no id and no url → null", () => {
     expect(releaseLinkProps({ id: null, url: null })).toBeNull();

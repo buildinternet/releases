@@ -37,10 +37,11 @@ describe("LookupRail releases preview — link target (#2330)", () => {
     expect(html).toContain("opens in new tab");
   });
 
-  it("falls back to the internal /release/<id> page when the release has no url", () => {
+  it("renders an unlinked row when the release has no url", () => {
     const html = renderToStaticMarkup(<LookupRail query="acme/repo" payload={basePayload} />);
-    expect(html).toContain('href="/release/rel_1"');
-    expect(html).toContain('data-release-id="rel_1"');
+    expect(html).toContain("Acme 1.0");
+    expect(html).not.toContain("/release/");
+    expect(html).not.toContain('data-release-id="rel_1"');
     expect(html).not.toContain("opens in new tab");
   });
 });

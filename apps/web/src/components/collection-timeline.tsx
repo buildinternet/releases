@@ -18,7 +18,9 @@ import {
 import { weekBoundaries } from "@/lib/timeline-weeks";
 import { weekDividerLabel } from "@/lib/digest-format";
 import { type CollectionReleaseItemView } from "@/lib/release-view";
+import { ReleaseLink } from "@/components/release-link";
 import { ReleaseTitleLink } from "@/components/release-title-link";
+import { releaseLinkProps } from "@/lib/release-link";
 import { memberKey } from "@/lib/member-key";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
@@ -148,6 +150,18 @@ const markdownClasses =
 // actions, commit-log icons). Centralized so tone tweaks happen in one place.
 const subduedLinkClass =
   "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200";
+
+/** "Details" goes to the release's upstream URL. No link when it has none —
+ *  never `/release/<id>`, which is robots-disallowed and noindexed. */
+function ReleaseDetailsLink({ release }: { release: CollectionReleaseItemView }) {
+  const linkProps = releaseLinkProps(release);
+  if (!linkProps) return null;
+  return (
+    <ReleaseLink linkProps={linkProps} className={subduedLinkClass}>
+      Details
+    </ReleaseLink>
+  );
+}
 
 const preBadgeClass =
   "text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded px-1.5 py-0.5 leading-none";
@@ -1031,12 +1045,7 @@ function PostHero({ release }: { release: CollectionReleaseItemView }) {
               Show more
             </button>
           )}
-          {/* Title links to the source now; this slot keeps the on-site permalink. */}
-          {release.id && (
-            <Link href={`/release/${release.id}`} className={subduedLinkClass}>
-              Details
-            </Link>
-          )}
+          <ReleaseDetailsLink release={release} />
           {release.prerelease && (
             <span title="Pre-release (beta, rc, nightly, preview)" className={preBadgeClass}>
               pre
@@ -1148,12 +1157,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
                 Show more
               </button>
             )}
-            {/* Title links to the source now; this slot keeps the on-site permalink. */}
-            {release.id && (
-              <Link href={`/release/${release.id}`} className={subduedLinkClass}>
-                Details
-              </Link>
-            )}
+            <ReleaseDetailsLink release={release} />
           </div>
         </div>
         {showThumb && thumbnail && (

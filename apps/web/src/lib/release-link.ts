@@ -5,9 +5,8 @@ import { isHttpUrl } from "@releases/rendering/digest-sections";
 export interface ReleaseLinkInput {
   id?: string | null;
   url?: string | null;
-  /** Internal `/release/*` path (slugged), when the caller's data has it —
-   *  preferred over the bare `/release/<id>` fallback so the internal link
-   *  matches the canonical slugged URL. */
+  /** Explicit internal `/release/*` path, when the caller already has the
+   *  canonical slugged URL (digest citations). Not synthesized from `id`. */
   path?: string | null;
 }
 
@@ -21,23 +20,21 @@ export interface ReleaseLinkTarget {
  * Default destination for a release row on feed surfaces.
  *
  * Release pages are noindexed stubs of upstream content (see
- * `/release/[id]/page.tsx`), so the default click goes straight to the
- * upstream `url` when the release has a referenceable one. The on-site
- * `/release/<id>` page stays reachable as a secondary affordance
- * (permalink / "Read more" / lightbox detail link) — it's just no longer
- * the default place a click lands. This also strips the main internal-link
- * paths crawlers used to discover tens of thousands of `/release/` URLs.
+ * `/release/[id]/page.tsx`) and robots-disallowed, so a row links to the
+ * upstream `url` when the release has a referenceable one. There is no
+ * bare `/release/<id>` fallback: a row with no upstream URL renders
+ * unlinked, so indexable pages don't hand crawlers a path onto those stubs.
+ * An explicit slugged `path` is still honored when the caller already has
+ * the canonical internal path (digest citations).
  *
- * Fallback order: upstream http(s) `url` → the slugged `/release/…` `path`
- * when provided → bare `/release/<id>` → null (row renders an unlinked
- * heading).
+ * Order: upstream http(s) `url` → slugged `/release/…` `path` when provided
+ * → null (row renders an unlinked heading).
  */
 export function releaseLinkTarget(release: ReleaseLinkInput): ReleaseLinkTarget | null {
   const url = (release.url ?? "").trim();
   if (isHttpUrl(url)) return { href: url, external: true };
   const path = (release.path ?? "").trim();
   if (path.startsWith("/release/")) return { href: path, external: false };
-  if (release.id) return { href: `/release/${release.id}`, external: false };
   return null;
 }
 
@@ -52,8 +49,6 @@ export type ReleaseLinkProps = {
   "data-release-id"?: string;
 };
 
-export function releaseLinkProps(r: ReleaseLinkInput & { id: string }): ReleaseLinkProps;
-export function releaseLinkProps(r: ReleaseLinkInput): ReleaseLinkProps | null;
 export function releaseLinkProps(release: ReleaseLinkInput): ReleaseLinkProps | null {
   const link = releaseLinkTarget(release);
   if (!link) return null;
