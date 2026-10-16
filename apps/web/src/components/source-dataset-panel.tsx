@@ -30,7 +30,9 @@ export function SourceDatasetPanel({
           <p className="text-[30px] leading-none tracking-tight tabular-nums text-stone-900 dark:text-stone-100">
             {count.toLocaleString("en-US")}
           </p>
-          <p className="mt-1.5 text-[11px] text-stone-500 dark:text-stone-400">indexed releases</p>
+          <p className="mt-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+            {count === 1 ? "stable release" : "stable releases"}
+          </p>
         </div>
       )}
       <div className="min-w-0 flex-1">
