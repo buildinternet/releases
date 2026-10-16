@@ -4,7 +4,7 @@
  * Release text is the vendor's own, so a page that only lists it adds little
  * over the vendor's changelog. An org earns indexing when it has something of
  * ours on top: a generated overview, plus enough release history for the
- * timeline to be worth reading. Its product pages follow the org. Three source
+ * timeline to be worth reading. Its product pages follow the org. Selected source
  * histories with dataset descriptions also follow it (source-dataset-pilot.ts).
  *
  * Pages below the bar still render and stay linked (`noindex, follow`); they

@@ -16,7 +16,7 @@ export const revalidate = 3600;
 const BASE_URL = getStaticBaseUrl();
 
 /**
- * Registry-surface sitemap: org pages, products, and the three dataset pilot
+ * Registry-surface sitemap: org pages, products, and the selected dataset pilot
  * source histories. Other source pages stay `noindex`. Split from `sitemap.xml` so
  * each submitted sitemap gets its own page-indexing breakdown.
  */

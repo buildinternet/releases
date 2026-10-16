@@ -8,6 +8,18 @@ describe("source dataset pilot scope", () => {
       ["anthropic", "claude-code-releases"],
       ["openai", "openai-codex-changelog"],
       ["vercel", "next-js"],
+      ["openai", "openai-api-changelog"],
+      ["openai", "chatgpt-release-notes"],
+      ["openai", "model-release-notes"],
+      ["xai", "release-notes"],
+      ["xai", "release-notes-2"],
+      ["xai", "grok-build-releases"],
+      ["cloudflare", "cloudflare-application-performance"],
+      ["cloudflare", "cloudflare-application-security"],
+      ["cloudflare", "cloudflare-cloudflare-one"],
+      ["cloudflare", "cloudflare-core-platform"],
+      ["cloudflare", "cloudflare-developer-platform"],
+      ["vercel", "vercel"],
     ]) {
       const pilot = getSourceDatasetPilot(org!, slug!);
       expect(pilot?.name).toBeTruthy();
@@ -15,10 +27,13 @@ describe("source dataset pilot scope", () => {
       expect(pilot?.description.length).toBeLessThanOrEqual(5000);
       names.add(pilot!.name);
     }
-    expect(names.size).toBe(3);
+    expect(names.size).toBe(15);
     expect(getSourceDatasetPilot("anthropic", "claude-code")).toBeUndefined();
     expect(getSourceDatasetPilot("other", "next-js")).toBeUndefined();
     expect(getSourceDatasetPilot("anthropic", "anthropic-news")).toBeUndefined();
+    expect(getSourceDatasetPilot("openai", "openai-news")).toBeUndefined();
+    expect(getSourceDatasetPilot("xai", "news")).toBeUndefined();
+    expect(getSourceDatasetPilot("spacex", "release-notes")).toBeUndefined();
   });
 
   test("public dataset treatment never exposes hidden or on-demand sources", () => {
