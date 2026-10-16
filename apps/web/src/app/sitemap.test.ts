@@ -7,10 +7,52 @@
 
 import { describe, test, expect } from "bun:test";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
-import { buildProductSitemapEntries, buildOrgSitemapEntries } from "@/lib/sitemap-entries";
+import {
+  buildProductSitemapEntries,
+  buildOrgSitemapEntries,
+  buildSourceDatasetSitemapEntries,
+} from "@/lib/sitemap-entries";
 import { renderSitemapXml } from "@/lib/sitemap-xml";
 
 const BASE = "https://releases.sh";
+
+describe("dataset source sitemap pilot", () => {
+  const payload: SitemapPayload = {
+    orgs: [indexedOrg("anthropic"), indexedOrg("openai"), indexedOrg("vercel")],
+    sources: [
+      { orgSlug: "anthropic", slug: "claude-code-releases", latestDate: "2026-10-01" },
+      { orgSlug: "openai", slug: "openai-codex-changelog", latestDate: null },
+      { orgSlug: "vercel", slug: "next-js", latestDate: null },
+      { orgSlug: "anthropic", slug: "anthropic-news", latestDate: null },
+      { orgSlug: "other", slug: "next-js", latestDate: null },
+    ],
+    products: [],
+    collections: [],
+  };
+
+  test("submits just the three canonical dataset histories without invented lastmod", () => {
+    const entries = buildSourceDatasetSitemapEntries(payload, BASE);
+    expect(entries.map((entry) => entry.url)).toEqual([
+      `${BASE}/anthropic/claude-code-releases`,
+      `${BASE}/openai/openai-codex-changelog`,
+      `${BASE}/vercel/next-js`,
+    ]);
+    expect(entries.every((entry) => entry.lastModified === undefined)).toBe(true);
+  });
+
+  test("omits unavailable sources, orgs below the index bar, and product collisions", () => {
+    const entries = buildSourceDatasetSitemapEntries(
+      {
+        ...payload,
+        orgs: [indexedOrg("anthropic"), { ...indexedOrg("openai"), hasOverview: false }],
+        products: [{ orgSlug: "anthropic", slug: "claude-code-releases" }],
+      },
+      BASE,
+    );
+    expect(entries).toEqual([]);
+    expect(buildSourceDatasetSitemapEntries({ ...payload, sources: [] }, BASE)).toEqual([]);
+  });
+});
 
 /** An org that clears the index bar (overview + enough releases). */
 function indexedOrg(slug: string): SitemapPayload["orgs"][number] {
@@ -58,7 +100,7 @@ describe("buildProductSitemapEntries", () => {
     expect(result).toEqual([]);
   });
 
-  test("source pages are never listed (they are noindex inputs to org/product views)", () => {
+  test("the product builder does not list source pages", () => {
     const payload: SitemapPayload = {
       orgs: [indexedOrg("orgX")],
       products: [

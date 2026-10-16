@@ -8,6 +8,8 @@ import { ViewTransition } from "react";
 import { SetupMessage } from "@/components/setup-message";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
+import { SourceDatasetPanel } from "@/components/source-dataset-panel";
+import { getSourceDatasetPilot, sourceDatasetEligible } from "@/lib/source-dataset-pilot";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { AppIcon } from "@/components/app-icon";
 import { PlatformBadge } from "@/components/platform-badge";
@@ -81,6 +83,9 @@ export default async function OrgSlugLayout({
   }
   const sourceSlug = source.slug;
   const base = `/${orgSlug}/${sourceSlug}`;
+  const dataset = sourceDatasetEligible(source)
+    ? getSourceDatasetPilot(orgSlug, sourceSlug)
+    : undefined;
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   const [activityResult, heatmapResult] = await Promise.all([
@@ -194,6 +199,14 @@ export default async function OrgSlugLayout({
                 activity={activity}
                 heatmap={heatmap}
                 trackingSince={source.trackingSince}
+              />
+            )}
+            {dataset && (
+              <SourceDatasetPanel
+                pilot={dataset}
+                basePath={base}
+                sourceUrl={source.url}
+                releaseCount={resolved.source.releaseCount}
               />
             )}
             <SourceTabs base={base} hasHighlights={hasHighlights} hasChangelog={hasChangelog} />

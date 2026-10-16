@@ -10,6 +10,7 @@ import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
 import { enableOnDemandIsr } from "@/lib/static-params";
 import { NOINDEX_FOLLOW, productMeetsIndexBar } from "@/lib/index-policy";
+import { getSourceDatasetPilot, sourceDatasetEligible } from "@/lib/source-dataset-pilot";
 
 // On-demand ISR: render once per product/source on first request, then serve
 // from cache (regenerated on ingest via POST /api/revalidate; 24h backstop).
@@ -66,12 +67,17 @@ export async function generateMetadata({
     const source = resolved.source;
     const orgName = source.org?.name ?? orgSlug;
     const canonical = `/${orgSlug}/${slug}`;
+    const dataset = sourceDatasetEligible(source)
+      ? getSourceDatasetPilot(orgSlug, slug)
+      : undefined;
     return {
-      title: `${source.name} — ${orgName}`,
-      description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
-      // Sources are inputs to the org and product views, which are the pages we
-      // offer for indexing. A source page stays reachable and linked.
-      robots: NOINDEX_FOLLOW,
+      title: dataset?.name ?? `${source.name} — ${orgName}`,
+      description:
+        dataset?.description ??
+        `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
+      // Only the three dataset pilot histories may join the indexed registry;
+      // they still follow their org's visibility and editorial quality bar.
+      robots: dataset && !orgNoIndex ? { index: true, follow: true } : NOINDEX_FOLLOW,
       openGraph: { type: "website", url: canonical },
       alternates: {
         canonical,

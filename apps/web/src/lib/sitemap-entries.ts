@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import type { SitemapPayload } from "@buildinternet/releases-api-types";
 import { orgMeetsIndexBar, productMeetsIndexBar } from "./index-policy";
+import { getSourceDatasetPilot } from "./source-dataset-pilot";
 
 type SitemapOrg = SitemapPayload["orgs"][number];
 
@@ -52,8 +53,7 @@ export function buildOrgSitemapEntries(
  * (`orgInSitemap`) and the product has enough releases of its own
  * (`productMeetsIndexBar`).
  *
- * Source pages are never listed: they are `noindex` inputs to the org and
- * product views (see `NOINDEX_FOLLOW` in `index-policy.ts`).
+ * Source histories in the dataset pilot are handled separately below.
  */
 export function buildProductSitemapEntries(
   data: SitemapPayload,
@@ -77,5 +77,30 @@ export function buildProductSitemapEntries(
       // No stored product updatedAt signal — omit lastmod rather than fake it.
       changeFrequency: "daily",
       priority: 0.7,
+    }));
+}
+
+/** Only public source histories selected for the dataset pilot are submitted.
+ * The API sitemap excludes hidden/on-demand sources and organizations. */
+export function buildSourceDatasetSitemapEntries(
+  data: SitemapPayload,
+  baseUrl: string,
+): MetadataRoute.Sitemap {
+  const indexedOrgs = new Set(data.orgs.filter(orgInSitemap).map((org) => org.slug));
+  const productPaths = new Set(
+    data.products.map((product) => `${product.orgSlug}/${product.slug}`),
+  );
+  return data.sources
+    .filter(
+      (source) =>
+        indexedOrgs.has(source.orgSlug) &&
+        getSourceDatasetPilot(source.orgSlug, source.slug) &&
+        !productPaths.has(`${source.orgSlug}/${source.slug}`),
+    )
+    .map((source) => ({
+      url: `${baseUrl}/${source.orgSlug}/${source.slug}`,
+      // Publication dates and polling timestamps are not dataset modifications.
+      changeFrequency: "daily",
+      priority: 0.6,
     }));
 }

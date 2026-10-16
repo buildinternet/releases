@@ -165,7 +165,7 @@ describe("GET /sitemap", () => {
     expect(result.sources[0].id).toBe(src.id);
   });
 
-  test("filters out hidden sources but keeps their parent org", async () => {
+  test("filters out hidden and on-demand sources but keeps their parent org", async () => {
     const db = testDatabase.db;
     const [org] = db.insert(organizations).values({ name: "Corp", slug: "corp" }).returning().all();
     db.insert(sources)
@@ -184,6 +184,15 @@ describe("GET /sitemap", () => {
           type: "feed",
           url: "https://corp.com/h",
           isHidden: true,
+        },
+        {
+          orgId: org.id,
+          name: "Visible on demand",
+          slug: "corp-on-demand",
+          type: "feed",
+          url: "https://corp.com/on-demand",
+          discovery: "on_demand",
+          isHidden: false,
         },
       ])
       .run();
