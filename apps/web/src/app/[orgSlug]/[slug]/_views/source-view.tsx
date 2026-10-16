@@ -5,6 +5,8 @@ import { SourceReleaseList } from "@/components/source-release-list";
 import { withReleaseBodyHtml } from "@/lib/render-release-body";
 import { RelatedRail } from "@/components/related-rail";
 import { buildReleaseItemListJsonLd, buildSourceEntityJsonLd } from "@/lib/schema-org";
+import { buildSourceDatasetJsonLd } from "@/lib/source-dataset";
+import { getSourceDatasetPilot, sourceDatasetEligible } from "@/lib/source-dataset-pilot";
 import { getAppInfo } from "@/lib/app-source";
 import { getVideoInfo } from "@/lib/video-source";
 
@@ -68,11 +70,15 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Mappe
   const videoInfo = getVideoInfo(source);
 
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
+  const pilot = sourceDatasetEligible(source)
+    ? getSourceDatasetPilot(orgSlug, sourceSlug)
+    : undefined;
   const releaseListId = `${sourceUrl}#releases`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       buildSourceEntityJsonLd(source, sourceUrl),
+      ...(pilot ? buildSourceDatasetJsonLd(source, sourceUrl, pilot) : []),
       {
         "@type": "BreadcrumbList",
         itemListElement: [
@@ -93,7 +99,7 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Mappe
       buildReleaseItemListJsonLd(source.releases, {
         listId: releaseListId,
         name: `${source.name} releases`,
-        isPartOfId: sourceUrl,
+        isPartOfId: pilot ? `${sourceUrl}#page` : sourceUrl,
       }),
     ],
   };

@@ -4,8 +4,8 @@
  * Release text is the vendor's own, so a page that only lists it adds little
  * over the vendor's changelog. An org earns indexing when it has something of
  * ours on top: a generated overview, plus enough release history for the
- * timeline to be worth reading. Its product pages follow the org; source
- * pages are never indexed (see `NOINDEX_FOLLOW`).
+ * timeline to be worth reading. Its product pages follow the org. Three source
+ * histories with dataset descriptions also follow it (source-dataset-pilot.ts).
  *
  * Pages below the bar still render and stay linked (`noindex, follow`); they
  * just aren't submitted in the sitemap or offered for indexing.
@@ -34,7 +34,7 @@ export function productMeetsIndexBar(product: { releaseCount?: number | null }):
 
 /**
  * Pages that feed the org and product views rather than standing on their own:
- * source pages (one input feed each), their `/highlights` and `/changelog`
+ * source pages outside the dataset pilot, their `/highlights` and `/changelog`
  * views, and the `/{org}/sources` directory. Always `noindex, follow`; they stay
  * reachable through links and the `.md` / `.json` / `.atom` formats.
  */

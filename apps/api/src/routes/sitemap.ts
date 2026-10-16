@@ -111,6 +111,7 @@ sitemapRoutes.get(
               slug: sourcesActive.slug,
               id: sourcesActive.id,
               isHidden: sourcesActive.isHidden,
+              discovery: sourcesActive.discovery,
             })
             .from(sourcesActive)
             .where(inArray(sourcesActive.orgId, chunk)),
@@ -214,7 +215,7 @@ sitemapRoutes.get(
     // Every row here was fetched via inArray(orgId, orgIds) so orgIdToSlug.get
     // is guaranteed to resolve — flatMap lets us skip hidden rows in one pass.
     const sourcesOut = sourceRows.flatMap((s) =>
-      s.isHidden || !s.orgId
+      s.isHidden || s.discovery === "on_demand" || !s.orgId
         ? []
         : [
             {
