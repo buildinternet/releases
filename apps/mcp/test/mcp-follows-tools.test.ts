@@ -169,6 +169,8 @@ describe("MCP follows tools — forwarding", () => {
               titleShort: "Dark mode",
               publishedAt: "2026-06-01T00:00:00Z",
               source: { name: "Acme Blog" },
+              url: "https://acme.example/changelog/dark-mode",
+              webUrl: "https://releases.sh/release/rel_1-dark-mode",
             },
           ],
           pagination: { nextCursor: "2026-06-01T00:00:00Z|2026-06-01T00:00:00Z|rel_1", limit: 10 },
@@ -183,6 +185,10 @@ describe("MCP follows tools — forwarding", () => {
     });
     const text = firstText(res);
     expect(text).toContain("Dark mode");
+    const sourceAt = text.indexOf("URL: https://acme.example/changelog/dark-mode");
+    const webAt = text.indexOf("Web: https://releases.sh/release/rel_1-dark-mode");
+    expect(sourceAt).toBeGreaterThan(-1);
+    expect(sourceAt).toBeLessThan(webAt);
     expect(calls[0]!.url).toContain(`cursor=${encodeURIComponent(cursor)}`);
     expect(calls[0]!.url).toContain("limit=10");
     const meta = (res as { _meta?: { pagination?: { kind?: string; nextCursor?: string } } })._meta

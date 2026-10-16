@@ -42,7 +42,10 @@ interface ReleaseRow {
   summary: string | null;
   contentPreview: string;
   publishedAt: string | null;
+  /** Original source URL. Primary link ("View source"). */
   url: string | null;
+  /** releases.sh detail page. Secondary to `url`. */
+  webUrl?: string | null;
   source: { name: string; coordinate: string; type: string };
   org: OrgIdentity | null;
   product: { name: string; slug: string } | null;
@@ -66,7 +69,10 @@ interface ReleaseDetail {
   content: string;
   summary: string | null;
   publishedAt: string | null;
+  /** Original source URL. Primary link ("View source"). */
   url: string | null;
+  /** releases.sh detail page. Secondary to `url`. */
+  webUrl?: string | null;
   source: { name: string; coordinate: string; type: string };
   org: OrgIdentity | null;
   product: { name: string; slug: string } | null;
@@ -541,6 +547,7 @@ function DetailView({ app, row, backLabel, loadDetail, onBack }: DetailViewProps
   const title = pickTitle(detail ?? row);
   const version = detail?.version ?? row.version;
   const url = detail?.url ?? row.url;
+  const webUrl = detail?.webUrl ?? row.webUrl ?? null;
   const repoUrl = githubRepoUrlFor(url);
   const markdownComponents = useMemo(() => makeMarkdownComponents(app), [app]);
   const remarkPlugins = useMemo(() => createRemarkPlugins({ repoUrl }), [repoUrl]);
@@ -572,11 +579,13 @@ function DetailView({ app, row, backLabel, loadDetail, onBack }: DetailViewProps
               ‹ Back to {backLabel}
             </button>
             {url && (
+              // The source URL is this button's tooltip. A visible "opens https://…"
+              // line under the back row duplicated View source and collided with the byline.
               <button
                 type="button"
                 className="header-action"
                 onClick={() => openLink(url)}
-                title="Open the original source"
+                title={url}
               >
                 View source
                 <ExternalLinkIcon size={12} />
@@ -625,6 +634,11 @@ function DetailView({ app, row, backLabel, loadDetail, onBack }: DetailViewProps
           <button type="button" className="btn btn-secondary" onClick={askMore}>
             Ask about this
           </button>
+          {webUrl && (
+            <button type="button" className="detail-foot-link" onClick={() => openLink(webUrl)}>
+              View on releases.sh
+            </button>
+          )}
         </footer>
       </div>
     </div>

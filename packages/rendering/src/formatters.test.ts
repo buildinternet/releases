@@ -553,7 +553,9 @@ describe("orgToMarkdown", () => {
   it("marks recent releases as truncated and includes lead-in prose", () => {
     const md = orgToMarkdown(fullOrg, { recentReleases: recent });
     expect(md).toContain('truncated="true"');
-    expect(md).toContain("Summaries below");
+    expect(md).toContain(
+      "fetch `url` for the original source, or `canonical` for the releases.sh copy",
+    );
   });
 
   it("adds canonical internal URL when baseUrl provided and release has id", () => {

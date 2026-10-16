@@ -74,10 +74,11 @@ export const ReleaseLatestItemSchema = z.object({
   breaking: z.enum(BREAKING_LEVELS).optional(),
   importance: ImportanceScoreSchema,
   publishedAt: z.string().nullable(),
+  /** Original source URL. Primary citation link; `webUrl` is the releases.sh copy. */
   url: z.string().nullable(),
   /**
-   * Canonical releases.sh detail-page URL (friendly form: ID + current
-   * title slug). Additive — older servers and the digest-cron path omit it.
+   * releases.sh detail-page URL (friendly form: ID + current title slug).
+   * Secondary to `url`. Additive — older servers and the digest-cron path omit it.
    */
   webUrl: z.string().optional(),
   media: z.array(MediaItemSchema),
@@ -268,12 +269,12 @@ export const ReleaseDetailResponseSchema = z.object({
    * when the body gives none. Detail-route-only — list paths never carry it.
    */
   migrationNotes: z.string().nullable().optional(),
+  /** Original source URL. Primary citation link; `webUrl` is the releases.sh copy. */
   url: z.string().nullable(),
   /**
-   * Canonical releases.sh detail-page URL, `https://releases.sh/release/
-   * rel_<id>-<slug>` (Zendesk-style: immutable ID + current title slug;
-   * the slug follows title regeneration, the ID keeps old links alive).
-   * Additive — older servers omit it.
+   * releases.sh detail-page URL, `https://releases.sh/release/rel_<id>-<slug>`
+   * (immutable ID + current title slug). Secondary to `url`. Additive — older
+   * servers omit it.
    */
   webUrl: z.string().optional(),
   contentHash: z.string().nullable(),
