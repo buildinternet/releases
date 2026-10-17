@@ -62,6 +62,14 @@ npx skills add buildinternet/releases --skill creating-releases-json
 
 See [Listing your product](/docs/listing) for the format and the paste-ready agent prompt.
 
+## More from Build Internet
+
+[buildnotes](https://buildnotes.releases.sh) is a sibling skill for coding agents. It reads a feature's issues, pull requests, and reviews, then writes them up as a post, video, or slides.
+
+```bash
+npx skills add buildinternet/buildnotes
+```
+
 ## Operator skills
 
 These are for people running or maintaining the registry itself: onboarding sources (`finding-changelogs`, `managing-sources`), the parse pipeline (`parsing-changelogs`, `classify-media-relevance`), and bulk maintenance (`seeding-playbooks` and friends). They live with the backend in the [releases monorepo](https://github.com/buildinternet/releases) under `.claude/skills/`. Claude Code picks them up automatically in a checkout, or you can install them anywhere:
