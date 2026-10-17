@@ -24,13 +24,7 @@ To get a key, run `releases login` or create one under **Account → API Keys** 
 
 ## Rate limits
 
-| Caller                      | Identified by               | Limit              |
-| --------------------------- | --------------------------- | ------------------ |
-| Anonymous                   | IP address                  | 120 requests / min |
-| Free account                | User API key or OAuth token | 300 requests / min |
-| Integration (machine) token | Issued by the operators     | 600 requests / min |
-
-Limits can change. Responses carry `RateLimit` headers, and a `429` includes `Retry-After` — back off and retry. If a legitimate integration needs more, email [hi@releases.sh](mailto:hi@releases.sh).
+The API applies rate limits to keep the service fair for everyone. When you hit a limit you get a `429` with a `Retry-After` header — back off and retry. If a legitimate integration needs more, email [hi@releases.sh](mailto:hi@releases.sh).
 
 ## For publishers
 
@@ -38,6 +32,6 @@ Getting your product listed is also free. See [Add your product](/docs/listing).
 
 ## Related
 
-- [Terms of Service](/terms) — acceptable use and fair-use limits.
+- [Terms of Service](/terms) — acceptable use and rate limits.
 - [Agent authentication](/auth.md) — OAuth discovery and token how-to.
 - [REST API](/docs/api/rest) and [MCP server](/docs/api/mcp) docs.

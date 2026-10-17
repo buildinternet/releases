@@ -34,8 +34,10 @@ Authorization Code with PKCE (`S256` is required):
 2. **Exchange the code:** `https://api.releases.sh/api/auth/oauth2/token`
 3. **Call the API** with `Authorization: Bearer <access_token>`.
 
-The `client_credentials` and `refresh_token` grants are also supported. Access
-tokens are JWTs (EdDSA) — verify them against the JWKS endpoint above.
+Clients are public: there is no client secret, and the token endpoint takes
+`token_endpoint_auth_method: none`. Request `offline_access` to get a refresh
+token (`refresh_token` grant). Access tokens are JWTs (EdDSA) — verify them
+against the JWKS endpoint above.
 
 **Scopes:** `read` ⊂ `write` ⊂ `admin` (plus the OIDC `openid`, `profile`,
 `email`, and `offline_access` scopes). A token's scope ceiling is set by the
@@ -43,11 +45,19 @@ user's role; most agents only need `read`.
 
 ## Client registration
 
-OAuth clients are provisioned by the Releases Index operators — **dynamic client
-registration (RFC 7591) is intentionally disabled**. To register an agent or
-application, email <security@releases.sh> or open an issue at
-<https://github.com/buildinternet/releases>. Human users can also mint a
-read-only personal API key from the web app.
+Agents can register themselves — no email or approval step. Two options:
+
+- **Dynamic client registration (RFC 7591):** `POST` your client metadata to
+  `https://api.releases.sh/api/auth/oauth2/register`. Registered clients are
+  public (PKCE, no secret) and limited to the `read` scope plus the OIDC
+  scopes.
+- **Client ID metadata document:** use an HTTPS URL that serves your client
+  metadata as the `client_id`. It is fetched on first authorize and gets the
+  same `read` ceiling.
+
+Self-registered clients always show the user a consent screen. Human users can
+also mint a read-only personal API key with `releases login` or under
+**Account → API Keys** on the web app.
 
 ## Reference
 
