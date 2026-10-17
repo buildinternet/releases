@@ -10,7 +10,7 @@ import type { UnifiedSearchResponse } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "Search",
-  alternates: { canonical: "/search" },
+  alternates: { canonical: "/search", types: { "text/markdown": "/search.md" } },
   robots: { index: false, follow: true },
 };
 

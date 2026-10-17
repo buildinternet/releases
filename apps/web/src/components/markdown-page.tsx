@@ -34,7 +34,7 @@ export function buildStaticPageMetadata(
       ...(description ? { description } : {}),
       ...img.twitter,
     },
-    alternates: { canonical: url },
+    alternates: { canonical: url, types: { "text/markdown": `${url}.md` } },
   };
 }
 
