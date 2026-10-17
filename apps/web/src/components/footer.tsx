@@ -3,12 +3,20 @@ import Link from "next/link";
 // Primary project repo — the open-source monorepo; the CLI ships from apps/cli.
 const GITHUB_REPO_URL = "https://github.com/buildinternet/releases";
 
-// Sibling tool in the Build Internet family — hosts agent-captured screenshots
-// and recordings for embedding in GitHub PRs/issues. Linked from the footer
-// family bar for cross-site discovery.
+// Sibling tools in the Build Internet family. `referral` keeps the referrer
+// (rel="noopener" without noreferrer) so these sites see cross-site traffic.
+const BUILDNOTES_URL = "https://buildnotes.releases.sh";
 const UPLOADS_URL = "https://uploads.sh";
 
-type FooterLink = { label: string; href: string; external?: boolean };
+type FooterLink = {
+  label: string;
+  href: string;
+  external?: boolean;
+  /** Sibling site: omit `noreferrer` so the destination sees referral traffic. */
+  referral?: boolean;
+  /** Native tooltip. Set only when the visible label needs a short gloss. */
+  title?: string;
+};
 type FooterColumn = { title: string; links: FooterLink[] };
 
 // Featured collections — the agent- and developer-facing slices people reach
@@ -71,6 +79,19 @@ const COLUMNS: FooterColumn[] = [
       { label: "Security", href: "/security" },
     ],
   },
+  {
+    title: "More from Build Internet",
+    links: [
+      {
+        label: "buildnotes",
+        href: BUILDNOTES_URL,
+        external: true,
+        referral: true,
+        title: "PR to blog post skill",
+      },
+      { label: "uploads.sh", href: UPLOADS_URL, external: true, referral: true },
+    ],
+  },
 ];
 
 const linkClass =
@@ -79,13 +100,19 @@ const linkClass =
 function FooterLinkItem({ link }: { link: FooterLink }) {
   if (link.external) {
     return (
-      <a href={link.href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+      <a
+        href={link.href}
+        target="_blank"
+        rel={link.referral ? "noopener" : "noopener noreferrer"}
+        title={link.title}
+        className={linkClass}
+      >
         {link.label}
       </a>
     );
   }
   return (
-    <Link href={link.href} className={linkClass}>
+    <Link href={link.href} title={link.title} className={linkClass}>
       {link.label}
     </Link>
   );
@@ -97,7 +124,7 @@ export function Footer() {
       className="border-t border-stone-200 dark:border-stone-800 mt-auto"
       style={{ viewTransitionName: "site-footer" }}
     >
-      <div className="max-w-5xl mx-auto px-6 pt-10 pb-8 text-xs">
+      <div className="mx-auto max-w-5xl px-6 pt-10 pb-8 text-xs xl:max-w-7xl">
         {/* Brand row — full width so the nav grid below can wrap into as many
             rows as the viewport needs without competing with the tagline. */}
         <div className="mb-8">
@@ -111,12 +138,13 @@ export function Footer() {
             A registry of release notes from across the web.
           </p>
         </div>
-        {/* Nav grid — columns wrap: 2-up on phones (3 rows), 3-up from `sm`
-            (2 rows), one row of 5 from `lg`. */}
-        <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
+        {/* Nav grid — 6 columns wrap evenly: 2-up on phones (3 rows), 3-up
+            from `sm` (2 rows). One row from `xl`, once the footer is wide
+            enough for the longest label to stay on one line. */}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3 xl:grid-cols-6 xl:gap-x-6">
           {COLUMNS.map((column) => (
             <nav key={column.title} aria-label={column.title}>
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
+              <div className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-balance text-stone-400 dark:text-stone-500">
                 {column.title}
               </div>
               <ul className="space-y-2">
@@ -131,12 +159,11 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Family bar — maintainer credit + a quiet cross-link to the sibling
-          Build Internet tool. rel omits "noreferrer" so uploads.sh sees the
-          referral traffic. Same text size as the column links (`text-xs`);
-          earlier 10px / stone-600 dark was hard to read. */}
+      {/* Maintainer credit. Sibling tools live in the nav grid above. Same
+          text size as the column links (`text-xs`); earlier 10px / stone-600
+          dark was hard to read. */}
       <div className="border-t border-stone-200 dark:border-stone-800">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-6 py-4 text-xs leading-relaxed text-stone-500 dark:text-stone-400 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto max-w-5xl px-6 py-4 text-xs leading-relaxed text-stone-500 dark:text-stone-400 xl:max-w-7xl">
           <p>
             Maintained by{" "}
             <a
@@ -157,12 +184,6 @@ export function Footer() {
               Build Internet
             </a>
             .
-          </p>
-          <p>
-            Screenshots &amp; recordings for agent PRs —{" "}
-            <a href={UPLOADS_URL} target="_blank" rel="noopener" className={linkClass}>
-              uploads.sh →
-            </a>
           </p>
         </div>
       </div>
