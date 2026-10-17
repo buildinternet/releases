@@ -5,6 +5,8 @@ import {
   signingFetchFromRawKey,
   buildSignatureBase,
   jwkThumbprint,
+  signDirectoryResponse,
+  buildDirectorySignatureBase,
 } from "./web-bot-auth-sign";
 
 async function makeKeys() {
@@ -137,5 +139,41 @@ describe("jwkThumbprint", () => {
     const priv = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as JsonWebKey;
     const pub = (await crypto.subtle.exportKey("jwk", pair.publicKey)) as JsonWebKey;
     expect(await jwkThumbprint(priv)).toBe(await jwkThumbprint(pub));
+  });
+});
+
+describe("signDirectoryResponse", () => {
+  it('signs "@authority";req with the directory tag and verifies', async () => {
+    const { privateJwk, publicJwk } = await makeKeys();
+    const headers = await signDirectoryResponse({
+      privateJwk,
+      keyId: "test-key-id",
+      authority: "releases.sh",
+      now: 1_700_000_000_000,
+    });
+
+    const input = headers["Signature-Input"];
+    expect(input).toMatch(/^sig1=\("@authority";req\);alg="ed25519";keyid="test-key-id";/);
+    expect(input).toContain('tag="http-message-signatures-directory"');
+    expect(input).toContain(";created=1700000000;expires=1700000300");
+
+    const base = buildDirectorySignatureBase({
+      authority: "releases.sh",
+      params: input.slice("sig1=".length),
+    });
+    const sig = Uint8Array.from(atob(headers.Signature.slice("sig1=:".length, -1)), (c) =>
+      c.charCodeAt(0),
+    );
+    const key = await crypto.subtle.importKey("jwk", publicJwk, { name: "Ed25519" }, false, [
+      "verify",
+    ]);
+    expect(await crypto.subtle.verify("Ed25519", key, sig, new TextEncoder().encode(base))).toBe(
+      true,
+    );
+    // A different authority must not verify (mirrors can't reuse the signature).
+    const mirrored = base.replace("releases.sh", "mirror.example");
+    expect(
+      await crypto.subtle.verify("Ed25519", key, sig, new TextEncoder().encode(mirrored)),
+    ).toBe(false);
   });
 });

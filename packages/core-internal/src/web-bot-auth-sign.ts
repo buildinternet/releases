@@ -73,6 +73,57 @@ export async function signBotRequest(args: SignArgs): Promise<Record<string, str
   };
 }
 
+/** RFC 9421 `tag` Cloudflare requires on the signed key-directory response. */
+export const DIRECTORY_SIGNATURE_TAG = "http-message-signatures-directory";
+
+/**
+ * Signature base for the key-directory response: the single component
+ * `"@authority";req` (the Host of the request that fetched the directory).
+ */
+export function buildDirectorySignatureBase(args: { authority: string; params: string }): string {
+  return `"@authority";req: ${args.authority}\n` + `"@signature-params": ${args.params}`;
+}
+
+export interface SignDirectoryArgs {
+  privateJwk: JsonWebKey;
+  keyId: string;
+  /** Host the directory was requested on, e.g. `releases.sh`. */
+  authority: string;
+  /** Epoch millis; injectable for tests. Defaults to Date.now(). */
+  now?: number;
+}
+
+/**
+ * Sign the `/.well-known/http-message-signatures-directory` response, as
+ * Cloudflare's bot registration requires (one signature per published key,
+ * tag="http-message-signatures-directory", covering `"@authority";req`). This
+ * proves the directory is served by the key holder, so a mirror can't register
+ * our key under its own name. Returns the Signature and Signature-Input headers.
+ */
+export async function signDirectoryResponse(
+  args: SignDirectoryArgs,
+): Promise<{ Signature: string; "Signature-Input": string }> {
+  const created = Math.floor((args.now ?? Date.now()) / 1000);
+  const expires = created + SIG_VALIDITY_SECONDS;
+  const nonce = b64(crypto.getRandomValues(new Uint8Array(32)).buffer);
+
+  const params =
+    `("@authority";req)` +
+    `;alg="ed25519";keyid="${args.keyId}";nonce="${nonce}"` +
+    `;tag="${DIRECTORY_SIGNATURE_TAG}";created=${created};expires=${expires}`;
+
+  const base = buildDirectorySignatureBase({ authority: args.authority, params });
+  const key = await crypto.subtle.importKey("jwk", args.privateJwk, { name: "Ed25519" }, false, [
+    "sign",
+  ]);
+  const sig = await crypto.subtle.sign("Ed25519", key, new TextEncoder().encode(base));
+
+  return {
+    "Signature-Input": `${SIG_LABEL}=${params}`,
+    Signature: `${SIG_LABEL}=:${b64(sig)}:`,
+  };
+}
+
 /** RFC 7638 JWK thumbprint (base64url, unpadded) of an OKP/Ed25519 key. */
 export async function jwkThumbprint(jwk: JsonWebKey): Promise<string> {
   // Fail fast on the wrong key shape so a malformed secret surfaces here (at

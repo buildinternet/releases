@@ -4,6 +4,7 @@
 
 - Keys provisioned: public key committed in `packages/core/src/web-bot-auth.ts` (`WEB_BOT_AUTH_PUBLIC_JWK`), private key stored in Cloudflare Secrets Store as `WEB_BOT_AUTH_PRIVATE_KEY` (run `bun scripts/gen-web-bot-auth-key.ts` to generate both).
 - `https://releases.sh/.well-known/http-message-signatures-directory` returns 200 + a JWKS (it 404s until the public key is provisioned).
+- That response carries `Signature` + `Signature-Input` headers (`tag="http-message-signatures-directory"`, covering `"@authority";req`). Cloudflare rejects an unsigned directory with "Web Bot Auth keys directory validation failed". The web route signs it with the `WEB_BOT_AUTH_PRIVATE_KEY` Vercel env var and serves it unsigned when that is missing. Check with `curl -sI https://releases.sh/.well-known/http-message-signatures-directory`.
 - The `/bot` page is live at `https://releases.sh/bot`.
 
 ## Provision the keys
@@ -15,8 +16,10 @@ bun scripts/gen-web-bot-auth-key.ts
 ```
 
 - Paste the printed **public** JWK (`kty`/`crv`/`x`/`kid`) into `WEB_BOT_AUTH_PUBLIC_JWK` in `packages/core/src/web-bot-auth.ts` and commit. The public key is not secret; this is what the directory serves.
-- Store the printed **private** JWK in the Cloudflare **Secrets Store** — the same account-level store as `WEBHOOK_HMAC_MASTER` (store id `a887a71cab084105b79706df23380723`) — under the name `WEB_BOT_AUTH_PRIVATE_KEY`. One secret serves **both** the `api` and `discovery` workers; their `wrangler.jsonc` already bind it. It is **not** needed in Vercel — only the Cloudflare Workers sign requests; the web frontend only serves the public key.
+- Store the printed **private** JWK in the Cloudflare **Secrets Store** — the same account-level store as `WEBHOOK_HMAC_MASTER` (store id `a887a71cab084105b79706df23380723`) — under the name `WEB_BOT_AUTH_PRIVATE_KEY`. One secret serves the `api` worker, whose `wrangler.jsonc` already binds it, for signing outbound requests.
   - That store id is the `store_id` in the `secrets_store_secrets` bindings in each `wrangler.jsonc` (search for `WEB_BOT_AUTH_PRIVATE_KEY`); if it ever changes, find the current id via the dashboard → Manage Account → Secrets Store, or `bunx wrangler secrets-store store list`.
+
+- Also add the same private JWK, as one line (`jq -c . key.json | tr -d '\n' | pbcopy`), to Vercel as `WEB_BOT_AUTH_PRIVATE_KEY`: Sensitive, **Production** only. The web app uses it to sign the key-directory response. **On rotation, update both copies**; a stale Vercel copy makes the route log a key mismatch and serve the directory unsigned.
 
 Via the dashboard (Manage Account → Secrets Store), or the CLI (run against the Build Internet account):
 
