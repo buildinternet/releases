@@ -14,6 +14,8 @@ type FooterLink = {
   external?: boolean;
   /** Sibling site: omit `noreferrer` so the destination sees referral traffic. */
   referral?: boolean;
+  /** Native tooltip. Set only when the visible label needs a short gloss. */
+  title?: string;
 };
 type FooterColumn = { title: string; links: FooterLink[] };
 
@@ -80,7 +82,13 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "More from Build Internet",
     links: [
-      { label: "buildnotes", href: BUILDNOTES_URL, external: true, referral: true },
+      {
+        label: "buildnotes",
+        href: BUILDNOTES_URL,
+        external: true,
+        referral: true,
+        title: "PR to blog post skill",
+      },
       { label: "uploads.sh", href: UPLOADS_URL, external: true, referral: true },
     ],
   },
@@ -96,6 +104,7 @@ function FooterLinkItem({ link }: { link: FooterLink }) {
         href={link.href}
         target="_blank"
         rel={link.referral ? "noopener" : "noopener noreferrer"}
+        title={link.title}
         className={linkClass}
       >
         {link.label}
@@ -103,7 +112,7 @@ function FooterLinkItem({ link }: { link: FooterLink }) {
     );
   }
   return (
-    <Link href={link.href} className={linkClass}>
+    <Link href={link.href} title={link.title} className={linkClass}>
       {link.label}
     </Link>
   );
