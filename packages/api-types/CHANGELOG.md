@@ -1,5 +1,11 @@
 # @buildinternet/releases-api-types
 
+## 0.59.0
+
+### Minor Changes
+
+- 04e7341: Add operator dataset settings and admin listing types, and expose effective dataset selection in sitemap source records.
+
 ## 0.58.3
 
 ### Patch Changes
