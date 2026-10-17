@@ -74,6 +74,7 @@ const COLUMNS: FooterColumn[] = [
       { label: "Why", href: "/docs/why" },
       { label: "GitHub", href: GITHUB_REPO_URL, external: true },
       { label: "Status", href: "https://status.releases.sh", external: true },
+      { label: "Pricing", href: "/pricing" },
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
       { label: "Security", href: "/security" },

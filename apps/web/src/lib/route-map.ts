@@ -54,7 +54,14 @@ export function routeMap(pathname: string): string | null {
   return null;
 }
 
-export const STATIC_PAGES = new Set(["privacy", "terms", "security", "search", "status"]);
+export const STATIC_PAGES = new Set([
+  "privacy",
+  "terms",
+  "security",
+  "search",
+  "status",
+  "pricing",
+]);
 
 const RESERVED = new Set([
   "admin",

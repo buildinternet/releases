@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { negotiate } from "@/lib/accept";
 import { FORMATS, type Format } from "@/lib/request";
-import { routeMap } from "@/lib/route-map";
+import { routeMap, STATIC_PAGES } from "@/lib/route-map";
 
 /**
  * URL-suffix routes (`/inngest.md`, `/docs.md`, `/inngest.atom`, etc.) dispatch
@@ -70,6 +70,11 @@ export function proxy(request: NextRequest) {
   const suffixMatch = pathname.match(SUFFIX_PATTERN);
   if (suffixMatch) {
     const [, basePath, format] = suffixMatch;
+    // Static pages (`/pricing.md`, `/terms.md`, …) have a markdown route of their
+    // own; the generic rewrite below would look them up as an org and 404.
+    if (format === "md" && STATIC_PAGES.has(basePath.slice(1))) {
+      return rewriteToFormat(request, `/api/format/page${basePath}`, "md");
+    }
     return rewriteToFormat(request, `/api/format${basePath}`, format as Format);
   }
 

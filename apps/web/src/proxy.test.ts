@@ -19,6 +19,22 @@ describe("proxy /auth.md guard", () => {
   });
 });
 
+describe("proxy static-page .md suffix", () => {
+  it("rewrites /pricing.md to the static page markdown route, not the org route", () => {
+    const res = run("/pricing.md");
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/api/format/page/pricing");
+  });
+
+  it("serves Accept: text/markdown on /pricing from the static page route", () => {
+    const res = proxy(
+      new NextRequest(new URL("https://releases.sh/pricing"), {
+        headers: { accept: "text/markdown" },
+      }),
+    );
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/api/format/page/pricing");
+  });
+});
+
 describe("proxy /schemas guard", () => {
   it("passes /schemas/*.json through to the static file without a format rewrite", () => {
     const res = run("/schemas/releases.json");
