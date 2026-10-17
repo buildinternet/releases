@@ -3,6 +3,18 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 16, 2026
+
+**Added**
+- Selected source histories — Anthropic Claude Code, OpenAI, xAI, Cloudflare, and Vercel changelogs — are now published as indexed dataset pages with descriptions, making them discoverable in search engines.
+- Buildnotes (a sibling tool for writing up pull requests and reviews as posts, videos, or slides) is now linked from the footer and the skills documentation page.
+
+**Changed**
+- MCP release results now put the original source URL first; releases.sh appears as a secondary link. The in-app release detail panel matches: "View source" is the primary action, with a quiet "View on releases.sh" in the footer.
+
+**Fixed**
+- Release cards on collection, search, and live-feed pages now link directly to the upstream post when one is available; without one, the title renders as plain text instead of pointing to an unindexed on-site page.
+
 ## October 15, 2026
 
 **Fixed**
