@@ -47,4 +47,15 @@ describe("staticPageMetadata", () => {
     expect(og.images).toHaveLength(1);
     expect(tw.images).toHaveLength(1);
   });
+
+  it.each(["privacy", "security", "terms", "pricing"])(
+    "%s advertises its markdown twin as an alternate",
+    (slug) => {
+      const m = buildStaticPageMetadata(slug, fm);
+      expect(m.alternates).toEqual({
+        canonical: `/${slug}`,
+        types: { "text/markdown": `/${slug}.md` },
+      });
+    },
+  );
 });

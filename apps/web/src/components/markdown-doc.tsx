@@ -40,10 +40,13 @@ export async function MarkdownDoc({
   slug,
   slots,
   loader = loadDoc,
+  viewHref,
 }: {
   slug: string;
   slots?: Record<string, React.ReactNode>;
   loader?: (slug: string) => Doc;
+  /** "View .md" link; defaults to the docs path for `slug`. */
+  viewHref?: string;
 }) {
   const doc = loader(slug);
   const body = adminDocs ? keepAdminBlocks(doc.body) : stripAdminBlocks(doc.body);
@@ -57,7 +60,7 @@ export async function MarkdownDoc({
   return (
     <>
       <div className="not-prose mb-8 flex justify-end">
-        <CopyPageButton markdown={copyMarkdown} slug={slug} />
+        <CopyPageButton markdown={copyMarkdown} slug={slug} viewHref={viewHref} />
       </div>
       {segments.map((seg, i) => (
         <Fragment key={i}>
