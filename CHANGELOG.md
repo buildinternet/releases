@@ -3,6 +3,14 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 17, 2026
+
+**Added**
+- Pricing page at `/pricing` — covers the free tier, how a free account raises the API rate limit, and which personal features require sign-in; also available as `/pricing.md`.
+
+**Fixed**
+- Static pages (terms, privacy, security, pricing) now serve Markdown via `Accept: text/markdown` or the `.md` URL, and include a `<link rel="alternate" type="text/markdown">` in the head; the "View .md" button on those pages previously pointed to a nonexistent path.
+
 ## October 16, 2026
 
 **Added**
