@@ -185,6 +185,26 @@ describe("parseAtom", () => {
     expect(releases[1].publishedAt).toEqual(new Date("2024-02-15T08:00:00Z"));
   });
 
+  it("dates an entry from <published>, and from <updated> only when <published> is missing", () => {
+    const xml = `<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Both dates</title>
+    <published>2026-05-08T00:00:00Z</published>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Published in May, touched in October</summary>
+  </entry>
+  <entry>
+    <title>Updated only</title>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>No published element</summary>
+  </entry>
+</feed>`;
+    const releases = parseAtom(xml);
+    expect(releases[0].publishedAt).toEqual(new Date("2026-05-08T00:00:00Z"));
+    expect(releases[1].publishedAt).toEqual(new Date("2026-10-07T00:00:00Z"));
+  });
+
   it("handles <content> vs <summary> fallback", () => {
     const releases = parseAtom(ATOM_BASIC);
     expect(releases[0].content).toContain("OAuth 2.0");
