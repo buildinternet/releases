@@ -665,3 +665,51 @@ describe("github.fetch tag filtering", () => {
     expect(result.releases.map((r) => r.version)).toEqual(["v1.0.0", "v2.0.0"]);
   });
 });
+
+describe("github.fetch rate limits", () => {
+  afterEach(() => {
+    restoreFetch();
+  });
+
+  it("treats a 403 rate limit like a 429 and still throws on other 403s", async () => {
+    const next = '<https://api.github.com/repos/owner/repo/releases?page=2>; rel="next"';
+
+    // Secondary rate limit: 403, remaining quota left, body names the limit.
+    // Already-fetched releases are kept (same partial-results path as 429).
+    installFetch((url) => {
+      if (url.includes("page=2")) {
+        return new Response(
+          JSON.stringify({
+            message: "You have exceeded a secondary rate limit. Please wait a few minutes.",
+          }),
+          { status: 403, headers: { "x-ratelimit-remaining": "4000" } },
+        );
+      }
+      return new Response(JSON.stringify([makeGitHubRelease("v1.0.0")]), {
+        status: 200,
+        headers: { link: next },
+      });
+    });
+    const partial = await github.fetch(mkSource());
+    expect(partial.releases.map((r) => r.version)).toEqual(["v1.0.0"]);
+
+    // Primary limit reported as 403 with the remaining counter at zero.
+    installFetch(() => {
+      return new Response(JSON.stringify({ message: "API rate limit exceeded" }), {
+        status: 403,
+        headers: { "x-ratelimit-remaining": "0" },
+      });
+    });
+    expect(await github.fetch(mkSource())).toEqual({ releases: [] });
+
+    // A 403 that is not a rate limit stays a hard error.
+    installFetch(
+      () =>
+        new Response(JSON.stringify({ message: "Resource not accessible by integration" }), {
+          status: 403,
+          headers: { "x-ratelimit-remaining": "4999" },
+        }),
+    );
+    await expect(github.fetch(mkSource())).rejects.toThrow(/403/);
+  });
+});
