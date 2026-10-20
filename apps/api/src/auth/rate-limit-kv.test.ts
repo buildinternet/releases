@@ -118,4 +118,25 @@ describe("kvRateLimitStorage.consume", () => {
   it("keeps the TTL above KV's 60s minimum and the 60s default window", () => {
     expect(AUTH_RATE_LIMIT_KV_TTL_SECONDS).toBeGreaterThanOrEqual(60);
   });
+
+  it("lets the request through when kv.put fails", async () => {
+    const kv = fakeKv();
+    kv.put = async () => {
+      throw new Error("KV PUT failed: 500");
+    };
+    const warnings: string[] = [];
+    const orig = console.warn;
+    console.warn = (msg?: unknown) => {
+      warnings.push(String(msg));
+    };
+    try {
+      expect(await kvRateLimitStorage(kv).consume(KEY, RULE)).toEqual({
+        allowed: true,
+        retryAfter: null,
+      });
+    } finally {
+      console.warn = orig;
+    }
+    expect(warnings.some((line) => line.includes("kv-put-failed"))).toBe(true);
+  });
 });
