@@ -295,6 +295,58 @@ describe("fetchOne → ETag conditional headers", () => {
       "If-Modified-Since": "Wed, 01 Jan 2025 00:00:00 GMT",
     });
   });
+
+  it("keeps the previous validators when storing items fails, so the next fetch repeats them", async () => {
+    const db = mkDb();
+    const src = await seed(db, {
+      feedUrl: "https://a.test/feed",
+      feedType: "atom",
+      feedEtag: '"old-etag"',
+      feedLastModified: "Tue, 01 Jan 2024 00:00:00 GMT",
+    });
+    nextFeedResult = {
+      releases: [mkRaw("https://a.test/v-missed")],
+      etag: '"new-etag"',
+      lastModified: "Wed, 01 Jan 2025 00:00:00 GMT",
+    };
+    await (db as unknown as { run: (query: ReturnType<typeof sql.raw>) => Promise<unknown> }).run(
+      sql.raw(
+        "CREATE TRIGGER fail_release_insert BEFORE INSERT ON releases BEGIN SELECT RAISE(ABORT, 'simulated store failure'); END",
+      ),
+    );
+
+    const failed = await fetchOne(db, src, {});
+    expect(failed.status).toBe("error");
+
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(releases)
+      .where(eq(releases.sourceId, "src_a1"));
+    expect(n).toBe(0);
+
+    const [afterFail] = await db.select().from(sources).where(eq(sources.id, "src_a1"));
+    const failedMeta = JSON.parse(afterFail.metadata!);
+    expect(failedMeta.feedEtag).toBe('"old-etag"');
+    expect(failedMeta.feedLastModified).toBe("Tue, 01 Jan 2024 00:00:00 GMT");
+
+    await (db as unknown as { run: (query: ReturnType<typeof sql.raw>) => Promise<unknown> }).run(
+      sql.raw("DROP TRIGGER fail_release_insert"),
+    );
+    feedCalls.length = 0;
+    const [refreshed] = await db.select().from(sources).where(eq(sources.id, "src_a1"));
+    const retried = await fetchOne(db, refreshed, {});
+    expect(retried.status).toBe("success");
+    expect(retried.releasesInserted).toBe(1);
+    expect(feedCalls[0].headers).toEqual({
+      "If-None-Match": '"old-etag"',
+      "If-Modified-Since": "Tue, 01 Jan 2024 00:00:00 GMT",
+    });
+
+    const [afterOk] = await db.select().from(sources).where(eq(sources.id, "src_a1"));
+    const okMeta = JSON.parse(afterOk.metadata!);
+    expect(okMeta.feedEtag).toBe('"new-etag"');
+    expect(okMeta.feedLastModified).toBe("Wed, 01 Jan 2025 00:00:00 GMT");
+  });
 });
 
 describe("fetchOne → maxEntries", () => {

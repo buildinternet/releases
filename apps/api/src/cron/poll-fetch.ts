@@ -1,5 +1,5 @@
 import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
-import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
+import { eq, and, or, sql, isNull, inArray, type SQL } from "drizzle-orm";
 import { createDb, type D1Db } from "../db.js";
 import {
   sources,
@@ -492,18 +492,11 @@ export async function pollOne(
       opts?.signedFetch,
     );
 
-    // Update stored header values in metadata
-    const metaUpdates: Partial<SourceMetadata> = {};
-    if (result.etag) metaUpdates.feedEtag = result.etag;
-    if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
-    if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
-
+    // Do not persist ETag / Last-Modified / Content-Length from this HEAD.
+    // Those values are the conditional-GET cursor. Writing them before
+    // fetchOne stores the body makes a failed insert look unchanged on every
+    // later poll. fetchOne writes them only after the items are stored.
     const updates: Record<string, unknown> = { lastPolledAt: nowIso };
-
-    if (Object.keys(metaUpdates).length > 0) {
-      const merged = { ...meta, ...metaUpdates };
-      updates.metadata = preserveLiveSourceDataset(JSON.stringify(merged));
-    }
 
     const changed = result.status === "changed" || result.status === "unknown";
     if (changed) {
@@ -1128,6 +1121,35 @@ export async function renderCheckOne(
 }
 
 /**
+ * Overlay feed-fetch metadata (conditional-GET validators, detected depth,
+ * cleared 4xx streak) onto the live source row. `undefined` values remove
+ * keys. Re-reads so an enrichment-breaker write during ingest is kept;
+ * `preserveLiveSourceDataset` still retains a dataset edit that lands between
+ * this read and the caller's update.
+ *
+ * Returns undefined when there is nothing to write. Callers commit the SQL in
+ * the same batch as the fetch bookkeeping, and only after the items from this
+ * response are stored (or there were none).
+ */
+async function pendingFeedMetadata(
+  db: D1Db,
+  sourceId: string,
+  updates: Partial<SourceMetadata> | null,
+): Promise<SQL | undefined> {
+  if (!updates || Object.keys(updates).length === 0) return undefined;
+  const [row] = await db
+    .select({ metadata: sources.metadata })
+    .from(sources)
+    .where(eq(sources.id, sourceId));
+  const current = getSourceMeta({ metadata: row?.metadata ?? null } as Source);
+  const merged: SourceMetadata = { ...current, ...updates };
+  for (const key of Object.keys(updates) as (keyof SourceMetadata)[]) {
+    if (updates[key] === undefined) delete merged[key];
+  }
+  return preserveLiveSourceDataset(JSON.stringify(merged));
+}
+
+/**
  * No-change bookkeeping shared by the empty-feed branch and the summary-only
  * crawl novelty gate. Writes a `no_change` fetch_log row and advances the
  * source's exponential backoff (`consecutiveNoChange++`,
@@ -1141,7 +1163,13 @@ export async function renderCheckOne(
 async function recordNoChange(
   db: D1Db,
   source: Source,
-  opts: { sessionId: string | null; start: number; releasesFound: number },
+  opts: {
+    sessionId: string | null;
+    start: number;
+    releasesFound: number;
+    /** Validators for this response, committed in the same batch. */
+    metadata?: SQL;
+  },
 ): Promise<FetchOneResult> {
   const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
   const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
@@ -1168,6 +1196,7 @@ async function recordNoChange(
         nextFetchAfter: nextFetch,
         changeDetectedAt: null,
         lastFetchedAt: new Date().toISOString(),
+        ...(opts.metadata ? { metadata: opts.metadata } : {}),
       })
       .where(eq(sources.id, source.id)),
   ];
@@ -1888,6 +1917,10 @@ export async function fetchOne(
   try {
     let rawReleases: RawRelease[];
     let repoStars: number | null = null;
+    // Conditional-GET cursor for this response. Written only after the items
+    // are stored (or the feed had nothing new to store). A failure before
+    // that leaves the previous validators so the next poll refetches.
+    let pendingFeedMeta: Partial<SourceMetadata> | null = null;
 
     if (isGitHubFetched(source, meta)) {
       const repoUrl = effectiveGitHubUrl(source, meta);
@@ -1949,13 +1982,7 @@ export async function fetchOne(
         const metaUpdates: Partial<SourceMetadata> = {};
         if (result.etag) metaUpdates.feedEtag = result.etag;
         if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
-        if (Object.keys(metaUpdates).length > 0) {
-          const merged = { ...meta, ...metaUpdates };
-          await db
-            .update(sources)
-            .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
-            .where(eq(sources.id, source.id));
-        }
+        if (Object.keys(metaUpdates).length > 0) pendingFeedMeta = metaUpdates;
       }
     } else if (meta.helpCenter?.provider) {
       // Help-center API source (type:feed whose feedUrl is a vendor JSON API,
@@ -2055,6 +2082,9 @@ export async function fetchOne(
 
       // Dry-run is a pure probe — skip persisting new etag/lastModified so a
       // follow-up real fetch sees the same upstream state the dry-run saw.
+      // On a real fetch, hold the validators until the items are stored.
+      // Writing them first makes a failed insert permanent: the next poll
+      // sends If-None-Match / If-Modified-Since and gets 304.
       if (!dryRun) {
         const metaUpdates: Partial<SourceMetadata> = {};
         if (result.etag) metaUpdates.feedEtag = result.etag;
@@ -2082,13 +2112,7 @@ export async function fetchOne(
             });
           }
         }
-        if (Object.keys(metaUpdates).length > 0) {
-          const merged = { ...meta, ...metaUpdates };
-          await db
-            .update(sources)
-            .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
-            .where(eq(sources.id, source.id));
-        }
+        if (Object.keys(metaUpdates).length > 0) pendingFeedMeta = metaUpdates;
       }
     }
 
@@ -2118,7 +2142,13 @@ export async function fetchOne(
     }
 
     if (rawReleases.length === 0) {
-      const result = await recordNoChange(db, source, { sessionId, start, releasesFound: 0 });
+      const metadata = await pendingFeedMetadata(db, source.id, pendingFeedMeta);
+      const result = await recordNoChange(db, source, {
+        sessionId,
+        start,
+        releasesFound: 0,
+        metadata,
+      });
       logEvent("info", {
         component: "cron-poll-fetch",
         event: "fetch-no-changes",
@@ -2157,10 +2187,12 @@ export async function fetchOne(
         (r) => typeof r.url === "string" && r.url !== "" && !existingUrls.has(r.url),
       );
       if (!hasNewUrl) {
+        const metadata = await pendingFeedMetadata(db, source.id, pendingFeedMeta);
         const result = await recordNoChange(db, source, {
           sessionId,
           start,
           releasesFound: rawReleases.length,
+          metadata,
         });
         logEvent("info", {
           component: "cron-poll-fetch",
@@ -2185,10 +2217,17 @@ export async function fetchOne(
       // startDeterministicUpdate before the workflow instance is created). No
       // extra gate is needed here — a single source's concurrent delegations
       // are serialized there.
+      // The crawl has not stored these URLs yet. Leave the conditional-GET
+      // validators unchanged so a failed crawl is refetched instead of stuck
+      // behind a 304.
       return await delegateScrapeToUpdateWorkflow(db, source, env);
     }
 
     const { insertedIds, inserted } = await ingestRawReleases(db, source, rawReleases, env, meta);
+    // Items are stored. Fold the new validators into the bookkeeping batch
+    // below so a failure of that batch keeps the previous cursor (the rows
+    // already inserted dedupe on the refetch).
+    const feedMetadata = await pendingFeedMetadata(db, source.id, pendingFeedMeta);
 
     // Embed newly-inserted releases as a best-effort side effect. Failure
     // never aborts the fetch. Runs inline rather than in waitUntil because
@@ -2237,6 +2276,7 @@ export async function fetchOne(
             stargazersCount: repoStars,
             starsFetchedAt: new Date().toISOString(),
           }),
+          ...(feedMetadata ? { metadata: feedMetadata } : {}),
         })
         .where(eq(sources.id, source.id)),
     ];
