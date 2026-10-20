@@ -378,6 +378,13 @@
       "name": "poll-and-fetch",
       "binding": "POLL_AND_FETCH_WORKFLOW",
       "class_name": "PollAndFetchWorkflow",
+      // ~1,500 instances/day; at the account's 30-day default this alone held
+      // ~1.6 GB-months of Workflow Storage. SourceActor creates instances
+      // without a per-instance `retention`, so this binding default applies.
+      "default_retention": {
+        "success_retention": "3 days",
+        "error_retention": "14 days",
+      },
     },
     {
       // One instance per `POST /v1/sources` create (when this binding is wired).
@@ -932,6 +939,11 @@
           "name": "poll-and-fetch-staging",
           "binding": "POLL_AND_FETCH_WORKFLOW",
           "class_name": "PollAndFetchWorkflow",
+          // Mirrors prod; Workflow bindings aren't inherited by env blocks.
+          "default_retention": {
+            "success_retention": "3 days",
+            "error_retention": "14 days",
+          },
         },
         {
           "name": "onboard-source-staging",
