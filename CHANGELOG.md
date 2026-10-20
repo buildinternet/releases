@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 19, 2026
+
+**Fixed**
+- Feed sources no longer miss releases after a failed ingest — feed validators (ETag / Last-Modified) are now saved only after new releases are stored, so a partial write on one poll doesn't cause subsequent polls to skip that content.
+
 ## October 17, 2026
 
 **Added**
