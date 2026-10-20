@@ -27,6 +27,8 @@
  * backend behave identically apart from the atomicity caveat above.
  */
 
+import { logEvent } from "@releases/lib/log-event";
+
 /** Better Auth's rate-limit record shape (model `rateLimit`). `lastRequest` is epoch ms. */
 export interface RateLimitRecord {
   key: string;
@@ -95,12 +97,18 @@ export function kvRateLimitStorage(kv: RateLimitKv) {
       const data = await readRecord(kv, key);
 
       const write = async (record: RateLimitRecord): Promise<void> => {
-        await kv.put(key, JSON.stringify(record), {
-          // Never expire the counter before its own window closes: a rule with
-          // a window longer than the floor would otherwise lose its record
-          // mid-window and hand the caller a fresh quota.
-          expirationTtl: Math.max(AUTH_RATE_LIMIT_KV_TTL_SECONDS, Math.ceil(rule.window)),
-        });
+        try {
+          await kv.put(key, JSON.stringify(record), {
+            // Never expire the counter before its own window closes: a rule with
+            // a window longer than the floor would otherwise lose its record
+            // mid-window and hand the caller a fresh quota.
+            expirationTtl: Math.max(AUTH_RATE_LIMIT_KV_TTL_SECONDS, Math.ceil(rule.window)),
+          });
+        } catch (err) {
+          // Same fail-open as readRecord: a KV blip must not 500 the request
+          // (including GET /api/auth/jwks). The edge limiter remains the strict gate.
+          logEvent("warn", { component: "auth-rate-limit", event: "kv-put-failed", err });
+        }
       };
 
       // No record, or the rolling window has elapsed: start a fresh window.
