@@ -546,11 +546,16 @@ function feedItemUrl(item: { url?: string | null; id?: string | null }): string 
 
 export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
-  for (const item of libParseFeed(xml).items) {
+  const feed = libParseFeed(xml);
+  // Atom entries date from <published>. <updated> applies only when
+  // <published> is missing. RSS keeps the previous field order so <pubDate>
+  // results stay the same.
+  const atomDates = feed.meta.type === "atom";
+  for (const item of feed.items) {
     if (!item.title) continue;
     const hasDistinctBody = Boolean(item.content && item.content.trim().length > 0);
     const body = item.content ?? item.description ?? "";
-    const dateRaw = item.updated ?? item.published;
+    const dateRaw = atomDates ? (item.published ?? item.updated) : (item.updated ?? item.published);
     const categories = item.categories
       .map((c) => c.label ?? c.term)
       .filter((c): c is string => Boolean(c));
