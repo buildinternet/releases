@@ -45,4 +45,29 @@ describe("dbHealthCheck middleware", () => {
       }),
     );
   });
+
+  it("returns a retryable 503 for a transient D1 error and does not latch readiness", async () => {
+    let calls = 0;
+    const DB = {
+      prepare: () => ({
+        first: async () => {
+          calls++;
+          throw new Error("D1_ERROR: D1 DB is overloaded. Requests queued for too long.");
+        },
+      }),
+    } as unknown as D1Database;
+
+    const res = await app.request("http://x/ping", {}, { DB });
+    // Known transient errors are retried once, then still fail closed as 503.
+    expect(calls).toBe(2);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("10");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("service_unavailable");
+    expect(body.error.message.toLowerCase()).toContain("temporarily unavailable");
+
+    // The failure must not latch dbReady — a later missing-table probe still
+    // returns the setup envelope.
+    await expectSetupEnvelope(await ping(() => null));
+  });
 });
