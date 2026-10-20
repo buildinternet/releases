@@ -11,6 +11,7 @@ import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
 import { hideInProduction } from "../openapi.js";
 import {
   eq,
+  ne,
   desc,
   count,
   and,
@@ -25,7 +26,7 @@ import {
 } from "drizzle-orm";
 import { findLiveParents, isSlugHeldByProduct } from "@releases/queries/entities";
 import { findVisibleReleaseDetail } from "@releases/queries/releases";
-import { createDb } from "../db.js";
+import { createDb, type D1Db } from "../db.js";
 import {
   sources,
   sourcesVisible,
@@ -56,7 +57,11 @@ import {
 } from "@buildinternet/releases-core/changelog-slice";
 import { releaseWebBase } from "../queries/releases.js";
 import { markPushFedOnFirstPublish } from "../queries/publish-tokens.js";
-import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
+import type {
+  SourceWithOrg,
+  SourcePatchInput,
+  ReleaseUrlConflictDetails,
+} from "@buildinternet/releases-api-types";
 import { SourcePatchInputSchema } from "@buildinternet/releases-api-types";
 import {
   SourceListResultSchema,
@@ -3417,6 +3422,48 @@ sourceRoutes.delete(
   },
 );
 
+/** True when `err` (or a cause) is SQLite's UNIQUE constraint failure. */
+function isUniqueConstraintError(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  let cur: unknown = err;
+  for (let i = 0; i < 8 && cur != null && !seen.has(cur); i++) {
+    seen.add(cur);
+    const message =
+      typeof cur === "string"
+        ? cur
+        : cur instanceof Error
+          ? cur.message
+          : typeof cur === "object" && "message" in cur
+            ? String((cur as { message: unknown }).message)
+            : "";
+    if (/UNIQUE constraint failed/i.test(message)) return true;
+    cur =
+      typeof cur === "object" && "cause" in cur ? (cur as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
+/**
+ * When a release URL update hits `idx_releases_source_url`, return the other
+ * release that already stores `url`. Anything else returns null so the caller
+ * rethrows.
+ */
+async function conflictingReleaseIdForUrl(
+  db: D1Db,
+  err: unknown,
+  sourceId: string,
+  releaseId: string,
+  url: string | null | undefined,
+): Promise<string | null> {
+  if (typeof url !== "string" || !isUniqueConstraintError(err)) return null;
+  const [conflict] = await db
+    .select({ id: releases.id })
+    .from(releases)
+    .where(and(eq(releases.sourceId, sourceId), eq(releases.url, url), ne(releases.id, releaseId)))
+    .limit(1);
+  return conflict?.id ?? null;
+}
+
 sourceRoutes.patch(
   "/releases/:id",
   describeRoute({
@@ -3437,6 +3484,11 @@ sourceRoutes.patch(
       },
       404: {
         description: "Release not found",
+        content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+      },
+      409: {
+        description:
+          "The new url is already stored by another release of the same source (unique index on source_id, url). `error.details.releaseId` is that release.",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
@@ -3540,7 +3592,23 @@ sourceRoutes.patch(
       }
     }
 
-    const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+    let updated: typeof releases.$inferSelect | undefined;
+    try {
+      [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+    } catch (err) {
+      // UNIQUE(source_id, url) — idx_releases_source_url. D1 surfaces this as a
+      // DrizzleQueryError ("Failed query: update \"releases\" set \"url\" ...")
+      // whose cause is `UNIQUE constraint failed: releases.source_id, releases.url`.
+      const conflictId = await conflictingReleaseIdForUrl(db, err, row.source.id, id, body.url);
+      if (conflictId) {
+        const details = { releaseId: conflictId } satisfies ReleaseUrlConflictDetails;
+        return respondError(
+          c,
+          new ConflictError(`Another release (${conflictId}) already uses this URL`, { details }),
+        );
+      }
+      throw err;
+    }
     if (!updated) return respondError(c, new NotFoundError("Release not found"));
 
     // Re-embed when any field that feeds the embedding text changes. Metadata-
