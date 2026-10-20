@@ -161,6 +161,7 @@ import type {
   ReleasesWithMediaResponseSchema,
   ReleaseDetailOrgSchema,
   ReleaseDetailResponseSchema,
+  ReleaseUrlConflictDetailsSchema,
   UpdateReleaseBodySchema,
   ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
@@ -555,6 +556,7 @@ export {
   ReleasesWithMediaResponseSchema,
   ReleaseDetailOrgSchema,
   ReleaseDetailResponseSchema,
+  ReleaseUrlConflictDetailsSchema,
   UpdateReleaseBodySchema,
   ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
@@ -1125,6 +1127,7 @@ export type ReleasesWithMediaResponse = z.infer<typeof ReleasesWithMediaResponse
 
 export type ReleaseDetailOrg = z.infer<typeof ReleaseDetailOrgSchema>;
 export type ReleaseDetailResponse = z.infer<typeof ReleaseDetailResponseSchema>;
+export type ReleaseUrlConflictDetails = z.infer<typeof ReleaseUrlConflictDetailsSchema>;
 export type UpdateReleaseBody = z.infer<typeof UpdateReleaseBodySchema>;
 export type ReleasePatchResponse = z.infer<typeof ReleasePatchResponseSchema>;
 export type ReleaseDeleteResponse = z.infer<typeof ReleaseDeleteResponseSchema>;

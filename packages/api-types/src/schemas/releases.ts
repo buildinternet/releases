@@ -315,6 +315,18 @@ export const ReleaseDetailResponseSchema = z.object({
  * via `.strict()` — the handler also re-runs the field-set check after
  * sanitization so an empty update payload still 400s.
  */
+/**
+ * `error.details` on a 409 from `PATCH /v1/releases/:id` when the new `url`
+ * collides with `UNIQUE(source_id, url)`. Additive: older servers omit `details`.
+ */
+export const ReleaseUrlConflictDetailsSchema = z
+  .object({
+    releaseId: z
+      .string()
+      .describe("Id of the existing release that already stores this URL on the same source."),
+  })
+  .describe("Structured details for a release URL conflict (409).");
+
 export const UpdateReleaseBodySchema = z
   .object({
     title: z.string().optional(),
