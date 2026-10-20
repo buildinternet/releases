@@ -249,6 +249,18 @@ export function parseNextLink(linkHeader: string | null): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * GitHub answers rate limits with 403 as well as 429. Primary limits set
+ * `x-ratelimit-remaining: 0`; secondary limits name themselves in the body
+ * ("secondary rate limit" / "rate limit exceeded"). A 403 without either
+ * signal is a real authorization failure.
+ */
+function isGitHubRateLimitForbidden(res: Response, body: string): boolean {
+  if (res.status !== 403) return false;
+  if (res.headers.get("x-ratelimit-remaining") === "0") return true;
+  return /rate limit/i.test(body);
+}
+
 interface GitHubRelease {
   tag_name: string;
   name: string | null;
@@ -351,16 +363,19 @@ export const github: Adapter = {
       // oxlint-disable-next-line no-await-in-loop -- GitHub REST API pagination; next URL comes from prior response Link header
       const res: Response = await fetch(url, { headers });
 
-      if (res.status === 429) {
-        logger.warn(
-          `GitHub rate limit hit for ${owner}/${repo}. Returning ${releases.length} releases fetched so far.`,
-        );
-        break;
-      }
-
       if (!res.ok) {
         // oxlint-disable-next-line no-await-in-loop -- GitHub REST API pagination; reading error body from same paged response
         const errBody = await res.text();
+        // 429 is always a rate limit. 403 is too when the primary quota is
+        // exhausted (x-ratelimit-remaining: 0) or the body says so — GitHub
+        // uses 403 for both primary and secondary rate limits. Other 403s
+        // (private repo, SAML, integration access) stay hard errors.
+        if (res.status === 429 || isGitHubRateLimitForbidden(res, errBody)) {
+          logger.warn(
+            `GitHub rate limit hit for ${owner}/${repo}. Returning ${releases.length} releases fetched so far.`,
+          );
+          break;
+        }
         throw new AdapterError(
           "github",
           `GitHub API returned ${res.status} for ${owner}/${repo}: ${errBody}`,
