@@ -32,7 +32,7 @@ env:
   BUN_VERSION: "1.4.2"
   # wrangler 4.88+ requires Node 22+. bunx invokes wrangler's bin via the
   # `#!/usr/bin/env node` shebang, so the runner's Node version is what counts.
-  NODE_VERSION: "24.15.0"
+  NODE_VERSION: "24.22.1"
   AGE_RECIPIENT: age1yl39fay4s3lwck56wdvh79v2ty2wjal8qxul5cl7hxk5q54kkefsl8tlhu
 
 jobs:
