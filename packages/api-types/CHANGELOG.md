@@ -1,5 +1,15 @@
 # @buildinternet/releases-api-types
 
+## 0.59.0
+
+### Minor Changes
+
+- 04e7341: Add operator dataset settings and admin listing types, and expose effective dataset selection in sitemap source records.
+
+### Patch Changes
+
+- 36f9761: Name the existing release id when a release URL update conflicts with `UNIQUE(source_id, url)`.
+
 ## 0.58.3
 
 ### Patch Changes
