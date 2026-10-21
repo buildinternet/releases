@@ -32,6 +32,8 @@ export function stubCtx(): ExecutionContext {
 // SEP-2243: the 2026-07-28 wire revision has no `initialize` handshake. Each
 // request names its revision and capabilities in reserved `_meta` keys and
 // mirrors the method (and, for tools/call, the tool name) in standard headers.
+// Server 2.3.1 also requires the `MCP-Protocol-Version` header on every modern
+// POST; a body-only revision is rejected with 400.
 const MODERN_PROTOCOL_VERSION = "2026-07-28";
 const PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion";
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
@@ -62,6 +64,7 @@ export function modernRequest(
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
+    "mcp-protocol-version": MODERN_PROTOCOL_VERSION,
     "mcp-method": mcpMethod,
     ...extraHeaders,
   };
@@ -97,6 +100,7 @@ describe("modern-era header requirement", () => {
         headers: {
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
+          "mcp-protocol-version": MODERN_PROTOCOL_VERSION,
         },
         body: JSON.stringify(modernRpc("tools/list")),
       }),
@@ -213,6 +217,7 @@ describe("advertised host alias", () => {
         headers: {
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
+          "mcp-protocol-version": MODERN_PROTOCOL_VERSION,
           "mcp-method": "tools/list",
         },
         body: JSON.stringify(modernRpc("tools/list")),
