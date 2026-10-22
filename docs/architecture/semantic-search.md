@@ -57,7 +57,7 @@ The unified MCP `search` tool (and `GET /v1/search`) accepts `mode: "lexical"|"s
 
 ## Recency multipliers
 
-Hybrid release ranking multiplies the fused RRF score by `decay × boost`, both functions of `now − COALESCE(published_at, created_at)`. The decay is exponential (0.5× at the half-life, 0.25× at 2× half-life, …); the boost is a piecewise taper that lifts the freshest content without ever demoting it. Lives in `packages/search/src/hybrid-search-worker.ts`.
+Hybrid release ranking multiplies the fused RRF score by `decay × boost`, both functions of `now − COALESCE(published_at, fetched_at)`. The decay is exponential (0.5× at the half-life, 0.25× at 2× half-life, …); the boost is a piecewise taper that lifts the freshest content without ever demoting it. Lives in `packages/search/src/hybrid-search-worker.ts`.
 
 Boost curve (Option B from #1045):
 
