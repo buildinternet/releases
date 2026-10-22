@@ -8,6 +8,7 @@
 import { createOpenRouter, type OpenRouterChatSettings } from "@openrouter/ai-sdk-provider";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModel, Experimental_EvaluationModel } from "ai";
+import { openRouterProviderRouting } from "@releases/lib/models";
 
 export interface LaneOpenRouterModelOpts {
   apiKey: string;
@@ -19,7 +20,12 @@ export interface LaneOpenRouterModelOpts {
   referer: string;
   /** OpenRouter display title (`X-Title`). */
   title: string;
-  /** Provider-routing preferences merged into the request body (e.g. `{ ignore: ["gmicloud"] }`). */
+  /**
+   * Lane provider-routing preferences merged into the request body
+   * (e.g. `{ ignore: ["gmicloud"] }`). Ignored when `model` has an entry in
+   * `openRouterProviderRouting` — that allowlist is the whole routing policy
+   * for the id, and must not be applied to an overlaid model.
+   */
   providerPrefs?: Record<string, unknown>;
   /**
    * Broadcast observability tags (inert until Broadcast is enabled in the
@@ -54,9 +60,21 @@ function serializeTrace(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * Model-specific allowlist wins over lane prefs. Lane prefs (the summarize
+ * ignore list) stay in force for every other resolved id.
+ */
+function providerForModel(
+  model: string,
+  lanePrefs: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  return openRouterProviderRouting(model) ?? lanePrefs;
+}
+
 /** Build an OpenRouter lane model (reasoning disabled by default when `reasoning` is set). */
 export function buildLaneOpenRouterModel(opts: LaneOpenRouterModelOpts): LanguageModel {
   const trace = serializeTrace(opts.trace);
+  const providerRouting = providerForModel(opts.model, opts.providerPrefs);
   const provider = createOpenRouter({
     apiKey: opts.apiKey,
     ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
@@ -67,7 +85,7 @@ export function buildLaneOpenRouterModel(opts: LaneOpenRouterModelOpts): Languag
     },
     extraBody: {
       session_id: opts.sessionId,
-      ...(opts.providerPrefs ? { provider: opts.providerPrefs } : {}),
+      ...(providerRouting ? { provider: providerRouting } : {}),
       ...(trace ? { trace } : {}),
     },
   });

@@ -21,7 +21,10 @@
  * OpenRouter lane at runtime. `OPENROUTER_MODELS` is what code uses when
  * those are unset. Lane-wide OpenRouter `reasoning: { enabled: false }` stays
  * on the lane (it must apply to whatever id an operator overlays), not on a
- * single catalog row.
+ * single catalog row. Provider allowlists are the opposite: they live in
+ * `OPENROUTER_PROVIDER_ROUTING` and apply only when the resolved id matches,
+ * so an overlay whose providers are not on the list is left on the lane's
+ * own routing (or none).
  */
 
 export interface ModelCapabilities {
@@ -114,16 +117,66 @@ export const MODEL_ROLE_ENV = {
 } as const satisfies Partial<Record<ModelRole, readonly [string, string]>>;
 
 /**
+ * Dated DeepSeek V4.1 Flash snapshot shared by the summarize, extract, and
+ * feed-enrich OpenRouter lanes. Marketing stays on JEV.
+ */
+const DEEPSEEK_V41_FLASH_1017 = "deepseek/deepseek-v4.1-flash-1017";
+
+/**
  * OpenRouter ids used when the lane's wrangler var and admin overlay are
  * absent. Production sets the same ids in `apps/api/wrangler.jsonc`; that
  * file is the deployed override, not a second code default.
  */
 export const OPENROUTER_MODELS = {
-  summarize: "deepseek/deepseek-v4.1-flash",
-  extract: "deepseek/deepseek-v4.1-flash",
-  feedEnrich: "deepseek/deepseek-v4.1-flash",
+  summarize: DEEPSEEK_V41_FLASH_1017,
+  extract: DEEPSEEK_V41_FLASH_1017,
+  feedEnrich: DEEPSEEK_V41_FLASH_1017,
   marketing: "typesafe/jev-1.13",
 } as const;
+
+/**
+ * Provider object OpenRouter should receive for one model id.
+ * `only` slugs are the endpoint `tag` prefixes from
+ * `GET /api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints`
+ * (deepinfra, atlas-cloud, makora, crusoe, parasail). Those endpoints are
+ * fp8 today; bf16 stays in the filter so a later bf16 endpoint of the same
+ * providers still qualifies.
+ */
+export interface OpenRouterProviderRoute {
+  only: readonly string[];
+  quantizations: readonly string[];
+  data_collection: "deny" | "allow";
+  allow_fallbacks: boolean;
+  sort: "price" | "throughput" | "latency";
+}
+
+export const OPENROUTER_PROVIDER_ROUTING = {
+  [DEEPSEEK_V41_FLASH_1017]: {
+    only: ["deepinfra", "atlas-cloud", "makora", "crusoe", "parasail"],
+    quantizations: ["fp8", "bf16"],
+    data_collection: "deny",
+    allow_fallbacks: true,
+    sort: "price",
+  },
+} as const satisfies Record<string, OpenRouterProviderRoute>;
+
+/**
+ * Provider routing for `model`, or undefined when this id has none.
+ * Callers must send the result only for the resolved id — never as a lane
+ * default — so an operator overlay does not inherit another model's allowlist.
+ */
+export function openRouterProviderRouting(model: string): Record<string, unknown> | undefined {
+  const id = model.trim();
+  if (!Object.hasOwn(OPENROUTER_PROVIDER_ROUTING, id)) return undefined;
+  const route = OPENROUTER_PROVIDER_ROUTING[id as keyof typeof OPENROUTER_PROVIDER_ROUTING];
+  return {
+    only: [...route.only],
+    quantizations: [...route.quantizations],
+    data_collection: route.data_collection,
+    allow_fallbacks: route.allow_fallbacks,
+    sort: route.sort,
+  };
+}
 
 export function modelId(role: ModelRole): string {
   return MODEL_ROLES[role].id;

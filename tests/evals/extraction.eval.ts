@@ -22,6 +22,7 @@ import {
   type AiSdkExtractDeps,
 } from "@releases/adapters/extract/aisdk";
 import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
+import { OPENROUTER_MODELS } from "@releases/lib/models";
 import { DIRECT_FETCH_SYSTEM_PROMPT } from "@releases/adapters/extract/shared";
 import {
   gradeFixture,
@@ -50,11 +51,11 @@ const LANES: Lane[] = [
     },
   },
   {
-    name: "deepseek-v4.1-flash (openrouter, reasoning off)",
+    name: "deepseek-v4.1-flash-1017 (openrouter, reasoning off)",
     model: () => {
       const key = process.env.OPENROUTER_API_KEY;
       return key
-        ? buildOpenRouterExtractModel({ apiKey: key, model: "deepseek/deepseek-v4.1-flash" })
+        ? buildOpenRouterExtractModel({ apiKey: key, model: OPENROUTER_MODELS.extract })
         : null;
     },
   },

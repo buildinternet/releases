@@ -7,6 +7,7 @@
 
 import { createOpenRouter, type OpenRouterChatSettings } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
+import { openRouterProviderRouting } from "@releases/lib/models";
 
 /**
  * Stable session id baked into every extraction request. OpenRouter uses it for
@@ -41,13 +42,18 @@ export interface OpenRouterExtractModelOpts {
  * so the shared prefix cache is reused — see `EXTRACT_SESSION_ID`.
  */
 export function buildOpenRouterExtractModel(opts: OpenRouterExtractModelOpts): LanguageModel {
+  // Allowlist is for this model id only. Reasoning stays off for every id.
+  const providerRouting = openRouterProviderRouting(opts.model);
   const provider = createOpenRouter({
     apiKey: opts.apiKey,
     ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
     // Belt-and-suspenders: OpenRouter accepts the sticky-routing session id via
     // either the `x-session-id` header or a top-level `session_id` body field.
     headers: { "x-session-id": EXTRACT_SESSION_ID },
-    extraBody: { session_id: EXTRACT_SESSION_ID },
+    extraBody: {
+      session_id: EXTRACT_SESSION_ID,
+      ...(providerRouting ? { provider: providerRouting } : {}),
+    },
   });
   // `reasoning.enabled: false` turns off chain-of-thought; the provider's
   // settings type models `reasoning` as a discriminated union that also expects

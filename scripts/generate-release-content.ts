@@ -4,7 +4,7 @@
  * `title_short`, and `summary` on `releases` rows that match a filter.
  *
  * Default provider matches production's cheap summarize lane: OpenRouter +
- * DeepSeek Flash (`deepseek/deepseek-v4.1-flash`, overridable via
+ * DeepSeek Flash (`deepseek/deepseek-v4.1-flash-1017`, overridable via
  * `SUMMARIZE_MODEL` / `RELEASE_CONTENT_MODEL`). Anthropic Message Batches
  * (Haiku) remain available as an explicit opt-in for large discounted
  * backfills — OpenRouter has no Batches API equivalent.
@@ -530,7 +530,9 @@ const realtimeModel =
           referer: "https://releases.sh",
           title: "Releases",
           // Mirror apps/api resolveSummarizeModel: don't burn the small
-          // output budget on CoT; skip outlier DeepSeek latency via gmicloud.
+          // output budget on CoT. The dated snapshot's provider allowlist
+          // replaces this ignore list when the resolved id matches; other ids
+          // still skip the gmicloud latency outlier.
           providerPrefs: { ignore: ["gmicloud"] },
           reasoning: { enabled: false },
           trace: {
