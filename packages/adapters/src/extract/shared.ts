@@ -7,6 +7,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { RELEASE_TYPES, type ReleaseType } from "@buildinternet/releases-core/schema";
+import { coerceReleaseType } from "@buildinternet/releases-core/release-type";
 import { isGifUrl } from "../media-classify.js";
 import type { ExtractedEntry, KnownRelease } from "./types.js";
 
@@ -479,7 +480,9 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
         version,
         publishedAt: e.publishedAt ? new Date(e.publishedAt) : undefined,
         isBreaking: e.isBreaking,
-        type: e.type,
+        // The JSON-schema enum is not reliably enforced (OpenRouter). Unknown
+        // labels ("fix", "update") become "feature" before any writer sees them.
+        type: coerceReleaseType(e.type),
         // Force `type: "gif"` on any `.gif` URL. The extraction prompt only
         // names "image"/"video", so the model under-classifies animated GIFs as
         // "image" — which would skip the ingest GIF→MP4 path and the heavier
