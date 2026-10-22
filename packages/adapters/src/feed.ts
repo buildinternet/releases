@@ -260,6 +260,22 @@ export function detectFeedTypeFromContent(body: string): FeedType | null {
   return null;
 }
 
+/**
+ * Feed type to write back after content detection succeeds. Only a missing or
+ * `"unknown"` stored value is replaced — a canonical type is left alone so a
+ * normal poll does not write metadata just to reaffirm it.
+ */
+export function feedTypeToPersist(
+  stored: string | null | undefined,
+  detected: FeedType | undefined,
+): FeedType | undefined {
+  if (!detected) return undefined;
+  if (stored === undefined || stored === null || stored === "" || stored === "unknown") {
+    return detected;
+  }
+  return undefined;
+}
+
 // ── Feed fetching + parsing ─────────────────────────────────────────
 
 /**
@@ -288,7 +304,7 @@ export function parseRetryAfterMs(headerVal: string | null): number | undefined 
 
 export async function fetchAndParseFeed(
   feedUrl: string,
-  feedType: FeedType,
+  feedType: string,
   options?: FetchOptions,
   headers?: Record<string, string>,
   fetchImpl: typeof fetch = fetch,
@@ -297,6 +313,8 @@ export async function fetchAndParseFeed(
   etag?: string;
   lastModified?: string;
   contentLength?: string;
+  /** Set when `feedType` was not canonical and the body sniffed as a feed. */
+  detectedFeedType?: FeedType;
 }> {
   const reqHeaders: Record<string, string> = {
     "User-Agent": RELEASES_BOT_UA,
@@ -331,8 +349,11 @@ export async function fetchAndParseFeed(
   const lastModified = res.headers.get("last-modified") ?? undefined;
   const contentLength = res.headers.get("content-length") ?? undefined;
 
-  let effectiveType: FeedType = feedType;
-  if (effectiveType !== "rss" && effectiveType !== "atom" && effectiveType !== "jsonfeed") {
+  let effectiveType: FeedType;
+  let detectedFeedType: FeedType | undefined;
+  if (feedType === "rss" || feedType === "atom" || feedType === "jsonfeed") {
+    effectiveType = feedType;
+  } else {
     const detected = detectFeedTypeFromContent(body);
     if (!detected) {
       throw new Error(
@@ -341,6 +362,7 @@ export async function fetchAndParseFeed(
     }
     logger.info(`Feed type "${feedType}" unrecognized, detected ${detected} from content`);
     effectiveType = detected;
+    detectedFeedType = detected;
   }
   let releases = effectiveType === "jsonfeed" ? parseJsonFeed(body) : parseRss(body);
 
@@ -357,7 +379,7 @@ export async function fetchAndParseFeed(
       .slice(0, options.maxEntries);
   }
 
-  return { releases, etag, lastModified, contentLength };
+  return { releases, etag, lastModified, contentLength, detectedFeedType };
 }
 
 export type ChangeStatus = "changed" | "unchanged" | "unknown";

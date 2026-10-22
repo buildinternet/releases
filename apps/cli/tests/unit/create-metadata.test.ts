@@ -77,8 +77,27 @@ describe("source create metadata flags", () => {
     expect(postBody).not.toBeNull();
     const meta = JSON.parse(String((postBody as { metadata?: string }).metadata));
     expect(meta.feedKeywordAllow).toEqual(["changelog", "patch-notes"]);
-    // feed-url metadata still rides along.
+    // feed-url metadata still rides along, with a real type rather than "unknown".
     expect(meta.feedUrl).toBe("https://discord.com/blog/rss.xml");
+    expect(meta.feedType).toBe("rss");
+  });
+
+  it("infers atom and jsonfeed from the feed URL", async () => {
+    await createSourceAction("Release Notes", {
+      url: "https://discord.com/blog",
+      type: "feed",
+      feedUrl: "https://discord.com/blog/atom.xml",
+    });
+    expect(JSON.parse(String((postBody as { metadata?: string }).metadata)).feedType).toBe("atom");
+
+    await createSourceAction("Release Notes", {
+      url: "https://discord.com/blog",
+      type: "feed",
+      feedUrl: "https://discord.com/blog/feed.json",
+    });
+    expect(JSON.parse(String((postBody as { metadata?: string }).metadata)).feedType).toBe(
+      "jsonfeed",
+    );
   });
 
   it("packs --metadata-set tokens with type coercion", async () => {

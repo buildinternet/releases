@@ -50,6 +50,7 @@ let nextFeedImpl: () => Promise<{
   etag?: string;
   lastModified?: string;
   contentLength?: string;
+  detectedFeedType?: "rss" | "atom" | "jsonfeed";
 }> = async () => ({ releases: [] });
 
 // Spread the real adapter so exports the fetch path imports transitively
@@ -132,6 +133,32 @@ describe("fetchOne — feed fetch cycle", () => {
       dataset: { enabled: false },
       feedEtag: "new-header",
     });
+  });
+
+  it("persists a sniffed feedType when the stored type is unknown", async () => {
+    const db = createTestDb();
+    const seeded = await seedFeedSource(db);
+    const metadata = JSON.stringify({ feedUrl: FEED_URL, feedType: "unknown" });
+    await db.update(sources).set({ metadata }).where(eq(sources.id, seeded.id));
+    nextFeedImpl = async () => ({ releases: ITEMS, detectedFeedType: "atom" });
+
+    const result = await fetchOne(db as any, { ...seeded, metadata }, {} as never, {
+      skipSideEffects: true,
+    });
+    expect(result.status).toBe("success");
+    const row = await db.select().from(sources).where(eq(sources.id, seeded.id)).get();
+    expect(JSON.parse(row!.metadata!).feedType).toBe("atom");
+  });
+
+  it("does not rewrite a canonical feedType when the parser reports a detection", async () => {
+    const db = createTestDb();
+    const seeded = await seedFeedSource(db);
+    nextFeedImpl = async () => ({ releases: ITEMS, detectedFeedType: "jsonfeed" });
+
+    const result = await fetchOne(db as any, seeded, {} as never, { skipSideEffects: true });
+    expect(result.status).toBe("success");
+    const row = await db.select().from(sources).where(eq(sources.id, seeded.id)).get();
+    expect(JSON.parse(row!.metadata!).feedType).toBe("rss");
   });
 
   it("first fetch inserts the feed items as releases with mapped url/title/publishedAt", async () => {

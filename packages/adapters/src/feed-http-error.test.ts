@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach, mock } from "bun:test";
-import { fetchAndParseFeed, FEED_4XX_INVALIDATE_THRESHOLD, CLEARED_FEED_FIELDS } from "./feed.js";
+import {
+  fetchAndParseFeed,
+  feedTypeToPersist,
+  FEED_4XX_INVALIDATE_THRESHOLD,
+  CLEARED_FEED_FIELDS,
+} from "./feed.js";
 import { FeedHttpError } from "@releases/lib/errors";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
@@ -102,6 +107,32 @@ describe("fetchAndParseFeed error classification", () => {
     expect(capturedAccept).not.toContain("application/xml");
     expect(capturedAccept).not.toContain("text/xml");
     expect(capturedAccept).toContain("application/atom+xml");
+  });
+
+  it("returns the sniffed type when the stored type is not canonical", async () => {
+    globalThis.fetch = (async () =>
+      new Response(MINIMAL_ATOM, { status: 200 })) as unknown as typeof fetch;
+    const result = await fetchAndParseFeed("https://example.com/feed.xml", "unknown");
+    expect(result.detectedFeedType).toBe("atom");
+    expect(result.releases).toEqual([]);
+  });
+
+  it("does not report a detected type when the stored type is already canonical", async () => {
+    globalThis.fetch = (async () =>
+      new Response(MINIMAL_ATOM, { status: 200 })) as unknown as typeof fetch;
+    const result = await fetchAndParseFeed("https://example.com/feed.xml", "rss");
+    expect(result.detectedFeedType).toBeUndefined();
+  });
+});
+
+describe("feedTypeToPersist", () => {
+  it("replaces only a missing or unknown stored type", () => {
+    expect(feedTypeToPersist(undefined, "atom")).toBe("atom");
+    expect(feedTypeToPersist(null, "rss")).toBe("rss");
+    expect(feedTypeToPersist("", "jsonfeed")).toBe("jsonfeed");
+    expect(feedTypeToPersist("unknown", "atom")).toBe("atom");
+    expect(feedTypeToPersist("rss", "atom")).toBeUndefined();
+    expect(feedTypeToPersist("atom", undefined)).toBeUndefined();
   });
 });
 
