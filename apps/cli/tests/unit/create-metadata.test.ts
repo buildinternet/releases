@@ -77,8 +77,8 @@ describe("source create metadata flags", () => {
     expect(postBody).not.toBeNull();
     const meta = JSON.parse(String((postBody as { metadata?: string }).metadata));
     expect(meta.feedKeywordAllow).toEqual(["changelog", "patch-notes"]);
-    // feed-url metadata still rides along.
     expect(meta.feedUrl).toBe("https://discord.com/blog/rss.xml");
+    expect(meta.feedType).toBe("rss");
   });
 
   it("packs --metadata-set tokens with type coercion", async () => {

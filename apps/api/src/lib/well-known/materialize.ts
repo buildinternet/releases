@@ -20,7 +20,7 @@ import type {
   ReleasesJsonProduct,
   ReleasesJsonRepoRelease,
 } from "@buildinternet/releases-api-types";
-import { fetchAndParseFeed, type FeedType } from "@releases/adapters/feed";
+import { fetchAndParseFeed } from "@releases/adapters/feed";
 import {
   parseAppStoreIdentifier,
   resolveAppStore,
@@ -287,14 +287,22 @@ async function defaultProbe(
     }
     if (isPrivateOrLocalHost(feedHost)) return { ok: false, note: "feed_private_host" };
     try {
-      await fetchAndParseFeed(
+      const parsed = await fetchAndParseFeed(
         location.feed!,
-        "unknown" as FeedType,
+        "unknown",
         { maxEntries: 1 },
         undefined,
         opts.fetchImpl,
       );
-      return { ok: true, metadata: { feedUrl: location.feed } };
+      return {
+        ok: true,
+        metadata: {
+          feedUrl: location.feed,
+          // The probe already sniffed the body. Store the type so the first
+          // poll does not treat the source as missing a feedType.
+          ...(parsed.detectedFeedType ? { feedType: parsed.detectedFeedType } : {}),
+        },
+      };
     } catch (error) {
       return {
         ok: false,

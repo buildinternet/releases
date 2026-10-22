@@ -18,6 +18,7 @@ import {
   headCheckUrl,
   bodyHashCheck,
   fetchAndParseFeed,
+  feedTypeToPersist,
   filterByCategoryAllow,
   filterByKeywordAllow,
   filterByUrlDeny,
@@ -2029,7 +2030,7 @@ export async function fetchOne(
       const botFetch = opts?.signedFetch ?? (await makeBotFetch(env));
       const result = await fetchAndParseFeed(
         meta.feedUrl,
-        meta.feedType as "rss" | "atom" | "jsonfeed",
+        meta.feedType,
         { maxEntries },
         Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
         botFetch,
@@ -2091,6 +2092,11 @@ export async function fetchOne(
         if (result.etag) metaUpdates.feedEtag = result.etag;
         if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
         if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
+        // A stored "unknown" still parses via content sniffing, and that logs
+        // on every poll. Write the sniffed type back once. A canonical type
+        // is left as-is, so this does not add a metadata write on its own.
+        const detectedType = feedTypeToPersist(meta.feedType, result.detectedFeedType);
+        if (detectedType) metaUpdates.feedType = detectedType;
         if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
         // Auto-detect summary-only feeds once and persist the flag. Only set it;
         // never clear it here (a feed that upgrades to full bodies clearing the

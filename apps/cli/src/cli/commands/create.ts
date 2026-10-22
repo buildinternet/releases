@@ -33,6 +33,14 @@ export function isGitHubUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/.test(url);
 }
 
+/** Same URL heuristic as `source update`. RSS is the fallback; the XML parser accepts Atom. */
+function inferFeedTypeFromUrl(url: string): "rss" | "atom" | "jsonfeed" {
+  const lower = url.toLowerCase();
+  if (lower.endsWith(".json") || lower.includes("feed.json")) return "jsonfeed";
+  if (lower.includes("atom")) return "atom";
+  return "rss";
+}
+
 interface CreateSourceInput {
   name: string;
   url: string;
@@ -109,7 +117,11 @@ async function createSingleSource(input: CreateSourceInput): Promise<CreateSourc
   if (input.feedUrl) {
     sourceType = (input.type as SourceType) ?? "feed";
     metadata.feedUrl = input.feedUrl;
-    metadata.feedType = "unknown";
+    // The create route stores this blob as-is and does not infer a feed type.
+    // A feedUrl with no feedType is skipped by poll (#1073), and a stored
+    // "unknown" parses but logs on every fetch until something writes the
+    // sniffed type back. Guess from the URL instead.
+    metadata.feedType = inferFeedTypeFromUrl(input.feedUrl);
     metadata.feedDiscoveredAt = new Date().toISOString();
     metadata.noFeedFound = false;
     logger.info(`Using provided feed URL — ${sourceType} adapter`);
