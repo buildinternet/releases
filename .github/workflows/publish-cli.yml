@@ -37,7 +37,7 @@ permissions:
   id-token: write # OIDC: mint a short-lived npm publish credential (no NPM_TOKEN)
 
 env:
-  BUN_VERSION: "1.4.2"
+  BUN_VERSION: "1.4.4"
 
 jobs:
   build-darwin:
