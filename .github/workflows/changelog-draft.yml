@@ -22,7 +22,7 @@ permissions:
   id-token: write
 
 env:
-  BUN_VERSION: "1.4.2"
+  BUN_VERSION: "1.4.4"
 
 jobs:
   draft:
