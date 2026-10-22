@@ -1,4 +1,5 @@
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
+import { coerceReleaseType } from "@buildinternet/releases-core/release-type";
 import { parseReleaseMedia } from "../../utils.js";
 import { builder } from "../builder.js";
 import { ReleaseTypeEnum } from "./enums.js";
@@ -18,7 +19,10 @@ export const ReleaseType = builder.objectType("Release", {
     id: t.exposeID("id"),
     title: t.exposeString("title"),
     version: t.exposeString("version", { nullable: true }),
-    type: t.field({ type: ReleaseTypeEnum, resolve: (r) => r.type }),
+    // Rows written before coercion can store "fix" / "update". This field is a
+    // non-null enum, so an unknown value nulls the parent list. Serve those
+    // as feature until the stored rows are cleaned up.
+    type: t.field({ type: ReleaseTypeEnum, resolve: (r) => coerceReleaseType(r.type) }),
     url: t.exposeString("url", { nullable: true }),
     publishedAt: t.expose("publishedAt", { type: "DateTime", nullable: true }),
     fetchedAt: t.expose("fetchedAt", { type: "DateTime" }),

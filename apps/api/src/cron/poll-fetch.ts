@@ -11,6 +11,7 @@ import {
   knowledgePages,
   organizations,
 } from "@buildinternet/releases-core/schema";
+import { coerceReleaseType } from "@buildinternet/releases-core/release-type";
 import { countTokensSafe, computeContentSize } from "@buildinternet/releases-core/tokens";
 import type { Source } from "@buildinternet/releases-core/schema";
 import {
@@ -1730,9 +1731,9 @@ export async function ingestRawReleases(
       content,
       url: raw.url ?? null,
       // Honor an adapter-provided release type (e.g. the Zendesk adapter classes
-      // periodic digests as `rollup`); existing feed/github/appstore adapters
-      // leave it unset, so this is a no-op for them (column default `feature`).
-      type: raw.type ?? "feature",
+      // periodic digests as `rollup`). Missing values and anything outside
+      // feature/rollup — model labels like "fix" — are stored as `feature`.
+      type: coerceReleaseType(raw.type),
       contentHash: contentHash({ ...raw, content }),
       bodyHash: releaseBodyHash(content, raw.title),
       contentChars: size.contentChars,

@@ -93,7 +93,7 @@ export async function scanStalePushFedSources(
 
   // One grouped aggregate: each eligible push-fed source plus the date of its
   // newest non-suppressed release. `MAX(CASE …)` ignores suppressed rows and
-  // falls back to created_at when published_at is null, mirroring the
+  // falls back to fetched_at when published_at is null, mirroring the
   // first-party scan. Eligibility (push-fed, not deleted, not hidden) is
   // filtered in SQL; the paused check runs in JS alongside everyone else.
   const rows: Array<{

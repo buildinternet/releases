@@ -38,6 +38,7 @@ import { cacheControl, cacheDefaultDeny } from "./middleware/cache.js";
 import { LATEST_CACHE_TAG } from "./lib/latest-cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
+import { securityHeaders } from "./middleware/security-headers.js";
 import { stagingAccessGate } from "./middleware/staging-access.js";
 import { mountV1Routes } from "./v1-routes.js";
 import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namespaces.js";
@@ -535,13 +536,8 @@ app.use("*", apiCorsMiddleware());
 app.use("*", stagingAccessGate());
 app.use("*", blockIndexing());
 
-// Security response headers
-app.use("*", async (c, next) => {
-  await next();
-  c.res.headers.set("X-Content-Type-Options", "nosniff");
-  c.res.headers.set("X-Frame-Options", "DENY");
-  c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-});
+// Security response headers. Skips 101 — WebSocket upgrade headers are immutable.
+app.use("*", securityHeaders());
 
 // Apex OAuth/OIDC discovery aliases — public (no per-route token auth). The two
 // AS-metadata aliases forward to Better Auth; the protected-resource metadata is
@@ -807,10 +803,7 @@ v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true })
 v1.use("/related/*", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 // Latest-releases feed: tagged so invalidateLatestCache (lib/latest-cache.ts)
 // can flush Workers Cache immediately via ctx.cache.purge({ tags: [...] })
-// after a publish, instead of waiting out max-age. Must be registered before
-// the /releases/:id mount below — both match this path (Hono composes every
-// matching `.use()` in registration order), and cacheControl no-ops once a
-// Cache-Control header is already set, so whichever mount runs first wins.
+// after a publish, instead of waiting out max-age.
 v1.use(
   "/releases/latest",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true, tags: [LATEST_CACHE_TAG] }),
@@ -822,8 +815,12 @@ v1.use(
 // generate-content / PATCH wrote title_short/summary (#1580). Workers Cache
 // (wrangler `cache.enabled`) is what actually stores/serves this at the edge
 // — this header is the freshness contract it reads.
+//
+// The pattern is `rel_…` only. A bare `:id` also matches the static
+// `/releases/stream` WebSocket (and `/releases/latest`); cache/Vary on a 101
+// upgrade 500s the handshake because those headers are immutable.
 v1.use(
-  "/releases/:id",
+  "/releases/:id{rel_.+}",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
   varyOnAccept(),
 );

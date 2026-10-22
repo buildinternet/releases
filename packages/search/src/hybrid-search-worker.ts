@@ -628,10 +628,11 @@ async function runHybridSearchInternal(
     const releaseIds = ids.filter((id) => getEntityType(id) === "release");
     if (releaseIds.length === 0) return map;
     const chunks = chunkArray(releaseIds, D1_IN_CHUNK);
+    // Undated releases rank by fetched_at, the ingest timestamp.
     const results = await Promise.all(
       chunks.map((chunk) =>
         db.all<{ id: string; rankAt: string | null }>(sql`
-          SELECT id, COALESCE(published_at, created_at) as rankAt
+          SELECT id, COALESCE(published_at, fetched_at) as rankAt
           FROM releases
           WHERE id IN (${sql.join(
             chunk.map((id) => sql`${id}`),

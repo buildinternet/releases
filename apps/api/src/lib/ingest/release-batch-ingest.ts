@@ -36,6 +36,7 @@ import {
   sources,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
+import { coerceReleaseType } from "@buildinternet/releases-core/release-type";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../../db.js";
 import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
@@ -420,7 +421,7 @@ export async function ingestReleaseBatch(
         sourceId: src.id,
         version,
         versionSort: computeVersionSort(version),
-        type: r.type ?? "feature",
+        type: coerceReleaseType(r.type),
         title: r.title,
         content: r.content,
         url: r.url ?? null,
