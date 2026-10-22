@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 20, 2026
+
+**Fixed**
+- Atom feed releases now record the date they were first published instead of the date the entry was last edited — an edit no longer silently moves a release forward in time.
+- GitHub-sourced changelogs now keep releases collected before a rate limit — a 403 rate-limit response is now treated the same as 429, returning partial results instead of aborting the fetch.
+- Sign-in no longer fails during transient KV storage errors in rate-limit tracking; the error is logged and the request continues.
+- Updating a release URL via the API now returns 409 with the conflicting release ID when the URL is already held by another release in the same source, instead of 500.
+- Transient database errors during a health probe now return a retryable 503 with `Retry-After` instead of the misleading "run migrations first" message.
+
 ## October 19, 2026
 
 **Fixed**
