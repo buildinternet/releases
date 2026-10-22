@@ -4,10 +4,11 @@ import { dbHealthCheck } from "../src/middleware/db-health.js";
 
 /**
  * The db-health middleware gates every request behind an "are D1 migrations
- * applied?" probe. Its 503 now carries the standardized nested error envelope
- * (#1830 item 3) with the stable `database_not_initialized` code and the setup
- * steps in `details.setup` — the exact contract the web transport
+ * applied?" probe. A definite missing table returns the standardized nested
+ * envelope (#1830 item 3) with the stable `database_not_initialized` code and
+ * the setup steps in `details.setup` — the contract the web transport
  * (`apps/web/src/lib/api.ts`) decodes to show the operator how to migrate.
+ * An empty probe is not that signal: it returns a retryable 503.
  */
 type Bindings = { DB: D1Database };
 
@@ -34,8 +35,34 @@ async function expectSetupEnvelope(res: Response): Promise<void> {
 }
 
 describe("dbHealthCheck middleware", () => {
-  it("returns the nested envelope when the sources table is missing", async () => {
-    await expectSetupEnvelope(await ping(() => null));
+  it("returns a retryable 503 when the probe comes back empty and does not latch readiness", async () => {
+    let calls = 0;
+    const DB = {
+      prepare: () => ({
+        first: async () => {
+          calls++;
+          return null;
+        },
+      }),
+    } as unknown as D1Database;
+
+    const res = await app.request("http://x/ping", {}, { DB });
+    // An empty result is ambiguous (export lock, dropped connection), so it is
+    // retried once and then reported as temporary — not as a missing schema.
+    expect(calls).toBe(2);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("10");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("service_unavailable");
+    expect(body.error.message.toLowerCase()).toContain("temporarily unavailable");
+
+    // The empty probe must not latch dbReady — a later missing-table error
+    // still returns the setup envelope.
+    await expectSetupEnvelope(
+      await ping(() => {
+        throw new Error("no such table: sources");
+      }),
+    );
   });
 
   it("returns the nested envelope when the probe query throws", async () => {
@@ -68,6 +95,10 @@ describe("dbHealthCheck middleware", () => {
 
     // The failure must not latch dbReady — a later missing-table probe still
     // returns the setup envelope.
-    await expectSetupEnvelope(await ping(() => null));
+    await expectSetupEnvelope(
+      await ping(() => {
+        throw new Error("no such table: sources");
+      }),
+    );
   });
 });

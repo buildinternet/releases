@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { respondError } from "../lib/error-response.js";
@@ -50,37 +50,62 @@ function isMissingTableError(err: unknown): boolean {
   return /no such table/i.test(errorChainText(err));
 }
 
+/**
+ * One row when `sources` exists (even if the table is empty). A missing table
+ * throws `no such table` — the only positive signal that migrations have not
+ * been applied. `.first()` returning nothing is not that signal: D1 can hand
+ * back an empty result during an export lock or a dropped connection.
+ */
 function probeSourcesTable(db: D1Database): Promise<unknown> {
-  return db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sources' LIMIT 1")
-    .first();
+  return db.prepare("SELECT EXISTS (SELECT 1 FROM sources) AS present").first();
 }
 
 /**
- * One retry for known transient D1 errors (`classifyDbError`). A missing table
- * is not retried — it will fail the same way immediately.
+ * One retry when the probe is empty or hits a known transient D1 error
+ * (`classifyDbError`). A missing table is not retried — it will fail the
+ * same way immediately.
  */
 async function probeSourcesTableWithRetry(db: D1Database): Promise<unknown> {
   try {
-    return await probeSourcesTable(db);
+    const row = await probeSourcesTable(db);
+    if (row) return row;
   } catch (err) {
     if (isMissingTableError(err) || classifyDbError(err)?.transient !== true) throw err;
-    return await probeSourcesTable(db);
   }
+  return probeSourcesTable(db);
+}
+
+/** Retryable 503 for a blip. Does not latch `dbReady`. */
+function retryableDatabaseUnavailable(c: Context): Response {
+  const res = respondError(
+    c,
+    new ServiceUnavailableError("The database is temporarily unavailable."),
+  );
+  res.headers.set("Retry-After", String(DB_HEALTH_RETRY_AFTER_SECONDS));
+  return res;
 }
 
 /**
  * Checks that D1 migrations have been applied before handling API requests.
- * A missing `sources` table returns the setup message. Any other probe failure
- * (overload during the nightly export, "Network connection lost", storage
- * reset) is a retryable 503 and does not latch `dbReady`.
+ * Only a definite missing-table error (`no such table`) returns the setup
+ * message. An empty probe, or any other failure (overload during the nightly
+ * export, "Network connection lost", storage reset), is a retryable 503 and
+ * does not latch `dbReady`.
  */
 export const dbHealthCheck: MiddlewareHandler<Env> = async (c, next) => {
   if (dbReady) return next();
 
   try {
     const row = await probeSourcesTableWithRetry(c.env.DB);
-    if (!row) return respondError(c, databaseNotInitializedError());
+    if (!row) {
+      logEvent("warn", {
+        component: "api",
+        event: "db_health_check_failed",
+        transient: true,
+        causeMessage: "sources probe returned no row",
+      });
+      return retryableDatabaseUnavailable(c);
+    }
     dbReady = true;
   } catch (err) {
     if (isMissingTableError(err)) {
@@ -102,12 +127,7 @@ export const dbHealthCheck: MiddlewareHandler<Env> = async (c, next) => {
           }
         : {}),
     });
-    const res = respondError(
-      c,
-      new ServiceUnavailableError("The database is temporarily unavailable."),
-    );
-    res.headers.set("Retry-After", String(DB_HEALTH_RETRY_AFTER_SECONDS));
-    return res;
+    return retryableDatabaseUnavailable(c);
   }
 
   await next();
