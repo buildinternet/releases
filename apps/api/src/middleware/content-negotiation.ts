@@ -37,10 +37,14 @@ export function markdownResponse(c: Context, body: string): Response {
 /**
  * Middleware that adds `Vary: Accept` to GET responses on routes that
  * support content negotiation, so CDN caches key on the Accept header.
+ *
+ * 101 (WebSocket upgrade) is skipped — headers immutable. Same skip as
+ * `cacheDefaultDeny`.
  */
 export function varyOnAccept(): MiddlewareHandler {
   return async (c, next) => {
     await next();
+    if (c.res.status === 101) return;
     if (c.req.method === "GET") {
       c.res.headers.append("Vary", "Accept");
     }
