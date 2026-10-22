@@ -1,5 +1,11 @@
 # @buildinternet/releases
 
+## 0.83.4
+
+### Patch Changes
+
+- 5636c65: Compiled CLI binaries are now built with Bun 1.4.4, which no longer trusts the compromised eMudhra intermediate certificates (CVE-2026-111943).
+
 ## 0.83.3
 
 ### Patch Changes

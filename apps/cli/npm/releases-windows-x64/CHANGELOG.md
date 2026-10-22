@@ -1,5 +1,7 @@
 # @buildinternet/releases-windows-x64
 
+## 0.83.4
+
 ## 0.83.3
 
 ## 0.83.2
