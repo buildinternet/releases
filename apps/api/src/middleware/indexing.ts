@@ -24,6 +24,9 @@ export function blockIndexing(): MiddlewareHandler<{
       });
     }
     await next();
+    // 101 (WebSocket upgrade) is skipped — headers immutable. Same skip as
+    // cacheDefaultDeny.
+    if (c.res.status === 101) return;
     c.res.headers.set("X-Robots-Tag", "noindex, nofollow");
   };
 }
