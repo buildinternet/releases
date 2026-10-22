@@ -38,6 +38,7 @@ import {
   sourceChangelogFiles,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
+import { coerceReleaseType } from "@buildinternet/releases-core/release-type";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
@@ -3139,7 +3140,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
         sourceId: src.id,
         version,
         versionSort: computeVersionSort(version),
-        type: body.type ?? "feature",
+        type: coerceReleaseType(body.type),
         title: body.title,
         content: body.content,
         summary: body.summary ?? null,
