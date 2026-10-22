@@ -91,8 +91,9 @@ const APP_TITLE = "Releases";
 const SUMMARIZE_REASONING: OpenRouterReasoning = { enabled: false };
 
 /**
- * Provider-routing preference for the summarize lanes: never route to providers
- * that are outliers for DeepSeek.
+ * Provider-routing preference for summarize lanes whose resolved model has no
+ * entry in `openRouterProviderRouting`. The dated DeepSeek snapshot replaces
+ * this object with its own allowlist; an overlaid id keeps this ignore list.
  * - `gmicloud`: latency outlier (#1633).
  * - `open-inference`: ~5 tokens/s vs. 29-120 for the rest, so a ~1.5K-token
  *   weekly digest takes ~300s. It is also the cheapest listing, so OpenRouter's

@@ -274,6 +274,34 @@ describe("resolveSummarizeModel — model var is the per-lane gate", () => {
     expect(body.provider).toEqual({ ignore: ["gmicloud", "open-inference", "dekallm"] });
   });
 
+  it("sends the dated DeepSeek provider allowlist only when that model id resolves", async () => {
+    const pinned = await captureOpenRouterBody(
+      resolveSummarizeModel,
+      baseEnv({
+        FLAGS: flagsBinding({ "openrouter-enabled": true }),
+        SUMMARIZE_MODEL: "deepseek/deepseek-v4.1-flash-1017",
+      }),
+    );
+    expect(pinned.reasoning).toEqual({ enabled: false });
+    expect(pinned.provider).toEqual({
+      only: ["deepinfra", "atlas-cloud", "makora", "crusoe", "parasail"],
+      quantizations: ["fp8", "bf16"],
+      data_collection: "deny",
+      allow_fallbacks: true,
+      sort: "price",
+    });
+
+    const overlaid = await captureOpenRouterBody(
+      resolveSummarizeModel,
+      baseEnv({
+        FLAGS: flagsBinding({ "openrouter-enabled": true }),
+        SUMMARIZE_MODEL: "google/gemini-2.5-flash-lite",
+      }),
+    );
+    expect(overlaid.reasoning).toEqual({ enabled: false });
+    expect(overlaid.provider).toEqual({ ignore: ["gmicloud", "open-inference", "dekallm"] });
+  });
+
   it("uses a site_settings overlay over the wrangler SUMMARIZE_MODEL", async () => {
     const db = createTestDb();
     clearAiLaneModelCache();
