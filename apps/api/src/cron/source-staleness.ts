@@ -118,7 +118,7 @@ export async function scanStaleSources(
 
   // One grouped aggregate: each eligible source plus the date of its newest
   // non-suppressed release. `MAX(CASE …)` ignores suppressed rows (a suppressed
-  // release isn't "new output") and falls back to created_at when published_at
+  // release isn't "new output") and falls back to fetched_at when published_at
   // is null. Eligibility (established cadence, not deleted, not Firecrawl) is
   // filtered in SQL so the scanned set stays small; paused/recency/overdue
   // checks run in JS to sidestep three-valued NULL comparisons.
