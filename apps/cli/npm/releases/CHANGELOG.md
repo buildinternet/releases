@@ -1,5 +1,11 @@
 # @buildinternet/releases
 
+## 0.83.5
+
+### Patch Changes
+
+- e47428d: `releases admin source create --feed-url` stores an inferred feed type (`rss`, `atom`, or `jsonfeed`) instead of `unknown`.
+
 ## 0.83.4
 
 ### Patch Changes
