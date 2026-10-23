@@ -91,7 +91,8 @@
     "better-call": "1.4.0",
     "@better-auth/infra": {
       "@better-auth/utils": "0.4.2"
-    }
+    },
+    "ip-address": "^10.7.4"
   },
   "keywords": [
     "changelog",
@@ -122,13 +123,13 @@
     "drizzle-orm": "^0.45.2",
     "js-tiktoken": "^1.0.21",
     "nanoid": "^6.0.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@types/bun": "^1.4.2",
     "drizzle-kit": "^0.31.10",
-    "hono": "^4.13.3",
+    "hono": "^4.13.11",
     "husky": "^9.1.7",
     "jose": "^6.2.12",
     "lint-staged": "^17.3.0",
