@@ -59,6 +59,11 @@ export const UserWebhookDeliveryHealthSchema = z.object({
   deliveryHealthSummary: z.string(),
 });
 
+/** GET/PATCH /v1/me/webhooks/:id response: the row plus its delivery health. */
+export const UserWebhookSchema = UserWebhookSubscriptionSchema.extend(
+  UserWebhookDeliveryHealthSchema.shape,
+);
+
 /** List item returned by GET /v1/me/webhooks — includes org/source display fields. */
 export const UserWebhookListItemSchema = UserWebhookSubscriptionSchema.omit({ userId: true })
   .extend(UserWebhookDeliveryHealthSchema.shape)
@@ -111,6 +116,11 @@ const WorkspaceOwnerFields = { workspaceId: z.string(), scope: z.literal("org") 
 export const WorkspaceWebhookSubscriptionSchema = UserWebhookSubscriptionSchema.omit({
   userId: true,
 }).extend(WorkspaceOwnerFields);
+
+/** GET/PATCH /v1/workspaces/:workspaceId/webhooks/:id response. */
+export const WorkspaceWebhookSchema = WorkspaceWebhookSubscriptionSchema.extend(
+  UserWebhookDeliveryHealthSchema.shape,
+);
 
 /** List item returned by GET /v1/workspaces/:workspaceId/webhooks. */
 export const WorkspaceWebhookListItemSchema =
@@ -169,12 +179,59 @@ export const CreateWorkspaceWebhookBodySchema = z.object({
   ...WebhookOrgTargetFields,
 });
 
+/**
+ * PATCH …/webhooks/:id body (user and workspace). Every field is optional,
+ * but at least one must be present. `null` on `sourceId` / `productId` /
+ * `releaseType` / `description` clears that filter; follows-scoped webhooks
+ * reject the source/product fields. Re-enabling resets the failure streak.
+ */
+export const UpdateWebhookBodySchema = z.object({
+  url: z.string().max(2048).optional(),
+  format: UserWebhookFormatSchema.optional(),
+  description: z.string().max(1000).nullable().optional(),
+  enabled: z.boolean().optional(),
+  disabledReason: z.string().nullable().optional(),
+  releaseType: UserWebhookReleaseTypeFilterSchema.nullable().optional(),
+  sourceId: z.string().nullable().optional(),
+  sourceSlug: z.string().optional(),
+  productId: z.string().nullable().optional(),
+  productSlug: z.string().optional(),
+});
+
+/** One Analytics Engine delivery-attempt row from GET …/webhooks/:id/deliveries. */
+export const WebhookDeliveryRowSchema = z.object({
+  timestamp: z.string().optional(),
+  event_id: z.string().optional(),
+  error_message: z.string().nullable().optional(),
+  error_code: z.string().nullable().optional(),
+  outcome: z.string().optional(),
+  /** "json" (signed raw event) or a chat card (`slack` / `discord`). Empty on pre-format rows. */
+  format: z.union([UserWebhookFormatSchema, z.literal("")]).optional(),
+  http_status: z.number().optional(),
+  latency_ms: z.number().optional(),
+  attempt: z.number().optional(),
+});
+
+/**
+ * GET …/webhooks/:id/deliveries response: the Analytics Engine SQL result,
+ * newest first. `?failed=true` keeps only failed attempts; `?limit=` is 1-100
+ * (default 20).
+ */
+export const WebhookDeliveriesResponseSchema = z
+  .object({
+    data: z.array(WebhookDeliveryRowSchema),
+    rows: z.number().int().optional(),
+    meta: z.array(z.object({ name: z.string(), type: z.string() })).optional(),
+  })
+  .passthrough();
+
 export type WebhookDeliveryHealth = z.infer<typeof WebhookDeliveryHealthSchema>;
 export type UserWebhookScope = z.infer<typeof UserWebhookScopeSchema>;
 export type UserWebhookReleaseTypeFilter = z.infer<typeof UserWebhookReleaseTypeFilterSchema>;
 export type UserWebhookFormat = z.infer<typeof UserWebhookFormatSchema>;
 export type UserWebhookSubscription = z.infer<typeof UserWebhookSubscriptionSchema>;
 export type UserWebhookDeliveryHealth = z.infer<typeof UserWebhookDeliveryHealthSchema>;
+export type UserWebhook = z.infer<typeof UserWebhookSchema>;
 export type UserWebhookListItem = z.infer<typeof UserWebhookListItemSchema>;
 export type UserWebhookListResponse = z.infer<typeof UserWebhookListResponseSchema>;
 export type CreateUserWebhookResponse = z.infer<typeof CreateUserWebhookResponseSchema>;
@@ -182,8 +239,12 @@ export type RotateUserWebhookSecretResponse = z.infer<typeof RotateUserWebhookSe
 export type TestUserWebhookResponse = z.infer<typeof TestUserWebhookResponseSchema>;
 export type WorkspaceMemberRole = z.infer<typeof WorkspaceMemberRoleSchema>;
 export type WorkspaceWebhookSubscription = z.infer<typeof WorkspaceWebhookSubscriptionSchema>;
+export type WorkspaceWebhook = z.infer<typeof WorkspaceWebhookSchema>;
 export type WorkspaceWebhookListItem = z.infer<typeof WorkspaceWebhookListItemSchema>;
 export type WorkspaceWebhookListResponse = z.infer<typeof WorkspaceWebhookListResponseSchema>;
 export type CreateWorkspaceWebhookResponse = z.infer<typeof CreateWorkspaceWebhookResponseSchema>;
 export type CreateUserWebhookBody = z.infer<typeof CreateUserWebhookBodySchema>;
 export type CreateWorkspaceWebhookBody = z.infer<typeof CreateWorkspaceWebhookBodySchema>;
+export type UpdateWebhookBody = z.infer<typeof UpdateWebhookBodySchema>;
+export type WebhookDeliveryRow = z.infer<typeof WebhookDeliveryRowSchema>;
+export type WebhookDeliveriesResponse = z.infer<typeof WebhookDeliveriesResponseSchema>;

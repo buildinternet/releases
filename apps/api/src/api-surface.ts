@@ -102,8 +102,14 @@ export const PUBLIC_OPERATIONS: Record<string, PublicAuth> = {
   "POST /listing/promote": "required",
 
   // ── Account (signed-in user) ──
+  "GET /api-keys": "required",
   "POST /api-keys": "required",
+  "DELETE /api-keys/:id": "required",
   "DELETE /tokens/me": "required",
+  "GET /me/follows": "required",
+  "POST /me/follows": "required",
+  "DELETE /me/follows/:targetType/:targetId": "required",
+  "GET /me/feed": "required",
   "GET /me/workspaces": "required",
   "GET /me/publish-tokens": "required",
   "POST /me/publish-tokens": "required",
@@ -114,12 +120,21 @@ export const PUBLIC_OPERATIONS: Record<string, PublicAuth> = {
   "PATCH /me/semantic-alerts/:id": "required",
   "DELETE /me/semantic-alerts/:id": "required",
 
-  // ── Webhooks ── list/get/update/delete/deliveries are still internal until
-  // documented; see INTERNAL_OPERATIONS.
+  // ── Webhooks ──
+  "GET /me/webhooks": "required",
   "POST /me/webhooks": "required",
+  "GET /me/webhooks/:id": "required",
+  "PATCH /me/webhooks/:id": "required",
+  "DELETE /me/webhooks/:id": "required",
+  "GET /me/webhooks/:id/deliveries": "required",
   "POST /me/webhooks/:id/rotate-secret": "required",
   "POST /me/webhooks/:id/test": "required",
+  "GET /workspaces/:workspaceId/webhooks": "required",
   "POST /workspaces/:workspaceId/webhooks": "required",
+  "GET /workspaces/:workspaceId/webhooks/:id": "required",
+  "PATCH /workspaces/:workspaceId/webhooks/:id": "required",
+  "DELETE /workspaces/:workspaceId/webhooks/:id": "required",
+  "GET /workspaces/:workspaceId/webhooks/:id/deliveries": "required",
   "POST /workspaces/:workspaceId/webhooks/:id/rotate-secret": "required",
   "POST /workspaces/:workspaceId/webhooks/:id/test": "required",
 };
@@ -267,14 +282,7 @@ export const INTERNAL_OPERATIONS = new Set<string>([
   "POST /changelog/fetch",
   "POST /changelog/parse",
 
-  // Account routes the web app uses that are not yet documented. Follows,
-  // feed and webhook read/update/delete are slated for the public surface.
-  "GET /api-keys",
-  "DELETE /api-keys/:id",
-  "GET /me/follows",
-  "POST /me/follows",
-  "DELETE /me/follows/:targetType/:targetId",
-  "GET /me/feed",
+  // Account routes that serve the web app's settings pages.
   "GET /me/feed/token",
   "POST /me/feed/token",
   "DELETE /me/feed/token",
@@ -286,22 +294,12 @@ export const INTERNAL_OPERATIONS = new Set<string>([
   "GET /me/settings/notifications",
   "GET /me/settings/developer",
   "POST /me/avatar",
-  "GET /me/webhooks",
-  "GET /me/webhooks/:id",
-  "PATCH /me/webhooks/:id",
-  "DELETE /me/webhooks/:id",
-  "GET /me/webhooks/:id/deliveries",
   "GET /workspaces/:workspaceId/profile",
   "PATCH /workspaces/:workspaceId/profile",
   "POST /workspaces/:workspaceId/avatar",
   "GET /workspaces/:workspaceId/integrations/uploads",
   "POST /workspaces/:workspaceId/integrations/uploads/connect",
   "DELETE /workspaces/:workspaceId/integrations/uploads",
-  "GET /workspaces/:workspaceId/webhooks",
-  "GET /workspaces/:workspaceId/webhooks/:id",
-  "PATCH /workspaces/:workspaceId/webhooks/:id",
-  "DELETE /workspaces/:workspaceId/webhooks/:id",
-  "GET /workspaces/:workspaceId/webhooks/:id/deliveries",
 ]);
 
 export type Visibility = "public" | "internal";

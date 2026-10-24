@@ -37,3 +37,7 @@ export const CreateUserApiKeyBodySchema = z.object({
   expiresInDays: z.number().int().min(1).max(365).optional(),
 });
 export type CreateUserApiKeyBody = z.infer<typeof CreateUserApiKeyBodySchema>;
+
+/** DELETE /v1/api-keys/:id response. */
+export const RevokeUserApiKeyResponseSchema = z.object({ success: z.literal(true) });
+export type RevokeUserApiKeyResponse = z.infer<typeof RevokeUserApiKeyResponseSchema>;

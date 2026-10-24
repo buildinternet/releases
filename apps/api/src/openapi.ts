@@ -78,7 +78,7 @@ const TAGS = [
   {
     name: "Account",
     description:
-      "Signed-in account preferences. Session cookie or user Bearer (`relu_` / OAuth JWT). Semantic alerts store interests only — matching is a later phase.",
+      "The signed-in caller: follows, the personalized feed, publish tokens, and semantic alerts. Session cookie or user Bearer (`relu_` / OAuth JWT).",
   },
   { name: "Sessions", description: "Update-run sessions (status hub)." },
 ];

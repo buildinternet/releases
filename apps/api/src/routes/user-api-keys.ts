@@ -21,6 +21,8 @@ import { type ApiScope } from "@buildinternet/releases-core/api-token";
 import {
   CreateUserApiKeyBodySchema,
   CreatedUserApiKeySchema,
+  ListUserApiKeysResponseSchema,
+  RevokeUserApiKeyResponseSchema,
   type UserApiKey,
 } from "@buildinternet/releases-api-types";
 import { requireSession } from "../middleware/auth.js";
@@ -29,7 +31,7 @@ import { respondError } from "../lib/error-response.js";
 import { userIdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency/idempotency-openapi.js";
-import { errorResponse } from "../lib/openapi-error.js";
+import { errorResponse, jsonResponse } from "../lib/openapi-error.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -259,35 +261,59 @@ export async function listUserApiKeys(
   }));
 }
 
-userApiKeyHandlers.get("/api-keys", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-  const db = createDb(c.env.DB);
-  return c.json({ apiKeys: await listUserApiKeys(db, session.user.id) });
-});
+userApiKeyHandlers.get(
+  "/api-keys",
+  describeRoute({
+    tags: ["Authentication"],
+    summary: "List user API keys",
+    description: "The caller's own `relu_` keys. Secrets are never returned after creation.",
+    responses: {
+      200: jsonResponse("The caller's API keys", ListUserApiKeysResponseSchema),
+      401: errorResponse("Sign-in required"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    const db = createDb(c.env.DB);
+    return c.json({ apiKeys: await listUserApiKeys(db, session.user.id) });
+  },
+);
 
-userApiKeyHandlers.delete("/api-keys/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-  const id = c.req.param("id");
-  const db = createDb(c.env.DB);
-  // The referenceId clause IS the ownership check — a non-owned/absent id deletes
-  // zero rows and returns one indistinct 404 (no cross-user existence oracle).
-  const deleted = await db
-    .delete(apikey)
-    .where(and(eq(apikey.id, id), eq(apikey.referenceId, session.user.id)))
-    .returning();
-  if (deleted.length === 0) return respondError(c, new NotFoundError("API key not found"));
-  // Revoke audit on the shared `component: "auth"` stream, with the owning
-  // userId — same event the native-delete after-hook emits (this route deletes
-  // via Drizzle, not auth.api.deleteApiKey, so it audits its own path).
-  makeAuthAudit(c.env)("info", {
-    event: "api-key-revoked",
-    userId: session.user.id,
-    keyId: id,
-  });
-  return c.json({ success: true });
-});
+userApiKeyHandlers.delete(
+  "/api-keys/:id",
+  describeRoute({
+    tags: ["Authentication"],
+    summary: "Revoke a user API key",
+    responses: {
+      200: jsonResponse("Key revoked", RevokeUserApiKeyResponseSchema),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("API key not found, or not owned by the caller"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    const id = c.req.param("id");
+    const db = createDb(c.env.DB);
+    // The referenceId clause IS the ownership check — a non-owned/absent id deletes
+    // zero rows and returns one indistinct 404 (no cross-user existence oracle).
+    const deleted = await db
+      .delete(apikey)
+      .where(and(eq(apikey.id, id), eq(apikey.referenceId, session.user.id)))
+      .returning();
+    if (deleted.length === 0) return respondError(c, new NotFoundError("API key not found"));
+    // Revoke audit on the shared `component: "auth"` stream, with the owning
+    // userId — same event the native-delete after-hook emits (this route deletes
+    // via Drizzle, not auth.api.deleteApiKey, so it audits its own path).
+    makeAuthAudit(c.env)("info", {
+      event: "api-key-revoked",
+      userId: session.user.id,
+      keyId: id,
+    });
+    return c.json({ success: true });
+  },
+);
 
 /** Production composition: requireSession then the handlers. */
 export const userApiKeyRoutes = new Hono<Env>();
