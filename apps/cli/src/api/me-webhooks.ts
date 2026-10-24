@@ -6,17 +6,16 @@ import type {
   UserWebhookDeliveryHealth,
   UserWebhookFormat,
   UserWebhookListItem,
-  UserWebhookListResponse,
   UserWebhookReleaseTypeFilter,
   UserWebhookScope,
   UserWebhookSubscription,
   WebhookDeliveryRow,
   WorkspaceMemberRole,
   WorkspaceWebhookListItem,
-  WorkspaceWebhookListResponse,
   WorkspaceWebhookSubscription,
 } from "@buildinternet/releases-api-types";
-import { apiFetch } from "./core.js";
+import type { Releases } from "@buildinternet/releases-sdk";
+import { call, find } from "./sdk.js";
 
 export type {
   RotateUserWebhookSecretResponse,
@@ -44,10 +43,31 @@ export type WebhookOwner = { kind: "user" } | { kind: "workspace"; id: string };
 
 export const MY_WEBHOOKS: WebhookOwner = { kind: "user" };
 
-function webhooksBasePath(owner: WebhookOwner): string {
-  return owner.kind === "workspace"
-    ? `/v1/workspaces/${encodeURIComponent(owner.id)}/webhooks`
-    : "/v1/me/webhooks";
+/**
+ * The SDK resource for an owner's subscriptions. Both owners expose the same
+ * verbs; the casts only widen the owner-specific body and response types to
+ * the unions this module already speaks in.
+ */
+function hooks(c: Releases, owner: WebhookOwner) {
+  return (owner.kind === "workspace"
+    ? c.workspaceWebhooks(owner.id)
+    : c.me.webhooks) as unknown as {
+    list(query?: { enabled?: boolean }): Promise<{
+      subscriptions: AnyWebhookListItem[];
+      role?: WorkspaceMemberRole;
+      canManage?: boolean;
+    }>;
+    create(body: CreateUserWebhookInput): Promise<AnyCreateWebhookResponse>;
+    get(id: string): Promise<AnyWebhookSubscription>;
+    update(id: string, body: UpdateMyWebhookInput): Promise<AnyWebhookSubscription>;
+    delete(id: string): Promise<void>;
+    deliveries(
+      id: string,
+      query?: { failed?: boolean; limit?: number },
+    ): Promise<{ data?: WebhookDeliveryRow[] }>;
+    rotateSecret(id: string): Promise<RotateUserWebhookSecretResponse>;
+    test(id: string): Promise<TestUserWebhookResponse>;
+  };
 }
 
 /** A subscription row as returned by either owner's list endpoint. */
@@ -101,12 +121,7 @@ export async function listWebhooks(
   owner: WebhookOwner,
   opts?: { enabled?: boolean },
 ): Promise<ListWebhooksResult> {
-  const params = new URLSearchParams();
-  if (opts?.enabled !== undefined) params.set("enabled", String(opts.enabled));
-  const qs = params.toString();
-  const res = await apiFetch<(UserWebhookListResponse & WorkspaceWebhookListResponse) | null>(
-    `${webhooksBasePath(owner)}${qs ? `?${qs}` : ""}`,
-  );
+  const res = await find((c) => hooks(c, owner).list({ enabled: opts?.enabled }));
   return {
     subscriptions: res?.subscriptions ?? [],
     role: res?.role,
@@ -125,10 +140,7 @@ export async function createWebhook(
   owner: WebhookOwner,
   input: CreateUserWebhookInput,
 ): Promise<AnyCreateWebhookResponse> {
-  return apiFetch<AnyCreateWebhookResponse>(webhooksBasePath(owner), {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return call((c) => hooks(c, owner).create(input));
 }
 
 /** Register a self-serve webhook. The `signingKey` is shown once. */
@@ -143,9 +155,7 @@ export async function getWebhook(
   owner: WebhookOwner,
   id: string,
 ): Promise<AnyWebhookSubscription | null> {
-  return apiFetch<AnyWebhookSubscription | null>(
-    `${webhooksBasePath(owner)}/${encodeURIComponent(id)}`,
-  );
+  return find((c) => hooks(c, owner).get(id));
 }
 
 /** Read one of the signed-in user's own subscriptions. Returns null on 404. */
@@ -158,10 +168,7 @@ export async function updateWebhook(
   id: string,
   fields: UpdateMyWebhookInput,
 ): Promise<AnyWebhookSubscription> {
-  return apiFetch<AnyWebhookSubscription>(`${webhooksBasePath(owner)}/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify(fields),
-  });
+  return call((c) => hooks(c, owner).update(id, fields));
 }
 
 export async function updateMyWebhook(
@@ -172,9 +179,7 @@ export async function updateMyWebhook(
 }
 
 export async function deleteWebhook(owner: WebhookOwner, id: string): Promise<void> {
-  await apiFetch<void>(`${webhooksBasePath(owner)}/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  await call((c) => hooks(c, owner).delete(id));
 }
 
 export async function deleteMyWebhook(id: string): Promise<void> {
@@ -185,10 +190,7 @@ export async function rotateWebhookSecret(
   owner: WebhookOwner,
   id: string,
 ): Promise<RotateUserWebhookSecretResponse> {
-  return apiFetch<RotateUserWebhookSecretResponse>(
-    `${webhooksBasePath(owner)}/${encodeURIComponent(id)}/rotate-secret`,
-    { method: "POST" },
-  );
+  return call((c) => hooks(c, owner).rotateSecret(id));
 }
 
 export async function rotateMyWebhookSecret(id: string): Promise<RotateUserWebhookSecretResponse> {
@@ -199,10 +201,7 @@ export async function testWebhook(
   owner: WebhookOwner,
   id: string,
 ): Promise<TestUserWebhookResponse> {
-  return apiFetch<TestUserWebhookResponse>(
-    `${webhooksBasePath(owner)}/${encodeURIComponent(id)}/test`,
-    { method: "POST" },
-  );
+  return call((c) => hooks(c, owner).test(id));
 }
 
 export async function testMyWebhook(id: string): Promise<TestUserWebhookResponse> {
@@ -214,12 +213,8 @@ export async function getWebhookDeliveries(
   id: string,
   opts?: { failed?: boolean; limit?: number },
 ): Promise<WebhookDeliveryRow[]> {
-  const params = new URLSearchParams();
-  if (opts?.failed) params.set("failed", "true");
-  if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
-  const qs = params.toString();
-  const res = await apiFetch<{ data?: WebhookDeliveryRow[] } | null>(
-    `${webhooksBasePath(owner)}/${encodeURIComponent(id)}/deliveries${qs ? `?${qs}` : ""}`,
+  const res = await find((c) =>
+    hooks(c, owner).deliveries(id, { failed: opts?.failed || undefined, limit: opts?.limit }),
   );
   return res?.data ?? [];
 }

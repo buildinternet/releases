@@ -53,7 +53,7 @@ Follow orgs and products to build a personalized feed. These act on your own acc
 ```bash
 releases follow vercel              # org slug, org/product coordinate, or typed ID
 releases following                  # list what you follow
-releases feed                       # your release timeline (--json, --page, --limit)
+releases feed                       # your release timeline (--json, --cursor, --limit)
 releases unfollow vercel
 ```
 

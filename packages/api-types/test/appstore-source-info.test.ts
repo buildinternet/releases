@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { OrgReleaseItemSchema } from "../src/schemas/orgs";
 
 const base = {
+  id: "rel_1",
   version: "3.12.0",
   title: "Notion 3.12.0",
   summary: "",

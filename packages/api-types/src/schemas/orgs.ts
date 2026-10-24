@@ -394,8 +394,10 @@ export const OrgSparklinesResponseSchema = z.object({
 /**
  * Release feed item on `GET /v1/orgs/:slug/releases`. Extends `ReleaseItem`
  * with a `source` block identifying the originating source within the org.
+ * `id` is always present here, unlike the shared `ReleaseItem`.
  */
 export const OrgReleaseItemSchema = ReleaseItemSchema.extend({
+  id: z.string(),
   source: z.object({
     slug: z.string(),
     name: z.string(),

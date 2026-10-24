@@ -124,14 +124,14 @@ describe("follows client wire contract", () => {
             product: { slug: "widget", name: "Widget" },
           },
         ],
-        pagination: { hasMore: true },
+        pagination: { nextCursor: "c_2", limit: 10 },
       });
-    const { releases, hasMore } = await client.getMyFeed({ page: 2, limit: 10 });
+    const { releases, nextCursor } = await client.getMyFeed({ cursor: "c_1", limit: 10 });
     expect(calls[0]!.method).toBe("GET");
     expect(calls[0]!.url).toContain("/v1/me/feed?");
-    expect(calls[0]!.url).toContain("page=2");
+    expect(calls[0]!.url).toContain("cursor=c_1");
     expect(calls[0]!.url).toContain("limit=10");
-    expect(hasMore).toBe(true);
+    expect(nextCursor).toBe("c_2");
     expect(releases).toHaveLength(1);
     // toLatestRelease flattens source → sourceName/sourceSlug for the renderer.
     expect(releases[0]).toMatchObject({

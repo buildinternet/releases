@@ -1,9 +1,5 @@
-import type {
-  LatestRelease,
-  MediaItem,
-  ReleaseWithSource,
-  SearchReleaseHit,
-} from "../../api/types.js";
+import type { ReleaseDetailResponse } from "@buildinternet/releases-api-types";
+import type { LatestRelease, SearchReleaseHit } from "../../api/types.js";
 import { cleanExcerpt } from "../../lib/release-display.js";
 
 /**
@@ -12,15 +8,6 @@ import { cleanExcerpt } from "../../lib/release-display.js";
  * title variants so agents spend fewer tokens; `--full` returns the complete
  * unprojected payload the CLI received.
  */
-
-/** The live `/v1/releases/:id` payload carries fields not on the stale
- *  `ReleaseWithSource` interface (org, sourceType, media). Read them
- *  defensively. */
-type RawReleaseDetail = ReleaseWithSource & {
-  org?: { slug: string; name: string } | null;
-  sourceType?: string | null;
-  media?: MediaItem[] | null;
-};
 
 function nullIfEmpty(s: string | null | undefined): string | null {
   return s?.trim() || null;
@@ -31,13 +18,13 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 }
 
 export function slimReleaseDetail(
-  rel: ReleaseWithSource,
+  rel: ReleaseDetailResponse,
   opts: { contentChars: number; contentTokens: number; full: boolean },
 ): unknown {
   if (opts.full) {
     return { ...rel, contentChars: opts.contentChars, contentTokens: opts.contentTokens };
   }
-  const r = rel as RawReleaseDetail;
+  const r = rel;
   const excerpt = cleanExcerpt(r.content);
   // `media[]` is user-facing content (carries the R2-mirrored `r2Url`), not a
   // storage/pipeline internal — surface it in the slim shape so callers can

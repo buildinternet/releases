@@ -1,11 +1,11 @@
 import type { MeWorkspace, MeWorkspacesResponse } from "@buildinternet/releases-api-types";
-import { apiFetch } from "./core.js";
+import { find } from "./sdk.js";
 
 export type { MeWorkspace } from "@buildinternet/releases-api-types";
 
 /** List the signed-in user's workspaces (Better Auth organizations). */
 export async function listMyWorkspaces(): Promise<MeWorkspace[]> {
-  const res = await apiFetch<MeWorkspacesResponse | null>(`/v1/me/workspaces`);
+  const res = await find((c) => c.request<MeWorkspacesResponse>("GET /me/workspaces"));
   return res?.workspaces ?? [];
 }
 

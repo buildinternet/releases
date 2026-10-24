@@ -66,35 +66,68 @@ export interface ApiFetchOpts extends RequestInit {
   skipDefaultAuth?: boolean;
 }
 
-export async function apiFetch<T>(path: string, opts?: ApiFetchOpts): Promise<T> {
+/** The human message for a non-2xx response, given its parsed body. */
+function failureMessage(res: Response, body: unknown): string {
+  const code = (body as { error?: { code?: unknown } } | null)?.error?.code;
+  return res.status === 409 && code === "idempotency_conflict"
+    ? IDEMPOTENCY_CONFLICT_MESSAGE
+    : (apiErrorMessage(body) ?? res.statusText);
+}
+
+export const IDEMPOTENCY_CONFLICT_MESSAGE =
+  "This request was already submitted with a different payload. If you meant to retry, wait for the earlier request to finish or start a fresh invocation.";
+
+/** Caller headers as a plain record; a `Headers` instance or tuple list is flattened. */
+function headerRecord(init: HeadersInit | undefined): Record<string, string> {
+  if (!init) return {};
+  if (init instanceof Headers || Array.isArray(init)) return Object.fromEntries(new Headers(init));
+  return init as Record<string, string>;
+}
+
+/** `/v1/orgs/x?y=1` for a URL under the configured API origin. */
+function apiPath(url: string): string {
+  const base = getApiUrl();
+  if (url.startsWith(base)) return url.slice(base.length);
+  const parsed = new URL(url);
+  return parsed.pathname + parsed.search;
+}
+
+/**
+ * The CLI's one HTTP chokepoint, shared by `apiFetch` and the SDK client
+ * (`sdk()` in `./sdk.ts` passes it as the SDK's `fetch`). It adds the user
+ * agent and the configured credential, an `Idempotency-Key` on effectful
+ * POSTs, and records mutations to the local audit log. It returns the raw
+ * response; status handling is the caller's.
+ */
+export async function cliFetch(url: string, opts: ApiFetchOpts = {}): Promise<Response> {
+  const path = apiPath(url);
   // Defense-in-depth: reject raw control characters in the assembled path. By
   // this point user identifiers are already percent-encoded, so a clean path
   // never contains them — this only catches anything that bypassed the
   // raw-input validation in the entity resolvers.
   assertSafePath(path);
-  const url = `${getApiUrl()}${path}`;
   // Empty string when no method is set — `shouldRecordMutation` rejects it, so
   // GETs never log and the `method` field is a real verb whenever we do.
-  const method = opts?.method ?? "";
+  const method = opts.method ?? "";
+  const { skipDefaultAuth, headers: callerHeaders, ...fetchOpts } = opts;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "User-Agent": RELEASES_CLI_UA,
-    ...(opts?.headers as Record<string, string>),
+    ...headerRecord(callerHeaders),
   };
   // Only send auth header when an API key is configured (admin mode). A
   // caller that already attached its own Authorization header (e.g. a
   // session-scoped Bearer token) can opt out via skipDefaultAuth so it isn't
   // clobbered by the static admin/API key.
-  if (isAdminMode() && !opts?.skipDefaultAuth) {
+  if (isAdminMode() && !skipDefaultAuth) {
     headers["Authorization"] = `Bearer ${getApiKey()}`;
   }
-  // One key per logical call to `apiFetch` — this function makes no internal
-  // retry attempts of its own, so "per invocation" and "per attempt" coincide
-  // here. A caller that retries the same logical write (e.g. `keysRequest`'s
-  // 401 reauth retry) generates its own key up front and reuses it instead of
-  // calling through this helper twice. Header names are case-insensitive on
-  // the wire, so match any casing — adding a second differently-cased header
-  // would make fetch send both values comma-joined.
+  // One key per logical call — this function makes no retry attempts of its
+  // own, so "per invocation" and "per attempt" coincide here. A caller that
+  // retries the same logical write (e.g. `keysRequest`'s 401 reauth retry)
+  // generates its own key up front and reuses it instead. Header names are
+  // case-insensitive on the wire, so match any casing — adding a second
+  // differently-cased header would make fetch send both values comma-joined.
   const callerProvidedKey = Object.keys(headers).some(
     (name) => name.toLowerCase() === "idempotency-key",
   );
@@ -106,12 +139,7 @@ export async function apiFetch<T>(path: string, opts?: ApiFetchOpts): Promise<T>
 
   let res: Response;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stripped before the spread below
-    const { skipDefaultAuth: _skipDefaultAuth, ...fetchOpts } = opts ?? {};
-    res = await fetch(url, {
-      ...fetchOpts,
-      headers,
-    });
+    res = await fetch(url, { ...fetchOpts, headers });
   } catch (err) {
     // Transport-level failure (DNS, connection refused, abort) — no response,
     // but the mutating attempt still belongs in the audit trail.
@@ -127,33 +155,44 @@ export async function apiFetch<T>(path: string, opts?: ApiFetchOpts): Promise<T>
     const hint = isCertVerificationError(err)
       ? " (TLS certificate verification failed — if you're behind a TLS-intercepting proxy, set NODE_EXTRA_CA_CERTS or SSL_CERT_FILE to the proxy's CA certificate)"
       : "";
-    throw new Error(`API request failed on ${opts?.method ?? "GET"} ${path}: ${detail}${hint}`, {
+    throw new Error(`API request failed on ${method || "GET"} ${path}: ${detail}${hint}`, {
       cause: err,
     });
   }
+
+  if (logMutation) {
+    if (res.ok) {
+      recordMutation({ method, path, ok: true, status: res.status });
+    } else {
+      const body: unknown = await res
+        .clone()
+        .json()
+        .catch(() => null);
+      recordMutation({
+        method,
+        path,
+        ok: false,
+        status: res.status,
+        error: failureMessage(res, body),
+      });
+    }
+  }
+  return res;
+}
+
+export async function apiFetch<T>(path: string, opts?: ApiFetchOpts): Promise<T> {
+  const res = await cliFetch(`${getApiUrl()}${path}`, opts);
 
   if (res.status === 404 && (!opts?.method || opts.method === "GET")) return null as T;
 
   if (!res.ok) {
     const body: unknown = await res.json().catch(() => null);
-    const code = (body as { error?: { code?: unknown } } | null)?.error?.code;
-    const message =
-      res.status === 409 && code === "idempotency_conflict"
-        ? "This request was already submitted with a different payload. If you meant to retry, wait for the earlier request to finish or start a fresh invocation."
-        : (apiErrorMessage(body) ?? res.statusText);
-    if (logMutation) {
-      recordMutation({ method, path, ok: false, status: res.status, error: message });
-    }
     throw new ApiError({
       status: res.status,
       method: opts?.method ?? "GET",
       path,
-      serverMessage: message,
+      serverMessage: failureMessage(res, body),
     });
-  }
-
-  if (logMutation) {
-    recordMutation({ method, path, ok: true, status: res.status });
   }
 
   // 204 No Content (e.g. DELETE) has an empty body; res.json() would throw.
@@ -192,7 +231,7 @@ export type LatestReleaseWire = {
   /** AI-scored importance 1–5; `null`/absent means unscored, never "unimportant". */
   importance?: number | null;
   publishedAt: string | null;
-  media: Array<{ type: string; url: string; alt?: string; r2Url?: string }>;
+  media?: Array<{ type: string; url: string; alt?: string; r2Url?: string }>;
   source: { slug: string; name: string; type: string };
   product?: { slug: string; name: string } | null;
 };

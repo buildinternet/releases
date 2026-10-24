@@ -5,20 +5,21 @@ import type {
   ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
+import type { ReleaseDetailResponse } from "@buildinternet/releases-api-types";
 import type { ReleaseWithSource, LatestRelease } from "./types.js";
 import { apiFetch, toLatestRelease } from "./core.js";
-import type { LatestReleaseWire } from "./core.js";
+import { call, find } from "./sdk.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { findProduct } from "./products.js";
 import { assertCleanIdentifier } from "../lib/validate-input.js";
 
 // ── Release CRUD ──
 
-export async function getRelease(id: string): Promise<ReleaseWithSource | null> {
+export async function getRelease(id: string): Promise<ReleaseDetailResponse | null> {
   // `id` is interpolated unencoded below, so harden it: a hallucinated
   // `../../…` would otherwise traverse the API path.
   assertCleanIdentifier(id, "release id");
-  return apiFetch<ReleaseWithSource | null>(`/v1/releases/${encodeURIComponent(id)}`);
+  return find((c) => c.releases.get(id));
 }
 
 export async function deleteRelease(id: string): Promise<boolean> {
@@ -134,19 +135,17 @@ export async function getLatestReleases(opts: {
    *  client-side by `parseImportanceFlag`; forwarded as `?minImportance=`. */
   minImportance?: number;
 }): Promise<LatestRelease[]> {
-  const qs = new URLSearchParams();
-  qs.set("count", String(opts.count));
-  if (opts.source) qs.set("source", opts.source);
-  if (opts.org) qs.set("org", opts.org);
-  if (opts.includeCoverage) qs.set("include_coverage", "true");
-  if (opts.since) qs.set("since", opts.since);
-  if (opts.until) qs.set("until", opts.until);
-  if (opts.minImportance !== undefined) qs.set("minImportance", String(opts.minImportance));
-
-  const data = await apiFetch<{ releases: LatestReleaseWire[] }>(
-    `/v1/releases/latest?${qs.toString()}`,
+  const data = await call((c) =>
+    c.releases.latest({
+      count: opts.count,
+      source: opts.source,
+      org: opts.org,
+      include_coverage: opts.includeCoverage || undefined,
+      since: opts.since,
+      until: opts.until,
+      minImportance: opts.minImportance,
+    }),
   );
-  if (!data) return [];
   return data.releases.map(toLatestRelease);
 }
 
@@ -175,11 +174,12 @@ export async function resolveProductFeedTarget(
   if (slash > 0 && slash < identifier.length - 1) {
     return { orgRef: identifier.slice(0, slash), product: identifier.slice(slash + 1) };
   }
-  const resolved = await apiFetch<{
-    productId: string;
-    productSlug: string;
-    orgSlug: string;
-  } | null>(`/v1/lookups/product-by-slug?slug=${encodeURIComponent(identifier)}`);
+  const resolved = await find((c) =>
+    c.request<{ productId: string; productSlug: string; orgSlug: string }>(
+      "GET /lookups/product-by-slug",
+      { query: { slug: identifier } },
+    ),
+  );
   if (!resolved) return null;
   return { orgRef: resolved.orgSlug, product: resolved.productSlug };
 }
@@ -203,19 +203,16 @@ export async function getProductReleases(opts: {
    *  {@link getLatestReleases}. */
   minImportance?: number;
 }): Promise<{ releases: LatestRelease[]; nextCursor: string | null } | null> {
-  const qs = new URLSearchParams();
-  qs.set("product", opts.product);
-  qs.set("limit", String(opts.count));
-  if (opts.cursor) qs.set("cursor", opts.cursor);
-  if (opts.includeCoverage) qs.set("include_coverage", "true");
-  if (opts.since) qs.set("since", opts.since);
-  if (opts.until) qs.set("until", opts.until);
-  if (opts.minImportance !== undefined) qs.set("minImportance", String(opts.minImportance));
-
-  const data = await apiFetch<{
-    releases: LatestReleaseWire[];
-    pagination?: { nextCursor: string | null };
-  } | null>(`/v1/orgs/${encodeURIComponent(opts.orgRef)}/releases?${qs.toString()}`);
+  const data = await find((c) =>
+    c.orgs.releases(opts.orgRef, {
+      product: opts.product,
+      limit: opts.count,
+      cursor: opts.cursor ?? undefined,
+      include_coverage: opts.includeCoverage || undefined,
+      since: opts.since,
+      until: opts.until,
+    }),
+  );
   if (!data) return null;
   return {
     releases: data.releases.map(toLatestRelease),
