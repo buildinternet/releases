@@ -9,58 +9,10 @@ import { runCli } from "../utils.js";
  * local validation against KIND_VALUES — wire-level filter behavior is
  * covered in the API + MCP test suites.
  *
- * Most assertions are help-output checks because the write paths resolve an
- * entity over the network before validating optional flags; behavioral
- * rejection is verified on the two read commands that validate `--kind`
- * before any API call.
+ * Flag registration on every command is covered by
+ * tests/unit/command-surface.test.ts; behavioral rejection is verified here
+ * on the two read commands that validate `--kind` before any API call.
  */
-describe("--kind flag exposure", () => {
-  it("admin source update --help lists --kind and --no-kind", () => {
-    const { stdout, exitCode } = runCli(["admin", "source", "update", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--kind <kind>");
-    expect(stdout).toContain("--no-kind");
-    // commander wraps long descriptions across lines, so assert the prefix
-    // rather than the full enum spelled out.
-    expect(stdout).toContain("platform, sdk");
-  });
-
-  it("admin product update --help lists --kind and --no-kind", () => {
-    const { stdout, exitCode } = runCli(["admin", "product", "update", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--kind <kind>");
-    expect(stdout).toContain("--no-kind");
-    expect(stdout).toContain("platform, sdk");
-  });
-
-  it("admin product create --help lists --kind", () => {
-    const { stdout, exitCode } = runCli(["admin", "product", "create", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--kind <kind>");
-    expect(stdout).toContain("platform, sdk");
-  });
-
-  it("admin product list --help lists --kind", () => {
-    const { stdout, exitCode } = runCli(["admin", "product", "list", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--kind <kind>");
-    expect(stdout).toContain("platform, sdk");
-  });
-
-  it("list --help lists --kind", () => {
-    const { stdout, exitCode } = runCli(["list", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--kind <kind>");
-    expect(stdout).toContain("platform, sdk");
-  });
-
-  it("search --help lists --kind", () => {
-    const { stdout, exitCode } = runCli(["search", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--kind <kind>");
-    expect(stdout).toContain("platform, sdk");
-  });
-});
 
 describe("--kind validation", () => {
   it("list rejects unknown kind before any API call", () => {

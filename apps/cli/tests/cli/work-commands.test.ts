@@ -16,14 +16,6 @@ function parseJson(stdout: string): unknown {
 }
 
 describe("admin work --help surface", () => {
-  it("lists start, status, and end subcommands", () => {
-    const { stdout, exitCode } = runCli(["admin", "work", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("start");
-    expect(stdout).toContain("status");
-    expect(stdout).toContain("end");
-  });
-
   it("`work start --help` documents the sticky pointer", () => {
     const { stdout, exitCode } = runCli(["admin", "work", "start", "--help"]);
     expect(exitCode).toBe(0);

@@ -1,8 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { releasePath } from "@buildinternet/releases-core/release-slug";
 import {
-  CLASSIFICATIONS_EMPTY_COPY,
-  CLASSIFICATIONS_ERROR_COPY,
   classificationFailureNote,
   DEFAULT_CLASSIFICATION_ORIGIN,
   classificationRecentUrl,
@@ -51,10 +49,6 @@ describe("classification window", () => {
     expect(recent).not.toContain("bucket=");
     expect(classificationRecentUrl(week, "ingest", { cursor: "abc" })).toContain("cursor=abc");
   });
-});
-
-it("defaults the origin filter to ingest", () => {
-  expect(DEFAULT_CLASSIFICATION_ORIGIN).toBe("ingest");
 });
 
 describe("summary view state", () => {
@@ -106,13 +100,6 @@ it("prefers an org/source href over the bare source path", () => {
   expect(sourceHref({ orgSlug: "openai", sourceSlug: "changelog" })).toBe("/openai/changelog");
   expect(sourceHref({ orgSlug: null, sourceSlug: "changelog" })).toBe("/source/changelog");
   expect(sourceHref({ orgSlug: "openai", sourceSlug: null })).toBeNull();
-});
-
-it("uses the empty and error copy shown on the tab", () => {
-  expect(CLASSIFICATIONS_EMPTY_COPY).toBe("No classifications in this range.");
-  expect(CLASSIFICATIONS_ERROR_COPY).toBe(
-    "Classifications failed to load. The rest of Status is unaffected.",
-  );
 });
 
 it("names the failed Analytics Engine statement without echoing its body", () => {

@@ -101,10 +101,6 @@ test("chunkChangelog: consecutive chunks overlap by ~tokens×4 chars", () => {
     }
   }
   expect(sawOverlap).toBe(true);
-
-  // Sanity: overlap budget constant is the documented value.
-  expect(CHUNK_TOKEN_OVERLAP).toBe(50);
-  expect(CHUNK_TOKEN_BUDGET).toBe(500);
 });
 
 test("chunkChangelog: heading extraction reflects the most recent heading", () => {

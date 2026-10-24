@@ -12,14 +12,6 @@ import { runCli } from "../utils.js";
  * tests/unit/confirm.test.ts (readline can't be driven through piped stdin).
  */
 describe("admin feedback triage write-path (CLI integration)", () => {
-  it("lists triage / archive / delete subcommands in help", () => {
-    const { stdout, exitCode } = runCli(["admin", "feedback", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("triage");
-    expect(stdout).toContain("archive");
-    expect(stdout).toContain("delete");
-  });
-
   it("requires --status on triage", () => {
     const { stderr, exitCode } = runCli(["admin", "feedback", "triage", "fb_x"]);
     expect(exitCode).not.toBe(0);
@@ -44,15 +36,5 @@ describe("admin feedback triage write-path (CLI integration)", () => {
     const { stderr, exitCode } = runCli(["admin", "feedback", "delete", "fb_x"]);
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("--yes");
-  });
-
-  it("exposes --undo on archive and --yes on delete", () => {
-    const archiveHelp = runCli(["admin", "feedback", "archive", "--help"]);
-    expect(archiveHelp.exitCode).toBe(0);
-    expect(archiveHelp.stdout).toContain("--undo");
-
-    const deleteHelp = runCli(["admin", "feedback", "delete", "--help"]);
-    expect(deleteHelp.exitCode).toBe(0);
-    expect(deleteHelp.stdout).toContain("--yes");
   });
 });

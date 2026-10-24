@@ -10,14 +10,6 @@ import { runCli } from "../utils.js";
  * confirmation gate — plus that the verbs and flags surface in --help.
  */
 describe("submit (public CLI integration)", () => {
-  it("documents the command and its flags in help", () => {
-    const { stdout, exitCode } = runCli(["submit", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--note");
-    expect(stdout).toContain("--contact");
-    expect(stdout).toContain("--dry-run");
-  });
-
   it("previews the payload with --dry-run --json and sends nothing", () => {
     const { stdout, exitCode } = runCli([
       "submit",
@@ -78,16 +70,6 @@ describe("submit (public CLI integration)", () => {
 });
 
 describe("admin recommendations review write-path (CLI integration)", () => {
-  it("lists list / triage / archive / delete / notify-added subcommands in help", () => {
-    const { stdout, exitCode } = runCli(["admin", "recommendations", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("list");
-    expect(stdout).toContain("triage");
-    expect(stdout).toContain("archive");
-    expect(stdout).toContain("delete");
-    expect(stdout).toContain("notify-added");
-  });
-
   it("requires --status on triage", () => {
     const { stderr, exitCode } = runCli(["admin", "recommendations", "triage", "rec_x"]);
     expect(exitCode).not.toBe(0);
@@ -111,25 +93,6 @@ describe("admin recommendations review write-path (CLI integration)", () => {
     const { stderr, exitCode } = runCli(["admin", "recommendations", "delete", "rec_x"]);
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("--yes");
-  });
-
-  it("exposes --undo on archive and --yes on delete", () => {
-    const archiveHelp = runCli(["admin", "recommendations", "archive", "--help"]);
-    expect(archiveHelp.exitCode).toBe(0);
-    expect(archiveHelp.stdout).toContain("--undo");
-
-    const deleteHelp = runCli(["admin", "recommendations", "delete", "--help"]);
-    expect(deleteHelp.exitCode).toBe(0);
-    expect(deleteHelp.stdout).toContain("--yes");
-  });
-
-  it("documents notify-added flags in help", () => {
-    const { stdout, exitCode } = runCli(["admin", "recommendations", "notify-added", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--org");
-    expect(stdout).toContain("--source");
-    expect(stdout).toContain("--dry-run");
-    expect(stdout).toContain("--json");
   });
 
   it("requires --org on notify-added", () => {

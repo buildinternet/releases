@@ -8,24 +8,6 @@ describe("CLI help", () => {
     expect(stdout).toContain("Commands:");
     expect(stdout).toContain("releases");
   });
-
-  it("shows help with -h", () => {
-    const { stdout, exitCode } = runCli(["-h"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("Commands:");
-  });
-
-  it("shows list subcommand help", () => {
-    const { stdout, exitCode } = runCli(["list", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("list");
-  });
-
-  it("shows search subcommand help", () => {
-    const { stdout, exitCode } = runCli(["search", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("search");
-  });
 });
 
 describe("CLI command gating (public mode)", () => {
@@ -103,24 +85,6 @@ describe("CLI command gating (admin mode)", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("source");
     expect(stdout).toContain("org");
-    expect(stdout).toContain("product");
-  });
-
-  it("allows admin source help", () => {
-    const { stdout, exitCode } = runCli(["admin", "source", "fetch", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("fetch");
-  });
-
-  it("allows org subcommand help", () => {
-    const { stdout, exitCode } = runCli(["admin", "org", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("org");
-  });
-
-  it("allows product subcommand help", () => {
-    const { stdout, exitCode } = runCli(["admin", "product", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
     expect(stdout).toContain("product");
   });
 });

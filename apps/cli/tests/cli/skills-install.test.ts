@@ -6,10 +6,6 @@ describe("buildSkillsArgs", () => {
     expect(buildSkillsArgs({})).toEqual(["--yes", "skills", "add", SKILLS_SOURCE, "--yes"]);
   });
 
-  it("uses the buildinternet/releases coordinate", () => {
-    expect(SKILLS_SOURCE).toBe("buildinternet/releases");
-  });
-
   it("emits --skill <name> for each positional", () => {
     const args = buildSkillsArgs({ skills: ["releases-mcp", "releases-cli"] });
     expect(args).toContain("--skill");

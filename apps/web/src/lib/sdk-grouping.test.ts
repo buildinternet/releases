@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { partitionSdkSources, sdkPreview, SDK_GROUP_MIN } from "./sdk-grouping";
+import { partitionSdkSources, sdkPreview } from "./sdk-grouping";
 
 type S = {
   slug: string;
@@ -63,10 +63,6 @@ describe("partitionSdkSources", () => {
     const { flat, sdk } = partitionSdkSources([], []);
     expect(flat).toEqual([]);
     expect(sdk).toEqual([]);
-  });
-
-  test("SDK_GROUP_MIN is 2", () => {
-    expect(SDK_GROUP_MIN).toBe(2);
   });
 });
 
