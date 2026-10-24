@@ -1,25 +1,8 @@
 import { generateSpecs, resolver } from "hono-openapi";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
 import type { Env } from "./index.js";
-import { PUBLIC_OPERATIONS, openapiToHonoPath } from "./api-surface.js";
-
-// Hides the route from /v1/openapi.json on production. Staging and local
-// `wrangler dev` still expose it so our internal tooling can introspect the
-// full surface. The endpoint itself is unaffected — this only changes what
-// the spec advertises.
-//
-// hono-openapi's `hide` callback signature passes `c?: Context | undefined`,
-// so we type the env read defensively and treat any non-"production" value
-// (staging, undefined under `wrangler dev`) as "show".
-//
-// Superseded by `api-surface.ts`, which filters the production spec to the
-// public operations centrally; existing `hide: hideInProduction` annotations are
-// redundant but harmless. New internal routes don't need it.
-export const hideInProduction = (opts: { c?: { env?: unknown } }) => {
-  const env = (opts.c?.env ?? {}) as { ENVIRONMENT?: string };
-  return env.ENVIRONMENT === "production";
-};
+import { PUBLIC_OPERATIONS, specOperations } from "./api-surface.js";
 
 // Scalar pinned to a major version; jsdelivr resolves to the latest 1.x patch.
 // A breaking 2.x release won't silently swap in.
@@ -100,10 +83,6 @@ const TAGS = [
   { name: "Sessions", description: "Update-run sessions (status hub)." },
 ];
 
-const OPERATION_METHODS = new Set(["get", "put", "post", "delete", "patch", "head", "options"]);
-
-type SpecOperation = { security?: unknown; "x-releases-visibility"?: string };
-
 /**
  * Applies the public/internal split from `api-surface.ts`. Production keeps
  * only public operations; elsewhere every documented operation stays, tagged
@@ -112,110 +91,119 @@ type SpecOperation = { security?: unknown; "x-releases-visibility"?: string };
  * auth is declared the same way everywhere.
  */
 export function applyApiSurface(paths: unknown, opts: { productionOnly: boolean }) {
-  const pathMap = (paths ?? {}) as Record<string, Record<string, SpecOperation>>;
-  for (const [path, item] of Object.entries(pathMap)) {
-    for (const method of Object.keys(item)) {
-      if (!OPERATION_METHODS.has(method)) continue;
-      const auth = PUBLIC_OPERATIONS[`${method.toUpperCase()} ${openapiToHonoPath(path)}`];
-      if (!auth) {
-        if (opts.productionOnly) delete item[method];
-        else item[method]["x-releases-visibility"] = "internal";
-        continue;
-      }
-      item[method]["x-releases-visibility"] = "public";
-      item[method].security = auth === "required" ? [{ bearerAuth: [] }] : [{}, { bearerAuth: [] }];
+  for (const { key, path, method, item, op } of specOperations(paths)) {
+    const auth = PUBLIC_OPERATIONS[key];
+    if (!auth) {
+      if (opts.productionOnly) delete item[method];
+      else op["x-releases-visibility"] = "internal";
+    } else {
+      op["x-releases-visibility"] = "public";
+      op.security = auth === "required" ? [{ bearerAuth: [] }] : [{}, { bearerAuth: [] }];
     }
-    if (!Object.keys(item).some((k) => OPERATION_METHODS.has(k))) delete pathMap[path];
+    if (Object.keys(item).length === 0) delete (paths as Record<string, unknown>)[path];
   }
 }
 
 export function mountOpenApi(v1: Hono<Env>) {
-  // Servers + securitySchemes are computed per-request so production's
+  // Servers + securitySchemes are computed per environment so production's
   // public spec advertises only api.releases.sh, while staging's spec keeps
   // its own host and the `X-Releases-Staging-Key` scheme visible.
   // `ENVIRONMENT` is set in apps/api/wrangler.jsonc (production | staging).
+  // Routes are fixed once mounted, so the spec only varies by environment:
+  // build it once per isolate per environment.
+  const specs = new Map<string, Promise<unknown>>();
   v1.get("/openapi.json", async (c) => {
-    const isStaging = c.env.ENVIRONMENT === "staging";
-    // The single error schema every documented 4xx/5xx response references
-    // via `{ $ref: "#/components/schemas/ErrorEnvelope" }` (see
-    // `lib/openapi-error.ts`) instead of inlining the schema at each of the
-    // ~200 response sites.
-    const errorEnvelopeOpenApiSchema = (await resolver(errorEnvelopeSchema).toOpenAPISchema())
-      .schema;
-    const spec = await generateSpecs(
-      v1,
-      {
-        documentation: {
-          info: {
-            title: "Releases API",
-            version: "1.0.0",
-            // Markdown rendered by Scalar as the intro panel. Includes a
-            // back-link to the narrative docs since the sidebar doesn't have
-            // one (we hide Scalar's footer branding, which is where their
-            // tooling normally puts cross-links).
-            description: [
-              "REST API for the Releases changelog registry — orgs, products, sources, releases, and search.",
-              "",
-              "**Links:** [releases.sh](https://releases.sh) · [Narrative docs](https://releases.sh/docs/api/rest) · [Errors](https://releases.sh/docs/api/errors) · [MCP server](https://releases.sh/docs/api/mcp)",
-            ].join("\n"),
-          },
-          servers: isStaging
-            ? [
-                {
-                  url: "https://api.releasenotesindex.dev",
-                  description: "Staging (access-key gated)",
-                },
-              ]
-            : [{ url: "https://api.releases.sh", description: "Production" }],
-          components: {
-            schemas: {
-              ErrorEnvelope: errorEnvelopeOpenApiSchema,
-            },
-            securitySchemes: {
-              bearerAuth: {
-                type: "http",
-                scheme: "bearer",
-                bearerFormat: "relk_… | relu_… | OAuth JWT",
-                description:
-                  "Machine/operator tokens use the relk_ prefix; self-serve read-only user keys use relu_; Sign in with Releases supplies an OAuth access token. Required scope depends on the endpoint.",
-              },
-              ...(isStaging && {
-                stagingKey: {
-                  type: "apiKey",
-                  in: "header",
-                  name: "X-Releases-Staging-Key",
-                  description:
-                    "Staging hosts gate every request behind this header. Bearer alternative also accepted on the staging MCP host.",
-                },
-              }),
-            },
-          },
-          tags: TAGS,
-        },
-      },
-      c,
-    );
-
-    applyApiSurface(spec.paths, { productionOnly: c.env.ENVIRONMENT === "production" });
-
-    // Drop tag definitions that no visible operation references. Without this,
-    // Scalar renders empty sidebar sections for any tag declared in `TAGS`
-    // that has no operations under it — common in production where whole tag
-    // families (Webhooks, Sessions, Workflows, Admin, Sitemap) collapse to
-    // zero operations after `hide: hideInProduction` does its work.
-    const usedTags = new Set<string>();
-    for (const methods of Object.values(spec.paths ?? {})) {
-      for (const op of Object.values(methods as Record<string, { tags?: string[] }>)) {
-        for (const t of op?.tags ?? []) usedTags.add(t);
-      }
+    const environment = c.env.ENVIRONMENT ?? "";
+    let spec = specs.get(environment);
+    if (!spec) {
+      spec = buildSpec(v1, c);
+      specs.set(environment, spec);
+      spec.catch(() => specs.delete(environment));
     }
-    if (spec.tags) spec.tags = spec.tags.filter((t) => usedTags.has(t.name));
-
-    return c.json(spec);
+    return c.json(await spec);
   });
 
   v1.get("/docs", (c) => {
     c.header("Cache-Control", "public, max-age=86400");
     return c.html(SCALAR_HTML);
   });
+}
+
+async function buildSpec(v1: Hono<Env>, c: Context<Env>) {
+  const isStaging = c.env.ENVIRONMENT === "staging";
+  // The single error schema every documented 4xx/5xx response references
+  // via `{ $ref: "#/components/schemas/ErrorEnvelope" }` (see
+  // `lib/openapi-error.ts`) instead of inlining the schema at each of the
+  // ~200 response sites.
+  const errorEnvelopeOpenApiSchema = (await resolver(errorEnvelopeSchema).toOpenAPISchema()).schema;
+  const spec = await generateSpecs(
+    v1,
+    {
+      documentation: {
+        info: {
+          title: "Releases API",
+          version: "1.0.0",
+          // Markdown rendered by Scalar as the intro panel. Includes a
+          // back-link to the narrative docs since the sidebar doesn't have
+          // one (we hide Scalar's footer branding, which is where their
+          // tooling normally puts cross-links).
+          description: [
+            "REST API for the Releases changelog registry — orgs, products, sources, releases, and search.",
+            "",
+            "**Links:** [releases.sh](https://releases.sh) · [Narrative docs](https://releases.sh/docs/api/rest) · [Errors](https://releases.sh/docs/api/errors) · [MCP server](https://releases.sh/docs/api/mcp)",
+          ].join("\n"),
+        },
+        servers: isStaging
+          ? [
+              {
+                url: "https://api.releasenotesindex.dev",
+                description: "Staging (access-key gated)",
+              },
+            ]
+          : [{ url: "https://api.releases.sh", description: "Production" }],
+        components: {
+          schemas: {
+            ErrorEnvelope: errorEnvelopeOpenApiSchema,
+          },
+          securitySchemes: {
+            bearerAuth: {
+              type: "http",
+              scheme: "bearer",
+              bearerFormat: "relk_… | relu_… | OAuth JWT",
+              description:
+                "Machine/operator tokens use the relk_ prefix; self-serve read-only user keys use relu_; Sign in with Releases supplies an OAuth access token. Required scope depends on the endpoint.",
+            },
+            ...(isStaging && {
+              stagingKey: {
+                type: "apiKey",
+                in: "header",
+                name: "X-Releases-Staging-Key",
+                description:
+                  "Staging hosts gate every request behind this header. Bearer alternative also accepted on the staging MCP host.",
+              },
+            }),
+          },
+        },
+        tags: TAGS,
+      },
+    },
+    c,
+  );
+
+  applyApiSurface(spec.paths, { productionOnly: c.env.ENVIRONMENT === "production" });
+
+  // Drop tag definitions that no visible operation references. Without this,
+  // Scalar renders empty sidebar sections for any tag declared in `TAGS`
+  // that has no operations under it — common in production where whole tag
+  // families (Webhooks, Sessions, Workflows, Admin, Sitemap) collapse to
+  // zero operations once `applyApiSurface` drops internal routes.
+  const usedTags = new Set<string>();
+  for (const methods of Object.values(spec.paths ?? {})) {
+    for (const op of Object.values(methods as Record<string, { tags?: string[] }>)) {
+      for (const t of op?.tags ?? []) usedTags.add(t);
+    }
+  }
+  if (spec.tags) spec.tags = spec.tags.filter((t) => usedTags.has(t.name));
+
+  return spec;
 }

@@ -1,5 +1,7 @@
 import { resolver, type DescribeRouteOptions } from "hono-openapi";
+import type { z } from "zod";
 import { ERROR_ENVELOPE_SCHEMA } from "../openapi-error.js";
+import { documentedJsonBody } from "../validate.js";
 
 const RETENTION_DESCRIPTION =
   "Optional idempotency key. Reuse the same key only for an identical request; successful responses are replayable for 24 hours.";
@@ -23,6 +25,8 @@ export function idempotentPostOpenApi(input: {
   successDescription: string;
   /** JSON body of the success response. Required for routes on the public API surface. */
   successSchema?: Parameters<typeof resolver>[0];
+  /** JSON request body, documented only (the handler parses it itself). */
+  bodySchema?: z.ZodType;
   tags: string[];
 }): DescribeRouteOptions {
   return {
@@ -30,6 +34,7 @@ export function idempotentPostOpenApi(input: {
     summary: input.summary,
     description: RETENTION_DESCRIPTION,
     parameters: [idempotencyKeyParameter],
+    ...(input.bodySchema && { requestBody: documentedJsonBody(input.bodySchema) }),
     responses: {
       [input.successStatus]: {
         description: input.successDescription,

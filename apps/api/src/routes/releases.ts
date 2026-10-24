@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
-import { hideInProduction } from "../openapi.js";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -54,7 +53,6 @@ export const releaseRoutes = new Hono<Env>();
 releaseRoutes.get(
   "/releases",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Releases"],
     summary: "List releases with media",
     description:
@@ -476,7 +474,6 @@ async function fetchCoverageSiblings(
 releaseRoutes.post(
   "/releases/:id/coverage",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Link releases as coverage of a canonical release",
     description:
@@ -563,7 +560,6 @@ releaseRoutes.post(
 releaseRoutes.delete(
   "/releases/:id/coverage",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Unlink a release from its coverage cluster",
     description:

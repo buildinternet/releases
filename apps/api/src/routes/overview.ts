@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
-import { hideInProduction } from "../openapi.js";
 import { eq, and } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { knowledgePages, organizations } from "@buildinternet/releases-core/schema";
@@ -63,7 +62,6 @@ app.get(
 app.post(
   "/orgs/:slug/overview",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Overviews"],
     summary: "Upsert org overview",
     description:

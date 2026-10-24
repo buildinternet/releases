@@ -6,8 +6,10 @@
  *   2. Every public operation appears in the production `/v1/openapi.json`
  *      with a tag, a JSON 2xx response schema (204 excepted), and, for
  *      POST/PUT/PATCH, a JSON request body (unless listed in NO_BODY).
- *   3. The production spec contains nothing that isn't public, and every
- *      public entry matches a registered route (no stale entries).
+ *   3. Every entry in `api-surface.ts` matches a registered route.
+ *
+ * That production contains only public operations is guaranteed by
+ * `applyApiSurface` and covered by `apps/api/test/api-surface.test.ts`.
  *
  * Run: `bun scripts/check-openapi-coverage.ts` (exit 0 = OK, 1 = violations,
  * 2 = bug — spec couldn't be generated).
@@ -18,8 +20,8 @@ import { mountV1Routes } from "../apps/api/src/v1-routes.js";
 import {
   PUBLIC_OPERATIONS,
   INTERNAL_OPERATIONS,
-  openapiToHonoPath,
   routeVisibility,
+  specOperations,
 } from "../apps/api/src/api-surface.js";
 import type { Env } from "../apps/api/src/index.js";
 
@@ -34,12 +36,6 @@ const NO_BODY = new Set<string>([
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 
-type Operation = {
-  tags?: string[];
-  requestBody?: { content?: Record<string, { schema?: unknown }> };
-  responses?: Record<string, { content?: Record<string, { schema?: unknown }> }>;
-};
-
 const v1 = new Hono<Env>();
 mountV1Routes(v1);
 
@@ -51,15 +47,8 @@ if (!res.ok) {
   logger.error(`Failed to generate OpenAPI spec: HTTP ${res.status}`);
   process.exit(2);
 }
-const spec = (await res.json()) as { paths?: Record<string, Record<string, Operation>> };
-
-const specOps = new Map<string, Operation>();
-for (const [path, item] of Object.entries(spec.paths ?? {})) {
-  for (const [method, op] of Object.entries(item)) {
-    if (!HTTP_METHODS.has(method.toUpperCase())) continue;
-    specOps.set(`${method.toUpperCase()} ${openapiToHonoPath(path)}`, op);
-  }
-}
+const spec = (await res.json()) as { paths?: unknown };
+const specOps = new Map(specOperations(spec.paths).map(({ key, op }) => [key, op]));
 
 // `app.get(path, mw, handler)` registers one entry per handler, so dedupe.
 const registered = new Set<string>();
@@ -67,18 +56,12 @@ for (const r of v1.routes) {
   if (HTTP_METHODS.has(r.method)) registered.add(`${r.method} ${r.path}`);
 }
 
-const problems: Record<string, string[]> = {
-  "Unclassified routes — add to PUBLIC_OPERATIONS or INTERNAL_OPERATIONS in apps/api/src/api-surface.ts":
-    [],
-  "Public operations missing from the production spec (add describeRoute)": [],
-  "Public operations without a tag": [],
-  "Public operations without a JSON 2xx response schema": [],
-  "Public writes without a JSON request body (validateJson / documentedJsonBody, or NO_BODY)": [],
-  "Internal operations present in the production spec": [],
-  "Stale api-surface entries (no matching route)": [],
-};
-const [unclassified, missing, untagged, noResponse, noBody, leaked, stale] =
-  Object.values(problems);
+const unclassified: string[] = [];
+const missing: string[] = [];
+const untagged: string[] = [];
+const noResponse: string[] = [];
+const noBody: string[] = [];
+const stale: string[] = [];
 
 for (const key of registered) {
   const [method, path] = key.split(" ");
@@ -109,11 +92,25 @@ for (const key of Object.keys(PUBLIC_OPERATIONS)) {
     noBody.push(key);
 }
 
-for (const key of specOps.keys()) if (!(key in PUBLIC_OPERATIONS)) leaked.push(key);
 for (const key of INTERNAL_OPERATIONS) if (!registered.has(key)) stale.push(key);
 for (const key of NO_BODY) if (!(key in PUBLIC_OPERATIONS)) stale.push(`${key} (NO_BODY)`);
 
-const failures = Object.entries(problems).filter(([, list]) => list.length > 0);
+const failures = (
+  [
+    [
+      "Unclassified routes — add to PUBLIC_OPERATIONS or INTERNAL_OPERATIONS in apps/api/src/api-surface.ts",
+      unclassified,
+    ],
+    ["Public operations missing from the production spec (add describeRoute)", missing],
+    ["Public operations without a tag", untagged],
+    ["Public operations without a JSON 2xx response schema", noResponse],
+    [
+      "Public writes without a JSON request body (validateJson / documentedJsonBody, or NO_BODY)",
+      noBody,
+    ],
+    ["Stale api-surface entries (no matching route)", stale],
+  ] as const
+).filter(([, list]) => list.length > 0);
 if (failures.length > 0) {
   logger.error(
     "Public API surface gate failed. See docs/architecture/routing.md → Public API surface.",

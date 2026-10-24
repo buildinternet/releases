@@ -13,11 +13,24 @@ export type {
 // Re-export above doesn't create local bindings; import for use in interfaces below.
 import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
 import type { UserApiKey } from "./schemas/api-keys.js";
+import type { SEMANTIC_ALERT_CANDIDATE_POOL } from "./schemas/semantic-alerts.js";
 import type {
   UserWebhookFormat,
   UserWebhookListItem,
   WorkspaceMemberRole,
 } from "./schemas/webhooks.js";
+export {
+  SEMANTIC_ALERT_MAX_PER_USER,
+  SEMANTIC_ALERT_QUERY_MAX_CHARS,
+  SEMANTIC_ALERT_THRESHOLD_DEFAULT,
+  SEMANTIC_ALERT_THRESHOLD_MIN,
+  SEMANTIC_ALERT_THRESHOLD_MAX,
+  SEMANTIC_ALERT_CANDIDATE_POOL,
+  SemanticAlertCreateBodySchema,
+  SemanticAlertUpdateBodySchema,
+  type SemanticAlertCreateBody,
+  type SemanticAlertUpdateBody,
+} from "./schemas/semantic-alerts.js";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import type {
   AiLaneIdSchema,
@@ -652,6 +665,9 @@ export {
   FeedbackDeleteResponseSchema,
   FeedbackSubmitBodySchema,
   FeedbackSubmitResponseSchema,
+  FEEDBACK_MESSAGE_MIN_CHARS,
+  FEEDBACK_MESSAGE_MAX_CHARS,
+  FEEDBACK_CONTACT_MAX_CHARS,
 } from "./schemas/feedback.js";
 export {
   ClassificationSummarySchema,
@@ -664,6 +680,9 @@ export {
   RecommendationNotifyAddedResultSchema,
   RecommendationSubmitBodySchema,
   RecommendationSubmitResponseSchema,
+  RECOMMENDATION_URL_MAX_CHARS,
+  RECOMMENDATION_NOTE_MAX_CHARS,
+  RECOMMENDATION_CONTACT_EMAIL_MAX_CHARS,
 } from "./schemas/recommendations.js";
 export {
   SitemapSourceSchema,
@@ -1296,23 +1315,7 @@ export interface CollectionDigestSubscriptionResponse {
 
 // ── Semantic alerts (#2304) ──
 
-/** Hard cap on saved semantic alerts per account. Enforced on create. */
-export const SEMANTIC_ALERT_MAX_PER_USER = 5;
-
-/** Freeform interest text, after trim. User-private — never an analytics label. */
-export const SEMANTIC_ALERT_QUERY_MAX_CHARS = 500;
-
-/** Default selected-choice probability, used unless an alert overrides it. */
-export const SEMANTIC_ALERT_THRESHOLD_DEFAULT = 0.8;
-
-export const SEMANTIC_ALERT_THRESHOLD_MIN = 0.5;
-export const SEMANTIC_ALERT_THRESHOLD_MAX = 1;
-
-/**
- * v1 candidate pool. Matching scores only releases that already hit
- * the caller's follow graph. Not a per-alert setting.
- */
-export const SEMANTIC_ALERT_CANDIDATE_POOL = "follows" as const;
+// Limits and request bodies live in ./schemas/semantic-alerts.ts.
 
 /** One saved semantic alert. Query text is returned only to the owning user. */
 export interface SemanticAlert {

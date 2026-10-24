@@ -1,3 +1,5 @@
+import { resolver } from "hono-openapi";
+
 /**
  * Shared `$ref` to the single error schema registered under
  * `components.schemas.ErrorEnvelope` (see `openapi.ts`, which derives it
@@ -14,5 +16,13 @@ export function errorResponse(description: string) {
   return {
     description,
     content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
+  };
+}
+
+/** A standard `application/json` success response: description + a Zod (Standard Schema) body. */
+export function jsonResponse(description: string, schema: Parameters<typeof resolver>[0]) {
+  return {
+    description,
+    content: { "application/json": { schema: resolver(schema) } },
   };
 }

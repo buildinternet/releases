@@ -7,8 +7,10 @@ import { describeRoute } from "hono-openapi";
 import {
   RecommendationSubmitBodySchema,
   RecommendationSubmitResponseSchema,
+  RECOMMENDATION_CONTACT_EMAIL_MAX_CHARS as MAX_CONTACT_EMAIL,
+  RECOMMENDATION_NOTE_MAX_CHARS as MAX_NOTE,
+  RECOMMENDATION_URL_MAX_CHARS as MAX_URL,
 } from "@buildinternet/releases-api-types";
-import { documentedJsonBody } from "../lib/validate.js";
 import { eq } from "drizzle-orm";
 import {
   recommendations,
@@ -35,9 +37,6 @@ import {
 
 export const recommendationRoutes = new Hono<Env>();
 
-const MAX_URL = 2048;
-const MAX_NOTE = 4000;
-const MAX_CONTACT_EMAIL = 200;
 const MAX_USER_AGENT = 500;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -71,13 +70,13 @@ const recommendationsPostOpenApi = idempotentPostOpenApi({
   successStatus: 202,
   successDescription: "Accepted recommendation identifier.",
   successSchema: RecommendationSubmitResponseSchema,
+  bodySchema: RecommendationSubmitBodySchema,
 });
 
 recommendationRoutes.post(
   "/recommendations",
   describeRoute({
     ...recommendationsPostOpenApi,
-    requestBody: documentedJsonBody(RecommendationSubmitBodySchema),
     responses: {
       ...recommendationsPostOpenApi.responses,
       400: errorResponse("Invalid type, URL, or contact email"),

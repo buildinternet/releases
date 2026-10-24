@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
-import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
+import { ERROR_ENVELOPE_SCHEMA, errorResponse, jsonResponse } from "../lib/openapi-error.js";
 import { eq } from "drizzle-orm";
 import {
   ListingValidateBodySchema,
@@ -102,10 +102,10 @@ listingRoutes.post(
     description:
       "Fetches https://{domain}/.well-known/releases.json live (HTTPS-only, 64KB, 5s), validates it against the v2 manifest schema, and returns a preview: identity, products, and per-locator classification, plus whether the domain is already listed. Public and anonymous; rate limited.",
     responses: {
-      200: {
-        description: "Manifest validation result and listing preview",
-        content: { "application/json": { schema: resolver(ListingValidationResultSchema) } },
-      },
+      200: jsonResponse(
+        "Manifest validation result and listing preview",
+        ListingValidationResultSchema,
+      ),
       404: errorResponse("Lane disabled"),
       429: {
         description: "Rate limited",
@@ -142,14 +142,8 @@ listingRoutes.post(
     description:
       "Re-validates https://{domain}/.well-known/releases.json server-side, then creates a stub org (basis: declared) for an unlisted domain. Already-stub domains take no write except an optional tracking-request stamp; tracked domains 409 with the org pointer. Public and anonymous; rate limited per IP and per domain.",
     responses: {
-      201: {
-        description: "Stub created",
-        content: { "application/json": { schema: resolver(ListingActivateResultSchema) } },
-      },
-      200: {
-        description: "Existing stub; tracking stamp updated",
-        content: { "application/json": { schema: resolver(ListingActivateResultSchema) } },
-      },
+      201: jsonResponse("Stub created", ListingActivateResultSchema),
+      200: jsonResponse("Existing stub; tracking stamp updated", ListingActivateResultSchema),
       409: {
         description: "Domain already listed (tracked)",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },

@@ -125,14 +125,14 @@ export const PUBLIC_OPERATIONS: Record<string, PublicAuth> = {
 };
 
 /**
- * Whole namespaces that are internal: every admin namespace plus worker
- * plumbing that is never a third-party API (inbound provider webhooks, media
- * proxy, email one-click actions, telemetry, the docs page itself).
+ * Whole namespaces that are internal: the admin namespaces (`adminRoutes`,
+ * collapsed to their top-level segment) plus worker plumbing that is never a
+ * third-party API (inbound provider webhooks, media proxy, email one-click
+ * actions, telemetry, the docs page itself). `DELETE /tokens/me` is public
+ * despite its prefix because exact entries win.
  */
 export const INTERNAL_PREFIXES: readonly string[] = [
-  ...adminRoutes,
-  "status",
-  "admin",
+  ...new Set(adminRoutes.map((r) => r.split("/")[0])),
   "inbound",
   "integrations",
   "media",
@@ -320,4 +320,34 @@ export function routeVisibility(method: string, honoPath: string): Visibility | 
 /** `/orgs/{slug}` (OpenAPI) → `/orgs/:slug` (Hono). */
 export function openapiToHonoPath(path: string): string {
   return path.replace(/\{([A-Za-z0-9_]+)\}/g, ":$1");
+}
+
+const SPEC_METHODS = new Set(["get", "put", "post", "delete", "patch", "head", "options"]);
+
+export type SpecOperation = {
+  tags?: string[];
+  security?: unknown;
+  requestBody?: { content?: Record<string, { schema?: unknown }> };
+  responses?: Record<string, { content?: Record<string, { schema?: unknown }> }>;
+  "x-releases-visibility"?: Visibility;
+};
+
+/**
+ * Every operation in an OpenAPI `paths` object, keyed `METHOD /hono-path` to
+ * match `PUBLIC_OPERATIONS`. `item` is the path item, so callers can delete
+ * the operation in place.
+ */
+export function specOperations(paths: unknown) {
+  const pathMap = (paths ?? {}) as Record<string, Record<string, SpecOperation>>;
+  return Object.entries(pathMap).flatMap(([path, item]) =>
+    Object.keys(item)
+      .filter((method) => SPEC_METHODS.has(method))
+      .map((method) => ({
+        key: `${method.toUpperCase()} ${openapiToHonoPath(path)}`,
+        path,
+        method,
+        item,
+        op: item[method],
+      })),
+  );
 }

@@ -10,7 +10,6 @@ import {
   RotateUserWebhookSecretResponseSchema,
   TestUserWebhookResponseSchema,
 } from "@buildinternet/releases-api-types";
-import { documentedJsonBody } from "../lib/validate.js";
 import { createDb } from "../db.js";
 import {
   insertWebhookSubscriptionCapped,
@@ -114,13 +113,13 @@ const createWebhookOpenApi = idempotentPostOpenApi({
   successStatus: 201,
   successDescription: "Created webhook subscription, including its one-time signing key.",
   successSchema: CreateUserWebhookResponseSchema,
+  bodySchema: CreateUserWebhookBodySchema,
 });
 
 meWebhookHandlers.post(
   "/me/webhooks",
   describeRoute({
     ...createWebhookOpenApi,
-    requestBody: documentedJsonBody(CreateUserWebhookBodySchema),
     responses: {
       ...createWebhookOpenApi.responses,
       400: errorResponse("Invalid url/description/scope/releaseType, or an unsafe webhook target"),

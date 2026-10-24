@@ -23,7 +23,6 @@ import {
   CreatedUserApiKeySchema,
   type UserApiKey,
 } from "@buildinternet/releases-api-types";
-import { documentedJsonBody } from "../lib/validate.js";
 import { requireSession } from "../middleware/auth.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -80,13 +79,13 @@ const createUserApiKeyOpenApi = idempotentPostOpenApi({
   successStatus: 201,
   successDescription: "Created user API key, including the one-time secret.",
   successSchema: CreatedUserApiKeySchema,
+  bodySchema: CreateUserApiKeyBodySchema,
 });
 
 userApiKeyHandlers.post(
   "/api-keys",
   describeRoute({
     ...createUserApiKeyOpenApi,
-    requestBody: documentedJsonBody(CreateUserApiKeyBodySchema),
     responses: {
       ...createUserApiKeyOpenApi.responses,
       400: errorResponse("Invalid JSON body, name, scope, or expiresInDays"),

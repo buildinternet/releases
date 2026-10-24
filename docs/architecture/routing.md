@@ -234,17 +234,16 @@ Public GET routes advertise per-route `Cache-Control` headers (registered in `ap
 
 - `PUBLIC_OPERATIONS` maps each public `METHOD /path` to its advertised auth: `optional` (anonymous works; a Bearer raises the rate-limit tier) or `required`. Org-scoped aliases are listed separately.
 - `INTERNAL_PREFIXES` (every admin namespace plus worker plumbing) and `INTERNAL_OPERATIONS` (internal routes inside public namespaces, grouped with a reason) cover the rest. Routes slated for promotion say so in their group comment.
-- `/v1/openapi.json` on production keeps only public operations and stamps their `security` from the list (`applyApiSurface` in `openapi.ts`). Staging and local keep every documented operation and tag each one `x-releases-visibility: public | internal`. `hide: hideInProduction` is now redundant; new internal routes don't need it.
+- `/v1/openapi.json` on production keeps only public operations and stamps their `security` from the list (`applyApiSurface` in `openapi.ts`). Staging and local keep every documented operation and tag each one `x-releases-visibility: public | internal`. The spec is built once per isolate per environment.
 
-A new route is internal until someone promotes it. To promote one, add it to `PUBLIC_OPERATIONS` and give it a tag, a JSON 2xx response schema, and, for POST/PUT/PATCH, a JSON request body (`validateJson`, or `documentedJsonBody` when the handler parses its own body).
+A new route is internal until someone promotes it. To promote one, add it to `PUBLIC_OPERATIONS` and give it a tag, a JSON 2xx response schema (`jsonResponse` in `lib/openapi-error.ts`), and, for POST/PUT/PATCH, a JSON request body (`validateJson`; `documentedJsonBody`, or `bodySchema` on `idempotentPostOpenApi`, when the handler parses its own body).
 
 ### Coverage gate (#894)
 
 `scripts/check-openapi-coverage.ts` runs in the CI `test` job and fails when:
 
 - a registered route is classified as neither public nor internal,
-- a public operation is missing from the production spec, or lacks a tag, a JSON 2xx response schema, or a request body (action endpoints with no body go in the script's `NO_BODY` set),
-- the production spec contains an internal operation, or
+- a public operation is missing from the production spec, or lacks a tag, a JSON 2xx response schema, or a request body (action endpoints with no body go in the script's `NO_BODY` set), or
 - an entry in `api-surface.ts` no longer matches a registered route.
 
 ## Error responses

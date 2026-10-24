@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
-import { hideInProduction } from "../openapi.js";
 import {
   OrgListResponseSchema,
   OrgDetailSchema,
@@ -659,7 +658,6 @@ orgRoutes.get(
 orgRoutes.post(
   "/orgs",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Create organization",
     description:
@@ -768,7 +766,6 @@ orgRoutes.post(
 orgRoutes.post(
   "/orgs/:slug/avatar",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Set organization avatar from a remote image",
     description:
@@ -827,7 +824,6 @@ orgRoutes.post(
 orgRoutes.post(
   "/orgs/:slug/sync-well-known",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Reconcile org metadata from the owner's .well-known/releases.json",
     description:
@@ -873,7 +869,6 @@ orgRoutes.post(
 orgRoutes.post(
   "/orgs/:slug/discover-apps",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Discover the org's native mobile apps from its well-known files",
     description:
@@ -912,7 +907,6 @@ orgRoutes.post(
 orgRoutes.post(
   "/orgs/stub",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Create a stub-tier organization",
     description:
@@ -1033,7 +1027,6 @@ orgRoutes.post(
 orgRoutes.post(
   "/orgs/stub-from-domain",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Create a stub org from an unlisted domain's manifest",
     description:
@@ -1065,7 +1058,6 @@ orgRoutes.post(
 orgRoutes.post(
   "/orgs/:slug/promote",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Promote a stub org to tracked",
     description:
@@ -1103,7 +1095,6 @@ orgRoutes.post(
 orgRoutes.patch(
   "/orgs/:slug",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Update organization",
     description:
@@ -1315,7 +1306,6 @@ orgRoutes.patch(
 orgRoutes.delete(
   "/orgs/:slug",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Delete organization",
     description:
@@ -1433,7 +1423,6 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/catalog",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org catalog (sources + products)",
     description:
@@ -1698,7 +1687,6 @@ orgRoutes.get(
 orgRoutes.delete(
   "/orgs/:slug/accounts/:platform/:handle",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Delete org account",
     description:
@@ -1815,7 +1803,6 @@ orgRoutes.get(
 orgRoutes.put(
   "/orgs/:slug/tags",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Add tags to org",
     description:
@@ -1865,7 +1852,6 @@ orgRoutes.put(
 orgRoutes.delete(
   "/orgs/:slug/tags",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Remove tags from org",
     description:
@@ -1914,7 +1900,6 @@ orgRoutes.delete(
 orgRoutes.post(
   "/tags",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Get or create a global tag",
     description:
@@ -1955,7 +1940,6 @@ orgRoutes.post(
 orgRoutes.get(
   "/orgs/:slug/activity",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org release activity (weekly buckets)",
     description:
@@ -2154,7 +2138,6 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/heatmap",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org release heatmap (daily counts)",
     description:
@@ -2193,7 +2176,6 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/sparklines",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org sparklines (30-day per-source breakdown)",
     description:
@@ -2555,7 +2537,6 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/recent-releases",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Recent releases for an org (agent summarization)",
     description:
@@ -2667,7 +2648,6 @@ orgRoutes.get(
 orgRoutes.post(
   "/orgs/:slug/accounts",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Add a platform account to an org",
     description:

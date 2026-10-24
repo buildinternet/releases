@@ -59,15 +59,20 @@ export const FeedbackDeleteResponseSchema = z.object({
   id: z.string(),
 });
 
+/** `POST /v1/feedback` field limits, shared with the handler's sanitizer. */
+export const FEEDBACK_MESSAGE_MIN_CHARS = 5;
+export const FEEDBACK_MESSAGE_MAX_CHARS = 4000;
+export const FEEDBACK_CONTACT_MAX_CHARS = 200;
+
 /**
  * `POST /v1/feedback` body. Documentation shape: the handler sanitizes each
  * field and coerces unknown `type` / `clientKind` values to their defaults
  * rather than rejecting them; only a short or missing `message` is a 400.
  */
 export const FeedbackSubmitBodySchema = z.object({
-  message: z.string().min(5).max(4000),
+  message: z.string().min(FEEDBACK_MESSAGE_MIN_CHARS).max(FEEDBACK_MESSAGE_MAX_CHARS),
   type: FeedbackTypeSchema.optional(),
-  contact: z.string().max(200).optional(),
+  contact: z.string().max(FEEDBACK_CONTACT_MAX_CHARS).optional(),
   clientKind: z.enum(TELEMETRY_CLIENT_KINDS).optional(),
   surface: z.string().max(32).optional(),
   cliVersion: z.string().max(32).optional(),

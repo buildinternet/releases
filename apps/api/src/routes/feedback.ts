@@ -12,8 +12,10 @@ import { describeRoute } from "hono-openapi";
 import {
   FeedbackSubmitBodySchema,
   FeedbackSubmitResponseSchema,
+  FEEDBACK_CONTACT_MAX_CHARS as MAX_CONTACT,
+  FEEDBACK_MESSAGE_MAX_CHARS as MAX_MESSAGE,
+  FEEDBACK_MESSAGE_MIN_CHARS as MIN_MESSAGE,
 } from "@buildinternet/releases-api-types";
-import { documentedJsonBody } from "../lib/validate.js";
 import { eq } from "drizzle-orm";
 import {
   feedback,
@@ -41,9 +43,6 @@ import {
 
 export const feedbackRoutes = new Hono<Env>();
 
-const MIN_MESSAGE = 5;
-const MAX_MESSAGE = 4000;
-const MAX_CONTACT = 200;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 // Matches the test-injection pattern in apps/api/src/routes/admin-cron-runs.ts;
@@ -68,13 +67,13 @@ const feedbackPostOpenApi = idempotentPostOpenApi({
   successStatus: 202,
   successDescription: "Accepted feedback identifier.",
   successSchema: FeedbackSubmitResponseSchema,
+  bodySchema: FeedbackSubmitBodySchema,
 });
 
 feedbackRoutes.post(
   "/feedback",
   describeRoute({
     ...feedbackPostOpenApi,
-    requestBody: documentedJsonBody(FeedbackSubmitBodySchema),
     responses: {
       ...feedbackPostOpenApi.responses,
       400: errorResponse("Missing/invalid JSON body, or message shorter than the minimum length"),

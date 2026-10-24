@@ -14,7 +14,6 @@ import { createDb } from "../db.js";
 import { resolveSourceFromContext } from "../utils.js";
 import { validateJson } from "../lib/validate.js";
 import { parseJsonBody } from "../lib/json-body.js";
-import { hideInProduction } from "../openapi.js";
 import { errorResponse } from "../lib/openapi-error.js";
 import { syncFirecrawlMonitor } from "../lib/ingest/firecrawl-sync.js";
 import type { Env } from "../index.js";
@@ -52,7 +51,6 @@ const SyncFirecrawlBodySchema = z.object({
 // Admin/operator endpoint — hidden from the public OpenAPI spec like its sibling
 // POST /sources/:slug/fetch; covered by the ALLOWLIST in check-openapi-coverage.ts.
 const postFirecrawlSyncRoute = describeRoute({
-  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Sync a source's Firecrawl monitor",
   description:

@@ -39,6 +39,11 @@ export const RecommendationNotifyAddedResultSchema = z.object({
   contactEmail: z.string().optional(),
 });
 
+/** `POST /v1/recommendations` field limits, shared with the handler's sanitizer. */
+export const RECOMMENDATION_URL_MAX_CHARS = 2048;
+export const RECOMMENDATION_NOTE_MAX_CHARS = 4000;
+export const RECOMMENDATION_CONTACT_EMAIL_MAX_CHARS = 200;
+
 /**
  * `POST /v1/recommendations` body — suggest a changelog the registry should
  * track. `note` and `contactEmail` are optional; a contact email gets an
@@ -46,9 +51,12 @@ export const RecommendationNotifyAddedResultSchema = z.object({
  */
 export const RecommendationSubmitBodySchema = z.object({
   type: z.enum(RECOMMENDATION_TYPES),
-  url: z.string().max(2048).describe("http(s) URL of the changelog or project."),
-  note: z.string().max(4000).optional(),
-  contactEmail: z.string().max(200).optional(),
+  url: z
+    .string()
+    .max(RECOMMENDATION_URL_MAX_CHARS)
+    .describe("http(s) URL of the changelog or project."),
+  note: z.string().max(RECOMMENDATION_NOTE_MAX_CHARS).optional(),
+  contactEmail: z.string().max(RECOMMENDATION_CONTACT_EMAIL_MAX_CHARS).optional(),
   surface: z.string().max(32).optional(),
 });
 

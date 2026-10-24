@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { WEBHOOK_FORMATS, WEBHOOK_SCOPES } from "@buildinternet/releases-core/schema";
+import { ReleaseTypeSchema } from "./shared.js";
 
 /**
  * Self-serve webhook subscriptions: user-owned (`/v1/me/webhooks`) and
@@ -6,7 +8,10 @@ import { z } from "zod";
  * never appear on read paths — only once on create / rotate.
  */
 
-/** High-level delivery posture derived from summary columns (no AE query). */
+/**
+ * High-level delivery posture derived from summary columns (no AE query).
+ * Mirrors `WebhookDeliveryHealth` in `@releases/core-internal/webhook-resilience`.
+ */
 export const WebhookDeliveryHealthSchema = z.enum([
   "never_delivered",
   "healthy",
@@ -17,13 +22,13 @@ export const WebhookDeliveryHealthSchema = z.enum([
 ]);
 
 /** Self-serve webhook filter scope. */
-export const UserWebhookScopeSchema = z.enum(["org", "follows"]);
+export const UserWebhookScopeSchema = z.enum(WEBHOOK_SCOPES);
 
 /** Optional per-event filter on release taxonomy type. */
-export const UserWebhookReleaseTypeFilterSchema = z.enum(["feature", "rollup"]);
+export const UserWebhookReleaseTypeFilterSchema = ReleaseTypeSchema;
 
 /** Webhook delivery output format. */
-export const UserWebhookFormatSchema = z.enum(["json", "slack", "discord"]);
+export const UserWebhookFormatSchema = z.enum(WEBHOOK_FORMATS);
 
 /** A user-owned webhook subscription row (no signing secret). */
 export const UserWebhookSubscriptionSchema = z.object({
@@ -71,14 +76,18 @@ export const UserWebhookListResponseSchema = z.object({
   subscriptions: z.array(UserWebhookListItemSchema),
 });
 
-/** POST /v1/me/webhooks response — signing key shown once at creation (omitted for slack/discord). */
-export const CreateUserWebhookResponseSchema = UserWebhookSubscriptionSchema.extend(
-  UserWebhookDeliveryHealthSchema.shape,
-).extend({
+/** Fields a create response adds to the stored row (user and workspace). */
+const CreatedWebhookFields = {
+  ...UserWebhookDeliveryHealthSchema.shape,
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable(),
+  /** Shown once at creation; omitted for slack/discord. */
   signingKey: z.string().optional(),
-});
+};
+
+/** POST /v1/me/webhooks response. */
+export const CreateUserWebhookResponseSchema =
+  UserWebhookSubscriptionSchema.extend(CreatedWebhookFields);
 
 /** POST …/webhooks/:id/rotate-secret response (user and workspace). */
 export const RotateUserWebhookSecretResponseSchema = z.object({
@@ -95,25 +104,17 @@ export const TestUserWebhookResponseSchema = z.object({
 /** Workspace member role (Better Auth `member.role`, not `user.role`). */
 export const WorkspaceMemberRoleSchema = z.enum(["owner", "admin", "member"]);
 
-/**
- * A workspace-owned webhook subscription row (no signing secret). Workspace
- * webhooks are org-scoped only; there is no workspace follows scope.
- */
+/** Workspace webhooks are org-scoped only; there is no workspace follows scope. */
+const WorkspaceOwnerFields = { workspaceId: z.string(), scope: z.literal("org") };
+
+/** A workspace-owned webhook subscription row (no signing secret). */
 export const WorkspaceWebhookSubscriptionSchema = UserWebhookSubscriptionSchema.omit({
   userId: true,
-  scope: true,
-}).extend({
-  workspaceId: z.string(),
-  scope: z.literal("org"),
-});
+}).extend(WorkspaceOwnerFields);
 
 /** List item returned by GET /v1/workspaces/:workspaceId/webhooks. */
-export const WorkspaceWebhookListItemSchema = UserWebhookListItemSchema.omit({
-  scope: true,
-}).extend({
-  workspaceId: z.string(),
-  scope: z.literal("org"),
-});
+export const WorkspaceWebhookListItemSchema =
+  UserWebhookListItemSchema.extend(WorkspaceOwnerFields);
 
 /** GET /v1/workspaces/:workspaceId/webhooks response. */
 export const WorkspaceWebhookListResponseSchema = z.object({
@@ -124,14 +125,9 @@ export const WorkspaceWebhookListResponseSchema = z.object({
   canManage: z.boolean(),
 });
 
-/** POST /v1/workspaces/:workspaceId/webhooks response — signing key shown once (omitted for slack/discord). */
-export const CreateWorkspaceWebhookResponseSchema = WorkspaceWebhookSubscriptionSchema.extend(
-  UserWebhookDeliveryHealthSchema.shape,
-).extend({
-  orgSlug: z.string().nullable(),
-  orgName: z.string().nullable(),
-  signingKey: z.string().optional(),
-});
+/** POST /v1/workspaces/:workspaceId/webhooks response. */
+export const CreateWorkspaceWebhookResponseSchema =
+  WorkspaceWebhookSubscriptionSchema.extend(CreatedWebhookFields);
 
 /**
  * Fields shared by user and workspace webhook create bodies. Documentation

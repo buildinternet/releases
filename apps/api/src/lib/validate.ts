@@ -71,14 +71,25 @@ export function validateJson<S extends Parameters<typeof validator>[1]>(schema: 
 /**
  * OpenAPI `requestBody` for a handler that parses its own JSON body instead of
  * going through `validateJson` (e.g. `idempotentPost` with sanitize-and-coerce
- * rules). Documentation only: nothing here validates the request.
+ * rules). Documentation only: nothing here validates the request. The JSON
+ * Schema is built on first read, when the spec is generated, not at import.
  */
 export function documentedJsonBody(
   schema: z.ZodType,
 ): NonNullable<DescribeRouteOptions["requestBody"]> {
-  const { $schema: _schema, ...jsonSchema } = z.toJSONSchema(schema, { io: "input" });
+  let jsonSchema: Record<string, unknown> | undefined;
   return {
     required: true,
-    content: { "application/json": { schema: jsonSchema as Record<string, unknown> } },
+    content: {
+      "application/json": {
+        get schema() {
+          if (!jsonSchema) {
+            const { $schema: _schema, ...rest } = z.toJSONSchema(schema, { io: "input" });
+            jsonSchema = rest as Record<string, unknown>;
+          }
+          return jsonSchema;
+        },
+      },
+    },
   };
 }

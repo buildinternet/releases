@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Hono } from "hono";
 import { ERROR_TYPES } from "@buildinternet/releases-core/errors";
-import type { Env } from "../src/index.js";
-import { mountV1Routes } from "../src/v1-routes.js";
+import { fetchOpenApiSpec } from "./openapi-spec-helper.js";
 
 type Response4xx5xx = { description?: string; content?: Record<string, { schema?: unknown }> };
 type Operation = { responses?: Record<string, Response4xx5xx> };
@@ -13,20 +11,10 @@ type Spec = {
 
 const ERROR_ENVELOPE_REF = { $ref: "#/components/schemas/ErrorEnvelope" };
 
-async function fullSpec(): Promise<Spec> {
-  const v1 = new Hono<Env>();
-  mountV1Routes(v1);
-  const app = new Hono<Env>();
-  app.route("/v1", v1);
-  const response = await app.fetch(
-    new Request("https://api.example.test/v1/openapi.json"),
-    // Staging documents internal operations too (production keeps only the
-    // public surface — see api-surface.test.ts), so admin routes stay covered.
-    { ENVIRONMENT: "staging" },
-    { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
-  );
-  expect(response.status).toBe(200);
-  return (await response.json()) as Spec;
+// Staging documents internal operations too (production keeps only the
+// public surface — see api-surface.test.ts), so admin routes stay covered.
+function fullSpec(): Promise<Spec> {
+  return fetchOpenApiSpec<Spec>("staging");
 }
 
 describe("OpenAPI error envelope", () => {
