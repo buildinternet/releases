@@ -533,17 +533,6 @@ export async function bodyHashCheck(
 // ── Feed parsers ────────────────────────────────────────────────────
 
 /**
- * Parse RSS or Atom XML via `@rowanmanning/feed-parser`. The library handles
- * namespace declarations, attribute-bearing tags (`<entry xml:lang="en">` —
- * see #700), CDATA, and the `content:encoded` ↔ `<description>` precedence
- * (#319: feeds like OpenAI Codex put a stub in description and the real body
- * in content:encoded). We still apply our own `htmlToMarkdown` + `extractMedia`
- * since the library returns HTML bodies and `<media:*>` enclosures, not markdown.
- *
- * `parseAtom` is an alias kept so callers can self-document which format they
- * have. The library doesn't parse JSON Feed — that path is `parseJsonFeed`.
- */
-/**
  * Pick a stable URL for the release row. Prefer the RSS `<link>` / Atom
  * `<link href>` (`item.url`). When that's missing — auth0's changelog, for
  * example, ships only `<guid>` fragment-hashes — fall back to `item.id` if
@@ -566,6 +555,17 @@ function feedItemUrl(item: { url?: string | null; id?: string | null }): string 
   return undefined;
 }
 
+/**
+ * Parse RSS or Atom XML via `@rowanmanning/feed-parser`. The library handles
+ * namespace declarations, attribute-bearing tags (`<entry xml:lang="en">` —
+ * see #700), CDATA, and the `content:encoded` ↔ `<description>` precedence
+ * (#319: feeds like OpenAI Codex put a stub in description and the real body
+ * in content:encoded). We still apply our own `htmlToMarkdown` + `extractMedia`
+ * since the library returns HTML bodies and `<media:*>` enclosures, not markdown.
+ *
+ * `parseAtom` is an alias kept so callers can self-document which format they
+ * have. The library doesn't parse JSON Feed — that path is `parseJsonFeed`.
+ */
 export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
   const feed = libParseFeed(xml);
@@ -690,11 +690,8 @@ export function isUrlDenied(url: string, deny: readonly string[]): boolean {
  * match. Patterns are compiled defensively (see `compileDenyPatterns`).
  * Empty `deny` (or all-invalid) short-circuits to passthrough.
  *
- * Generic over any item carrying a `url` so the same denylist can run on both
- * the parsed-feed path (`RawRelease`) and the release-insert write boundary
- * (the `/releases/batch` payload shape) — see #1335, where the filter is
- * applied server-side at insert time so it can't be bypassed by the
- * managed-agent fetch path.
+ * Generic over any item carrying a `url` so the same denylist also runs at the
+ * release-insert write boundary, where no fetch path can bypass it (#1335).
  */
 export function filterByUrlDeny<T extends { url?: string | null }>(
   items: T[],
@@ -864,9 +861,8 @@ export function iframeSrcToWatchUrl(src: string): string {
  * (`&lt;`, `&gt;`, `&amp;`, `&quot;`, `&apos;`) inside CDATA on its way out,
  * which leaves literal `<` characters in places where the original feed had
  * `&lt;` — typically PHP snippets like `<?php` or inline HTML examples
- * inside docstrings. The HTML5 parser (linkedom, browser DOMParser, our old
- * regex stripper) all treat `<?` as a bogus comment that eats through the
- * next `>`, which gobbles whole function bodies (see rel_t9fAnizXt0rM0vPDC48ds).
+ * inside docstrings. HTML5 parsers treat `<?` as a bogus comment that eats
+ * through the next `>`, gobbling whole function bodies.
  *
  * Idempotent: properly-encoded input (e.g. JSON Feed content_html) parses
  * unchanged, since `&lt;` matches the known-entity negative lookahead.

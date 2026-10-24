@@ -7,27 +7,12 @@
  * - `ingestReleaseBatch` — the durable core: deny filter, scrape title-dedup,
  *   same-day body-hash dedup, media R2 mirror + GIF transcode, chunked upsert
  *   (D1's 100 bind-param cap), cascade and version-line coverage clustering,
- *   total count. Everything here is either a
- *   write the caller needs reflected in the response, or a read needed to
- *   decide one.
- * - `runBatchIngestEffects` — the post-insert extras: marketing classification
- *   (when `metadata.marketingFilter` is set), publish to the ReleaseHub DO,
- *   the web revalidate ping, latest-cache invalidation, generate-content
- *   (same eligibility as poll, including `metadata.summarize=false`, chunked
- *   so a bulk insert is not dropped), then embed + `embeddedAt` marking.
- *   Classification runs first and suppresses marketing hits so they are not
- *   published, summarized, or embedded. Publish / revalidate / invalidate
- *   tolerate failure independently and run concurrently via
- *   `Promise.allSettled`. Generate is awaited *before* embed so the
- *   Vectorize payload sees `summary` / `title_generated` when the org is opted
- *   in — matching `runContentAndEmbedSteps`. The scrape persister skips
- *   generate and embed; the DeterministicUpdate workflow runs them as durable
- *   steps later. Classification still runs on that persist.
+ *   total count.
+ * - `runBatchIngestEffects` — the post-insert extras (see its docstring). The
+ *   scrape persister skips generate and embed; the DeterministicUpdate
+ *   workflow runs them as durable steps later.
  *
- * Request-shaped concerns (body parsing, `releases`-array validation, `mode`
- * validation → `enrichMode`) stay in the route handler — they're HTTP
- * boundary concerns, not ingest logic, and a future in-process caller won't
- * have an HTTP body to parse.
+ * Request-shaped concerns (body parsing, validation) stay in the route handler.
  */
 import { eq, inArray, count } from "drizzle-orm";
 import {
