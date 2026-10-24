@@ -9,11 +9,8 @@
  *
  * All strategy logic lives in `@releases/adapters/extract`; this module
  * handles source resolution, content acquisition for the scrape path, and
- * persistence (release insert, fetch log, source-after-fetch updates) via
- * the API worker.
- *
- * The export is still named `scrapeFetch` for back-compat with
- * `managed-agents-session.ts`, even though it now covers agent-type sources.
+ * persistence via the injected `ScrapePersister`. Named `scrapeFetch` though it
+ * also covers agent-type sources.
  */
 
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -336,8 +333,7 @@ export async function acquireCrawlMarkdown(
  * actually returns at the origin. Cloudflare Browser Rendering and crawl
  * silently render error pages — a 404'd URL still yields a "successful"
  * markdown response containing the error page HTML, which the AI extractor
- * dutifully turns into a "Page not found" release row. See the cloudflare-blog
- * incident triaged in #939 for the read-side cleanup that motivated this guard.
+ * dutifully turns into a "Page not found" release row (#939).
  *
  * Scoped narrowly to definitively-gone statuses (404 / 410). 401 / 403 may
  * come back when bot UA detection blocks our probe but CF Browser Rendering's
@@ -499,10 +495,8 @@ async function runAgentPath(
  * flag, resolved once per session). Never throws — a capture failure must not
  * abort the extraction it precedes.
  *
- * Retained as a thin wrapper over `httpPersister(env).captureRawSnapshot` for
- * back-compat with existing callers that import this directly by name.
- * Callers inside this file go through the resolved `persister` instead (which
- * may be a non-HTTP implementation).
+ * Thin wrapper over `httpPersister(env).captureRawSnapshot`; callers inside
+ * this file use the resolved `persister` instead.
  */
 export async function captureRawSnapshot(
   env: ScrapeEnv,
@@ -688,17 +682,10 @@ async function runScrapePath(
   // have) and call extractFromBody directly with a prompt tuned to preserve
   // per-page bodies.
   if (cameFromCrawl) {
-    // Memoize a failed extraction input (#1852 follow-up). A crawl body that
-    // already maxed the output-token cap can only fail identically on a
-    // byte-identical re-crawl — extracting it again just re-bills an
-    // Anthropic call for a guaranteed-doomed result. Skip the extraction
-    // entirely when the freshly-crawled body hashes to the same value as the
-    // last body that failed. This must NOT go through `finalize()` (which
-    // would call `updateSourceAfterFetch` and reset the #1851 error backoff
-    // via consecutiveErrors: 0) and must NOT re-throw a `model` categorized
-    // error (which would re-trigger `applyScrapeFailureBackoff` and extend
-    // the backoff further on every skip) — a skip is "no new work", not a
-    // fresh failure, so the existing backoff schedule is left exactly as-is.
+    // Memoize a failed extraction input (#1852): a byte-identical body that
+    // already maxed the output-token cap can only fail again, so skip it. Must
+    // NOT go through `finalize()` (resets the #1851 error backoff) or re-throw
+    // a `model` error (extends the backoff): a skip leaves the backoff as-is.
     const crawlBodyHash = sha256Hex(markdown);
     if (meta.lastFailedExtractHash && meta.lastFailedExtractHash === crawlBodyHash) {
       const durationMs = Date.now() - start;
@@ -826,23 +813,16 @@ async function runScrapePath(
  * cross-check whether that zero is trustworthy before reporting `no_change`
  * (#2193).
  *
- * `runIncrementalExtraction` feeds the model a fixed ~200-line window
- * (`findContentStart` + `lineCap`). Confirmed on langchain-changelog
- * (docs.langchain.com/langsmith/changelog, a Mintlify page): the window
- * lands correctly on real content at line 0, but the newest single entry
- * alone runs ~285 markdown lines — the window is exhausted mid-entry, and
- * every older unindexed entry below it never enters the model's view. The
- * result is a clean `releasesFound: 0` indistinguishable from genuine
- * "nothing new", so the source silently rots until something else (the
- * staleness digest, 30+ days later) notices.
+ * `runIncrementalExtraction` feeds the model a fixed ~200-line window. When a
+ * single entry is longer than that (seen on langchain-changelog), older
+ * unindexed entries never enter the model's view and the result is a clean
+ * `releasesFound: 0` indistinguishable from "nothing new".
  *
  * A zero is suspicious when either:
  *   - the model itself set `needsMoreContext` (it told us the slice looked
  *     incomplete), or
  *   - the page's content hash differs from the last hash this path
- *     committed (the scrape/incremental path never tracked one before this
- *     change, so the first zero after this ships always counts as
- *     "changed" — self-corrects once a baseline is committed below).
+ *     committed (no baseline counts as changed).
  *
  * On a suspicious zero, escalate ONCE to a full-body extraction
  * (`extractFromBody`, which already tiers into the tool-loop above
@@ -851,9 +831,8 @@ async function runScrapePath(
  * subsequent byte-identical fetch doesn't re-escalate forever — only the
  * exact fetch that first observes changed content pays the extra cost.
  *
- * Fail-open throughout: any error checking or committing the hash, or
- * running the escalation call, degrades to today's behavior (the original
- * empty incremental result) rather than blocking the fetch.
+ * Fail-open throughout: any error degrades to the original empty incremental
+ * result rather than blocking the fetch.
  */
 async function runIncrementalWithEscalation(
   source: Source,

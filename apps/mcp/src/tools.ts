@@ -450,9 +450,7 @@ export type AmbiguousCandidate = { orgSlug: string; slug: string; id: string };
  * than silently `.limit(1)`-ing onto an arbitrary row (which could read from —
  * or, for a future mutating caller, write to — the wrong org), the resolver
  * throws this so the caller surfaces the `org/slug` + typed-id escape hatches.
- * The `message` is model-readable and lists every candidate, so it stays
- * useful even if it ever propagates uncaught. Mirrors the CLI's
- * AmbiguousSourceError (releases-cli#267); see #1324.
+ * The `message` is model-readable and lists every candidate (#1324).
  */
 export class AmbiguousEntityError extends Error {
   readonly entity: "source" | "product";
@@ -625,10 +623,8 @@ function resolveToolWindow(params: {
  * Validate an optional `minImportance` tool input against the shared
  * {@link isImportanceScore} range check — mirrors the REST `?minImportance=`
  * validation in `apps/api/src/routes/releases.ts` exactly (integer,
- * `IMPORTANCE_MIN`–`IMPORTANCE_MAX`). Zod already enforces this bound at the
- * MCP-server input-schema layer for real callers (see `mcp-agent.ts`); this
- * is the same check applied defensively for callers of the exported function
- * directly (tests, and any future non-server caller).
+ * `IMPORTANCE_MIN`–`IMPORTANCE_MAX`). Zod already enforces this for server
+ * callers; this guards direct callers of the exported function.
  */
 function validateMinImportance(
   value: number | undefined,
