@@ -139,7 +139,8 @@ function bearer(c: Context<Env>): string {
  * but the `iss` it must match is the AS's canonical issuer: the origin PLUS the
  * `/api/auth` basePath (what the discovery doc advertises and the token `iss`
  * carries). Returns null when no origin can be resolved (e.g. local dev without
- * BETTER_AUTH_URL) — the JWT lane is then simply inert. The JWKS URL is derived origin-relative as `${origin}/api/auth/jwks`.
+ * BETTER_AUTH_URL) — the JWT lane is then simply inert. The JWKS URL is
+ * derived origin-relative as `${origin}/api/auth/jwks`.
  *
  * Same-environment MCP origin and `/mcp` are also accepted audiences: follows
  * tools on the MCP worker forward the caller's Bearer to `/v1/me/*`, and those
