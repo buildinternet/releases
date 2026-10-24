@@ -239,6 +239,7 @@ jobs:
         run: |
           (cd packages/core && npm pack --dry-run >/dev/null)
           (cd packages/api-types && npm pack --dry-run >/dev/null)
+          (cd packages/sdk && npm pack --dry-run >/dev/null)
 
   # Same production Next build Vercel runs for apps/web/ (Next 16 + Turbopack). Root
   # oxlint ignorePatterns include apps/web/**, so type/export errors that fail the

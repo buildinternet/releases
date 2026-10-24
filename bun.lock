@@ -331,6 +331,13 @@
         "@types/mdast": "^4.0.4",
       },
     },
+    "packages/sdk": {
+      "name": "@buildinternet/releases-sdk",
+      "version": "0.0.0",
+      "dependencies": {
+        "@buildinternet/releases-api-types": "workspace:*",
+      },
+    },
     "packages/search": {
       "name": "@releases/search",
       "version": "0.0.0",
@@ -475,6 +482,8 @@
     "@buildinternet/releases-linux-arm64": ["@buildinternet/releases-linux-arm64@workspace:apps/cli/npm/releases-linux-arm64"],
 
     "@buildinternet/releases-linux-x64": ["@buildinternet/releases-linux-x64@workspace:apps/cli/npm/releases-linux-x64"],
+
+    "@buildinternet/releases-sdk": ["@buildinternet/releases-sdk@workspace:packages/sdk"],
 
     "@buildinternet/releases-windows-x64": ["@buildinternet/releases-windows-x64@workspace:apps/cli/npm/releases-windows-x64"],
 
