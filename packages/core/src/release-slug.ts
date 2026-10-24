@@ -1,4 +1,4 @@
-import { toSlug } from "./slug.js";
+import { toSlug } from "./slug";
 
 /**
  * Friendly release URLs (Zendesk-style): `/release/rel_<id>-<slug>`.

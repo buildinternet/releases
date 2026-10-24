@@ -23,7 +23,7 @@
  *   computeVersionSort("1.0.0-rc.1") -> "0_0000000001.0000000000.0000000000-rc.0000000001"
  */
 
-import { isPrereleaseVersion } from "./prerelease.js";
+import { isPrereleaseVersion } from "./prerelease";
 
 const SEGMENT_WIDTH = 10;
 

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { distExports, distManifest } from "../../scripts/pack-dist.js";
+import {
+  addJsExtensions,
+  distExports,
+  distManifest,
+  pinWorkspaceDeps,
+} from "../../scripts/pack-dist.js";
 
 describe("pack-dist", () => {
   test("maps source exports to dist JavaScript and declarations", () => {
@@ -26,5 +31,47 @@ describe("pack-dist", () => {
     });
     expect(manifest.files).toEqual(["dist", "fixtures", "README.md"]);
     expect(manifest.name).toBe("x");
+  });
+});
+
+describe("pinWorkspaceDeps", () => {
+  test("pins workspace ranges and leaves the rest", () => {
+    expect(
+      pinWorkspaceDeps(
+        { a: "workspace:*", b: "workspace:^", c: "workspace:~", zod: "^4.4.3" },
+        { a: "1.2.3", b: "0.5.0", c: "2.0.0" },
+      ),
+    ).toEqual({ a: "1.2.3", b: "^0.5.0", c: "~2.0.0", zod: "^4.4.3" });
+  });
+
+  test("fails on a workspace dependency it can't resolve", () => {
+    expect(() => pinWorkspaceDeps({ a: "workspace:*" }, {})).toThrow("no known version");
+  });
+});
+
+describe("addJsExtensions", () => {
+  const files = new Set(["./slug.js", "./schemas/index.js", "../core.js"]);
+  const exists = (rel: string) => files.has(rel);
+
+  test("adds .js to relative imports, exports and import() types", () => {
+    const code = [
+      'import { toSlug } from "./slug";',
+      "export * from './schemas';",
+      'type T = import("../core").Core;',
+      'import "./slug";',
+    ].join("\n");
+    expect(addJsExtensions(code, exists)).toBe(
+      [
+        'import { toSlug } from "./slug.js";',
+        "export * from './schemas/index.js';",
+        'type T = import("../core.js").Core;',
+        'import "./slug.js";',
+      ].join("\n"),
+    );
+  });
+
+  test("leaves package imports, explicit extensions and unknown paths alone", () => {
+    const code = 'import { z } from "zod";\nimport a from "./a.js";\nimport b from "./missing";';
+    expect(addJsExtensions(code, exists)).toBe(code);
   });
 });

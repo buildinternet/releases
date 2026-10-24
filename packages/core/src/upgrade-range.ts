@@ -23,7 +23,7 @@
  *   - otherwise → empty (a valid answer, never an error).
  */
 
-import { computeVersionSort } from "./version-sort.js";
+import { computeVersionSort } from "./version-sort";
 
 export interface UpgradeRangeEntry {
   version: string | null;

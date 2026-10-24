@@ -6,8 +6,8 @@
  * cl100k_base) — `tokens` wins when both are passed.
  */
 
-import { countTokens, countTokensSafe } from "./tokens.js";
-import { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam } from "./changelog-range.js";
+import { countTokens, countTokensSafe } from "./tokens";
+import { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam } from "./changelog-range";
 
 export { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam };
 
