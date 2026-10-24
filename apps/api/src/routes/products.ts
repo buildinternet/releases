@@ -581,7 +581,6 @@ productRoutes.get(
   getProductDetailHandler,
 );
 
-// Create product
 productRoutes.post(
   "/products",
   describeRoute({

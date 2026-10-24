@@ -102,7 +102,6 @@ async function fetchHttpSignals(url: string): Promise<HttpSignals | null> {
 
 export function detectFromHttpSignals(signals: HttpSignals): ProviderDef | null {
   for (const provider of PROVIDERS) {
-    // Check headers
     if (provider.headers) {
       for (const [headerName, substring] of Object.entries(provider.headers)) {
         const value = signals.headers[headerName];

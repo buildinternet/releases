@@ -2781,7 +2781,6 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     return respondError(c, new ValidationError(message, { code: "bad_request" }));
   }
 
-  // Check for slug uniqueness before attempting update
   if (body.slug !== undefined && body.slug !== src.slug) {
     if (isReservedSlug(body.slug, "nested")) {
       return respondError(
