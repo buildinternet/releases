@@ -14,7 +14,7 @@ Seven packages ship together as one changesets `fixed` group (see `.changeset/co
 
 `@buildinternet/releases-lib` is owned by this repo and is a workspace; the CLI and other packages consume it via `workspace:*`.
 
-`@buildinternet/releases-core` and `@buildinternet/releases-api-types` are still published to npm for outside consumers, from `publish-core.yml` and `publish-api-types.yml`. They are not in the fixed group. The CLI consumes both through `workspace:*`, so a schema or wire change and the CLI code that adopts it land in one PR, with no version bump to chase. `@releases/core-internal` stays private (DB-coupled and worker-only helpers). Skills ship from the repo tree via `npx skills add`, not npm; the `releases` Claude Code plugin lives at `plugins/claude/releases/`.
+`@buildinternet/releases-core` and `@buildinternet/releases-api-types` are still published to npm for outside consumers, from `publish-core.yml` and `publish-api-types.yml`. They are not in the fixed group. The CLI consumes both through `workspace:*`, so a schema or wire change and the CLI code that adopts it land in one PR, with no version bump to chase. `@buildinternet/releases-sdk` (the TypeScript API client) ships the same way from `publish-sdk.yml`. `@releases/core-internal` stays private (DB-coupled and worker-only helpers). Skills ship from the repo tree via `npx skills add`, not npm; the `releases` Claude Code plugin lives at `plugins/claude/releases/`.
 
 ## How a CLI change ships
 
@@ -38,11 +38,13 @@ flowchart LR
 4. `publish-cli.yml` builds and signs the darwin binaries on macOS (a Linux cross-compile breaks Bun's signature and the binary is killed on launch), cross-compiles linux and windows on Linux, and publishes the seven packages with OIDC trusted publishing. The meta package goes last, so "meta on npm" means everything shipped, and a partial failure re-runs cleanly.
 5. It then creates the GitHub release `v<version>` on this repo with the binaries and checksums, and updates the Homebrew formula in `buildinternet/homebrew-tap`.
 
-`.../releases/latest/download/<asset>` URLs (used by the install docs and the shell installer) resolve against this repo's "latest" release. The core and api-types publish workflows create their GitHub releases with `--latest=false` so they never take that marker; only the CLI release does.
+`.../releases/latest/download/<asset>` URLs (used by the install docs and the shell installer) resolve against this repo's "latest" release. The core, api-types and sdk publish workflows create their GitHub releases with `--latest=false` so they never take that marker; only the CLI release does.
 
 ## Trusted publishers
 
 npm trusted publishing (OIDC) must be registered for all seven packages: repo `buildinternet/releases`, workflow file `publish-cli.yml`, for example `npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml`. A newly added trusted publisher expires if it goes unused for two days, so register them shortly before the first release, not weeks ahead. Missing one package fails the publish part-way; fix the publisher and re-run, and the per-package "already published" check skips what landed.
+
+A brand-new package needs one manual publish first, because a trusted publisher can only be added to a package that already exists on npm. For the SDK, run `bun run publish:bootstrap:sdk` after `npm login`: it publishes the current version with your login and then runs `npm trust` to register `publish-sdk.yml` (`scripts/npm-bootstrap.ts`; pass `--dry-run` to check the pack). Until then `publish-sdk.yml` skips with a warning instead of failing. If the trusted publisher expires before the workflow first uses it, run the same command again: it skips the publish and re-registers the publisher.
 
 ## Homebrew
 

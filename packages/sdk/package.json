@@ -1,7 +1,6 @@
 {
   "name": "@buildinternet/releases-sdk",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "TypeScript client for the Releases API (api.releases.sh).",
   "type": "module",
   "license": "MIT",
@@ -17,6 +16,9 @@
     "src",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "bun ../../scripts/pack-dist.ts prepack ../core ../api-types",

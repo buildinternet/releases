@@ -7,7 +7,7 @@ Shared code, split between published npm packages and private in-tree packages.
 | `core/`          | `@buildinternet/releases-core`      | Published                            | Pure, runtime-neutral helpers shared with the CLI; DB schema is source of truth.              |
 | `core-internal/` | `@releases/core-internal`           | Private, workspace-only              | DB-coupled / worker-only helpers the thin CLI doesn't need.                                   |
 | `api-types/`     | `@buildinternet/releases-api-types` | Published                            | Wire protocol — request/response shapes for the API worker.                                   |
-| `sdk/`           | `@buildinternet/releases-sdk`       | Not yet published                    | TypeScript client for the public API, typed by api-types.                                     |
+| `sdk/`           | `@buildinternet/releases-sdk`       | Published                            | TypeScript client for the public API, typed by api-types.                                     |
 | `adapters/`      | `@releases/adapters`                | Private, workspace-only              | Fetch adapters (GitHub, Cloudflare, crawl, feed, App Store) + extraction orchestration.       |
 | `ai/`            | `@releases/ai-internal`             | Private, workspace-only              | AI helpers for ingest/content pipelines — evaluation, extraction, classification, generation. |
 | `rendering/`     | `@releases/rendering`               | Private, workspace-only              | Atom feed helpers, markdown/JSON formatters, media URL helpers.                               |
