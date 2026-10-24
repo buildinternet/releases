@@ -167,21 +167,17 @@ export type Env = {
     MEDIA_BACKFILL_WORKFLOW?: Workflow;
     /**
      * Deterministic scrape/agent update runs (#1946): one instance per drain /
-     * manual update batch, dispatched via `lib/sources/update-dispatch.ts` from
-     * OrgActor, POST /v1/workflows/update, and the poll-fetch crawl-feed
-     * delegation. Replaced the discovery worker's `/update` session path.
+     * manual update batch, dispatched via `lib/sources/update-dispatch.ts`.
      */
     DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
     /**
      * Self service binding (this worker). The deterministic-update workflow's
-     * `scrapeFetch` persists through the HTTP API surface; the self binding
-     * keeps each of those calls its own invocation with the same middleware
-     * semantics as the retired discovery→api service-binding hop.
+     * `scrapeFetch` persists through the HTTP API, each call its own invocation
+     * with full middleware.
      */
     API_SELF?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
-    // Update-dispatch gates (#1946), formerly enforced at discovery's /update:
-    // the MA kill-switch flag fallback and the daily spend-cap overrides read
-    // by `checkSpendCap` against the shared LATEST_CACHE counters.
+    // Update-dispatch gates (#1946): the MA kill-switch flag fallback and the
+    // daily spend-cap overrides read by `checkSpendCap`.
     MA_SESSIONS_DISABLED?: string;
     MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
     MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
@@ -261,15 +257,13 @@ export type Env = {
     // stored. See lib/email/feedback-email.ts.
     FEEDBACK_NOTIFY_MAX_PER_HOUR?: string;
     // Optional KV namespace caching single-query embeddings on the search
-    // path (see packages/search/src/embedding-cache.ts). Absent → every cold search
-    // re-calls the embedding provider, matching pre-cache behavior.
+    // path (see packages/search/src/embedding-cache.ts).
     EMBED_CACHE?: KVNamespace;
     // Optional KV namespace caching the GET /v1/releases/latest response
     // (see src/lib/latest-cache.ts). Absent → every request hits D1.
     LATEST_CACHE?: KVNamespace;
     // Gates event-driven KV purge of `/v1/releases/latest` (see
-    // src/lib/latest-cache.ts invalidateLatestCache). Ships "false"; flipped
-    // to "true" after a parity-logging week.
+    // src/lib/latest-cache.ts invalidateLatestCache).
     INVALIDATION_ENABLED?: string;
     // Email notifications (see src/lib/email/email.ts). SEND_EMAIL is the Cloudflare
     // Email Routing send binding; absent → email notifications no-op.
@@ -288,7 +282,6 @@ export type Env = {
     RECOMMENDATION_ADDED_MAX_PER_HOUR?: string;
     ADMIN_BASE_URL?: string;
     // Optional KV namespace for Tier-1 alert dedup (1h TTL per subject).
-    // Reuses an existing KV binding — no new resource needed.
     // See src/lib/email/send-alert.ts.
     ALERT_DEDUP_KV?: KVNamespace;
     // Staging-only kill switch — see middleware/indexing.ts.
@@ -342,19 +335,17 @@ export type Env = {
     // the prod dataset.
     RELEASE_CLASSIFICATIONS_AE?: AnalyticsEngineDataset;
     // Cloudflare Browser Rendering credentials for feed-content enrichment.
-    // Bound via Secrets Store in Task 9 — optional here so the route degrades
-    // gracefully (cheap-path-only) when absent.
+    // Optional so the route degrades to the cheap path when absent.
     CLOUDFLARE_ACCOUNT_ID?: SecretBinding;
     CLOUDFLARE_API_TOKEN?: SecretBinding;
     // Floor length (chars) below which a feed item's content is considered thin.
     // Mirrors FetchOneEnv.FEED_THIN_CHARS; default 600 when absent.
     FEED_THIN_CHARS?: string;
     // Firecrawl integration. FIRECRAWL_API_KEY gates the monitor-sync helper;
-    // FIRECRAWL_WEBHOOK_SECRET is used in Phase 2 to verify inbound webhook
-    // payloads. FIRECRAWL_INGEST_WORKFLOW is bound in wrangler in Phase 2.
+    // FIRECRAWL_WEBHOOK_SECRET verifies inbound webhook payloads.
     FIRECRAWL_API_KEY?: SecretBinding;
     FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
-    FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in wrangler in Phase 2
+    FIRECRAWL_INGEST_WORKFLOW?: Workflow;
     // GitHub App webhook signing secret — verifies inbound `X-Hub-Signature-256`
     // on POST /v1/inbound/github (#1698). Bound from the Secrets
     // Store; an unresolved binding fails the receiver closed (401).
@@ -363,7 +354,7 @@ export type Env = {
     // to a resumable BackfillSourceWorkflow instance when BACKFILL_WORKFLOW_ENABLED=true.
     BACKFILL_SOURCE_WORKFLOW?: Workflow;
     // Hours since a firecrawl source's last run before the hourly staleness
-    // scan flags it (monitor stopped delivering). Default 48. See option A.
+    // scan flags it (monitor stopped delivering). Default 48.
     FIRECRAWL_STALE_HOURS?: string;
     // First-party source staleness scan (#1528): warn when an established-cadence
     // source we still poll has stopped producing. All optional with defaults
@@ -404,23 +395,15 @@ export type Env = {
     // Signing secret. Cloudflare Secrets Store binding in prod; a plain string
     // is accepted too (local .dev.vars / wrangler var). Required in prod.
     BETTER_AUTH_SECRET?: SecretBinding | string;
-    // Local-dev fallback for the signing secret (plain string, `.dev.vars` only).
-    // The same-named Secrets Store binding above shadows a plain `BETTER_AUTH_SECRET`
-    // line in `wrangler dev`, so local dev sets THIS distinct var to get a stable
-    // secret. Preferred only when the binding is unresolvable; never bound in prod.
-    // See resolveSigningSecret in src/auth/index.ts and issue #1425.
+    // Local-dev fallback for the signing secret (`.dev.vars` only). See
+    // resolveSigningSecret in src/auth/index.ts and #1425.
     BETTER_AUTH_SECRET_DEV?: string;
-    // Better Auth Infrastructure ("dash") API key — connects this backend to the
-    // hosted admin/analytics dashboard at dash.better-auth.com via the dash()
-    // plugin. Secrets Store binding in prod; plain string locally (.dev.vars).
-    // Absent → the dash plugin stays off (no keyless outbound calls). See
-    // src/auth/index.ts.
+    // Better Auth Infrastructure ("dash") API key. Absent → the dash plugin
+    // stays off. See src/auth/instance.ts.
     BETTER_AUTH_API_KEY?: SecretBinding | string;
-    // Project-scoped Better Auth Infrastructure KV "identify" endpoint backing the
-    // sentinel() security plugin, e.g. https://kv.better-auth.com/projects/<id>.
-    // A plain var (a project URL, not a secret); paired with BETTER_AUTH_API_KEY —
-    // sentinel() mounts only when BOTH resolve. Absent → no Sentinel checks. See
-    // src/auth/index.ts.
+    // Project-scoped "identify" endpoint for sentinel(), e.g.
+    // https://kv.better-auth.com/projects/<id>. sentinel() mounts only when this
+    // and BETTER_AUTH_API_KEY both resolve. See src/auth/instance.ts.
     BETTER_AUTH_IDENTIFY_URL?: string;
     // Public base URL of THIS worker (where the auth handler lives), e.g.
     // https://api.releases.sh. Drives OAuth callback + cookie-domain derivation.
@@ -442,10 +425,8 @@ export type Env = {
     // resource servers, e.g. the MCP worker). Unioned with the BETTER_AUTH_URL
     // origin by oauthValidAudiences(). Plain config, not a feature flag.
     OAUTH_RESOURCE_AUDIENCES?: string;
-    // Explicit kill switch for Better Auth's brute-force rate limiting (default
-    // OFF → rate limiting stays ON in prod). Set to "true" in local `.dev.vars`
-    // to skip rate limiting during sign-in testing. A plain var (never a transient
-    // Secrets-Store failure), so it can't silently drop protection in prod.
+    // Explicit kill switch for Better Auth's brute-force rate limiting. Set to
+    // "true" in local `.dev.vars` to skip it during sign-in testing.
     AUTH_RATE_LIMIT_DISABLED?: string;
     // Social-login credentials — GATED: a provider activates only when BOTH its
     // id + secret resolve; absent → silently omitted (no crash). To enable, add
@@ -466,13 +447,8 @@ export type Env = {
     UPLOADS_OAUTH_REVOKE_URL?: string;
     UPLOADS_OAUTH_SCOPES?: string;
     UPLOADS_OAUTH_REDIRECT_URI?: string;
-    // Stripe (`@better-auth/stripe`) — GATED on BOTH resolving (same seam as the
-    // social pairs): present → a Stripe Customer is created on sign-up and linked
-    // via user.stripeCustomerId; absent either → the plugin is omitted (no Stripe
-    // calls). Secrets Store bindings in prod (add them to the store + wrangler.jsonc
-    // before binding — see the GitHub note there), plain strings locally (.dev.vars).
-    // STRIPE_SECRET_KEY is the account API key; STRIPE_WEBHOOK_SECRET is the signing
-    // secret for the /api/auth/stripe/webhook endpoint. See auth/instance.ts.
+    // Stripe (`@better-auth/stripe`): the plugin mounts only when BOTH resolve.
+    // STRIPE_WEBHOOK_SECRET signs /api/auth/stripe/webhook. See buildStripePlugin.
     STRIPE_SECRET_KEY?: SecretBinding | string;
     STRIPE_WEBHOOK_SECRET?: SecretBinding | string;
     // Cloudflare Email Sending binding for USER-FACING auth mail (verification +
@@ -589,22 +565,16 @@ for (const p of OAUTH_SELF_SERVICE_WRITE_PATHS) {
 }
 
 // ── Better Auth ──
-// Human user sessions (email/password now; Google/GitHub when their secrets are
-// supplied). Served at /api/auth/* on this worker (api.releases.sh). createAuth is
+// Human user sessions. Served at /api/auth/* on this worker (api.releases.sh). createAuth is
 // memoized per isolate; the handler wraps in runAuthWithWaitUntil for background
 // work. See src/auth/index.ts.
 // Runs after the "*" middleware above, so the staging gate + noindex apply.
 app.on(["POST", "GET"], "/api/auth/*", async (c) => {
-  // Edge brute-force shedding (#1728). A credential-stuffing flood hits the
-  // mutating auth endpoints (POST sign-in/sign-up/…), and Better Auth's own
-  // limiter is D1-backed — so without a front gate every flood request incurs a
-  // D1 read+write, write-amplifying into the shared database. Reject abusive
-  // per-IP volume HERE, on Cloudflare's native limiter (no D1/KV write), before
-  // we even construct the auth instance. GET (session reads like /get-session,
-  // polled by the browser and often shared behind NAT) is intentionally exempt —
-  // the brute-force risk and the D1-write amplification both live on the POSTs.
-  // Gated by binding presence (absent in staging → no-op) + a default-ON kill
-  // switch. Better Auth's per-key limiter still runs as the precise second layer.
+  // Edge brute-force shedding (#1728): reject abusive per-IP POST volume on
+  // Cloudflare's native limiter before constructing the auth instance, so a
+  // flood never write-amplifies into storage. GET (session reads, often shared
+  // behind NAT) is intentionally exempt. Better Auth's per-key limiter still runs
+  // as the precise second layer.
   const authEdgeLimiter = selectAuthEdgeLimiter(
     c.req.method,
     c.env.AUTH_EDGE_RATE_LIMIT_ENABLED,
@@ -675,12 +645,9 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
 
 const v1 = new Hono<Env>();
 
-// Response caching at the edge is handled by Workers Cache (wrangler
-// `cache.enabled`, see wrangler.jsonc) reading the `Cache-Control` headers
-// the per-route `cacheControl(...)` middleware below sets — no in-worker
-// middleware needed; a cache hit never runs the Worker. This replaced the
-// hand-rolled `caches.default` edge-cache middleware (issue #1800 origin) once
-// Workers Cache reached GA. See .context/2026-07-07-workers-cache-migration.md.
+// Edge response caching is Workers Cache (wrangler `cache.enabled`) reading the
+// `Cache-Control` headers the per-route `cacheControl(...)` middleware below
+// sets; a cache hit never runs the Worker.
 
 // `publicReadRoutes`, `adminRoutes`, and `publicWriteRoutes` are defined in
 // route-namespaces.ts so the CI coverage gate
@@ -749,8 +716,7 @@ v1.use(
 );
 v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs/:slug/collections", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
-// Non-personalized org-scoped reads that were missing a Cache-Control while
-// their single-entity/org-scoped siblings had one (#1800 Tier 2).
+// Non-personalized org-scoped reads (#1800 Tier 2).
 v1.use(
   "/orgs/:slug/recent-releases",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
@@ -758,8 +724,7 @@ v1.use(
 v1.use("/orgs/:slug/tags", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs/:slug/sparklines", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs/:slug/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
-// AI-generated org overview — identical for every visitor until the next
-// regen, the only headline-content read that was uncached (#1800 finding 1).
+// AI-generated org overview — identical for every visitor until the next regen.
 v1.use("/orgs/:slug/overview", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 // Catalog + org-scoped source/product GETs (#690): same cache profile as the
 // bare resource routes since they hit the same handlers.
@@ -810,11 +775,7 @@ v1.use(
   varyOnAccept(),
 );
 // Single-release detail: same 60s/SWR-30 profile as the other single-entity
-// reads (/orgs/:slug, /sources/:slug, /products/:slug). The old 120s/SWR-60
-// let downstream caches serve up to ~3 minutes of staleness right after
-// generate-content / PATCH wrote title_short/summary (#1580). Workers Cache
-// (wrangler `cache.enabled`) is what actually stores/serves this at the edge
-// — this header is the freshness contract it reads.
+// reads; a longer TTL left title_short/summary edits stale for minutes (#1580).
 //
 // The pattern is `rel_…` only. A bare `:id` also matches the static
 // `/releases/stream` WebSocket (and `/releases/latest`); cache/Vary on a 101
@@ -831,7 +792,7 @@ v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true 
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/products/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
-// Non-personalized product-scoped reads missing a Cache-Control (#1800 Tier 2).
+// Non-personalized product-scoped reads (#1800 Tier 2).
 v1.use(
   "/products/:slug/collections",
   cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
@@ -866,8 +827,7 @@ v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true
 v1.use("/lookups/by-domain", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
-// Pure resolution primitive over indexed columns, same class as the three
-// lookup siblings above — was the only one uncached (#1800 Tier 2).
+// Pure resolution primitive over indexed columns, like the lookups above.
 v1.use(
   "/lookups/source-by-coordinate",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
@@ -885,8 +845,7 @@ v1.use(
 v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/collections", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/collections/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
-// Written once/day by the collection-summaries cron — static for ~24h and
-// fully shared, yet was uncached (#1800 finding 2).
+// Written once/day by the collection-summaries cron — static for ~24h.
 v1.use(
   "/collections/:slug/daily-summaries",
   cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
@@ -915,7 +874,7 @@ v1.use("/openapi.json", cacheControl(3600, { staleWhileRevalidate: 300, isPublic
 // of that call so the generator sees the complete route table.
 mountV1Routes(v1);
 
-// GraphQL spike (#TBD). Sits inside v1 so it picks up the per-route public
+// GraphQL. Sits inside v1 so it picks up the per-route public
 // middleware (rate limit, db health). publicReadAuthMiddleware is intentionally
 // not applied — its POST-requires-Bearer behavior would block legitimate
 // public GraphQL queries (which are POSTs by convention); admin-vs-public
@@ -1073,11 +1032,8 @@ export default {
       ctx.waitUntil(
         loggedDispatch(
           "domain-demand-sweep-cron",
-          // Pass the bindings whole rather than projecting. `DomainDemandSweepEnv`
-          // extends `WebBotAuthEnv`, and inherited fields are invisible when you
-          // check a hand-built literal against the interface body — which is how
-          // the signing key went missing and every manifest probe went out
-          // unsigned.
+          // Pass the bindings whole: a hand-built literal silently dropped the
+          // inherited `WebBotAuthEnv` signing key once.
           domainDemandSweep(env),
           alertEnv,
         ),
@@ -1173,8 +1129,7 @@ export default {
     // Daily (`0 13 * * *`) and weekly-Monday (`0 13 * * MON`) digests are delivered
     // as separate scheduled events with distinct cron strings, so on Mondays both
     // fire — each targets its own cadence's subscribers. The weekly entry uses the
-    // named weekday: Cloudflare cron numbers weekdays 1=Sunday..7=Saturday, so the
-    // old `0 13 * * 1` fired Sundays (#1796).
+    // named weekday: Cloudflare cron numbers weekdays 1=Sunday..7=Saturday (#1796).
     if (event.cron === "0 13 * * *" || event.cron === "0 13 * * MON") {
       const cadence = event.cron === "0 13 * * MON" ? "weekly" : "daily";
       ctx.waitUntil(
@@ -1318,9 +1273,8 @@ export default {
     }
     // Resilience: on every hourly fire, flag firecrawl-owned sources whose
     // monitor has stopped delivering (out of credits / suspended / receiver
-    // rejecting). Cheap scan over the ~handful of firecrawl sources; emits one
-    // `scan-complete` summary event on the `firecrawl-staleness` component. No-ops when CRON_ENABLED is
-    // "false". See resilience option A.
+    // rejecting). Cheap scan over the handful of firecrawl sources. No-ops when
+    // CRON_ENABLED is "false".
     ctx.waitUntil(
       loggedDispatch(
         "firecrawl-staleness-cron",
@@ -1344,10 +1298,8 @@ export default {
       ctx.waitUntil(loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env), alertEnv));
       return;
     }
-    // Same builder the workflow paths use (#2171). This literal used to be
-    // hand-rolled and forwarded zero AI-lane keys, so the inline-cron fallback
-    // never enriched — the local-dev path where you would try to reproduce an
-    // enrichment bug was the one path guaranteed not to show it.
+    // Same builder the workflow paths use (#2171), so the local-dev fallback
+    // forwards the AI-lane keys too.
     const fetchEnv = await buildFetchOneEnv(env);
     ctx.waitUntil(
       loggedDispatch(
