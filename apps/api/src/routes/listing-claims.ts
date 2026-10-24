@@ -1,11 +1,15 @@
 import { Hono, type Context } from "hono";
-import { describeRoute } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA, errorResponse } from "../lib/openapi-error.js";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   ListingClaimBodySchema,
   ListingClaimVerifyBodySchema,
   ListingPromoteBodySchema,
+  ListingClaimsResultSchema,
+  ClaimVerifyResultSchema,
+  ListingPromoteResultSchema,
+  OrgClaimSchema,
   type OrgClaim,
   type ListingPromoteResult,
 } from "@buildinternet/releases-api-types";
@@ -117,8 +121,14 @@ listingClaimHandlers.post(
     description:
       "Signed-in only. Mints a pending claim with a well-known-token + DNS-TXT proof pair for a stub or tracked domain; idempotent once verified. 404s an unlisted domain.",
     responses: {
-      201: { description: "Pending claim minted (OrgClaim)" },
-      200: { description: "Existing verified claim returned as-is (OrgClaim)" },
+      201: {
+        description: "Pending claim minted",
+        content: { "application/json": { schema: resolver(OrgClaimSchema) } },
+      },
+      200: {
+        description: "Existing verified claim returned as-is",
+        content: { "application/json": { schema: resolver(OrgClaimSchema) } },
+      },
       401: {
         description: "Sign-in required",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
@@ -216,7 +226,10 @@ listingClaimHandlers.post(
     description:
       "Signed-in only, and the claim must belong to the caller (404 otherwise — no existence oracle). Checks the well-known token file and the DNS TXT record; either passes. Fails closed on any ambiguous response. 200 whether or not it verifies.",
     responses: {
-      200: { description: "ClaimVerifyResult (verified may be true or false)" },
+      200: {
+        description: "Verification result (verified may be true or false)",
+        content: { "application/json": { schema: resolver(ClaimVerifyResultSchema) } },
+      },
       401: {
         description: "Sign-in required",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
@@ -389,7 +402,10 @@ listingClaimHandlers.get(
     description:
       "Signed-in only. Lazily flips overdue pending claims to expired on read. Pending claims include the token + proof instructions; verified/expired do not.",
     responses: {
-      200: { description: "ListingClaimsResult" },
+      200: {
+        description: "The caller's claims",
+        content: { "application/json": { schema: resolver(ListingClaimsResultSchema) } },
+      },
       401: {
         description: "Sign-in required",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
@@ -432,7 +448,10 @@ listingClaimHandlers.delete(
     description:
       "Signed-in only, and the claim must belong to the caller (404 otherwise). Ends a pending or verified claim: the row is kept as `revoked`. Publish tokens that relied on it stop working on their next request. Idempotent; an already-expired claim is returned unchanged. You can start a new claim later.",
     responses: {
-      200: { description: "The ended claim (OrgClaim)" },
+      200: {
+        description: "The ended claim",
+        content: { "application/json": { schema: resolver(OrgClaimSchema) } },
+      },
       401: {
         description: "Sign-in required",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
@@ -486,7 +505,10 @@ listingClaimHandlers.post(
     description:
       "Signed-in only, and the caller must hold a verified claim on the resolved org (403 otherwise). Materializes stored release locators into sources — tier-1 (feed/github/appstore) go live, tier-2 (bare url/file) land paused for curator review — and flips the org to tracked. Idempotent: an already-tracked org is a no-op success. Gated behind a dedicated kill switch (creates live fetching sources).",
     responses: {
-      200: { description: "ListingPromoteResult" },
+      200: {
+        description: "Promotion result",
+        content: { "application/json": { schema: resolver(ListingPromoteResultSchema) } },
+      },
       401: {
         description: "Sign-in required",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },

@@ -94,6 +94,7 @@ import {
   ChangelogProbeResponseSchema,
   DeleteSourceResponseSchema,
   DeleteSourceReleasesResponseSchema,
+  SourceReleasesResponseSchema,
   InsertReleaseResponseSchema,
   BatchReleasesResponseSchema,
   RawSnapshotResponseSchema,
@@ -2242,7 +2243,10 @@ const getSourceReleasesFeedRoute = describeRoute({
   description:
     "Cursor-paginated release feed scoped to one source. Supports inline FTS filter via `?q=`, prerelease toggle (`?include_prereleases=`), and coverage flag (`?include_coverage=`). Cursor shape matches `/v1/orgs/:slug/releases`.",
   responses: {
-    200: { description: "Releases page" },
+    200: {
+      description: "Releases page",
+      content: { "application/json": { schema: resolver(SourceReleasesResponseSchema) } },
+    },
     404: {
       description: "Source not found",
       content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },

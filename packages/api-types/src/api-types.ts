@@ -12,7 +12,12 @@ export type {
 } from "@buildinternet/releases-core/source-enums";
 // Re-export above doesn't create local bindings; import for use in interfaces below.
 import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
-import type { ApiScope } from "@buildinternet/releases-core/api-token";
+import type { UserApiKey } from "./schemas/api-keys.js";
+import type {
+  UserWebhookFormat,
+  UserWebhookListItem,
+  WorkspaceMemberRole,
+} from "./schemas/webhooks.js";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import type {
   AiLaneIdSchema,
@@ -92,6 +97,7 @@ import type {
   SourceListResultSchema,
   SourceDetailSchema,
   SourceFeedPaginationSchema,
+  SourceReleasesResponseSchema,
   SourceMutationResponseSchema,
   AppStoreMaterializeResponseSchema,
   SourceOrgRefSchema,
@@ -221,6 +227,8 @@ import type {
   FeedbackListResponseSchema,
   FeedbackUpdateBodySchema,
   FeedbackDeleteResponseSchema,
+  FeedbackSubmitBodySchema,
+  FeedbackSubmitResponseSchema,
 } from "./schemas/feedback.js";
 import type {
   ClassificationSummarySchema,
@@ -231,6 +239,8 @@ import type { SemanticAlertSummarySchema } from "./schemas/semantic-alert-summar
 import type {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
+  RecommendationSubmitBodySchema,
+  RecommendationSubmitResponseSchema,
 } from "./schemas/recommendations.js";
 import type {
   SitemapSourceSchema,
@@ -455,12 +465,61 @@ export {
   type RevokePublishTokenResponse,
 } from "./schemas/publish-tokens.js";
 export {
+  UserApiKeySchema,
+  CreatedUserApiKeySchema,
+  ListUserApiKeysResponseSchema,
+  CreateUserApiKeyBodySchema,
+  type UserApiKey,
+  type CreatedUserApiKey,
+  type ListUserApiKeysResponse,
+  type CreateUserApiKeyBody,
+} from "./schemas/api-keys.js";
+export {
+  WebhookDeliveryHealthSchema,
+  UserWebhookScopeSchema,
+  UserWebhookReleaseTypeFilterSchema,
+  UserWebhookFormatSchema,
+  UserWebhookSubscriptionSchema,
+  UserWebhookDeliveryHealthSchema,
+  UserWebhookListItemSchema,
+  UserWebhookListResponseSchema,
+  CreateUserWebhookResponseSchema,
+  RotateUserWebhookSecretResponseSchema,
+  TestUserWebhookResponseSchema,
+  WorkspaceMemberRoleSchema,
+  WorkspaceWebhookSubscriptionSchema,
+  WorkspaceWebhookListItemSchema,
+  WorkspaceWebhookListResponseSchema,
+  CreateWorkspaceWebhookResponseSchema,
+  CreateUserWebhookBodySchema,
+  CreateWorkspaceWebhookBodySchema,
+  type WebhookDeliveryHealth,
+  type UserWebhookScope,
+  type UserWebhookReleaseTypeFilter,
+  type UserWebhookFormat,
+  type UserWebhookSubscription,
+  type UserWebhookDeliveryHealth,
+  type UserWebhookListItem,
+  type UserWebhookListResponse,
+  type CreateUserWebhookResponse,
+  type RotateUserWebhookSecretResponse,
+  type TestUserWebhookResponse,
+  type WorkspaceMemberRole,
+  type WorkspaceWebhookSubscription,
+  type WorkspaceWebhookListItem,
+  type WorkspaceWebhookListResponse,
+  type CreateWorkspaceWebhookResponse,
+  type CreateUserWebhookBody,
+  type CreateWorkspaceWebhookBody,
+} from "./schemas/webhooks.js";
+export {
   SourceListItemSchema,
   SourceWithOrgSchema,
   SourceListResponseSchema,
   SourceListResultSchema,
   SourceDetailSchema,
   SourceFeedPaginationSchema,
+  SourceReleasesResponseSchema,
   SourceMutationResponseSchema,
   AppStoreMaterializeResponseSchema,
   SourceOrgRefSchema,
@@ -591,6 +650,8 @@ export {
   FeedbackListResponseSchema,
   FeedbackUpdateBodySchema,
   FeedbackDeleteResponseSchema,
+  FeedbackSubmitBodySchema,
+  FeedbackSubmitResponseSchema,
 } from "./schemas/feedback.js";
 export {
   ClassificationSummarySchema,
@@ -601,6 +662,8 @@ export { SemanticAlertSummarySchema } from "./schemas/semantic-alert-summary.js"
 export {
   RecommendationNotifyAddedBodySchema,
   RecommendationNotifyAddedResultSchema,
+  RecommendationSubmitBodySchema,
+  RecommendationSubmitResponseSchema,
 } from "./schemas/recommendations.js";
 export {
   SitemapSourceSchema,
@@ -700,36 +763,7 @@ export interface ListResponse<T> {
 }
 
 // === User-owned API keys (relu_) — self-serve surface served by /v1/api-keys ===
-
-/** A user-owned API key (relu_) as returned by GET /v1/api-keys. */
-export interface UserApiKey {
-  id: string;
-  name: string | null;
-  start: string | null;
-  scope: ApiScope | null;
-  enabled: boolean | null;
-  remaining: number | null;
-  lastRequest: string | null; // ISO 8601
-  createdAt: string; // ISO 8601
-  expiresAt: string | null; // ISO 8601
-}
-
-/** POST /v1/api-keys create response — includes the full key string exactly once. */
-export interface CreatedUserApiKey extends Omit<UserApiKey, "enabled" | "lastRequest"> {
-  key: string;
-}
-
-/** GET /v1/api-keys response envelope. */
-export interface ListUserApiKeysResponse {
-  apiKeys: UserApiKey[];
-}
-
-/** POST /v1/api-keys request body. Self-serve mints are capped at read server-side. */
-export interface CreateUserApiKeyBody {
-  name: string;
-  scope?: ApiScope;
-  expiresInDays?: number;
-}
+// Response shapes live in ./schemas/api-keys.ts.
 
 // ── Sitemap (bulk URL emission) ──
 
@@ -1210,129 +1244,7 @@ export interface PersonalizedFeedResponse {
 }
 
 // ── User webhooks ──
-
-/** High-level delivery posture derived from summary columns (no AE query). */
-export type WebhookDeliveryHealth =
-  | "never_delivered"
-  | "healthy"
-  | "degraded"
-  | "failing"
-  | "paused"
-  | "auto_paused";
-
-/** Self-serve webhook filter scope. */
-export type UserWebhookScope = "org" | "follows";
-
-/** Optional per-event filter on release taxonomy type. */
-export type UserWebhookReleaseTypeFilter = "feature" | "rollup";
-
-/** Webhook delivery output format. */
-export type UserWebhookFormat = "json" | "slack" | "discord";
-
-/** A user-owned webhook subscription row (no signing secret). */
-export interface UserWebhookSubscription {
-  id: string;
-  userId: string;
-  scope: UserWebhookScope;
-  orgId: string | null;
-  url: string;
-  sourceId: string | null;
-  productId: string | null;
-  releaseType: UserWebhookReleaseTypeFilter | null;
-  format: UserWebhookFormat;
-  enabled: boolean;
-  description: string | null;
-  secretVersion: number;
-  createdAt: string;
-  lastSuccessAt: string | null;
-  lastErrorAt: string | null;
-  lastErrorMsg: string | null;
-  consecutiveFailures: number;
-  disabledReason: string | null;
-  failureStreakStartedAt: string | null;
-}
-
-/** Delivery health fields returned on user webhook read paths. */
-export interface UserWebhookDeliveryHealth {
-  deliveryHealth: WebhookDeliveryHealth;
-  deliveryHealthSummary: string;
-}
-
-/** List item returned by GET /v1/me/webhooks — includes org/source display fields. */
-export interface UserWebhookListItem
-  extends Omit<UserWebhookSubscription, "userId">, UserWebhookDeliveryHealth {
-  orgSlug: string | null;
-  orgName: string | null;
-  sourceSlug: string | null;
-  sourceName: string | null;
-  productSlug: string | null;
-  productName: string | null;
-}
-
-/** GET /v1/me/webhooks response. */
-export interface UserWebhookListResponse {
-  subscriptions: UserWebhookListItem[];
-}
-
-/** POST /v1/me/webhooks response — signing key shown once at creation (omitted for slack/discord). */
-export interface CreateUserWebhookResponse
-  extends UserWebhookSubscription, UserWebhookDeliveryHealth {
-  orgSlug: string | null;
-  orgName: string | null;
-  signingKey?: string;
-}
-
-/** POST /v1/me/webhooks/:id/rotate-secret response. */
-export interface RotateUserWebhookSecretResponse {
-  secretVersion: number;
-  signingKey: string;
-}
-
-/** POST /v1/me/webhooks/:id/test response. */
-export interface TestUserWebhookResponse {
-  enqueued: true;
-  eventId: string;
-}
-
-// ── Workspace webhooks ──
-
-/** Workspace member role (Better Auth `member.role`, not `user.role`). */
-export type WorkspaceMemberRole = "owner" | "admin" | "member";
-
-/**
- * A workspace-owned webhook subscription row (no signing secret). Workspace
- * webhooks are org-scoped only; there is no workspace follows scope.
- */
-export interface WorkspaceWebhookSubscription extends Omit<
-  UserWebhookSubscription,
-  "userId" | "scope"
-> {
-  workspaceId: string;
-  scope: "org";
-}
-
-/** List item returned by GET /v1/workspaces/:workspaceId/webhooks. */
-export interface WorkspaceWebhookListItem extends Omit<UserWebhookListItem, "scope"> {
-  workspaceId: string;
-  scope: "org";
-}
-
-/** GET /v1/workspaces/:workspaceId/webhooks response. */
-export interface WorkspaceWebhookListResponse {
-  subscriptions: WorkspaceWebhookListItem[];
-  /** The caller's role in the workspace. */
-  role: WorkspaceMemberRole;
-  /** True for owners and admins: create, edit, rotate, and delete. Members can view and test. */
-  canManage: boolean;
-}
-
-/** POST /v1/workspaces/:workspaceId/webhooks response — signing key shown once (omitted for slack/discord). */
-export interface CreateWorkspaceWebhookResponse
-  extends WorkspaceWebhookSubscription, UserWebhookDeliveryHealth {
-  orgSlug: string | null;
-  orgName: string | null;
-  signingKey?: string;
-}
+// Subscription shapes (user + workspace) live in ./schemas/webhooks.ts.
 
 /** One Analytics Engine delivery-attempt row from GET …/webhooks/:id/deliveries. */
 export interface WebhookDeliveryRow {
@@ -1769,10 +1681,7 @@ export type SourceHeatmap = SourceHeatmapResponse;
 
 // Source-scoped release feed — the source identity is encoded in the URL, so
 // items omit the redundant `source` block carried by the org feed.
-export interface SourceReleasesResponse {
-  releases: ReleaseItem[];
-  pagination: { nextCursor: string | null; limit: number };
-}
+export type SourceReleasesResponse = z.infer<typeof SourceReleasesResponseSchema>;
 
 // ── Products ──
 
@@ -1959,6 +1868,8 @@ export type FeedbackItem = z.infer<typeof FeedbackItemSchema>;
 export type FeedbackListResponse = z.infer<typeof FeedbackListResponseSchema>;
 export type FeedbackUpdateBody = z.infer<typeof FeedbackUpdateBodySchema>;
 export type FeedbackDeleteResponse = z.infer<typeof FeedbackDeleteResponseSchema>;
+export type FeedbackSubmitBody = z.infer<typeof FeedbackSubmitBodySchema>;
+export type FeedbackSubmitResponse = z.infer<typeof FeedbackSubmitResponseSchema>;
 
 // ── Classification analytics ──
 export type ClassificationSummary = z.infer<typeof ClassificationSummarySchema>;
@@ -1970,6 +1881,8 @@ export type SemanticAlertSummary = z.infer<typeof SemanticAlertSummarySchema>;
 // ── Recommendations ──
 export type RecommendationNotifyAddedBody = z.infer<typeof RecommendationNotifyAddedBodySchema>;
 export type RecommendationNotifyAddedResult = z.infer<typeof RecommendationNotifyAddedResultSchema>;
+export type RecommendationSubmitBody = z.infer<typeof RecommendationSubmitBodySchema>;
+export type RecommendationSubmitResponse = z.infer<typeof RecommendationSubmitResponseSchema>;
 
 // ── Fetch log ──
 

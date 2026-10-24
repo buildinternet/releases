@@ -107,6 +107,39 @@ const listAlertSchema = {
   },
 } as const;
 
+const alertInputProperties = {
+  query: {
+    type: "string",
+    maxLength: SEMANTIC_ALERT_QUERY_MAX_CHARS,
+    description: "Freeform interest. Trimmed. User-private.",
+  },
+  enabled: { type: "boolean" },
+  threshold: {
+    type: "number",
+    minimum: SEMANTIC_ALERT_THRESHOLD_MIN,
+    maximum: SEMANTIC_ALERT_THRESHOLD_MAX,
+  },
+  deliverEmail: { type: "boolean" },
+  deliverWebhook: { type: "boolean" },
+  webhookSubscriptionId: {
+    type: "string",
+    nullable: true,
+    description: "One of the caller's webhook subscriptions. `null` clears the link on update.",
+  },
+} as const;
+
+const createAlertBodySchema = {
+  type: "object",
+  required: ["query"],
+  properties: alertInputProperties,
+} as const;
+
+const updateAlertBodySchema = { type: "object", properties: alertInputProperties } as const;
+
+function requestJson(schema: Record<string, unknown>) {
+  return { required: true, content: { "application/json": { schema } } };
+}
+
 function jsonBody(description: string, schema: Record<string, unknown>) {
   return {
     description,
@@ -286,6 +319,7 @@ meSemanticAlertHandlers.post(
     summary: "Create a semantic alert",
     description: `${LANE_DESCRIPTION} Body: \`{ query, enabled?, threshold?, deliverEmail?, deliverWebhook?, webhookSubscriptionId? }\`. \`query\` is required, trimmed, and at most ${SEMANTIC_ALERT_QUERY_MAX_CHARS} characters. Omitted \`enabled\` defaults to true, \`threshold\` to ${SEMANTIC_ALERT_THRESHOLD_DEFAULT}, \`deliverEmail\` to true, \`deliverWebhook\` to false.`,
     security: [{ bearerAuth: [] }],
+    requestBody: requestJson(createAlertBodySchema),
     responses: {
       201: jsonBody("The created alert.", alertSchema),
       400: errorResponse("Invalid query, threshold, booleans, or webhookSubscriptionId"),
@@ -360,6 +394,7 @@ meSemanticAlertHandlers.patch(
     summary: "Update a semantic alert",
     description: `${LANE_DESCRIPTION} Partial body. \`webhookSubscriptionId: null\` clears the link. An empty body returns the current alert.`,
     security: [{ bearerAuth: [] }],
+    requestBody: requestJson(updateAlertBodySchema),
     responses: {
       200: jsonBody("The updated alert.", alertSchema),
       400: errorResponse("Invalid query, threshold, booleans, or webhookSubscriptionId"),

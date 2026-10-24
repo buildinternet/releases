@@ -10,6 +10,13 @@
  */
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
+import {
+  CreateWorkspaceWebhookBodySchema,
+  CreateWorkspaceWebhookResponseSchema,
+  RotateUserWebhookSecretResponseSchema,
+  TestUserWebhookResponseSchema,
+} from "@buildinternet/releases-api-types";
+import { documentedJsonBody } from "../lib/validate.js";
 import { createDb } from "../db.js";
 import {
   insertWebhookSubscriptionCapped,
@@ -112,12 +119,14 @@ const createWorkspaceWebhookOpenApi = idempotentPostOpenApi({
   summary: "Create a workspace webhook subscription",
   successStatus: 201,
   successDescription: "Created webhook subscription, including its one-time signing key.",
+  successSchema: CreateWorkspaceWebhookResponseSchema,
 });
 
 workspaceWebhookHandlers.post(
   "/workspaces/:workspaceId/webhooks",
   describeRoute({
     ...createWorkspaceWebhookOpenApi,
+    requestBody: documentedJsonBody(CreateWorkspaceWebhookBodySchema),
     responses: {
       ...createWorkspaceWebhookOpenApi.responses,
       400: errorResponse("Invalid url/description/scope/releaseType, or an unsafe webhook target"),
@@ -284,6 +293,7 @@ const rotateWorkspaceWebhookSecretOpenApi = idempotentPostOpenApi({
   summary: "Rotate a workspace webhook signing key",
   successStatus: 200,
   successDescription: "The new secret version and one-time signing key.",
+  successSchema: RotateUserWebhookSecretResponseSchema,
 });
 
 workspaceWebhookHandlers.post(
@@ -334,6 +344,7 @@ const testWorkspaceWebhookOpenApi = idempotentPostOpenApi({
   summary: "Queue a workspace webhook test delivery",
   successStatus: 200,
   successDescription: "The queued synthetic event identifier.",
+  successSchema: TestUserWebhookResponseSchema,
 });
 
 workspaceWebhookHandlers.post(

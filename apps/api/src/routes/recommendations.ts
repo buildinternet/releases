@@ -4,6 +4,11 @@
  */
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
+import {
+  RecommendationSubmitBodySchema,
+  RecommendationSubmitResponseSchema,
+} from "@buildinternet/releases-api-types";
+import { documentedJsonBody } from "../lib/validate.js";
 import { eq } from "drizzle-orm";
 import {
   recommendations,
@@ -65,12 +70,14 @@ const recommendationsPostOpenApi = idempotentPostOpenApi({
   summary: "Submit a source recommendation",
   successStatus: 202,
   successDescription: "Accepted recommendation identifier.",
+  successSchema: RecommendationSubmitResponseSchema,
 });
 
 recommendationRoutes.post(
   "/recommendations",
   describeRoute({
     ...recommendationsPostOpenApi,
+    requestBody: documentedJsonBody(RecommendationSubmitBodySchema),
     responses: {
       ...recommendationsPostOpenApi.responses,
       400: errorResponse("Invalid type, URL, or contact email"),

@@ -1,4 +1,4 @@
-import type { DescribeRouteOptions } from "hono-openapi";
+import { resolver, type DescribeRouteOptions } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../openapi-error.js";
 
 const RETENTION_DESCRIPTION =
@@ -21,6 +21,8 @@ export function idempotentPostOpenApi(input: {
   summary: string;
   successStatus: 200 | 201 | 202;
   successDescription: string;
+  /** JSON body of the success response. Required for routes on the public API surface. */
+  successSchema?: Parameters<typeof resolver>[0];
   tags: string[];
 }): DescribeRouteOptions {
   return {
@@ -37,6 +39,9 @@ export function idempotentPostOpenApi(input: {
             schema: { type: "string", enum: ["true"] },
           },
         },
+        ...(input.successSchema && {
+          content: { "application/json": { schema: resolver(input.successSchema) } },
+        }),
       },
       409: {
         description:

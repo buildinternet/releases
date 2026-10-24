@@ -1,235 +1,132 @@
 /**
- * CI gate: every HTTP method registered under a `publicReadRoutes` or
- * `publicWriteRoutes` prefix must appear in `/v1/openapi.json`. Catches
- * public routes that ship without `describeRoute(...)` annotations.
+ * CI gate for the public API surface (`apps/api/src/api-surface.ts`):
  *
- * Run: `bun scripts/check-openapi-coverage.ts` (exit 0 = OK, 1 = holes,
+ *   1. Every registered `/v1` route is classified as public or internal —
+ *      a new route fails until someone decides which it is.
+ *   2. Every public operation appears in the production `/v1/openapi.json`
+ *      with a tag, a JSON 2xx response schema (204 excepted), and, for
+ *      POST/PUT/PATCH, a JSON request body (unless listed in NO_BODY).
+ *   3. The production spec contains nothing that isn't public, and every
+ *      public entry matches a registered route (no stale entries).
+ *
+ * Run: `bun scripts/check-openapi-coverage.ts` (exit 0 = OK, 1 = violations,
  * 2 = bug — spec couldn't be generated).
- *
- * To opt a route out of coverage, add an
- * explicit entry to ALLOWLIST below with a comment pointing at the route
- * file. The expectation is that ALLOWLIST shrinks as files get
- * `describeRoute(...)` annotations — stale entries log a warning so they
- * don't accumulate after a route is renamed or removed.
  */
 import { Hono } from "hono";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { publicReadRoutes, publicWriteRoutes } from "../apps/api/src/route-namespaces.js";
 import { mountV1Routes } from "../apps/api/src/v1-routes.js";
+import {
+  PUBLIC_OPERATIONS,
+  INTERNAL_OPERATIONS,
+  openapiToHonoPath,
+  routeVisibility,
+} from "../apps/api/src/api-surface.js";
 import type { Env } from "../apps/api/src/index.js";
 
-/**
- * `METHOD /hono-style/path` tuples that are knowingly undocumented today.
- * Paths are Hono-style (`:slug`, not OpenAPI `{slug}`) — they match what
- * `v1.routes[].path` returns.
- */
-const ALLOWLIST = new Set<string>([
-  // These routes are annotated with `hide: hideInProduction` — they exist in
-  // the spec on staging/local but are intentionally suppressed on production.
-  // The coverage script always generates the spec with ENVIRONMENT=production,
-  // so they appear as holes here even though they have describeRoute(). See
-  // apps/api/src/openapi.ts for the `hideInProduction` helper.
-  "GET /orgs/:slug/activity",
-  "GET /orgs/:slug/heatmap",
-  "GET /orgs/:slug/sparklines",
-  "GET /orgs/:slug/recent-releases",
-  "GET /sitemap",
-  "GET /sources/fetchable",
-  "GET /sources/feeds",
-  "GET /sources/changes",
-  "GET /sources/:slug/recent-releases",
-  "GET /sources/:slug/known-releases",
-  "GET /sources/:slug/sessions",
-  "GET /sources/:slug/activity",
-  "GET /sources/:slug/heatmap",
-  "GET /sources/:slug/changelog",
-  "GET /sources/changelog-files/oversized",
-  // Org-scoped aliases of the above source routes (same describeRoute, same hide):
-  "GET /orgs/:orgSlug/sources/:sourceSlug/recent-releases",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/known-releases",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/activity",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/heatmap",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/changelog",
-  // Product activity/heatmap (same hide: hideInProduction pattern as org/source counterparts):
-  "GET /products/:slug/activity",
-  "GET /products/:slug/heatmap",
-  "GET /orgs/:orgSlug/products/:productSlug/activity",
-  "GET /orgs/:orgSlug/products/:productSlug/heatmap",
-  // Admin/internal GET routes hidden from production spec:
-  "GET /orgs/:slug/catalog", // web-frontend aggregation payload, not shaped for general API consumers
-  "GET /orgs/:slug/ignored-urls", // operator-facing ignore-list management
-  "GET /releases", // internal media-backfill CLI helper (?hasMedia=true only)
-  "GET /orgs/:slug/playbook", // editorial-internal; admin Bearer required even for GET
-  "GET /sources/:slug/summaries", // AI-generated content storage; agent-pipeline internal
-  "GET /orgs/:slug/overview/inputs", // AI-pipeline input; admin-only orchestration endpoint
-  "GET /releases/stream", // experimental WebSocket; not a stable REST surface
-  // Write mutations hidden from production spec (same hideInProduction pattern).
-  // These are registered under publicReadRoutes prefixes (auth is handled by
-  // publicReadAuthMiddleware's SAFE_METHODS check) so the gate sees them as
-  // registered routes even though they require Bearer auth at runtime.
-  "POST /orgs",
-  "PATCH /orgs/:slug",
-  "POST /orgs/:slug/avatar", // one-step avatar ingest (#1406); Bearer required, hide: hideInProduction
-  "POST /orgs/:slug/sync-well-known", // .well-known reconcile; Bearer required, hide: hideInProduction
-  "POST /orgs/:slug/discover-apps", // AASA/assetlinks mobile-app discovery (#1907); Bearer required, hide: hideInProduction
-  "POST /orgs/stub", // stub-org creation (#1947); admin required, hide: hideInProduction
-  "POST /orgs/stub-from-domain", // unlisted-domain stub creation (#1947); admin required, hide: hideInProduction
-  "POST /orgs/:slug/promote", // stub→tracked promotion (#1947); admin required, hide: hideInProduction
-  "DELETE /orgs/:slug",
-  "DELETE /orgs/:slug/accounts/:platform/:handle",
-  "POST /orgs/:slug/accounts",
-  "PUT /orgs/:slug/tags",
-  "DELETE /orgs/:slug/tags",
-  "POST /tags",
-  "POST /orgs/:slug/ignored-urls",
-  "DELETE /orgs/:slug/ignored-urls/:url",
-  "POST /orgs/:slug/overview",
-  "POST /sources",
-  "POST /sources/appstore",
-  // Write (Bearer required); annotated with describeRoute but hidden in prod
-  // (hideInProduction), same as POST /sources/appstore above. Materializes a
-  // video source from a YouTube channel/playlist URL.
-  "POST /sources/video",
-  "PATCH /sources/:slug",
-  "PATCH /orgs/:orgSlug/sources/:sourceSlug",
-  "DELETE /sources/:slug",
-  "POST /sources/:slug/fetch",
-  // Admin-only Firecrawl monitor sync (Bearer required via the publicReadRoutes
-  // `sources` prefix); operator/agent-internal, not a stable public surface.
-  "POST /sources/:slug/firecrawl/sync",
-  "POST /sources/:slug/releases/batch",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
-  // Raw-snapshot capture (#1283); Bearer required, hide: hideInProduction like
-  // releases/batch above. Discovery worker POSTs the scraped body here.
-  "POST /sources/:slug/raw-snapshot",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/raw-snapshot",
-  "DELETE /sources/:slug/releases",
-  "POST /sources/:slug/content-hash",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/content-hash",
-  "PATCH /sources/:slug/metadata",
-  "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
-  "PATCH /sources/:slug/changelog/tokens",
-  "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
-  "POST /sources/:slug/changelog/probe",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/changelog/probe",
-  // Experimental coordinate-based changelog fetch — hide: hideInProduction,
-  // so suppressed in the prod-generated spec this coverage script uses.
-  "POST /changelog/fetch",
-  // Experimental coordinate-based changelog parse — hide: hideInProduction,
-  // so suppressed in the prod-generated spec this coverage script uses.
-  "POST /changelog/parse",
-  "POST /sources/:slug/releases",
-  "POST /sources/:slug/summaries",
-  "PATCH /orgs/:slug/playbook/notes",
-  "POST /releases/:id/coverage",
-  "DELETE /releases/:id/coverage",
-  "DELETE /releases/batch",
-  "DELETE /releases/:id",
-  "PATCH /releases/:id",
-  "POST /releases/batch-suppress",
-  "POST /releases/:id/suppress",
-  "POST /releases/:id/unsuppress",
-  "POST /products",
-  "POST /products/adopt",
-  "PATCH /products/:slug",
-  "PATCH /orgs/:orgSlug/products/:productSlug",
-  "DELETE /products/:identifier",
-  "PUT /products/:identifier/tags",
-  "DELETE /products/:identifier/tags",
-  "PATCH /categories/:slug",
-  "POST /collections",
-  "PATCH /collections/:slug",
-  "DELETE /collections/:slug",
-  "PUT /collections/:slug/members",
-  "POST /collections/:slug/members",
-  "DELETE /collections/:slug/members/:org",
-  "DELETE /collections/:slug/members/products/:product",
+/** Public writes that take no request body (action endpoints). */
+const NO_BODY = new Set<string>([
+  "POST /me/webhooks/:id/rotate-secret",
+  "POST /me/webhooks/:id/test",
+  "POST /workspaces/:workspaceId/webhooks/:id/rotate-secret",
+  "POST /workspaces/:workspaceId/webhooks/:id/test",
 ]);
 
-const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
-const PUBLIC_READ_PREFIXES = [...publicReadRoutes, ...publicWriteRoutes].map((r) => `/${r}`);
+const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 
-function honoToOpenapi(path: string): string {
-  return path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
-}
-
-function isPublicReadPath(path: string): boolean {
-  return PUBLIC_READ_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
-}
+type Operation = {
+  tags?: string[];
+  requestBody?: { content?: Record<string, { schema?: unknown }> };
+  responses?: Record<string, { content?: Record<string, { schema?: unknown }> }>;
+};
 
 const v1 = new Hono<Env>();
 mountV1Routes(v1);
 
 const app = new Hono();
 app.route("/v1", v1);
-// `mountOpenApi` reads `c.env.ENVIRONMENT` to gate the staging server
-// entry; pass an explicit production binding so the script always
-// validates against the public-facing spec.
+// `mountOpenApi` reads `c.env.ENVIRONMENT`; production is the public spec.
 const res = await app.request("/v1/openapi.json", {}, { ENVIRONMENT: "production" });
 if (!res.ok) {
   logger.error(`Failed to generate OpenAPI spec: HTTP ${res.status}`);
   process.exit(2);
 }
-const spec = (await res.json()) as {
-  paths?: Record<string, Record<string, unknown>>;
-};
-const specPaths = spec.paths ?? {};
+const spec = (await res.json()) as { paths?: Record<string, Record<string, Operation>> };
 
-type Tuple = { method: string; honoPath: string };
-// Dedupe — `app.get(path, middleware, handler)` registers an entry per
-// variadic, so `v1.routes` contains repeated (method, path) tuples for
-// routes that wrap their handler with middleware (e.g. `authMiddleware`).
-const registeredKeys = new Set<string>();
-const registered: Tuple[] = [];
-for (const r of v1.routes) {
-  if (!HTTP_METHODS.has(r.method)) continue;
-  if (!isPublicReadPath(r.path)) continue;
-  const key = `${r.method} ${r.path}`;
-  if (registeredKeys.has(key)) continue;
-  registeredKeys.add(key);
-  registered.push({ method: r.method, honoPath: r.path });
+const specOps = new Map<string, Operation>();
+for (const [path, item] of Object.entries(spec.paths ?? {})) {
+  for (const [method, op] of Object.entries(item)) {
+    if (!HTTP_METHODS.has(method.toUpperCase())) continue;
+    specOps.set(`${method.toUpperCase()} ${openapiToHonoPath(path)}`, op);
+  }
 }
 
-const holes: string[] = [];
-const allowedHit: string[] = [];
-for (const { method, honoPath } of registered) {
-  const tuple = `${method} ${honoPath}`;
-  const documented = specPaths[honoToOpenapi(honoPath)]?.[method.toLowerCase()];
-  if (documented) continue;
-  if (ALLOWLIST.has(tuple)) {
-    allowedHit.push(tuple);
+// `app.get(path, mw, handler)` registers one entry per handler, so dedupe.
+const registered = new Set<string>();
+for (const r of v1.routes) {
+  if (HTTP_METHODS.has(r.method)) registered.add(`${r.method} ${r.path}`);
+}
+
+const problems: Record<string, string[]> = {
+  "Unclassified routes — add to PUBLIC_OPERATIONS or INTERNAL_OPERATIONS in apps/api/src/api-surface.ts":
+    [],
+  "Public operations missing from the production spec (add describeRoute)": [],
+  "Public operations without a tag": [],
+  "Public operations without a JSON 2xx response schema": [],
+  "Public writes without a JSON request body (validateJson / documentedJsonBody, or NO_BODY)": [],
+  "Internal operations present in the production spec": [],
+  "Stale api-surface entries (no matching route)": [],
+};
+const [unclassified, missing, untagged, noResponse, noBody, leaked, stale] =
+  Object.values(problems);
+
+for (const key of registered) {
+  const [method, path] = key.split(" ");
+  if (!routeVisibility(method, path)) unclassified.push(key);
+}
+
+for (const key of Object.keys(PUBLIC_OPERATIONS)) {
+  if (!registered.has(key)) {
+    stale.push(key);
     continue;
   }
-  holes.push(tuple);
+  const op = specOps.get(key);
+  if (!op) {
+    missing.push(key);
+    continue;
+  }
+  if (!op.tags?.length) untagged.push(key);
+  const hasResponse = Object.entries(op.responses ?? {}).some(
+    ([code, r]) => code === "204" || (code.startsWith("2") && r.content?.["application/json"]),
+  );
+  if (!hasResponse) noResponse.push(key);
+  const [method] = key.split(" ");
+  if (
+    BODY_METHODS.has(method) &&
+    !NO_BODY.has(key) &&
+    !op.requestBody?.content?.["application/json"]
+  )
+    noBody.push(key);
 }
 
-// Stale allowlist entries — warn but don't fail. Keeps the list from
-// accumulating dead entries after a route gets annotated or removed.
-const staleAllowlist = [...ALLOWLIST].filter((entry) => !registeredKeys.has(entry));
+for (const key of specOps.keys()) if (!(key in PUBLIC_OPERATIONS)) leaked.push(key);
+for (const key of INTERNAL_OPERATIONS) if (!registered.has(key)) stale.push(key);
+for (const key of NO_BODY) if (!(key in PUBLIC_OPERATIONS)) stale.push(`${key} (NO_BODY)`);
 
-if (holes.length > 0) {
-  logger.error(`OpenAPI coverage gate: ${holes.length} undocumented public-read route(s).`);
-  logger.error("");
-  logger.error("Either add describeRoute(...) in the corresponding apps/api/src/routes/");
-  logger.error("file, or add an explicit ALLOWLIST entry in");
-  logger.error("scripts/check-openapi-coverage.ts with a rationale comment.");
-  logger.error("");
-  for (const h of holes.toSorted()) logger.error(`  - ${h}`);
-  if (staleAllowlist.length > 0) {
+const failures = Object.entries(problems).filter(([, list]) => list.length > 0);
+if (failures.length > 0) {
+  logger.error(
+    "Public API surface gate failed. See docs/architecture/routing.md → Public API surface.",
+  );
+  for (const [title, list] of failures) {
     logger.error("");
-    logger.error("(Also: ALLOWLIST has stale entries that match no registered route.)");
-    for (const s of staleAllowlist.toSorted()) logger.error(`  - ${s}`);
+    logger.error(`${title}:`);
+    for (const item of list.toSorted()) logger.error(`  - ${item}`);
   }
   process.exit(1);
 }
 
-const documented = registered.length - allowedHit.length;
+const publicCount = Object.keys(PUBLIC_OPERATIONS).length;
 logger.info(
-  `OpenAPI coverage gate: OK — ${documented} documented, ${allowedHit.length} allowlisted, ${registered.length} total public-read routes.`,
+  `Public API surface gate: OK — ${publicCount} public operations documented, ${registered.size - publicCount} internal routes.`,
 );
-if (staleAllowlist.length > 0) {
-  logger.warn("");
-  logger.warn(`Warning: ${staleAllowlist.length} stale ALLOWLIST entries (no matching route).`);
-  logger.warn("Clean these up in scripts/check-openapi-coverage.ts:");
-  for (const s of staleAllowlist.toSorted()) logger.warn(`  - ${s}`);
-}

@@ -20,7 +20,9 @@ async function fullSpec(): Promise<Spec> {
   app.route("/v1", v1);
   const response = await app.fetch(
     new Request("https://api.example.test/v1/openapi.json"),
-    { ENVIRONMENT: "production" },
+    // Staging documents internal operations too (production keeps only the
+    // public surface — see api-surface.test.ts), so admin routes stay covered.
+    { ENVIRONMENT: "staging" },
     { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
   );
   expect(response.status).toBe(200);

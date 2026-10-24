@@ -47,11 +47,13 @@ import { tryDomainManifestJit } from "../lib/listing/domain-jit.js";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import {
+  LookupBodySchema,
   LookupResponseSchema,
   LookupSourceBySlugResponseSchema,
   LookupProductBySlugResponseSchema,
   DomainLookupResponseSchema,
 } from "@buildinternet/releases-api-types";
+import { documentedJsonBody } from "../lib/validate.js";
 
 export const lookupRoutes = new Hono<Env>();
 
@@ -417,6 +419,7 @@ lookupRoutes.post(
     description:
       'Resolves a GitHub `org/repo` coordinate to a registry source. Idempotent — if the source already exists, returns it with `status: "existing"`; otherwise probes GitHub, inserts a hidden `on_demand` source row (and a new `on_demand` org when no curated org claims the segment), and ingests up to 100 releases.\n\nNegative results (`not_found`, `empty`) are cached in KV (24h and 6h respectively) so repeat probes don\'t re-hit GitHub. `deferred` outcomes (rate-limit, 5xx) are not cached and let the next cron pass retry.\n\nBody requires `provider: "github"` — other providers are explicitly rejected, not silently accepted. Coordinate must match `{org}/{repo}` (case-insensitive; URLs are deduped via `LOWER(sources.url)`).',
     security: [{ bearerAuth: [] }],
+    requestBody: documentedJsonBody(LookupBodySchema),
     responses: {
       200: {
         description: "Lookup result. Inspect `status` to disambiguate outcomes.",

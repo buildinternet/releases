@@ -1,13 +1,14 @@
 /**
  * Top-level resource namespaces, split by auth model. Pulled out of `index.ts`
- * so tooling — notably `scripts/check-openapi-coverage.ts` — can import these
- * without dragging in the worker's `cloudflare:workers` re-exports (Durable
- * Objects and Workflows), which Bun can't resolve outside the Workers runtime.
+ * so tooling — notably `api-surface.ts` and `scripts/check-openapi-coverage.ts`
+ * — can import these without dragging in the worker's `cloudflare:workers`
+ * re-exports (Durable Objects and Workflows), which Bun can't resolve outside
+ * the Workers runtime.
  *
- * Both arrays drive middleware wiring in `index.ts` (`publicReadAuthMiddleware`
- * + rate limit for public-read; `authMiddleware` for admin) and are the source
- * of truth the CI gate uses to decide which registered routes must appear in
- * the OpenAPI document.
+ * These arrays drive middleware wiring in `index.ts` (`publicReadAuthMiddleware`
+ * + rate limit for public-read; `authMiddleware` for admin). Which routes are
+ * documented and supported for third parties is a separate list: see
+ * `api-surface.ts`.
  */
 
 /**

@@ -2,6 +2,7 @@ import { generateSpecs, resolver } from "hono-openapi";
 import type { Hono } from "hono";
 import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
 import type { Env } from "./index.js";
+import { PUBLIC_OPERATIONS, openapiToHonoPath } from "./api-surface.js";
 
 // Hides the route from /v1/openapi.json on production. Staging and local
 // `wrangler dev` still expose it so our internal tooling can introspect the
@@ -11,6 +12,10 @@ import type { Env } from "./index.js";
 // hono-openapi's `hide` callback signature passes `c?: Context | undefined`,
 // so we type the env read defensively and treat any non-"production" value
 // (staging, undefined under `wrangler dev`) as "show".
+//
+// Superseded by `api-surface.ts`, which filters the production spec to the
+// public operations centrally; existing `hide: hideInProduction` annotations are
+// redundant but harmless. New internal routes don't need it.
 export const hideInProduction = (opts: { c?: { env?: unknown } }) => {
   const env = (opts.c?.env ?? {}) as { ENVIRONMENT?: string };
   return env.ENVIRONMENT === "production";
@@ -95,6 +100,35 @@ const TAGS = [
   { name: "Sessions", description: "Update-run sessions (status hub)." },
 ];
 
+const OPERATION_METHODS = new Set(["get", "put", "post", "delete", "patch", "head", "options"]);
+
+type SpecOperation = { security?: unknown; "x-releases-visibility"?: string };
+
+/**
+ * Applies the public/internal split from `api-surface.ts`. Production keeps
+ * only public operations; elsewhere every documented operation stays, tagged
+ * with `x-releases-visibility` so tooling (SDK generators, the coverage gate)
+ * can filter. Public operations get their `security` from the surface list so
+ * auth is declared the same way everywhere.
+ */
+export function applyApiSurface(paths: unknown, opts: { productionOnly: boolean }) {
+  const pathMap = (paths ?? {}) as Record<string, Record<string, SpecOperation>>;
+  for (const [path, item] of Object.entries(pathMap)) {
+    for (const method of Object.keys(item)) {
+      if (!OPERATION_METHODS.has(method)) continue;
+      const auth = PUBLIC_OPERATIONS[`${method.toUpperCase()} ${openapiToHonoPath(path)}`];
+      if (!auth) {
+        if (opts.productionOnly) delete item[method];
+        else item[method]["x-releases-visibility"] = "internal";
+        continue;
+      }
+      item[method]["x-releases-visibility"] = "public";
+      item[method].security = auth === "required" ? [{ bearerAuth: [] }] : [{}, { bearerAuth: [] }];
+    }
+    if (!Object.keys(item).some((k) => OPERATION_METHODS.has(k))) delete pathMap[path];
+  }
+}
+
 export function mountOpenApi(v1: Hono<Env>) {
   // Servers + securitySchemes are computed per-request so production's
   // public spec advertises only api.releases.sh, while staging's spec keeps
@@ -161,6 +195,8 @@ export function mountOpenApi(v1: Hono<Env>) {
       },
       c,
     );
+
+    applyApiSurface(spec.paths, { productionOnly: c.env.ENVIRONMENT === "production" });
 
     // Drop tag definitions that no visible operation references. Without this,
     // Scalar renders empty sidebar sections for any tag declared in `TAGS`

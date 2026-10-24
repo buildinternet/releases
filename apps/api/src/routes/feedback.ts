@@ -9,6 +9,11 @@
  */
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
+import {
+  FeedbackSubmitBodySchema,
+  FeedbackSubmitResponseSchema,
+} from "@buildinternet/releases-api-types";
+import { documentedJsonBody } from "../lib/validate.js";
 import { eq } from "drizzle-orm";
 import {
   feedback,
@@ -62,12 +67,14 @@ const feedbackPostOpenApi = idempotentPostOpenApi({
   summary: "Submit product feedback",
   successStatus: 202,
   successDescription: "Accepted feedback identifier.",
+  successSchema: FeedbackSubmitResponseSchema,
 });
 
 feedbackRoutes.post(
   "/feedback",
   describeRoute({
     ...feedbackPostOpenApi,
+    requestBody: documentedJsonBody(FeedbackSubmitBodySchema),
     responses: {
       ...feedbackPostOpenApi.responses,
       400: errorResponse("Missing/invalid JSON body, or message shorter than the minimum length"),
