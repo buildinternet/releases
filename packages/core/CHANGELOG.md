@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.35.3
+
+### Patch Changes
+
+- e5499f2: Coerce a release's `type` to `feature` or `rollup`. Any other value, including a label a model invents, is stored as `feature`.
+
 ## 0.35.2
 
 ### Patch Changes
