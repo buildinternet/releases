@@ -136,14 +136,6 @@ export function mapOrgPageFromRest(detail: OrgDetail): OrgPageData {
 }
 
 /**
- * Primary org record + products + sources via the stable `OrgPage` persisted
- * query. Collections and overview are separate (see `getOrgCollections` /
- * `getOrgOverview`) so this hash can ship without a coordinated API deploy.
- *
- * Falls back to REST when GraphQL fails (PersistedQueryNotFound deploy window,
- * resolver error, etc.) — same resilience pattern as ProductPage (#2054 / #2056).
- */
-/**
  * Single-product collapse: with fewer than two products the org page already is
  * that product's feed, so its product URL 308s to `/{org}`. `org.products` holds
  * the org's visible products (at least one visible source) — the same set the
@@ -153,6 +145,14 @@ export function collapsesToOrg(org: { products: readonly unknown[] }): boolean {
   return org.products.length <= 1;
 }
 
+/**
+ * Primary org record + products + sources via the stable `OrgPage` persisted
+ * query. Collections and overview are separate (see `getOrgCollections` /
+ * `getOrgOverview`) so this hash can ship without a coordinated API deploy.
+ *
+ * Falls back to REST when GraphQL fails (PersistedQueryNotFound deploy window,
+ * resolver error, etc.) — same resilience pattern as ProductPage (#2054 / #2056).
+ */
 export const getOrg = cache(async (slug: string): Promise<OrgPageData> => {
   try {
     return await getOrgGraphql(slug);
