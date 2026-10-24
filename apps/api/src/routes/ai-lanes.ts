@@ -489,9 +489,8 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
       sourceId: source?.id,
       releaseId: release?.id,
     };
-    // `metadata.summarize=false` is a hard opt-out. The ingest SELECT honors
-    // it; this lane used to call the model anyway and write the fields back
-    // on `apply: true`. Inline content with no source still runs.
+    // `metadata.summarize=false` is a hard opt-out, here as in the ingest
+    // SELECT. Inline content with no source still runs.
     if (source && parseSourceMeta(source.metadata).summarize === false) {
       if (release) {
         logSummarizeSkip({

@@ -1,24 +1,17 @@
 /**
- * Shared ingest step primitives for the workflow ingest paths (#1946 phase 3).
+ * Shared ingest step primitives for the workflow ingest paths (#1946).
  *
  * The poll path (`workflows/poll-and-fetch.ts`) and the Firecrawl webhook path
  * (`workflows/firecrawl-ingest.ts`) run the SAME post-insert side-effect chain —
  * summarize (`generate-content`) → embed (`embed-releases`) → purge the
- * latest-cache (`invalidate-latest-cache`). Historically each workflow inlined
- * its own copy, and they drifted (the firecrawl copy had embed/generate reversed
- * and no cache purge — fixed in #1955). Home the chain here so the two paths
- * can't diverge again, and so the webhook path no longer imports the 800-line
- * PollAndFetch workflow module just to reach `generateContentForReleases`.
+ * latest-cache (`invalidate-latest-cache`). It lives here so the two paths
+ * can't drift apart again (#1955).
  *
  * The `step.do` names emitted here are load-bearing: CF Workflows matches
- * completed steps by name on replay, so they must stay byte-identical to what
- * both workflows emitted before the extraction.
+ * completed steps by name on replay, so they must stay byte-identical.
  *
- * Env typing: the helpers accept `PollAndFetchWorkflowEnv` (imported type-only,
- * so there is no runtime import cycle with the poll workflow module — the value
- * imports flow the other way: poll-and-fetch imports these definitions from
- * here). `FirecrawlIngestEnv` extends `PollAndFetchWorkflowEnv`, so both callers
- * satisfy it.
+ * `PollAndFetchWorkflowEnv` is imported type-only, so there is no runtime import
+ * cycle with the poll workflow module.
  */
 
 import type { WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
@@ -128,8 +121,7 @@ const MAX_AUTOGEN_BODY_CHARS = 50_000;
  * summarize-release`, stable `reason` code, `count` + `releaseIds`). That
  * includes gates that return before `batch-summary` (hidden, opted-out,
  * source opt-out, suppressed, coverage) and the in-loop empty / too-large
- * skips. `batch-summary.skippedEmpty` / `skippedTooLarge` are unchanged.
- * A bulk insert over the per-call chunk size is split and each slice runs;
+ * skips. A bulk insert over the per-call chunk size is split and each slice runs;
  * it is not dropped.
  */
 export async function generateContentForReleases(
@@ -155,11 +147,10 @@ export async function generateContentForReleases(
     return 0;
   }
 
-  // A bulk insert (the OpenRouter blog's 72-row `/releases/batch`, a first
-  // feed onboard) used to trip the cap below and return 0 for the whole set.
-  // Recurse per chunk so each wave commits its own updates — a timeout keeps
-  // the slices that already landed, and `title_generated IS NULL` makes the
-  // retry fill only the rest. `summarize=false` is applied inside each slice.
+  // A bulk insert (e.g. a first feed onboard) exceeds the cap. Recurse per chunk so each
+  // wave commits its own updates — a timeout keeps the slices that already landed, and
+  // `title_generated IS NULL` makes the retry fill only the rest. `summarize=false` is
+  // applied inside each slice.
   if (insertedIds.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
     logEvent("info", {
       component: "auto-generate-content",
@@ -277,8 +268,7 @@ export async function generateContentForReleases(
   // unlike title_short, it survives the boilerplate-discard path (where
   // title_short is intentionally null) so eligibility doesn't re-pick those
   // rows on the next batch run. When composition is null we omit metadata SET
-  // entirely so boilerplate
-  // rows don't trigger a no-op D1 page write.
+  // entirely so boilerplate rows don't trigger a no-op D1 page write.
   const updates: {
     id: string;
     titleGenerated: string | null;

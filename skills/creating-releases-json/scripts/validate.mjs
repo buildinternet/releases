@@ -244,7 +244,6 @@ function detectScope(m) {
   return "domain"; // a bare { version, releases } file is a valid domain manifest
 }
 
-// ---- entry point ----
 const args = process.argv.slice(2);
 const scopeFlagIdx = args.indexOf("--scope");
 let scopeFlag = null;

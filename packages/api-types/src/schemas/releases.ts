@@ -307,15 +307,6 @@ export const ReleaseDetailResponseSchema = z.object({
 });
 
 /**
- * Body accepted by `PATCH /v1/releases/:id`. All fields are optional;
- * omitted fields are not updated. The nullable string columns (`version`,
- * `url`, `publishedAt`, `contentHash`) accept a string or `null`. AI-generated
- * fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to
- * explicitly clear the stored value. Non-whitelisted fields are rejected
- * via `.strict()` — the handler also re-runs the field-set check after
- * sanitization so an empty update payload still 400s.
- */
-/**
  * `error.details` on a 409 from `PATCH /v1/releases/:id` when the new `url`
  * collides with `UNIQUE(source_id, url)`. Additive: older servers omit `details`.
  */
@@ -327,6 +318,15 @@ export const ReleaseUrlConflictDetailsSchema = z
   })
   .describe("Structured details for a release URL conflict (409).");
 
+/**
+ * Body accepted by `PATCH /v1/releases/:id`. All fields are optional;
+ * omitted fields are not updated. The nullable string columns (`version`,
+ * `url`, `publishedAt`, `contentHash`) accept a string or `null`. AI-generated
+ * fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to
+ * explicitly clear the stored value. Non-whitelisted fields are rejected
+ * via `.strict()` — the handler also re-runs the field-set check after
+ * sanitization so an empty update payload still 400s.
+ */
 export const UpdateReleaseBodySchema = z
   .object({
     title: z.string().optional(),

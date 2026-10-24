@@ -37,16 +37,6 @@ function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
 }
 
 /**
- * Read + parse a JSON request body while **enforcing** a byte cap by streaming
- * the body and summing chunk sizes — the only guard that actually holds, since a
- * `Content-Length` header check is advisory (a chunked or header-spoofed request
- * sails past it). Bails at `maxBytes` with `payload_too_large`, cancelling the
- * reader so we never buffer the whole payload. A missing body, a read error, or
- * unparseable bytes all resolve to `invalid_json`. Shared by the open,
- * unauthenticated POST routes (`/feedback`, `/recommendations`); keep the cheap
- * `Content-Length` pre-check at the call site as a fast-path for honest clients.
- */
-/**
  * Parse an already-buffered, already-cap-checked body (e.g. bytes handed
  * back by `idempotentPost`, which streams and caps the body itself). Same
  * result shape as {@link readJsonBodyCapped} for a byte-array input, minus
@@ -61,6 +51,16 @@ export function parseJsonBodyCapped(bytes: Uint8Array): ReadJsonBodyResult {
   }
 }
 
+/**
+ * Read + parse a JSON request body while **enforcing** a byte cap by streaming
+ * the body and summing chunk sizes — the only guard that actually holds, since a
+ * `Content-Length` header check is advisory (a chunked or header-spoofed request
+ * sails past it). Bails at `maxBytes` with `payload_too_large`, cancelling the
+ * reader so we never buffer the whole payload. A missing body, a read error, or
+ * unparseable bytes all resolve to `invalid_json`. Shared by the open,
+ * unauthenticated POST routes (`/feedback`, `/recommendations`); keep the cheap
+ * `Content-Length` pre-check at the call site as a fast-path for honest clients.
+ */
 export async function readJsonBodyCapped(
   req: Request,
   maxBytes: number,

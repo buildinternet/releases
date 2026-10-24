@@ -205,13 +205,9 @@ export function ReleaseListItem({
       />
     ) : null;
 
-  // Feed title hierarchy (#feed-title): lead with a descriptive headline and
-  // demote the version, instead of using a bare `v2.1.154` (which loses product
-  // context). When the row has nothing more descriptive than its version, fall
-  // back to a product+version headline. The product/source name is shown only
-  // when the feed mixes sources (`sourceByline` is set) — folding the old
-  // left-rail byline into an inline meta line. App Store rows keep their own
-  // layout below. See `.context/2026-05-29-feed-version-title-hierarchy.md`.
+  // Lead with a descriptive headline and demote the version (see
+  // lib/release-title.ts). The product/source name is shown only when the feed
+  // mixes sources (`sourceByline` is set). App Store rows keep their own layout below.
   const { descriptive, versionLabel } = deriveFeedTitle(release);
 
   // Title click goes to the upstream source URL. No /release/{id} fallback

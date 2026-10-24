@@ -6,7 +6,7 @@
  * Run: `bun scripts/check-openapi-coverage.ts` (exit 0 = OK, 1 = holes,
  * 2 = bug — spec couldn't be generated).
  *
- * To opt a route out of coverage during the Phase 1 long-tail port, add an
+ * To opt a route out of coverage, add an
  * explicit entry to ALLOWLIST below with a comment pointing at the route
  * file. The expectation is that ALLOWLIST shrinks as files get
  * `describeRoute(...)` annotations — stale entries log a warning so they
@@ -55,7 +55,7 @@ const ALLOWLIST = new Set<string>([
   "GET /products/:slug/heatmap",
   "GET /orgs/:orgSlug/products/:productSlug/activity",
   "GET /orgs/:orgSlug/products/:productSlug/heatmap",
-  // Admin/internal GET routes hidden from production spec (Phase 2 extension):
+  // Admin/internal GET routes hidden from production spec:
   "GET /orgs/:slug/catalog", // web-frontend aggregation payload, not shaped for general API consumers
   "GET /orgs/:slug/ignored-urls", // operator-facing ignore-list management
   "GET /releases", // internal media-backfill CLI helper (?hasMedia=true only)

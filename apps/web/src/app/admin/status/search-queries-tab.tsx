@@ -5,8 +5,6 @@ import { useEffect, useState } from "react";
 import { SortHeader, type SortState } from "@/components/sort-header";
 import { formatStatusTimestamp } from "./status-shared";
 
-// ---- Types ----------------------------------------------------------------
-
 interface RawSearchQuery {
   id: string;
   timestamp: number;
@@ -34,8 +32,6 @@ interface TopQuery {
   count: number;
   lastSeen: number;
 }
-
-// ---- Formatting helpers ---------------------------------------------------
 
 function formatTimestamp(ts: number): string {
   return formatStatusTimestamp(ts);
@@ -126,8 +122,6 @@ function modeColor(mode: string | null): string {
   }
 }
 
-// ---- Shared status helpers ------------------------------------------------
-
 function LoadingState(): React.ReactElement {
   return <div className="text-stone-500 text-xs">Loading...</div>;
 }
@@ -139,8 +133,6 @@ function ErrorState({ message }: { message: string }): React.ReactElement {
 function EmptyState(): React.ReactElement {
   return <div className="text-stone-500 text-xs">No queries recorded yet.</div>;
 }
-
-// ---- Top queries section --------------------------------------------------
 
 type TopSortField = "count" | "lastSeen" | "query";
 
@@ -212,8 +204,6 @@ function TopQueriesTable(): React.ReactElement {
     </div>
   );
 }
-
-// ---- Recent raw queries section -------------------------------------------
 
 type RecentSortField = "timestamp" | "durationMs" | "surface" | "mode" | "clientKind";
 
@@ -345,8 +335,6 @@ function RecentQueriesTable(): React.ReactElement {
     </div>
   );
 }
-
-// ---- Tab root -------------------------------------------------------------
 
 export function SearchQueriesTab(): React.ReactElement {
   return (

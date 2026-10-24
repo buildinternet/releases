@@ -1287,7 +1287,7 @@ workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) =>
 // Session reads go through `/v1/sessions/:id` — no separate status endpoint
 // here. Dispatch is the shared `startDeterministicUpdate` gate (kill switch → spend cap →
 // per-source lock) and execution is the DETERMINISTIC_UPDATE workflow in this
-// worker. The wire contract is unchanged: 202 {sessionId, status: "running",
+// worker. Responses: 202 {sessionId, status: "running",
 // sourceIdentifiers}, 400 validation, 409 + Retry-After on lock contention,
 // 429 spend cap, 503 kill switch / unbound workflow. Admin scope is enforced
 // by the /workflows namespace middleware (route-namespaces.ts).
@@ -2017,15 +2017,12 @@ workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
 // ── POST /workflows/backfill-media ───────────────────────────────────────────
 //
 // Operator-triggered R2 backfill for releases stored before ingest-time R2
-// mirroring was active (or while the `MEDIA` bucket binding was unbound), so
-// their `media` still points at third-party URLs with no `r2Key`. The standard ingest upsert
-// backfills `media` only for stored-empty rows and never overwrites populated
-// media (RELEASE_URL_UPSERT), so re-fetching a source can NOT re-mirror media
-// that already has URLs — this route is the only path that R2-stamps them.
+// mirroring was active, so their `media` still points at third-party URLs with
+// no `r2Key`. The ingest upsert never overwrites populated media, so re-fetching
+// can't re-mirror them; this route is the only path that R2-stamps them.
 //
-// It re-runs the exact ingest mirror (`processMediaForR2`: junk filter →
-// content-type/size gate → R2 put → registry insert → stamp `r2Key`) and writes
-// the stamped media JSON back. Bounded per call; `remaining` reports how many
+// It re-runs the ingest mirror (`processMediaForR2`) and writes the stamped
+// media JSON back. Bounded per call; `remaining` reports how many
 // rows still need backfill so the operator can loop. `dryRun` (default) reports
 // the pending count without writing. Idempotent: a mirrored row has `r2Key` and
 // drops out of the candidate filter.
@@ -2266,22 +2263,15 @@ workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
 // ── POST /workflows/backfill-video ───────────────────────────────────────────
 //
 // Operator-triggered retrofit of the inline hosted-video card (#1549) onto
-// releases ingested before that ingest hook existed. The card renders in web
-// purely from a `media[]` item with `type:"video"` + `linkUrl` — it does NOT
-// scan markdown at render time — and that item is written ONLY at ingest for new
-// releases (poll-fetch `isNewRelease` gate). So existing releases that link out
-// to a Wistia/Loom/Vimeo/YouTube video never got the card; this route adds it.
+// releases ingested before that ingest hook existed. The card renders only from
+// a `media[]` item with `type:"video"` + `linkUrl`, written at ingest for new
+// releases, so older rows never got one.
 //
-// Built on the same primitives as the manual media edit (Part 1) and
-// `backfill-media`: for each candidate it re-runs `detectInlineVideos`
-// (detect → oEmbed poster/title/watch-URL), mirrors the poster via
-// `processMediaForR2`, and APPENDS the resulting `type:"video"` item(s) to the
-// existing `media[]` (preserving the row id + hero image + all other items).
-// Idempotent — a video already present (matched by `linkUrl`) is skipped, so
-// re-running adds nothing. Scope a single release with `releaseId` (rel_…) or a
-// whole source with `sourceId` (src_…); `all: true` sweeps every source.
-// `dryRun` (default) reports the candidate count without writing. No feature
-// flag: admin-gated, idempotent, fail-open (an unresolvable embed is a no-op).
+// For each candidate it re-runs `detectInlineVideos`, mirrors the poster via
+// `processMediaForR2`, and APPENDS the `type:"video"` item(s) to the existing
+// `media[]`. Idempotent — a video already present (matched by `linkUrl`) is
+// skipped. Scope with `releaseId`, `sourceId`, or `all: true`. `dryRun`
+// (default) reports the candidate count without writing.
 //
 // Body: { releaseId?, sourceId?, all?, limit?, dryRun? }
 
@@ -2385,7 +2375,7 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
 // (CRAWL_PAGE_SYSTEM_PROMPT, same path as Firecrawl crawl monitors), and update
 // the existing row — same `rel_` id — with the full body/media/date. Built for
 // thin index-scrape rows (teaser body + synthesized `#fragment` URL) so healing
-// them no longer requires delete + re-fetch, which mints new ids and kills web
+// them doesn't require delete + re-fetch, which mints new ids and kills web
 // links.
 //
 // Policy (curator action, unlike ingest's fill-if-empty):

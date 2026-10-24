@@ -229,7 +229,7 @@ orgRoutes.get(
     const db = createDb(c.env.DB);
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-    // Admin-only tracking-requested filter (#1947 phase 2) — a distinct,
+    // Admin-only tracking-requested filter (#1947) — a distinct,
     // narrower projection over `organizations` rather than the public
     // stats-heavy list below. Fails closed: presence of the param always
     // requires admin, never silently falls through to the public path.
@@ -2546,13 +2546,11 @@ orgRoutes.get(
   },
 );
 
-// ---------------------------------------------------------------------------
 // GET /orgs/:slug/recent-releases?since=<iso>&limit=<n>
 //
 // Returns releases for grouping / summarization — same shape as the local
 // getRecentReleasesByOrg query (full Release row + sourceName/sourceSlug),
 // filtered to `publishedAt >= since` and skipping suppressed + disabled.
-// ---------------------------------------------------------------------------
 
 orgRoutes.get(
   "/orgs/:slug/recent-releases",

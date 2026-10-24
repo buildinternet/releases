@@ -50,7 +50,7 @@ function buildAppStoreBlock(listing: AppStoreListing, coord: AppStoreCoordinate)
 
 /**
  * Build the source-row `metadata` JSON for a brand-new App Store source: just
- * the `{appStore:...}` block. Task 8's create path uses this — a full
+ * the `{appStore:...}` block. A full
  * overwrite is correct for a row with no prior metadata.
  */
 export function buildAppStoreMeta(listing: AppStoreListing, coord: AppStoreCoordinate): string {

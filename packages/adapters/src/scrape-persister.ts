@@ -1,5 +1,5 @@
 /**
- * Persistence seam for `scrapeFetch` (#1946 phase 4). `ScrapePersister`
+ * Persistence seam for `scrapeFetch` (#1946). `ScrapePersister`
  * abstracts source reads, release inserts, source-after-fetch updates,
  * fetch-log writes, and raw-snapshot capture behind an interface so a
  * direct-DB implementation can be injected later without touching

@@ -132,10 +132,8 @@ async function runOneShot(
         },
         { model: deps.oneShotAiSdkModel as LanguageModel, modelLabel: label, logger },
       );
-      // Mirrors the other lanes' `ai_usage` event (apps/api/src/lib/ai/text-model.ts's
-      // `withLaneUsageLogging` and `overviewUsageSink`) so Axiom shows the one-shot
-      // tier's routing — previously invisible since extract only logged to the
-      // `usage_log` D1 table.
+      // Mirrors the other lanes' `ai_usage` event (`withLaneUsageLogging` in
+      // apps/api/src/lib/ai/text-model.ts) so Axiom shows the one-shot tier's routing.
       //
       // `promptTokens` / `cacheHitRate` replicate `cacheMetrics` in
       // packages/ai/src/text-model.ts rather than importing it: packages/adapters
@@ -271,10 +269,7 @@ export async function extractFromBody(
     // Pass the base prompt and guidance SEPARATELY so the loop can emit
     // per-source parseInstructions + the org playbook in a trailing system block,
     // after the cache breakpoint — keeping the static prefix shareable across
-    // sources while still delivering guidance to the model. (Folding it into
-    // systemPrompt here previously wedged it mid-prefix.) Sources like
-    // posthog-changelog, which rely on parseInstructions to point at the right
-    // slice of a 700+ item flat array, still get it.
+    // sources while still delivering guidance to the model.
     const loopOpts = {
       body: bodyForLoop,
       systemPrompt: opts.systemPrompt,

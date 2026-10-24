@@ -2,10 +2,6 @@ import { Command } from "commander";
 import { writeJson } from "../../lib/output.js";
 import { VERSION } from "../version.js";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export interface AgentContextArg {
   name: string;
   required: boolean;
@@ -39,14 +35,12 @@ export interface AgentContextDocument {
   commands: AgentContextCommand[];
 }
 
-// ---------------------------------------------------------------------------
 // Stdin-accepting flags allowlist
 //
 // Commander has no generic signal for "this flag accepts - for stdin". The
 // pairs below are (command-path-suffix, flag-long-name) tuples that we know
 // accept "-" to mean stdin. Extend this list whenever a new stdin-capable
 // flag is added to the CLI.
-// ---------------------------------------------------------------------------
 const STDIN_FLAGS: Array<{ pathSuffix: string[]; flagName: string }> = [
   // releases import <file>
   { pathSuffix: ["import"], flagName: "<file>" },
@@ -66,14 +60,12 @@ const STDIN_FLAGS: Array<{ pathSuffix: string[]; flagName: string }> = [
   { pathSuffix: ["unsuppress"], flagName: "--file" },
 ];
 
-// ---------------------------------------------------------------------------
 // Deprecated command detection
 //
 // Commands whose action is wrapped by warnDeprecatedAlias() are considered
 // deprecated. We detect this via the command description, which always starts
 // with "(deprecated — use <verb>)" per the pattern established across the
 // codebase. This avoids needing to introspect the action function closure.
-// ---------------------------------------------------------------------------
 const DEPRECATED_DESCRIPTION_PREFIX = "(deprecated — use ";
 
 function parseDeprecationFromDescription(description: string): {
@@ -89,10 +81,6 @@ function parseDeprecationFromDescription(description: string): {
   const replacement = closeIdx >= 0 ? inner.slice(0, closeIdx).trim() : null;
   return { deprecated: true, deprecatedReplacement: replacement };
 }
-
-// ---------------------------------------------------------------------------
-// Introspection helpers
-// ---------------------------------------------------------------------------
 
 function pathEndsWith(path: string[], suffix: string[]): boolean {
   if (suffix.length > path.length) return false;
@@ -217,10 +205,6 @@ export function buildAgentContext(program: Command): AgentContextDocument {
     commands,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Command registration
-// ---------------------------------------------------------------------------
 
 export function registerAgentContextCommand(program: Command): void {
   program

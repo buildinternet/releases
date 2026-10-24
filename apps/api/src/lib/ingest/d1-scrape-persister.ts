@@ -1,6 +1,6 @@
 /**
  * Direct-D1 `ScrapePersister` for the API worker's deterministic update
- * workflow (#1946 phase 4, task 6). It mirrors `httpPersister`'s mappings while
+ * workflow (#1946). It mirrors `httpPersister`'s mappings while
  * calling the extracted ingest helpers in-process. Workflow callers have no
  * `waitUntil`, so every durable write and post-ingest effect is awaited.
  */

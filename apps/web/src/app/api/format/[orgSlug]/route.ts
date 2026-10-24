@@ -53,8 +53,7 @@ export async function GET(
     return formatErrorResponse(err, "Organization not found", format);
   }
 
-  // The API's public-read endpoints gate admin-only fields (e.g. playbook)
-  // behind isValidBearerAuth. The web no longer forwards the admin bearer on
-  // these calls, so the response is safe to serve verbatim.
+  // The web doesn't forward the admin bearer here, so admin-only fields (e.g.
+  // playbook) are already gated out and the response is safe to serve verbatim.
   return jsonFormatResponse(org);
 }

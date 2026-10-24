@@ -1,5 +1,5 @@
 /**
- * Follows-scoped semantic alert matcher (#2304 Phase 2).
+ * Follows-scoped semantic alert matcher (#2304).
  *
  * One JEV call per release (chunked) asks a `noul` question per enabled alert.
  * The AI SDK names that question `boolean`; OpenRouter/JEV wire it as `noul`.

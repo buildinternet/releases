@@ -74,7 +74,7 @@ function webhookUrl(env: Env["Bindings"]): string {
   // ADMIN_BASE_URL is the API worker's own public origin (https://api.releases.sh),
   // the same self-referential binding used by routes/workflows.ts.
   // WEB_BASE_URL points at the Next.js frontend
-  // (https://releases.sh), where this path 404s — see Phase 2 webhook receiver.
+  // (https://releases.sh), where this path 404s.
   const base = env.ADMIN_BASE_URL ?? "https://api.releases.sh";
   return `${base.replace(/\/$/, "")}/v1/inbound/firecrawl`;
 }
@@ -201,11 +201,9 @@ firecrawlRoutes.post(
   },
 );
 
-// ---------------------------------------------------------------------------
 // Inbound receiver: POST /v1/inbound/firecrawl.
 // `inbound` is in none of the route-namespace lists, so no shared auth
 // middleware runs. The handler checks X-Firecrawl-Token itself.
-// ---------------------------------------------------------------------------
 
 /**
  * Deterministic Workflow instance id for one webhook page. Keyed on (checkId,

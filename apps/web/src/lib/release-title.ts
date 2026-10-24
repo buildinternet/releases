@@ -5,8 +5,7 @@
  * of using a bare `v2.1.154` as the headline (which loses product context). The
  * pure decisions live here so the rendering component stays a thin view layer
  * and the edge cases (bare-version detection, version normalization, AI-title
- * preference) are unit-tested. See
- * `.context/2026-05-29-feed-version-title-hierarchy.md`.
+ * preference) are unit-tested.
  */
 
 import { fmtVersion } from "@/lib/cadence";

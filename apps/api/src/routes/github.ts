@@ -9,7 +9,6 @@ import { UnauthorizedError } from "@releases/lib/releases-error";
 
 export const githubRoutes = new Hono<Env>();
 
-// ---------------------------------------------------------------------------
 // Inbound GitHub App webhook receiver — PLUMBING STUB (#1698).
 //
 // This is the inbound ingress for a future GitHub App that comments changelog
@@ -25,7 +24,6 @@ export const githubRoutes = new Hono<Env>();
 // here, the shared inbound-webhook ingress harness (#1247) should absorb the
 // Firecrawl + GitHub receiver boilerplate; until then this stays a small
 // self-contained sibling rather than a premature abstraction.
-// ---------------------------------------------------------------------------
 
 /**
  * Verify GitHub's `X-Hub-Signature-256` header: `sha256=<hex>` where the hex is

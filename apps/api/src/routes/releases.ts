@@ -48,10 +48,8 @@ import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 export const releaseRoutes = new Hono<Env>();
 
-// ---------------------------------------------------------------------------
 // GET /releases?hasMedia=true — returns releases with non-empty media JSON
 // Used by the `media backfill` CLI command.
-// ---------------------------------------------------------------------------
 
 releaseRoutes.get(
   "/releases",
@@ -345,7 +343,6 @@ releaseRoutes.get(
   },
 );
 
-// ---------------------------------------------------------------------------
 // Release coverage
 //
 // Multiple releases can cover the same underlying launch (marketing post +
@@ -355,7 +352,6 @@ releaseRoutes.get(
 // Auth note: these routes mount under /releases/* which is declared as a
 // public-read group in index.ts, so GET is open and writes require the
 // admin key. That policy lives in the mount, not in this file.
-// ---------------------------------------------------------------------------
 
 releaseRoutes.get(
   "/releases/:id/coverage",

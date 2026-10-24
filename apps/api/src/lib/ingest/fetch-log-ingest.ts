@@ -1,7 +1,7 @@
 /**
  * Shared fetch-log ingest core, extracted from the `POST /admin/logs/fetch`
- * handler (#1946 phase 4, task 4) so a later D1 persister can call it
- * in-process without going through HTTP.
+ * handler (#1946) so the D1 persister can call it in-process without going
+ * through HTTP.
  *
  * `ingestFetchLog` runs, in order: the fetch_log insert (throws on failure,
  * matching the route's existing 500 behavior), the #1851 scrape-failure

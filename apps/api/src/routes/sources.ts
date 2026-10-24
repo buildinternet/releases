@@ -676,10 +676,8 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     // already owns the crawl pipeline. See #1061.
     const maSessionHeader = c.req.header("X-Releases-MA-Session");
     const skipDelegation = maSessionHeader !== undefined && maSessionHeader.length > 0;
-    // Route through the single builder shared with the workflow ingest paths
-    // (#2171) — a hand-built literal here previously forwarded zero AI-lane
-    // keys (ANTHROPIC_API_KEY, OPENROUTER_*, FEED_ENRICH_*, SUMMARIZE_MODEL, …),
-    // so a manual fetch silently skipped feed enrichment. See _fetch-env.ts.
+    // Same builder as the workflow ingest paths (#2171) so the AI-lane keys are
+    // forwarded. See _fetch-env.ts.
     const fetchEnv = await buildFetchOneEnv(c.env);
     const result = await fetchOne(db, src, fetchEnv, {
       sessionId,
@@ -695,15 +693,10 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
           cause: src.id,
         }),
       );
-      // A manual fetch lands rows with null title_generated / title_short /
-      // summary — only the cron workflow summarizes at ingest (#1579). Run the
-      // same fill pass POST /workflows/generate-content uses over this source's
-      // unfilled rows, async + fail-open so a summarize failure never fails the
-      // fetch. Eligibility (org auto_generate_content opt-in + per-source
-      // metadata.summarize opt-out) lives in the candidate SELECT, so a
-      // non-opted source yields zero candidates and never touches the model.
-      // Best-effort: a runtime eviction mid-pass just leaves rows for the next
-      // trigger or a manual generate-content run.
+      // Only the cron workflow summarizes at ingest (#1579), so run the same
+      // fill pass as POST /workflows/generate-content over this source's
+      // unfilled rows, async + fail-open. Eligibility lives in the candidate
+      // SELECT, so a non-opted source never touches the model.
       c.executionCtx.waitUntil(
         runGenerateContent(
           db,
@@ -729,8 +722,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     // Render dry-run probe (#1528): a client-rendered scrape source's steady-
     // state fetch renders the index via Browser Rendering. `?dryRun=true` here
     // renders it once and reports candidate-link count WITHOUT the extraction
-    // loop — the cheap "is the render seeing releases or an empty
-    // shell?" check onboarding previously couldn't answer.
+    // loop.
     const result = await renderCheckOne(db, src, {
       CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: c.env.CLOUDFLARE_API_TOKEN,
@@ -763,10 +755,9 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     }),
   );
 
-  // Admin fetch used to leave a dead SourceActor untouched (#2286): fetchOne
-  // stamps lastPolledAt, so the hourly due-query will not re-seed for a full
-  // tier interval. Force-arm so managed becomes true with a scheduled next
-  // alarm even when the source was just polled.
+  // fetchOne stamps lastPolledAt, so the hourly due-query won't re-seed a dead SourceActor
+  // for a full tier interval (#2286). Force-arm so managed becomes true with a scheduled
+  // next alarm even when the source was just polled.
   c.executionCtx.waitUntil(
     ensureSourceActorScheduled(c.env.SOURCE_ACTOR, src.id, {
       force: true,
@@ -2785,7 +2776,6 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     return respondError(c, new ValidationError(message, { code: "bad_request" }));
   }
 
-  // Check for slug uniqueness before attempting update
   if (body.slug !== undefined && body.slug !== src.slug) {
     if (isReservedSlug(body.slug, "nested")) {
       return respondError(
@@ -3551,14 +3541,9 @@ sourceRoutes.patch(
 
     if (body.media !== undefined) {
       // Wholesale REPLACE of the release's stored media[] (curator manual edit).
-      // Mirror any not-yet-mirrored item through the ingest R2 path so posters /
-      // images land in `released-media` and get `r2Key` stamped — same gate as
-      // ingest (`env.MEDIA != null`). Items already on the media origin or
-      // carrying an `r2Key` pass through untouched (no needless re-fetch).
-      // Fail-open: `processMediaForR2` leaves an item's third-party URL in place
-      // on any fetch/size/type/put error. An unbound `MEDIA` bucket stores the
-      // supplied media verbatim. The resulting JSON is stored the same way
-      // ingest stores it (`JSON.stringify` of the media array).
+      // Not-yet-mirrored items go through the ingest R2 path (same
+      // `env.MEDIA != null` gate); already-mirrored items pass through.
+      // Fail-open: a failed mirror keeps the third-party URL.
       const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
       const supplied = body.media;
       const alreadyMirrored = (m: { url: string; r2Key?: string }): boolean =>

@@ -56,7 +56,7 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt?: number;
   error?: string;
-  /** Classification fields populated by the API ≥ #591 (PR A). Older sessions have these undefined; treat undefined as `errorSource: "us"`. */
+  /** Classification fields populated by the API ≥ #591. Older sessions have these undefined; treat undefined as `errorSource: "us"`. */
   errorSource?: "provider" | "us";
   errorType?: string;
   stopReason?: string;

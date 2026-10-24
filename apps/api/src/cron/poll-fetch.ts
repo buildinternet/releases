@@ -417,7 +417,7 @@ export async function pollOne(
     drainSelfFlag?: { staleHours: number };
     /**
      * When present, a scrape/agent poll that flags the source arms the per-org
-     * `OrgActor` drain immediately via this namespace (#1946 phase 2) rather than
+     * `OrgActor` drain immediately via this namespace (#1946) rather than
      * waiting for the source's next `SourceActor` alarm to notice the flag. Absent
      * ⇒ no eager notify (the alarm backstop still covers it).
      */
@@ -466,7 +466,7 @@ export async function pollOne(
       opts.signedFetch,
       opts.drainSelfFlag,
     );
-    // Eager drain-arm (#1946 phase 2): a `changed` result here means this poll
+    // Eager drain-arm (#1946): a `changed` result here means this poll
     // just set `changeDetectedAt` for the OrgActor drain (this is exactly the
     // scrape/agent-no-feed drain-candidate shape). Arm the drain now — an
     // in-worker DO RPC — instead of waiting up to a full tier interval for the
@@ -548,14 +548,12 @@ function isStale(lastFetchedAt: string | null, now: Date, staleHours: number): b
  *   body-hash-filtered    → GET + SHA-256 after stripping volatile markup
  *                           (script/style/link/meta/comments). For SSR
  *                           pages whose body churns per-request (#789).
- *   unreliable            → no-op; Phase 3 force-drain cron handles these.
+ *   unreliable            → no-op; the force-drain path handles these.
  *   absent                → no-op; source is stranded until populated.
  *
- * On a detected change the function sets `changeDetectedAt` (the scrape-
- * agent sweep cron then drains it) and persists fresh validators in
- * metadata. Always logs `detector=<x> outcome=<unchanged|changed|error>`
- * so the poll-and-fetch Workflow step-level view stays the single source
- * of truth for what happened on this cron tick.
+ * On a detected change the function sets `changeDetectedAt` (the OrgActor
+ * drain then picks it up) and persists fresh validators in metadata. Always
+ * logs `detector=<x> outcome=<unchanged|changed|error>`.
  */
 async function pollScrapeOrAgentByQuirk(
   db: D1Db,
@@ -772,24 +770,16 @@ export interface FetchOneEnv extends WebRevalidateEnv, TextModelEnv, UpdateDispa
 }
 
 /**
- * True when this source should hand body-fetching off to the discovery
- * worker's crawl pipeline instead of inserting the feed-parsed rows directly.
+ * True when this source should hand body-fetching off to a deterministic update
+ * run instead of inserting the feed-parsed rows directly.
  *
- * The signal is "the feed gave us titles but no bodies." That's either an
- * explicit `feedContentDepth: "summary-only"` tag on the source metadata, or
- * the empirical reality that every parsed item came back with empty content.
- * Either way, inserting those stubs would persist empty `content` + empty
- * `media` rows under whatever URLs the feed handed us — exactly the bug that
- * left Notion's recent releases empty after the upstream feed switched to a
- * title-only format and we kept ingesting it as-is.
+ * The signal is "the feed gave us titles but no bodies": an explicit
+ * `feedContentDepth` tag, or every parsed item came back with empty content.
+ * Inserting those stubs would persist empty rows (how Notion's releases went
+ * empty after its feed went title-only).
  *
- * Gated on `crawlEnabled` because the alternative is "do nothing useful" —
- * if the operator hasn't opted into crawl-based enrichment we don't have a
- * second path to try, and inserting the stubs is still better than dropping
- * the change signal entirely.
- *
- * Pure and side-effect-free so we can unit-test the decision matrix without
- * spinning up a worker environment.
+ * Gated on `crawlEnabled`: without crawl there's no second path, and inserting
+ * the stubs beats dropping the change signal.
  */
 export function shouldDelegateToCrawl(
   source: Source,
@@ -808,19 +798,6 @@ export function shouldDelegateToCrawl(
 }
 
 /**
- * Hand the source off to a deterministic update run (#1946) and return a
- * no-rows result. The run executes async as a `DeterministicUpdateWorkflow`
- * instance in this worker — when it completes, `scrapeFetch` writes its own
- * `fetch_log` rows and source-counter updates. Returning a synthetic
- * `no_change` keeps the workflow step from racing it (we don't yet know what
- * changed) and avoids double-bumping counters.
- *
- * The run needs `company` (used for the StatusHub session row), which means we
- * have to look up the org name from `source.orgId`. Failing that lookup is
- * surfaced as an error so the workflow step retries — an orphaned source is
- * an upstream bug we'd rather see in logs than silently swallow.
- */
-/**
  * Refusal-cooldown horizon for {@link delegateScrapeToUpdateWorkflow}. Shorter
  * than the 1h success cooldown (`DELEGATION_COOLDOWN_MS`) because a refusal
  * usually clears sooner — a 15-min scrape lease, an operator kill-switch flip,
@@ -829,6 +806,16 @@ export function shouldDelegateToCrawl(
  */
 const DELEGATION_REFUSAL_COOLDOWN_MS = 30 * 60_000;
 
+/**
+ * Hand the source off to a deterministic update run (#1946) and return a
+ * no-rows result. The run executes async as a `DeterministicUpdateWorkflow`
+ * instance, and `scrapeFetch` writes its own `fetch_log` rows and counters when
+ * it completes. Returning a synthetic `no_change` avoids racing it and
+ * double-bumping counters.
+ *
+ * A failed org-name lookup is surfaced as an error so the workflow step retries;
+ * an orphaned source is an upstream bug we'd rather see than swallow.
+ */
 export async function delegateScrapeToUpdateWorkflow(
   db: D1Db,
   source: Source,
@@ -889,16 +876,10 @@ export async function delegateScrapeToUpdateWorkflow(
 
   if (!result.ok) {
     // Refused dispatch (spend cap / kill switch / per-source lock / binding
-    // unavailable). Unlike a successful handoff, nothing downstream is now
-    // handling this source, so we leave `changeDetectedAt` set for it to retry —
-    // but a bare refusal leaves `nextFetchAfter` null, so the source stays "due"
-    // and re-attempts delegation on every poll tick: the same runaway the success
-    // path guards against (the $20 Notion loop, 2026-05-18). Stamp a short
-    // `nextFetchAfter` refusal cooldown to pace the retries — the refusal
-    // typically clears within it (a 15-min scrape lease, an operator kill-switch
-    // toggle, or the UTC-midnight spend-cap reset). We do NOT bump
-    // `consecutiveNoChange`: the source isn't unchanged, just deferred, so
-    // exponential no-change backoff doesn't apply.
+    // unavailable). Leave `changeDetectedAt` set so it retries, but stamp a short
+    // `nextFetchAfter` cooldown — otherwise it re-delegates every poll tick (the
+    // runaway the success path guards against). Don't bump `consecutiveNoChange`:
+    // the source is deferred, not unchanged.
     try {
       await db
         .update(sources)
@@ -930,20 +911,12 @@ export async function delegateScrapeToUpdateWorkflow(
     };
   }
 
-  // Write bookkeeping so the source isn't immediately re-picked while the MA
-  // session is still in flight. Without this, `changeDetectedAt` stays set
-  // and `nextFetchAfter` stays null, so the next poll-fetch tick re-fires
-  // delegation — that's the runaway loop that burned ~$20 in Haiku on
-  // 2026-05-18 when a manual /fetch seeded one Notion session and the
-  // workflow kept re-spawning. The MA session writes the real fetch_log row
-  // (with actual `releasesInserted` count) when it completes; this synthetic
-  // row only exists to take the source out of the "due" queue.
+  // Take the source out of the "due" queue while the run is in flight; without
+  // this the next poll tick re-fires delegation (a runaway loop burned ~$20 on
+  // 2026-05-18). The run writes the real fetch_log row when it completes.
   //
-  // 1-hour fixed cooldown: longer than any reasonable MA session runtime
-  // (typical ~2 min), shorter than the normal-tier 4h base interval so we
-  // don't disrupt the source's natural cadence. We don't touch
-  // `consecutiveNoChange` because the source isn't actually unchanged — we
-  // just delegated; exponential backoff doesn't apply.
+  // 1-hour cooldown: longer than a typical run, shorter than the normal-tier 4h
+  // interval. `consecutiveNoChange` is untouched: we delegated, not unchanged.
   const DELEGATION_COOLDOWN_MS = 60 * 60_000;
   // db.batch is atomic — both writes commit together or neither does. A
   // half-written state (cooldown set without the matching fetch_log entry,
@@ -1047,9 +1020,8 @@ export function extractCandidateLinks(markdown: string, baseUrl: string): string
  * Render dry-run probe (#1528). Renders a client-rendered scrape source's index
  * once via Cloudflare Browser Rendering and reports how many candidate release
  * links the rendered page exposes — WITHOUT the extraction loop (no
- * Haiku/Sonnet, no update run). The cheap "can the cron's
- * render actually see releases here, or is it hitting an empty JS shell?" check
- * that onboarding a `renderRequired` source previously had no way to answer.
+ * Haiku/Sonnet, no update run): can the render actually see releases here, or
+ * is it hitting an empty JS shell?
  *
  * Writes a `dry_run` fetch_log row so the probe is visible in observability but
  * never mutates source state or inserts releases.
@@ -1212,22 +1184,16 @@ async function recordNoChange(
 }
 
 /**
- * Log threshold for a large classification wave. A normal feed delta is 0–5
- * genuinely-new items. A first onboard can be 50+. We used to skip the whole
- * set above this size and insert everything visibly, which is how a 72-row
- * blog import landed with no marketing verdicts. Classify every new item;
- * this number is only the size at which we log that the wave is large.
- * Calls stay sequential.
+ * Size at which a classification wave is logged as large. Every new item is
+ * still classified; this is not a cap.
  */
 const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
 
 /**
  * Indices of `rawReleases` whose URL is not already stored for this source —
  * i.e. the items a subsequent insert would actually persist (the rest collide
- * on `UNIQUE(source_id, url)` and are dropped by `onConflictDoNothing`). Feeds
- * re-list their whole window every fetch (dbt-blog returns 25, ClickHouse 200),
- * so classifying — and capping — against `rawReleases.length` would trip the
- * cap on every fire and permanently disable the filter for high-volume feeds.
+ * on `UNIQUE(source_id, url)`). Feeds re-list their whole window every fetch, so
+ * classifying against `rawReleases.length` would waste calls on stored items.
  *
  * Items with no URL count as new: the insert path always writes them (SQLite
  * treats NULL as distinct under the unique index), so they should be classified
@@ -1635,13 +1601,10 @@ export async function ingestRawReleases(
     }
   }
 
-  // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
-  // downstream readers see the underlying CDN asset. When the `MEDIA` bucket
-  // is bound (#1177), additionally drop junk (favicons / avatars / pixels) and
-  // mirror survivors into `released-media` so reads resolve a same-origin
-  // `r2Url`. Sequential per release (the helper bounds image concurrency
-  // within); fail-open — any image-level failure keeps the third-party URL. An
-  // unbound `MEDIA` bucket = today's verbatim behavior.
+  // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs. When
+  // `MEDIA` is bound (#1177), also drop junk (favicons / avatars / pixels) and
+  // mirror survivors into R2. Fail-open: an image-level failure keeps the
+  // third-party URL.
   const r2UploadEnabled = env.MEDIA != null;
   // GIF→MP4 transcode (#1368): store ingested GIFs as small MP4s. Gated on its own
   // flag AND the transform binding being bound; off → GIFs mirror verbatim.
@@ -1670,14 +1633,10 @@ export async function ingestRawReleases(
     // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
     const base = rawMedia.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
     const isNewRelease = raw.url == null || !existingMediaUrls.has(raw.url);
-    // Promote hosted-video links found inline in the body (Wistia/Loom/Vimeo/
-    // YouTube) into a `type: "video"` media item carrying the oEmbed poster
-    // (`url`, mirrored to R2 like any image) + watch URL (`linkUrl`) so the web
-    // renders a play-thumbnail card instead of a bare link (#1549). Fail-open:
-    // an unresolvable embed yields nothing and the bare link stays. Only for
-    // new releases — re-detecting on every fire would re-fetch oEmbed for rows
-    // we won't re-insert. The release body is the only inline-asset source we
-    // promote (deliberately narrow vs. mirroring all inline images).
+    // Promote inline hosted-video links into a `type: "video"` media item
+    // (oEmbed poster + watch URL) so the web renders a play-thumbnail card
+    // (#1549). Fail-open, and only for new releases so oEmbed isn't re-fetched
+    // every fire.
     const inlineVideos = isNewRelease
       ? // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds oEmbed concurrency internally
         await detectInlineVideos(enrich?.content ?? raw.content)
@@ -1892,11 +1851,9 @@ export async function fetchOne(
     skipSideEffects?: boolean;
     /**
      * Skip the `delegateScrapeToUpdateWorkflow` branch even when the source would
-     * normally qualify for crawl delegation. Set by the `POST /v1/sources/:id/fetch`
-     * route when the caller is an update run (detected via the
-     * `X-Releases-MA-Session` request header). Without this guard the run
-     * would re-enter its own session-start path and self-collide on the
-     * per-source KV lock from #1058. See #1061.
+     * normally qualify for crawl delegation. Set by `POST /v1/sources/:id/fetch`
+     * when the caller is an update run (`X-Releases-MA-Session`), which would
+     * otherwise re-enter itself and collide on the per-source lock (#1061).
      */
     skipDelegation?: boolean;
     /**
@@ -2165,26 +2122,18 @@ export async function fetchOne(
       return result;
     }
 
-    // Summary-only feed (e.g. RSS that only carries `<title>` + `<link>`):
-    // inserting the parsed rows would persist empty-body releases under the
-    // feed's link URLs. When `crawlEnabled: true` is set, delegate to the
-    // deterministic update workflow's crawl + extract pipeline instead so the
-    // per-release pages get fetched and bodies + media land in D1. The feed
-    // becomes a pure change detector. Dry-runs skip this branch — they're
-    // supposed to be cheap probes of the feed itself, not full crawls.
+    // Summary-only feed: delegate to the update workflow's crawl + extract so
+    // per-release bodies land, with the feed as a pure change detector (see
+    // shouldDelegateToCrawl). Dry-runs skip this; they probe the feed only.
     if (
       !dryRun &&
       !skipDelegation &&
       env.DETERMINISTIC_UPDATE_WORKFLOW &&
       shouldDelegateToCrawl(source, meta, rawReleases)
     ) {
-      // The summary-only feed is the change detector: only pay for a managed-
-      // agent crawl when it surfaces a release URL we don't already have.
-      // Otherwise a quiet source (Notion sat unchanged for ~9 days) spawns a
-      // Haiku crawl on every 4h poll that crawls all N pages and inserts 0 —
-      // the feed still lists items, but they're all already indexed. Gate the
-      // handoff on novelty and fold the "nothing new" case into the standard
-      // no-change backoff so the source's poll cadence actually relaxes.
+      // Only pay for a crawl when the feed surfaces a URL we don't already
+      // have; otherwise a quiet source crawls every page each poll and inserts
+      // 0. "Nothing new" folds into the standard no-change backoff.
       const existingUrls = await selectExistingReleaseUrls(
         db,
         source.id,
@@ -2219,11 +2168,7 @@ export async function fetchOne(
         feedItemCount: rawReleases.length,
       });
 
-      // #1814: the per-source mutex lives in the SourceActor DO and is
-      // enforced by the dispatch gate (checked/acquired inside
-      // startDeterministicUpdate before the workflow instance is created). No
-      // extra gate is needed here — a single source's concurrent delegations
-      // are serialized there.
+      // The per-source mutex is enforced inside startDeterministicUpdate (#1814).
       // The crawl has not stored these URLs yet. Leave the conditional-GET
       // validators unchanged so a failed crawl is refetched instead of stuck
       // behind a 304.
@@ -2546,16 +2491,11 @@ async function fetchOneFile(
 /**
  * Refresh the GitHub CHANGELOG mirror for a source.
  *
- * Path planning is delegated to `discoverChangelogPaths` from
- * `@releases/adapters/github-discovery` (the same planner the probe endpoint
- * uses), so pnpm-workspace.yaml, package.json#workspaces, and
- * metadata.changelogPaths overrides are all handled identically. The worker
- * retains its own fetch + D1 upsert for the persistence half.
+ * Path planning is `discoverChangelogPaths` (shared with the probe endpoint).
  *
- * Historical default: upsert files AND embed changed ones inline (fire-and-
- * forget). When `opts.skipEmbed` is true, returns the changed file list so
- * the caller can embed in a separate step (used by the Workflows path in
- * #486 so the embed retry is independent of the file refresh retry).
+ * By default upserts files AND embeds changed ones inline (fire-and-forget).
+ * With `opts.skipEmbed`, returns the changed file list so the Workflows path
+ * can embed in a separately retried step (#486).
  */
 export async function refreshChangelogFile(
   db: D1Db,

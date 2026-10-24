@@ -49,10 +49,8 @@ export async function ChangelogPage({
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     if (!(err instanceof ApiNotFoundError)) throw err;
-    // No source owns this slug. After the product-first flip a product can
-    // share this URL space, so a bare `/{org}/{product}/changelog` bookmark
-    // used to dead-end in a 404. A product spans many sources (no single
-    // CHANGELOG.md to render), so send those to the product page instead.
+    // No source owns this slug, but a product may. A product spans many sources
+    // (no single CHANGELOG.md to render), so send those to the product page.
     source = null;
   }
 

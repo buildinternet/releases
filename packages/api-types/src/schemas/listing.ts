@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Public wire contract for the self-serve listing lane (#1947 phase 2):
+ * Public wire contract for the self-serve listing lane (#1947):
  * POST /v1/listing/validate and POST /v1/listing/activate. This projection is
  * deliberately independent of the internal materialization plan — it is the
  * stable shape web/CLI consume while internals stay free to change.
@@ -181,7 +181,7 @@ export const RevokeOrgClaimBodySchema = z.strictObject({
 export type RevokeOrgClaimBody = z.infer<typeof RevokeOrgClaimBodySchema>;
 
 /**
- * Self-serve Tier-1 promotion (#1947 epic item 3, PR B): a verified owner
+ * Self-serve Tier-1 promotion (#1947): a verified owner
  * promotes their claimed stub to `tracked`. Independent of the internal
  * materialization plan — this is the stable public projection.
  */

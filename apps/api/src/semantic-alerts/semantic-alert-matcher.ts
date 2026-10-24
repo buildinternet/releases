@@ -1,6 +1,6 @@
 /**
  * Admin-preview seam for scoring one user's semantic alerts against releases
- * (#2304 Phase 2). Production delivery still runs from `publishReleaseEvents`.
+ * (#2304). Production delivery still runs from `publishReleaseEvents`.
  * This path only reports scores for the admin response: no claim row, no email,
  * no webhook enqueue, no Analytics Engine points. Query text stays out of logs.
  */

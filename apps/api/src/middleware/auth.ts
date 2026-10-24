@@ -138,10 +138,9 @@ function bearer(c: Context<Env>): string {
  * origin — the resource identifier a client requests via RFC 8707 `resource`),
  * but the `iss` it must match is the AS's canonical issuer: the origin PLUS the
  * `/api/auth` basePath (what the discovery doc advertises and the token `iss`
- * carries). Using the bare origin as issuer rejected every real token (jose
- * exact-match) — #1483 issuer-mismatch fix. Returns null when no origin can be
- * resolved (e.g. local dev without BETTER_AUTH_URL) — the JWT lane is then
- * simply inert. The JWKS URL is derived origin-relative as `${origin}/api/auth/jwks`.
+ * carries). Returns null when no origin can be resolved (e.g. local dev without
+ * BETTER_AUTH_URL) — the JWT lane is then simply inert. The JWKS URL is
+ * derived origin-relative as `${origin}/api/auth/jwks`.
  *
  * Same-environment MCP origin and `/mcp` are also accepted audiences: follows
  * tools on the MCP worker forward the caller's Bearer to `/v1/me/*`, and those
@@ -167,9 +166,7 @@ function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
 // This worker IS the authorization server, so it verifies its OWN OAuth/session
 // JWTs with keys read in-process — never via verifyOAuthJwt's default remote
 // fetch of `${origin}/api/auth/jwks`, which is a self-subrequest to this worker's
-// own public hostname. On Cloudflare such a self-fetch can be routed to a
-// (nonexistent) origin and fail, which would reject every otherwise-valid token
-// (the bug behind admin actions 401ing despite a correctly-minted token).
+// own public hostname, which Cloudflare can route to a nonexistent origin.
 // Cross-worker resource servers (MCP) legitimately keep the remote path.
 // Cached module-wide; rebuilt on a verify miss in case the signing key rotated.
 let inProcessJwks: JWTVerifyGetKey | null = null;
@@ -281,9 +278,9 @@ async function verifyUserKey(
  * never for authorization. Returns `{ valid, userId }`. Flag-gated exactly like
  * the metered lane (`API_TOKENS_DISABLED` kill switch + `USER_API_KEYS_ENABLED`
  * rollout): when either gate is closed the key is treated as not-an-account
- * (`{ valid: false }`), so it falls to the anonymous IP rung — matching today's
- * behavior. The limiter calls this behind a ~60s KV cache, so the underlying
- * `verifyUserKey` (which meters) runs at most once per key per window.
+ * (`{ valid: false }`), so it falls to the anonymous IP rung. The limiter calls
+ * this behind a ~60s KV cache, so the underlying `verifyUserKey` (which meters)
+ * runs at most once per key per window.
  */
 export async function validateAccountCredential(
   c: Context<Env>,
@@ -816,14 +813,6 @@ async function resolveBearerUser(c: Context<Env>, presented: string): Promise<Be
   return { kind: "none" };
 }
 
-/**
- * User follows + feed gate (`/v1/me/*`) — enabled by default, no flag. Resolves a
- * principal from EITHER a Better Auth session (cookie, or a device-login Bearer
- * session token via the `bearer()` plugin) OR a Bearer user credential (`relu_`
- * key / OAuth JWT) so CLI + MCP callers — which authenticate by Bearer, not a
- * cookie — can manage their follows too. Session is tried first; the Bearer-user
- * lanes are the fallback. 401 when neither resolves.
- */
 /** Outcome of resolving a `/v1/me/*`-style user principal (session or Bearer). */
 type FollowsPrincipalResolution =
   | { kind: "user"; user: AuthSessionContext["user"] }
@@ -854,6 +843,14 @@ async function resolveFollowsPrincipal(c: Context<Env>): Promise<FollowsPrincipa
   return { kind: "none" };
 }
 
+/**
+ * User follows + feed gate (`/v1/me/*`). Resolves a
+ * principal from EITHER a Better Auth session (cookie, or a device-login Bearer
+ * session token via the `bearer()` plugin) OR a Bearer user credential (`relu_`
+ * key / OAuth JWT) so CLI + MCP callers — which authenticate by Bearer, not a
+ * cookie — can manage their follows too. Session is tried first; the Bearer-user
+ * lanes are the fallback. 401 when neither resolves.
+ */
 export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) => {
   const resolved = await resolveFollowsPrincipal(c);
   if (resolved.kind === "user") {

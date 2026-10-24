@@ -255,7 +255,7 @@ export function etDayBoundsUtc(dateKey: string): { startUtc: string; endUtc: str
 // Monday–Sunday — the same ET convention as the daily helpers above, just
 // rolled up to a 7-day bucket. The canonical week key is the Monday's
 // `YYYY-MM-DD`, used both as the DB `week_start` value and the URL segment
-// (`/digest/2026-07-06`, PR B).
+// (`/digest/2026-07-06`).
 
 /**
  * The Monday (`YYYY-MM-DD`, ET) starting the Eastern calendar week containing

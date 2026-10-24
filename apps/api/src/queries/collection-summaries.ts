@@ -333,7 +333,7 @@ export async function upsertCollectionWeeklyDigest(
     });
 }
 
-// ── Weekly digest reads (PR B) ──────────────────────────────────────
+// ── Weekly digest reads ───────────────────────────────────────────
 
 /** Cursor-paginated, newest-first digest list for a collection. Cursor is the
  *  last row's `weekStart` from the prior page — weeks sort naturally as

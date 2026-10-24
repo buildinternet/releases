@@ -188,7 +188,7 @@ function printIssues(target: string, scope: Scope, issues: Issue[]): void {
 }
 
 // The domain form. The verdict comes from the shared web fast-lane backend
-// (POST /v1/listing/validate — buildinternet/releases#1910/#1947 phase 2) so
+// (POST /v1/listing/validate — buildinternet/releases#1947) so
 // web and CLI never disagree: the API fetches https://<domain>/.well-known/
 // releases.json live and returns the validation verdict plus the
 // materialization plan. Anonymous, per-IP rate-limited; no auth header.

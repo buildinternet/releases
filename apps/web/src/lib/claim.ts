@@ -82,7 +82,7 @@ export async function listClaims(): Promise<OrgClaim[]> {
 }
 
 /**
- * Self-serve Tier-1 promotion (#1947 PR B). Requires a verified claim on the
+ * Self-serve Tier-1 promotion (#1947). Requires a verified claim on the
  * domain — the API 403s otherwise — and 404s when the promotion kill switch
  * is off (distinct from the listing-lane switch). Prefer checking
  * {@link fetchListingCapabilities} before offering the CTA.

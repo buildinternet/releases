@@ -1,5 +1,5 @@
 /**
- * Shared best-effort "arm the per-org drain" notify (#1946 phase 2).
+ * Shared best-effort "arm the per-org drain" notify (#1946).
  *
  * Every producer that sets `changeDetectedAt` on a scrape/agent source calls
  * this as it finishes so the `OrgActor` drain is armed in real time, instead of

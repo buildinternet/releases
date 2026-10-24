@@ -2,13 +2,10 @@
  * SourceActor — one Durable Object per source (`SOURCE_ACTOR.getByName(sourceId)`),
  * owning that source's fetch lifecycle: its own alarm-driven fetch timer, tier
  * cadence (normal 4h / low 24h), smart-fetch backoff, and single-threaded
- * serialization. Each source schedules itself instead of being swept up by the
- * hourly poll cron + due-query + fan-out + FNV-1a jitter smear. See #1776 and
- * docs/architecture/durable-objects-exploration.md §SourceActor.
+ * serialization (#1776).
  *
- * Migration seam (deliberate): the DO owns the **timer + mutex only**. The proven
- * `PollAndFetchWorkflow` still does the actual fetch/parse/embed/ingest — the
- * alarm just `create()`s an instance. The ingest pipeline is untouched.
+ * The DO owns the **timer + mutex only**: `PollAndFetchWorkflow` does the actual
+ * fetch/parse/embed/ingest, and the alarm just `create()`s an instance.
  *
  * Outcome feedback without a callback: the workflow already writes
  * `last_polled_at` / `next_fetch_after` / `consecutive_no_change` to D1, so this
@@ -55,22 +52,17 @@ const STATE_KEY = "state";
 const SOURCE_ID_KEY = "sourceId";
 
 /**
- * Per-source MA-delegation lock (#1780 Box 1 / #1814). Replaces the KV
- * `ma:active:src:{id}` lock: the mutex that stops two update runs for the same
- * source at once now lives in this DO's storage instead of the shared
- * `LATEST_CACHE` KV namespace. `startDeterministicUpdate` checks/acquires
- * around minting a run and the workflow releases in its completion `finally`,
- * exactly where the KV lock used to sit.
+ * Per-source update-run lock (#1814): stops two update runs for the same source
+ * at once. `startDeterministicUpdate` acquires around minting a run and the
+ * workflow releases in its completion `finally`.
  */
 const SCRAPE_LOCK_KEY = "scrapeLock";
 
 /**
- * Lease length, mirroring the KV lock's 15-min `expirationTtl`. DO storage has
- * no native key TTL, so expiry is a stored `expiresAt` enforced lazily on read
- * (a lease past its deadline is treated as absent) — the backstop for a session
- * that dies before its release RPC lands. Must stay far shorter than the 24h
- * force-drain interval so a stale lease always self-clears before force-drain
- * runs (see .context/1780-box1-delegation-serialization-design.md).
+ * Lease length. DO storage has no native key TTL, so expiry is a stored
+ * `expiresAt` enforced lazily on read — the backstop for a session that dies
+ * before releasing. Must stay far shorter than the 24h force-drain interval so a
+ * stale lease always self-clears first.
  */
 const SCRAPE_LOCK_LEASE_MS = 15 * 60 * 1000;
 
@@ -172,11 +164,9 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
-   * MA-delegation lock — atomic try-acquire (#1780 Box 1 / #1814).
+   * MA-delegation lock — atomic try-acquire (#1814).
    *
-   * The real per-source mutex: because the DO runs single-threaded, this
-   * read-then-write is indivisible, so it does what the KV lock only approximated
-   * (its separate get-then-put left a TOCTOU window). Claims the lease for
+   * The DO runs single-threaded, so this read-then-write is indivisible. Claims the lease for
    * `sessionId` with a fresh 15-min deadline and returns `{ acquired: true }`
    * ONLY when the source was free. When a live lease is already held it does NOT
    * overwrite — it returns `{ acquired: false, sessionId: <current owner> }` so
@@ -216,9 +206,8 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   /**
    * MA-delegation lock — conditional release. Clears the lease only when
    * `sessionId` still owns it, so a session whose lease already expired and was
-   * re-claimed by a newer owner can't delete the newer lease (the DO-atomic
-   * version of the KV "read owner, delete iff mine" release the update workflow
-   * used to do). No-op when the lease is absent or foreign.
+   * re-claimed by a newer owner can't delete the newer lease. No-op when the
+   * lease is absent or foreign.
    */
   async releaseScrapeLock(sourceId: string, sessionId: string): Promise<void> {
     const lock = await this.ctx.storage.get<ScrapeLock>(SCRAPE_LOCK_KEY);
@@ -320,17 +309,12 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     await this.scheduleAt(row, nextAlarmMs, fired, fired ? now : (prev?.lastFiredAt ?? null));
   }
 
-  // --- internals -----------------------------------------------------------
-
   /**
-   * Arm this source's OrgActor when the source is a flagged scrape/agent source
-   * (retires the scrape-agent-sweep trigger). This is the at-least-once BACKSTOP
-   * for the eager notify the poll workflow now fires the instant it sets
-   * `changeDetectedAt` (#1946 phase 2): the flag it reads here is from the row as
-   * loaded at the top of the alarm, so on the alarm whose own workflow just
-   * flagged the source the eager path has already armed the drain; this re-arms on
-   * every subsequent alarm while the flag persists (a permanently-stranded source
-   * whose eager notify was dropped). Best-effort — never blocks or fails the alarm.
+   * Arm this source's OrgActor when the source is a flagged scrape/agent source.
+   * This is the at-least-once BACKSTOP for the eager notify the poll workflow
+   * fires when it sets `changeDetectedAt` (#1946): it re-arms on every alarm
+   * while the flag persists, covering a dropped eager notify. Best-effort — never
+   * blocks or fails the alarm.
    */
   private async maybeNotifyOrgDrain(row: Source): Promise<void> {
     if (row.type !== "scrape" && row.type !== "agent") return;

@@ -20,10 +20,6 @@ type Env = {
 
 export const mediaRoutes = new Hono<Env>();
 
-// ---------------------------------------------------------------------------
-// Public: redirect to R2 custom domain, or serve directly as fallback
-// ---------------------------------------------------------------------------
-
 mediaRoutes.get("/media/:key{.+}", async (c) => {
   const key = c.req.param("key");
   const mediaOrigin = c.env.MEDIA_ORIGIN;
@@ -58,10 +54,6 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
   return new Response(object.body, { headers });
 });
 
-// ---------------------------------------------------------------------------
-// Authenticated: upload media to R2
-// ---------------------------------------------------------------------------
-
 mediaRoutes.put("/media/:key{.+}", authMiddleware, async (c) => {
   const key = c.req.param("key");
   const body = await c.req.arrayBuffer();
@@ -73,10 +65,6 @@ mediaRoutes.put("/media/:key{.+}", authMiddleware, async (c) => {
 
   return c.json({ key }, 201);
 });
-
-// ---------------------------------------------------------------------------
-// Authenticated: media asset registry
-// ---------------------------------------------------------------------------
 
 mediaRoutes.post("/media/assets", authMiddleware, async (c) => {
   const db = createDb(c.env.DB);

@@ -127,33 +127,19 @@ import {
 } from "./audit.js";
 
 /**
- * Build the Better Auth Stripe plugin (`@better-auth/stripe`), GATED on BOTH the
- * secret API key and the webhook signing secret resolving — the same graceful-
- * degradation seam as `dash()` / `sentinel()` / the social providers. Absent
- * either → returns `null` and the plugin is omitted entirely: no Stripe client is
- * constructed and no Stripe writes happen, so the feature is inert until the
- * secrets are provisioned. Present both → it mounts, and a Stripe Customer is
- * created on every sign-up (`createCustomerOnSignUp`) and linked to the user via
- * the `stripeCustomerId` column. Dropping the two secrets into the environment
- * activates it with zero code change — the "billing-ready" seam.
+ * Build the Better Auth Stripe plugin (`@better-auth/stripe`), gated on BOTH the
+ * secret API key and the webhook signing secret resolving. Absent either →
+ * `null` and the plugin is omitted, so billing is inert until the secrets are
+ * provisioned. Present both → a Stripe Customer is created per user on sign-up
+ * and linked via `stripeCustomerId`.
  *
- * Customer-on-sign-up stays per-USER. The subscription feature is wired but INERT:
- * `subscription.enabled` with `plans: []` means the `subscription` table + endpoints
- * exist but nothing is purchasable, so no row is ever written (zero user impact).
- * Subscriptions are keyed to the WORKSPACE (`referenceId` = organization id) and
- * gated by `authorizeReference` (owner/admin only). Adding real plans later activates
- * org billing with no further plumbing — the "billing-ready" seam.
+ * Subscriptions are wired but inert (`plans: []`): keyed to the workspace
+ * (`referenceId` = organization id) and gated to its owner/admin, so adding
+ * plans later needs no further plumbing.
  *
- * Worker-compat: the Stripe Node SDK's default HTTP transport isn't available on
- * Cloudflare Workers, so the client is constructed with the Fetch HTTP client.
- * Webhook signature verification (the plugin calls `constructEventAsync`
- * internally) uses WebCrypto on Workers — no extra wiring needed. `apiVersion` is
- * left at the SDK default so its value always matches the installed SDK's types.
- *
- * Not split into a pure-config half + a separate construction step (unlike
- * `buildSocialProviders`) because the plugin requires a live `stripeClient`
- * instance; the `Stripe` constructor performs no network I/O, so this stays
- * cheap and unit-testable (the gating is asserted via the resolved plugin id).
+ * Worker-compat: the Stripe SDK's default HTTP transport isn't available on
+ * Workers, so the client uses the Fetch HTTP client. `apiVersion` is left at the
+ * SDK default so it always matches the installed SDK's types.
  */
 export function buildStripePlugin(
   creds: {
@@ -170,13 +156,7 @@ export function buildStripePlugin(
     stripeClient,
     stripeWebhookSecret: creds.webhookSecret,
     createCustomerOnSignUp: true,
-    // Org-billing seam — INERT. `plans: []` means nothing is purchasable yet, so no
-    // `subscription` row is ever written (zero user impact); the table, endpoints, and
-    // authorization gate all exist so adding real plans later needs no further
-    // plumbing. `referenceId` is the workspace (organization) id, and
-    // `authorizeReference` restricts subscription management to that workspace's
-    // owner/admin (org `member.role`, NOT `user.role`). The Stripe Customer stays
-    // per-user (createCustomerOnSignUp) — only the subscription is org-scoped.
+    // `authorizeReference` checks org `member.role`, NOT `user.role`.
     subscription: {
       enabled: true,
       plans: [],
@@ -454,19 +434,10 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     runInBackground(Promise.resolve(run()));
   };
 
-  // Better Auth Infrastructure ("dash") — the hosted admin/analytics dashboard at
-  // dash.better-auth.com reads from THIS self-hosted backend through the dash()
-  // plugin (user management, session monitoring, sign-up/sign-in analytics, audit
-  // logs). Gated on the API key resolving, same graceful-degradation seam as the
-  // social providers above: present (prod Secrets Store binding, or local
-  // .dev.vars) → the plugin mounts and the dashboard connects; absent (e.g. local
-  // dev without the key) → it stays off rather than making keyless outbound calls.
-  // Activity tracking is ON: dash() stamps `user.lastActiveAt` on non-GET authed
-  // requests (throttled to updateInterval, default 5 min) so the dashboard can show
-  // "last active". Best-effort on Workers — the plugin fires the write without
-  // awaiting it — so it's approximate, not a per-request heartbeat; the dashboard
-  // also lazily backfills it from session timestamps. The `last_active_at` column is
-  // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
+  // Better Auth Infrastructure ("dash"): the hosted dashboard reads from this
+  // backend through dash(). Mounts only when the API key resolves, so keyless
+  // local dev makes no outbound calls. Activity tracking stamps
+  // `user.lastActiveAt` without awaiting the write, so it's approximate on Workers.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
 
   // Sentinel (Better Auth Infrastructure abuse/security protection) shares the
@@ -483,21 +454,13 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
   // dash()/social — absence is the natural off-switch, so no feature flag.
   const sentinelIdentifyUrl = env.BETTER_AUTH_IDENTIFY_URL;
 
-  // userApiKeysOn — the relu_ user-key path (Flagship → var → default false); when
-  // off, apiKey() and its self-serve endpoints aren't registered. Mirrors the
-  // middleware/auth.ts gate.
+  // When off, apiKey() and its self-serve endpoints aren't registered. Mirrors
+  // the middleware/auth.ts gate.
   const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
-  // deviceAuthOn — the device-authorization (RFC 8628) path backing `releases login`.
-  // The deviceAuthorization() + bearer() plugins are always registered now. Device
-  // login mints relu_ keys via the /v1/api-keys route (gated on userApiKeysEnabled),
-  // so it is only USEFUL with that one also on.
+  // Device authorization (RFC 8628) backs `releases login`. It mints relu_ keys
+  // via /v1/api-keys, so it is only useful with userApiKeysOn too.
   const deviceAuthOn = true;
 
-  // Stripe customer registration (`@better-auth/stripe`). Built only when BOTH the
-  // secret key and webhook signing secret resolve — same fail-safe seam as
-  // dash()/sentinel()/social. Inert (null → omitted) until the secrets are
-  // provisioned; once present, a Stripe Customer is created on every sign-up and
-  // linked via user.stripeCustomerId. See `buildStripePlugin`.
   const stripeInstance = buildStripePlugin(
     {
       secretKey: await resolveSecret(env.STRIPE_SECRET_KEY),
@@ -580,15 +543,6 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     // register/authenticate round-trips (both to this worker) carry it. The `passkey`
     // table is wired into the drizzleAdapter schema map below.
     passkeyPlugin(derivePasskeyRp(env)),
-    // OAuth 2.0 / OIDC authorization server ("Sign in with Releases"). Issues
-    // JWT access tokens (the adjacent jwt() plugin signs them + exposes JWKS)
-    // and serves discovery metadata. Consent UI, per-user scope entitlement, and
-    // resource-server JWT verification have all shipped, and dynamic client
-    // registration (RFC 7591) is now ON so agent-run MCP clients can self-register
-    // without an admin pre-provisioning each one. No feature flag. DCR is
-    // untrusted (consent required), forced public/PKCE, and capped at
-    // DCR_SCOPES (identity + read — never write/admin). Role-clamp at issuance
-    // (customAccessTokenClaims) is a second layer, not the client ceiling.
     // The jwt() plugin signs the OAuth provider's access tokens AND exposes
     // GET /api/auth/token — the first-party "session → JWT" path the web admin
     // actions use. Config here pins that /token JWT to what the resource-server
@@ -624,7 +578,7 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       // web origin locally; the session cookie is .releases.sh-scoped so it rides
       // across the two subdomains.
       loginPage: `${releaseWebBase(env)}/login`,
-      consentPage: `${releaseWebBase(env)}/oauth/consent`, // page built in sub-project 3; path provisional
+      consentPage: `${releaseWebBase(env)}/oauth/consent`,
       scopes: [...OAUTH_SCOPES],
       // DCR capability ceiling. Discovery still lists the full `scopes` list
       // (admin included) for first-party clients; these two options are the
@@ -637,72 +591,47 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       // Public DCR clients always require PKCE; keep the confidential-DCR
       // default on too so a plugin regression cannot opt a DCR row out.
       clientRegistrationRequirePKCE: true,
-      // Better Auth 1.7 replaced the flat `validAudiences` list with the
-      // persisted `resources` model: each identifier becomes an `oauth_resource`
-      // row (seeded at boot, `resourceSeedMode` defaults to the safe
-      // "insertOnly") and is the RFC 8707 `resource` value a client may request;
-      // the minted token's `aud` is bound to it. Same identifiers as before, so
-      // the MCP worker's `OAUTH_JWT_AUDIENCE` needs no change.
+      // Each identifier becomes an `oauth_resource` row (seeded at boot,
+      // insert-only) and is an RFC 8707 `resource` a client may request; the
+      // minted token's `aud` is bound to it.
       resources: oauthValidAudiences(env),
       // 1.7 rejects a DCR request carrying `resources` unless they're
       // whitelisted. Mark ours *allowed* (client selects) rather than *default*
       // (force-attached to every client), preserving the 1.6 behavior where any
       // registered client could target these audiences.
       clientRegistrationAllowedResources: oauthValidAudiences(env),
-      // `enforcePerClientResources` defaults to TRUE in 1.7 (RFC 8707 §3):
-      // /oauth2/authorize and /oauth2/token then require the client to be linked
-      // to every requested `resource` through an `oauth_client_resource` row, and
-      // otherwise redirect back with `error=invalid_target` ("client … is not
-      // linked to resource(s) …"). Standard MCP clients (claude.ai's connector
-      // included) send `resource` as an authorize/token PARAMETER, never as a DCR
-      // field, so they are never linked — and every already-registered client
-      // predates the table entirely. There is no admin flow to link third-party
-      // clients, and 1.6's `validAudiences` let any registered client target these
-      // audiences. `false` restores that: any enabled resource is requestable,
-      // while the minted token stays `aud`-bound to the requested one.
-      // Matches buildinternet/uploads (apps/auth/src/auth.ts).
+      // Defaults to true in 1.7, which requires an `oauth_client_resource` link
+      // for every requested `resource` and otherwise fails with
+      // `invalid_target`. Standard MCP clients send `resource` as an
+      // authorize/token parameter, never at DCR, so they are never linked and
+      // there is no admin flow to link them. `false` lets any enabled resource be
+      // requested; the token stays `aud`-bound to it. Matches buildinternet/uploads.
       enforcePerClientResources: false,
-      // Grace window (seconds) for refresh-token rotation replay: a refresh
-      // token presented again within 60s of its rotation replays the original
-      // rotation response instead of revoking the token family. Concurrent
-      // refreshers and network retries — routine in MCP clients holding one
-      // session across several tabs/processes — otherwise trip reuse detection
-      // and force a full re-authorization. Matches the grace window Better
-      // Auth's own mcp() plugin defaults to. Option added in 1.7.
+      // A refresh token replayed within 60s of rotation returns the original
+      // response instead of revoking the family. Concurrent refreshers and
+      // retries are routine in MCP clients and would otherwise force a full
+      // re-authorization. Same default as Better Auth's mcp() plugin.
       refreshTokenReuseInterval: 60,
-      // RFC 7591 dynamic client registration. ON so off-the-shelf MCP clients
-      // (Claude Desktop, MCP Inspector, agent runtimes) self-register a client_id
-      // via the public /oauth2/register endpoint instead of an admin minting one.
-      // Safety is the DCR_SCOPES ceiling + forced public/PKCE + consent (not
-      // role-clamp alone). FOLLOW-UP: a reaper for stale/unused oauth_client
-      // rows (each registration is a row on a public endpoint).
+      // RFC 7591 DCR so off-the-shelf MCP clients self-register. Safety is the
+      // DCR_SCOPES ceiling + forced public/PKCE + consent. FOLLOW-UP: a reaper
+      // for stale oauth_client rows (each registration is a row on a public endpoint).
       allowDynamicClientRegistration: true,
-      // Allow registration WITHOUT a prior session. Off-the-shelf MCP clients hit
-      // /oauth2/register BEFORE any user login, so DCR is inert for them without
-      // this — the endpoint would 401 every tokenless registration. This is what
-      // makes registration truly public (unauthenticated + row-creating), hence the
-      // explicit rate limit below and the stale-row reaper follow-up. The plugin
-      // notes this flag will be deprecated once the MCP protocol settles on Client
-      // ID Metadata Documents / `software_statement`; revisit the lane then.
+      // MCP clients register BEFORE any user login, so DCR is inert without
+      // this. It makes registration public and row-creating, hence the rate limit
+      // below. The plugin plans to deprecate this flag once MCP settles on CIMD /
+      // `software_statement`; revisit then.
       allowUnauthenticatedClientRegistration: true,
-      // Explicit abuse ceiling on the unauthenticated /oauth2/register endpoint —
-      // pinned in-repo rather than inheriting the plugin's library default so the
-      // limit is auditable here and can't silently drift. Enforced only when Better
-      // Auth's core limiter is on (deployed prod; see `rateLimit.enabled` below).
-      // 5/min/IP: a legitimate client registers once; this caps spray registration.
+      // Pinned here rather than inheriting the library default so it can't drift.
+      // Enforced only when the core limiter is on (prod; see `rateLimit` below).
       rateLimit: { register: { window: 60, max: 5 } },
       // Set-once before first deploy (changing later orphans live tokens). Extends
       // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
       prefix: { refreshToken: "relo_", clientSecret: CLIENT_SECRET_PREFIX },
       // Per-user entitlement backstop + role claim. Runs at every user-token
-      // issuance (authorization_code, refresh re-issue) and introspection, so no
-      // token can carry scopes beyond the user's live role — even via a
-      // skip_consent client or refresh replay. M2M tokens (no user) are skipped.
-      // Wrapped because the plugin's `info.user` is typed as
-      // `(User & Record<string, unknown>) | null | undefined` — the base `User`
-      // type doesn't carry `role` statically (that field is added by the admin
-      // plugin at runtime). Extracting `role` via the index signature satisfies
-      // both the plugin's expected callback type and `oauthAccessTokenClaims`.
+      // issuance and introspection, so no token can carry scopes beyond the
+      // user's live role, even via a skip_consent client or refresh replay.
+      // `role` is read via the index signature because the admin plugin adds it
+      // at runtime; the base `User` type doesn't carry it.
       customAccessTokenClaims: (info) => {
         const u = info.user;
         return oauthAccessTokenClaims({
@@ -731,28 +660,19 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       // operator-set flags, so an admin `trusted` PATCH must not be reverted.
       onClientCreated: ({ client }) => clampCimdClient(client),
     }),
-    // Better Auth admin plugin — adds the `role` column that drives OAuth scope
-    // entitlement (auth/entitlement.ts). Reuses the built-in admin/user roles;
-    // `curator` mirrors `user` for admin-plugin permissions (NO user-management
-    // powers) — its only meaning is the OAuth scope ceiling. The first admin is
-    // provisioned via `PATCH /v1/admin/users/role` (root-key gated; see
-    // docs/architecture/remote-mode.md) — once a user's `role` column is `admin`,
-    // `adminRoles` authorizes them for native `setRole` too. Always-on, no flag.
+    // Adds the `role` column that drives OAuth scope entitlement
+    // (auth/entitlement.ts). `curator` mirrors `user` for admin-plugin
+    // permissions; its only meaning is the OAuth scope ceiling.
     admin({
       roles: { admin: adminAc, user: userAc, curator: userAc },
       adminRoles: ["admin"],
       defaultRole: "user",
     }),
-    // Organization plugin — user-tenancy "Workspaces" (DISTINCT from the registry
-    // `organizations` = indexed vendors). Always-on, no flag: additive and inert for
-    // anyone who never creates a second workspace — everyone gets a personal one,
-    // provisioned lazily by the session.create.before hook below (which backfills
-    // existing users on next sign-in, so no migration backfill is needed). Built-in
-    // owner/admin/member roles (the org `member.role`, NOT `user.role` / the OAuth
-    // scope ceiling); no teams. The organization/member/invitation tables are wired
-    // into the drizzleAdapter schema map below. `sendInvitationEmail` is a thin wrapper
-    // over the existing auth-email seam so the (UI-less but reachable) invitation
-    // endpoint isn't silently broken; the accept link targets the WEB origin.
+    // User-tenancy "Workspaces", DISTINCT from the registry `organizations`
+    // (indexed vendors). Personal workspaces are provisioned lazily by the
+    // session.create.before hook below. Roles here are org `member.role`, NOT
+    // `user.role`. `sendInvitationEmail` exists so the UI-less but reachable
+    // invitation endpoint isn't silently broken.
     organization({
       membershipLimit: 100,
       sendInvitationEmail: async (data) => {
@@ -794,20 +714,11 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
           apiKeyGovernancePlugin({ db, audit }),
         ]
       : []),
-    // Device-authorization (RFC 8628) for `releases login`. bearer() MUST ride
-    // alongside it: the device token endpoint returns a session access token that
-    // the CLI then presents as `Authorization: Bearer <token>` to the /v1/api-keys
-    // create route — bearer() is what makes `auth.api.getSession` (and thus
-    // `requireSession`) honor that header instead of only the cookie. verificationUri
-    // MUST be an ABSOLUTE URL on the WEB origin: the /device approval page is served
-    // by the Next.js frontend (releases.sh), not this API worker (api.releases.sh).
-    // The plugin only prefixes baseURL when the value is relative — a bare "/device"
-    // resolves against baseURL and yields https://api.releases.sh/device, which 404s.
-    // WEB_BASE_URL is releases.sh in prod/staging and the portless web origin locally;
-    // the session cookie is .releases.sh-scoped so it rides across the two subdomains.
-    // validateClient is a fail-closed allow-list: only our known CLI client id may
-    // start a device flow (an unknown id can never obtain a token even though approval
-    // is interactive — defense in depth).
+    // bearer() MUST ride alongside deviceAuthorization(): the CLI presents the
+    // device session token as a Bearer to /v1/api-keys, and bearer() is what makes
+    // getSession honor it. verificationUri MUST be absolute on the web origin; a
+    // bare "/device" resolves against baseURL (api.releases.sh) and 404s.
+    // validateClient is a fail-closed allow-list of our CLI client id.
     ...(deviceAuthOn
       ? [
           bearer(),
@@ -836,26 +747,14 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
           }),
         ]
       : []),
-    // Tracks the auth method each user last signed in with and writes it to a
-    // non-httpOnly cookie (`better-auth.last_used_login_method`). The cookie
-    // inherits the session cookie's attributes — including the `.releases.sh`
-    // cross-subdomain domain set above — so the web sign-in form (releases.sh) can
-    // read a cookie set by this worker (api.releases.sh) and badge the method the
-    // returning user used last. Cookie-only: no `storeInDatabase`, so no schema
-    // column and no migration. The plugin's default resolver already covers the
-    // Google redirect callback, password sign-in, and magic-link verify; the
-    // override adds Google One Tap (`/one-tap/callback`), which the default misses.
+    // Writes the last-used sign-in method to a non-httpOnly cookie on the
+    // `.releases.sh` domain so the web sign-in form can badge it. Cookie-only, no
+    // schema column. The override adds Google One Tap, which the default misses.
     lastLoginMethod({
       customResolveMethod: (ctx) => resolveLastLoginMethodOverride(ctx.path),
     }),
-    // Non-httpOnly session-presence hint cookie (`releases.logged_in`) that lets the
-    // web client skip its `get-session` probe for never-authenticated visitors and
-    // crawlers. Kept in lockstep with the session-token cookie. See the plugin doc.
     loggedInHintPlugin(),
-    // Stripe customer registration — mounts only when both Stripe secrets resolve
-    // (see `buildStripePlugin`). Adds the `stripeCustomerId` user field + the
-    // sign-up customer-creation hook and serves the webhook at
-    // /api/auth/stripe/webhook (handled by the existing /api/auth/* catch-all).
+    // Webhook served at /api/auth/stripe/webhook via the /api/auth/* catch-all.
     ...(stripeInstance ? [stripeInstance] : []),
   ];
 
@@ -876,13 +775,9 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     onAPIError: {
       errorURL: `${releaseWebBase(env)}/auth/error`,
     },
-    // Short-lived cookie cache — avoids a D1 read on every getSession within
-    // a visit. `jwe` encrypts the `session_data` cookie (A256CBC-HS512). The
-    // `session_token` cookie stays the credential. A cache written with the
-    // previous compact strategy fails to decrypt; getSession expires that
-    // cookie and reads the session from D1. It does not delete the session.
-    // The cache window is 5 minutes, so the deploy costs one extra D1 read
-    // per live cache cookie, then the next response writes a JWE cache.
+    // Short-lived cookie cache avoids a D1 read on every getSession within a
+    // visit. `jwe` encrypts the `session_data` cookie; `session_token` stays the
+    // credential.
     // https://better-auth.com/docs/concepts/session-management#cookie-cache-strategies
     session: {
       cookieCache: {
@@ -960,27 +855,15 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       afterEmailVerification: auditAfterEmailVerification(audit),
     },
     user: {
-      // Human-facing display email, preserving the original casing/dots that the
-      // Sentinel `emailNormalization` pass strips off the canonical `email` column.
-      // Declared so the drizzle adapter persists the paired `display_email` column
-      // and Better Auth returns it on the session user. `input: false` keeps it
-      // server-set only — it's populated from the OAuth profile via each provider's
-      // `mapProfileToUser` (see `mapDisplayEmail`), never accepted from a client
-      // sign-up/update body (which would let a caller spoof their own display
-      // email). `returned: true` (the default) surfaces it to the web session.
+      // Display email keeps the casing/dots Sentinel's `emailNormalization`
+      // strips from `email`. `input: false` keeps it server-set (from the OAuth
+      // profile via `mapDisplayEmail`) so a client can't spoof it.
       additionalFields: {
         displayEmail: { type: "string", required: false, input: false },
       },
-      // Self-serve email change from the account page (`/api/auth/change-email`).
-      // Default-off in Better Auth; opt in here. Every user reaches us verified
-      // (requireEmailVerification above), so the flow that matters is the
-      // verified-user path: `sendChangeEmailConfirmation` fires and a confirmation
-      // link is emailed to the user's CURRENT address — the change only lands once
-      // that link is clicked. `updateEmailWithoutVerification` is left default-off
-      // so an email is NEVER switched without a confirming click. Routes through the
-      // same `scheduleSend` → `waitUntil` seam as verify/reset so the send outlives
-      // the response on Workers; the binding-absent case degrades to a logged
-      // no-send (see sendAuthEmail), never a crash.
+      // The confirmation link goes to the user's CURRENT address and the change
+      // lands only once it's clicked. `updateEmailWithoutVerification` stays off
+      // so an email is never switched without that click.
       changeEmail: {
         enabled: true,
         sendChangeEmailConfirmation: async ({ user: u, newEmail, url }) => {
@@ -994,12 +877,8 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     },
     socialProviders,
     plugins,
-    // Audit hooks for sign-up / sign-in-success / sign-out / session-revoked. See
-    // audit.ts; the failure stream is logged at the HTTP layer in index.ts. The
-    // api-key cap + create/delete audit ride the `apiKeyGovernancePlugin` in
-    // `plugins` above (matcher-scoped to the `/api-key/*` endpoints). Merged with a
-    // `user.update.before` transform that keeps `displayEmail` fresh on an email
-    // change (see `syncDisplayEmailOnUpdate`) — the audit hooks define only
+    // Audit hooks (see audit.ts; sign-in failures are logged in index.ts) merged
+    // with the `user.update.before` guards. The audit hooks define only
     // `user.create.after`, so the two `user` sub-keys compose without collision.
     databaseHooks: (() => {
       const auditHooks = auditDatabaseHooks(audit);
@@ -1022,12 +901,9 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
         // than silently dropping an audit hook the spread would have carried.
         session: {
           create: {
-            // Audit sign-in-success.
             after: auditHooks.session.create.after,
-            // Workspace provisioning: seed the session's active workspace.
             // ensureActiveWorkspace creates a personal workspace on first sign-in
-            // (backfilling existing users) and never throws, so a hiccup can't block
-            // sign-in.
+            // and never throws, so a hiccup can't block sign-in.
             before: async (s: { userId: string; activeOrganizationId?: string | null }) => {
               const orgId = await ensureActiveWorkspace(db, s.userId);
               return orgId ? { data: { ...s, activeOrganizationId: orgId } } : undefined;
@@ -1047,7 +923,6 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
               }
             },
           },
-          // Audit sign-out / session-revoked.
           delete: auditHooks.session.delete,
         },
         // Generic MCP clients copy extras into authorize `scope=`. Rewrite the
@@ -1099,17 +974,9 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
         }
         if (oauthOverride) return oauthOverride;
       }),
-      // Response `after` hook: backfill `display_email` for Google One Tap
-      // sign-ins. One Tap verifies its own ID token at `/one-tap/callback` and
-      // never routes through a provider's `mapProfileToUser`, so the standard-flow
-      // capture (`mapDisplayEmail`) never fires for a One-Tap user — neither on
-      // create nor on re-login — and they'd keep seeing the dot-stripped canonical
-      // email. We run {@link backfillDisplayEmailOnSignIn} here instead, gated on a
-      // SUCCESSFUL callback: `ctx.context.returned` carries a `user` only when the
-      // plugin's `jwtVerify` passed (an invalid token surfaces an APIError with no
-      // `user`), so we never act on an unverified token. The returned user's
-      // `email` is the canonical lookup key; the original-cased value comes from
-      // re-reading the (already-verified) token's `email` claim.
+      // One Tap never routes through `mapProfileToUser`, so `display_email` is
+      // backfilled here instead. `returned.user` is present only when the
+      // plugin's `jwtVerify` passed, so we never act on an unverified token.
       after: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/oauth2/register") {
           await clampRegisteredDcrClient(db, ctx.context.returned);
@@ -1130,29 +997,17 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
         await backfillDisplayEmailOnSignIn(db, email, originalEmail);
       }),
     },
-    // Rate limiting backed by D1 so counters survive across Worker isolates — the
-    // in-memory default resets per isolate and is useless on serverless. Better
-    // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we
-    // gate it explicitly. Sensitive endpoints (sign-in/up) get the built-in
-    // 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
+    // Persistent storage so counters survive across isolates (the in-memory
+    // default resets per isolate). Better Auth's prod auto-enable keys off
+    // NODE_ENV, which Workers don't set, so it's gated explicitly.
     //
-    // FAIL-CLOSED: on in any deployed prod env, full stop. We deliberately do NOT
-    // couple this to the signing secret resolving — local dev and a broken prod
-    // deploy are indistinguishable by (ENVIRONMENT, secret), and a transiently
-    // unresolved secret in prod must never silently drop brute-force protection on
-    // the most sensitive endpoints. `AUTH_RATE_LIMIT_DISABLED` is the explicit,
-    // auditable opt-out (a plain var, never a transient Secrets-Store failure):
-    // default OFF so prod stays protected; set it to "true" in local `.dev.vars` to
-    // skip rate limiting (and its `rate_limit` table dependency) during sign-in
-    // testing. Local dev otherwise mirrors prod once the table exists
-    // (`bun run db:reset:local`).
+    // FAIL-CLOSED: on in any deployed prod env, deliberately NOT coupled to the
+    // signing secret resolving, so a transiently unresolved secret can't drop
+    // brute-force protection. `AUTH_RATE_LIMIT_DISABLED` is the explicit opt-out
+    // for local `.dev.vars`.
     //
-    // STORAGE (#1728): when the `AUTH_RATE_LIMIT_KV` namespace is bound (prod),
-    // route the per-key counters to KV via `customStorage` so brute-force /
-    // credential-stuffing floods don't write-amplify into the shared D1.
-    // Absent (local dev / staging) → fall back to `storage: "database"`. See
-    // ./rate-limit-kv.ts for the consistency tradeoff (best-effort per-key
-    // counting backed by the strict edge limiter in front of /api/auth/*).
+    // STORAGE (#1728): KV when `AUTH_RATE_LIMIT_KV` is bound (prod) so floods
+    // don't write-amplify into D1; otherwise D1. See ./rate-limit-kv.ts.
     rateLimit: {
       enabled: env.ENVIRONMENT === "production" && env.AUTH_RATE_LIMIT_DISABLED !== "true",
       ...(env.AUTH_RATE_LIMIT_KV
@@ -1161,11 +1016,8 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     },
     advanced: {
       backgroundTasks: { handler: runInBackground },
-      // True client IP behind Cloudflare. `cf-connecting-ip` is the single
-      // authoritative client IP CF sets on every request; `x-forwarded-for` is the
-      // fallback (and what local `wrangler dev` / non-CF paths populate). Drives
-      // Better Auth's rate-limit keying and the dash plugin's IP-based analytics —
-      // without it the worker would see one upstream IP for everyone behind the CDN.
+      // True client IP behind Cloudflare; `x-forwarded-for` covers local
+      // `wrangler dev`. Drives rate-limit keying and dash's IP analytics.
       ipAddress: {
         ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"],
       },

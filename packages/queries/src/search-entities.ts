@@ -116,8 +116,7 @@ export function sourceIdInList(sourceIds: string[]) {
 // MCP worker so both surfaces stay in lockstep). Substring-only candidates —
 // "ai" hitting React Em·ai·l or the `.ai` TLD — are dropped, and the survivors
 // order by match tier (exact > name prefix > name word > slug/domain >
-// category) instead of the alphabetical ORDER BY that used to stand in for
-// relevance.
+// category) rather than alphabetically.
 
 /** Split a `GROUP_CONCAT(domain)` column back into hostnames (commas can't
  * appear inside a hostname, so the default separator is unambiguous). */
