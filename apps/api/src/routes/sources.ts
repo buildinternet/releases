@@ -2102,6 +2102,7 @@ export async function buildSourceDetailPayload(
     isPrimary: src.isPrimary ?? false,
     isHidden: Boolean(src.isHidden),
     discovery: src.discovery ?? "curated",
+    fetchPriority: src.fetchPriority ?? null,
     metadata: src.metadata ?? "{}",
     notice: parseNotice(src.metadata),
     kind: src.kind ?? null,

@@ -170,6 +170,8 @@ export const SourceDetailSchema = z.object({
   // `agent` + hidden) from rows materialized by `/v1/lookups` (`on_demand`).
   // Optional for graceful degradation against older API responses.
   discovery: SourceDiscoverySchema.optional(),
+  /** Poll tier; `paused` stops fetching. Optional for older servers. */
+  fetchPriority: z.enum(["normal", "low", "paused"]).nullable().optional(),
   isPrimary: z.boolean(),
   metadata: z.string(),
   changelogUrl: z.string().nullable().optional(),

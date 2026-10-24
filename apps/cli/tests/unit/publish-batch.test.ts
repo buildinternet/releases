@@ -27,6 +27,7 @@ describe("resolvePublishTarget", () => {
       source: "changelog",
       org: "acme",
       path: "/v1/orgs/acme/sources/changelog/releases/batch",
+      ref: { org: "acme", source: "changelog" },
     });
   });
 
@@ -99,11 +100,7 @@ describe("postReleaseBatch", () => {
         prerelease: false,
       },
     ];
-    const result = await postReleaseBatch(
-      "/v1/sources/src_abc/releases/batch",
-      releases,
-      "relk_ok",
-    );
+    const result = await postReleaseBatch({ ref: "src_abc" }, releases, "relk_ok");
     expect(captured.url).toBe("https://api.example/v1/sources/src_abc/releases/batch");
     expect(captured.headers?.get("authorization")).toBe("Bearer relk_ok");
     expect(captured.headers?.get("authorization")).not.toContain("relu_should_not_be_sent");
@@ -123,10 +120,23 @@ describe("postReleaseBatch", () => {
       )) as typeof fetch;
     await expect(
       postReleaseBatch(
-        "/v1/sources/src_abc/releases/batch",
+        { ref: "src_abc" },
         [{ title: "x", content: "y", url: "https://example.com/x", type: "feature" }],
         "relk_nope",
       ),
     ).rejects.toBeInstanceOf(ApiError);
+  });
+
+  test("org-scoped publish posts to the org-scoped batch route", async () => {
+    let url = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      url = String(input);
+      return new Response(JSON.stringify({ inserted: 0, total: 0, insertedIds: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+    await postReleaseBatch(resolvePublishTarget("acme/changelog"), [], "relk_ok");
+    expect(url).toBe("https://api.example/v1/orgs/acme/sources/changelog/releases/batch");
   });
 });

@@ -631,6 +631,8 @@ orgRoutes.get(
       lastFetchedAt: latestFetch.maxFetch ?? null,
       lastPolledAt: latestPoll.maxPoll ?? null,
       trackingSince: oldestReleaseDate ?? org.createdAt,
+      createdAt: org.createdAt,
+      updatedAt: org.updatedAt,
       aliases: aliasRows.map((a) => a.domain),
       accounts,
       products: productRows,

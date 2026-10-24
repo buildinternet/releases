@@ -341,7 +341,7 @@ Examples:
 
             // Org creation gates subsequent product/source creation — sequential by design.
             // eslint-disable-next-line no-await-in-loop
-            let org = await findOrg(orgSlug);
+            let org: { id: string; name: string; slug: string } | null = await findOrg(orgSlug);
             if (org) {
               if (!opts.json)
                 logger.info(chalk.yellow(`Org already exists: ${org.name} (${org.slug})`));
@@ -402,7 +402,8 @@ Examples:
                 const prodSlug = prodEntry.slug ?? toSlug(prodEntry.name);
                 // Product creation gates child source creation — sequential by design.
                 // eslint-disable-next-line no-await-in-loop
-                let prod = await findProduct(prodSlug);
+                let prod: { id: string; name: string; slug: string } | null =
+                  await findProduct(prodSlug);
 
                 if (prod) {
                   if (!opts.json)

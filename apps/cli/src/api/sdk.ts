@@ -19,13 +19,29 @@ export function sdk(): Releases {
 }
 
 /**
+ * A client that authenticates with `token` alone, never the stored admin key
+ * or login. `releases publish` uses it with its publish token.
+ */
+export function sdkWithToken(token: string): Releases {
+  return new Releases({
+    baseUrl: getApiUrl(),
+    apiKey: token,
+    fetch: ((input: string | URL | Request, init?: RequestInit) =>
+      cliFetch(String(input), { ...init, skipDefaultAuth: true })) as typeof fetch,
+  });
+}
+
+/**
  * Run an SDK call under the CLI's error contract: a non-2xx response becomes
  * an `ApiError`, and a transport failure rethrows `cliFetch`'s error (which
  * carries the TLS-proxy hint).
  */
-export async function call<T>(fn: (client: Releases) => Promise<T>): Promise<T> {
+export async function call<T>(
+  fn: (client: Releases) => Promise<T>,
+  client: Releases = sdk(),
+): Promise<T> {
   try {
-    return await fn(sdk());
+    return await fn(client);
   } catch (err) {
     throw toCliError(err);
   }

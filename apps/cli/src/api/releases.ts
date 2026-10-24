@@ -2,14 +2,12 @@ import type {
   Release,
   ReleaseSummary,
   NewReleaseSummary,
-  ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ReleaseDetailResponse } from "@buildinternet/releases-api-types";
 import type { ReleaseWithSource, LatestRelease } from "./types.js";
 import { apiFetch, toLatestRelease } from "./core.js";
 import { call, find } from "./sdk.js";
-import { logger } from "@buildinternet/releases-lib/logger";
 import { findProduct } from "./products.js";
 import { assertCleanIdentifier } from "../lib/validate-input.js";
 
@@ -257,52 +255,6 @@ export async function getMonthlySummary(
     `/v1/sources/${encodeURIComponent(sourceSlugOrId)}/summaries?type=monthly&year=${year}&month=${month}`,
   );
   return rows?.[0];
-}
-
-// ── Source release batch insert ──
-
-export async function insertReleasesBatch(
-  source: Pick<Source, "id">,
-  releaseRows: Array<{
-    version?: string | null;
-    title: string;
-    content: string;
-    url?: string | null;
-    contentHash?: string | null;
-    publishedAt?: string | null;
-    type?: ReleaseType;
-  }>,
-): Promise<{ inserted: number; total: number }> {
-  const chunks: (typeof releaseRows)[] = [];
-  for (let i = 0; i < releaseRows.length; i += 5) {
-    chunks.push(releaseRows.slice(i, i + 5));
-  }
-  const path = `/v1/sources/${encodeURIComponent(source.id)}/releases/batch`;
-  const settled = await Promise.allSettled(
-    chunks.map((chunk) =>
-      apiFetch<{ inserted: number; total: number }>(path, {
-        method: "POST",
-        body: JSON.stringify({ releases: chunk }),
-      }),
-    ),
-  );
-
-  const succeeded = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-  const failures = settled.flatMap((r) => (r.status === "rejected" ? [r.reason] : []));
-
-  if (succeeded.length === 0 && failures.length > 0) {
-    throw failures[0];
-  }
-
-  if (failures.length > 0) {
-    logger.warn(
-      `insertReleasesBatch(${source.id}): ${failures.length}/${chunks.length} chunk(s) failed — ${failures.map(String).join("; ")}`,
-    );
-  }
-
-  const inserted = succeeded.reduce((sum, r) => sum + r.inserted, 0);
-  const total = succeeded[succeeded.length - 1]?.total ?? 0;
-  return { inserted, total };
 }
 
 export async function deleteReleasesForSource(

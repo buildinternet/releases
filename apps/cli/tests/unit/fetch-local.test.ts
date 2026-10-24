@@ -27,11 +27,11 @@ const SOURCE = {
   name: "My Changelog",
   url: "https://ex.com/changelog",
   orgId: "org_1",
+  org: { id: "org_1", slug: "acme", name: "Acme" },
 };
-const ORG = { id: "org_1", slug: "acme", name: "Acme" };
 
 /**
- * Route by URL: the API host serves findSource/findOrg, ex.com serves
+ * Route by URL: the API host serves findSource, ex.com serves
  * robots.txt + sitemap. The API routes match by path suffix because
  * `getApiUrl()` memoizes its base URL process-wide on first call (mode.ts),
  * so the host depends on whichever client-mocking test file ran first.
@@ -41,7 +41,6 @@ function installFetch(robots: { body: string; status?: number }, sitemap?: strin
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
     if (u.endsWith("/v1/sources/src_abc")) return json(SOURCE);
-    if (u.endsWith("/v1/orgs/org_1")) return json(ORG);
     if (u === "https://ex.com/robots.txt")
       return new Response(robots.body, {
         status: robots.status ?? 200,

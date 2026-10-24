@@ -1,6 +1,9 @@
 import type { Product } from "@buildinternet/releases-core/schema";
 import type { Kind } from "@buildinternet/releases-core/kinds";
+import type { ProductDetail } from "@buildinternet/releases-api-types";
+import type { ProductRef } from "@buildinternet/releases-sdk";
 import { apiFetch } from "./core.js";
+import { find } from "./sdk.js";
 import { assertCleanIdentifier } from "../lib/validate-input.js";
 import { computePagination, type ListResponse } from "@buildinternet/releases-core/cli-contracts";
 
@@ -26,41 +29,26 @@ export async function createProduct(
 }
 
 /** Sibling of `resolveSourceTarget` for products. Same identifier shapes. */
-async function resolveProductTarget(
-  identifier: string,
-): Promise<{ pathSegment: string; productId: string } | null> {
+async function resolveProductRef(identifier: string): Promise<ProductRef | null> {
   assertCleanIdentifier(identifier, "product");
-  if (identifier.startsWith("prod_")) {
-    return {
-      pathSegment: `/v1/products/${encodeURIComponent(identifier)}`,
-      productId: identifier,
-    };
-  }
+  if (identifier.startsWith("prod_")) return identifier;
   const slash = identifier.indexOf("/");
   if (slash > 0 && slash < identifier.length - 1) {
-    const orgSlug = identifier.slice(0, slash);
-    const productSlug = identifier.slice(slash + 1);
-    return {
-      pathSegment: `/v1/orgs/${encodeURIComponent(orgSlug)}/products/${encodeURIComponent(productSlug)}`,
-      productId: "",
-    };
+    return { org: identifier.slice(0, slash), product: identifier.slice(slash + 1) };
   }
-  const resolved = await apiFetch<{
-    productId: string;
-    productSlug: string;
-    orgSlug: string;
-  } | null>(`/v1/lookups/product-by-slug?slug=${encodeURIComponent(identifier)}`);
-  if (!resolved) return null;
-  return {
-    pathSegment: `/v1/orgs/${encodeURIComponent(resolved.orgSlug)}/products/${encodeURIComponent(resolved.productSlug)}`,
-    productId: resolved.productId,
-  };
+  const resolved = await find((c) =>
+    c.request<{ productId: string; productSlug: string; orgSlug: string }>(
+      "GET /lookups/product-by-slug",
+      { query: { slug: identifier } },
+    ),
+  );
+  return resolved ? { org: resolved.orgSlug, product: resolved.productSlug } : null;
 }
 
-export async function findProduct(identifier: string): Promise<Product | null> {
-  const target = await resolveProductTarget(identifier);
-  if (!target) return null;
-  return apiFetch<Product | null>(target.pathSegment);
+export async function findProduct(identifier: string): Promise<ProductDetail | null> {
+  const ref = await resolveProductRef(identifier);
+  if (!ref) return null;
+  return find((c) => c.products.get(ref));
 }
 
 export type ProductWithSourceCount = Product & { sourceCount: number };
