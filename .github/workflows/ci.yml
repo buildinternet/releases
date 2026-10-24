@@ -232,6 +232,15 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Pack the published libraries
+        # npm consumers get compiled dist/ (scripts/pack-dist.ts). A dry-run
+        # pack builds core and api-types with NodeNext resolution, which
+        # catches an extensionless relative import or a Bun-only API before
+        # it breaks a publish.
+        run: |
+          (cd packages/core && npm pack --dry-run >/dev/null)
+          (cd packages/api-types && npm pack --dry-run >/dev/null)
+
   # Same production Next build Vercel runs for apps/web/ (Next 16 + Turbopack). Root
   # oxlint ignorePatterns include apps/web/**, so type/export errors that fail the
   # Vercel deploy never fail lint/test alone. Path filter mirrors

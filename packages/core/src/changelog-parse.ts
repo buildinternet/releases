@@ -6,7 +6,7 @@
  * client (CLI) that wants the same shape without a server round-trip.
  */
 
-import { isPrereleaseVersion } from "./prerelease";
+import { isPrereleaseVersion } from "./prerelease.js";
 
 /**
  * A single release entry. Mirrors the parse-relevant subset of the stored
