@@ -17,7 +17,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
-import { hideInProduction } from "../openapi.js";
 import {
   discoverChangelogPathsViaTree,
   buildGitHubHeaders,
@@ -91,7 +90,6 @@ const ChangelogFetchResponseSchema = z.object({
 });
 
 const fetchChangelogsRoute = describeRoute({
-  hide: hideInProduction,
   tags: ["Changelog"],
   summary: "Fetch CHANGELOG files for a GitHub repo (experimental, no persistence)",
   description:
@@ -291,7 +289,6 @@ const ChangelogParseResponseSchema = z.object({
 });
 
 const parseChangelogRoute = describeRoute({
-  hide: hideInProduction,
   tags: ["Changelog"],
   summary:
     "Parse a GitHub repo's changelog into structured releases (experimental, no persistence)",

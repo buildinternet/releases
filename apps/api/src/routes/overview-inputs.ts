@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
-import { hideInProduction } from "../openapi.js";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { organizationsPublic } from "@buildinternet/releases-core/schema";
@@ -37,7 +36,6 @@ function getDb(c: any): ReturnType<typeof createDb> {
 app.get(
   "/orgs/:slug/overview/inputs",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Overviews"],
     summary: "Get overview inputs",
     description:

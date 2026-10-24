@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
-import { hideInProduction } from "../openapi.js";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -29,7 +28,6 @@ const app = new Hono<Env>();
 app.get(
   "/orgs/:slug/playbook",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Playbook"],
     summary: "Get org playbook",
     description:
@@ -67,7 +65,6 @@ app.get(
 app.patch(
   "/orgs/:slug/playbook/notes",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Playbook"],
     summary: "Update playbook notes",
     description:

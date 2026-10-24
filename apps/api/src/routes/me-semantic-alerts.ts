@@ -19,6 +19,8 @@ import {
   SEMANTIC_ALERT_THRESHOLD_DEFAULT,
   SEMANTIC_ALERT_THRESHOLD_MAX,
   SEMANTIC_ALERT_THRESHOLD_MIN,
+  SemanticAlertCreateBodySchema,
+  SemanticAlertUpdateBodySchema,
   type SemanticAlertListResponse,
 } from "@buildinternet/releases-api-types";
 import { FLAGS, flag } from "@releases/lib/flags";
@@ -32,6 +34,7 @@ import type { Env } from "../index.js";
 import { createDb } from "../db.js";
 import { respondError } from "../lib/error-response.js";
 import { errorResponse } from "../lib/openapi-error.js";
+import { documentedJsonBody } from "../lib/validate.js";
 import {
   countSemanticAlerts,
   deleteSemanticAlert,
@@ -286,6 +289,7 @@ meSemanticAlertHandlers.post(
     summary: "Create a semantic alert",
     description: `${LANE_DESCRIPTION} Body: \`{ query, enabled?, threshold?, deliverEmail?, deliverWebhook?, webhookSubscriptionId? }\`. \`query\` is required, trimmed, and at most ${SEMANTIC_ALERT_QUERY_MAX_CHARS} characters. Omitted \`enabled\` defaults to true, \`threshold\` to ${SEMANTIC_ALERT_THRESHOLD_DEFAULT}, \`deliverEmail\` to true, \`deliverWebhook\` to false.`,
     security: [{ bearerAuth: [] }],
+    requestBody: documentedJsonBody(SemanticAlertCreateBodySchema),
     responses: {
       201: jsonBody("The created alert.", alertSchema),
       400: errorResponse("Invalid query, threshold, booleans, or webhookSubscriptionId"),
@@ -360,6 +364,7 @@ meSemanticAlertHandlers.patch(
     summary: "Update a semantic alert",
     description: `${LANE_DESCRIPTION} Partial body. \`webhookSubscriptionId: null\` clears the link. An empty body returns the current alert.`,
     security: [{ bearerAuth: [] }],
+    requestBody: documentedJsonBody(SemanticAlertUpdateBodySchema),
     responses: {
       200: jsonBody("The updated alert.", alertSchema),
       400: errorResponse("Invalid query, threshold, booleans, or webhookSubscriptionId"),

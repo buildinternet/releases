@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
-import { hideInProduction } from "../openapi.js";
 import { z } from "zod";
 import { eq, and, or, count, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -38,7 +37,6 @@ export const ignoreRoutes = new Hono<Env>();
 ignoreRoutes.get(
   "/orgs/:slug/ignored-urls",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "List org ignored URLs",
     description:
@@ -119,7 +117,6 @@ ignoreRoutes.get(
 ignoreRoutes.post(
   "/orgs/:slug/ignored-urls",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Add a URL to the org ignore list",
     description:
@@ -166,7 +163,6 @@ ignoreRoutes.post(
 ignoreRoutes.delete(
   "/orgs/:slug/ignored-urls/:url",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Remove a URL from the org ignore list",
     description:
@@ -254,7 +250,6 @@ ignoreRoutes.get("/admin/blocklist", async (c) => {
 ignoreRoutes.post(
   "/admin/blocklist",
   describeRoute({
-    hide: hideInProduction,
     tags: ["Admin"],
     summary: "Add a URL or domain to the global blocklist",
     description:

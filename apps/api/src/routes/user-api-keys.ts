@@ -18,7 +18,11 @@ import {
 } from "../auth/api-key-limit.js";
 import { makeAuthAudit } from "../auth/audit.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
-import type { UserApiKey } from "@buildinternet/releases-api-types";
+import {
+  CreateUserApiKeyBodySchema,
+  CreatedUserApiKeySchema,
+  type UserApiKey,
+} from "@buildinternet/releases-api-types";
 import { requireSession } from "../middleware/auth.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -74,6 +78,8 @@ const createUserApiKeyOpenApi = idempotentPostOpenApi({
   summary: "Create a user API key",
   successStatus: 201,
   successDescription: "Created user API key, including the one-time secret.",
+  successSchema: CreatedUserApiKeySchema,
+  bodySchema: CreateUserApiKeyBodySchema,
 });
 
 userApiKeyHandlers.post(

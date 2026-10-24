@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Hono } from "hono";
 import { ERROR_TYPES } from "@buildinternet/releases-core/errors";
-import type { Env } from "../src/index.js";
-import { mountV1Routes } from "../src/v1-routes.js";
+import { fetchOpenApiSpec } from "./openapi-spec-helper.js";
 
 type Operation = {
   description?: string;
@@ -59,18 +57,10 @@ type Spec = {
   components?: { schemas?: Record<string, unknown> };
 };
 
-async function idempotencySpec(): Promise<Spec> {
-  const v1 = new Hono<Env>();
-  mountV1Routes(v1);
-  const app = new Hono<Env>();
-  app.route("/v1", v1);
-  const response = await app.fetch(
-    new Request("https://api.example.test/v1/openapi.json"),
-    { ENVIRONMENT: "production" },
-    { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
-  );
-  expect(response.status).toBe(200);
-  return (await response.json()) as Spec;
+// Staging documents internal operations too (production keeps only the
+// public surface — see api-surface.test.ts), so admin routes stay covered.
+function idempotencySpec(): Promise<Spec> {
+  return fetchOpenApiSpec<Spec>("staging");
 }
 
 /** Every documented 4xx/5xx response now points here instead of inlining the schema. */

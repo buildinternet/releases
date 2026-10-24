@@ -1,6 +1,6 @@
 # REST route surface
 
-Read this before adding or changing an API route. It answers the questions every new endpoint raises: **where does it live** (CRUD vs. job triggers vs. admin telemetry — the [naming buckets](#route-naming-buckets-494)), **how do callers identify things** (IDs vs. slugs, org-scoped vs. bare paths, the `/v1/lookups` resolvers), **how does it paginate** ([three shapes](#pagination-shape), picked by data shape), and **what must be documented** (the [OpenAPI coverage gate](#openapi-coverage-gate-894-phase-3) fails CI for undocumented public routes). Error shape is owned by [errors.md](errors.md); who may call a route is owned by [remote-mode.md → Auth model](remote-mode.md#auth-model).
+Read this before adding or changing an API route. It answers the questions every new endpoint raises: **where does it live** (CRUD vs. job triggers vs. admin telemetry — the [naming buckets](#route-naming-buckets-494)), **how do callers identify things** (IDs vs. slugs, org-scoped vs. bare paths, the `/v1/lookups` resolvers), **how does it paginate** ([three shapes](#pagination-shape), picked by data shape), and **is it public** (the [public API surface](#public-api-surface) list, enforced by a CI gate). Error shape is owned by [errors.md](errors.md); who may call a route is owned by [remote-mode.md → Auth model](remote-mode.md#auth-model).
 
 ## Route naming buckets (#494)
 
@@ -228,11 +228,23 @@ Like `since`/`until`, any `minImportance` value forces the KV read-through cache
 
 Public GET routes advertise per-route `Cache-Control` headers (registered in `apps/api/src/index.ts` via `cacheControl()`). These headers are read by **Workers Cache** — Cloudflare's per-Worker tiered edge cache, enabled by `"cache": { "enabled": true }` in `apps/api/wrangler.jsonc` — which stores/serves responses in front of the fetch handler, so a cache hit never runs the Worker (zero CPU, skips auth/rate-limit/D1 and any per-request counters like the search-query log). Only anonymous GETs are cached: `cacheControl()` itself forces `private, no-store` on requests bearing `Authorization` and stamps `Vary: Authorization` on anonymous entries — Workers Cache alone would NOT exclude them, because RFC 9111 lets an explicit `public` override the shared-cache Authorization restriction, which would both leak principal-shaped responses (admin projections, `include_hidden`, playbook content) into the shared cache and serve anonymous-shaped entries to authed callers. Responses with `Set-Cookie` auto-bypass; inbound `Cookie` headers do not. Workers Cache also applies **heuristic freshness** to responses with no `Cache-Control` header at all (200 → ~2h, 404 → ~3min), so the root app registers `cacheDefaultDeny()` first: any response without an explicit `Cache-Control` is stamped `private, no-store`, making caching strictly opt-in — this is what keeps `/api/auth/*` (e.g. `get-session`, which Better Auth serves header-less to cookie-bearing callers) out of the shared cache. The cache key includes the Worker version, so every deploy starts from an empty cache. Staging keeps it explicitly disabled so the `STAGING_ACCESS_KEY` gate always runs. Invalidation: `cacheControl(..., { tags })` emits `Cache-Tag`; today only `/v1/releases/latest` is tagged (`latest`), purged by `purgeLatestCacheTag()` in `lib/latest-cache.ts` on publish. The `cache-disabled` flag is a slow-drain kill switch — it stops new entries (no header emitted) but already-stored entries age out over their remaining `max-age`. Single-entity reads — including `GET /v1/releases/:id` (#1580) — use `public, max-age=60, stale-while-revalidate=30`, so a just-written field (e.g. generate-content's `title_short`/`summary`) can read stale for up to ~90s through a caching intermediary; read back through an uncached route (the source-releases list) or wait out the window before concluding a write failed.
 
-## OpenAPI coverage gate (#894 Phase 3)
+## Public API surface
 
-Every method registered under a `publicReadRoutes` prefix (defined in `apps/api/src/route-namespaces.ts`) must appear in `/v1/openapi.json`. Enforced by `scripts/check-openapi-coverage.ts`, run as a step in the CI `test` job.
+`apps/api/src/api-surface.ts` decides which operations are **public**: documented on production, supported for third-party callers, and the input to any generated SDK. Everything else the worker serves is **internal** (web-app aggregations, curator writes, ingest and agent pipelines, admin) and can change without notice. Namespace auth (`route-namespaces.ts`) and visibility are separate questions: a public-read namespace still holds internal routes (`POST /orgs`), and a public operation can require a Bearer (`POST /me/webhooks`).
 
-Add `describeRoute(...)` annotations from `hono-openapi` to new public-read routes. If a public-read route is genuinely meant to stay undocumented, add an explicit entry to the script's `ALLOWLIST` set with a rationale comment (stale entries log a warning so they don't accumulate). Admin-only routes (`adminRoutes` in the same module) are intentionally outside the gate's scope.
+- `PUBLIC_OPERATIONS` maps each public `METHOD /path` to its advertised auth: `optional` (anonymous works; a Bearer raises the rate-limit tier) or `required`. Org-scoped aliases are listed separately.
+- `INTERNAL_PREFIXES` (every admin namespace plus worker plumbing) and `INTERNAL_OPERATIONS` (internal routes inside public namespaces, grouped with a reason) cover the rest. Routes slated for promotion say so in their group comment.
+- `/v1/openapi.json` on production keeps only public operations and stamps their `security` from the list (`applyApiSurface` in `openapi.ts`). Staging and local keep every documented operation and tag each one `x-releases-visibility: public | internal`. The spec is built once per isolate per environment.
+
+A new route is internal until someone promotes it. To promote one, add it to `PUBLIC_OPERATIONS` and give it a tag, a JSON 2xx response schema (`jsonResponse` in `lib/openapi-error.ts`), and, for POST/PUT/PATCH, a JSON request body (`validateJson`; `documentedJsonBody`, or `bodySchema` on `idempotentPostOpenApi`, when the handler parses its own body).
+
+### Coverage gate (#894)
+
+`scripts/check-openapi-coverage.ts` runs in the CI `test` job and fails when:
+
+- a registered route is classified as neither public nor internal,
+- a public operation is missing from the production spec, or lacks a tag, a JSON 2xx response schema, or a request body (action endpoints with no body go in the script's `NO_BODY` set), or
+- an entry in `api-surface.ts` no longer matches a registered route.
 
 ## Error responses
 

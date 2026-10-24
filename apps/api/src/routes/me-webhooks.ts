@@ -4,6 +4,12 @@
  */
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
+import {
+  CreateUserWebhookBodySchema,
+  CreateUserWebhookResponseSchema,
+  RotateUserWebhookSecretResponseSchema,
+  TestUserWebhookResponseSchema,
+} from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import {
   insertWebhookSubscriptionCapped,
@@ -106,6 +112,8 @@ const createWebhookOpenApi = idempotentPostOpenApi({
   summary: "Create a personal webhook subscription",
   successStatus: 201,
   successDescription: "Created webhook subscription, including its one-time signing key.",
+  successSchema: CreateUserWebhookResponseSchema,
+  bodySchema: CreateUserWebhookBodySchema,
 });
 
 meWebhookHandlers.post(
@@ -292,6 +300,7 @@ const rotateWebhookSecretOpenApi = idempotentPostOpenApi({
   summary: "Rotate a personal webhook signing key",
   successStatus: 200,
   successDescription: "The new secret version and one-time signing key.",
+  successSchema: RotateUserWebhookSecretResponseSchema,
 });
 
 meWebhookHandlers.post(
@@ -337,6 +346,7 @@ const testWebhookOpenApi = idempotentPostOpenApi({
   summary: "Queue a personal webhook test delivery",
   successStatus: 200,
   successDescription: "The queued synthetic event identifier.",
+  successSchema: TestUserWebhookResponseSchema,
 });
 
 meWebhookHandlers.post(

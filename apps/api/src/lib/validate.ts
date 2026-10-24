@@ -14,7 +14,8 @@
  * Path segments are joined with `.` — sufficient for our flat-ish request
  * shapes and human-readable in the error response.
  */
-import { validator } from "hono-openapi";
+import { validator, type DescribeRouteOptions } from "hono-openapi";
+import { z } from "zod";
 import { ValidationError } from "@releases/lib/releases-error";
 
 type StandardIssue = {
@@ -65,4 +66,30 @@ export function validateJson<S extends Parameters<typeof validator>[1]>(schema: 
       return c.json(err.toWire(), 400);
     }
   });
+}
+
+/**
+ * OpenAPI `requestBody` for a handler that parses its own JSON body instead of
+ * going through `validateJson` (e.g. `idempotentPost` with sanitize-and-coerce
+ * rules). Documentation only: nothing here validates the request. The JSON
+ * Schema is built on first read, when the spec is generated, not at import.
+ */
+export function documentedJsonBody(
+  schema: z.ZodType,
+): NonNullable<DescribeRouteOptions["requestBody"]> {
+  let jsonSchema: Record<string, unknown> | undefined;
+  return {
+    required: true,
+    content: {
+      "application/json": {
+        get schema() {
+          if (!jsonSchema) {
+            const { $schema: _schema, ...rest } = z.toJSONSchema(schema, { io: "input" });
+            jsonSchema = rest as Record<string, unknown>;
+          }
+          return jsonSchema;
+        },
+      },
+    },
+  };
 }

@@ -130,6 +130,16 @@ export const SourceFeedPaginationSchema = z.object({
 });
 
 /**
+ * Response shape for `GET /v1/sources/:slug/releases` (and the org-scoped
+ * alias). The source identity is in the URL, so items omit the `source` block
+ * the org feed carries.
+ */
+export const SourceReleasesResponseSchema = z.object({
+  releases: z.array(ReleaseItemSchema),
+  pagination: SourceFeedPaginationSchema,
+});
+
+/**
  * Resolved attribution block returned alongside a source row. `id` is
  * additive vs the legacy `{ slug, name }` shape — older clients that ignored
  * it still parse cleanly. `productId` / `productSlug` are sibling top-level
