@@ -64,7 +64,7 @@ function main() {
 
   if (dryRun) return;
   logger.info(`Registering ${REPO} ${workflow} as the trusted publisher`);
-  if (!npm(["trust", "github", pkg.name, "--repo", REPO, "--file", workflow])) {
+  if (!npm(["trust", "github", pkg.name, "--repo", REPO, "--file", workflow, "--allow-publish"])) {
     logger.error(
       `npm trust failed. Add it by hand at https://www.npmjs.com/package/${pkg.name}/access ` +
         `(GitHub Actions, repository ${REPO}, workflow ${workflow}).`,

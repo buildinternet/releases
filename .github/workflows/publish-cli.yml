@@ -12,7 +12,7 @@ name: Publish CLI (@buildinternet/releases)
 #
 # npm trusted publishers (OIDC) MUST be registered for ALL 7 packages against
 # repo `buildinternet/releases` + workflow file `publish-cli.yml`, e.g.
-#   npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml
+#   npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml --allow-publish
 # A newly added trusted publisher expires if unused within 2 days, so register
 # them shortly before the first release, not weeks ahead.
 

@@ -42,7 +42,7 @@ flowchart LR
 
 ## Trusted publishers
 
-npm trusted publishing (OIDC) must be registered for all seven packages: repo `buildinternet/releases`, workflow file `publish-cli.yml`, for example `npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml`. A newly added trusted publisher expires if it goes unused for two days, so register them shortly before the first release, not weeks ahead. Missing one package fails the publish part-way; fix the publisher and re-run, and the per-package "already published" check skips what landed.
+npm trusted publishing (OIDC) must be registered for all seven packages: repo `buildinternet/releases`, workflow file `publish-cli.yml`, for example `npm trust github <pkg> --repo buildinternet/releases --file publish-cli.yml --allow-publish` (npm requires a permission flag). A newly added trusted publisher expires if it goes unused for two days, so register them shortly before the first release, not weeks ahead. Missing one package fails the publish part-way; fix the publisher and re-run, and the per-package "already published" check skips what landed.
 
 A brand-new package needs one manual publish first, because a trusted publisher can only be added to a package that already exists on npm. For the SDK, run `bun run publish:bootstrap:sdk` after `npm login`: it publishes the current version with your login and then runs `npm trust` to register `publish-sdk.yml` (`scripts/npm-bootstrap.ts`; pass `--dry-run` to check the pack). Until then `publish-sdk.yml` skips with a warning instead of failing. If the trusted publisher expires before the workflow first uses it, run the same command again: it skips the publish and re-registers the publisher.
 
