@@ -102,6 +102,7 @@ export const CollectionDetailSchema = z.object({
  * tightening to the SourceType enum would break pass-through code.
  */
 export const CollectionReleaseItemSchema = ReleaseItemSchema.extend({
+  id: z.string(),
   source: z.object({ slug: z.string(), name: z.string(), type: z.string() }),
   org: z.object({ slug: z.string(), name: z.string() }),
   /**

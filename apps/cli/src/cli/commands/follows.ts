@@ -35,7 +35,7 @@ function requireAuth(): void {
   }
 }
 
-/** Strict 1-based positive-integer parser for `--page` / `--limit`. */
+/** Strict 1-based positive-integer parser for `--limit`. */
 function parsePositiveInt(label: string, max: number) {
   return (raw: string): number => {
     const n = Number(raw);
@@ -140,18 +140,18 @@ export function registerFollowsCommands(program: Command): void {
   program
     .command("feed")
     .description("Your personalized release feed (from the orgs + products you follow)")
-    .option("--page <n>", "1-based page number (default 1)", parsePositiveInt("--page", 100_000))
+    .option("--cursor <cursor>", "Continue from a previous page (its `nextCursor`)")
     .option(
       "--limit <n>",
       "Releases per page, 1–100 (default 30)",
       parsePositiveInt("--limit", 100),
     )
     .option("--json", "Output as JSON")
-    .action(async (opts: { page?: number; limit?: number; json?: boolean }) => {
+    .action(async (opts: { cursor?: string; limit?: number; json?: boolean }) => {
       requireAuth();
-      const { releases, hasMore } = await getMyFeed({ page: opts.page, limit: opts.limit });
+      const { releases, nextCursor } = await getMyFeed({ cursor: opts.cursor, limit: opts.limit });
       if (opts.json) {
-        await writeJson({ releases, pagination: { hasMore } });
+        await writeJson({ releases, pagination: { nextCursor } });
         return;
       }
       if (releases.length === 0) {
@@ -164,11 +164,9 @@ export function registerFollowsCommands(program: Command): void {
         return;
       }
       console.log(renderReleaseRows(releases, { mode: "feed" }));
-      if (hasMore) {
+      if (nextCursor) {
         console.log(
-          chalk.dim(
-            `\nMore available — pass \`--page ${(opts.page ?? 1) + 1}\` for the next page.`,
-          ),
+          chalk.dim(`\nMore available — pass \`--cursor ${nextCursor}\` for the next page.`),
         );
       }
     });

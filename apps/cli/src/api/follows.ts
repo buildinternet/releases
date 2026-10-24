@@ -3,17 +3,16 @@ import type { LatestRelease } from "./types.js";
 import type {
   Follow,
   FollowTarget,
-  FollowsListResponse,
   FollowMutationResponse,
 } from "@buildinternet/releases-api-types";
-import { apiFetch, toLatestRelease } from "./core.js";
-import type { LatestReleaseWire } from "./core.js";
+import { toLatestRelease } from "./core.js";
+import { call, find } from "./sdk.js";
 import { findOrg } from "./orgs.js";
 import { findProduct } from "./products.js";
 
 // ── User follows + personalized feed (`/v1/me/*`) ──
 //
-// These act on the signed-in user's own account. `apiFetch` forwards the stored
+// These act on the signed-in user's own account. The CLI transport forwards the stored
 // credential (a `relu_` user key from `releases login`, or `RELEASES_API_KEY`);
 // the API's `/v1/me/*` gate accepts that Bearer user principal. Callers should
 // check `isAuthenticated()` first so an unauthenticated user gets a "run
@@ -66,7 +65,7 @@ export async function resolveFollowTarget(
 
 /** List the signed-in user's follows, enriched + newest-first. */
 export async function listMyFollows(): Promise<Follow[]> {
-  const res = await apiFetch<FollowsListResponse | null>(`/v1/me/follows`);
+  const res = await find((c) => c.me.follows.list());
   return res?.follows ?? [];
 }
 
@@ -75,10 +74,7 @@ export async function addFollow(
   targetType: FollowTarget,
   targetId: string,
 ): Promise<FollowMutationResponse> {
-  return apiFetch<FollowMutationResponse>(`/v1/me/follows`, {
-    method: "POST",
-    body: JSON.stringify({ targetType, targetId }),
-  });
+  return call((c) => c.me.follows.add(targetType, targetId));
 }
 
 /** Remove a follow (idempotent — removing a non-follow is a no-op). */
@@ -86,33 +82,22 @@ export async function removeFollow(
   targetType: FollowTarget,
   targetId: string,
 ): Promise<FollowMutationResponse> {
-  return apiFetch<FollowMutationResponse>(
-    `/v1/me/follows/${targetType}/${encodeURIComponent(targetId)}`,
-    { method: "DELETE" },
-  );
+  return call((c) => c.me.follows.remove(targetType, targetId));
 }
 
 /**
  * The signed-in user's personalized release feed (org follow = its products
  * too). Same per-item wire shape as `/v1/releases/latest`, so it reuses
  * `toLatestRelease` and renders through the shared `renderReleaseRows` path that
- * `tail` uses. Page/offset paginated; returns `hasMore` from the list envelope.
+ * `tail` uses. Cursor-paginated: pass the returned `nextCursor` back as `cursor`.
  */
 export async function getMyFeed(opts?: {
-  page?: number;
+  cursor?: string;
   limit?: number;
-}): Promise<{ releases: LatestRelease[]; hasMore: boolean }> {
-  const qs = new URLSearchParams();
-  if (opts?.page) qs.set("page", String(opts.page));
-  if (opts?.limit) qs.set("limit", String(opts.limit));
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  const data = await apiFetch<{
-    items: LatestReleaseWire[];
-    pagination?: { hasMore?: boolean };
-  } | null>(`/v1/me/feed${suffix}`);
-  if (!data) throw new Error("Personalized feed unavailable (unexpected 404 on /v1/me/feed).");
+}): Promise<{ releases: LatestRelease[]; nextCursor: string | null }> {
+  const data = await call((c) => c.me.feed({ cursor: opts?.cursor, limit: opts?.limit }));
   return {
     releases: data.items.map(toLatestRelease),
-    hasMore: data.pagination?.hasMore ?? false,
+    nextCursor: data.pagination.nextCursor ?? null,
   };
 }

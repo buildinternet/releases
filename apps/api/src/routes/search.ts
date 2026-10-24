@@ -50,8 +50,10 @@ import {
   parseLimitParam,
   parseTimeWindow,
   firstImageThumbnail,
+  orgWhere,
 } from "../utils.js";
 import {
+  organizations,
   organizationsActive,
   sources,
   productsActive,
@@ -334,6 +336,14 @@ searchRoutes.get(
         description: "Narrow results to the org owning this domain.",
       },
       {
+        name: "org",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          'Narrow results to one org by slug or `org_…` id — the same scope as `domain`, for callers that already know the org. Unknown orgs return an empty envelope with `orgStatus: "not_found"`. Pass either `org` or `domain`, not both (400).',
+      },
+      {
         name: "product",
         in: "query",
         required: false,
@@ -416,7 +426,7 @@ searchRoutes.get(
       },
       400: {
         description:
-          "Missing `q`, invalid `domain` hostname, unknown `kind` or `category` value, or unparseable `since`/`until`",
+          "Missing `q`, invalid `domain` hostname, `org` and `domain` both supplied, unknown `kind` or `category` value, or unparseable `since`/`until`",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
     },
@@ -488,8 +498,29 @@ searchRoutes.get(
         }),
       );
     }
-    const scopeOrgId = domainResolution?.kind === "hit" ? domainResolution.orgId : undefined;
     const domainMissed = domainResolution?.kind === "miss";
+
+    // Optional `?org=` is the same single-org scope as `?domain=`, keyed by
+    // slug or `org_…` id. Unknown org → empty envelope with `orgStatus:
+    // "not_found"`, mirroring a domain miss.
+    const rawOrg = c.req.query("org")?.trim();
+    if (rawOrg && rawDomain) {
+      return respondError(
+        c,
+        new ValidationError("Pass either `org` or `domain`, not both", { code: "bad_request" }),
+      );
+    }
+    const orgRow = rawOrg
+      ? await db
+          .select({ id: organizations.id, slug: organizations.slug })
+          .from(organizations)
+          .where(orgWhere(rawOrg))
+          .get()
+      : undefined;
+    const orgMissed = Boolean(rawOrg) && !orgRow;
+    const orgEcho = orgRow ? { org: orgRow.slug, orgStatus: "matched" as const } : {};
+    const scopeOrgId =
+      domainResolution?.kind === "hit" ? domainResolution.orgId : (orgRow?.id ?? undefined);
 
     // Optional `?product=` narrows release and catalog hits to the sources
     // belonging to one product. Bare slugs are rejected because product slugs
@@ -566,14 +597,15 @@ searchRoutes.get(
       }
     }
 
-    // Domain miss → empty result envelope. Skip the SQL entirely and skip
-    // the on-demand GitHub lookup (which is a separate primitive — domain
+    // Domain or org miss → empty result envelope. Skip the SQL entirely and
+    // skip the on-demand GitHub lookup (which is a separate primitive — scope
     // misses don't probe).
-    if (domainMissed) {
+    if (domainMissed || orgMissed) {
       const result = {
         query: q,
-        domain: domainResolution.domain,
-        domainStatus: "not_found" as const,
+        ...(domainMissed
+          ? { domain: domainResolution.domain, domainStatus: "not_found" as const }
+          : { org: rawOrg!, orgStatus: "not_found" as const }),
         orgs: [],
         catalog: [],
         sources: [],
@@ -859,6 +891,7 @@ searchRoutes.get(
         ...(domainResolution
           ? { domain: domainResolution.domain, domainStatus: "matched" as const }
           : {}),
+        ...orgEcho,
         ...(productEcho ? { product: productEcho, productStatus: "matched" as const } : {}),
         ...categoryEcho,
         ...collectionEcho,
@@ -1019,6 +1052,7 @@ searchRoutes.get(
       ...(domainResolution
         ? { domain: domainResolution.domain, domainStatus: "matched" as const }
         : {}),
+      ...orgEcho,
       ...(productEcho ? { product: productEcho, productStatus: "matched" as const } : {}),
       ...categoryEcho,
       ...collectionEcho,

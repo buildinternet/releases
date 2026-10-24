@@ -108,6 +108,7 @@ import {
   parseBoolParam,
   parseFeedCursor,
   parseLimitParam,
+  parseMinImportanceParam,
   parseTimeWindow,
   replaceAliases,
   findProductForOrgSlug,
@@ -198,6 +199,14 @@ orgRoutes.get(
         schema: { type: "boolean" },
         description:
           "Filter to editorially featured orgs only (home-page rail). Default unfiltered.",
+      },
+      {
+        name: "platform",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Filter to orgs with a linked account on this platform (e.g. `github`, `x`). Matched case-insensitively. `meta.emptyOrgCount` is scoped to the same filter.",
       },
       {
         name: "trackingRequested",
@@ -311,6 +320,7 @@ orgRoutes.get(
     const category = categoryResolved?.ok ? categoryResolved.slug : undefined;
     // Optional featured filter — narrows to editorially promoted orgs for the home page.
     const featured = parseBoolParam(c.req.query("featured"));
+    const platform = c.req.query("platform")?.trim() || undefined;
 
     const [rows, counts] = await Promise.all([
       getOrgsWithStats(
@@ -321,9 +331,9 @@ orgRoutes.get(
           limit: pagination.pageSize,
           offset: pagination.offset,
         },
-        { includeEmpty, category, featured },
+        { includeEmpty, category, featured, platform },
       ),
-      countOrgsForList(db, qParam ?? undefined, { includeEmpty, category, featured }),
+      countOrgsForList(db, qParam ?? undefined, { includeEmpty, category, featured, platform }),
     ]);
     const sparklineRows = await getOrgSparklines(
       db,
@@ -2387,6 +2397,14 @@ orgRoutes.get(
         description:
           "Keep only releases published at or before this bound. Same input formats as `since`; a bare date (`2026-06-25`) includes that whole UTC day.",
       },
+      {
+        name: "minImportance",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 5 },
+        description:
+          "Only include releases with AI-scored `importance` >= this value (1–5). Releases with no score (`null`) are excluded when set.",
+      },
     ],
     responses: {
       200: {
@@ -2397,7 +2415,8 @@ orgRoutes.get(
         },
       },
       400: {
-        description: "Invalid `kind` value or unparseable `since`/`until`",
+        description:
+          "Invalid `kind` value, unparseable `since`/`until`, or invalid `minImportance`",
         content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
       },
       404: {
@@ -2428,6 +2447,10 @@ orgRoutes.get(
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
     if (!window.ok)
       return respondError(c, new ValidationError(window.message, { code: "bad_request" }));
+
+    const importance = parseMinImportanceParam(c.req.query("minImportance"));
+    if (!importance.ok)
+      return respondError(c, new ValidationError(importance.message, { code: "bad_request" }));
 
     const db = createDb(c.env.DB);
 
@@ -2462,6 +2485,7 @@ orgRoutes.get(
         productId,
         since: window.since,
         until: window.until,
+        minImportance: importance.value,
       },
     );
 

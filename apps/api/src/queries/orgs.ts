@@ -7,14 +7,22 @@ import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "../lib/d1-limits.js";
 import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
 
+export type OrgListOpts = {
+  includeEmpty?: boolean;
+  category?: string;
+  featured?: boolean;
+  /** Keep only orgs with a linked account on this platform (`org_accounts.platform`). */
+  platform?: string;
+};
+
 export async function getOrgsWithStats(
   db: D1Db,
   cutoff30d: string,
   q?: string,
   pagination?: { limit: number; offset: number },
-  opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
+  opts: OrgListOpts = {},
 ): Promise<OrgListRow[]> {
-  const where = orgListWhere(q, opts.category, opts.featured);
+  const where = orgListWhere(q, opts);
   const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
   // Drop orgs that haven't produced any visible releases yet (#746). Applied
   // post-aggregate via HAVING so the search-term filter still matches the
@@ -52,9 +60,9 @@ export async function getOrgsWithStats(
 export async function countOrgsForList(
   db: D1Db,
   q?: string,
-  opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
+  opts: OrgListOpts = {},
 ): Promise<{ totalItems: number; emptyOrgCount: number }> {
-  const where = orgListWhere(q, opts.category, opts.featured);
+  const where = orgListWhere(q, opts);
   // Three buckets over the same per-org aggregate: orgs WITH ≥1 visible release,
   // stub orgs (0 releases but shown by design, #1947), and other empties. The
   // default list shows with-releases + stubs; `emptyOrgCount` is only the
@@ -99,9 +107,9 @@ export async function countOrgsForList(
 export async function getOrgIdsForList(
   db: D1Db,
   pagination: { limit: number; offset: number },
-  opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
+  opts: OrgListOpts = {},
 ): Promise<string[]> {
-  const where = orgListWhere(undefined, opts.category, opts.featured);
+  const where = orgListWhere(undefined, opts);
   const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0 OR o.tier = 'stub'`;
   const rows = await db.all<{ id: string }>(sql`
     SELECT o.id
@@ -154,7 +162,10 @@ export async function getOrgStatsByIds(
   `);
 }
 
-export function orgListWhere(q?: string, category?: string, featured?: boolean) {
+export function orgListWhere(
+  q?: string,
+  { category, featured, platform }: Pick<OrgListOpts, "category" | "featured" | "platform"> = {},
+) {
   // Hidden orgs ("don't feature") never appear in the directory listing,
   // regardless of the empty-org toggle. is_hidden is NOT NULL so `= 0` is safe.
   const conds = [sql`o.is_hidden = 0`];
@@ -163,6 +174,11 @@ export function orgListWhere(q?: string, category?: string, featured?: boolean) 
   if (category) conds.push(sql`o.category = ${category}`);
   // When featured=true, restrict to orgs editorially promoted for the home page.
   if (featured === true) conds.push(sql`o.featured = 1`);
+  if (platform) {
+    conds.push(
+      sql`EXISTS (SELECT 1 FROM org_accounts a WHERE a.org_id = o.id AND lower(a.platform) = ${platform.toLowerCase()})`,
+    );
+  }
   if (q) {
     const lower = q.toLowerCase();
     conds.push(
@@ -610,10 +626,12 @@ export async function getOrgReleasesFeed(
      */
     since?: string;
     until?: string;
+    /** Keep only releases scored at or above this importance (1–5). Drops unscored rows. */
+    minImportance?: number;
   } = {},
 ): Promise<OrgReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
-  const filterBindings: string[] = [];
+  const filterBindings: (string | number)[] = [];
   let sourceTypeWhere = "";
   if (opts.sourceTypes && opts.sourceTypes.length > 0) {
     sourceTypeWhere = `AND s.type IN (${opts.sourceTypes.map(() => "?").join(",")})`;
@@ -654,6 +672,11 @@ export async function getOrgReleasesFeed(
     windowWhere += " AND r.published_at <= ?";
     filterBindings.push(opts.until);
   }
+  let importanceWhere = "";
+  if (opts.minImportance !== undefined) {
+    importanceWhere = "AND r.importance >= ?";
+    filterBindings.push(opts.minImportance);
+  }
 
   // Drop releases whose upstream-supplied date is in the future. Sources
   // occasionally publish a misdated entry (typo, scheduled-post slip);
@@ -684,6 +707,7 @@ export async function getOrgReleasesFeed(
       ${kindWhere}
       ${productWhere}
       ${windowWhere}
+      ${importanceWhere}
       ${cursor.cursorWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,

@@ -25,6 +25,8 @@ import type {
   OverviewManifestResponse,
 } from "@buildinternet/releases-api-types";
 import { apiFetch, SCOPE_RESOURCE } from "./core.js";
+import { find, call } from "./sdk.js";
+import type { SourceRef } from "@buildinternet/releases-sdk";
 import { assertCleanIdentifier, assertSafeReadPath } from "../lib/validate-input.js";
 import {
   computePagination,
@@ -100,10 +102,14 @@ export async function listSourcesBySlug(slug: string): Promise<SourceWithOrg[]> 
  */
 async function resolveSourceTarget(
   identifier: string,
-): Promise<{ pathSegment: string; sourceId: string } | null> {
+): Promise<{ pathSegment: string; sourceId: string; ref: SourceRef } | null> {
   assertCleanIdentifier(identifier, "source");
   if (identifier.startsWith("src_")) {
-    return { pathSegment: `/v1/sources/${encodeURIComponent(identifier)}`, sourceId: identifier };
+    return {
+      pathSegment: `/v1/sources/${encodeURIComponent(identifier)}`,
+      sourceId: identifier,
+      ref: identifier,
+    };
   }
   const slash = identifier.indexOf("/");
   if (slash > 0 && slash < identifier.length - 1) {
@@ -112,6 +118,7 @@ async function resolveSourceTarget(
     return {
       pathSegment: `/v1/orgs/${encodeURIComponent(orgSlug)}/sources/${encodeURIComponent(sourceSlug)}`,
       sourceId: "", // unknown until we hydrate via findSource — callers that need the ID re-read source.id from the result
+      ref: { org: orgSlug, source: sourceSlug },
     };
   }
   // Bare slug — slugs are unique per-org but not globally, so enumerate every
@@ -126,7 +133,11 @@ async function resolveSourceTarget(
   }
   // Exactly one match — hydrate through the globally-unambiguous typed id.
   const only = matches[0]!;
-  return { pathSegment: `/v1/sources/${encodeURIComponent(only.id)}`, sourceId: only.id };
+  return {
+    pathSegment: `/v1/sources/${encodeURIComponent(only.id)}`,
+    sourceId: only.id,
+    ref: only.id,
+  };
 }
 
 export async function findSource(identifier: string): Promise<Source | null> {
@@ -143,15 +154,7 @@ export async function sourceChangelog(
   if (range?.path !== undefined) assertSafeReadPath(range.path);
   const target = await resolveSourceTarget(identifier);
   if (!target) return null;
-  const params = new URLSearchParams();
-  if (range?.path !== undefined) params.set("path", range.path);
-  if (range?.offset !== undefined) params.set("offset", String(range.offset));
-  if (range?.limit !== undefined) params.set("limit", String(range.limit));
-  if (range?.tokens !== undefined) params.set("tokens", String(range.tokens));
-  const qs = params.toString();
-  return apiFetch<SourceChangelogResponse | null>(
-    `${target.pathSegment}/changelog${qs ? `?${qs}` : ""}`,
-  );
+  return find((c) => c.sources.changelog(target.ref, range));
 }
 
 /** Result of `POST /v1/sources/:id/fetch` — union of the inline-fetch, queued,
@@ -215,6 +218,8 @@ export async function unifiedSearch(
   query: string,
   limit: number,
   opts?: {
+    /** Org slug or `org_…` id; scopes every section to that org. Same scope
+     *  as `domain` — the API 400s when both are sent. */
     org?: string;
     domain?: string;
     /** Product identifier (org/slug coordinate, prod_… id, or product slug);
@@ -233,25 +238,27 @@ export async function unifiedSearch(
     until?: string;
   },
 ): Promise<UnifiedSearchResponse> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
-  if (opts?.org) params.set("org", opts.org);
-  if (opts?.domain) params.set("domain", opts.domain);
-  if (opts?.product) params.set("product", opts.product);
-  if (opts?.category) params.set("category", opts.category);
-  if (opts?.collection) params.set("collection", opts.collection);
-  if (opts?.mode) params.set("mode", opts.mode);
-  if (opts?.kind) params.set("kind", opts.kind);
-  if (opts?.since) params.set("since", opts.since);
-  if (opts?.until) params.set("until", opts.until);
-  return apiFetch<UnifiedSearchResponse>(`/v1/search?${params}`);
+  return call((c) =>
+    c.search({
+      q: query,
+      limit,
+      org: opts?.org || undefined,
+      domain: opts?.domain || undefined,
+      product: opts?.product || undefined,
+      category: opts?.category || undefined,
+      collection: opts?.collection || undefined,
+      mode: opts?.mode,
+      kind: opts?.kind,
+      since: opts?.since || undefined,
+      until: opts?.until || undefined,
+    }),
+  );
 }
 
 // ── Domain lookup ──
 
 export async function lookupDomain(domain: string): Promise<DomainLookupResponse | null> {
-  return apiFetch<DomainLookupResponse | null>(
-    `/v1/lookups/by-domain?domain=${encodeURIComponent(domain)}`,
-  );
+  return find((c) => c.lookups.byDomain(domain));
 }
 
 // ── List sources with org ──
@@ -698,9 +705,8 @@ export async function getOverview(
   scope: keyof typeof SCOPE_RESOURCE,
   identifier: string,
 ): Promise<OverviewWithCitations | null> {
-  return apiFetch<OverviewWithCitations | null>(
-    `/v1/${SCOPE_RESOURCE[scope]}/${encodeURIComponent(identifier)}/overview`,
-  );
+  const operation = scope === "org" ? "GET /orgs/:slug/overview" : "GET /products/:slug/overview";
+  return find((c) => c.request<OverviewWithCitations>(operation, { params: { slug: identifier } }));
 }
 
 export async function getPlaybook(identifier: string): Promise<KnowledgePage | null> {

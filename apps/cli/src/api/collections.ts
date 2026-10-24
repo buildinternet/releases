@@ -1,8 +1,9 @@
 import { apiFetch } from "./core.js";
-import type { ReleaseType } from "@buildinternet/releases-core/schema";
+import { call, find } from "./sdk.js";
 import type {
   CollectionListItem,
   CollectionDetail,
+  CollectionReleasesResponse,
   CollectionRow,
   CreateCollectionRequest,
   UpdateCollectionRequest,
@@ -10,59 +11,36 @@ import type {
   AddCollectionMemberRequest,
 } from "@buildinternet/releases-api-types";
 
-export interface CollectionReleaseItemCli {
-  id: string;
-  version: string | null;
-  type: ReleaseType;
-  title: string;
-  summary: string;
-  content: string;
-  publishedAt: string | null;
-  url: string | null;
-  prerelease: boolean;
-  source: { slug: string; name: string; type: string };
-  org: { slug: string; name: string };
-  product: { slug: string; name: string } | null;
-}
-
-interface CollectionReleasesResponseCli {
-  releases: CollectionReleaseItemCli[];
-  pagination: { nextCursor: string | null; limit: number };
-}
-
 export async function listCollections(): Promise<CollectionListItem[]> {
-  return apiFetch<CollectionListItem[]>("/v1/collections");
+  return call((c) => c.collections.list());
 }
 
 export async function getCollection(slug: string): Promise<CollectionDetail | null> {
-  return apiFetch<CollectionDetail | null>(`/v1/collections/${encodeURIComponent(slug)}`);
+  return find((c) => c.collections.get(slug));
 }
 
 /**
  * Cross-org release feed for a collection. Cursor-paginated; the API's cursor
  * format is opaque to the CLI — we just round-trip whatever the server returns.
- *
- * `CollectionReleaseItem` isn't published in api-types yet, so the wire shape
- * is declared inline. When the next api-types release lands, this can switch
- * to importing the canonical type.
  */
 export async function getCollectionReleases(
   slug: string,
   opts: { limit?: number; cursor?: string | null; includePrereleases?: boolean } = {},
-): Promise<CollectionReleasesResponseCli | null> {
-  const qs = new URLSearchParams();
-  if (opts.limit !== undefined) qs.set("limit", String(opts.limit));
-  if (opts.cursor) qs.set("cursor", opts.cursor);
-  if (opts.includePrereleases) qs.set("include_prereleases", "1");
-  const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
-  return apiFetch<CollectionReleasesResponseCli | null>(
-    `/v1/collections/${encodeURIComponent(slug)}/releases${suffix}`,
+): Promise<CollectionReleasesResponse | null> {
+  return find((c) =>
+    c.collections.releases(slug, {
+      limit: opts.limit,
+      cursor: opts.cursor || undefined,
+      include_prereleases: opts.includePrereleases || undefined,
+    }),
   );
 }
 
 /** Collections an org is a member of. Used to indicate membership on `releases get <orgslug>`. */
 export async function getOrgCollections(orgRef: string): Promise<CollectionListItem[]> {
-  return apiFetch<CollectionListItem[]>(`/v1/orgs/${encodeURIComponent(orgRef)}/collections`);
+  return call((c) =>
+    c.request<CollectionListItem[]>("GET /orgs/:slug/collections", { params: { slug: orgRef } }),
+  );
 }
 
 export async function createCollection(input: CreateCollectionRequest): Promise<CollectionRow> {

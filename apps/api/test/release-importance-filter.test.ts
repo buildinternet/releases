@@ -7,11 +7,12 @@
  * a threshold; out-of-range or non-integer values 400 rather than silently
  * falling through (same rationale as the `exclude` param — a silent
  * fallthrough would return an unfiltered feed and could cache-collide with
- * the default homepage shape).
+ * the default homepage shape). The org feed takes the same filter.
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { releaseRoutes } from "../src/routes/releases.js";
+import { orgRoutes } from "../src/routes/orgs.js";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { makeCaller } from "./route-test-helpers.js";
 
@@ -142,5 +143,41 @@ describe("GET /v1/releases/latest — importance", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { message: string } };
     expect(body.error.message).toMatch(/minImportance/);
+  });
+});
+
+const callOrg = makeCaller(orgRoutes, makeEnv);
+
+describe("GET /v1/orgs/:slug/releases — minImportance", () => {
+  it("keeps only releases scored at or above the threshold", async () => {
+    await seedOrgAndSource();
+    await seedRelease({ id: "rel_low", title: "Low importance", importance: 2 });
+    await seedRelease({ id: "rel_high", title: "High importance", importance: 5 });
+    await seedRelease({ id: "rel_null", title: "Unscored", importance: null });
+
+    const res = await callOrg("/orgs/acme/releases?minImportance=4");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { releases: Array<{ title: string }> };
+    expect(body.releases.map((r) => r.title)).toEqual(["High importance"]);
+  });
+
+  it("returns every release when the param is absent", async () => {
+    await seedOrgAndSource();
+    await seedRelease({ id: "rel_low", title: "Low importance", importance: 2 });
+    await seedRelease({ id: "rel_null", title: "Unscored", importance: null });
+
+    const res = await callOrg("/orgs/acme/releases");
+    const body = (await res.json()) as { releases: Array<{ title: string }> };
+    expect(body.releases).toHaveLength(2);
+  });
+
+  it("rejects an invalid minImportance with 400", async () => {
+    await seedOrgAndSource();
+    for (const bad of ["0", "6", "abc", "2.5"]) {
+      const res = await callOrg(`/orgs/acme/releases?minImportance=${bad}`);
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: { message: string } };
+      expect(body.error.message).toMatch(/minImportance/);
+    }
   });
 });

@@ -12,6 +12,11 @@ import { toSlug } from "@buildinternet/releases-core/slug";
 import { resolveDateParam } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import {
+  IMPORTANCE_MAX,
+  IMPORTANCE_MIN,
+  isImportanceScore,
+} from "@buildinternet/releases-core/importance";
+import {
   hydrateMediaUrls,
   normalizeMediaUrl,
   resolveR2Url,
@@ -387,6 +392,25 @@ export type TimeWindowResult =
  * NULL `published_at` is handled at the query layer (the `>=`/`<=` comparisons
  * drop undated rows).
  */
+/**
+ * Parse `?minImportance=`. Absent → `{ ok: true, value: undefined }`; anything
+ * other than an integer in the importance range → `{ ok: false, message }` so
+ * the route can 400 rather than silently return an unfiltered feed.
+ */
+export function parseMinImportanceParam(
+  raw: string | undefined,
+): { ok: true; value: number | undefined } | { ok: false; message: string } {
+  if (raw === undefined) return { ok: true, value: undefined };
+  const parsed = Number(raw);
+  if (!isImportanceScore(parsed)) {
+    return {
+      ok: false,
+      message: `\`minImportance\` must be an integer between ${IMPORTANCE_MIN} and ${IMPORTANCE_MAX}`,
+    };
+  }
+  return { ok: true, value: parsed };
+}
+
 export function parseTimeWindow(
   sinceRaw: string | undefined,
   untilRaw: string | undefined,
