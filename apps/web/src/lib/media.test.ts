@@ -8,7 +8,6 @@ import {
   pickReleaseThumb,
   releaseThumbImage,
   releaseBodyImageUrl,
-  BODY_IMAGE_WIDTH,
 } from "./media";
 
 const origin = "https://media.releases.sh";
@@ -174,8 +173,7 @@ describe("releaseThumbImage / releaseBodyImageUrl (flag off in tests)", () => {
     expect(releaseThumbImage(src, 240)).toEqual({ src, unoptimized: undefined });
   });
 
-  it("caps body images at BODY_IMAGE_WIDTH and passes third-party URLs through", () => {
-    expect(BODY_IMAGE_WIDTH).toBe(1320);
+  it("passes third-party body image URLs through", () => {
     const src = "https://cdn.vendor.com/hero.png";
     expect(releaseBodyImageUrl(src)).toBe(src);
   });

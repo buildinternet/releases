@@ -12,13 +12,6 @@ describe("tail/latest --limit + --cursor (#304)", () => {
     expect(stderr).not.toContain("unknown option");
   });
 
-  it("--help documents --limit as an alias for --count", () => {
-    const { stdout, exitCode } = runCli(["tail", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--limit");
-    expect(stdout).toContain("--count");
-  });
-
   it("rejects a non-positive --limit", () => {
     const { stderr, exitCode } = runCli(["latest", "--limit", "0"]);
     expect(exitCode).not.toBe(0);

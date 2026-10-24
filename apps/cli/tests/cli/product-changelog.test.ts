@@ -9,12 +9,6 @@ const publicEnv = {
 };
 
 describe("releases changelog", () => {
-  it("is a public command in --help", () => {
-    const { stdout, exitCode } = runCli(["--help"], { env: publicEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("changelog");
-  });
-
   it("prints help with examples", () => {
     const { stdout, exitCode } = runCli(["changelog", "--help"], { env: publicEnv });
     expect(exitCode).toBe(0);

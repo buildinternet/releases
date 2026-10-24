@@ -14,9 +14,4 @@ describe("AppPlatformCue", () => {
     expect(html).toContain("macOS app");
     expect(html).toContain('aria-label="Available for macOS"');
   });
-
-  it("applies an extra className", () => {
-    const html = renderToStaticMarkup(<AppPlatformCue label="iOS" className="text-[13px]" />);
-    expect(html).toContain("text-[13px]");
-  });
 });

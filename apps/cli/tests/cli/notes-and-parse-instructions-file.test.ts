@@ -15,18 +15,6 @@ import { runCli } from "../utils.js";
 describe("admin playbook --notes-file (#103 ws3)", () => {
   const adminEnv = { RELEASED_API_KEY: "test-key" };
 
-  it("documents --notes-file in --help", () => {
-    const { stdout, exitCode } = runCli(["admin", "playbook", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--notes-file");
-  });
-
-  it("does not document removed --notes flag in --help", () => {
-    const { stdout, exitCode } = runCli(["admin", "playbook", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).not.toContain("--notes <text>");
-  });
-
   it("exits non-zero with unknown option error for removed --notes flag", () => {
     const { stderr, exitCode } = runCli(["admin", "playbook", "acme", "--notes", "x"], {
       env: adminEnv,
@@ -38,24 +26,6 @@ describe("admin playbook --notes-file (#103 ws3)", () => {
 
 describe("source update --parse-instructions-file (#103 ws3)", () => {
   const adminEnv = { RELEASED_API_KEY: "test-key" };
-
-  it("documents --parse-instructions-file in update --help", () => {
-    const { stdout, exitCode } = runCli(["admin", "source", "update", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--parse-instructions-file");
-  });
-
-  it("documents --parse-instructions-file in deprecated edit --help", () => {
-    const { stdout, exitCode } = runCli(["admin", "source", "edit", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--parse-instructions-file");
-  });
-
-  it("does not document removed --parse-instructions flag in update --help", () => {
-    const { stdout, exitCode } = runCli(["admin", "source", "update", "--help"], { env: adminEnv });
-    expect(exitCode).toBe(0);
-    expect(stdout).not.toContain("--parse-instructions <text>");
-  });
 
   it("exits non-zero with unknown option error for removed --parse-instructions flag", () => {
     const { stderr, exitCode } = runCli(

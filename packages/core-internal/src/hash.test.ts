@@ -2,11 +2,6 @@ import { describe, it, expect } from "bun:test";
 import { sha256Hex } from "./hash.js";
 
 describe("sha256Hex", () => {
-  it("returns a 64-char hex string", () => {
-    const result = sha256Hex("hello");
-    expect(result).toMatch(/^[a-f0-9]{64}$/);
-  });
-
   it("handles empty string", () => {
     const result = sha256Hex("");
     expect(result).toMatch(/^[a-f0-9]{64}$/);

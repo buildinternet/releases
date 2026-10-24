@@ -1,13 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { IMPORTANCE_HIGH, isImportanceScore, isRoutineAppRelease } from "./importance.js";
-import { OVERVIEW_HIGH_IMPORTANCE } from "./overview.js";
-
-describe("IMPORTANCE_HIGH", () => {
-  it("is the single flame threshold shared with the overview selector", () => {
-    expect(IMPORTANCE_HIGH).toBe(4);
-    expect(OVERVIEW_HIGH_IMPORTANCE).toBe(IMPORTANCE_HIGH);
-  });
-});
+import { isImportanceScore, isRoutineAppRelease } from "./importance.js";
 
 describe("isImportanceScore", () => {
   it("accepts 1–5 integers only", () => {

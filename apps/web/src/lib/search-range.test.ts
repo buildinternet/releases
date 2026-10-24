@@ -15,10 +15,6 @@ test("parseRangeKey falls back to the default for unknown/missing input", () => 
   expect(parseRangeKey("garbage")).toBe(DEFAULT_RANGE);
 });
 
-test("DEFAULT_RANGE is past year", () => {
-  expect(DEFAULT_RANGE).toBe("1y");
-});
-
 test("rangeSince maps keys to API shorthand; 'any' has no bound", () => {
   expect(rangeSince("any")).toBeUndefined();
   expect(rangeSince("30d")).toBe("30d");

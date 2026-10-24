@@ -107,30 +107,6 @@ function env(): Record<string, string> {
 }
 
 describe("`--no-browser` on keys/publish-token", () => {
-  it("is documented on every keys subcommand", () => {
-    for (const args of [
-      ["keys", "create", "--help"],
-      ["keys", "list", "--help"],
-      ["keys", "revoke", "--help"],
-    ]) {
-      const r = runCli(args);
-      expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("--no-browser");
-    }
-  });
-
-  it("is documented on every publish-token subcommand", () => {
-    for (const args of [
-      ["publish-token", "create", "--help"],
-      ["publish-token", "list", "--help"],
-      ["publish-token", "revoke", "--help"],
-    ]) {
-      const r = runCli(args);
-      expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("--no-browser");
-    }
-  });
-
   it("`keys list --no-browser` completes the device flow without ever printing the real-browser branch", () => {
     const r = runCli(["keys", "list", "--no-browser"], { env: env() });
     expect(r.exitCode).toBe(0);

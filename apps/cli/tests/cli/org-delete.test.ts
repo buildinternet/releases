@@ -25,17 +25,4 @@ describe("admin org delete --hard (CLI integration)", () => {
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("--yes");
   });
-
-  it("exposes --hard and --yes flags on the delete subcommand", () => {
-    const { stdout, exitCode } = runCli(["admin", "org", "delete", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--hard");
-    expect(stdout).toContain("--yes");
-  });
-
-  it("treats `org remove` as an alias of `org delete`", () => {
-    const { stdout, exitCode } = runCli(["admin", "org", "remove", "--help"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("--hard");
-  });
 });

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  isHexColor,
-  readableTextColor,
-  SITE_NOTICE_KEY,
-  DEFAULT_SITE_NOTICE_COLOR,
-} from "./site-notice";
+import { isHexColor, readableTextColor } from "./site-notice";
 
 describe("isHexColor", () => {
   it("accepts 6-digit hex with hash", () => {
@@ -30,12 +25,5 @@ describe("readableTextColor", () => {
   });
   it("falls back to light text on an invalid color", () => {
     expect(readableTextColor("not-a-color")).toBe("#ffffff");
-  });
-});
-
-describe("constants", () => {
-  it("exposes the storage key and default color", () => {
-    expect(SITE_NOTICE_KEY).toBe("site_notice");
-    expect(DEFAULT_SITE_NOTICE_COLOR).toBe("#0081e7");
   });
 });

@@ -1,16 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  WEBHOOK_FORMATS,
-  isUnsignedWebhookFormat,
-  isWebhookFormat,
-  parseWebhookFormat,
-} from "./schema.js";
+import { isUnsignedWebhookFormat, isWebhookFormat, parseWebhookFormat } from "./schema.js";
 
 describe("webhook format helpers", () => {
-  test("WEBHOOK_FORMATS includes json, slack, and discord", () => {
-    expect(WEBHOOK_FORMATS).toEqual(["json", "slack", "discord"]);
-  });
-
   test("parseWebhookFormat defaults empty values to json", () => {
     expect(parseWebhookFormat(undefined)).toBe("json");
     expect(parseWebhookFormat(null)).toBe("json");

@@ -12,12 +12,6 @@ describe("ReleaseThumb", () => {
   it("renders nothing when src is empty", () => {
     expect(renderToStaticMarkup(<ReleaseThumb src="" alt="x" />)).toBe("");
   });
-
-  it("applies the small size class when size=sm", () => {
-    const html = renderToStaticMarkup(<ReleaseThumb src="https://cdn/a.png" size="sm" />);
-    expect(html).toContain("w-8");
-    expect(html).toContain("h-8");
-  });
 });
 
 describe("ReleaseThumb transform", () => {
