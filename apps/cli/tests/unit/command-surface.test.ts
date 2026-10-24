@@ -16,7 +16,7 @@ const SURFACE: Record<string, string[]> = {
   "": ["changelog"],
   tail: ["--limit", "--count"],
   list: ["--kind"],
-  search: ["--kind"],
+  search: ["--kind", "--org"],
   submit: ["--note", "--contact", "--dry-run"],
   "webhook list": ["--workspace"],
   "webhook add": ["--workspace"],

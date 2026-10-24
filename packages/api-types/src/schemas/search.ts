@@ -245,6 +245,10 @@ export const UnifiedSearchResponseSchema = z.object({
   // domain filter was applied.
   domain: z.string().optional(),
   domainStatus: z.enum(["matched", "not_found"]).optional(),
+  // `?org=` echo (the resolved slug on a match, the raw value on a miss) +
+  // resolution outcome. Both absent when no org filter was applied.
+  org: z.string().optional(),
+  orgStatus: z.enum(["matched", "not_found"]).optional(),
   // Normalized `?category=` echo. Present only when a category filter was
   // applied; the resolved canonical slug (aliases are folded to canonical).
   // `categoryStatus` is always `matched` because an unknown category is a 400,

@@ -86,6 +86,8 @@ export interface OrgReleasesQuery extends CursorQuery {
   q?: string;
   since?: string;
   until?: string;
+  /** Only releases with an AI-scored importance of at least this (1–5). */
+  minImportance?: number;
   include_coverage?: boolean;
   include_prereleases?: boolean;
 }
@@ -97,6 +99,8 @@ export interface OrgListQuery {
   limit?: number;
   featured?: boolean;
   includeEmpty?: boolean;
+  /** Only orgs with a linked account on this platform (e.g. `github`). */
+  platform?: string;
 }
 
 export interface SearchQuery {
@@ -105,6 +109,8 @@ export interface SearchQuery {
   offset?: number;
   mode?: "lexical" | "semantic" | "hybrid";
   domain?: string;
+  /** Org slug or ID. Same scope as `domain`; pass one or the other. */
+  org?: string;
   product?: string;
   category?: string;
   collection?: string;

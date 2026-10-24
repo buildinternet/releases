@@ -218,7 +218,8 @@ export async function unifiedSearch(
   query: string,
   limit: number,
   opts?: {
-    /** Not a `/v1/search` parameter; the API ignores it, so it isn't sent. */
+    /** Org slug or `org_…` id; scopes every section to that org. Same scope
+     *  as `domain` — the API 400s when both are sent. */
     org?: string;
     domain?: string;
     /** Product identifier (org/slug coordinate, prod_… id, or product slug);
@@ -241,6 +242,7 @@ export async function unifiedSearch(
     c.search({
       q: query,
       limit,
+      org: opts?.org || undefined,
       domain: opts?.domain || undefined,
       product: opts?.product || undefined,
       category: opts?.category || undefined,

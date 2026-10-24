@@ -123,6 +123,7 @@ export function registerSearchCommand(program: Command) {
       "--domain <domain>",
       "Scope to the org owning this domain (URL-shaped input is normalized)",
     )
+    .option("--org <org>", "Scope to one org by slug or org_… id (use instead of --domain)")
     .option(
       "--product <identifier>",
       "Scope hits to one product's sources (org/slug coordinate, prod_… id, or product slug)",
@@ -161,6 +162,7 @@ Examples:
   releases search "breaking change"               Full-text + semantic search
   releases search "breaking change" --kind sdk    Narrow to SDK sources
   releases search "slack integration" --since 90d Only hits from the last 90 days
+  releases search webhooks --org vercel           Scope a term to one org
   releases search webhooks --product vercel/next-js   Scope a term to one product
   releases search mcp --category developer-tools  Scope to dev-tools companies
   releases search agents --collection coding-agents   Scope to a collection
@@ -175,6 +177,7 @@ Examples:
           type?: string;
           mode?: string;
           domain?: string;
+          org?: string;
           product?: string;
           category?: string;
           collection?: string;
@@ -228,9 +231,15 @@ Examples:
         const since = parseTimeWindowFlag("since", opts.since);
         const until = parseTimeWindowFlag("until", opts.until);
 
+        if (opts.org && opts.domain) {
+          logger.error("Pass either --org or --domain, not both.");
+          process.exit(1);
+        }
+
         const searchOpts: {
           mode?: SearchMode;
           domain?: string;
+          org?: string;
           product?: string;
           category?: string;
           collection?: string;
@@ -240,6 +249,7 @@ Examples:
         } = {};
         if (mode) searchOpts.mode = mode;
         if (opts.domain) searchOpts.domain = opts.domain;
+        if (opts.org) searchOpts.org = opts.org;
         if (opts.product) searchOpts.product = opts.product;
         if (opts.category) searchOpts.category = opts.category;
         if (opts.collection) searchOpts.collection = opts.collection;
@@ -259,6 +269,15 @@ Examples:
           } else if (response.domainStatus === "matched") {
             const scopedOrgName = response.orgs[0]?.name ?? scopedDomain;
             logger.info(`Scoped to ${scopedOrgName} (${scopedDomain}).`);
+          }
+        }
+
+        if (!opts.json && response.orgStatus !== undefined) {
+          const scopedOrg = response.org ?? opts.org;
+          if (response.orgStatus === "not_found") {
+            logger.warn(`No org matching "${scopedOrg}". Showing no results.`);
+          } else if (response.orgStatus === "matched") {
+            logger.info(`Scoped to ${scopedOrg}.`);
           }
         }
 

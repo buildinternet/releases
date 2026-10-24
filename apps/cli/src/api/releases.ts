@@ -211,6 +211,7 @@ export async function getProductReleases(opts: {
       include_coverage: opts.includeCoverage || undefined,
       since: opts.since,
       until: opts.until,
+      minImportance: opts.minImportance,
     }),
   );
   if (!data) return null;

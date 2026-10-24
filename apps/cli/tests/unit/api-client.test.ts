@@ -469,6 +469,12 @@ describe("since/until query params", () => {
     expect(capturedUrl).toContain("collection=coding-agents");
   });
 
+  it("unifiedSearch forwards org", async () => {
+    captureWith({ orgs: [], catalog: [], releases: [], collections: [] });
+    await client.unifiedSearch("q", 10, { org: "vercel" });
+    expect(capturedUrl).toContain("org=vercel");
+  });
+
   it("unifiedSearch omits category/collection when not supplied", async () => {
     captureWith({ orgs: [], catalog: [], releases: [], collections: [] });
     await client.unifiedSearch("q", 10);
@@ -557,10 +563,12 @@ describe("getProductReleases", () => {
       cursor: "CURSOR_1",
       since: "30d",
       until: "2026-05-01",
+      minImportance: 4,
     });
     expect(capturedUrl).toContain("cursor=CURSOR_1");
     expect(capturedUrl).toContain("since=30d");
     expect(capturedUrl).toContain("until=2026-05-01");
+    expect(capturedUrl).toContain("minImportance=4");
   });
 
   it("returns null when the org/product 404s", async () => {

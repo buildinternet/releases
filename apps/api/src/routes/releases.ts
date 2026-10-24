@@ -10,14 +10,15 @@ import {
   sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
-import {
-  IMPORTANCE_MAX,
-  IMPORTANCE_MIN,
-  isImportanceScore,
-} from "@buildinternet/releases-core/importance";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import type { Env } from "../index.js";
-import { orgWhere, parseBoolParam, parseTimeWindow, firstImageThumbnail } from "../utils.js";
+import {
+  orgWhere,
+  parseBoolParam,
+  parseMinImportanceParam,
+  parseTimeWindow,
+  firstImageThumbnail,
+} from "../utils.js";
 import {
   getLatestReleasesAcross,
   mapLatestRowToReleaseItem,
@@ -237,21 +238,10 @@ releaseRoutes.get(
     // Reject typos/garbage with a 400 — same rationale as `exclude`: silent
     // fallthrough would return an unfiltered feed and cache-collide with the
     // default homepage shape.
-    const minImportanceParam = c.req.query("minImportance");
-    let minImportance: number | undefined;
-    if (minImportanceParam !== undefined) {
-      const parsed = Number(minImportanceParam);
-      if (!isImportanceScore(parsed)) {
-        return respondError(
-          c,
-          new ValidationError(
-            `\`minImportance\` must be an integer between ${IMPORTANCE_MIN} and ${IMPORTANCE_MAX}`,
-            { code: "bad_request" },
-          ),
-        );
-      }
-      minImportance = parsed;
-    }
+    const importance = parseMinImportanceParam(c.req.query("minImportance"));
+    if (!importance.ok)
+      return respondError(c, new ValidationError(importance.message, { code: "bad_request" }));
+    const minImportance = importance.value;
 
     if (sourceParam && orgParam) {
       return respondError(
