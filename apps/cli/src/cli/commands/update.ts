@@ -190,7 +190,7 @@ export async function updateSourceAction(
     updates.orgId = null;
     changes.push("org removed");
   } else if (typeof opts.org === "string") {
-    let org = await findOrg(opts.org);
+    let org: { id: string; name: string; slug: string } | null = await findOrg(opts.org);
     if (!org) {
       // Don't auto-create when the operator passed a typed ID — an unresolved
       // `org_…` is a typo, not a request to spin up a new org. Same logic for

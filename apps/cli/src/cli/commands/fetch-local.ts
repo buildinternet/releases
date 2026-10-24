@@ -13,7 +13,6 @@
  */
 
 import chalk from "chalk";
-import { findOrg } from "../../api/orgs.js";
 import { findSource } from "../../api/sources.js";
 import { sourceNotFound } from "../suggest.js";
 import { writeJson } from "../../lib/output.js";
@@ -72,7 +71,7 @@ export async function runLocalHandoff(identifier: string, opts: LocalHandoffOpts
   const source = await findSource(identifier);
   if (!source) return sourceNotFound(identifier); // exits 1 (AmbiguousSourceError propagates)
 
-  const org = source.orgId ? await findOrg(source.orgId).catch(() => null) : null;
+  const org = source.org;
   const batchEndpoint = org?.slug
     ? `/v1/orgs/${org.slug}/sources/${source.slug}/releases/batch`
     : `/v1/sources/${source.id}/releases/batch`;

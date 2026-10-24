@@ -228,7 +228,7 @@ async function createSingleSource(input: CreateSourceInput): Promise<CreateSourc
   let orgName: string | null = null;
 
   if (input.org) {
-    let org = await findOrg(input.org);
+    let org: { id: string; name: string; slug: string } | null = await findOrg(input.org);
     if (!org) {
       // Don't auto-create when the operator passed a typed ID — an unresolved
       // `org_…` is a typo, not a request to spin up a new org.

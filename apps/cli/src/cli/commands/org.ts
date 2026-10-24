@@ -702,9 +702,14 @@ export function registerOrgCommand(program: Command) {
               { label: "Name" },
               { label: "Slug", noTruncate: true },
               { label: "Domain" },
-              { label: "Updated", noTruncate: true },
+              { label: "Last release", noTruncate: true },
             ],
-            rows: pageItems.map((o) => [o.name, o.slug, o.domain ?? chalk.dim("—"), o.updatedAt]),
+            rows: pageItems.map((o) => [
+              o.name,
+              o.slug,
+              o.domain ?? chalk.dim("—"),
+              o.lastActivity ? o.lastActivity.slice(0, 10) : chalk.dim("—"),
+            ]),
           }),
         );
         if (!explicitLimit && pagination.hasMore) {

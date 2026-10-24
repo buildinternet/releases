@@ -303,7 +303,7 @@ async function renderOrg(
     name: string;
     slug: string;
     domain: string | null;
-    category: string | null;
+    category?: string | null;
     description?: string | null;
   }>,
   opts: GetEntityOpts,

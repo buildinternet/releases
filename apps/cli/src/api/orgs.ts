@@ -6,16 +6,22 @@ import type {
   Tag,
 } from "@buildinternet/releases-core/schema";
 import type { OrgCatalogResponse, OrgDependentsResponse } from "./types.js";
-import type { CreateStubOrgBody, SetOrgAvatarResponse } from "@buildinternet/releases-api-types";
+import type {
+  CreateStubOrgBody,
+  OrgDetail,
+  OrgListResponse,
+  SetOrgAvatarResponse,
+} from "@buildinternet/releases-api-types";
+import { call, find } from "./sdk.js";
 import { apiFetch, suggestEntities } from "./core.js";
 import { assertCleanIdentifier } from "../lib/validate-input.js";
 import { type ListResponse } from "@buildinternet/releases-core/cli-contracts";
 
 // ── Org queries ──
 
-export async function findOrg(identifier: string): Promise<Organization | null> {
+export async function findOrg(identifier: string): Promise<OrgDetail | null> {
   assertCleanIdentifier(identifier, "org");
-  return apiFetch<Organization | null>(`/v1/orgs/${encodeURIComponent(identifier)}`);
+  return find((c) => c.orgs.get(identifier));
 }
 
 export const suggestOrgs = (term: string, limit: number) =>
@@ -37,15 +43,16 @@ export async function listOrgs(opts?: {
   limit?: number;
   page?: number;
   includeEmpty?: boolean;
-}): Promise<ListResponse<Organization>> {
-  const params = new URLSearchParams();
-  if (opts?.query) params.set("q", opts.query);
-  if (opts?.platform) params.set("platform", opts.platform);
-  if (opts?.limit != null) params.set("limit", String(opts.limit));
-  if (opts?.page != null) params.set("page", String(opts.page));
-  if (opts?.includeEmpty) params.set("includeEmpty", "true");
-  const qs = params.toString();
-  return apiFetch<ListResponse<Organization>>(`/v1/orgs${qs ? `?${qs}` : ""}`);
+}): Promise<OrgListResponse> {
+  return call((c) =>
+    c.orgs.list({
+      q: opts?.query || undefined,
+      platform: opts?.platform || undefined,
+      limit: opts?.limit,
+      page: opts?.page,
+      includeEmpty: opts?.includeEmpty || undefined,
+    }),
+  );
 }
 
 // ── Ignored URLs (org-scoped) ──

@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { apiFetch } from "../../api/core.js";
+import { call, sdkWithToken } from "../../api/sdk.js";
+import type { SourceRef } from "@buildinternet/releases-sdk";
+import type { BatchReleasesResponse } from "@buildinternet/releases-api-types";
 import { markDryRun } from "../../lib/dry-run.js";
 import { CliError } from "../../lib/errors.js";
 import { logger } from "@buildinternet/releases-lib/logger";
@@ -20,7 +22,9 @@ const TOKEN_MISSING =
 export type PublishTarget = {
   source: string;
   org?: string;
+  /** The batch route, for previews and messages. */
   path: string;
+  ref: SourceRef;
 };
 
 /**
@@ -38,6 +42,7 @@ export function resolvePublishTarget(source: string, org?: string): PublishTarge
     return {
       source: raw,
       path: `/v1/sources/${encodeURIComponent(raw)}/releases/batch`,
+      ref: raw,
     };
   }
 
@@ -66,6 +71,7 @@ export function resolvePublishTarget(source: string, org?: string): PublishTarge
     source: slug,
     org: orgSlug,
     path: `/v1/orgs/${encodeURIComponent(orgSlug)}/sources/${encodeURIComponent(slug)}/releases/batch`,
+    ref: { org: orgSlug, source: slug },
   };
 }
 
@@ -76,32 +82,15 @@ export function requirePublishToken(env: NodeJS.ProcessEnv = process.env): strin
   return token;
 }
 
-export type BatchUpsertResponse = {
-  inserted: number;
-  total: number;
-  insertedIds: string[];
-};
-
 export async function postReleaseBatch(
-  path: string,
+  target: Pick<PublishTarget, "ref">,
   releases: BatchRelease[],
   token: string,
-): Promise<BatchUpsertResponse> {
-  const raw = await apiFetch<{
-    inserted?: number;
-    total?: number;
-    insertedIds?: string[];
-  } | null>(path, {
-    method: "POST",
-    body: JSON.stringify({ mode: "upsert-content", releases }),
-    skipDefaultAuth: true,
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return {
-    inserted: Number(raw?.inserted ?? 0),
-    total: Number(raw?.total ?? 0),
-    insertedIds: Array.isArray(raw?.insertedIds) ? raw.insertedIds : [],
-  };
+): Promise<BatchReleasesResponse> {
+  return call(
+    (c) => c.sources.publish(target.ref, { mode: "upsert-content", releases }),
+    sdkWithToken(token),
+  );
 }
 
 type PublishOpts = {
@@ -255,7 +244,7 @@ ${chalk.dim("Same plan as the publish-changelog GitHub Action.")}
       }
 
       if (token === null) throw new CliError(TOKEN_MISSING);
-      const result = await postReleaseBatch(target.path, plan.body.releases, token);
+      const result = await postReleaseBatch(target, plan.body.releases, token);
       if (opts.json) {
         await writeJson({
           ...result,

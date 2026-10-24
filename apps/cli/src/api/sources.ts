@@ -20,6 +20,7 @@ import type {
 } from "./types.js";
 import type {
   DomainLookupResponse,
+  SourceDetail,
   OverviewCitation,
   OverviewInputsCheck,
   OverviewManifestResponse,
@@ -140,11 +141,10 @@ async function resolveSourceTarget(
   };
 }
 
-export async function findSource(identifier: string): Promise<Source | null> {
-  // API returns enriched data — extra fields are harmlessly ignored by callers expecting Source
+export async function findSource(identifier: string): Promise<SourceDetail | null> {
   const target = await resolveSourceTarget(identifier);
   if (!target) return null;
-  return apiFetch<Source | null>(target.pathSegment);
+  return find((c) => c.sources.get(target.ref));
 }
 
 export async function sourceChangelog(
@@ -1079,7 +1079,7 @@ export async function setAliases(
  * via a PATCH on the remote API.
  */
 export async function updateSourceMeta(
-  source: Source,
+  source: Pick<Source, "id" | "metadata">,
   meta: Record<string, unknown>,
 ): Promise<void> {
   let existing: Record<string, unknown> = {};
@@ -1106,10 +1106,10 @@ export async function updateSourceMeta(
 
 // ── Bulk source helpers ──
 
-export async function findSourcesBySlugs(slugs: string[]): Promise<Source[]> {
+export async function findSourcesBySlugs(slugs: string[]): Promise<SourceDetail[]> {
   if (slugs.length === 0) return [];
   const results = await Promise.all(slugs.map((s) => findSource(s)));
-  return results.filter((r): r is Source => r !== null);
+  return results.filter((r): r is SourceDetail => r !== null);
 }
 
 export async function deleteSources(

@@ -26,12 +26,12 @@ export interface ResolvedFollowTarget {
   label: string;
 }
 
-const orgFollowTarget = (o: Organization): ResolvedFollowTarget => ({
+const orgFollowTarget = (o: Pick<Organization, "id" | "name" | "slug">): ResolvedFollowTarget => ({
   targetType: "org",
   targetId: o.id,
   label: o.name ?? o.slug,
 });
-const productFollowTarget = (p: Product): ResolvedFollowTarget => ({
+const productFollowTarget = (p: Pick<Product, "id" | "name" | "slug">): ResolvedFollowTarget => ({
   targetType: "product",
   targetId: p.id,
   label: p.name ?? p.slug,

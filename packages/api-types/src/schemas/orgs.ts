@@ -486,7 +486,7 @@ export const DeleteOrgAccountResponseSchema = z.object({
 });
 
 export const OrgDetailSchema = z.object({
-  id: z.string().optional(),
+  id: z.string(),
   slug: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
@@ -525,6 +525,9 @@ export const OrgDetailSchema = z.object({
   lastFetchedAt: z.string().nullable(),
   lastPolledAt: z.string().nullable(),
   trackingSince: z.string(),
+  /** Row timestamps. Optional for older servers. */
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
   aliases: z.array(z.string()).optional(),
   accounts: z.array(OrgAccountItemSchema),
   products: z.array(OrgDetailProductSchema),
