@@ -15,6 +15,10 @@ import {
   CreateWorkspaceWebhookResponseSchema,
   RotateUserWebhookSecretResponseSchema,
   TestUserWebhookResponseSchema,
+  UpdateWebhookBodySchema,
+  WebhookDeliveriesResponseSchema,
+  WorkspaceWebhookListResponseSchema,
+  WorkspaceWebhookSchema,
 } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import {
@@ -60,7 +64,8 @@ import { respondError } from "../lib/error-response.js";
 import { userIdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency/idempotency-openapi.js";
-import { errorResponse } from "../lib/openapi-error.js";
+import { errorResponse, jsonResponse } from "../lib/openapi-error.js";
+import { documentedJsonBody } from "../lib/validate.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -93,25 +98,49 @@ interface WebhookCreateInput {
   resolvedProductId: string | null;
 }
 
-workspaceWebhookHandlers.get("/workspaces/:workspaceId/webhooks", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+workspaceWebhookHandlers.get(
+  "/workspaces/:workspaceId/webhooks",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "List workspace webhook subscriptions",
+    parameters: [
+      {
+        name: "enabled",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "`true` for enabled subscriptions only, `false` for disabled only.",
+      },
+    ],
+    responses: {
+      200: jsonResponse(
+        "The workspace's webhook subscriptions and the caller's role",
+        WorkspaceWebhookListResponseSchema,
+      ),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Workspace not found (non-members get 404)"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const workspaceId = c.req.param("workspaceId");
-  const db = getDb(c);
-  const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-  if (!member.ok) return respondError(c, workspaceGateError(member));
+    const workspaceId = c.req.param("workspaceId");
+    const db = getDb(c);
+    const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
+    if (!member.ok) return respondError(c, workspaceGateError(member));
 
-  const enabledParam = c.req.query("enabled");
-  const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
+    const enabledParam = c.req.query("enabled");
+    const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
 
-  const subscriptions = await listWorkspaceWebhookSubscriptionsEnriched(db, workspaceId, opts);
-  return c.json({
-    subscriptions,
-    role: member.role,
-    canManage: member.role === "owner" || member.role === "admin",
-  });
-});
+    const subscriptions = await listWorkspaceWebhookSubscriptionsEnriched(db, workspaceId, opts);
+    return c.json({
+      subscriptions,
+      role: member.role,
+      canManage: member.role === "owner" || member.role === "admin",
+    });
+  },
+);
 
 const createWorkspaceWebhookOpenApi = idempotentPostOpenApi({
   tags: ["Webhooks"],
@@ -225,67 +254,109 @@ workspaceWebhookHandlers.post(
   },
 );
 
-workspaceWebhookHandlers.get("/workspaces/:workspaceId/webhooks/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+workspaceWebhookHandlers.get(
+  "/workspaces/:workspaceId/webhooks/:id",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "Get a workspace webhook subscription",
+    responses: {
+      200: jsonResponse("The subscription and its delivery health", WorkspaceWebhookSchema),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Workspace or webhook subscription not found (non-members get 404)"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const workspaceId = c.req.param("workspaceId");
-  const db = getDb(c);
-  const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-  if (!member.ok) return respondError(c, workspaceGateError(member));
+    const workspaceId = c.req.param("workspaceId");
+    const db = getDb(c);
+    const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
+    if (!member.ok) return respondError(c, workspaceGateError(member));
 
-  const id = c.req.param("id");
-  const sub = await getWorkspaceWebhookSubscription(db, workspaceId, id);
-  if (!sub) return respondError(c, new NotFoundError());
-  return c.json(jsonSubscription(sub));
-});
+    const id = c.req.param("id");
+    const sub = await getWorkspaceWebhookSubscription(db, workspaceId, id);
+    if (!sub) return respondError(c, new NotFoundError());
+    return c.json(jsonSubscription(sub));
+  },
+);
 
-workspaceWebhookHandlers.patch("/workspaces/:workspaceId/webhooks/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+workspaceWebhookHandlers.patch(
+  "/workspaces/:workspaceId/webhooks/:id",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "Update a workspace webhook subscription",
+    requestBody: documentedJsonBody(UpdateWebhookBodySchema),
+    responses: {
+      200: jsonResponse("The updated subscription", WorkspaceWebhookSchema),
+      400: errorResponse(
+        "Invalid JSON body or field, an unsafe webhook target, or no recognized fields",
+      ),
+      401: errorResponse("Sign-in required"),
+      403: errorResponse("Workspace owner or admin required"),
+      404: errorResponse("Workspace, webhook subscription, or named source/product not found"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const workspaceId = c.req.param("workspaceId");
-  const db = getDb(c);
-  const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
-  if (!gate.ok) return respondError(c, workspaceGateError(gate));
+    const workspaceId = c.req.param("workspaceId");
+    const db = getDb(c);
+    const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
+    if (!gate.ok) return respondError(c, workspaceGateError(gate));
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
-  }
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
+    }
 
-  const id = c.req.param("id");
-  const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
-  if (!owned) return respondError(c, new NotFoundError());
+    const id = c.req.param("id");
+    const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
+    if (!owned) return respondError(c, new NotFoundError());
 
-  // Workspace webhooks are always org-scoped — the shared patch builder's
-  // org-scope branch (resolveOrgWebhookPatchFilters) always applies here.
-  const patch = await buildWebhookPatch(db, owned, body);
-  if (isReleasesError(patch)) return respondError(c, patch);
+    // Workspace webhooks are always org-scoped — the shared patch builder's
+    // org-scope branch (resolveOrgWebhookPatchFilters) always applies here.
+    const patch = await buildWebhookPatch(db, owned, body);
+    if (isReleasesError(patch)) return respondError(c, patch);
 
-  const fresh = await updateWebhookSubscription(db, id, patch);
-  if (!fresh) return respondError(c, new NotFoundError());
-  return c.json(jsonSubscription(fresh));
-});
+    const fresh = await updateWebhookSubscription(db, id, patch);
+    if (!fresh) return respondError(c, new NotFoundError());
+    return c.json(jsonSubscription(fresh));
+  },
+);
 
-workspaceWebhookHandlers.delete("/workspaces/:workspaceId/webhooks/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+workspaceWebhookHandlers.delete(
+  "/workspaces/:workspaceId/webhooks/:id",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "Delete a workspace webhook subscription",
+    responses: {
+      204: { description: "Deleted" },
+      401: errorResponse("Sign-in required"),
+      403: errorResponse("Workspace owner or admin required"),
+      404: errorResponse("Workspace or webhook subscription not found (non-members get 404)"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const workspaceId = c.req.param("workspaceId");
-  const db = getDb(c);
-  const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
-  if (!gate.ok) return respondError(c, workspaceGateError(gate));
+    const workspaceId = c.req.param("workspaceId");
+    const db = getDb(c);
+    const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
+    if (!gate.ok) return respondError(c, workspaceGateError(gate));
 
-  const id = c.req.param("id");
-  const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
-  if (!owned) return respondError(c, new NotFoundError());
+    const id = c.req.param("id");
+    const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
+    if (!owned) return respondError(c, new NotFoundError());
 
-  await deleteWebhookSubscription(db, id);
-  return new Response(null, { status: 204 });
-});
+    await deleteWebhookSubscription(db, id);
+    return new Response(null, { status: 204 });
+  },
+);
 
 const rotateWorkspaceWebhookSecretOpenApi = idempotentPostOpenApi({
   tags: ["Webhooks"],
@@ -410,23 +481,54 @@ workspaceWebhookHandlers.post(
   },
 );
 
-workspaceWebhookHandlers.get("/workspaces/:workspaceId/webhooks/:id/deliveries", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+workspaceWebhookHandlers.get(
+  "/workspaces/:workspaceId/webhooks/:id/deliveries",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "List recent workspace webhook deliveries",
+    description: "Recent delivery attempts from Analytics Engine, newest first.",
+    parameters: [
+      {
+        name: "failed",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "`true` keeps only failed attempts.",
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+      },
+    ],
+    responses: {
+      200: jsonResponse("Delivery attempts", WebhookDeliveriesResponseSchema),
+      400: errorResponse("Invalid subscription id"),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Workspace or webhook subscription not found (non-members get 404)"),
+      502: errorResponse("Analytics Engine query failed"),
+      503: errorResponse("Delivery history is not configured"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const workspaceId = c.req.param("workspaceId");
-  const db = getDb(c);
-  const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
-  if (!member.ok) return respondError(c, workspaceGateError(member));
+    const workspaceId = c.req.param("workspaceId");
+    const db = getDb(c);
+    const member = await requireWorkspaceMember(db, session.user.id, workspaceId);
+    if (!member.ok) return respondError(c, workspaceGateError(member));
 
-  const id = c.req.param("id");
-  const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
-  if (!owned) return respondError(c, new NotFoundError());
+    const id = c.req.param("id");
+    const owned = await getWorkspaceWebhookSubscription(db, workspaceId, id);
+    if (!owned) return respondError(c, new NotFoundError());
 
-  const result = await queryWebhookDeliveries(c.env, id, {
-    failed: c.req.query("failed"),
-    limit: c.req.query("limit"),
-  });
-  if (isReleasesError(result)) return respondError(c, result);
-  return c.json(result.data);
-});
+    const result = await queryWebhookDeliveries(c.env, id, {
+      failed: c.req.query("failed"),
+      limit: c.req.query("limit"),
+    });
+    if (isReleasesError(result)) return respondError(c, result);
+    return c.json(result.data);
+  },
+);

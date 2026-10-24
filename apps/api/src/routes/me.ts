@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { describeRoute } from "hono-openapi";
 import { createDb } from "../db.js";
 import { requireFollowsPrincipal } from "../middleware/auth.js";
 import { parseLimitParam } from "../utils.js";
@@ -32,6 +33,12 @@ import {
 } from "../queries/collection-digest-subs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
 import { parseJsonBody } from "../lib/json-body.js";
+import {
+  FollowMutationResponseSchema,
+  FollowRequestSchema,
+  FollowsListResponseSchema,
+  PersonalizedFeedResponseSchema,
+} from "@buildinternet/releases-api-types";
 import type {
   CollectionDigestSubscriptionResponse,
   CollectionDigestSubscriptionsResponse,
@@ -55,6 +62,8 @@ import { meSemanticAlertHandlers } from "./me-semantic-alerts.js";
 import { meWorkspaceHandlers } from "./me-workspaces.js";
 import { accountProfileHandlers } from "./account-profile.js";
 import { respondError } from "../lib/error-response.js";
+import { errorResponse, jsonResponse } from "../lib/openapi-error.js";
+import { documentedJsonBody } from "../lib/validate.js";
 import { UnauthorizedError, ValidationError, NotFoundError } from "@releases/lib/releases-error";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -84,113 +93,182 @@ function isFollowTargetType(v: unknown): v is FollowTargetType {
  */
 export const meHandlers = new Hono<Env>();
 
-meHandlers.get("/me/follows", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-  const db = createDb(c.env.DB);
-  const follows = await listFollows(db, session.user.id);
-  return c.json({ follows });
-});
+meHandlers.get(
+  "/me/follows",
+  describeRoute({
+    tags: ["Account"],
+    summary: "List follows",
+    description: "Orgs and products the caller follows, with display fields for rendering.",
+    responses: {
+      200: jsonResponse("The caller's follows", FollowsListResponseSchema),
+      401: errorResponse("Sign-in required"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    const db = createDb(c.env.DB);
+    const follows = await listFollows(db, session.user.id);
+    return c.json({ follows });
+  },
+);
 
-meHandlers.post("/me/follows", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-  let body: { targetType?: unknown; targetId?: unknown };
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
-  }
-  if (!isFollowTargetType(body.targetType) || typeof body.targetId !== "string" || !body.targetId) {
-    return respondError(
-      c,
-      new ValidationError("targetType must be 'org' or 'product' and targetId is required", {
-        code: "bad_request",
-      }),
+meHandlers.post(
+  "/me/follows",
+  describeRoute({
+    tags: ["Account"],
+    summary: "Follow an org or product",
+    description:
+      "Idempotent: returns 201 for a new follow and 200 when the caller already follows the target. Following an org includes its products in the feed.",
+    requestBody: documentedJsonBody(FollowRequestSchema),
+    responses: {
+      200: jsonResponse("Already following", FollowMutationResponseSchema),
+      201: jsonResponse("Now following", FollowMutationResponseSchema),
+      400: errorResponse("Invalid JSON body, targetType, or targetId"),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Target not found"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    let body: { targetType?: unknown; targetId?: unknown };
+    try {
+      body = (await c.req.json()) as typeof body;
+    } catch {
+      return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
+    }
+    if (
+      !isFollowTargetType(body.targetType) ||
+      typeof body.targetId !== "string" ||
+      !body.targetId
+    ) {
+      return respondError(
+        c,
+        new ValidationError("targetType must be 'org' or 'product' and targetId is required", {
+          code: "bad_request",
+        }),
+      );
+    }
+    const db = createDb(c.env.DB);
+
+    // Distinguish "already following" (200) from a fresh follow (201) with a
+    // single indexed existence check — addFollow's onConflictDoNothing is the
+    // actual idempotency guard, so this only drives the status code.
+    if (await hasFollow(db, session.user.id, body.targetType, body.targetId)) {
+      return c.json({ success: true, following: true }, 200);
+    }
+
+    const entity = await resolveFollowTarget(db, body.targetType, body.targetId);
+    if (!entity) return respondError(c, new NotFoundError("Target not found"));
+
+    await addFollow(db, session.user.id, body.targetType, body.targetId);
+    await invalidateFeedCache(c, session.user.id);
+    return c.json({ success: true, following: true }, 201);
+  },
+);
+
+meHandlers.delete(
+  "/me/follows/:targetType/:targetId",
+  describeRoute({
+    tags: ["Account"],
+    summary: "Unfollow an org or product",
+    description: "Idempotent: succeeds whether or not the caller followed the target.",
+    responses: {
+      200: jsonResponse("No longer following", FollowMutationResponseSchema),
+      400: errorResponse("Invalid targetType"),
+      401: errorResponse("Sign-in required"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+    const targetType = c.req.param("targetType");
+    const targetId = c.req.param("targetId");
+    if (!isFollowTargetType(targetType)) {
+      return respondError(c, new ValidationError("Invalid targetType", { code: "bad_request" }));
+    }
+    const db = createDb(c.env.DB);
+    await removeFollow(db, session.user.id, targetType, targetId);
+    await invalidateFeedCache(c, session.user.id);
+    return c.json({ success: true, following: false }, 200);
+  },
+);
+
+meHandlers.get(
+  "/me/feed",
+  describeRoute({
+    tags: ["Account"],
+    summary: "Get the personalized release feed",
+    description:
+      "Recent releases from everything the caller follows, newest first. Cursor-paginated: pass `pagination.nextCursor` back as `?cursor=`; `?limit=` is 1-100.",
+    parameters: [
+      { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100 },
+      },
+    ],
+    responses: {
+      200: jsonResponse("Releases from followed orgs and products", PersonalizedFeedResponseSchema),
+      400: errorResponse("`?page=` is not supported; use `?cursor=`"),
+      401: errorResponse("Sign-in required"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+
+    const params = new URL(c.req.url).searchParams;
+    if (params.has("page")) {
+      return respondError(
+        c,
+        new ValidationError("Use ?cursor= instead of ?page=", { code: "bad_request" }),
+      );
+    }
+
+    const cursor = params.get("cursor");
+    const limit = parseLimitParam(params.get("limit") ?? undefined, FEED_CACHE_PAGE_SIZE, 100);
+    const db = createDb(c.env.DB);
+    const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+
+    const compute = async () => {
+      const rows = await getFollowedReleases(db, session.user.id, {
+        limit: limit + 1,
+        cursor,
+      });
+      const hasMore = rows.length > limit;
+      const pageRows = hasMore ? rows.slice(0, limit) : rows;
+      const items = pageRows.map((r) =>
+        mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)),
+      );
+      const nextCursor =
+        hasMore && pageRows.length > 0
+          ? feedCursorFromLatestRow(pageRows[pageRows.length - 1]!)
+          : null;
+      return { items, pagination: { nextCursor, limit } };
+    };
+
+    c.header("Cache-Control", "private, no-store");
+
+    if (!isCacheableFeedRequest(cursor, limit)) {
+      c.header("X-Cache", "BYPASS");
+      return c.json(await compute());
+    }
+
+    const { data, hit } = await withLatestCache(
+      c.env.LATEST_CACHE,
+      buildFeedCacheKey(session.user.id),
+      optionalWaitUntil(c),
+      compute,
+      FEED_CACHE_TTL_SECONDS,
     );
-  }
-  const db = createDb(c.env.DB);
-
-  // Distinguish "already following" (200) from a fresh follow (201) with a
-  // single indexed existence check — addFollow's onConflictDoNothing is the
-  // actual idempotency guard, so this only drives the status code.
-  if (await hasFollow(db, session.user.id, body.targetType, body.targetId)) {
-    return c.json({ success: true, following: true }, 200);
-  }
-
-  const entity = await resolveFollowTarget(db, body.targetType, body.targetId);
-  if (!entity) return respondError(c, new NotFoundError("Target not found"));
-
-  await addFollow(db, session.user.id, body.targetType, body.targetId);
-  await invalidateFeedCache(c, session.user.id);
-  return c.json({ success: true, following: true }, 201);
-});
-
-meHandlers.delete("/me/follows/:targetType/:targetId", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-  const targetType = c.req.param("targetType");
-  const targetId = c.req.param("targetId");
-  if (!isFollowTargetType(targetType)) {
-    return respondError(c, new ValidationError("Invalid targetType", { code: "bad_request" }));
-  }
-  const db = createDb(c.env.DB);
-  await removeFollow(db, session.user.id, targetType, targetId);
-  await invalidateFeedCache(c, session.user.id);
-  return c.json({ success: true, following: false }, 200);
-});
-
-meHandlers.get("/me/feed", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
-
-  const params = new URL(c.req.url).searchParams;
-  if (params.has("page")) {
-    return respondError(
-      c,
-      new ValidationError("Use ?cursor= instead of ?page=", { code: "bad_request" }),
-    );
-  }
-
-  const cursor = params.get("cursor");
-  const limit = parseLimitParam(params.get("limit") ?? undefined, FEED_CACHE_PAGE_SIZE, 100);
-  const db = createDb(c.env.DB);
-  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-
-  const compute = async () => {
-    const rows = await getFollowedReleases(db, session.user.id, {
-      limit: limit + 1,
-      cursor,
-    });
-    const hasMore = rows.length > limit;
-    const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const items = pageRows.map((r) =>
-      mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)),
-    );
-    const nextCursor =
-      hasMore && pageRows.length > 0
-        ? feedCursorFromLatestRow(pageRows[pageRows.length - 1]!)
-        : null;
-    return { items, pagination: { nextCursor, limit } };
-  };
-
-  c.header("Cache-Control", "private, no-store");
-
-  if (!isCacheableFeedRequest(cursor, limit)) {
-    c.header("X-Cache", "BYPASS");
-    return c.json(await compute());
-  }
-
-  const { data, hit } = await withLatestCache(
-    c.env.LATEST_CACHE,
-    buildFeedCacheKey(session.user.id),
-    optionalWaitUntil(c),
-    compute,
-    FEED_CACHE_TTL_SECONDS,
-  );
-  c.header("X-Cache", hit ? "HIT" : "MISS");
-  return c.json(data);
-});
+    c.header("X-Cache", hit ? "HIT" : "MISS");
+    return c.json(data);
+  },
+);
 
 /**
  * Build the absolute, tokenized feed URL from the API worker's own request

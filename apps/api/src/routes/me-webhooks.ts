@@ -9,6 +9,10 @@ import {
   CreateUserWebhookResponseSchema,
   RotateUserWebhookSecretResponseSchema,
   TestUserWebhookResponseSchema,
+  UpdateWebhookBodySchema,
+  UserWebhookListResponseSchema,
+  UserWebhookSchema,
+  WebhookDeliveriesResponseSchema,
 } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import {
@@ -52,7 +56,8 @@ import { respondError } from "../lib/error-response.js";
 import { userIdempotencyPrincipal } from "../lib/idempotency/idempotency-principal.js";
 import { idempotentPost } from "../middleware/idempotency.js";
 import { idempotentPostOpenApi } from "../lib/idempotency/idempotency-openapi.js";
-import { errorResponse } from "../lib/openapi-error.js";
+import { errorResponse, jsonResponse } from "../lib/openapi-error.js";
+import { documentedJsonBody } from "../lib/validate.js";
 import {
   UnauthorizedError,
   ValidationError,
@@ -95,17 +100,37 @@ type WebhookCreateInput =
       resolvedProductId: string | null;
     };
 
-meWebhookHandlers.get("/me/webhooks", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+meWebhookHandlers.get(
+  "/me/webhooks",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "List personal webhook subscriptions",
+    parameters: [
+      {
+        name: "enabled",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "`true` for enabled subscriptions only, `false` for disabled only.",
+      },
+    ],
+    responses: {
+      200: jsonResponse("The caller's webhook subscriptions", UserWebhookListResponseSchema),
+      401: errorResponse("Sign-in required"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const enabledParam = c.req.query("enabled");
-  const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
+    const enabledParam = c.req.query("enabled");
+    const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
 
-  const db = getDb(c);
-  const subscriptions = await listUserWebhookSubscriptionsEnriched(db, session.user.id, opts);
-  return c.json({ subscriptions });
-});
+    const db = getDb(c);
+    const subscriptions = await listUserWebhookSubscriptionsEnriched(db, session.user.id, opts);
+    return c.json({ subscriptions });
+  },
+);
 
 const createWebhookOpenApi = idempotentPostOpenApi({
   tags: ["Webhooks"],
@@ -247,53 +272,95 @@ meWebhookHandlers.post(
   },
 );
 
-meWebhookHandlers.get("/me/webhooks/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+meWebhookHandlers.get(
+  "/me/webhooks/:id",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "Get a personal webhook subscription",
+    responses: {
+      200: jsonResponse("The subscription and its delivery health", UserWebhookSchema),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Webhook subscription not found, or not owned by the caller"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const sub = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!sub) return respondError(c, new NotFoundError());
-  return c.json(jsonSubscription(sub));
-});
+    const id = c.req.param("id");
+    const db = getDb(c);
+    const sub = await getUserWebhookSubscription(db, session.user.id, id);
+    if (!sub) return respondError(c, new NotFoundError());
+    return c.json(jsonSubscription(sub));
+  },
+);
 
-meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+meWebhookHandlers.patch(
+  "/me/webhooks/:id",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "Update a personal webhook subscription",
+    requestBody: documentedJsonBody(UpdateWebhookBodySchema),
+    responses: {
+      200: jsonResponse("The updated subscription", UserWebhookSchema),
+      400: errorResponse(
+        "Invalid JSON body or field, an unsafe webhook target, or no recognized fields",
+      ),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse(
+        "Webhook subscription not found, or not owned by the caller, or the named source/product is not in its org",
+      ),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
-  }
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
+    }
 
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return respondError(c, new NotFoundError());
+    const id = c.req.param("id");
+    const db = getDb(c);
+    const owned = await getUserWebhookSubscription(db, session.user.id, id);
+    if (!owned) return respondError(c, new NotFoundError());
 
-  const patch = await buildWebhookPatch(db, owned, body);
-  if (isReleasesError(patch)) return respondError(c, patch);
+    const patch = await buildWebhookPatch(db, owned, body);
+    if (isReleasesError(patch)) return respondError(c, patch);
 
-  const fresh = await updateWebhookSubscription(db, id, patch);
-  if (!fresh) return respondError(c, new NotFoundError());
-  return c.json(jsonSubscription(fresh));
-});
+    const fresh = await updateWebhookSubscription(db, id, patch);
+    if (!fresh) return respondError(c, new NotFoundError());
+    return c.json(jsonSubscription(fresh));
+  },
+);
 
-meWebhookHandlers.delete("/me/webhooks/:id", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+meWebhookHandlers.delete(
+  "/me/webhooks/:id",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "Delete a personal webhook subscription",
+    responses: {
+      204: { description: "Deleted" },
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Webhook subscription not found, or not owned by the caller"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return respondError(c, new NotFoundError());
+    const id = c.req.param("id");
+    const db = getDb(c);
+    const owned = await getUserWebhookSubscription(db, session.user.id, id);
+    if (!owned) return respondError(c, new NotFoundError());
 
-  await deleteWebhookSubscription(db, id);
-  return new Response(null, { status: 204 });
-});
+    await deleteWebhookSubscription(db, id);
+    return new Response(null, { status: 204 });
+  },
+);
 
 const rotateWebhookSecretOpenApi = idempotentPostOpenApi({
   tags: ["Webhooks"],
@@ -409,19 +476,50 @@ meWebhookHandlers.post(
   },
 );
 
-meWebhookHandlers.get("/me/webhooks/:id/deliveries", async (c) => {
-  const session = c.get("session");
-  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
+meWebhookHandlers.get(
+  "/me/webhooks/:id/deliveries",
+  describeRoute({
+    tags: ["Webhooks"],
+    summary: "List recent personal webhook deliveries",
+    description: "Recent delivery attempts from Analytics Engine, newest first.",
+    parameters: [
+      {
+        name: "failed",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "`true` keeps only failed attempts.",
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+      },
+    ],
+    responses: {
+      200: jsonResponse("Delivery attempts", WebhookDeliveriesResponseSchema),
+      400: errorResponse("Invalid subscription id"),
+      401: errorResponse("Sign-in required"),
+      404: errorResponse("Webhook subscription not found, or not owned by the caller"),
+      502: errorResponse("Analytics Engine query failed"),
+      503: errorResponse("Delivery history is not configured"),
+    },
+  }),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return respondError(c, new NotFoundError());
+    const id = c.req.param("id");
+    const db = getDb(c);
+    const owned = await getUserWebhookSubscription(db, session.user.id, id);
+    if (!owned) return respondError(c, new NotFoundError());
 
-  const result = await queryWebhookDeliveries(c.env, id, {
-    failed: c.req.query("failed"),
-    limit: c.req.query("limit"),
-  });
-  if (isReleasesError(result)) return respondError(c, result);
-  return c.json(result.data);
-});
+    const result = await queryWebhookDeliveries(c.env, id, {
+      failed: c.req.query("failed"),
+      limit: c.req.query("limit"),
+    });
+    if (isReleasesError(result)) return respondError(c, result);
+    return c.json(result.data);
+  },
+);

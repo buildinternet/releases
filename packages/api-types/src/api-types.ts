@@ -14,11 +14,7 @@ export type {
 import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
 import type { UserApiKey } from "./schemas/api-keys.js";
 import type { SEMANTIC_ALERT_CANDIDATE_POOL } from "./schemas/semantic-alerts.js";
-import type {
-  UserWebhookFormat,
-  UserWebhookListItem,
-  WorkspaceMemberRole,
-} from "./schemas/webhooks.js";
+import type { UserWebhookListItem, WorkspaceMemberRole } from "./schemas/webhooks.js";
 export {
   SEMANTIC_ALERT_MAX_PER_USER,
   SEMANTIC_ALERT_QUERY_MAX_CHARS,
@@ -482,11 +478,29 @@ export {
   CreatedUserApiKeySchema,
   ListUserApiKeysResponseSchema,
   CreateUserApiKeyBodySchema,
+  RevokeUserApiKeyResponseSchema,
   type UserApiKey,
   type CreatedUserApiKey,
   type ListUserApiKeysResponse,
   type CreateUserApiKeyBody,
+  type RevokeUserApiKeyResponse,
 } from "./schemas/api-keys.js";
+export {
+  FollowTargetSchema,
+  FollowSchema,
+  FollowsListResponseSchema,
+  FollowRequestSchema,
+  FollowMutationResponseSchema,
+  PersonalizedFeedPaginationSchema,
+  PersonalizedFeedResponseSchema,
+  type FollowTarget,
+  type Follow,
+  type FollowsListResponse,
+  type FollowRequest,
+  type FollowMutationResponse,
+  type PersonalizedFeedPagination,
+  type PersonalizedFeedResponse,
+} from "./schemas/follows.js";
 export {
   WebhookDeliveryHealthSchema,
   UserWebhookScopeSchema,
@@ -506,6 +520,11 @@ export {
   CreateWorkspaceWebhookResponseSchema,
   CreateUserWebhookBodySchema,
   CreateWorkspaceWebhookBodySchema,
+  UserWebhookSchema,
+  WorkspaceWebhookSchema,
+  UpdateWebhookBodySchema,
+  WebhookDeliveryRowSchema,
+  WebhookDeliveriesResponseSchema,
   type WebhookDeliveryHealth,
   type UserWebhookScope,
   type UserWebhookReleaseTypeFilter,
@@ -524,6 +543,11 @@ export {
   type CreateWorkspaceWebhookResponse,
   type CreateUserWebhookBody,
   type CreateWorkspaceWebhookBody,
+  type UserWebhook,
+  type WorkspaceWebhook,
+  type UpdateWebhookBody,
+  type WebhookDeliveryRow,
+  type WebhookDeliveriesResponse,
 } from "./schemas/webhooks.js";
 export {
   SourceListItemSchema,
@@ -1196,38 +1220,7 @@ export type ReleaseStreamMessage = z.infer<typeof ReleaseStreamMessageSchema>;
 export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 
 // ── Follows ──
-
-/** What a user can follow. */
-export type FollowTarget = "org" | "product";
-
-/** A user's follow, enriched for rendering (returned by GET /v1/me/follows). */
-export interface Follow {
-  targetType: FollowTarget;
-  targetId: string;
-  name: string;
-  slug: string;
-  avatarUrl: string | null;
-  /** Owning org slug for product follows (null for org follows). */
-  orgSlug: string | null;
-  createdAt: string;
-}
-
-/** GET /v1/me/follows response. */
-export interface FollowsListResponse {
-  follows: Follow[];
-}
-
-/** POST /v1/me/follows request body. */
-export interface FollowRequest {
-  targetType: FollowTarget;
-  targetId: string;
-}
-
-/** POST/DELETE /v1/me/follows response. */
-export interface FollowMutationResponse {
-  success: true;
-  following: boolean;
-}
+// Follow and personalized-feed shapes live in ./schemas/follows.ts.
 
 /**
  * A user's personalized feed token, including the full re-revealable feed URL.
@@ -1249,35 +1242,8 @@ export interface FeedTokenResponse {
   token: FeedToken | null;
 }
 
-/** Cursor pagination shape for GET /v1/me/feed (same as other release feeds). */
-export type PersonalizedFeedPagination = OrgFeedPagination;
-
-/**
- * GET /v1/me/feed response — the personalized release feed. Reuses the same item
- * shape as /v1/releases/latest (ReleaseLatestItem); cursor-paginated like other
- * feed-shaped surfaces.
- */
-export interface PersonalizedFeedResponse {
-  items: ReleaseLatestItem[];
-  pagination: PersonalizedFeedPagination;
-}
-
 // ── User webhooks ──
-// Subscription shapes (user + workspace) live in ./schemas/webhooks.ts.
-
-/** One Analytics Engine delivery-attempt row from GET …/webhooks/:id/deliveries. */
-export interface WebhookDeliveryRow {
-  timestamp?: string;
-  event_id?: string;
-  error_message?: string | null;
-  error_code?: string | null;
-  outcome?: string;
-  /** Delivery format — "json" (signed raw event) or a chat card (`slack` / `discord`). Empty on pre-format rows. */
-  format?: UserWebhookFormat | "";
-  http_status?: number;
-  latency_ms?: number;
-  attempt?: number;
-}
+// Subscription and delivery shapes (user + workspace) live in ./schemas/webhooks.ts.
 
 // ── Digest emails ──
 
