@@ -25,6 +25,7 @@
     "deploy:api": "wrangler deploy --config apps/api/wrangler.jsonc",
     "deploy:mcp": "bun run mcp:ui:build && wrangler deploy --config apps/mcp/wrangler.jsonc",
     "publish:mcp-registry": "cd apps/mcp && mcp-publisher publish",
+    "publish:bootstrap:sdk": "bun scripts/npm-bootstrap.ts packages/sdk publish-sdk.yml",
     "deploy": "bun run deploy:api && bun run deploy:mcp",
     "db:generate": "drizzle-kit generate",
     "db:check-filenames": "./scripts/check-migration-filenames.sh",

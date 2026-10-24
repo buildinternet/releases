@@ -1,0 +1,118 @@
+name: Publish @buildinternet/releases-sdk
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/sdk/package.json"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry-run only (no npm publish)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+
+permissions:
+  contents: write # tag + GitHub release after a successful publish
+  id-token: write # OIDC: mint a short-lived npm publish credential (no NPM_TOKEN)
+
+env:
+  BUN_VERSION: "1.4.4"
+
+jobs:
+  publish:
+    name: Publish packages/sdk to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # OIDC trusted publishing needs npm >= 11.5.1 / Node >= 22.14.0. Node 24
+      # bundles npm 11.19.1, clearing the bar without an in-place
+      # `npm i -g npm@latest` self-upgrade (that races and dies with
+      # MODULE_NOT_FOUND 'promise-retry'). bun runs install/tests; npm does the
+      # publish + OIDC token exchange. No registry-url here on purpose — an
+      # empty _authToken line breaks OIDC (npm/cli#8976).
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.22.1 # pinned: bundles npm 11.19.1 (see comment above)
+
+      - run: bun install --frozen-lockfile
+
+      # apps/mcp is excluded from the root workspace and carries its own
+      # bun.lock — the root install doesn't populate its node_modules, but the
+      # root `bun run test` below includes its suite (mirrors ci.yml).
+      - name: Install apps/mcp deps
+        working-directory: apps/mcp
+        run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Read version
+        id: version
+        run: echo "version=$(jq -r .version packages/sdk/package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version already published
+        id: check
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Trusted publishing only works once the package exists on npm; the
+          # first version goes out by hand (`bun run publish:bootstrap:sdk`).
+          if ! npm view "@buildinternet/releases-sdk" name >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::@buildinternet/releases-sdk is not on npm yet. Run 'bun run publish:bootstrap:sdk' once to publish it and register this workflow as its trusted publisher."
+          elif npm view "@buildinternet/releases-sdk@${SDK_VERSION}" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${SDK_VERSION} already on npm — skipping publish." >&2
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.check.outputs.already == 'false'
+        working-directory: packages/sdk
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+          # Source repo is public — npm provenance attestations are supported.
+          # Trusted publishing (OIDC) provides the tokenless credential and
+          # attaches the provenance statement on publish.
+          NPM_CONFIG_PROVENANCE: "true"
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            npm publish --dry-run
+          else
+            npm publish
+          fi
+
+      # Provenance marker: tag the exact commit each npm version shipped from and
+      # surface it in the repo's Releases sidebar. `gh release create` creates the
+      # tag at --target; idempotent via the already-published gate above.
+      # --latest=false: the CLI release (publish-cli.yml) owns the repo's
+      # "latest" marker that /releases/latest/download/... resolves against.
+      - name: Tag + GitHub release
+        if: steps.check.outputs.already == 'false' && inputs.dry-run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "sdk@${SDK_VERSION}" \
+            --latest=false \
+            --target "${GITHUB_SHA}" \
+            --title "@buildinternet/releases-sdk@${SDK_VERSION}" \
+            --notes "Published [@buildinternet/releases-sdk@${SDK_VERSION}](https://www.npmjs.com/package/@buildinternet/releases-sdk/v/${SDK_VERSION}) to npm from ${GITHUB_SHA}."

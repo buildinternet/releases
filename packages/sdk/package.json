@@ -1,0 +1,30 @@
+{
+  "name": "@buildinternet/releases-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Releases API (api.releases.sh).",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "packages/sdk"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "bun ../../scripts/pack-dist.ts prepack ../core ../api-types",
+    "postpack": "bun ../../scripts/pack-dist.ts postpack"
+  },
+  "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*"
+  }
+}
