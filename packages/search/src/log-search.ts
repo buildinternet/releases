@@ -54,10 +54,6 @@ function pickMode(mode: SearchMode | null | undefined): SearchMode | null {
   return mode && (SEARCH_MODES as readonly string[]).includes(mode) ? mode : null;
 }
 
-// ---------------------------------------------------------------------------
-// API worker variant
-// ---------------------------------------------------------------------------
-
 export interface LogSearchInput {
   surface: SearchSurface;
   query: string;
@@ -127,10 +123,6 @@ export async function logSearch(env: SearchLogEnv, input: LogSearchInput): Promi
   if (!row) return;
   await writeRow(env, row);
 }
-
-// ---------------------------------------------------------------------------
-// MCP worker variant
-// ---------------------------------------------------------------------------
 
 export type McpSearchCommand = "search";
 
@@ -220,10 +212,6 @@ export async function logMcpSearch(env: SearchLogEnv, input: McpLogSearchInput):
   if (!row) return;
   await writeRow(env, row);
 }
-
-// ---------------------------------------------------------------------------
-// Shared insert path
-// ---------------------------------------------------------------------------
 
 async function writeRow(env: SearchLogEnv, row: NewSearchQuery): Promise<void> {
   try {

@@ -201,11 +201,9 @@ firecrawlRoutes.post(
   },
 );
 
-// ---------------------------------------------------------------------------
 // Inbound receiver: POST /v1/inbound/firecrawl.
 // `inbound` is in none of the route-namespace lists, so no shared auth
 // middleware runs. The handler checks X-Firecrawl-Token itself.
-// ---------------------------------------------------------------------------
 
 /**
  * Deterministic Workflow instance id for one webhook page. Keyed on (checkId,

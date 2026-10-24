@@ -320,8 +320,6 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     await this.scheduleAt(row, nextAlarmMs, fired, fired ? now : (prev?.lastFiredAt ?? null));
   }
 
-  // --- internals -----------------------------------------------------------
-
   /**
    * Arm this source's OrgActor when the source is a flagged scrape/agent source
    * (retires the scrape-agent-sweep trigger). This is the at-least-once BACKSTOP

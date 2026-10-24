@@ -2546,13 +2546,11 @@ orgRoutes.get(
   },
 );
 
-// ---------------------------------------------------------------------------
 // GET /orgs/:slug/recent-releases?since=<iso>&limit=<n>
 //
 // Returns releases for grouping / summarization — same shape as the local
 // getRecentReleasesByOrg query (full Release row + sourceName/sourceSlug),
 // filtered to `publishedAt >= since` and skipping suppressed + disabled.
-// ---------------------------------------------------------------------------
 
 orgRoutes.get(
   "/orgs/:slug/recent-releases",

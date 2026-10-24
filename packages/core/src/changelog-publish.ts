@@ -248,10 +248,6 @@ export function isUnparsableChangelog(afterMd: string): boolean {
   return parseSections(afterMd).format === "unknown";
 }
 
-// ---------------------------------------------------------------------------
-// Directory mode: one MDX/Markdown file per release, frontmatter metadata.
-// ---------------------------------------------------------------------------
-
 export type DirectoryFileStatus = "A" | "M" | "D";
 
 export type DirectoryFileInput = {

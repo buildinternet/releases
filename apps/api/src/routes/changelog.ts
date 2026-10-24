@@ -241,10 +241,6 @@ const fetchChangelogsHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ repo: `${owner}/${repo}`, files, stats });
 };
 
-// ---------------------------------------------------------------------------
-// POST /changelog/parse
-// ---------------------------------------------------------------------------
-
 const PARSE_SOURCES = ["auto", "github_releases", "changelog_file"] as const;
 
 const ParsedReleaseSchema = z.object({
