@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.36.0
+
+### Minor Changes
+
+- 2e256e2: Publish compiled ES modules and type declarations (`dist/`) instead of TypeScript source, so both packages import cleanly in Node, Deno and any bundler, not only in Bun or TypeScript-aware toolchains. Import paths are unchanged.
+
 ## 0.35.3
 
 ### Patch Changes

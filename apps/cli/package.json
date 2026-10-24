@@ -2,7 +2,7 @@
   "name": "@releases/cli",
   "version": "0.0.0",
   "private": true,
-  "description": "The `releases` CLI (published as @buildinternet/releases) \u2014 source and build scripts.",
+  "description": "The `releases` CLI (published as @buildinternet/releases) — source and build scripts.",
   "type": "module",
   "bin": {
     "releases": "./src/index.ts"

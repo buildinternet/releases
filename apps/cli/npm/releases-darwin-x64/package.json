@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-darwin-x64",
-  "version": "0.83.5",
+  "version": "0.84.0",
   "description": "releases binary for macOS x64",
   "os": [
     "darwin"

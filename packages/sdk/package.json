@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript client for the Releases API (api.releases.sh).",
   "type": "module",
   "license": "MIT",
