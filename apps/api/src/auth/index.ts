@@ -27,12 +27,9 @@ type SecretLike = string | Parameters<typeof getSecret>[0];
  * or a plain string (local `.dev.vars` / `wrangler dev`). Returns null when
  * absent so callers can treat "unset" uniformly.
  *
- * A Secrets Store binding can be *present but unresolvable* in local `wrangler
- * dev` (no local value) — `getSecret` throws there. We treat any resolution
- * failure as "not configured" so a missing secret degrades gracefully (e.g.
- * Better Auth's dev-secret fallback, or a social provider simply staying off)
- * instead of 500ing every `/api/auth/*` request. Callers decide what an absent
- * secret means; `createAuth` logs when the *signing* secret is the one missing.
+ * A Secrets Store binding can be present but unresolvable in local `wrangler
+ * dev`, where `getSecret` throws. Any resolution failure is treated as "not
+ * configured" so a missing secret degrades instead of 500ing `/api/auth/*`.
  */
 export async function resolveSecret(value: SecretLike): Promise<string | null> {
   if (value == null) return null;
@@ -47,18 +44,12 @@ export async function resolveSecret(value: SecretLike): Promise<string | null> {
 /**
  * Resolve the Better Auth signing secret, with a local-dev fallback.
  *
- * In deployed envs `BETTER_AUTH_SECRET` is a Secrets Store binding (validated at
- * deploy). In local `wrangler dev` that binding can't reach the Secrets Store, and
- * — the footgun — a same-named `.dev.vars` plain string does NOT override it
- * (wrangler binds the store binding), so the signing secret silently became an
- * ephemeral per-restart random value (#1425). We therefore read a DISTINCT
- * plain-string var, `BETTER_AUTH_SECRET_DEV`, and prefer it only when the binding
- * is unresolvable: local dev gets a stable secret (sessions survive restarts,
- * tokens are mintable for tests) without the prod secret ever touching a laptop.
+ * In local `wrangler dev` the `BETTER_AUTH_SECRET` store binding can't resolve,
+ * and a same-named `.dev.vars` string does NOT override it, so the secret silently
+ * became ephemeral per restart (#1425). A DISTINCT var, `BETTER_AUTH_SECRET_DEV`,
+ * is used only when the binding is unresolvable.
  *
- * Safe in prod: the binding resolves there so its value wins, and
- * `BETTER_AUTH_SECRET_DEV` is never bound in deployed envs anyway. Deliberately
- * NOT gated on `ENVIRONMENT` — local `wrangler dev` defaults `ENVIRONMENT` to
+ * Deliberately NOT gated on `ENVIRONMENT`: local `wrangler dev` defaults it to
  * `production`, so such a gate would disable the fallback exactly where it's needed.
  */
 export async function resolveSigningSecret(env: {
@@ -76,50 +67,30 @@ type SocialProvider = {
   clientId: string;
   clientSecret: string;
   /**
-   * Re-import the provider's profile (`name`, `image`) onto the user on EVERY
-   * sign-in, not just the first. Better Auth defaults this off; we opt Google in
-   * so the avatar we surface stays current. Custom uploads mirrored to R2 are
-   * preserved by `preserveCustomAvatarOnUpdate` in the `user.update.before` hook.
-   * See `buildSocialProviders`.
+   * Re-import the provider's profile (`name`, `image`) on EVERY sign-in. Custom
+   * avatar uploads are preserved by `preserveCustomAvatarOnUpdate`.
    */
   overrideUserInfoOnSignIn?: boolean;
   /**
-   * Map the raw provider profile onto extra user fields at create/override time.
-   * We use it to capture `displayEmail` — the provider's email with its ORIGINAL
-   * casing/dots — before the Sentinel `emailNormalization` pass rewrites the
-   * canonical `email` column (lowercase + Gmail dots stripped). Better Auth merges
-   * the returned object onto the user it creates, and Sentinel's user create/update
-   * hooks spread `...user` (touching only `email`), so `displayEmail` survives. See
-   * `mapDisplayEmail` and the `user.additionalFields.displayEmail` declaration.
+   * Captures `displayEmail` (original casing/dots) before Sentinel's
+   * `emailNormalization` rewrites `email`. Sentinel's hooks spread `...user` and
+   * touch only `email`, so `displayEmail` survives.
    */
   mapProfileToUser?: (profile: { email?: string | null }) => { displayEmail?: string };
 };
 
 /**
- * Capture the provider profile's email verbatim into the `displayEmail` field.
- * Both the Google (decoded id token) and GitHub (resolved primary email) profiles
- * expose `.email`; an absent email yields no field (the read path falls back to the
- * canonical `email`). Shared by every provider so the display form is preserved
- * uniformly. Pure so it's unit-testable in isolation.
+ * Capture the provider profile's email verbatim into `displayEmail`. An absent
+ * email yields no field (the read path falls back to the canonical `email`).
  */
 export function mapDisplayEmail(profile: { email?: string | null }): { displayEmail?: string } {
   return typeof profile.email === "string" && profile.email ? { displayEmail: profile.email } : {};
 }
 
 /**
- * `user.update.before` transform that keeps `displayEmail` from going stale when the
- * canonical `email` changes (the self-serve change-email confirmation, which applies
- * `updateUser({ email })`). Sets `displayEmail` to the incoming email so the account
- * page never shows the OLD address after a change.
- *
- * The guard is load-bearing: it acts ONLY when `email` is in the update AND no
- * explicit `displayEmail` is — because Google's `overrideUserInfoOnSignIn` re-imports
- * the profile on EVERY sign-in via `mapProfileToUser`, sending an update that carries
- * BOTH the (lowercased) `email` and the original-cased `displayEmail`. Without the
- * `displayEmail == null` check we'd overwrite that nicely-cased value with the
- * lowercased email on every Google sign-in. Returns `{ data }` (Better Auth's
- * modify-shape) only when it changes something, else `undefined` (a no-op passthrough).
- * Pure + exported for unit testing.
+ * `user.update.before` transform: keeps `displayEmail` in sync with an email
+ * change and preserves a custom-uploaded avatar. Returns `{ data }` only when it
+ * changes something.
  */
 export async function applyUserUpdateGuards(
   db: AnyDb,
@@ -154,6 +125,12 @@ export async function applyUserUpdateGuards(
   return changed ? { data: merged } : undefined;
 }
 
+/**
+ * Sets `displayEmail` to an incoming `email` so the account page never shows the
+ * old address after a change. Acts ONLY when no explicit `displayEmail` is in the
+ * update: Google's `overrideUserInfoOnSignIn` sends both on every sign-in, and the
+ * original-cased value must win over the lowercased email.
+ */
 export function syncDisplayEmailOnUpdate(
   data: Record<string, unknown>,
 ): { data: Record<string, unknown> } | undefined {
@@ -163,19 +140,9 @@ export function syncDisplayEmailOnUpdate(
 }
 
 /**
- * Recover the original-cased email claim from a Google ID token's payload.
- *
- * Google One Tap (the `oneTap` plugin) verifies its own ID token at
- * `/one-tap/callback` and hands the canonical email to the link/create path — it
- * never routes through a provider's `mapProfileToUser`, so unlike the standard
- * OAuth flow, nothing captures the verbatim `displayEmail` for a One-Tap user. We
- * re-read it from the SAME token to drive the backfill. This decode is NOT a
- * verification: the after-hook only runs it for an already-verified token (the
- * callback returns a user solely when the plugin's `jwtVerify` passed), so we just
- * need the `email` claim back, not to re-establish trust.
- *
- * Decodes the middle (payload) segment as base64url. Pure + exported for unit
- * testing; returns `undefined` for anything malformed or emailless.
+ * Recover the original-cased email claim from a Google ID token's payload, for
+ * the One Tap `displayEmail` backfill. This decode is NOT a verification: the
+ * caller only runs it for a token the oneTap plugin already verified.
  */
 export function emailFromGoogleIdToken(idToken: unknown): string | undefined {
   if (typeof idToken !== "string") return undefined;
@@ -192,17 +159,10 @@ export function emailFromGoogleIdToken(idToken: unknown): string | undefined {
 }
 
 /**
- * Decide the `displayEmail` to backfill onto an EXISTING user row at sign-in, or
- * `undefined` for a no-op. Pure + exported for unit testing (mirrors
- * {@link syncDisplayEmailOnUpdate}).
- *
- * Needed for the Google One Tap path even though `mapDisplayEmail` already maps it
- * on the standard flow: One Tap bypasses `mapProfileToUser` entirely (it verifies
- * its own ID token), so neither the create nor the re-login path ever sets
- * `displayEmail` for a One-Tap user. We fill it ourselves from the token's
- * original-cased email — but ONLY when the row's value is still empty, so a value
- * set by `mapDisplayEmail` (a standard-flow create) or by a self-serve
- * change-email (`syncDisplayEmailOnUpdate`) is never clobbered.
+ * Decide the `displayEmail` to backfill onto an existing user row at sign-in, or
+ * `undefined` for a no-op. One Tap bypasses `mapProfileToUser`, so this fills it
+ * — but ONLY when still empty, so a value from `mapDisplayEmail` or a change-email
+ * is never clobbered.
  */
 export function displayEmailBackfill(
   current: { displayEmail?: string | null } | undefined,
@@ -217,11 +177,8 @@ export function displayEmailBackfill(
 let warnedDisplayEmailBackfill = false;
 
 /**
- * Best-effort: backfill an existing user's `display_email` from the original-cased
- * OAuth profile email at sign-in, when it's still empty. Used by the Google One
- * Tap after-hook (see {@link createAuth}), whose flow never reaches
- * `mapProfileToUser`. A failure must never disturb sign-in, so everything is
- * swallowed (warn once via logEvent).
+ * Best-effort One Tap `display_email` backfill. A failure must never disturb
+ * sign-in, so everything is swallowed (warn once).
  *
  * @param normalizedEmail the deduped canonical email — matches the stored `email` key
  * @param originalEmail   the verbatim provider email, with casing/dots preserved
@@ -259,17 +216,9 @@ export async function backfillDisplayEmailOnSignIn(
 }
 
 /**
- * Build the `socialProviders` map, **gating each provider on both halves of its
- * credential pair**. A provider is included only when its client id AND secret
- * both resolve to non-empty values; otherwise it's silently omitted (no crash).
- * This is the "social-ready" seam — dropping the Google/GitHub secrets into the
- * environment activates them with zero code change. Pure + synchronous so it can
- * be unit-tested without touching the database or the network.
- *
- * Google additionally carries `overrideUserInfoOnSignIn` so the Google profile
- * photo (mapped to `user.image` by Better Auth's default profile mapping) and
- * name re-sync on every Google sign-in. GitHub keeps the plain import-on-signup
- * default — only Google was asked to stay fresh.
+ * Build the `socialProviders` map. A provider is included only when its client id
+ * AND secret both resolve; otherwise it's silently omitted. Only Google re-syncs
+ * its profile on every sign-in; GitHub keeps the import-on-signup default.
  */
 export function buildSocialProviders(creds: {
   googleClientId?: string | null;
@@ -297,14 +246,9 @@ export function buildSocialProviders(creds: {
 }
 
 /**
- * Override resolution for the `last-login-method` plugin. Better Auth's default
- * resolver already maps the Google redirect callback (`/callback/google`),
- * password sign-in (`/sign-in/email` → `"email"`), and `/magic-link/verify`, but
- * NOT Google One Tap — that flow completes at `/one-tap/callback`, which the
- * default misses. Mapping it to `"google"` keeps One Tap and the redirect
- * "Continue with Google" button on a single badge. Returning `null` falls through
- * to the plugin's default resolution for every other path. Pure + synchronous so
- * it's unit-testable in isolation (mirrors `buildSocialProviders`).
+ * Override for the `last-login-method` plugin: maps Google One Tap
+ * (`/one-tap/callback`), which the default resolver misses, to `"google"`.
+ * `null` falls through to the default for every other path.
  */
 export function resolveLastLoginMethodOverride(path: string | null | undefined): string | null {
   if (path === "/one-tap/callback") return "google";
@@ -348,17 +292,9 @@ function extraTrustedOrigins(env: Bindings): string[] {
  * Supports the two forms Better Auth's own origin check accepts, so the CORS layer
  * stays in lockstep — an entry Better Auth trusts is never silently blocked by CORS:
  *
- *  • an exact origin (`https://foo.example.com`) — matched verbatim against the
- *    request origin (the pre-wildcard behavior);
- *  • a host wildcard (`*.example.com`, optionally scheme-prefixed) — matched against
- *    the request HOST as a glob (`*` = any run of chars, `?` = one char). A single
- *    `*.example.com` entry therefore covers every subdomain, including the
- *    worktree-prefixed dev hosts (`feat-x.example.com`) that an exact-match list
- *    can't enumerate. The apex is NOT matched by `*.example.com` (mirrors Better
- *    Auth / standard glob — there's no leading-dot segment), so list it separately.
- *
- * This is what lets the local-dev origin live entirely in `.dev.vars` instead of
- * being hard-coded here: set `BETTER_AUTH_TRUSTED_ORIGINS` to the apex + `*.` wildcard.
+ *  • an exact origin (`https://foo.example.com`), matched verbatim;
+ *  • a host wildcard (`*.example.com`, optionally scheme-prefixed), matched against
+ *    the request HOST as a glob. The apex is NOT matched, so list it separately.
  */
 function matchesTrustedOrigin(origin: string, entries: string[]): boolean {
   let host: string;
@@ -395,21 +331,10 @@ function globToHostRegExp(pattern: string): RegExp {
  * origin the CORS layer reflects is also accepted by Better Auth's own origin
  * check — never trusted by one and rejected by the other.
  *
- * The releases.sh / releases.localhost family is the apex (exact origin) plus every
- * subdomain (host wildcard `*.releases.sh` — Better Auth matches a no-scheme
- * wildcard against the request host, exactly like `isReleasesFamilyOrigin`).
- * `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds explicit extras — a Vercel
- * preview origin, or the portless custom-TLD dev host (Google/Apple OAuth accept a
- * real TLD where the `*.releases.localhost` portless hosts are rejected). Entries
- * may be exact origins OR host wildcards (`*.local.releasenotesindex.dev`),
- * which Better Auth's origin check and {@link matchesTrustedOrigin} both honor — a
- * single wildcard entry covers worktree-prefixed dev hosts. The dev origin lives in
- * config (`.dev.vars`), not hard-coded here, so nothing org-specific ships in code.
- *
- * Outside production we additionally trust any bare-loopback web origin
- * (`http://localhost:*` / `http://127.0.0.1:*`, any port) so local OAuth can run on
- * plain `localhost` ports without config. Prod stays locked to the releases.sh
- * family plus whatever is explicitly configured.
+ * `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds extras such as a Vercel
+ * preview or the custom-TLD dev host (Google/Apple OAuth reject the
+ * `*.releases.localhost` portless hosts). Outside production any bare-loopback
+ * origin is also trusted so local OAuth works on plain `localhost` ports.
  */
 export function authTrustedOrigins(env: Bindings): string[] {
   const defaults = [
@@ -440,14 +365,9 @@ export const DEFAULT_AUTH_ORIGIN = "https://api.releases.sh";
 export const APP_NAME = "Releases";
 
 /**
- * Protected resources this AS issues access tokens for — fed to the 1.7
- * `resources` model (and `clientRegistrationAllowedResources`), which replaced
- * the 1.6 `validAudiences` list. Still the set of valid `aud` values: the origin
- * of this AS
- * (`BETTER_AUTH_URL`) unioned with every comma-separated entry of
- * `OAUTH_RESOURCE_AUDIENCES` (the resource servers — e.g. the MCP worker). Pure
- * + exported so it's unit-testable. Falls back to the prod API origin when
- * nothing resolves, so a token always has a defined audience.
+ * Protected resources (valid `aud` values) this AS issues tokens for: the origin
+ * of `BETTER_AUTH_URL` unioned with each `OAUTH_RESOURCE_AUDIENCES` entry. Falls
+ * back to the prod API origin so a token always has a defined audience.
  */
 export function oauthValidAudiences(env: Bindings): string[] {
   const auds = new Set<string>();
@@ -467,13 +387,9 @@ export function oauthValidAudiences(env: Bindings): string[] {
     for (const id of mcpResourceAndOrigin(trimmed)) auds.add(id);
   }
   if (auds.size === 0) auds.add(DEFAULT_AUTH_ORIGIN);
-  // Accept both the bare-origin and trailing-slash form of every audience. The
-  // oauth-provider plugin validates the client's RFC 8707 `resource` parameter
-  // against this set by exact string, and MCP clients derive that resource via
-  // WHATWG URL normalization (`new URL("https://mcp.releases.sh").href` →
-  // `"https://mcp.releases.sh/"`), so a root-hosted resource server is requested
-  // with a trailing slash our config omits. The RS verifier accepts the matching
-  // pair (`audienceVariants` in @releases/lib/oauth-jwt) — keep them in lockstep.
+  // Accept bare and trailing-slash forms: `resource` is matched by exact string
+  // and MCP clients normalize via WHATWG URL (adding `/`). Keep in lockstep with
+  // `audienceVariants` in the RS verifier.
   return [...new Set([...auds].flatMap(audienceVariants))];
 }
 
@@ -537,28 +453,14 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
 }
 
 /**
- * WebAuthn relying-party config for the passkey plugin. The crux: the WebAuthn
- * ceremony runs in the BROWSER on the WEB origin (releases.sh), NOT on this API
- * worker's origin (api.releases.sh). Left to its defaults the passkey plugin
- * derives `rpID` and `origin` from `baseURL` — the API origin — which makes the
- * browser's rpID/origin checks reject every registration and authentication. So
- * we derive them from `WEB_BASE_URL` instead:
+ * WebAuthn relying-party config for the passkey plugin. The ceremony runs in the
+ * browser on the WEB origin, not this API worker's origin, so the plugin's
+ * `baseURL`-derived defaults would fail every rpID/origin check. Both derive from
+ * `WEB_BASE_URL` instead (`origin` without a trailing slash, as the browser writes
+ * it into clientDataJSON).
  *
- *  • `rpID` is the web HOST (`releases.sh`). A passkey scoped to the apex is
- *    usable from both `releases.sh` and `api.releases.sh` because rpID must be a
- *    registrable suffix of the page origin and the apex is a suffix of itself.
- *  • `origin` is the full web ORIGIN (`https://releases.sh`) — the value the
- *    browser writes into clientDataJSON, which the plugin verifies verbatim (no
- *    trailing slash).
- *  • `rpName` is the human-facing label shown in the OS/browser passkey prompt.
- *
- * Prod/staging set `WEB_BASE_URL`; the fallback keeps the prod web origin so a
- * missing var degrades to the right host rather than the API host. Locally
- * `WEB_BASE_URL` is the portless web origin (`https://releases.localhost`),
- * yielding rpID `releases.localhost` — valid for WebAuthn dev. A worktree-prefixed
- * dev host (`feat-x.releases.localhost`) won't match this single origin, so passkey
- * testing in a worktree needs `WEB_BASE_URL` pointed at that exact host. Pure +
- * exported so it's unit-testable in isolation (mirrors `deriveCookieDomain`).
+ * A worktree-prefixed dev host won't match this single origin, so passkey testing
+ * in a worktree needs `WEB_BASE_URL` pointed at that exact host.
  */
 export function derivePasskeyRp(env: { WEB_BASE_URL?: string }): {
   rpID: string;
@@ -647,17 +549,12 @@ function applyCorsHeaders(
 }
 
 /**
- * Worker-wide CORS (#2205), keyed on origin not path:
- * trusted first-party → reflect + credentials; else → `*` (no credentials);
- * no Origin → no CORS headers. New session-cookie browser surfaces need no
- * registration — only the trusted-origin list shared with Better Auth.
+ * Worker-wide CORS (#2205), keyed on origin not path: trusted first-party →
+ * reflect + credentials; else `*` (no credentials); no Origin → no CORS headers.
  *
- * Headers for non-OPTIONS requests are applied AFTER `next()`. Setting them
- * before is lost when a handler returns a raw `Response` (Hono replaces
- * `c.res` and does not merge pre-set `c.header()` values) — which is exactly
- * what `/api/auth/*` does via Better Auth. That regression shipped in #2207
- * and broke production `get-session` (200 with no ACAO). OPTIONS still returns
- * early with headers on a Hono-built body, so it never hit the bug.
+ * Non-OPTIONS headers are applied AFTER `next()`: a handler returning a raw
+ * `Response` (Better Auth on `/api/auth/*`) replaces `c.res` and drops pre-set
+ * `c.header()` values (#2207 broke prod `get-session` this way).
  */
 export function apiCorsMiddleware(): MiddlewareHandler<Env> {
   return async (c, next) => {
@@ -695,8 +592,6 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
 
     // 101 (WebSocket upgrade) headers are immutable — same skip as cacheDefaultDeny.
     if (c.res.status === 101) return;
-    // Must mutate the finalized response: raw Response returns (Better Auth)
-    // replace c.res and drop any pre-next c.header() values.
     c.res.headers.set("Access-Control-Expose-Headers", "Idempotency-Replayed");
     if (origin) applyCorsHeaders(c.res.headers, origin, env);
   };
