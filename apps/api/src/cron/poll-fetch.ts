@@ -417,7 +417,7 @@ export async function pollOne(
     drainSelfFlag?: { staleHours: number };
     /**
      * When present, a scrape/agent poll that flags the source arms the per-org
-     * `OrgActor` drain immediately via this namespace (#1946 phase 2) rather than
+     * `OrgActor` drain immediately via this namespace (#1946) rather than
      * waiting for the source's next `SourceActor` alarm to notice the flag. Absent
      * ⇒ no eager notify (the alarm backstop still covers it).
      */
@@ -466,7 +466,7 @@ export async function pollOne(
       opts.signedFetch,
       opts.drainSelfFlag,
     );
-    // Eager drain-arm (#1946 phase 2): a `changed` result here means this poll
+    // Eager drain-arm (#1946): a `changed` result here means this poll
     // just set `changeDetectedAt` for the OrgActor drain (this is exactly the
     // scrape/agent-no-feed drain-candidate shape). Arm the drain now — an
     // in-worker DO RPC — instead of waiting up to a full tier interval for the

@@ -1,7 +1,7 @@
 /**
  * Shared batch-release ingest core, extracted from `postReleasesBatchHandler`
- * (#1946 phase 4, task 3) so a later D1 persister can call it in-process
- * without going through HTTP.
+ * (#1946) so the D1 persister can call it in-process without going through
+ * HTTP.
  *
  * Split in two:
  * - `ingestReleaseBatch` — the durable core: deny filter, scrape title-dedup,

@@ -115,7 +115,7 @@ export interface Env {
   /**
    * Rollout gate for the Better Auth user-API-key (`relu_`) path — mirrors the
    * API worker. When not "true", presented `relu_` keys resolve to anonymous
-   * read (the path is inert). Flip on in BOTH Flagship apps at Phase 3 rollout.
+   * read (the path is inert).
    */
   USER_API_KEYS_ENABLED?: string;
   /** Service binding to the API worker — used for on-demand /v1/lookups calls. */

@@ -4,8 +4,7 @@ import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
  * (inbound webhook → POST /v1/inbound/firecrawl). Re-scrapes the
  * page via Firecrawl, extracts releases, inserts them through the standard
  * ingest tail (dedup → coverage → publish → revalidate ping), then embeds and
- * optionally summarizes the new rows. See Phase 2 of the Firecrawl monitoring
- * integration plan.
+ * optionally summarizes the new rows. See docs/architecture/firecrawl-monitoring.md.
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";

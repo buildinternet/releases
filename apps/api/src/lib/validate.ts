@@ -6,7 +6,7 @@
  * Two payoffs over hand-rolled `await c.req.json().catch(...)` + ad-hoc checks
  * in each handler:
  *   1. The Zod schema is published in `requestBody.content["application/json"]`
- *      of the route's OpenAPI spec automatically — Phase 2 of issue #894.
+ *      of the route's OpenAPI spec automatically (#894).
  *   2. The handler reads `c.req.valid("json")` and is guaranteed a typed,
  *      parsed body. No second-pass validation; no `body as Record<…>` cast.
  *

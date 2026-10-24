@@ -26,7 +26,7 @@ export interface ScrapeFetchOutcome {
   errorCategory?: string;
   /**
    * Release IDs inserted this fetch, when the scrapeFetch success JSON carries
-   * them (#1946 phase 4) — drives the deterministic-update workflow's
+   * them (#1946) — drives the deterministic-update workflow's
    * post-insert summarize/embed/invalidate chain. Absent on non-JSON/failure
    * results and on older callers whose persister doesn't return ids.
    */

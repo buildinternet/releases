@@ -61,7 +61,7 @@ listingRoutes.get(
 );
 
 /**
- * Self-serve listing lane (#1947 phase 2). Both routes are PUBLIC and
+ * Self-serve listing lane (#1947). Both routes are PUBLIC and
  * anonymous — integrity comes from manifest host-scoping (you can only
  * declare a domain you control), the kill switch, and the rate limiters.
  */

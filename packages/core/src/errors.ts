@@ -48,7 +48,7 @@ export function statusForType(type: ErrorType): number {
  * once shipped a code is never reworded (the message may change; the code may
  * not). Open on the wire — a new server code an old client doesn't recognize
  * still decodes — but producers construct from this registry so a typo is a
- * compile error. First cut; finalized against the ~486 producer sites in Phase 3.
+ * compile error.
  */
 export const ERROR_CODES = [
   "validation_failed",
@@ -68,8 +68,8 @@ export const ERROR_CODES = [
   "service_unavailable",
   "internal_error",
   "db_too_many_variables",
-  // Phase 3 promotions — distinct domain codes a client branches on. Each maps
-  // to an existing `type` (no new ErrorType); see the Phase 3 code-mapping table.
+  // Distinct domain codes a client branches on. Each maps to an existing `type`
+  // (no new ErrorType).
   "instance_not_found", // not_found
   "client_not_found", // not_found
   "user_not_found", // not_found

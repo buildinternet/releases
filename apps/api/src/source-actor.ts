@@ -164,7 +164,7 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
-   * MA-delegation lock — atomic try-acquire (#1780 Box 1 / #1814).
+   * MA-delegation lock — atomic try-acquire (#1814).
    *
    * The DO runs single-threaded, so this read-then-write is indivisible. Claims the lease for
    * `sessionId` with a fresh 15-min deadline and returns `{ acquired: true }`

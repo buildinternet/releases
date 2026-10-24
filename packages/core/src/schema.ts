@@ -95,7 +95,7 @@ export const organizations = sqliteTable(
     // never reached its `finally`. Internal-only — never exposed on any read
     // surface or in api-types.
     promotingAt: text("promoting_at"),
-    // Owner demand signal (#1947 phase 2): stamped when a domain owner requests
+    // Owner demand signal (#1947): stamped when a domain owner requests
     // tracking through the self-serve listing lane (POST /v1/listing/activate
     // with requestTracking). Repeat requests refresh the timestamp. Internal —
     // surfaced only on admin read surfaces, never in public api-types.
@@ -395,7 +395,7 @@ export const collectionDailySummaries = sqliteTable(
 // collection's members, with `[text](rel:rel_ID)` placeholders resolved to
 // real release IDs at generation time. Written by the nightly
 // collection-summaries cron on ET Mondays (the just-closed week); read by
-// GET /v1/collections/:slug/digests (PR B, not yet built). Weeks are ET
+// GET /v1/collections/:slug/digests. Weeks are ET
 // Monday–Sunday; `weekStart` is the Monday as YYYY-MM-DD.
 export const collectionWeeklyDigests = sqliteTable(
   "collection_weekly_digests",
@@ -623,7 +623,7 @@ export type NewReleaseLocation = typeof releaseLocations.$inferInsert;
 
 // Ownership claim flow (#1947 epic item 2). A signed-in user proves control of
 // a listed domain via a well-known token file OR a DNS TXT record (either
-// passes); a verified claim unlocks self-serve Tier-1 promotion (PR B).
+// passes); a verified claim unlocks self-serve Tier-1 promotion.
 // Multiple pending claims may coexist; at most one verified claim per
 // (org, user) is meaningful — re-verifying is idempotent at the route layer.
 // Ending a claim (#2389) keeps the row as `revoked` with who/when/why; the

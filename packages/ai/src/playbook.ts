@@ -327,7 +327,7 @@ export function serializePlaybookNotes(
 /**
  * Read the typed `fetchQuirks` entry for a given source slug out of stored
  * playbook notes. Returns `null` when the playbook has no frontmatter, no
- * `fetchQuirks` map, or no entry for that slug. Phase 2 (#517) reads this in
+ * `fetchQuirks` map, or no entry for that slug. Read (#517) in
  * `pollOne` to route scrape-no-feed / agent sources to a change detector.
  */
 export function loadFetchQuirks(

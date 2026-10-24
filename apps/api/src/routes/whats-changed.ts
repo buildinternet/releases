@@ -1,7 +1,7 @@
 /**
- * `GET /v1/whats-changed` — upgrade-intelligence Phase 1 (#1697). Given one
+ * `GET /v1/whats-changed` — upgrade intelligence (#1697). Given one
  * package and a `from`/`to` version, return the ordered changelog entries in the
- * half-open range `(from, to]`, their summaries, and (now that #1696 landed)
+ * half-open range `(from, to]`, their summaries, and
  * their breaking-change verdicts + migration notes. The wedge feature for the
  * agent-native channel: an agent can't visit N changelog pages to plan an
  * upgrade, but it can make one call here.
@@ -12,7 +12,7 @@
  * HTTP 200 (a valid answer, not an error) — never a write side effect (the
  * confused-deputy guard the MCP auth model warns about).
  *
- * Phase 2 (`upgrade_plan` over a whole manifest) fans this out per dependency
+ * A future `upgrade_plan` over a whole manifest would fan this out per dependency
  * and aggregates — design the response so a manifest result is a map of these.
  */
 import { Hono } from "hono";

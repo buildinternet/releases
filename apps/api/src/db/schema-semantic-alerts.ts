@@ -3,7 +3,7 @@ import { webhookSubscriptions } from "@buildinternet/releases-core/schema";
 import { user } from "./schema-auth.js";
 
 /**
- * User-owned semantic alerts (#2304 Phase 1).
+ * User-owned semantic alerts (#2304).
  *
  * Worker-local schema island (sibling of schema-follows.ts), deliberately NOT in
  * the published `@buildinternet/releases-core` schema: this is user-coupled data
@@ -12,7 +12,7 @@ import { user } from "./schema-auth.js";
  *
  * The candidate pool is follows-only for every row (a product constant, not a
  * column): a release is eligible only if it already hits the owner's follow
- * graph. Phase 2 scores enabled rows with JEV and delivers email/webhook.
+ * graph. Enabled rows are scored with JEV and delivered by email/webhook.
  *
  * `query` is user-private. Do not copy it into Analytics Engine points or logs.
  * `webhook_subscription_id` optionally points at one of the owner's

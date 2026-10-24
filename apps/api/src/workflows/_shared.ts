@@ -1,6 +1,6 @@
 /**
  * Cross-workflow primitives. Constants and helpers shared between workflow
- * classes (phase 1 sweep, phase 2 poll-and-fetch, phase 3 onboarding).
+ * classes.
  */
 
 import { workflowFailures } from "../db/schema-workflow-failures.js";

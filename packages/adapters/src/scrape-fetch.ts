@@ -103,7 +103,7 @@ export interface ScrapeEnv {
   /** Signed outbound fetch for third-party content; falls back to global fetch. */
   signedFetch?: typeof fetch;
   /**
-   * Persistence seam (#1946 phase 4). Defaults to `httpPersister(env)` — the
+   * Persistence seam (#1946). Defaults to `httpPersister(env)` — the
    * API-worker-backed path used by callers without D1/R2 access and
    * everything else that doesn't inject one. A direct-DB persister can be
    * supplied by callers that have D1 access, skipping the HTTP round-trip.

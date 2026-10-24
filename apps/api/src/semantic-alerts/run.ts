@@ -1,6 +1,6 @@
 /**
  * Score one publish batch against follows-scoped semantic alerts and deliver
- * matches (#2304 Phase 2).
+ * matches (#2304).
  *
  * Flag off returns before any read or model call. Candidates are users who
  * follow the release's org or product and have an enabled alert with a

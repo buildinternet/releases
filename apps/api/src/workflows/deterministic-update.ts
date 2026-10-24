@@ -1,30 +1,16 @@
 /**
- * Deterministic per-source update workflow (#1946, phase 1 of the ingest
- * consolidation).
+ * Deterministic per-source update workflow (#1946).
  *
- * Relocates the drain-path execution that lived in the discovery worker's
- * `ManagedAgentsSession.runDeterministicUpdate` (#1878): a routine update run
- * is a plain `scrapeFetch` loop — no coordinator, no Anthropic session — so it
- * now runs as an API-worker workflow, one `step.do` per source. Dispatch (kill
- * switch, spend cap, per-source lock, StatusHub session:start) happens in
- * `lib/sources/update-dispatch.ts` before the instance is created.
+ * A routine update run is a plain `scrapeFetch` loop — no coordinator, no
+ * Anthropic session — run as one `step.do` per source with a per-step timeout.
+ * Dispatch (kill switch, spend cap, per-source lock, StatusHub session:start)
+ * happens in `lib/sources/update-dispatch.ts` before the instance is created.
  *
- * Behavior parity with the retired discovery path:
- *   - `scrapeFetch` still persists through the HTTP API surface — via the
- *     `API_SELF` self service binding, which reproduces the discovery→api
- *     service-binding semantics (own invocation per call, auth middleware,
- *     waitUntil lifetimes) exactly. Direct-DB persistence is the phase-3
- *     consolidation, not this change.
  *   - A run where every processed source failed reports `session:error` with
- *     the same `classifyUsFatal` classification; otherwise `session:complete`
- *     with the `mode: "update-deterministic"` result record.
+ *     the `classifyUsFatal` classification; otherwise `session:complete` with
+ *     the `mode: "update-deterministic"` result record.
  *   - Locks release in a `finally`; the SourceActor 15-min lease is the
  *     backstop if the instance dies mid-run.
- *
- * What changed: the old loop ran inside one DO alarm under a 12-min wall-clock
- * budget (sources past the budget were skipped). Each source is now its own
- * workflow step with a per-step timeout, so the batch-level budget (and its
- * skipped-sources accounting) is gone — every source in the batch runs.
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
@@ -55,8 +41,7 @@ export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
    * Self service binding (this worker). Only the extraction-time HTTP calls
    * (content-hash, playbook, usage log via `buildWorkerExtractDeps`'s
    * `ExtractRepo`) still route through this — persistence itself moved to the
-   * direct-D1 persister below (#1946 phase 4, task 8). Out of scope: draining
-   * `ExtractRepo` off HTTP is a later task.
+   * direct-D1 persister below (#1946).
    */
   API_SELF?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   RELEASES_API_KEY?: SecretBinding;
@@ -75,7 +60,7 @@ export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
   STATUS_HUB?: DurableObjectNamespace;
   SOURCE_ACTOR?: DurableObjectNamespace;
 
-  // Direct-D1 persistence + post-insert step bindings (#1946 phase 4). The
+  // Direct-D1 persistence + post-insert step bindings (#1946). The
   // workflow shares the worker's bindings at runtime; this interface only
   // needs to declare the slice `d1ScrapePersister` + `ingest-steps` consume —
   // mirrors `PollAndFetchWorkflowEnv` (apps/api/src/workflows/poll-and-fetch.ts).
@@ -167,7 +152,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
         { budgetMs: Number.POSITIVE_INFINITY },
       );
 
-      // Post-insert summarize/embed/invalidate chain (#1946 phase 4, task 8) —
+      // Post-insert summarize/embed/invalidate chain (#1946) —
       // same steps the poll-and-fetch workflow runs, now that persistence is
       // direct-D1 instead of going through the HTTP self-call. Run per source
       // that actually inserted rows this fetch. A failure here must NOT fail
@@ -356,8 +341,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
       openRouterBaseURL: env.OPENROUTER_BASE_URL,
       extractModel: await effectiveLaneModel(env, "extract"),
       signedFetch,
-      // Direct-D1 persistence (#1946 phase 4, task 6/8) — replaces the HTTP
-      // self-call persister. `apiFetcher` above stays wired for the
+      // Direct-D1 persistence (#1946). `apiFetcher` above stays wired for the
       // extraction-time HTTP calls only.
       persister: d1ScrapePersister({ db, env, sessionId, captureRawSnapshots }),
     };

@@ -43,7 +43,7 @@ import {
 } from "../lib/ingest/ingest-steps.js";
 // Back-compat re-exports: existing importers (backfill-source, batch-enrich,
 // routes/workflows, tests) still import these shared primitives from this
-// module. Their canonical home is now lib/ingest/ingest-steps.ts (#1946 phase 3).
+// module. Their canonical home is now lib/ingest/ingest-steps.ts (#1946).
 export {
   RETRY_POLL,
   RETRY_FETCH,
@@ -96,7 +96,7 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
     SOURCE_ACTOR?: DurableObjectNamespace;
     /**
-     * Per-org drain actor (#1946 phase 2): when the poll step flags a scrape/
+     * Per-org drain actor (#1946): when the poll step flags a scrape/
      * agent source, `pollOne` arms this OrgActor immediately instead of leaving
      * the arming to the source's next `SourceActor` alarm.
      */
@@ -250,7 +250,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
           playbookNotes: source.orgId ? (notesByOrg.get(source.orgId) ?? null) : null,
           signedFetch: await makeBotFetch(env),
           drainSelfFlag,
-          // #1946 phase 2: arm the OrgActor drain the instant this poll flags a
+          // #1946: arm the OrgActor drain the instant this poll flags a
           // scrape/agent source, removing the up-to-one-tier-interval arming lag.
           drainOrgActor: env.ORG_ACTOR,
         });

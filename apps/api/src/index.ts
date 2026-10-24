@@ -235,14 +235,14 @@ export type Env = {
     FEEDBACK_RATE_LIMIT_ENABLED?: string;
     FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
     // Anonymous self-serve listing lane (/v1/listing validate + activate,
-    // #1947 phase 2). Kill switch + per-IP and per-domain rate limiters.
+    // #1947). Kill switch + per-IP and per-domain rate limiters.
     LISTING_SELF_SERVE_ENABLED?: string;
     LISTING_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
     LISTING_DOMAIN_RATE_LIMITER?: {
       limit(options: { key: string }): Promise<{ success: boolean }>;
     };
     // Self-serve Tier-1 promotion for verified owners (/v1/listing/promote,
-    // #1947 PR B). Off = route refuses. Reuses LISTING_DOMAIN_RATE_LIMITER.
+    // #1947). Off = route refuses. Reuses LISTING_DOMAIN_RATE_LIMITER.
     LISTING_SELF_SERVE_PROMOTION_ENABLED?: string;
     // Per-sub / per-user caps on POST /v1/me/webhooks/:id/test (see test-rate-limit.ts).
     WEBHOOK_TEST_RATE_LIMIT_ENABLED?: string;

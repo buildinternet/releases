@@ -1,6 +1,6 @@
 /**
  * Fetch-completion source write, extracted so a future D1 persister can call
- * it in-process (#1946 phase 4, task 5).
+ * it in-process (#1946).
  *
  * This is the narrow write `updateSourceAfterFetch` performs today via a
  * PATCH: counter resets + the same fire-and-forget playbook regen that

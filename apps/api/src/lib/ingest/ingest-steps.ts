@@ -1,5 +1,5 @@
 /**
- * Shared ingest step primitives for the workflow ingest paths (#1946 phase 3).
+ * Shared ingest step primitives for the workflow ingest paths (#1946).
  *
  * The poll path (`workflows/poll-and-fetch.ts`) and the Firecrawl webhook path
  * (`workflows/firecrawl-ingest.ts`) run the SAME post-insert side-effect chain —
