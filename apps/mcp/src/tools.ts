@@ -509,10 +509,8 @@ export async function resolveSource(db: D1Db, identifier: string) {
   // (#690), so enumerate every org's match instead of `.limit(1)`-ing onto an
   // arbitrary one — org-joined so an ambiguous result can echo org/slug + src_…
   // candidates: 0 → null, 1 → resolve, >1 → throw rather than silently
-  // resolving the wrong org (#1324, mirroring releases-cli#267). Callers still
-  // short-circuit bare slugs with isBareSlug() for a friendlier hint; this is
-  // the safety net so correctness no longer depends on every caller remembering
-  // that guard.
+  // resolving the wrong org (#1324). Callers still short-circuit bare slugs with
+  // isBareSlug() for a friendlier hint; this is the safety net.
   const matches = await listSourcesBySlug(db, id);
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0].row;

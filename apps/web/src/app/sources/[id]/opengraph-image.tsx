@@ -15,10 +15,8 @@ export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
 export const generateStaticParams = enableOnDemandIsr;
 
-// Stays on REST (out of scope for #1978 slice 3 — see PR description): the
-// `_lib/source-by-id.ts` helper other routes under this segment share is now
-// GraphQL-backed and no longer carries `releaseCount` / `releasesLast30Days`,
-// so this route calls `api.sourceById` directly instead.
+// Stays on REST: the shared `_lib/source-by-id.ts` helper is GraphQL-backed and
+// doesn't carry `releaseCount` / `releasesLast30Days`.
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {

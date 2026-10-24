@@ -111,14 +111,6 @@ export interface ScrapeEnv {
   persister?: ScrapePersister;
 }
 
-// ── API helpers ────────────────────────────────────────────────────
-//
-// The HTTP-backed helpers that used to live here (fetchSourceInfo,
-// fetchKnownReleases, insertReleases, updateSourceAfterFetch, writeFetchLog,
-// sourceSubpath) have moved to `./scrape-persister.js` as `httpPersister`'s
-// methods (#1946 phase 4). `scrapeFetch` now goes through the injected (or
-// default HTTP) `ScrapePersister` — see the top of `scrapeFetch` below.
-
 // ── Content acquisition for scrape path ───────────────────────────
 
 /**

@@ -155,11 +155,10 @@ export async function generateContentForReleases(
     return 0;
   }
 
-  // A bulk insert (the OpenRouter blog's 72-row `/releases/batch`, a first
-  // feed onboard) used to trip the cap below and return 0 for the whole set.
-  // Recurse per chunk so each wave commits its own updates — a timeout keeps
-  // the slices that already landed, and `title_generated IS NULL` makes the
-  // retry fill only the rest. `summarize=false` is applied inside each slice.
+  // A bulk insert (e.g. a first feed onboard) exceeds the cap. Recurse per chunk so each
+  // wave commits its own updates — a timeout keeps the slices that already landed, and
+  // `title_generated IS NULL` makes the retry fill only the rest. `summarize=false` is
+  // applied inside each slice.
   if (insertedIds.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
     logEvent("info", {
       component: "auto-generate-content",

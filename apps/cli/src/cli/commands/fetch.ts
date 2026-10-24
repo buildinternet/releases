@@ -134,10 +134,8 @@ Examples:
           logger.warn("--force only applies with --local; ignoring it for the remote fetch path.");
         }
 
-        // A single source identifier and --org are mutually exclusive — the
-        // org fan-out used to win silently, dropping the identifier and
-        // dispatching a managed-agent session over every active source in the
-        // org (#307). Mirrors `latest`'s --product/--org rejection.
+        // A single source identifier and --org are mutually exclusive, or the
+        // org fan-out would silently fetch every source in the org (#307).
         if (identifier && opts.org) {
           logger.error(
             "A source identifier can't be combined with --org. Pass one source (src_…, org/slug, or --source), or use --org alone to fetch the whole org.",
