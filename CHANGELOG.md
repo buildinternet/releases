@@ -3,6 +3,20 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 22, 2026
+
+**Fixed**
+- Live release stream and `releases tail` were failing to connect 9 times out of 10 — the WebSocket handshake now succeeds reliably.
+- Release list pages were going blank when any source contained a release with an unrecognized type value from AI extraction; those releases now display as expected.
+- Search recency ranking was ignoring undated releases — results now use fetch date as a fallback, restoring the recency boost for releases without a publication date.
+- A database health probe returning an empty response during a brief outage was incorrectly reporting "run migrations first"; it now returns a retryable 503 like other transient failures.
+- `releases` CLI binaries rebuilt with Bun 1.4.4, removing trust for a compromised intermediate certificate (CVE-2026-111943).
+
+## October 21, 2026
+
+**Fixed**
+- Patched four Next.js security advisories affecting the web frontend (SVG RCE via Image Optimization, `use cache` typed-array RCE, Server Action DoS, Image Optimization SSRF) and four MCP server/client advisories affecting the remote MCP server.
+
 ## October 20, 2026
 
 **Fixed**
