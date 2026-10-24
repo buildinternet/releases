@@ -134,6 +134,8 @@ import type {
   DeleteSourceReleasesResponseSchema,
   InsertReleaseResponseSchema,
   BatchReleasesResponseSchema,
+  BatchReleaseInputSchema,
+  BatchReleasesBodySchema,
   RawSnapshotResponseSchema,
   OversizedChangelogFileRowSchema,
   OversizedChangelogFilesResponseSchema,
@@ -584,6 +586,8 @@ export {
   DeleteSourceReleasesResponseSchema,
   InsertReleaseResponseSchema,
   BatchReleasesResponseSchema,
+  BatchReleaseInputSchema,
+  BatchReleasesBodySchema,
   RawSnapshotResponseSchema,
   OversizedChangelogFileRowSchema,
   OversizedChangelogFilesResponseSchema,
@@ -910,6 +914,8 @@ export type DeleteSourceResponse = z.infer<typeof DeleteSourceResponseSchema>;
 export type DeleteSourceReleasesResponse = z.infer<typeof DeleteSourceReleasesResponseSchema>;
 export type InsertReleaseResponse = z.infer<typeof InsertReleaseResponseSchema>;
 export type BatchReleasesResponse = z.infer<typeof BatchReleasesResponseSchema>;
+export type BatchReleaseInput = z.infer<typeof BatchReleaseInputSchema>;
+export type BatchReleasesBody = z.infer<typeof BatchReleasesBodySchema>;
 export type RawSnapshotResponse = z.infer<typeof RawSnapshotResponseSchema>;
 export type OversizedChangelogFileRow = z.infer<typeof OversizedChangelogFileRowSchema>;
 export type OversizedChangelogFilesResponse = z.infer<typeof OversizedChangelogFilesResponseSchema>;

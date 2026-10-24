@@ -62,6 +62,12 @@ export const PUBLIC_OPERATIONS: Record<string, PublicAuth> = {
   "GET /sources/:slug/releases": "optional",
   "GET /orgs/:orgSlug/sources/:sourceSlug": "optional",
   "GET /orgs/:orgSlug/sources/:sourceSlug/releases": "optional",
+  "GET /sources/:slug/changelog": "optional",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/changelog": "optional",
+
+  // ── Publishing (write token, or a publish token bound to the source) ──
+  "POST /sources/:slug/releases/batch": "required",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch": "required",
 
   "GET /releases/latest": "optional",
   "GET /releases/:id": "optional",
@@ -197,10 +203,6 @@ export const INTERNAL_OPERATIONS = new Set<string>([
   "GET /orgs/:slug/overview/inputs",
   "GET /orgs/:slug/playbook",
   "GET /orgs/:slug/ignored-urls",
-  // CHANGELOG-file reads: candidates for the public surface once their
-  // response shapes are settled.
-  "GET /sources/:slug/changelog",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/changelog",
 
   // Curator writes on catalog entities.
   "POST /orgs",
@@ -272,11 +274,6 @@ export const INTERNAL_OPERATIONS = new Set<string>([
   "DELETE /feedback/:id",
   "PATCH /recommendations/:id",
   "DELETE /recommendations/:id",
-
-  // Release publishing: candidate for the public surface (publish tokens,
-  // `actions/publish-changelog`) once its request body is modelled.
-  "POST /sources/:slug/releases/batch",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
 
   // Experimental coordinate-based changelog fetch/parse (no persistence).
   "POST /changelog/fetch",

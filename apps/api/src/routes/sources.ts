@@ -95,6 +95,7 @@ import {
   DeleteSourceReleasesResponseSchema,
   SourceReleasesResponseSchema,
   InsertReleaseResponseSchema,
+  BatchReleasesBodySchema,
   BatchReleasesResponseSchema,
   RawSnapshotResponseSchema,
   OversizedChangelogFilesResponseSchema,
@@ -102,7 +103,7 @@ import {
   FeedSourcesResponseSchema,
   ChangedSourcesResponseSchema,
 } from "@buildinternet/releases-api-types";
-import { validateJson } from "../lib/validate.js";
+import { documentedJsonBody, validateJson } from "../lib/validate.js";
 import {
   getStatusHub,
   orgWhere,
@@ -912,23 +913,21 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
 };
 const postReleasesBatchRoute = describeRoute({
   tags: ["Sources"],
-  summary: "Batch insert releases",
+  summary: "Publish a batch of releases",
   description:
-    "Inserts or upserts a batch of release rows for the source identified by slug or `src_…` ID on the bare path, or by org-scoped slug pair. Body: `{ releases: Array<{ title, content, version?, url?, contentHash?, publishedAt?, media?, type?, prerelease? }> }`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. On URL collision (`UNIQUE(source_id, url)`), content is backfilled when the incoming value is non-empty and the existing value is empty. LLM-generated placeholder versions (`<UNKNOWN>`, `n/a`) are stripped server-side. Release vectors are embedded asynchronously via `waitUntil`. Emits real-time events to the `ReleaseHub` Durable Object. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    "Inserts or updates releases for one source, identified by slug or `src_…` ID on the bare path, or by the org-scoped slug pair. Releases are matched on `url`: a new URL inserts, a known URL fills empty fields, or, with `mode: \"upsert-content\"`, overwrites content and media. Re-posting the same batch is safe. Requires a `write` token, or a publish token bound to this source. A source's first write with its owner's publish token marks it push-fed, so it is no longer polled.",
   security: [{ bearerAuth: [] }],
+  requestBody: documentedJsonBody(BatchReleasesBodySchema),
   responses: {
     200: {
-      description: "Batch result: inserted count and updated source total",
+      description: "Batch result: inserted count, the source's new release total, and the new IDs",
       content: { "application/json": { schema: resolver(BatchReleasesResponseSchema) } },
     },
-    404: {
-      description: "Source not found",
-      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
-    },
-    500: {
-      description: "D1 insert failed",
-      content: { "application/json": { schema: ERROR_ENVELOPE_SCHEMA } },
-    },
+    400: errorResponse("`releases` is not an array, or `mode` is not `upsert-content`"),
+    401: errorResponse("Bearer token required"),
+    403: errorResponse("Token lacks write scope, or the publish token is bound to another source"),
+    404: errorResponse("Source not found"),
+    500: errorResponse("D1 insert failed"),
   },
 });
 sourceRoutes.post(
@@ -1637,7 +1636,32 @@ const getSourceChangelogRoute = describeRoute({
   tags: ["Sources"],
   summary: "Get source changelog",
   description:
-    "Returns the source's tracked CHANGELOG.md (or the file selected by `?path=`). Range params: `?offset=`, `?limit=` (chars), `?tokens=` (cl100k_base budget). Always emits the full `files` index so clients can render a file picker.",
+    "Returns the source's tracked CHANGELOG.md (or the file selected by `?path=`), sliced by characters (`?offset=`, `?limit=`) or by a cl100k_base token budget (`?tokens=`). Page with `nextOffset`. Always includes the full `files` index so clients can render a file picker.",
+  parameters: [
+    {
+      name: "path",
+      in: "query",
+      required: false,
+      schema: { type: "string" },
+      description:
+        "Repo path of the file to return, from `files[].path`. Defaults to the root CHANGELOG.",
+    },
+    { name: "offset", in: "query", required: false, schema: { type: "integer", minimum: 0 } },
+    {
+      name: "limit",
+      in: "query",
+      required: false,
+      schema: { type: "integer", minimum: 1 },
+      description: "Slice length in characters.",
+    },
+    {
+      name: "tokens",
+      in: "query",
+      required: false,
+      schema: { type: "integer", minimum: 1 },
+      description: "Slice to this many cl100k_base tokens instead of `limit` characters.",
+    },
+  ],
   responses: {
     200: {
       description: "Changelog slice with file index",

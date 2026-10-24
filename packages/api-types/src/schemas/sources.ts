@@ -10,6 +10,7 @@ import {
   NoticeSchema,
   ReleaseItemSchema,
   ReleaseSummaryItemSchema,
+  ReleaseTypeSchema,
 } from "./shared.js";
 
 export const SourceTypeSchema = z.enum(SOURCE_TYPES);
@@ -603,10 +604,48 @@ export const InsertReleaseResponseSchema = z.union([
 
 // ── Batch release insert (POST /sources/:slug/releases/batch) ──
 
+/** One release in a `POST /v1/sources/:slug/releases/batch` body. */
+export const BatchReleaseInputSchema = z.object({
+  title: z.string(),
+  content: z.string().describe("Release notes, as markdown."),
+  version: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Placeholder versions such as `<UNKNOWN>` or `n/a` are stripped."),
+  url: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Canonical permalink. Re-posting the same URL updates that release."),
+  contentHash: z.string().optional(),
+  publishedAt: z.string().nullable().optional().describe("ISO 8601 timestamp."),
+  media: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("JSON-encoded array of `{ type, url, alt? }` media items."),
+  type: ReleaseTypeSchema.optional(),
+  prerelease: z.boolean().optional(),
+});
+
+/**
+ * Body for `POST /v1/sources/:slug/releases/batch`. Without `mode`, a URL that
+ * already exists only has its empty fields filled. `mode: "upsert-content"`
+ * overwrites content and media on a URL match, which is what publishers
+ * (`actions/publish-changelog`, `releases publish`) send.
+ */
+export const BatchReleasesBodySchema = z.object({
+  mode: z.literal("upsert-content").optional(),
+  releases: z.array(BatchReleaseInputSchema),
+});
+
 /** Response for `POST /v1/sources/:slug/releases/batch`. */
 export const BatchReleasesResponseSchema = z.object({
   inserted: z.number().int().min(0),
   total: z.number().int().min(0),
+  /** IDs of the releases this batch created (not those it updated). */
+  insertedIds: z.array(z.string()),
 });
 
 // ── Raw page snapshot (POST /sources/:slug/raw-snapshot) ──
