@@ -266,6 +266,8 @@
   // ALERT_DEDUP_KV stores 1h dedup keys for Tier-1 alert emails (keys:
   // alert:<subject>). Reuses the LATEST_CACHE namespace to avoid provisioning
   // a new resource — alert keys use a distinct prefix so they never collide.
+  // The same namespace also holds the default GET /v1/stats rollup (key
+  // stats:v1:days=30), refreshed by the hourly cron (routes/stats.ts).
   "kv_namespaces": [
     {
       "binding": "EMBED_CACHE",
