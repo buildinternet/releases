@@ -1,5 +1,17 @@
 # @buildinternet/releases
 
+## 0.84.0
+
+### Minor Changes
+
+- 30f025f: The CLI now sends its public API calls (follows, the personalized feed, webhooks, workspaces, release reads, collections, search, domain lookup, changelogs and overviews) through `@buildinternet/releases-sdk`. `releases feed` pages with `--cursor` instead of `--page`, which the API rejects. `releases search` gains `--org`.
+
+  The API now honors three filters the CLI already sent: `org` on `GET /v1/search` (slug or `org_…` id, echoed as `org` / `orgStatus`), `platform` on `GET /v1/orgs`, and `minImportance` on `GET /v1/orgs/:slug/releases`. The SDK's `SearchQuery`, `OrgListQuery` and `OrgReleasesQuery` take them, and api-types adds `org` / `orgStatus` to the search response. Rows of the org and collection release feeds now type `id` as always present, matching what the API returns.
+
+### Patch Changes
+
+- 2ff1665: The CLI's org, product and source lookups, the org list, and `releases publish` now go through `@buildinternet/releases-sdk`, typed against the API's wire shapes. That surfaced fields the CLI printed but the API never sent: `releases org get` now shows real Created/Updated times, `releases source show` shows the fetch priority, and `releases org list` replaces its always-empty Updated column with the last release date. In api-types, `OrgDetail` gains `createdAt` / `updatedAt` and types `id` as always present, and `SourceDetail` gains `fetchPriority`.
+
 ## 0.83.5
 
 ### Patch Changes
