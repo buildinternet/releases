@@ -38,6 +38,9 @@ export const publicReadRoutes = [
   // /site-notice: public GET (active notice, cached). PUT is admin-gated inside
   // the handler (isValidBearerAuth) on top of the namespace write gate.
   "site-notice",
+  // /whats-changed: GET-only upgrade-range read. Listed here so it gets the
+  // same per-IP limiter and D1 health gate as every other public read.
+  "whats-changed",
 ] as const;
 
 /**

@@ -64,6 +64,7 @@ import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
 import { handleQueueBatch } from "./queues/handler.js";
 import { runCollectionSummaries } from "./cron/collection-summaries.js";
+import { refreshStatsRollup } from "./routes/stats.js";
 import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/email/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
@@ -1271,6 +1272,16 @@ export default {
       );
       return;
     }
+    // Recompute the default /v1/stats rollup into KV so public stats reads never
+    // fan out to D1 (a cold-cache burst of them overloaded D1 on 2026-10-24/25).
+    // Logged, not alerted: a missed refresh just leaves the previous rollup up.
+    ctx.waitUntil(
+      loggedDispatch(
+        "stats-rollup-cron",
+        refreshStatsRollup({ DB: env.DB, LATEST_CACHE: env.LATEST_CACHE }),
+      ),
+    );
+
     // Resilience: on every hourly fire, flag firecrawl-owned sources whose
     // monitor has stopped delivering (out of credits / suspended / receiver
     // rejecting). Cheap scan over the handful of firecrawl sources. No-ops when
