@@ -63,9 +63,15 @@ describe("getSecret", () => {
     expect((binding as any).callCount).toBe(2);
   });
 
-  it("throws when both attempts fail", async () => {
+  it("retries twice on back-to-back transient failures and succeeds", async () => {
+    const binding = makeFailingBinding(2, "retry-secret");
+    expect(await getSecret(binding)).toBe("retry-secret");
+    expect((binding as any).callCount).toBe(3);
+  });
+
+  it("throws when every attempt fails", async () => {
     const binding = makeAlwaysFailingBinding();
-    await expect(getSecret(binding)).rejects.toThrow("Failed to resolve secret after 2 attempts");
+    await expect(getSecret(binding)).rejects.toThrow("Failed to resolve secret after 3 attempts");
   });
 });
 
