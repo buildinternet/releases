@@ -7,6 +7,7 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../src/db.js";
 import { Hono } from "hono";
 import { fetchLogRoutes } from "../src/routes/fetch-log.js";
+import { sourceRoutes } from "../src/routes/sources.js";
 
 // Non-converging no-op drain auto-pause (#1862). The fetch-log POST handler
 // counts consecutive flagged-but-empty drains and pauses the source at the
@@ -38,13 +39,15 @@ async function seedSource(db: D1Db, overrides: Record<string, unknown> = {}) {
   });
 }
 
-function mkApp(db: D1Db) {
+function mkApp(db: D1Db, opts?: { sources?: boolean }) {
   const fakeEnv = { DB: db };
+  const fakeCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
   const app = new Hono();
   const v1 = new Hono();
   v1.route("/", fetchLogRoutes);
+  if (opts?.sources) v1.route("/", sourceRoutes);
   app.route("/v1", v1);
-  return async (req: Request) => app.fetch(req, fakeEnv as never);
+  return async (req: Request) => app.fetch(req, fakeEnv as never, fakeCtx as never);
 }
 
 function postLog(fetch: (req: Request) => Promise<Response>, body: Record<string, unknown>) {
@@ -116,5 +119,28 @@ describe("fetch-log unproductive-drain auto-pause (#1862)", () => {
     expect((await readSource(db)).unproductiveDrains).toBe(2);
     await postLog(fetch, { wasFlagged: true, releasesInserted: 3, status: "success" });
     expect((await readSource(db)).unproductiveDrains).toBe(0);
+  });
+
+  it("stays un-paused after one empty drain when un-paused at the threshold (#2550)", async () => {
+    const db = mkDb();
+    await seedSource(db, { fetchPriority: "paused", unproductiveDrains: PAUSE_AFTER });
+    const fetch = mkApp(db, { sources: true });
+
+    const unpause = await fetch(
+      new Request("https://x.test/v1/sources/src_a1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fetchPriority: "normal" }),
+      }),
+    );
+    expect(unpause.status).toBe(200);
+    expect((await readSource(db)).fetchPriority).toBe("normal");
+    expect((await readSource(db)).unproductiveDrains).toBe(0);
+
+    const drain = await postLog(fetch, { wasFlagged: true });
+    expect(drain.status).toBe(201);
+    const src = await readSource(db);
+    expect(src.unproductiveDrains).toBe(1);
+    expect(src.fetchPriority).toBe("normal");
   });
 });

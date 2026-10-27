@@ -2673,6 +2673,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     "fetchPriority",
     "consecutiveNoChange",
     "consecutiveErrors",
+    "unproductiveDrains",
     "nextFetchAfter",
     "isPrimary",
     "isHidden",
@@ -2735,6 +2736,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.consecutiveNoChange !== undefined)
     updates.consecutiveNoChange = body.consecutiveNoChange;
   if (body.consecutiveErrors !== undefined) updates.consecutiveErrors = body.consecutiveErrors;
+  if (body.unproductiveDrains !== undefined) updates.unproductiveDrains = body.unproductiveDrains;
   if (body.nextFetchAfter !== undefined) updates.nextFetchAfter = body.nextFetchAfter;
   if (body.isPrimary !== undefined) updates.isPrimary = body.isPrimary;
   if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
@@ -2753,12 +2755,20 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   }
 
   // Un-pausing is the operator's manual "try again" signal (#1852 auto-pauses
-  // a source stuck maxing extraction output — see fetch-log.ts's
+  // a source stuck maxing extraction output — see fetch-log-ingest.ts's
   // applyScrapeFailureBackoff). The crawl path memoizes a failed extraction's
   // input hash (`metadata.lastFailedExtractHash`) so a byte-identical re-crawl
   // skips re-extracting a guaranteed-doomed body; that memo would otherwise
   // outlive a code/prompt/model fix and keep skipping forever. Clear it here
   // so the very next fetch after unpause always re-attempts extraction.
+  //
+  // The drain-convergence streak (#1862, #2550) has the same shape: it only
+  // resets on a productive drain, so a source un-paused at
+  // UNPRODUCTIVE_DRAIN_PAUSE_AFTER re-pauses on the next flagged-empty drain.
+  // Zero it on the way off `paused`. An explicit `unproductiveDrains` in this
+  // body wins, same as the other counter fields. `consecutiveErrors` is left
+  // alone — a successful fetch already clears it, and the error auto-pause
+  // only fires on the next deterministic failure, not on an empty drain.
   if (
     body.fetchPriority !== undefined &&
     body.fetchPriority !== "paused" &&
@@ -2769,6 +2779,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
         lastFailedExtractHash: null,
       }),
     );
+    if (body.unproductiveDrains === undefined) updates.unproductiveDrains = 0;
   }
 
   if (Object.keys(updates).length === 0) {
@@ -2883,7 +2894,7 @@ const patchSourceRoute = describeRoute({
   tags: ["Sources"],
   summary: "Update source",
   description:
-    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Slug uniqueness is checked before write. Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
+    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Moving `fetchPriority` off `paused` clears `unproductiveDrains` (an explicit `unproductiveDrains` in the same body wins) and `metadata.lastFailedExtractHash`. Slug uniqueness is checked before write. Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: {

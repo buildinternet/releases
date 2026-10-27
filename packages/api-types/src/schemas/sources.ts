@@ -276,6 +276,12 @@ export const SourcePatchInputSchema = z.object({
   fetchPriority: SourceFetchPrioritySchema.optional(),
   consecutiveNoChange: z.number().int().optional(),
   consecutiveErrors: z.number().int().optional(),
+  /**
+   * Drain-convergence streak (#1862). Leaving `fetchPriority` of `paused`
+   * clears this automatically; set it directly to reset a source that is
+   * not paused, or to override the automatic clear in the same request.
+   */
+  unproductiveDrains: z.number().int().optional(),
   nextFetchAfter: z.string().nullable().optional(),
   isPrimary: z.boolean().optional(),
   isHidden: z.boolean().optional(),
