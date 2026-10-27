@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 24, 2026
+
+**Added**
+- `@buildinternet/releases-sdk` TypeScript SDK — new npm package for calling the public API from Node, Deno, or any bundler; `releases-core` and `releases-api-types` are now also published as compiled ES modules instead of TypeScript source.
+- `releases search --org` — filter search results to a single org by slug or `org_…` id.
+
+**Changed**
+- `releases feed` now paginates with `--cursor` instead of `--page`; `--page` was always rejected with a 400 by the API.
+
+**Fixed**
+- `releases org get` now shows real creation and update timestamps, `releases org list` shows last release date instead of an empty column, and `releases source show` shows fetch priority; all three fields previously always showed "—".
+- The `/v1/stats` endpoint and `releases stats` no longer fail under request bursts — the default 30-day window is now served from an hourly cache rather than running database queries on each request.
+
 ## October 22, 2026
 
 **Fixed**
