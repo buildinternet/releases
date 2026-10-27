@@ -120,7 +120,10 @@ async function applyScrapeFailureBackoff(db: D1Db, sourceId: string): Promise<vo
  * was flagged as changed when the drain began) — a legitimately-quiet poll that
  * was never flagged is not counted, so healthy idle sources are never paused.
  * A productive drain (`releasesInserted > 0`) resets the streak; an empty one
- * increments it and pauses at UNPRODUCTIVE_DRAIN_PAUSE_AFTER. Best-effort.
+ * increments it and pauses at UNPRODUCTIVE_DRAIN_PAUSE_AFTER. Un-pausing
+ * (source PATCH moving `fetchPriority` off `paused`) also zeroes the streak
+ * (#2550) — this function does not, so a stale count re-pauses immediately.
+ * Best-effort.
  */
 async function applyDrainConvergence(
   db: D1Db,
