@@ -106,7 +106,9 @@
     // the CF AI Gateway — no double-hop, per docs/architecture/ai-gateway.md Layer 1).
     // These four ids match OPENROUTER_MODELS in packages/lib/src/models.ts, which
     // is the code default when a var is empty. This file is the deployed override.
-    "MARKETING_CLASSIFIER_MODEL": "typesafe/jev-1.13",
+    // `~typesafe/jev-latest` is OpenRouter's floating alias for the newest Jev
+    // (the leading `~` is required). Decisions routing matches this id exactly.
+    "MARKETING_CLASSIFIER_MODEL": "~typesafe/jev-latest",
     // OpenRouter cheap-call model for the *live* poll-fetch summarizer AND the
     // nightly collection-daily-summary cron (both consume SUMMARIZE_MODEL).
     // Consulted only when `openrouter-enabled` is on; empty → both stay on
@@ -813,7 +815,7 @@
         // not a var — see the prod vars block note + docs/architecture/ai-gateway.md.
         // OpenRouter cheap-call model (marketing classifier); gated by the
         // `openrouter-enabled` flag. Mirrors prod.
-        "MARKETING_CLASSIFIER_MODEL": "typesafe/jev-1.13",
+        "MARKETING_CLASSIFIER_MODEL": "~typesafe/jev-latest",
         // OpenRouter cheap-call model for the live summarizer + collection daily
         // summaries; gated by the `openrouter-enabled` flag. deepseek-v4.1-flash-1017
         // (dated snapshot, vision-capable) per the #1633 bench and the 1017

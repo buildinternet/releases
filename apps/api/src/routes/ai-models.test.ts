@@ -109,7 +109,7 @@ describe("PUT /ai/models", () => {
         {
           method: "PUT",
           headers: { ...auth, "content-type": "application/json" },
-          body: JSON.stringify({ models: { [lane]: "typesafe/jev-1.13" } }),
+          body: JSON.stringify({ models: { [lane]: "~typesafe/jev-latest" } }),
         },
         env,
       );

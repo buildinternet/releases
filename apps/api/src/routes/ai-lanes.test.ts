@@ -193,7 +193,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
           ...baseEnv(),
           OPENROUTER_ENABLED: "true",
           OPENROUTER_API_KEY: secretBinding("test-or"),
-          MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+          MARKETING_CLASSIFIER_MODEL: "~typesafe/jev-latest",
         } as never,
       );
       expect(response.status).toBe(502);
@@ -233,7 +233,7 @@ describe("POST /v1/ai/lanes/:lane", () => {
           ...baseEnv(),
           OPENROUTER_ENABLED: "true",
           OPENROUTER_API_KEY: secretBinding("test-or"),
-          MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+          MARKETING_CLASSIFIER_MODEL: "~typesafe/jev-latest",
         } as never,
       );
       expect(urls).toEqual(["https://openrouter.ai/api/alpha/decisions"]);

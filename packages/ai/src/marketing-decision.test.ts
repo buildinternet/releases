@@ -13,7 +13,7 @@ const input = {
 
 function decision(choice: string, probability?: unknown, confidence = 1): DecisionModel {
   return {
-    id: "openrouter:typesafe/jev-1.13",
+    id: "openrouter:~typesafe/jev-latest",
     decide: async () =>
       ({
         choice,

@@ -128,7 +128,7 @@ function event(): ReleaseEvent {
 
 function scoringModel(probability: number, calls: NoulBatchRequest[] = []): NoulBatchModel {
   return {
-    id: "openrouter:typesafe/jev-1.13",
+    id: "openrouter:~typesafe/jev-latest",
     decideNoul: async (request) => {
       calls.push(request);
       return {
@@ -334,7 +334,7 @@ describe("runSemanticAlertMatch", () => {
         },
         {
           resolveModel: async () => ({
-            id: "openrouter:typesafe/jev-1.13",
+            id: "openrouter:~typesafe/jev-latest",
             decideNoul: async () => {
               throw new Error(QUERY);
             },
@@ -604,7 +604,7 @@ describe("semantic alert analytics points", () => {
       sourceId: "src_a",
       alertId: "sal_a",
       provider: "openrouter",
-      model: "openrouter:typesafe/jev-1.13",
+      model: "openrouter:~typesafe/jev-latest",
       disposition: "matched",
       probability: 0.91,
       threshold: 0.8,
@@ -612,6 +612,7 @@ describe("semantic alert analytics points", () => {
     const encoded = JSON.stringify(point);
     expect(encoded).not.toContain(QUERY);
     expect(point.blobs[3]).toBe("semantic-alert");
+    expect(point.blobs[7]).toBe("openrouter:~typesafe/jev-latest");
     expect(point.blobs[10]).toBe("sal_a");
     expect(point.doubles[0]).toBe(0.91);
     expect(point.doubles[2]).toBe(0.8);

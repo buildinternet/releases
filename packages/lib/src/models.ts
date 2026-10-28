@@ -126,12 +126,16 @@ const DEEPSEEK_V41_FLASH_1017 = "deepseek/deepseek-v4.1-flash-1017";
  * OpenRouter ids used when the lane's wrangler var and admin overlay are
  * absent. Production sets the same ids in `apps/api/wrangler.jsonc`; that
  * file is the deployed override, not a second code default.
+ *
+ * Marketing is OpenRouter's floating Jev alias. The leading `~` is part of
+ * the id (bare `typesafe/jev-latest` is not), and the Decisions seam matches
+ * this string exactly.
  */
 export const OPENROUTER_MODELS = {
   summarize: DEEPSEEK_V41_FLASH_1017,
   extract: DEEPSEEK_V41_FLASH_1017,
   feedEnrich: DEEPSEEK_V41_FLASH_1017,
-  marketing: "typesafe/jev-1.13",
+  marketing: "~typesafe/jev-latest",
 } as const;
 
 /**

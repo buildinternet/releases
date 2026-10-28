@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 it("resolves the marketing eval candidate via Decisions without running the eval harness", async () => {
-  process.env.EVAL_MODEL = "typesafe/jev-1.13";
+  process.env.EVAL_MODEL = "~typesafe/jev-latest";
   process.env.OPENROUTER_API_KEY = "test-key";
   delete process.env.OPENROUTER_BASE_URL;
   let url = "";
@@ -48,7 +48,7 @@ it("resolves the marketing eval candidate via Decisions without running the eval
 });
 
 it("retains the Anthropic eval baseline when JEV has no key", () => {
-  process.env.EVAL_MODEL = "typesafe/jev-1.13";
+  process.env.EVAL_MODEL = "~typesafe/jev-latest";
   delete process.env.OPENROUTER_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-key";
   expect(resolvers).toHaveProperty("resolveMarketingEvalModel");

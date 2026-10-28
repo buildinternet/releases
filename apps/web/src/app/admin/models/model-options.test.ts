@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import { modelOptions } from "./model-options";
 
 const catalog = [
-  { id: "typesafe/jev-1.13", name: "Typesafe: JEV 1.13 (decision)" },
+  { id: "~typesafe/jev-latest", name: "TypeSafe: Jev Latest (decision)" },
   { id: "google/gemini-2.5-flash-lite", name: "Gemini Flash Lite" },
 ].map((m) => ({
   ...m,
@@ -13,7 +13,9 @@ const catalog = [
 }));
 
 it("offers the decision model in marketing searches", () => {
-  expect(modelOptions(catalog, "marketing", "jev").map((m) => m.id)).toEqual(["typesafe/jev-1.13"]);
+  expect(modelOptions(catalog, "marketing", "jev").map((m) => m.id)).toEqual([
+    "~typesafe/jev-latest",
+  ]);
 });
 
 it("excludes decision models from text-only lane choices", () => {

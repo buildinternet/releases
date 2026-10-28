@@ -23,7 +23,8 @@ const NO_SOURCE_INDEX = "none";
 const SOURCE_ID_RE = /^src_[A-Za-z0-9_-]{1,64}$/;
 const RELEASE_ID_RE = /^rel_[A-Za-z0-9_-]{1,64}$/;
 const ALERT_ID_RE = /^sal_[A-Za-z0-9-]{1,80}$/;
-const TOKEN_RE = /^[A-Za-z0-9_.:/+-]{1,80}$/;
+// `~` is OpenRouter's floating-alias prefix (`openrouter:~typesafe/jev-latest`).
+const TOKEN_RE = /^[A-Za-z0-9_.:/+~-]{1,80}$/;
 
 export interface SemanticAlertPointInput {
   releaseId: string;

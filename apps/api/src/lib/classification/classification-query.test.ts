@@ -167,8 +167,8 @@ describe("classification SQL", () => {
   });
 
   it("quotes only validated filters and pins the dataset identifier", () => {
-    const sql = summarySql(summary({ model: "typesafe/jev-1.13", sourceId: "src_acme" }));
-    expect(sql).toContain("blob8 = 'typesafe/jev-1.13'");
+    const sql = summarySql(summary({ model: "~typesafe/jev-latest", sourceId: "src_acme" }));
+    expect(sql).toContain("blob8 = '~typesafe/jev-latest'");
     expect(sql).toContain("blob6 = 'src_acme'");
     expect(sql).toContain("blob1 = '1'");
     expect(sql).toContain("blob4 = 'marketing'");
@@ -237,7 +237,7 @@ describe("classification SQL", () => {
     const key = await summaryCacheKey(summaryCacheMaterial(omitted, DATASET_PRODUCTION));
     expect(key.startsWith("classification-summary:v1:")).toBe(true);
     expect(key).not.toContain("ingest");
-    expect(key).not.toContain("typesafe/jev-1.13");
+    expect(key).not.toContain("~typesafe/jev-latest");
 
     const body = shapeClassificationSummary({
       afterIso: AFTER,
@@ -284,7 +284,9 @@ describe("classification response shaping", () => {
         { t: "2026-09-20 00:00:00", choice: "", samples: 9 },
         { t: "2026-09-20 00:00:00", choice: "case_study", samples: 3 },
       ],
-      models: [{ provider: "openrouter", model: "typesafe/jev-1.13", samples: 5, cost_usd: 0.02 }],
+      models: [
+        { provider: "openrouter", model: "~typesafe/jev-latest", samples: 5, cost_usd: 0.02 },
+      ],
       histogram: [{ selected_8: 5, selected_missing: 2, confidence_3: 4, confidence_missing: 1 }],
     });
 
@@ -352,7 +354,7 @@ describe("classification response shaping", () => {
         source_id: "src_acme",
         release_id: "rel_shipped",
         provider: "openrouter",
-        model: "typesafe/jev-1.13",
+        model: "~typesafe/jev-latest",
         choice: "case_study",
         selected_probability: -1,
         provider_confidence: 0,
@@ -368,7 +370,7 @@ describe("classification response shaping", () => {
         source_id: "src_missing",
         release_id: "rel_missing",
         provider: "openrouter",
-        model: "typesafe/jev-1.13",
+        model: "~typesafe/jev-latest",
         choice: "real_product_news",
         selected_probability: 0.91,
         provider_confidence: -1,

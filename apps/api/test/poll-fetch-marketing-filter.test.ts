@@ -239,7 +239,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
       const result = await fetchOne(db as never, src, {
         OPENROUTER_ENABLED: "true",
         OPENROUTER_API_KEY: { get: async () => "test-or" },
-        MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+        MARKETING_CLASSIFIER_MODEL: "~typesafe/jev-latest",
       } as never);
       const [row] = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
       expect(result.status).toBe("success");

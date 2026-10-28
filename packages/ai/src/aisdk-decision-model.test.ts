@@ -49,7 +49,7 @@ describe("aisdkDecisionModel", () => {
         },
       };
     };
-    const model = aisdkDecisionModel({} as never, "openrouter:typesafe/jev-1.13", { evaluate });
+    const model = aisdkDecisionModel({} as never, "openrouter:~typesafe/jev-latest", { evaluate });
 
     const result = await model.decide({
       state: "A weekly product update.",
@@ -93,7 +93,7 @@ describe("aisdkDecisionModel", () => {
       answers: { decision: { type: "choice", choice: "product" as OPTION } },
       usage: {},
     });
-    const model = aisdkDecisionModel({} as never, "openrouter:typesafe/jev-1.13", { evaluate });
+    const model = aisdkDecisionModel({} as never, "openrouter:~typesafe/jev-latest", { evaluate });
 
     const result = await model.decide({
       state: "A release note.",
@@ -131,7 +131,9 @@ describe("aisdkDecisionModel", () => {
         usage: {},
         providerMetadata,
       });
-      const model = aisdkDecisionModel({} as never, "openrouter:typesafe/jev-1.13", { evaluate });
+      const model = aisdkDecisionModel({} as never, "openrouter:~typesafe/jev-latest", {
+        evaluate,
+      });
 
       await expect(
         model.decide({
@@ -160,7 +162,7 @@ describe("aisdkDecisionModel noul batch", () => {
         providerMetadata: { openrouter: { usage: { cost: 0.00004 } } },
       };
     };
-    const model = aisdkDecisionModel({} as never, "openrouter:typesafe/jev-1.13", {
+    const model = aisdkDecisionModel({} as never, "openrouter:~typesafe/jev-latest", {
       evaluateNoul,
     });
     const result = await model.decideNoul({
