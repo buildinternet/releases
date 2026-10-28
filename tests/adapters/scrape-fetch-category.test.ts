@@ -32,6 +32,10 @@ const mockSource = {
 let cfMarkdownResult: string | null = null;
 mock.module("@releases/adapters/cloudflare", () => ({
   fetchCloudflareMarkdown: async () => cfMarkdownResult,
+  // scrape-fetch statically imports this for the render:false fallback (#1298).
+  // The first mock.module in this process wins, so omitting it breaks every
+  // later scrape-fetch import when this file loads first.
+  fetchCloudflareMarkdownFast: async () => null,
 }));
 
 // Stub crawl to do nothing
