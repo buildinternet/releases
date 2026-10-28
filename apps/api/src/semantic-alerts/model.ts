@@ -1,5 +1,5 @@
 /**
- * JEV decision model for semantic alerts. Always `typesafe/jev-1.13` via the
+ * JEV decision model for semantic alerts. Always `~typesafe/jev-latest` via the
  * OpenRouter Decisions seam the marketing classifier uses. There is no
  * Anthropic fallback: a missing key or a constructor failure returns null and
  * the caller notifies nobody.

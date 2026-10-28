@@ -52,7 +52,7 @@ describe("fetchOpenRouterCatalog", () => {
   it("retains JEV when a successful response contains no valid catalog", async () => {
     globalThis.fetch = (async () => Response.json({})) as unknown as typeof fetch;
     const result = await fetchOpenRouterCatalog({});
-    expect(result.catalog.map((m) => m.id)).toEqual(["typesafe/jev-1.13"]);
+    expect(result.catalog.map((m) => m.id)).toEqual(["~typesafe/jev-latest"]);
   });
 
   it("maps catalog rows and flags vision", async () => {
@@ -81,8 +81,8 @@ describe("fetchOpenRouterCatalog", () => {
     expect(catalog[0]?.id).toBe("deepseek/deepseek-v4.1-flash");
     expect(catalog[0]?.vision).toBe(true);
     expect(catalog[0]?.promptPricePerMillion).toBeCloseTo(0.14);
-    expect(catalog.find((m) => m.id === "typesafe/jev-1.13")).toMatchObject({
-      name: "Typesafe: JEV 1.13 (decision)",
+    expect(catalog.find((m) => m.id === "~typesafe/jev-latest")).toMatchObject({
+      name: "TypeSafe: Jev Latest (decision)",
       promptPricePerMillion: null,
     });
   });
@@ -90,7 +90,7 @@ describe("fetchOpenRouterCatalog", () => {
     globalThis.fetch = (async () =>
       new Response("unavailable", { status: 503 })) as unknown as typeof fetch;
     const result = await fetchOpenRouterCatalog({});
-    expect(result.catalog.some((m) => m.id === "typesafe/jev-1.13")).toBe(true);
+    expect(result.catalog.some((m) => m.id === "~typesafe/jev-latest")).toBe(true);
     expect(result.catalogError).toBeTruthy();
   });
 });

@@ -80,7 +80,7 @@ function summaryFetch(calls: Array<{ url: string; sql: string; authorization: st
     }
     if (sql.includes("blob7 AS provider")) {
       return jsonResponse([
-        { provider: "openrouter", model: "typesafe/jev-1.13", samples: 5, cost_usd: 0.02 },
+        { provider: "openrouter", model: "~typesafe/jev-latest", samples: 5, cost_usd: 0.02 },
       ]);
     }
     if (sql.includes("toStartOfInterval")) {
@@ -199,7 +199,7 @@ describe("GET /admin/classifications/summary", () => {
       { t: "2026-09-20T00:00:00.000Z", choices: { case_study: 1 } },
     ]);
     expect(body.models).toEqual([
-      { provider: "openrouter", model: "typesafe/jev-1.13", count: 5, costUsd: 0.02 },
+      { provider: "openrouter", model: "~typesafe/jev-latest", count: 5, costUsd: 0.02 },
     ]);
     expect(body.probability.threshold).toBe(0.65);
     expect(body.probability.selected.bins).toHaveLength(10);
@@ -302,7 +302,7 @@ describe("GET /admin/classifications/recent", () => {
           release_id: "rel_shipped",
           source_id: "src_acme",
           provider: "openrouter",
-          model: "typesafe/jev-1.13",
+          model: "~typesafe/jev-latest",
           choice: "real_product_news",
           selected_probability: 1,
           provider_confidence: 0.4,
@@ -318,7 +318,7 @@ describe("GET /admin/classifications/recent", () => {
           release_id: "rel_hidden",
           source_id: "src_acme",
           provider: "openrouter",
-          model: "typesafe/jev-1.13",
+          model: "~typesafe/jev-latest",
           choice: "case_study",
           selected_probability: 0.99,
           provider_confidence: 0.5,
@@ -334,7 +334,7 @@ describe("GET /admin/classifications/recent", () => {
           release_id: "rel_missing",
           source_id: "src_acme",
           provider: "openrouter",
-          model: "typesafe/jev-1.13",
+          model: "~typesafe/jev-latest",
           choice: "unclear_other",
           selected_probability: -1,
           provider_confidence: -1,

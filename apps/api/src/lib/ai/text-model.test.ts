@@ -86,7 +86,10 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
         )) as unknown as typeof fetch;
       try {
         const model = await resolveMarketingModel(
-          baseEnv({ OPENROUTER_ENABLED: "true", MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13" }),
+          baseEnv({
+            OPENROUTER_ENABLED: "true",
+            MARKETING_CLASSIFIER_MODEL: "~typesafe/jev-latest",
+          }),
         );
         const result = await classifyMarketing(model!, {
           sourceName: "Blog",
@@ -106,7 +109,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
           .find((row) => row.event === "ai_usage" && row.lane === "marketing-classifier");
         expect(record).toMatchObject({
           provider: "openrouter",
-          model: "typesafe/jev-1.13",
+          model: "~typesafe/jev-latest",
           decision: diagnostics,
         });
       } finally {
@@ -129,7 +132,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
       return Response.json(marketingDecisionResponse("case_study", 0.8));
     }) as typeof fetch;
     try {
-      await putStoredAiLaneModels(db.db, { marketing: "typesafe/jev-1.13" });
+      await putStoredAiLaneModels(db.db, { marketing: "~typesafe/jev-latest" });
       const model = await resolveMarketingModel(
         baseEnv({ OPENROUTER_ENABLED: "true", DB: db.db as unknown as D1Database }),
       );
@@ -140,7 +143,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
         url: null,
       });
       expect(url).toBe("https://openrouter.ai/api/alpha/decisions");
-      expect(body.model).toBe("typesafe/jev-1.13");
+      expect(body.model).toBe("~typesafe/jev-latest");
       expect(body.session_id).toBe("marketing-classifier");
       expect(body.trace).toEqual({ generation_name: "marketing-classifier", environment: "test" });
       expect(body).not.toHaveProperty("messages");
@@ -168,7 +171,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
       const model = await resolveMarketingModel(
         baseEnv({
           OPENROUTER_ENABLED: "true",
-          MARKETING_CLASSIFIER_MODEL: "typesafe/jev-1.13",
+          MARKETING_CLASSIFIER_MODEL: "~typesafe/jev-latest",
           ...overrides,
         }),
       );

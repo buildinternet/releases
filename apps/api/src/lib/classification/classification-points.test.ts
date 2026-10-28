@@ -83,7 +83,7 @@ describe("marketingClassificationInput", () => {
         index: 0,
         disposition: "kept",
         provider: "openrouter",
-        model: "typesafe/jev-1.13",
+        model: "~typesafe/jev-latest",
         verdict: verdict({
           isMarketing: false,
           decision: { choice: "real_product_news", selectedChoiceProbability: 0.4 },

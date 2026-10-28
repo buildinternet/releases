@@ -4,7 +4,7 @@
  *
  * Default provider is Anthropic Haiku (the production baseline). To evaluate a
  * cheap OpenRouter candidate instead, set `OPENROUTER_API_KEY` + `EVAL_MODEL`
- * (e.g. `EVAL_MODEL=typesafe/jev-1.13`) — the prompt + fixtures are held
+ * (e.g. `EVAL_MODEL=~typesafe/jev-latest`) — the prompt + fixtures are held
  * constant so the run is a clean cross-model comparison. Optionally set
  * `OPENROUTER_BASE_URL` to route through an AI Gateway sub-path.
  *

@@ -32,7 +32,7 @@ let catalogCache: {
 // even when catalog fetching fails; unknown pricing stays unknown.
 const DECISION_CATALOG: OpenRouterCatalogModel = {
   id: MARKETING_DECISION_MODEL,
-  name: "Typesafe: JEV 1.13 (decision)",
+  name: "TypeSafe: Jev Latest (decision)",
   contextLength: null,
   promptPricePerMillion: null,
   completionPricePerMillion: null,

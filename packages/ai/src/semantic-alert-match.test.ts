@@ -22,7 +22,7 @@ function model(
   calls: NoulBatchRequest[] = [],
 ): NoulBatchModel {
   return {
-    id: "openrouter:typesafe/jev-1.13",
+    id: "openrouter:~typesafe/jev-latest",
     decideNoul: async (request) => {
       calls.push(request);
       return {

@@ -87,7 +87,8 @@ export interface ClassificationDataset {
 
 const SOURCE_ID_RE = /^src_[A-Za-z0-9_-]{1,64}$/;
 const RELEASE_ID_RE = /^rel_[A-Za-z0-9_-]{1,64}$/;
-const TOKEN_RE = /^[A-Za-z0-9_.:/@+-]{1,80}$/;
+// `~` is OpenRouter's floating-alias prefix (`~typesafe/jev-latest`).
+const TOKEN_RE = /^[A-Za-z0-9_.:/@+~-]{1,80}$/;
 
 function token(value: string | null | undefined, fallback = ""): string {
   if (!value) return fallback;

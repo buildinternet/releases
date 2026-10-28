@@ -57,7 +57,8 @@ export const SUMMARY_CACHE_PREFIX = "classification-summary:v1:";
 const AE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 const SOURCE_ID_RE = /^src_[A-Za-z0-9_-]{1,64}$/;
 const RELEASE_ID_RE = /^rel_[A-Za-z0-9_-]{1,64}$/;
-const TOKEN_RE = /^[A-Za-z0-9_.:/@+-]{1,80}$/;
+// `~` is OpenRouter's floating-alias prefix (`~typesafe/jev-latest`).
+const TOKEN_RE = /^[A-Za-z0-9_.:/@+~-]{1,80}$/;
 const LIMIT_RE = /^\d+$/;
 const TIMESTAMP_RE =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})?)?$/;
