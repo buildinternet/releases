@@ -73,11 +73,11 @@ This worker does implement RFC 8628 for the seeded `releases-cli` client (`devic
 
 **What we do.** `defaultRegistrationApplicationType` and `coerceExplicitWebToNativeForPrivateUseScheme` in `apps/api/src/auth/oauth-application-type.ts`, applied by `applyOAuthClientInterop` on `/oauth2/register` alongside the `grant_types` rewrite (composed on the same body).
 
-**This stack is `@better-auth/oauth-provider@1.7.7`, so this rewrite is live** — it was written under the 1.6.25 pin as forward-compat and became load-bearing with the 1.7 upgrade. Ported from buildinternet/uploads PRs #885–#887.
+**This stack is `@better-auth/oauth-provider@1.7.14`, so this rewrite is live.** It was written under the 1.6.25 pin as forward-compat and became load-bearing with the 1.7 upgrade. Ported from buildinternet/uploads PRs #885–#887. Upstream's `clientRegistrationDefaultApplicationType: "infer"` (1.7.8, loopback `http` included in 1.7.10) still leaves an explicit `application_type: "web"` alone, which is what Cursor sends, so the coercion stays.
 
-**The 1.7 native validator needs a dist patch.** Routing Cursor to the native branch exposes a second upstream bug: 1.7 accepts only authority-free reverse-domain private-use redirect URIs and rejects the host-bearing `cursor://anysphere.cursor-mcp/oauth/callback` form (better-auth/better-auth#10956, #10946 — still open as of 1.7.7). Uploads PR #886's dist patch is therefore ported as `patches/@better-auth%2Foauth-provider@1.7.7.patch`, wired through bun `patchedDependencies` in the root `package.json`. Delete it once an upstream release ships the fix; re-check on every `@better-auth/oauth-provider` bump, since the patch targets a hashed dist filename.
+**Host-bearing redirects shipped in 1.7.8.** better-auth/better-auth#10956 accepts `cursor://anysphere.cursor-mcp/oauth/callback` for native clients and CIMD documents. The dist patch (`patches/@better-auth%2Foauth-provider@1.7.7.patch`) that ported that fix onto 1.7.7 is removed.
 
-**Do not.** Carry the dist patch forward blindly across an upgrade — check whether #10956/#10946 shipped first. Widen the native-defaulting rule to plain `https://` redirect URIs (that is a legitimate web-client shape). Treat this section as live behavior on the current stack — verify against the pinned `@better-auth/oauth-provider` version before assuming otherwise.
+**Do not.** Widen the native-defaulting rule to plain `https://` redirect URIs (that is a legitimate web-client shape). Treat this section as live behavior on the current stack — verify against the pinned `@better-auth/oauth-provider` version before assuming otherwise.
 
 ## 2. `invalid_scope` on authorize or consent
 

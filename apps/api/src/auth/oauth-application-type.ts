@@ -20,18 +20,17 @@
  * registration. Both opencode and Cursor fail `/oauth2/register` on 1.7
  * unless the registration body is corrected before the plugin validates it.
  *
- * This stack now runs `@better-auth/oauth-provider@1.7.7`, where the register
- * schema does carry `application_type` — so this rewrite is live, not the
- * inert forward-compat it was under the 1.6.25 pin it was written against.
+ * This stack runs `@better-auth/oauth-provider@1.7.14`. The register schema
+ * carries `application_type`, and the default for an omitted field is still
+ * `"web"`. `clientRegistrationDefaultApplicationType: "infer"` (1.7.8, widened
+ * to loopback `http` in 1.7.10) would cover opencode, but it never overrides an
+ * `application_type` the client sends, and Cursor sends `"web"`. This rewrite
+ * stays for that coercion.
  *
- * Routing Cursor to the native branch exposes a second upstream bug: 1.7's
- * native validator accepts only authority-free reverse-domain private-use
- * URIs, and rejects the host-bearing `cursor://anysphere.cursor-mcp/oauth/callback`
- * form (better-auth/better-auth#10956, #10946 — still open as of 1.7.7). The
- * dist patch from uploads PR #886 is therefore ported here as
- * `patches/@better-auth%2Foauth-provider@1.7.7.patch`; delete it once an
- * upstream release ships the fix. The patch targets a hashed dist filename,
- * so re-check it on every `@better-auth/oauth-provider` bump.
+ * Host-bearing private-use redirects (`cursor://anysphere.cursor-mcp/oauth/callback`)
+ * are accepted upstream since 1.7.8 (better-auth/better-auth#10956). The dist
+ * patch that used to port that fix (`patches/@better-auth%2Foauth-provider@1.7.7.patch`)
+ * is gone.
  *
  * All helpers here are pure: they never mutate the input body, and return
  * `undefined` to mean "no change" so callers can leave the document as
