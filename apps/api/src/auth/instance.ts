@@ -53,6 +53,11 @@ import {
 } from "./oauth-grant-scopes.js";
 import { ensureActiveWorkspace, isOrgOwnerOrAdmin } from "./workspace.js";
 import { kvRateLimitStorage } from "./rate-limit-kv.js";
+import {
+  alignAuthEmail,
+  blockDuplicateMailboxCreate,
+  resolveStoredMailbox,
+} from "./mailbox-link.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
 import {
@@ -196,6 +201,35 @@ async function resolveApiKeyHookOwner(ctx: ApiKeyHookCtx): Promise<string | unde
 
 const API_KEY_NAME_MAX_BYTES = 200;
 const utf8Encoder = new TextEncoder();
+
+/**
+ * Point OAuth `getUserInfo` at an existing user's stored email when the
+ * provider address is the same mailbox under a different spelling (Gmail dots,
+ * `+tag`). Better Auth then links the provider account instead of inserting a
+ * second user. A new mailbox is left unchanged, so sign-up still stores the
+ * address the provider sent.
+ *
+ * Listed after `sentinel` so this wrapper stays outside Sentinel's. With
+ * `emailNormalization` off, Sentinel does not wrap `getUserInfo` at all.
+ */
+function mailboxLinkPlugin(db: AnyDb): BetterAuthPlugin {
+  return {
+    id: "mailbox-link",
+    init(ctx) {
+      for (const provider of ctx.socialProviders) {
+        const original = provider.getUserInfo.bind(provider);
+        provider.getUserInfo = async (token) => {
+          const result = await original(token);
+          const email = result?.user?.email;
+          if (typeof email !== "string" || !email) return result;
+          const stored = await resolveStoredMailbox(db, email);
+          if (stored.toLowerCase() === email.trim().toLowerCase()) return result;
+          return { ...result, user: { ...result.user, email: stored } };
+        };
+      }
+    },
+  };
+}
 
 /**
  * Better Auth plugin governing the user-key (`relu_`) lane: a per-user active-key
@@ -498,10 +532,16 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     // apps/web/src/lib/auth-client.ts) for bots, suspicious IPs, and the first
     // credential-stuffing threshold. Impossible travel and stale-account
     // reactivation are LOG-only: observe in the Security dashboard before enforcing,
-    // per the plugin's own best practice. emailNormalization dedupes Gmail-dot/plus
-    // aliases so one human can't silently fork into multiple accounts. This rides
-    // ALONGSIDE — not instead of — Better Auth's D1-backed brute-force rate limiting
-    // (rateLimit below). Tune actions up once real traffic is visible.
+    // per the plugin's own best practice. This rides ALONGSIDE — not instead of —
+    // Better Auth's D1-backed brute-force rate limiting (rateLimit below). Tune
+    // actions up once real traffic is visible.
+    //
+    // emailNormalization is explicitly OFF. Omitting the key does not do that:
+    // Sentinel treats an absent flag as on (`emailValidation.enabled !== false`).
+    // The pass rewrote Gmail dots / plus-tags on email sign-up but, until infra
+    // 0.4.22, not on the OAuth lookup, so one mailbox became two users. Linking
+    // those spellings to the existing row is `mailboxLinkPlugin`, which does not
+    // rewrite `user.email`.
     ...(dashApiKey && sentinelIdentifyUrl
       ? [
           sentinel({
@@ -517,11 +557,14 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
               suspiciousIpBlocking: { action: "challenge" },
               impossibleTravel: { enabled: true, action: "log" },
               staleUsers: { enabled: true, staleDays: 90, action: "log", notifyUser: true },
-              emailNormalization: { enabled: true },
+              emailNormalization: { enabled: false },
             },
           }),
         ]
       : []),
+    // After sentinel so the wrapper sees the provider email Sentinel would have
+    // rewritten, and replaces it with the stored address instead.
+    mailboxLinkPlugin(db),
     ...(socialProviders.google ? [oneTap({ clientId: socialProviders.google.clientId })] : []),
     magicLink({
       expiresIn: 60 * 15,
@@ -855,9 +898,9 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
       afterEmailVerification: auditAfterEmailVerification(audit),
     },
     user: {
-      // Display email keeps the casing/dots Sentinel's `emailNormalization`
-      // strips from `email`. `input: false` keeps it server-set (from the OAuth
-      // profile via `mapDisplayEmail`) so a client can't spoof it.
+      // Original casing and Gmail dots from the provider profile. `input: false`
+      // keeps it server-set (via `mapDisplayEmail`) so a client can't spoof it.
+      // The stored `email` is not rewritten from a social sign-in.
       additionalFields: {
         displayEmail: { type: "string", required: false, input: false },
       },
@@ -878,14 +921,21 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     socialProviders,
     plugins,
     // Audit hooks (see audit.ts; sign-in failures are logged in index.ts) merged
-    // with the `user.update.before` guards. The audit hooks define only
-    // `user.create.after`, so the two `user` sub-keys compose without collision.
+    // with the user guards. `user.create.after` is the audit sign-up hook and is
+    // referenced explicitly so a change in audit.ts can't be dropped by this
+    // override. `user.create.before` refuses a second row for a mailbox that
+    // already exists under another spelling. `user.update.before` keeps a social
+    // profile refresh from writing `email`.
     databaseHooks: (() => {
       const auditHooks = auditDatabaseHooks(audit);
       return {
         ...auditHooks,
         user: {
           ...auditHooks.user,
+          create: {
+            before: async (data: { email?: unknown }) => blockDuplicateMailboxCreate(db, data),
+            after: auditHooks.user.create.after,
+          },
           update: {
             before: async (data: Record<string, unknown>, context) =>
               applyUserUpdateGuards(
@@ -960,10 +1010,21 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     // consent. Better Auth takes a single `hooks.before` middleware.
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // Same mailbox, different spelling (jane.doe@ vs janedoe@) signs into the
+        // existing user. Runs before the OAuth interop rewrite; those paths don't
+        // overlap. `/change-email` is not rewritten.
+        const linkedEmail = await alignAuthEmail(db, ctx.path, ctx.body);
+        const requestCtx = linkedEmail
+          ? { ...ctx, body: { ...(ctx.body as Record<string, unknown>), email: linkedEmail } }
+          : ctx;
         const authed = ctx.path === "/oauth2/consent" ? await getSessionFromCtx(ctx) : null;
         const role = (authed?.user as { role?: string } | undefined)?.role;
-        const oauthOverride = await applyOAuthClientInterop(ctx, registeredScopesForClientId, role);
-        const consentBody = (oauthOverride?.context.body ?? ctx.body) as
+        const oauthOverride = await applyOAuthClientInterop(
+          requestCtx,
+          registeredScopesForClientId,
+          role,
+        );
+        const consentBody = (oauthOverride?.context.body ?? requestCtx.body) as
           | { accept?: unknown; scope?: unknown }
           | undefined;
         if (ctx.path === "/oauth2/consent" && consentScopeViolation(role, consentBody)) {
@@ -973,6 +1034,7 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
           });
         }
         if (oauthOverride) return oauthOverride;
+        if (linkedEmail) return { context: { body: requestCtx.body } };
       }),
       // One Tap never routes through `mapProfileToUser`, so `display_email` is
       // backfilled here instead. `returned.user` is present only when the

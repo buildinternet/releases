@@ -67,14 +67,14 @@ type SocialProvider = {
   clientId: string;
   clientSecret: string;
   /**
-   * Re-import the provider's profile (`name`, `image`) on EVERY sign-in. Custom
-   * avatar uploads are preserved by `preserveCustomAvatarOnUpdate`.
+   * Re-import the provider's profile (`name`, `image`, `displayEmail`) on EVERY
+   * sign-in. `email` is stripped from that write in `applyUserUpdateGuards`.
+   * Custom avatar uploads are preserved by `preserveCustomAvatarOnUpdate`.
    */
   overrideUserInfoOnSignIn?: boolean;
   /**
-   * Captures `displayEmail` (original casing/dots) before Sentinel's
-   * `emailNormalization` rewrites `email`. Sentinel's hooks spread `...user` and
-   * touch only `email`, so `displayEmail` survives.
+   * Captures `displayEmail` (original casing and Gmail dots) from the provider
+   * profile. The stored `email` is the sign-in key and is not rewritten from this.
    */
   mapProfileToUser?: (profile: { email?: string | null }) => { displayEmail?: string };
 };
@@ -87,10 +87,24 @@ export function mapDisplayEmail(profile: { email?: string | null }): { displayEm
   return typeof profile.email === "string" && profile.email ? { displayEmail: profile.email } : {};
 }
 
+/** OAuth callback and Google One Tap, where `overrideUserInfoOnSignIn` rewrites the profile. */
+export function isOAuthProfileRefresh(context: unknown): boolean {
+  if (!context || typeof context !== "object") return false;
+  const path = (context as { path?: unknown }).path;
+  if (typeof path !== "string") return false;
+  return path === "/one-tap/callback" || path.startsWith("/callback/");
+}
+
 /**
- * `user.update.before` transform: keeps `displayEmail` in sync with an email
- * change and preserves a custom-uploaded avatar. Returns `{ data }` only when it
- * changes something.
+ * `user.update.before` transform: a social profile refresh may update name,
+ * image, and displayEmail, but never `email` (a colliding Gmail alias 500s the
+ * callback). Also keeps `displayEmail` in sync with a real email change and
+ * preserves a custom-uploaded avatar. Returns `{ data }` only when it changes
+ * something.
+ *
+ * `email` is set to `undefined` rather than omitted: hook results are merged
+ * onto the original payload, so a missing key would leave the provider address
+ * in the UPDATE. Drizzle drops `undefined` and does not write the column.
  */
 export async function applyUserUpdateGuards(
   db: AnyDb,
@@ -101,7 +115,12 @@ export async function applyUserUpdateGuards(
   let merged = data;
   let changed = false;
 
-  const emailPatch = syncDisplayEmailOnUpdate(data);
+  if (isOAuthProfileRefresh(context) && "email" in merged) {
+    merged = { ...merged, email: undefined };
+    changed = true;
+  }
+
+  const emailPatch = syncDisplayEmailOnUpdate(merged);
   if (emailPatch) {
     merged = emailPatch.data;
     changed = true;

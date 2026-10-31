@@ -12,6 +12,7 @@ import {
   passkey,
 } from "../src/db/schema-auth.js";
 import {
+  applyUserUpdateGuards,
   buildSocialProviders,
   mapDisplayEmail,
   syncDisplayEmailOnUpdate,
@@ -28,6 +29,7 @@ import {
   type BetterAuthInstance,
 } from "../src/auth/index.js";
 import { buildStripePlugin } from "../src/auth/instance.js";
+import { resolveStoredMailbox } from "../src/auth/mailbox-link.js";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
@@ -176,6 +178,68 @@ describe("displayEmailBackfill (fills a One-Tap user's empty displayEmail)", () 
 
   it("is a no-op when the provider gave no email", () => {
     expect(displayEmailBackfill({ displayEmail: null }, "")).toBeUndefined();
+  });
+});
+
+describe("social profile refresh", () => {
+  it("does not move email onto another mailbox, and links a dotted Gmail to the existing user", async () => {
+    const db = createTestDb();
+    const now = new Date();
+    await db.insert(user).values([
+      {
+        id: "canonical",
+        name: "Canonical",
+        email: "janedoe@gmail.com",
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "dotted",
+        name: "Dotted",
+        email: "jane.doe@gmail.com",
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    // Google's overrideUserInfoOnSignIn sends the normalized address. The refresh
+    // may update name, image, and displayEmail; email must not be in the write.
+    const refresh = await applyUserUpdateGuards(
+      db,
+      {
+        name: "From Google",
+        email: "janedoe@gmail.com",
+        displayEmail: "Jane.Doe@gmail.com",
+        image: "https://example.com/avatar.png",
+        emailVerified: true,
+      },
+      { path: "/callback/google" },
+      "https://media.releases.sh",
+    );
+    expect(refresh?.data.email).toBeUndefined();
+    expect(refresh?.data.name).toBe("From Google");
+    expect(refresh?.data.image).toBe("https://example.com/avatar.png");
+    expect(refresh?.data.displayEmail).toBe("Jane.Doe@gmail.com");
+    expect(refresh?.data.emailVerified).toBe(true);
+
+    // A real email change still writes the address.
+    const change = await applyUserUpdateGuards(
+      db,
+      { email: "new.addr@example.com" },
+      { path: "/change-email" },
+      "https://media.releases.sh",
+    );
+    expect(change?.data.email).toBe("new.addr@example.com");
+    expect(change?.data.displayEmail).toBe("new.addr@example.com");
+
+    // Exact row wins while the split exists, so sign-in is not aimed at the other user.
+    expect(await resolveStoredMailbox(db, "Jane.Doe@gmail.com")).toBe("jane.doe@gmail.com");
+    // No exact row: the dotted address is the same mailbox as the canonical user.
+    expect(await resolveStoredMailbox(db, "Jane.Doe+news@gmail.com")).toBe("janedoe@gmail.com");
+    // A mailbox nobody owns is stored as sent.
+    expect(await resolveStoredMailbox(db, "other.person@gmail.com")).toBe("other.person@gmail.com");
   });
 });
 

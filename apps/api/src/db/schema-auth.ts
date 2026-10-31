@@ -83,13 +83,12 @@ export const user = sqliteTable("user", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   // Human-facing display form of the email, preserving the original casing and
-  // (for Gmail) dots that the Sentinel `emailNormalization` pass strips off the
-  // canonical `email` column. Captured from the OAuth provider profile via each
-  // provider's `mapProfileToUser` (auth/index.ts `buildSocialProviders`) so SSO
-  // users see `Dunn.zach@gmail.com` instead of the deduped `dunnzach@gmail.com`.
-  // Nullable + display-only: the unique `email` column stays the dedup/sign-in key,
-  // and read paths fall back to `email` when this is unset (existing rows, and
-  // email/password sign-ups, where no provider profile carries the original).
+  // Gmail dots from the provider profile. Captured via each provider's
+  // `mapProfileToUser` (auth/index.ts `buildSocialProviders`) so SSO users see
+  // `Dunn.zach@gmail.com` instead of a lowercased stored `email`. Nullable +
+  // display-only: the unique `email` column stays the sign-in key (older rows
+  // may still hold a dot-stripped Gmail from the retired Sentinel normalizer),
+  // and read paths fall back to `email` when this is unset.
   // Paired migration: 20260615000000_add_user_display_email.sql.
   displayEmail: text("display_email"),
   emailVerified: integer("email_verified", { mode: "boolean" })
