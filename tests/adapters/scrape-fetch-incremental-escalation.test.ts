@@ -42,6 +42,8 @@ import {
   mapEntries,
   CLOUDFLARE_SYSTEM_PROMPT,
   CRAWL_SYSTEM_PROMPT,
+  CRAWL_PAGE_SYSTEM_PROMPT,
+  PLACEHOLDER_RE,
 } from "../../packages/adapters/src/extract/shared.js";
 // Passed through (not stubbed) in the `@releases/adapters/extract` mock
 // below — `extract-deps-worker.ts` (real, unmocked) imports these from the
@@ -129,6 +131,11 @@ mock.module("@releases/adapters/extract", () => ({
   mapEntries,
   CLOUDFLARE_SYSTEM_PROMPT,
   CRAWL_SYSTEM_PROMPT,
+  // Pass-throughs. Whichever of these two extract mocks is installed last
+  // is what later files in this process see. firecrawl-extract links
+  // CRAWL_PAGE_SYSTEM_PROMPT; workflows.ts links PLACEHOLDER_RE.
+  CRAWL_PAGE_SYSTEM_PROMPT,
+  PLACEHOLDER_RE,
   runIncrementalExtraction: async () => {
     incrementalCalls++;
     return incrementalResult;

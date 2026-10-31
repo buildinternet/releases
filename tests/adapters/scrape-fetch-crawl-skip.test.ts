@@ -28,7 +28,13 @@ import { restoreGlobalFetch } from "../global-fetch";
 // the `@releases/adapters/extract` barrel, since that barrel is the specifier
 // being mocked below — re-entering it from inside the mock factory (e.g. via
 // a dynamic `import()` of the barrel) breaks module resolution.
-import { mapEntries, CRAWL_SYSTEM_PROMPT } from "../../packages/adapters/src/extract/shared.js";
+import {
+  mapEntries,
+  CRAWL_SYSTEM_PROMPT,
+  CRAWL_PAGE_SYSTEM_PROMPT,
+  CLOUDFLARE_SYSTEM_PROMPT,
+  PLACEHOLDER_RE,
+} from "../../packages/adapters/src/extract/shared.js";
 
 const PAGE_URL = "https://harvey.ai/release-notes/2026-06-01";
 const PAGE_MARKDOWN = "# 2026-06-01\n\nSome release content.";
@@ -84,6 +90,12 @@ let nextExtractResult = {
 mock.module("@releases/adapters/extract", () => ({
   mapEntries,
   CRAWL_SYSTEM_PROMPT,
+  // Pass-throughs. This mock leaks for the rest of the `bun test tests/`
+  // process. onboard-source pulls routes/sources → workflows →
+  // firecrawl-extract, which links these names off the barrel.
+  CRAWL_PAGE_SYSTEM_PROMPT,
+  CLOUDFLARE_SYSTEM_PROMPT,
+  PLACEHOLDER_RE,
   extractFromBody: async () => nextExtractResult,
   // extract-deps-worker.ts (real, unmocked — see the module-comment above)
   // also imports this from the barrel; env.openrouterEnabled is unset in
