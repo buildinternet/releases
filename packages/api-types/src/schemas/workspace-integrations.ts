@@ -9,6 +9,11 @@ export const UploadsIntegrationStatusSchema = z.object({
   scope: z.string().nullable(),
   /** uploads.sh workspace slug from the access-token JWT (`workspace`, else `workspaces[]`). */
   uploadsWorkspace: z.string().nullable(),
+  /**
+   * True while a reconnect is in progress on a row that still has tokens.
+   * The previous grant stays connected until the new callback finishes.
+   */
+  reconnecting: z.boolean(),
 });
 
 export const UploadsOAuthConnectResponseSchema = z.object({

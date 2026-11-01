@@ -274,11 +274,13 @@ describe("uploads OAuth workspace routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         connected: boolean;
+        reconnecting: boolean;
         workspaceId: string;
         scope: string;
         uploadsWorkspace: string | null;
       };
       expect(body.connected).toBe(true);
+      expect(body.reconnecting).toBe(false);
       expect(body.workspaceId).toBe("ws_1");
       expect(body.scope).toContain("files:read");
       expect(body.uploadsWorkspace).toBe("acme");
@@ -304,6 +306,114 @@ describe("uploads OAuth workspace routes", () => {
       );
       expect(status.status).toBe(200);
       expect(((await status.json()) as { uploadsWorkspace: string }).uploadsWorkspace).toBe("acme");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("keeps a reconnect connected and reports reconnecting until the attempt expires", async () => {
+    db = createTestDb();
+    seed();
+    const now = Date.now();
+    db.insert(workspaceIntegrations)
+      .values({
+        id: "wsi_1",
+        workspaceId: "ws_1",
+        provider: "uploads",
+        status: "connected",
+        accessTokenEnc: "tok",
+        createdAt: now,
+        updatedAt: now,
+        connectedAt: now,
+      })
+      .run();
+    const res = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads/connect",
+      { method: "POST", headers: { Origin: "https://releases.sh" } },
+      env(),
+    );
+    expect(res.status).toBe(200);
+    const [row] = await db.select().from(workspaceIntegrations);
+    expect(row?.status).toBe("connected");
+    expect(row?.accessTokenEnc).toBe("tok");
+    expect(row?.oauthState).toBeTruthy();
+    const status = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads",
+      { method: "GET" },
+      env(),
+    );
+    expect(await status.json()).toMatchObject({ connected: true, reconnecting: true });
+
+    db.update(workspaceIntegrations)
+      .set({ pendingExpiresAt: Date.now() - 1000 })
+      .where(eq(workspaceIntegrations.id, "wsi_1"))
+      .run();
+    const expired = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads",
+      { method: "GET" },
+      env(),
+    );
+    expect(await expired.json()).toMatchObject({ connected: true, reconnecting: false });
+  });
+
+  it("revokes the previous grant when a reconnect callback succeeds", async () => {
+    db = createTestDb();
+    seed();
+    const realFetch = globalThis.fetch;
+    const revoked: string[] = [];
+    let refreshToken = "refresh-old";
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/oauth2/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: unsignedJwt({ workspace: "acme" }),
+            refresh_token: refreshToken,
+            token_type: "Bearer",
+            scope: "files:read offline_access",
+            expires_in: 3600,
+          }),
+        );
+      }
+      const body = new URLSearchParams(String(init?.body));
+      revoked.push(body.get("token") ?? "");
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+
+    async function connectAndFinish(code: string) {
+      const start = await appAs("user_1").request(
+        "/workspaces/ws_1/integrations/uploads/connect",
+        { method: "POST", headers: { Origin: "https://releases.sh" } },
+        env(),
+      );
+      const { authorizeUrl } = (await start.json()) as { authorizeUrl: string };
+      const state = new URL(authorizeUrl).searchParams.get("state")!;
+      const res = await appAs("user_1").request(
+        "/integrations/uploads/callback",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code, state }),
+        },
+        env(),
+      );
+      expect(res.status).toBe(200);
+    }
+
+    try {
+      await connectAndFinish("first");
+      expect(revoked).toEqual([]);
+      refreshToken = "refresh-new";
+      await connectAndFinish("second");
+      expect(revoked).toEqual(["refresh-old"]);
+      const [row] = await db.select().from(workspaceIntegrations);
+      expect(row?.status).toBe("connected");
+      const stored = await decryptOAuthSecret(row!.refreshTokenEnc!, ENCRYPTION_KEY, {
+        workspaceId: "ws_1",
+        provider: "uploads",
+        field: "refresh_token",
+      });
+      expect(stored).toBe("refresh-new");
     } finally {
       globalThis.fetch = realFetch;
     }

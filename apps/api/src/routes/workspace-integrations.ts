@@ -51,15 +51,29 @@ function projectStatus(
         scope: string | null;
         connectedAt: number | null;
         providerWorkspace?: string | null;
+        oauthState?: string | null;
+        pendingExpiresAt?: number | null;
+        accessTokenEnc?: string | null;
+        refreshTokenEnc?: string | null;
       }
     | undefined,
   configured: boolean,
+  now: number = Date.now(),
 ): UploadsIntegrationStatus {
   const connected = row?.status === "connected";
+  const hasTokens = Boolean(row?.accessTokenEnc || row?.refreshTokenEnc);
+  const reconnecting = Boolean(
+    connected &&
+    hasTokens &&
+    row?.oauthState &&
+    row.pendingExpiresAt != null &&
+    row.pendingExpiresAt > now,
+  );
   return {
     provider: "uploads",
     connected,
     configured,
+    reconnecting,
     connectedAt:
       connected && row?.connectedAt != null ? new Date(row.connectedAt).toISOString() : null,
     scope: connected ? (row?.scope ?? null) : null,
@@ -83,6 +97,10 @@ workspaceIntegrationHandlers.get("/workspaces/:workspaceId/integrations/uploads"
       scope: workspaceIntegrations.scope,
       connectedAt: workspaceIntegrations.connectedAt,
       providerWorkspace: workspaceIntegrations.providerWorkspace,
+      oauthState: workspaceIntegrations.oauthState,
+      pendingExpiresAt: workspaceIntegrations.pendingExpiresAt,
+      accessTokenEnc: workspaceIntegrations.accessTokenEnc,
+      refreshTokenEnc: workspaceIntegrations.refreshTokenEnc,
     })
     .from(workspaceIntegrations)
     .where(
@@ -325,6 +343,8 @@ workspaceIntegrationHandlers.post(
     }
 
     const now = Date.now();
+    const previousTokenEnc = row.refreshTokenEnc ?? row.accessTokenEnc;
+    const previousField = row.refreshTokenEnc ? "refresh_token" : "access_token";
     const { uploadsWorkspace, persisted } = await persistUploadsTokenGrant(db, {
       rowId: row.id,
       workspaceId: row.workspaceId,
@@ -357,6 +377,26 @@ workspaceIntegrationHandlers.post(
       );
     }
 
+    if (previousTokenEnc) {
+      // The new grant is stored. Drop the one it replaced. A failed revoke
+      // does not undo the connect; the old grant just stays live at uploads.sh.
+      try {
+        const previous = await decryptOAuthSecret(previousTokenEnc, cfg.encryptionKey, {
+          workspaceId: row.workspaceId,
+          provider: UPLOADS_OAUTH_PROVIDER,
+          field: previousField,
+        });
+        await revokeUploadsToken(cfg, previous, previousField);
+      } catch (err) {
+        logEvent("warn", {
+          component: "uploads-oauth",
+          event: "previous-grant-revoke-failed",
+          workspaceId: row.workspaceId,
+          err,
+        });
+      }
+    }
+
     logEvent("info", {
       component: "uploads-oauth",
       event: "connected",
@@ -368,6 +408,7 @@ workspaceIntegrationHandlers.post(
       provider: "uploads",
       connected: true,
       configured: true,
+      reconnecting: false,
       connectedAt: new Date(now).toISOString(),
       scope: tokens.scope,
       uploadsWorkspace,
