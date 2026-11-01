@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../../../tests/db-helper";
 import { eq } from "drizzle-orm";
 import { cronRuns } from "../src/db/schema-cron";
-import { insertRunningRow, finalizeRunRow } from "../src/db/cron-runs-dao";
+import { insertRunningRow, finalizeRunRow, reconcileStaleRunning } from "../src/db/cron-runs-dao";
 
 function makeDb() {
   const sqlite = new Database(":memory:");
@@ -95,5 +95,34 @@ describe("cron_runs DAO", () => {
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, id)).all();
     expect(JSON.parse(row.sessionsStarted!).length).toBe(20);
     expect(JSON.parse(row.dispatchErrorDetail!).length).toBe(20);
+  });
+
+  it("does not mark an aborted row done when finalize lands after the sweep", async () => {
+    const { db } = makeDb();
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
+    const swept = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now: new Date("2026-04-18T03:00:00Z"),
+      thresholdMs: 60_000,
+    });
+    expect(swept).toBe(1);
+    await finalizeRunRow(db, id, {
+      endedAt: "2026-04-18T03:00:01Z",
+      status: "done",
+      candidates: 1,
+      dispatched: 1,
+      skippedOverCap: 0,
+      dispatchErrors: 0,
+      sessionsStarted: [],
+      dispatchErrorDetail: [],
+      notes: "finished late",
+    });
+    const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, id)).all();
+    expect(row.status).toBe("aborted");
+    expect(row.abortReason).toBe("stale_running");
+    expect(row.notes).toBe("reconciled by next sweep");
   });
 });

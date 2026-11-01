@@ -6,15 +6,16 @@
  * This pass loads the stored title/content, classifies each one the same way
  * ingest does, and writes `suppressed` / `suppressedReason`.
  *
- * A not-marketing verdict clears a `marketing_classifier:*` reason. It does
- * not clear a manual or `force_refetch` suppression — those rows are reported
- * as `held`. A marketing verdict always suppresses.
+ * A not-marketing verdict clears a `marketing_classifier:*` reason. A manual
+ * suppression, a `force_refetch` suppression, and a manual unsuppress
+ * (`manual:unsuppressed`) stay as stored and are reported as `held`. A
+ * compare-and-set miss is `conflict`.
  *
  * Per request the caller passes at most {@link RECLASSIFY_MAX} ids. A source
  * sweep pages with `after` so a long history is several requests, each one
  * short enough to finish inside a worker invocation.
  */
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { releases, sources } from "@buildinternet/releases-core/schema";
 import { chunkArray, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import {
@@ -37,7 +38,10 @@ export interface ReclassifyEnv extends TextModelEnv {
   RELEASE_CLASSIFICATIONS_AE?: ClassificationDataset;
 }
 
-export type ReclassifyDisposition = "suppressed" | "kept" | "failed" | "held";
+/** Stored when an operator clears suppression, so a later reclassify does not put it back. */
+export const MANUAL_UNSUPPRESS_REASON = "manual:unsuppressed";
+
+export type ReclassifyDisposition = "suppressed" | "kept" | "failed" | "held" | "conflict";
 
 export interface ReclassifyResultRow {
   id: string;
@@ -60,6 +64,8 @@ export interface ReclassifyReport {
   kept: number;
   failed: number;
   held: number;
+  /** Compare-and-set missed: the row changed while it was being classified. */
+  conflict: number;
   missing: string[];
   /** True when rows were selected but no classifier model could be resolved. */
   providerMissing: boolean;
@@ -109,6 +115,11 @@ function classifierOwns(reason: string | null): boolean {
   return reason == null || reason.startsWith("marketing_classifier:");
 }
 
+function operatorKeeps(row: StoredRelease): boolean {
+  if (row.suppressedReason === MANUAL_UNSUPPRESS_REASON) return true;
+  return isSuppressed(row.suppressed) && !classifierOwns(row.suppressedReason);
+}
+
 function isSuppressed(value: boolean | null): boolean {
   return value === true;
 }
@@ -121,15 +132,20 @@ function plannedState(
   row: StoredRelease,
   verdict: MarketingClassifierResult,
 ): { suppressed: boolean; suppressedReason: string | null; held: boolean } {
+  // A manual suppress, force-refetch, or manual unsuppress stays, even when this pass says marketing.
+  if (operatorKeeps(row)) {
+    return {
+      suppressed: isSuppressed(row.suppressed),
+      suppressedReason: row.suppressedReason,
+      held: true,
+    };
+  }
   if (verdict.isMarketing) {
     return {
       suppressed: true,
       suppressedReason: `marketing_classifier:${verdict.reason}`,
       held: false,
     };
-  }
-  if (isSuppressed(row.suppressed) && !classifierOwns(row.suppressedReason)) {
-    return { suppressed: true, suppressedReason: row.suppressedReason, held: true };
   }
   return { suppressed: false, suppressedReason: null, held: false };
 }
@@ -170,6 +186,7 @@ export async function reclassifyReleaseIds(
     kept: 0,
     failed: 0,
     held: 0,
+    conflict: 0,
     missing,
     providerMissing: false,
     nextAfter: null,
@@ -206,6 +223,7 @@ export async function reclassifyReleaseIds(
   let kept = 0;
   let failed = 0;
   let held = 0;
+  let conflict = 0;
 
   for (const row of ordered) {
     const started = Date.now();
@@ -224,7 +242,7 @@ export async function reclassifyReleaseIds(
         { threshold },
       );
       const next = plannedState(row, verdict);
-      const disposition: ReclassifyDisposition = next.held
+      let disposition: ReclassifyDisposition = next.held
         ? "held"
         : next.suppressed
           ? "suppressed"
@@ -234,22 +252,39 @@ export async function reclassifyReleaseIds(
         row.suppressedReason !== next.suppressedReason;
       let applied = false;
       if (!opts.dryRun && changed && !next.held) {
+        const reasonMatch =
+          row.suppressedReason == null
+            ? isNull(releases.suppressedReason)
+            : eq(releases.suppressedReason, row.suppressedReason);
+        const suppressedMatch = isSuppressed(row.suppressed)
+          ? eq(releases.suppressed, true)
+          : or(eq(releases.suppressed, false), isNull(releases.suppressed));
         // oxlint-disable-next-line no-await-in-loop -- one write per changed row
-        await db
+        const [written] = await db
           .update(releases)
           .set({ suppressed: next.suppressed, suppressedReason: next.suppressedReason })
-          .where(eq(releases.id, row.id));
-        applied = true;
+          .where(and(eq(releases.id, row.id), reasonMatch, suppressedMatch!))
+          .returning({ id: releases.id });
+        applied = written != null;
+        if (!written) disposition = "conflict";
       }
       if (disposition === "suppressed") suppressed++;
       else if (disposition === "held") held++;
-      else kept++;
+      else if (disposition === "conflict") {
+        conflict++;
+        logEvent("info", {
+          component: "marketing-reclassify",
+          event: "reclassify-conflict",
+          releaseId: row.id,
+        });
+      } else kept++;
+      const stored = disposition === "conflict";
       results.push({
         id: row.id,
         disposition,
         reason: verdict.reason,
-        suppressed: next.suppressed,
-        suppressedReason: next.suppressedReason,
+        suppressed: stored ? isSuppressed(row.suppressed) : next.suppressed,
+        suppressedReason: stored ? row.suppressedReason : next.suppressedReason,
         applied,
       });
       writeClassificationPoint(
@@ -257,12 +292,17 @@ export async function reclassifyReleaseIds(
         env.ENVIRONMENT,
         marketingClassificationInput(
           {
-            disposition: next.held
-              ? "skipped"
-              : disposition === "suppressed"
-                ? "suppressed"
-                : "kept",
-            failureCategory: next.held ? "manual_hold" : null,
+            disposition:
+              next.held || disposition === "conflict"
+                ? "skipped"
+                : disposition === "suppressed"
+                  ? "suppressed"
+                  : "kept",
+            failureCategory: next.held
+              ? "manual_hold"
+              : disposition === "conflict"
+                ? "cas_conflict"
+                : null,
             verdict: next.held ? null : verdict,
             provider,
             model: modelName,
@@ -326,6 +366,7 @@ export async function reclassifyReleaseIds(
     suppressed,
     kept,
     held,
+    conflict,
     failed,
     threshold,
     modelId: model.id,
@@ -341,6 +382,7 @@ export async function reclassifyReleaseIds(
     kept,
     failed,
     held,
+    conflict,
     missing,
     providerMissing: false,
     nextAfter: null,

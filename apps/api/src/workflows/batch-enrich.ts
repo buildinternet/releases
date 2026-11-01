@@ -1,4 +1,4 @@
-import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
+import { recordEnrichmentOutcome } from "../lib/ingest/source-fetch-health.js";
 /**
  * BatchEnrichWorkflow — async, batched backfill of feed-content enrichment for
  * the render-heavy / JS-shell summary-only sources that the synchronous backfill
@@ -31,7 +31,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import type Anthropic from "@anthropic-ai/sdk";
 import { createDb } from "../db.js";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
@@ -58,7 +58,7 @@ import {
 import type { FlagshipBinding } from "@releases/lib/flags";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/ai/anthropic.js";
 import { logUsage } from "../lib/ai/usage-log.js";
-import { parsePositiveInt, nextEnrichmentMetadata } from "../cron/feed-enrich.js";
+import { parsePositiveInt } from "../cron/feed-enrich.js";
 import {
   selectEnrichCandidates,
   buildEnrichBatchRequests,
@@ -573,17 +573,13 @@ function groupBySource(
 
 /**
  * Reset the per-source enrichment circuit breaker (`metadata.enrichment
- * .consecutiveFailures`) to 0 after a successful backfill. Reuses
- * `nextEnrichmentMetadata` (success → 0) so the marker shape stays identical to
- * the forward path; skips the write when the breaker is already clear.
+ * .consecutiveFailures`) to 0 after a successful backfill, only while the
+ * counter is still the value this run started from. Skips the write when the
+ * breaker is already clear.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern
 async function resetEnrichmentBreaker(db: any, src: Source): Promise<void> {
-  const meta = getSourceMeta(src);
-  if ((meta.enrichment?.consecutiveFailures ?? 0) === 0) return;
-  const merged = { ...meta, enrichment: nextEnrichmentMetadata(meta.enrichment, true) };
-  await db
-    .update(sources)
-    .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
-    .where(eq(sources.id, src.id));
+  const observed = getSourceMeta(src).enrichment?.consecutiveFailures ?? 0;
+  if (observed === 0) return;
+  await recordEnrichmentOutcome(db, src.id, { succeeded: true, observedFailures: observed });
 }

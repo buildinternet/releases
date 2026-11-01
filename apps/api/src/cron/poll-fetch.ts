@@ -5,6 +5,7 @@ import {
   NO_CHANGE_BACKOFF_CAP_HOURS,
   bumpSourceCounterQuery,
   recordConsecutiveFetchError,
+  recordFeed4xx,
 } from "../lib/ingest/source-fetch-health.js";
 import {
   sources,
@@ -32,7 +33,6 @@ import {
   effectiveGitHubUrl,
   synthesizeReleaseUrl,
   FEED_4XX_INVALIDATE_THRESHOLD,
-  CLEARED_FEED_FIELDS,
   extractMediaFromMarkdown,
 } from "@releases/adapters/feed.js";
 import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
@@ -2340,40 +2340,19 @@ export async function fetchOne(
     // next retry out by hours and slow self-healing — we'd rather keep the
     // normal cron cadence until the streak hits the invalidation threshold.
     if (err instanceof FeedHttpError) {
-      const streak = (meta.feed4xxStreak ?? 0) + 1;
-      if (streak >= FEED_4XX_INVALIDATE_THRESHOLD) {
+      const recorded = await recordFeed4xx(db, source.id, FEED_4XX_INVALIDATE_THRESHOLD).catch(
+        logSwallowed("cron-poll-fetch", "source-metadata-write-failed", {
+          sourceSlug: source.slug,
+        }),
+      );
+      if (recorded?.invalidated) {
         logEvent("warn", {
           component: "cron-poll-fetch",
           event: "feed-url-invalidated",
           sourceSlug: source.slug,
-          streak,
+          streak: recorded.streak,
           httpStatus: err.status,
         });
-        const cleared = { ...meta, ...CLEARED_FEED_FIELDS, noFeedFound: false };
-        await db
-          .update(sources)
-          .set({
-            metadata: preserveLiveSourceDataset(JSON.stringify(cleared)),
-            consecutiveErrors: 0,
-            nextFetchAfter: null,
-          })
-          .where(eq(sources.id, source.id))
-          .catch(
-            logSwallowed("cron-poll-fetch", "source-metadata-write-failed", {
-              sourceSlug: source.slug,
-            }),
-          );
-      } else {
-        const merged = { ...meta, feed4xxStreak: streak };
-        await db
-          .update(sources)
-          .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
-          .where(eq(sources.id, source.id))
-          .catch(
-            logSwallowed("cron-poll-fetch", "source-metadata-write-failed", {
-              sourceSlug: source.slug,
-            }),
-          );
       }
       return {
         releasesFound: 0,

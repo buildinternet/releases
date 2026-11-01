@@ -1,4 +1,3 @@
-import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 /**
  * Feed content enrichment — follow a summary-only feed item's link, fetch the
  * real article, and return clean body + media. Cheap path first (plain fetch +
@@ -26,8 +25,8 @@ import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage, type UsageLogDb } from "../lib/ai/usage-log.js";
 import { enrichmentFloor, type EnrichmentMarker } from "../lib/ingest/enrich-apply.js";
-import { releases, sources } from "@buildinternet/releases-core/schema";
-import { getSourceMeta } from "@releases/adapters/source-meta.js";
+import { releases } from "@buildinternet/releases-core/schema";
+import { recordEnrichmentOutcome } from "../lib/ingest/source-fetch-health.js";
 import type { drizzle } from "drizzle-orm/d1";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
@@ -321,21 +320,6 @@ export function isEnrichmentCircuitOpen(meta: SourceMetadata): boolean {
   return failures >= ENRICH_CONSECUTIVE_FAILURE_LIMIT;
 }
 
-/**
- * Derives the next `enrichment` metadata block after an attempt.
- * - On failure: increments `consecutiveFailures` (starts from 0 if absent).
- * - On success: resets `consecutiveFailures` to 0.
- */
-export function nextEnrichmentMetadata(
-  current: SourceMetadata["enrichment"],
-  succeeded: boolean,
-): NonNullable<SourceMetadata["enrichment"]> {
-  if (succeeded) {
-    return { consecutiveFailures: 0 };
-  }
-  return { consecutiveFailures: (current?.consecutiveFailures ?? 0) + 1 };
-}
-
 interface EnrichNewThinEnv {
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;
@@ -416,14 +400,16 @@ export async function enrichNewThinItems(
   }
 
   // Persist the per-source breaker state. Any success this fire resets the
-  // counter to 0 (and clears any tripped state); an all-fail fire increments
-  // it. The write only runs when at least one attempt was made (guarded
-  // above), so a source with nothing to enrich never trips the breaker. Merge
-  // against the freshly-read row so a concurrent metadata edit isn't clobbered
-  // wholesale; fail-open — a write error must not lose the enriched bodies the
-  // caller is about to apply.
+  // counter to 0 only while it is still the value this attempt started from;
+  // an all-fail fire increments the stored counter in one UPDATE. Fail-open —
+  // a write error must not lose the enriched bodies the caller is about to apply.
   try {
-    await persistEnrichmentBreakerState(db, source.id, anySuccess);
+    await persistEnrichmentBreakerState(
+      db,
+      source.id,
+      anySuccess,
+      meta.enrichment?.consecutiveFailures ?? 0,
+    );
   } catch (err) {
     logEvent("warn", {
       component: "feed-enrich",
@@ -435,30 +421,16 @@ export async function enrichNewThinItems(
   return out;
 }
 
-/**
- * Re-read the source's current metadata, fold in the next `enrichment` block
- * (increment on all-fail, reset on any success), and write it back to the
- * `sources` row. Re-reading inside the function keeps the merge against the
- * latest persisted metadata rather than the possibly-stale in-memory copy the
- * caller held, so an unrelated metadata field written earlier in the same fire
- * isn't dropped.
- */
+/** Increment or conditionally reset `metadata.enrichment.consecutiveFailures`. */
 async function persistEnrichmentBreakerState(
   db: ReturnType<typeof drizzle>,
   sourceId: string,
   succeeded: boolean,
+  observedFailures: number,
 ): Promise<void> {
-  const [row] = await db
-    .select({ metadata: sources.metadata })
-    .from(sources)
-    .where(eq(sources.id, sourceId));
-  const current = row ? getSourceMeta({ metadata: row.metadata } as Source) : {};
-  const merged: SourceMetadata = {
-    ...current,
-    enrichment: nextEnrichmentMetadata(current.enrichment, succeeded),
-  };
-  await db
-    .update(sources)
-    .set({ metadata: preserveLiveSourceDataset(JSON.stringify(merged)) })
-    .where(eq(sources.id, sourceId));
+  await recordEnrichmentOutcome(
+    db as never,
+    sourceId,
+    succeeded ? { succeeded: true, observedFailures } : { succeeded: false },
+  );
 }

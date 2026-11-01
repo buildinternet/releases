@@ -244,9 +244,55 @@ describe("POST /admin/marketing-classifier/reclassify", () => {
     expect(held?.suppressedReason).toBe("manual");
     const forced = await stored("rel_force");
     expect(forced?.suppressedReason).toBe("force_refetch");
+
+    await seedRelease({
+      id: "rel_manual_mkt",
+      title: "Case study: operator kept this",
+      suppressed: true,
+      suppressedReason: "manual",
+    });
+    const manual = await post({ releaseIds: ["rel_manual_mkt"], dryRun: false });
+    const manualBody = (await manual.json()) as {
+      results: Array<{ disposition: string; applied: boolean }>;
+    };
+    expect(manualBody.results[0]).toMatchObject({ disposition: "held", applied: false });
+    expect((await stored("rel_manual_mkt"))?.suppressedReason).toBe("manual");
     expect(
       points.some((point) => point.blobs[9] === "skipped" && point.blobs[12] === "manual_hold"),
     ).toBe(true);
+  });
+
+  it("does not re-suppress a release an operator unsuppressed", async () => {
+    installClassifier();
+    await seedRelease({
+      id: "rel_unsup",
+      title: "Case study: operator unsuppressed this",
+      suppressed: false,
+      suppressedReason: "manual:unsuppressed",
+    });
+    const res = await post({ releaseIds: ["rel_unsup"], dryRun: false });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      held: number;
+      suppressed: number;
+      results: Array<{
+        disposition: string;
+        applied: boolean;
+        suppressed: boolean;
+        suppressedReason: string;
+      }>;
+    };
+    expect(body.held).toBe(1);
+    expect(body.suppressed).toBe(0);
+    expect(body.results[0]).toMatchObject({
+      disposition: "held",
+      applied: false,
+      suppressed: false,
+      suppressedReason: "manual:unsuppressed",
+    });
+    const row = await stored("rel_unsup");
+    expect(row?.suppressed).toBeFalsy();
+    expect(row?.suppressedReason).toBe("manual:unsuppressed");
   });
 
   it("404s a single unknown release and an unknown source", async () => {

@@ -5,7 +5,10 @@ import { createTestDb } from "../../../../../tests/db-helper.js";
 import {
   AUTO_PAUSE_AFTER_ERRORS,
   bumpSourceCounter,
+  firecrawlBookkeepingMetadata,
   recordConsecutiveFetchError,
+  recordEnrichmentOutcome,
+  recordFeed4xx,
 } from "./source-fetch-health.js";
 
 async function seed() {
@@ -150,6 +153,101 @@ describe("source fetch-health transitions", () => {
     // pre-update streak 2 → 4h
     expect(waitMs).toBeGreaterThan(3.5 * 3600_000);
     expect(waitMs).toBeLessThan(4.5 * 3600_000);
+    tdb.cleanup();
+  });
+
+  it("increments a feed 4xx streak without dropping other metadata, and clears the feed at the threshold", async () => {
+    const tdb = await seed();
+    await tdb.db
+      .update(sources)
+      .set({
+        metadata: JSON.stringify({ feedUrl: "https://acme.example/feed.xml", keep: true }),
+        consecutiveErrors: 2,
+      })
+      .where(eq(sources.id, "src_a"));
+
+    const first = await recordFeed4xx(tdb.db as never, "src_a", 5);
+    expect(first).toEqual({ streak: 1, invalidated: false });
+    const [kept] = await tdb.db.select().from(sources).where(eq(sources.id, "src_a"));
+    const keptMeta = JSON.parse(kept!.metadata!);
+    expect(keptMeta.feed4xxStreak).toBe(1);
+    expect(keptMeta.feedUrl).toBe("https://acme.example/feed.xml");
+    expect(keptMeta.keep).toBe(true);
+
+    await tdb.db
+      .update(sources)
+      .set({
+        metadata: JSON.stringify({
+          feedUrl: "https://acme.example/feed.xml",
+          feed4xxStreak: 4,
+          keep: true,
+        }),
+      })
+      .where(eq(sources.id, "src_a"));
+    const tripped = await recordFeed4xx(tdb.db as never, "src_a", 5);
+    expect(tripped).toEqual({ streak: 5, invalidated: true });
+    const [cleared] = await tdb.db.select().from(sources).where(eq(sources.id, "src_a"));
+    const clearedMeta = JSON.parse(cleared!.metadata!);
+    expect(clearedMeta.feedUrl).toBeUndefined();
+    expect(clearedMeta.feed4xxStreak).toBeUndefined();
+    expect(clearedMeta.keep).toBe(true);
+    expect(clearedMeta.noFeedFound).toBe(false);
+    expect(cleared!.consecutiveErrors).toBe(0);
+    tdb.cleanup();
+  });
+
+  it("leaves malformed metadata untouched instead of throwing", async () => {
+    const tdb = await seed();
+    await tdb.db.update(sources).set({ metadata: "not-json" }).where(eq(sources.id, "src_a"));
+    const bumped = await recordFeed4xx(tdb.db as never, "src_a", 5);
+    expect(bumped).toEqual({ streak: 0, invalidated: false });
+    const [row] = await tdb.db.select().from(sources).where(eq(sources.id, "src_a"));
+    expect(row?.metadata).toBe("not-json");
+    tdb.cleanup();
+  });
+
+  it("does not let an enrichment success reset a newer failure", async () => {
+    const tdb = await seed();
+    await tdb.db
+      .update(sources)
+      .set({ metadata: JSON.stringify({ keep: true, enrichment: { consecutiveFailures: 1 } }) })
+      .where(eq(sources.id, "src_a"));
+
+    await recordEnrichmentOutcome(tdb.db as never, "src_a", { succeeded: false });
+    await recordEnrichmentOutcome(tdb.db as never, "src_a", {
+      succeeded: true,
+      observedFailures: 1,
+    });
+    const [row] = await tdb.db.select().from(sources).where(eq(sources.id, "src_a"));
+    const meta = JSON.parse(row!.metadata!);
+    expect(meta.keep).toBe(true);
+    expect(meta.enrichment.consecutiveFailures).toBe(2);
+    tdb.cleanup();
+  });
+
+  it("patches Firecrawl bookkeeping without rewriting the rest of the metadata", async () => {
+    const tdb = await seed();
+    await tdb.db
+      .update(sources)
+      .set({
+        metadata: JSON.stringify({
+          keep: true,
+          dataset: { enabled: false },
+          firecrawl: { enabled: false, webhook: "https://hooks.example/x" },
+        }),
+      })
+      .where(eq(sources.id, "src_a"));
+    await tdb.db
+      .update(sources)
+      .set({ metadata: firecrawlBookkeepingMetadata("chk_1", "2026-06-01T00:00:00.000Z") })
+      .where(eq(sources.id, "src_a"));
+    const [row] = await tdb.db.select().from(sources).where(eq(sources.id, "src_a"));
+    const meta = JSON.parse(row!.metadata!);
+    expect(meta.keep).toBe(true);
+    expect(meta.dataset).toEqual({ enabled: false });
+    expect(meta.firecrawl.webhook).toBe("https://hooks.example/x");
+    expect(meta.firecrawl.enabled).toBe(true);
+    expect(meta.firecrawl.lastCheckId).toBe("chk_1");
     tdb.cleanup();
   });
 });

@@ -70,7 +70,7 @@ export async function finalizeRunRow(
       abortReason: params.abortReason ?? null,
       notes: params.notes,
     })
-    .where(eq(cronRuns.id, id));
+    .where(and(eq(cronRuns.id, id), eq(cronRuns.status, "running")));
 }
 
 export async function reconcileStaleRunning(

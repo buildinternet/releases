@@ -164,7 +164,7 @@ describe("POST /releases/batch-suppress", () => {
     expect(untouched?.suppressed).toBe(false);
   });
 
-  it("unsuppresses listed releases and clears the reason", async () => {
+  it("unsuppresses listed releases and marks them so reclassify leaves them visible", async () => {
     seedRelease("rel_a", { suppressed: true });
 
     const res = await sourceRoutes.request(
@@ -183,7 +183,7 @@ describe("POST /releases/batch-suppress", () => {
 
     const [row] = await testDb.db.select().from(releases).where(eq(releases.id, "rel_a"));
     expect(row?.suppressed).toBe(false);
-    expect(row?.suppressedReason).toBeNull();
+    expect(row?.suppressedReason).toBe("manual:unsuppressed");
   });
 
   it("purges homepage reel caches when any row changes visibility", async () => {

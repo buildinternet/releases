@@ -3,6 +3,37 @@ import { buildListResponse, parseListPagination, slicePage } from "./lib/paginat
 import { enableWsPingPong } from "./lib/ws-auto-response.js";
 
 const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
+const STALE_TIMEOUT_ERROR = "Session timed out (no updates received)";
+
+const TERMINAL_SESSION_STATUSES = new Set(["complete", "error", "cancelled"]);
+
+function isTerminalSession(status: string | undefined): boolean {
+  return status != null && TERMINAL_SESSION_STATUSES.has(status);
+}
+
+/** The read-path sweep's timeout is a guess. A later complete or cancel replaces it. */
+function isSweepTimeout(session: {
+  status: string;
+  error?: string;
+  errorSource?: string;
+}): boolean {
+  return (
+    session.status === "error" &&
+    session.error === STALE_TIMEOUT_ERROR &&
+    session.errorSource === "us"
+  );
+}
+
+function blocksLateTerminal(
+  session: { status: string; error?: string; errorSource?: string },
+  incoming: "complete" | "cancelled",
+): boolean {
+  if (!isTerminalSession(session.status)) return false;
+  if (isSweepTimeout(session) && (incoming === "complete" || incoming === "cancelled")) {
+    return false;
+  }
+  return true;
+}
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // run cleanup daily
 const STDOUT_FLUSH_INTERVAL_MS = 2_000; // batch stdout writes to storage
@@ -395,8 +426,10 @@ export class StatusHub extends DurableObject {
       }
     } else if (event.type === "session:complete") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
-      if (existing) {
+      if (existing && !blocksLateTerminal(existing, "complete")) {
         existing.status = "complete";
+        existing.error = undefined;
+        existing.errorSource = undefined;
         existing.activeSources = [];
         existing.lastUpdatedAt = now;
         if (event.result && typeof event.result === "object") {
@@ -412,8 +445,10 @@ export class StatusHub extends DurableObject {
       }
     } else if (event.type === "session:cancelled") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
-      if (existing) {
+      if (existing && !blocksLateTerminal(existing, "cancelled")) {
         existing.status = "cancelled";
+        existing.error = undefined;
+        existing.errorSource = undefined;
         existing.activeSources = [];
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
@@ -435,7 +470,9 @@ export class StatusHub extends DurableObject {
       if (event.stopReason) classification.stopReason = event.stopReason as string;
       if (typeof event.retryCount === "number") classification.retryCount = event.retryCount;
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
-      if (existing) {
+      if (existing && isTerminalSession(existing.status)) {
+        // A finished session stays finished. A late error must not flip it.
+      } else if (existing) {
         existing.status = "error";
         existing.error = event.error as string;
         Object.assign(existing, classification);
@@ -491,7 +528,7 @@ export class StatusHub extends DurableObject {
       const lastUpdate = session.lastUpdatedAt || session.startedAt;
       if (session.status === "running" && now - lastUpdate > STALE_SESSION_MS) {
         session.status = "error";
-        session.error = "Session timed out (no updates received)";
+        session.error = STALE_TIMEOUT_ERROR;
         session.errorSource = "us";
         session.lastUpdatedAt = now;
         // oxlint-disable-next-line no-await-in-loop -- sequential DO storage write: session state updated in place during iteration

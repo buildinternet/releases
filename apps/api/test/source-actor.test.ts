@@ -68,6 +68,7 @@ function mkActor(
   opts: {
     failCreateIds?: Set<string>;
     throwOnCreate?: boolean;
+    instanceStatus?: (id: string) => string;
     orgActorCalls?: Array<{ name: string; id: string }>;
   } = {},
   store: Map<string, unknown> = new Map(),
@@ -103,6 +104,11 @@ function mkActor(
         if (opts.failCreateIds?.has(o.id)) throw new Error(`duplicate instance id: ${o.id}`);
         created.push({ id: o.id, params: o.params });
       },
+      get: opts.instanceStatus
+        ? async (id: string) => ({
+            status: async () => ({ status: opts.instanceStatus!(id) }),
+          })
+        : undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
     ORG_ACTOR: opts.orgActorCalls
@@ -182,6 +188,46 @@ describe("SourceActor.alarm", () => {
     const mirror = await metaSourceActor(db, "src_due");
     expect(mirror?.managed).toBe(true);
     expect(typeof mirror?.nextAlarmAt).toBe("string");
+  });
+
+  it("does not start another workflow while a paused instance still holds the lease", async () => {
+    const db = mkDb();
+    seedSource(db, "src_due", { lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString() });
+    const h = mkActor(db, { instanceStatus: () => "paused" });
+    h.store.set("sourceId", "src_due");
+    h.store.set("state", {
+      tier: "normal",
+      lastFetchedAt: null,
+      nextAlarmAt: null,
+      inFlight: true,
+      lastFiredAt: Date.now() - 20 * 60 * 1000,
+      backoff: { consecutiveNoChange: 0, consecutiveErrors: 0, nextFetchAfter: null },
+    });
+
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(0);
+    expect((await h.actor.getState()).inFlight).toBe(true);
+  });
+
+  it("does not start another workflow while the previous instance is still running", async () => {
+    const db = mkDb();
+    seedSource(db, "src_due", { lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString() });
+    const h = mkActor(db, { instanceStatus: () => "running" });
+    h.store.set("sourceId", "src_due");
+    h.store.set("state", {
+      tier: "normal",
+      lastFetchedAt: null,
+      nextAlarmAt: null,
+      inFlight: true,
+      lastFiredAt: Date.now() - 20 * 60 * 1000,
+      backoff: { consecutiveNoChange: 0, consecutiveErrors: 0, nextFetchAfter: null },
+    });
+
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(0);
+    expect((await h.actor.getState()).inFlight).toBe(true);
   });
 
   it("schedules short retry when workflow.create fails (non-duplicate)", async () => {

@@ -1,4 +1,4 @@
-import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
+import { firecrawlBookkeepingMetadata } from "../lib/ingest/source-fetch-health.js";
 /**
  * Workflow triggered when Firecrawl detects a change on a monitored source
  * (inbound webhook → POST /v1/inbound/firecrawl). Re-scrapes the
@@ -342,16 +342,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
 
       // ── Step 6: bookkeep ─────────────────────────────────────────────────────
       await step.do("bookkeep", RETRY_POLL, async () => {
-        const currentMeta = getSourceMeta(source);
-        const nextMeta = {
-          ...currentMeta,
-          firecrawl: {
-            ...currentMeta.firecrawl,
-            enabled: true,
-            lastCheckId: checkId,
-            lastChangeAt: new Date().toISOString(),
-          },
-        };
+        const checkedAt = new Date().toISOString();
         await db.batch([
           db.insert(fetchLog).values({
             sourceId,
@@ -367,12 +358,12 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           db
             .update(sources)
             .set({
-              lastFetchedAt: new Date().toISOString(),
+              lastFetchedAt: checkedAt,
               consecutiveNoChange: 0,
               consecutiveErrors: 0,
               nextFetchAfter: null,
               changeDetectedAt: null,
-              metadata: preserveLiveSourceDataset(JSON.stringify(nextMeta)),
+              metadata: firecrawlBookkeepingMetadata(checkId, checkedAt),
             })
             .where(eq(sources.id, sourceId)),
         ] as [unknown, ...unknown[]]);
