@@ -29,6 +29,7 @@ import { isPushFed } from "@releases/adapters/source-meta";
 import { logEvent } from "@releases/lib/log-event";
 import { seedJitterMs } from "./lib/sources/source-actor-seed.js";
 import { notifyOrgDrain } from "./lib/sources/org-drain-notify.js";
+import { workflowInstanceStatus } from "./lib/workflow-instance.js";
 
 /**
  * In-flight guard window. A fired workflow (poll + fetch + content + embed +
@@ -279,15 +280,17 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       return;
     }
 
-    // In-flight guard: a workflow we fired is presumably still running. Re-check
-    // after the safety window rather than spawning a second instance.
-    const inFlight =
-      prev?.inFlight === true &&
-      prev.lastFiredAt != null &&
-      now - prev.lastFiredAt < SAFETY_WINDOW_MS;
-    if (inFlight) {
-      await this.scheduleAt(row, now + SAFETY_WINDOW_MS, true, prev?.lastFiredAt ?? null);
-      return;
+    // In-flight guard: a workflow we fired is presumably still running. Inside
+    // the safety window, don't even ask. Past it, look up that instance — a
+    // run that is still alive keeps the lease instead of starting another.
+    if (prev?.inFlight === true && prev.lastFiredAt != null) {
+      const withinWindow = now - prev.lastFiredAt < SAFETY_WINDOW_MS;
+      const stillAlive =
+        withinWindow || (await this.previousWorkflowAlive(sourceId, prev.lastFiredAt));
+      if (stillAlive) {
+        await this.scheduleAt(row, now + SAFETY_WINDOW_MS, true, prev.lastFiredAt);
+        return;
+      }
     }
 
     // Due — fire the existing ingest workflow (timer/mutex here; ingest there).
@@ -340,6 +343,31 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       .where(eq(organizations.id, row.orgId))
       .limit(1);
     return org?.fetchPaused === true;
+  }
+
+  /** True when the instance fired at `lastFiredAt` is still in progress. */
+  private async previousWorkflowAlive(sourceId: string, lastFiredAt: number): Promise<boolean> {
+    const wf = this.env.POLL_AND_FETCH_WORKFLOW;
+    if (!wf || typeof (wf as { get?: unknown }).get !== "function") return false;
+    const bucket = Math.floor(lastFiredAt / SAFETY_WINDOW_MS);
+    const result = await workflowInstanceStatus(
+      wf as unknown as Parameters<typeof workflowInstanceStatus>[0],
+      `source-actor-${sourceId}-${bucket}`,
+    );
+    if (!result.ok) {
+      if (result.code === "not_found") return false;
+      logEvent("warn", {
+        component: "source-actor",
+        event: "inflight-status-failed",
+        sourceId,
+        message: result.message,
+      });
+      return true;
+    }
+    const status = typeof result.status.status === "string" ? result.status.status : "";
+    return (
+      status === "queued" || status === "running" || status === "waiting" || status === "paused"
+    );
   }
 
   private async fireWorkflow(sourceId: string, nowMs: number): Promise<boolean> {

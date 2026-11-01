@@ -244,6 +244,19 @@ describe("POST /admin/marketing-classifier/reclassify", () => {
     expect(held?.suppressedReason).toBe("manual");
     const forced = await stored("rel_force");
     expect(forced?.suppressedReason).toBe("force_refetch");
+
+    await seedRelease({
+      id: "rel_manual_mkt",
+      title: "Case study: operator kept this",
+      suppressed: true,
+      suppressedReason: "manual",
+    });
+    const manual = await post({ releaseIds: ["rel_manual_mkt"], dryRun: false });
+    const manualBody = (await manual.json()) as {
+      results: Array<{ disposition: string; applied: boolean }>;
+    };
+    expect(manualBody.results[0]).toMatchObject({ disposition: "held", applied: false });
+    expect((await stored("rel_manual_mkt"))?.suppressedReason).toBe("manual");
     expect(
       points.some((point) => point.blobs[9] === "skipped" && point.blobs[12] === "manual_hold"),
     ).toBe(true);

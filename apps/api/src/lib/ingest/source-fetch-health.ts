@@ -11,7 +11,7 @@
  * the pre-update row, so overlapping bumps each add one, and the backoff
  * deadline is computed from that same pre-update count.
  */
-import { eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../../db.js";
 
@@ -166,4 +166,88 @@ export async function recordConsecutiveFetchError(
         ? new Date(Date.now() + retryAfterMs).toISOString()
         : undefined,
   });
+}
+
+function metadataNumber(metadata: string | null, key: string): number {
+  if (!metadata) return 0;
+  try {
+    const value = (JSON.parse(metadata) as Record<string, unknown>)[key];
+    return typeof value === "number" ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Bump `metadata.feed4xxStreak` in one UPDATE. When the new streak reaches
+ * `invalidateAt`, clear the feed locator keys (and only those) if the streak
+ * is still the value this bump wrote.
+ */
+export async function recordFeed4xx(
+  db: D1Db,
+  sourceId: string,
+  invalidateAt: number,
+): Promise<{ streak: number; invalidated: boolean } | null> {
+  const [bumped] = await db
+    .update(sources)
+    .set({
+      metadata: sql`json_set(coalesce(${sources.metadata}, '{}'), '$.feed4xxStreak', coalesce(json_extract(${sources.metadata}, '$.feed4xxStreak'), 0) + 1)`,
+    })
+    .where(eq(sources.id, sourceId))
+    .returning({ metadata: sources.metadata });
+  if (!bumped) return null;
+  const streak = metadataNumber(bumped.metadata, "feed4xxStreak");
+  if (streak < invalidateAt) return { streak, invalidated: false };
+  const [cleared] = await db
+    .update(sources)
+    .set({
+      metadata: sql`json_set(json_remove(coalesce(${sources.metadata}, '{}'), '$.feedUrl', '$.feedType', '$.feedDiscoveredAt', '$.feedEtag', '$.feedLastModified', '$.feedContentLength', '$.feed4xxStreak'), '$.noFeedFound', json('false'))`,
+      consecutiveErrors: 0,
+      nextFetchAfter: null,
+    })
+    .where(
+      and(
+        eq(sources.id, sourceId),
+        sql`coalesce(json_extract(${sources.metadata}, '$.feed4xxStreak'), 0) = ${streak}`,
+      ),
+    )
+    .returning({ id: sources.id });
+  return { streak, invalidated: cleared != null };
+}
+
+/**
+ * Enrichment breaker. A failure always adds one to the stored counter. A
+ * success resets it only while the counter is still the value this attempt
+ * started from, so a newer failure is not wiped.
+ */
+export async function recordEnrichmentOutcome(
+  db: D1Db,
+  sourceId: string,
+  outcome: { succeeded: true; observedFailures: number } | { succeeded: false },
+): Promise<void> {
+  if (outcome.succeeded) {
+    await db
+      .update(sources)
+      .set({
+        metadata: sql`json_set(coalesce(${sources.metadata}, '{}'), '$.enrichment', json('{"consecutiveFailures":0}'))`,
+      })
+      .where(
+        and(
+          eq(sources.id, sourceId),
+          sql`coalesce(json_extract(${sources.metadata}, '$.enrichment.consecutiveFailures'), 0) = ${outcome.observedFailures}`,
+        ),
+      );
+    return;
+  }
+  await db
+    .update(sources)
+    .set({
+      metadata: sql`json_set(coalesce(${sources.metadata}, '{}'), '$.enrichment', json_object('consecutiveFailures', coalesce(json_extract(${sources.metadata}, '$.enrichment.consecutiveFailures'), 0) + 1))`,
+    })
+    .where(eq(sources.id, sourceId));
+}
+
+/** Patch only the Firecrawl bookkeeping keys. Other metadata stays put. */
+export function firecrawlBookkeepingMetadata(checkId: string, at: string): SQL {
+  return sql`json_set(coalesce(${sources.metadata}, '{}'), '$.firecrawl.enabled', json('true'), '$.firecrawl.lastCheckId', ${checkId}, '$.firecrawl.lastChangeAt', ${at})`;
 }

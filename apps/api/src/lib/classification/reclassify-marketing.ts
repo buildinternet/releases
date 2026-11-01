@@ -14,7 +14,7 @@
  * sweep pages with `after` so a long history is several requests, each one
  * short enough to finish inside a worker invocation.
  */
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { releases, sources } from "@buildinternet/releases-core/schema";
 import { chunkArray, IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import {
@@ -121,15 +121,16 @@ function plannedState(
   row: StoredRelease,
   verdict: MarketingClassifierResult,
 ): { suppressed: boolean; suppressedReason: string | null; held: boolean } {
+  // A manual or force-refetch decision stays, even when this pass says marketing.
+  if (isSuppressed(row.suppressed) && !classifierOwns(row.suppressedReason)) {
+    return { suppressed: true, suppressedReason: row.suppressedReason, held: true };
+  }
   if (verdict.isMarketing) {
     return {
       suppressed: true,
       suppressedReason: `marketing_classifier:${verdict.reason}`,
       held: false,
     };
-  }
-  if (isSuppressed(row.suppressed) && !classifierOwns(row.suppressedReason)) {
-    return { suppressed: true, suppressedReason: row.suppressedReason, held: true };
   }
   return { suppressed: false, suppressedReason: null, held: false };
 }
@@ -224,7 +225,7 @@ export async function reclassifyReleaseIds(
         { threshold },
       );
       const next = plannedState(row, verdict);
-      const disposition: ReclassifyDisposition = next.held
+      let disposition: ReclassifyDisposition = next.held
         ? "held"
         : next.suppressed
           ? "suppressed"
@@ -234,12 +235,21 @@ export async function reclassifyReleaseIds(
         row.suppressedReason !== next.suppressedReason;
       let applied = false;
       if (!opts.dryRun && changed && !next.held) {
+        const reasonMatch =
+          row.suppressedReason == null
+            ? isNull(releases.suppressedReason)
+            : eq(releases.suppressedReason, row.suppressedReason);
+        const suppressedMatch = isSuppressed(row.suppressed)
+          ? eq(releases.suppressed, true)
+          : or(eq(releases.suppressed, false), isNull(releases.suppressed));
         // oxlint-disable-next-line no-await-in-loop -- one write per changed row
-        await db
+        const [written] = await db
           .update(releases)
           .set({ suppressed: next.suppressed, suppressedReason: next.suppressedReason })
-          .where(eq(releases.id, row.id));
-        applied = true;
+          .where(and(eq(releases.id, row.id), reasonMatch, suppressedMatch!))
+          .returning({ id: releases.id });
+        applied = written != null;
+        if (!written) disposition = "held";
       }
       if (disposition === "suppressed") suppressed++;
       else if (disposition === "held") held++;

@@ -3,6 +3,12 @@ import { buildListResponse, parseListPagination, slicePage } from "./lib/paginat
 import { enableWsPingPong } from "./lib/ws-auto-response.js";
 
 const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
+
+const TERMINAL_SESSION_STATUSES = new Set(["complete", "error", "cancelled"]);
+
+function isTerminalSession(status: string | undefined): boolean {
+  return status != null && TERMINAL_SESSION_STATUSES.has(status);
+}
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // run cleanup daily
 const STDOUT_FLUSH_INTERVAL_MS = 2_000; // batch stdout writes to storage
@@ -395,7 +401,7 @@ export class StatusHub extends DurableObject {
       }
     } else if (event.type === "session:complete") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
-      if (existing) {
+      if (existing && !isTerminalSession(existing.status)) {
         existing.status = "complete";
         existing.activeSources = [];
         existing.lastUpdatedAt = now;
@@ -412,7 +418,7 @@ export class StatusHub extends DurableObject {
       }
     } else if (event.type === "session:cancelled") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
-      if (existing) {
+      if (existing && !isTerminalSession(existing.status)) {
         existing.status = "cancelled";
         existing.activeSources = [];
         existing.lastUpdatedAt = now;
@@ -435,7 +441,9 @@ export class StatusHub extends DurableObject {
       if (event.stopReason) classification.stopReason = event.stopReason as string;
       if (typeof event.retryCount === "number") classification.retryCount = event.retryCount;
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
-      if (existing) {
+      if (existing && isTerminalSession(existing.status)) {
+        // A finished session stays finished. A late error must not flip it.
+      } else if (existing) {
         existing.status = "error";
         existing.error = event.error as string;
         Object.assign(existing, classification);
