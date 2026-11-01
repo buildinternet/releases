@@ -9,7 +9,7 @@
  * For now, duplicate cleanly here and in apps/api/src/webhooks/queries.ts.
  */
 
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   organizations,
   webhookSubscriptions,
@@ -18,9 +18,11 @@ import {
 import type { SubscriptionLabel } from "@releases/core-internal/webhook-alert-format";
 import type { D1Db } from "./db.js";
 
-export type SummaryUpdate =
-  | { kind: "success"; at: string }
-  | { kind: "error"; at: string; message: string };
+export type { SummaryUpdate } from "@releases/core-internal/webhook-delivery-state";
+export {
+  setWebhookSubscriptionEnabled,
+  updateWebhookSubscriptionSummary,
+} from "@releases/core-internal/webhook-delivery-state";
 
 export async function getWebhookSubscriptionById(
   db: D1Db,
@@ -78,74 +80,4 @@ export async function getOrgLabelById(
     .where(eq(organizations.id, orgId))
     .limit(1);
   return rows[0] ?? null;
-}
-
-/**
- * Record one delivery outcome. Failure increments `consecutive_failures` in
- * the UPDATE itself (a read-modify-write drops or double-counts when two
- * queue consumers finish the same subscription together) and starts the
- * failure streak only when the pre-update count is 0. Returns the row after
- * the write, or null when the subscription is gone.
- */
-export async function updateWebhookSubscriptionSummary(
-  db: D1Db,
-  id: string,
-  update: SummaryUpdate,
-): Promise<WebhookSubscription | null> {
-  if (update.kind === "success") {
-    const [row] = await db
-      .update(webhookSubscriptions)
-      .set({
-        lastSuccessAt: update.at,
-        consecutiveFailures: 0,
-        failureStreakStartedAt: null,
-      })
-      .where(eq(webhookSubscriptions.id, id))
-      .returning();
-    return row ?? null;
-  }
-  const [row] = await db
-    .update(webhookSubscriptions)
-    .set({
-      lastErrorAt: update.at,
-      lastErrorMsg: update.message,
-      consecutiveFailures: sql`${webhookSubscriptions.consecutiveFailures} + 1`,
-      failureStreakStartedAt: sql`CASE WHEN ${webhookSubscriptions.consecutiveFailures} = 0 THEN ${update.at} ELSE ${webhookSubscriptions.failureStreakStartedAt} END`,
-    })
-    .where(eq(webhookSubscriptions.id, id))
-    .returning();
-  return row ?? null;
-}
-
-/**
- * Flip `enabled`. Returns true only when this call changed the row.
- *
- * Disable is compare-and-set on the failure snapshot the caller just
- * observed. A success (or a manual re-enable) that lands in between clears
- * the counter and this UPDATE matches nothing, so a stale decision cannot
- * pause a webhook that has recovered — and two consumers crossing the
- * threshold together send one auto-disable, not two.
- */
-export async function setWebhookSubscriptionEnabled(
-  db: D1Db,
-  id: string,
-  enabled: boolean,
-  reason: string | null,
-  observed?: { consecutiveFailures: number; failureStreakStartedAt: string | null },
-): Promise<boolean> {
-  const conditions = [eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.enabled, !enabled)];
-  if (!enabled && observed) {
-    conditions.push(eq(webhookSubscriptions.consecutiveFailures, observed.consecutiveFailures));
-    conditions.push(
-      observed.failureStreakStartedAt == null
-        ? isNull(webhookSubscriptions.failureStreakStartedAt)
-        : eq(webhookSubscriptions.failureStreakStartedAt, observed.failureStreakStartedAt),
-    );
-  }
-  const [row] = await db
-    .update(webhookSubscriptions)
-    .set({ enabled, disabledReason: enabled ? null : reason })
-    .where(and(...conditions))
-    .returning({ id: webhookSubscriptions.id });
-  return row != null;
 }

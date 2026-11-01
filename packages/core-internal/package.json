@@ -13,6 +13,7 @@
     "./webhook-resilience": "./src/webhook-resilience.ts",
     "./webhook-url-safety": "./src/webhook-url-safety.ts",
     "./webhook-delivery": "./src/webhook-delivery.ts",
+    "./webhook-delivery-state": "./src/webhook-delivery-state.ts",
     "./release-event": "./src/release-event.ts",
     "./web-bot-auth-sign": "./src/web-bot-auth-sign.ts",
     "./collection-feed": "./src/collection-feed.ts",
