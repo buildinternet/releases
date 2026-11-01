@@ -5,6 +5,7 @@ import {
   type UploadsIntegrationStatus,
 } from "@buildinternet/releases-api-types";
 import {
+  ConflictError,
   ServiceUnavailableError,
   UnauthorizedError,
   ValidationError,
@@ -324,14 +325,37 @@ workspaceIntegrationHandlers.post(
     }
 
     const now = Date.now();
-    const { uploadsWorkspace } = await persistUploadsTokenGrant(db, {
+    const { uploadsWorkspace, persisted } = await persistUploadsTokenGrant(db, {
       rowId: row.id,
       workspaceId: row.workspaceId,
       tokens,
       encryptionKey: cfg.encryptionKey,
       mode: "connect",
+      expectedOAuthState: state,
       now,
     });
+    if (!persisted) {
+      // The state was replaced or the row was removed while the code was
+      // being exchanged. Drop the grant we just minted so it isn't left live
+      // at uploads.sh with no row pointing at it.
+      try {
+        await revokeUploadsToken(cfg, tokens.accessToken, "access_token");
+        if (tokens.refreshToken) {
+          await revokeUploadsToken(cfg, tokens.refreshToken, "refresh_token");
+        }
+      } catch (err) {
+        logEvent("warn", {
+          component: "uploads-oauth",
+          event: "superseded-revoke-failed",
+          workspaceId: row.workspaceId,
+          err,
+        });
+      }
+      return respondError(
+        c,
+        new ConflictError("This connect attempt was replaced. Start connect again."),
+      );
+    }
 
     logEvent("info", {
       component: "uploads-oauth",

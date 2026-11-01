@@ -12,6 +12,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import { createDb } from "../db.js";
 import { eq } from "drizzle-orm";
+import { bumpSourceCounterQuery } from "../lib/ingest/source-fetch-health.js";
 import { sources, fetchLog } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/feed.js";
@@ -434,10 +435,6 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             recoverable: snapshot?.id != null,
             err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
           });
-          const [row] = await db
-            .select({ consecutiveErrors: sources.consecutiveErrors })
-            .from(sources)
-            .where(eq(sources.id, sourceId));
           await db.batch([
             db.insert(fetchLog).values({
               sourceId,
@@ -448,10 +445,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
               error: (err instanceof Error ? err.message : String(err)).slice(0, 500),
               errorCategory: "infra",
             }),
-            db
-              .update(sources)
-              .set({ consecutiveErrors: (row?.consecutiveErrors ?? 0) + 1 })
-              .where(eq(sources.id, sourceId)),
+            bumpSourceCounterQuery(db, sourceId, "consecutiveErrors"),
           ] as [unknown, ...unknown[]]);
         });
       } catch (recordErr) {

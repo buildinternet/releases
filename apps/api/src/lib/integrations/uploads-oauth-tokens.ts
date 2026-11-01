@@ -5,13 +5,15 @@
  * {@link ensureFreshUploadsAccessToken}, which refreshes via the
  * `refresh_token` grant when `offline_access` minted a refresh token.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { logEvent } from "@releases/lib/log-event";
 import type { AnyDb } from "../../db.js";
 import { workspaceIntegrations, type WorkspaceIntegration } from "../../db/schema-integrations.js";
 import { decryptOAuthSecret, encryptOAuthSecret } from "./oauth-token-crypto.js";
 import {
   UPLOADS_OAUTH_PROVIDER,
   refreshUploadsAccessToken,
+  revokeUploadsToken,
   uploadsWorkspaceFromAccessToken,
   type UploadsOAuthConfig,
   type UploadsTokenResponse,
@@ -35,15 +37,26 @@ export async function persistUploadsTokenGrant(
     workspaceId: string;
     tokens: UploadsTokenResponse;
     encryptionKey: string;
-    /** `connect` writes refresh=null when the AS omitted one; `refresh` keeps the stored RT. */
-    mode: "connect" | "refresh";
-    existingWorkspace?: string | null;
     now?: number;
-  },
-): Promise<{ uploadsWorkspace: string | null }> {
+  } & (
+    | {
+        /** Connect commits only while `oauth_state` is still the state this callback read. */
+        mode: "connect";
+        expectedOAuthState: string;
+      }
+    | {
+        /** `refresh` keeps the stored refresh token when the AS omits a new one. */
+        mode: "refresh";
+        existingWorkspace?: string | null;
+        /** Ciphertext this refresh decrypted. A connect that replaced it wins. */
+        expectedRefreshTokenEnc: string;
+      }
+  ),
+): Promise<{ uploadsWorkspace: string | null; persisted: boolean }> {
   const now = opts.now ?? Date.now();
   const decoded = uploadsWorkspaceFromAccessToken(opts.tokens.accessToken);
-  const uploadsWorkspace = decoded ?? opts.existingWorkspace ?? null;
+  const existingWorkspace = opts.mode === "refresh" ? opts.existingWorkspace : null;
+  const uploadsWorkspace = decoded ?? existingWorkspace ?? null;
 
   const accessTokenEnc = await encryptOAuthSecret(opts.tokens.accessToken, opts.encryptionKey, {
     workspaceId: opts.workspaceId,
@@ -96,9 +109,26 @@ export async function persistUploadsTokenGrant(
     });
   }
 
-  await db.update(workspaceIntegrations).set(patch).where(eq(workspaceIntegrations.id, opts.rowId));
+  // Connect is compare-and-set on the oauth state captured before the token
+  // exchange. A newer connect (or a disconnect) that landed meanwhile must
+  // win; this callback's grant is not stored.
+  const where =
+    opts.mode === "connect"
+      ? and(
+          eq(workspaceIntegrations.id, opts.rowId),
+          eq(workspaceIntegrations.oauthState, opts.expectedOAuthState),
+        )
+      : and(
+          eq(workspaceIntegrations.id, opts.rowId),
+          eq(workspaceIntegrations.refreshTokenEnc, opts.expectedRefreshTokenEnc),
+        );
+  const updated = await db
+    .update(workspaceIntegrations)
+    .set(patch)
+    .where(where)
+    .returning({ id: workspaceIntegrations.id });
 
-  return { uploadsWorkspace };
+  return { uploadsWorkspace, persisted: updated.length > 0 };
 }
 
 export async function refreshStoredUploadsGrant(
@@ -116,14 +146,38 @@ export async function refreshStoredUploadsGrant(
     field: "refresh_token",
   });
   const tokens = await refreshUploadsAccessToken(cfg, refreshToken, fetchImpl);
-  const { uploadsWorkspace } = await persistUploadsTokenGrant(db, {
+  const { uploadsWorkspace, persisted } = await persistUploadsTokenGrant(db, {
     rowId: row.id,
     workspaceId: row.workspaceId,
     tokens,
     encryptionKey: cfg.encryptionKey,
     mode: "refresh",
     existingWorkspace: row.providerWorkspace,
+    expectedRefreshTokenEnc: row.refreshTokenEnc,
   });
+  if (!persisted) {
+    // A connect replaced this grant while the refresh was in flight. The
+    // access token is still usable for this call. The new refresh token is
+    // not stored, so revoke it or it stays live at uploads.sh on the old grant.
+    if (tokens.refreshToken) {
+      try {
+        await revokeUploadsToken(cfg, tokens.refreshToken, "refresh_token", fetchImpl);
+      } catch (err) {
+        logEvent("warn", {
+          component: "uploads-oauth",
+          event: "superseded-refresh-revoke-failed",
+          workspaceId: row.workspaceId,
+          err,
+        });
+      }
+    }
+    logEvent("info", {
+      component: "uploads-oauth",
+      event: "superseded-refresh",
+      workspaceId: row.workspaceId,
+    });
+    return { tokens, uploadsWorkspace };
+  }
   return { tokens, uploadsWorkspace };
 }
 

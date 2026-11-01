@@ -129,6 +129,32 @@ describe("recordBatchProgress", () => {
     expect(row!.requestCountExpired).toBe(0);
     expect(row!.requestCountCanceled).toBe(0);
   });
+
+  it("does not reopen a terminal batch", async () => {
+    await recordBatchSubmit(asDb(tdb.db), {
+      ...BASE_SUBMIT,
+      anthropicBatchId: "msgbatch_prog_closed",
+    });
+    await recordBatchFinalize(asDb(tdb.db), "msgbatch_prog_closed", {
+      status: "ended",
+      endedAt: "2026-06-01T00:00:00.000Z",
+      counts: { succeeded: 4, errored: 0, expired: 0, canceled: 0 },
+      actualCostUsd: 0.01,
+    });
+    await recordBatchProgress(asDb(tdb.db), "msgbatch_prog_closed", {
+      succeeded: 0,
+      errored: 9,
+      expired: 0,
+      canceled: 0,
+    });
+    const [row] = await tdb.db
+      .select()
+      .from(batchRuns)
+      .where(eq(batchRuns.anthropicBatchId, "msgbatch_prog_closed"));
+    expect(row!.status).toBe("ended");
+    expect(row!.requestCountSucceeded).toBe(4);
+    expect(row!.requestCountErrored).toBe(0);
+  });
 });
 
 describe("recordBatchFinalize", () => {
@@ -215,5 +241,33 @@ describe("recordBatchFinalize", () => {
     expect(row!.requestCountErrored).toBe(2);
     const parsed = JSON.parse(row!.errorSummary!);
     expect(parsed).toEqual({ sample: ["err1", "err2"] });
+  });
+
+  it("keeps the first terminal outcome when finalize runs again", async () => {
+    await recordBatchSubmit(asDb(tdb.db), {
+      ...BASE_SUBMIT,
+      anthropicBatchId: "msgbatch_final_twice",
+    });
+    await recordBatchFinalize(asDb(tdb.db), "msgbatch_final_twice", {
+      status: "ended",
+      endedAt: "2026-06-01T00:00:00.000Z",
+      counts: { succeeded: 4, errored: 0, expired: 0, canceled: 0 },
+      actualCostUsd: 0.02,
+    });
+    await recordBatchFinalize(asDb(tdb.db), "msgbatch_final_twice", {
+      status: "failed",
+      endedAt: "2026-06-02T00:00:00.000Z",
+      counts: { succeeded: 0, errored: 4, expired: 0, canceled: 0 },
+      actualCostUsd: null,
+      errorSummary: { reason: "late" },
+    });
+    const [row] = await tdb.db
+      .select()
+      .from(batchRuns)
+      .where(eq(batchRuns.anthropicBatchId, "msgbatch_final_twice"));
+    expect(row!.status).toBe("ended");
+    expect(row!.endedAt).toBe("2026-06-01T00:00:00.000Z");
+    expect(row!.requestCountSucceeded).toBe(4);
+    expect(row!.errorSummary).toBeNull();
   });
 });

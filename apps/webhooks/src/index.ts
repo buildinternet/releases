@@ -241,21 +241,23 @@ export default {
         msg.ack();
       } else {
         // oxlint-disable-next-line no-await-in-loop -- webhook delivery; failure summary update per-subscriber
-        await updateWebhookSubscriptionSummary(db, body.subscriptionId, {
+        const fresh = await updateWebhookSubscriptionSummary(db, body.subscriptionId, {
           kind: "error",
           at,
           message: result.errorMessage ?? "unknown",
         });
-        // oxlint-disable-next-line no-await-in-loop -- webhook delivery; re-fetch subscription to check auto-disable threshold
-        const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
         if (fresh && shouldAutoDisableWebhook(fresh, threshold)) {
           const reason = autoDisableReason(fresh);
-          // oxlint-disable-next-line no-await-in-loop -- webhook delivery; auto-disable subscription after threshold failures
+          // oxlint-disable-next-line no-await-in-loop -- webhook delivery; auto-disable only if this failure snapshot is still current
           const flipped = await setWebhookSubscriptionEnabled(
             db,
             body.subscriptionId,
             false,
             reason,
+            {
+              consecutiveFailures: fresh.consecutiveFailures,
+              failureStreakStartedAt: fresh.failureStreakStartedAt,
+            },
           );
           writeDeliveryAttempt(
             env.WEBHOOK_DELIVERIES_AE,

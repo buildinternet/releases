@@ -18,9 +18,11 @@ import {
 import type { SubscriptionLabel } from "@releases/core-internal/webhook-alert-format";
 import type { D1Db } from "./db.js";
 
-export type SummaryUpdate =
-  | { kind: "success"; at: string }
-  | { kind: "error"; at: string; message: string };
+export type { SummaryUpdate } from "@releases/core-internal/webhook-delivery-state";
+export {
+  setWebhookSubscriptionEnabled,
+  updateWebhookSubscriptionSummary,
+} from "@releases/core-internal/webhook-delivery-state";
 
 export async function getWebhookSubscriptionById(
   db: D1Db,
@@ -78,57 +80,4 @@ export async function getOrgLabelById(
     .where(eq(organizations.id, orgId))
     .limit(1);
   return rows[0] ?? null;
-}
-
-export async function updateWebhookSubscriptionSummary(
-  db: D1Db,
-  id: string,
-  update: SummaryUpdate,
-): Promise<void> {
-  if (update.kind === "success") {
-    await db
-      .update(webhookSubscriptions)
-      .set({
-        lastSuccessAt: update.at,
-        consecutiveFailures: 0,
-        failureStreakStartedAt: null,
-      })
-      .where(eq(webhookSubscriptions.id, id));
-  } else {
-    // Read-modify-write: not atomic. Concurrent retries may double-increment.
-    const cur = await getWebhookSubscriptionById(db, id);
-    if (!cur) return;
-    const nextFailures = cur.consecutiveFailures + 1;
-    await db
-      .update(webhookSubscriptions)
-      .set({
-        lastErrorAt: update.at,
-        lastErrorMsg: update.message,
-        consecutiveFailures: nextFailures,
-        failureStreakStartedAt:
-          cur.consecutiveFailures === 0 ? update.at : cur.failureStreakStartedAt,
-      })
-      .where(eq(webhookSubscriptions.id, id));
-  }
-}
-
-/**
- * Flip a subscription's enabled state. Returns true when the row actually
- * transitioned (caller can use this to fire one-shot side-effects like an
- * auto-disable alert without duplicating across concurrent batch messages).
- */
-export async function setWebhookSubscriptionEnabled(
-  db: D1Db,
-  id: string,
-  enabled: boolean,
-  reason: string | null,
-): Promise<boolean> {
-  const cur = await getWebhookSubscriptionById(db, id);
-  if (!cur) return false;
-  if (cur.enabled === enabled) return false;
-  await db
-    .update(webhookSubscriptions)
-    .set({ enabled, disabledReason: enabled ? null : reason })
-    .where(eq(webhookSubscriptions.id, id));
-  return true;
 }
