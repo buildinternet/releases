@@ -2,6 +2,11 @@ import { preserveLiveSourceDataset } from "../queries/source-metadata.js";
 import { eq, and, or, sql, isNull, inArray, type SQL } from "drizzle-orm";
 import { createDb, type D1Db } from "../db.js";
 import {
+  NO_CHANGE_BACKOFF_CAP_HOURS,
+  bumpSourceCounterQuery,
+  recordConsecutiveFetchError,
+} from "../lib/ingest/source-fetch-health.js";
+import {
   sources,
   sourcesActive,
   releases,
@@ -1145,14 +1150,11 @@ async function recordNoChange(
     metadata?: SQL;
   },
 ): Promise<FetchOneResult> {
-  const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
-  const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
-  const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-  // db.batch is atomic — the fetch_log row and the backoff stamp commit
-  // together or neither does. A half-written state (log row without the
-  // matching counter advance, or vice versa) would either drop the source from
-  // observability or relax the cadence with no record of why. Mirrors
-  // delegateScrapeToUpdateWorkflow's handoff write.
+  // db.batch is atomic — the fetch_log row and the counter advance commit
+  // together or neither does. The counter is incremented in SQL from the
+  // stored value (not the snapshot this run loaded), so an overlapping poll
+  // cannot both write the same streak. `next_fetch_after` is computed in that
+  // same UPDATE from the pre-update count.
   const ops = [
     db.insert(fetchLog).values({
       sourceId: source.id,
@@ -1162,17 +1164,15 @@ async function recordNoChange(
       durationMs: Date.now() - opts.start,
       status: "no_change",
     }),
-    db
-      .update(sources)
-      .set({
-        consecutiveNoChange: newNoChange,
+    bumpSourceCounterQuery(db, source.id, "consecutiveNoChange", {
+      backoffCapHours: NO_CHANGE_BACKOFF_CAP_HOURS,
+      extra: {
         consecutiveErrors: 0,
-        nextFetchAfter: nextFetch,
         changeDetectedAt: null,
         lastFetchedAt: new Date().toISOString(),
         ...(opts.metadata ? { metadata: opts.metadata } : {}),
-      })
-      .where(eq(sources.id, source.id)),
+      },
+    }),
   ];
   await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
   return {
@@ -2312,24 +2312,18 @@ export async function fetchOne(
     // invalidation. Flag the result `rateLimited` so the workflow treats it as
     // expected: no retry storm, no failure-alert email.
     if (err instanceof FeedHttpError && isTransientFeedHttpStatus(err.status)) {
-      const newErrors = (source.consecutiveErrors ?? 0) + 1;
-      const backoffMs = Math.min(Math.pow(2, newErrors - 1), 72) * 3600_000;
-      const waitMs = Math.max(backoffMs, err.retryAfterMs ?? 0);
-      const nextFetch = new Date(Date.now() + waitMs).toISOString();
-      await db
-        .update(sources)
-        .set({ consecutiveErrors: newErrors, nextFetchAfter: nextFetch })
-        .where(eq(sources.id, source.id))
-        .catch(
-          logSwallowed("cron-poll-fetch", "backoff-write-failed", { sourceSlug: source.slug }),
-        );
+      const bumped = await recordConsecutiveFetchError(db, source.id, {
+        retryAfterMs: err.retryAfterMs ?? undefined,
+      }).catch(
+        logSwallowed("cron-poll-fetch", "backoff-write-failed", { sourceSlug: source.slug }),
+      );
       logEvent("warn", {
         component: "cron-poll-fetch",
         event: "feed-rate-limited",
         sourceSlug: source.slug,
         httpStatus: err.status,
         retryAfterMs: err.retryAfterMs,
-        nextFetchAfter: nextFetch,
+        nextFetchAfter: bumped?.nextFetchAfter ?? null,
       });
       return {
         releasesFound: 0,
@@ -2390,17 +2384,9 @@ export async function fetchOne(
       };
     }
 
-    const newErrors = (source.consecutiveErrors ?? 0) + 1;
-    const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
-    const nextFetch = new Date(Date.now() + errorBackoffHours * 3600_000).toISOString();
-    await db
-      .update(sources)
-      .set({
-        consecutiveErrors: newErrors,
-        nextFetchAfter: nextFetch,
-      })
-      .where(eq(sources.id, source.id))
-      .catch(logSwallowed("cron-poll-fetch", "backoff-write-failed", { sourceSlug: source.slug }));
+    await recordConsecutiveFetchError(db, source.id).catch(
+      logSwallowed("cron-poll-fetch", "backoff-write-failed", { sourceSlug: source.slug }),
+    );
 
     return {
       releasesFound: 0,

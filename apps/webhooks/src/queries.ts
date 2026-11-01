@@ -9,7 +9,7 @@
  * For now, duplicate cleanly here and in apps/api/src/webhooks/queries.ts.
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   organizations,
   webhookSubscriptions,
@@ -80,55 +80,72 @@ export async function getOrgLabelById(
   return rows[0] ?? null;
 }
 
+/**
+ * Record one delivery outcome. Failure increments `consecutive_failures` in
+ * the UPDATE itself (a read-modify-write drops or double-counts when two
+ * queue consumers finish the same subscription together) and starts the
+ * failure streak only when the pre-update count is 0. Returns the row after
+ * the write, or null when the subscription is gone.
+ */
 export async function updateWebhookSubscriptionSummary(
   db: D1Db,
   id: string,
   update: SummaryUpdate,
-): Promise<void> {
+): Promise<WebhookSubscription | null> {
   if (update.kind === "success") {
-    await db
+    const [row] = await db
       .update(webhookSubscriptions)
       .set({
         lastSuccessAt: update.at,
         consecutiveFailures: 0,
         failureStreakStartedAt: null,
       })
-      .where(eq(webhookSubscriptions.id, id));
-  } else {
-    // Read-modify-write: not atomic. Concurrent retries may double-increment.
-    const cur = await getWebhookSubscriptionById(db, id);
-    if (!cur) return;
-    const nextFailures = cur.consecutiveFailures + 1;
-    await db
-      .update(webhookSubscriptions)
-      .set({
-        lastErrorAt: update.at,
-        lastErrorMsg: update.message,
-        consecutiveFailures: nextFailures,
-        failureStreakStartedAt:
-          cur.consecutiveFailures === 0 ? update.at : cur.failureStreakStartedAt,
-      })
-      .where(eq(webhookSubscriptions.id, id));
+      .where(eq(webhookSubscriptions.id, id))
+      .returning();
+    return row ?? null;
   }
+  const [row] = await db
+    .update(webhookSubscriptions)
+    .set({
+      lastErrorAt: update.at,
+      lastErrorMsg: update.message,
+      consecutiveFailures: sql`${webhookSubscriptions.consecutiveFailures} + 1`,
+      failureStreakStartedAt: sql`CASE WHEN ${webhookSubscriptions.consecutiveFailures} = 0 THEN ${update.at} ELSE ${webhookSubscriptions.failureStreakStartedAt} END`,
+    })
+    .where(eq(webhookSubscriptions.id, id))
+    .returning();
+  return row ?? null;
 }
 
 /**
- * Flip a subscription's enabled state. Returns true when the row actually
- * transitioned (caller can use this to fire one-shot side-effects like an
- * auto-disable alert without duplicating across concurrent batch messages).
+ * Flip `enabled`. Returns true only when this call changed the row.
+ *
+ * Disable is compare-and-set on the failure snapshot the caller just
+ * observed. A success (or a manual re-enable) that lands in between clears
+ * the counter and this UPDATE matches nothing, so a stale decision cannot
+ * pause a webhook that has recovered — and two consumers crossing the
+ * threshold together send one auto-disable, not two.
  */
 export async function setWebhookSubscriptionEnabled(
   db: D1Db,
   id: string,
   enabled: boolean,
   reason: string | null,
+  observed?: { consecutiveFailures: number; failureStreakStartedAt: string | null },
 ): Promise<boolean> {
-  const cur = await getWebhookSubscriptionById(db, id);
-  if (!cur) return false;
-  if (cur.enabled === enabled) return false;
-  await db
+  const conditions = [eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.enabled, !enabled)];
+  if (!enabled && observed) {
+    conditions.push(eq(webhookSubscriptions.consecutiveFailures, observed.consecutiveFailures));
+    conditions.push(
+      observed.failureStreakStartedAt == null
+        ? isNull(webhookSubscriptions.failureStreakStartedAt)
+        : eq(webhookSubscriptions.failureStreakStartedAt, observed.failureStreakStartedAt),
+    );
+  }
+  const [row] = await db
     .update(webhookSubscriptions)
     .set({ enabled, disabledReason: enabled ? null : reason })
-    .where(eq(webhookSubscriptions.id, id));
-  return true;
+    .where(and(...conditions))
+    .returning({ id: webhookSubscriptions.id });
+  return row != null;
 }

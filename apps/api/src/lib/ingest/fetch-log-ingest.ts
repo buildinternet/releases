@@ -24,6 +24,15 @@ import type { D1Db } from "../../db.js";
 import { classifyDbError, dbErrorToWireCode } from "@releases/lib/db-errors";
 import { logEvent } from "@releases/lib/log-event";
 import { InternalError } from "@releases/lib/releases-error";
+import {
+  AUTO_PAUSE_AFTER_ERRORS,
+  UNPRODUCTIVE_DRAIN_PAUSE_AFTER,
+  bumpSourceCounter,
+  failureBackoffHours,
+  recordConsecutiveFetchError,
+} from "./source-fetch-health.js";
+
+export { failureBackoffHours };
 
 // ── Auto-backoff for non-converging scrape/agent fetches (#1851) ──────────
 //
@@ -45,11 +54,9 @@ import { InternalError } from "@releases/lib/releases-error";
 // `updateSourceAfterFetch`, so this self-heals the moment extraction recovers.
 
 const BACKOFF_ERROR_CATEGORIES = new Set(["model", "bot_challenge"]);
-const MAX_BACKOFF_HOURS = 72;
-// After this many consecutive deterministic failures (~2^(n-1) ≈ 63h of retries
-// with the exponential ladder), pause the source so it stops spending and
-// surfaces for review rather than retrying indefinitely.
-const AUTO_PAUSE_AFTER_ERRORS = 6;
+// After AUTO_PAUSE_AFTER_ERRORS consecutive deterministic failures (~2^(n-1)
+// hours of retries on the exponential ladder), pause the source so it stops
+// spending and surfaces for review rather than retrying indefinitely.
 
 // ── Auto-pause for non-converging *no-op* drains (#1862) ──────────────────
 //
@@ -63,7 +70,6 @@ const AUTO_PAUSE_AFTER_ERRORS = 6;
 // empty* drains and pause the source once it's clearly non-converging, so it
 // surfaces for curator review (SPA shell, moved changelog, dead source) rather
 // than draining to infinity. A productive drain (>=1 inserted) resets the count.
-const UNPRODUCTIVE_DRAIN_PAUSE_AFTER = 5;
 
 /**
  * Whether a recorded fetch outcome is a deterministic, non-self-resolving
@@ -74,42 +80,17 @@ export function shouldBackoffScrapeFailure(errorCategory: unknown): boolean {
   return typeof errorCategory === "string" && BACKOFF_ERROR_CATEGORIES.has(errorCategory);
 }
 
-/**
- * Exponential backoff for the Nth consecutive error, capped, matching the
- * feed/GitHub poll path (`cron/poll-fetch.ts`). Returns the delay in hours.
- */
-export function failureBackoffHours(consecutiveErrors: number): number {
-  return Math.min(Math.pow(2, consecutiveErrors - 1), MAX_BACKOFF_HOURS);
-}
-
 async function applyScrapeFailureBackoff(db: D1Db, sourceId: string): Promise<void> {
-  const [src] = await db
-    .select({ consecutiveErrors: sources.consecutiveErrors, fetchPriority: sources.fetchPriority })
-    .from(sources)
-    .where(eq(sources.id, sourceId));
-  if (!src) return;
+  const bumped = await recordConsecutiveFetchError(db, sourceId);
+  if (!bumped) return;
 
-  const newErrors = (src.consecutiveErrors ?? 0) + 1;
-  const backoffHours = failureBackoffHours(newErrors);
-  const nextFetchAfter = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-  const shouldPause = newErrors >= AUTO_PAUSE_AFTER_ERRORS && src.fetchPriority !== "paused";
-
-  await db
-    .update(sources)
-    .set({
-      consecutiveErrors: newErrors,
-      nextFetchAfter,
-      ...(shouldPause ? { fetchPriority: "paused" as const } : {}),
-    })
-    .where(eq(sources.id, sourceId))
-    .catch(() => {});
-
+  const shouldPause = bumped.value === AUTO_PAUSE_AFTER_ERRORS && bumped.fetchPriority === "paused";
   logEvent(shouldPause ? "warn" : "info", {
     component: "fetch-log",
     event: shouldPause ? "source-auto-paused" : "scrape-failure-backoff",
     sourceId,
-    consecutiveErrors: newErrors,
-    backoffHours,
+    consecutiveErrors: bumped.value,
+    backoffHours: failureBackoffHours(bumped.value),
     paused: shouldPause,
   });
 }
@@ -140,32 +121,19 @@ async function applyDrainConvergence(
     return;
   }
 
-  const [src] = await db
-    .select({
-      unproductiveDrains: sources.unproductiveDrains,
-      fetchPriority: sources.fetchPriority,
-    })
-    .from(sources)
-    .where(eq(sources.id, sourceId));
-  if (!src) return;
+  const bumped = await bumpSourceCounter(db, sourceId, "unproductiveDrains", {
+    pauseAt: UNPRODUCTIVE_DRAIN_PAUSE_AFTER,
+  });
+  if (!bumped) return;
 
-  const newStreak = (src.unproductiveDrains ?? 0) + 1;
-  const shouldPause = newStreak >= UNPRODUCTIVE_DRAIN_PAUSE_AFTER && src.fetchPriority !== "paused";
-
-  await db
-    .update(sources)
-    .set({
-      unproductiveDrains: newStreak,
-      ...(shouldPause ? { fetchPriority: "paused" as const } : {}),
-    })
-    .where(eq(sources.id, sourceId))
-    .catch(() => {});
+  const shouldPause =
+    bumped.value === UNPRODUCTIVE_DRAIN_PAUSE_AFTER && bumped.fetchPriority === "paused";
 
   logEvent(shouldPause ? "warn" : "info", {
     component: "fetch-log",
     event: shouldPause ? "source-auto-paused-unproductive" : "drain-unproductive",
     sourceId,
-    unproductiveDrains: newStreak,
+    unproductiveDrains: bumped.value,
     paused: shouldPause,
   });
 }

@@ -9,7 +9,7 @@
  *   3. recordBatchFinalize — stamp ended_at + final counts + actual cost (status: ended | failed)
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 // Relative import instead of the package alias so this file resolves correctly
 // in both production (apps/api picks up packages/core via workspace) and in
@@ -28,6 +28,9 @@ export type BatchCaller = "script" | "workflow" | "admin";
 
 /** Terminal status values for a batch run. */
 export type TerminalBatchStatus = "ended" | "failed";
+
+/** Statuses a progress tick or a finalize may still move. Terminal rows stay put. */
+const OPEN_BATCH_STATUSES = ["submitted", "in_progress"] as const;
 
 export interface BatchSubmitFields {
   /** Anthropic batch ID returned by submitBatch (e.g. "msgbatch_…"). */
@@ -74,6 +77,8 @@ export interface BatchProgressCounts {
 /**
  * Update in-flight request counts for a batch. Sets status to "in_progress".
  * Called on each poll tick inside pollBatch's onPoll callback.
+ * A row already `ended` or `failed` is left alone — a late poll tick must
+ * not reopen a batch the finalize step already closed.
  */
 export async function recordBatchProgress(
   db: AnyDb,
@@ -89,7 +94,12 @@ export async function recordBatchProgress(
       requestCountExpired: counts.expired,
       requestCountCanceled: counts.canceled,
     })
-    .where(eq(batchRuns.anthropicBatchId, anthropicId));
+    .where(
+      and(
+        eq(batchRuns.anthropicBatchId, anthropicId),
+        inArray(batchRuns.status, [...OPEN_BATCH_STATUSES]),
+      ),
+    );
 }
 
 // ── recordBatchFinalize ──────────────────────────────────────────────────────
@@ -117,6 +127,8 @@ export interface BatchFinalizeFields {
 /**
  * Finalize a batch_runs row after collectResults + cost accounting. Stamps
  * ended_at, final counts, actual cost, and optional error summary.
+ * Terminal status sticks: a second finalize (workflow replay, a timeout
+ * racing the success path) does not overwrite the first outcome.
  */
 export async function recordBatchFinalize(
   db: AnyDb,
@@ -135,5 +147,10 @@ export async function recordBatchFinalize(
       actualCostUsd: fields.actualCostUsd ?? null,
       errorSummary: fields.errorSummary ? JSON.stringify(fields.errorSummary) : null,
     })
-    .where(eq(batchRuns.anthropicBatchId, anthropicId));
+    .where(
+      and(
+        eq(batchRuns.anthropicBatchId, anthropicId),
+        inArray(batchRuns.status, [...OPEN_BATCH_STATUSES]),
+      ),
+    );
 }
