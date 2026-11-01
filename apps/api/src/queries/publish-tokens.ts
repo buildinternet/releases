@@ -216,9 +216,29 @@ export async function revokePublishToken(
     };
   }
   const revokedAt = new Date().toISOString();
-  await db
+  const [updated] = await db
     .update(apiTokens)
     .set({ active: false, revokedAt })
-    .where(and(eq(apiTokens.id, id), ownedPublishToken(userId), isNull(apiTokens.revokedAt)));
-  return { id: existing.id, sourceId: existing.sourceId, revokedAt, alreadyRevoked: false };
+    .where(and(eq(apiTokens.id, id), ownedPublishToken(userId), isNull(apiTokens.revokedAt)))
+    .returning({ revokedAt: apiTokens.revokedAt });
+  if (updated?.revokedAt) {
+    return {
+      id: existing.id,
+      sourceId: existing.sourceId,
+      revokedAt: updated.revokedAt,
+      alreadyRevoked: false,
+    };
+  }
+  const current = await db
+    .select({ revokedAt: apiTokens.revokedAt })
+    .from(apiTokens)
+    .where(and(eq(apiTokens.id, id), ownedPublishToken(userId)))
+    .get();
+  if (!current?.revokedAt) return null;
+  return {
+    id: existing.id,
+    sourceId: existing.sourceId,
+    revokedAt: current.revokedAt,
+    alreadyRevoked: true,
+  };
 }

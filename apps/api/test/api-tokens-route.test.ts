@@ -303,6 +303,14 @@ describe("POST /v1/tokens/:id/revoke", () => {
     const row = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_r")).get();
     expect(row?.active).toBe(false);
     expect(row?.revokedAt).toBeTruthy();
+
+    const firstRevoked = row?.revokedAt ?? null;
+    const again = await call(h.db)("/tokens/tok_r/revoke", { method: "POST" });
+    expect(again.status).toBe(200);
+    const body = (await again.json()) as { revokedAt: string | null };
+    expect(body.revokedAt).toBe(firstRevoked);
+    const after = h.db.select().from(apiTokens).where(eq(apiTokens.id, "tok_r")).get();
+    expect(after?.revokedAt ?? null).toBe(firstRevoked);
   });
 
   it("404 for unknown id", async () => {

@@ -309,6 +309,39 @@ describe("uploads OAuth workspace routes", () => {
     }
   });
 
+  it("shows a reconnect as not connected until the new callback finishes", async () => {
+    db = createTestDb();
+    seed();
+    const now = Date.now();
+    db.insert(workspaceIntegrations)
+      .values({
+        id: "wsi_1",
+        workspaceId: "ws_1",
+        provider: "uploads",
+        status: "connected",
+        accessTokenEnc: "tok",
+        createdAt: now,
+        updatedAt: now,
+        connectedAt: now,
+      })
+      .run();
+    const res = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads/connect",
+      { method: "POST", headers: { Origin: "https://releases.sh" } },
+      env(),
+    );
+    expect(res.status).toBe(200);
+    const [row] = await db.select().from(workspaceIntegrations);
+    expect(row?.status).toBe("pending");
+    expect(row?.accessTokenEnc).toBe("tok");
+    const status = await appAs("user_1").request(
+      "/workspaces/ws_1/integrations/uploads",
+      { method: "GET" },
+      env(),
+    );
+    expect(((await status.json()) as { connected: boolean }).connected).toBe(false);
+  });
+
   it("disconnects and attempts remote revoke", async () => {
     db = createTestDb();
     seed();

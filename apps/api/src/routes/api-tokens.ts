@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { describeRoute } from "hono-openapi";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import {
@@ -426,12 +426,17 @@ apiTokenRoutes.patch("/tokens/:id", async (c) => {
 apiTokenRoutes.post("/tokens/:id/revoke", async (c) => {
   const db = createDb(c.env.DB);
   const id = c.req.param("id");
+  const revokedAt = new Date().toISOString();
   const [updated] = await db
     .update(apiTokens)
-    .set({ active: false, revokedAt: new Date().toISOString() })
-    .where(eq(apiTokens.id, id))
+    .set({ active: false, revokedAt })
+    .where(and(eq(apiTokens.id, id), isNull(apiTokens.revokedAt)))
     .returning();
-  if (!updated) return respondError(c, new NotFoundError("token not found"));
-  logEvent("info", { component: "api-tokens", event: "revoked", tokenId: id });
-  return c.json(toPublicRow(updated));
+  if (updated) {
+    logEvent("info", { component: "api-tokens", event: "revoked", tokenId: id });
+    return c.json(toPublicRow(updated));
+  }
+  const [current] = await db.select().from(apiTokens).where(eq(apiTokens.id, id)).limit(1);
+  if (!current) return respondError(c, new NotFoundError("token not found"));
+  return c.json(toPublicRow(current));
 });

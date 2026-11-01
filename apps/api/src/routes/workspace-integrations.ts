@@ -142,6 +142,7 @@ workspaceIntegrationHandlers.post(
       await db
         .update(workspaceIntegrations)
         .set({
+          status: "pending",
           oauthState: state,
           codeVerifierEnc: verifierEnc,
           redirectUri,
