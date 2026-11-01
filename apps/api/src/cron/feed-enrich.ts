@@ -320,21 +320,6 @@ export function isEnrichmentCircuitOpen(meta: SourceMetadata): boolean {
   return failures >= ENRICH_CONSECUTIVE_FAILURE_LIMIT;
 }
 
-/**
- * Derives the next `enrichment` metadata block after an attempt.
- * - On failure: increments `consecutiveFailures` (starts from 0 if absent).
- * - On success: resets `consecutiveFailures` to 0.
- */
-export function nextEnrichmentMetadata(
-  current: SourceMetadata["enrichment"],
-  succeeded: boolean,
-): NonNullable<SourceMetadata["enrichment"]> {
-  if (succeeded) {
-    return { consecutiveFailures: 0 };
-  }
-  return { consecutiveFailures: (current?.consecutiveFailures ?? 0) + 1 };
-}
-
 interface EnrichNewThinEnv {
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;

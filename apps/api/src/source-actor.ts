@@ -39,6 +39,21 @@ import { workflowInstanceStatus } from "./lib/workflow-instance.js";
  */
 const SAFETY_WINDOW_MS = 15 * 60 * 1000;
 
+/** Statuses that still own the in-flight lease. A paused run holds it on purpose. */
+const LIVE_WORKFLOW_STATUSES = new Set([
+  "queued",
+  "running",
+  "waiting",
+  "paused",
+  "waitingForPause",
+]);
+
+/** Same id `fireWorkflow` passes to `workflow.create`, so the lease lookup cannot drift. */
+function sourceActorWorkflowId(sourceId: string, firedAtMs: number): string {
+  const bucket = Math.floor(firedAtMs / SAFETY_WINDOW_MS);
+  return `source-actor-${sourceId}-${bucket}`;
+}
+
 /** Retry alarm after a failed workflow.create — short enough to recover from
  *  transient control-plane errors, far shorter than the tier interval. */
 const CREATE_FAILURE_RETRY_MS = 10 * 60 * 1000;
@@ -349,10 +364,9 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   private async previousWorkflowAlive(sourceId: string, lastFiredAt: number): Promise<boolean> {
     const wf = this.env.POLL_AND_FETCH_WORKFLOW;
     if (!wf || typeof (wf as { get?: unknown }).get !== "function") return false;
-    const bucket = Math.floor(lastFiredAt / SAFETY_WINDOW_MS);
     const result = await workflowInstanceStatus(
       wf as unknown as Parameters<typeof workflowInstanceStatus>[0],
-      `source-actor-${sourceId}-${bucket}`,
+      sourceActorWorkflowId(sourceId, lastFiredAt),
     );
     if (!result.ok) {
       if (result.code === "not_found") return false;
@@ -365,9 +379,15 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       return true;
     }
     const status = typeof result.status.status === "string" ? result.status.status : "";
-    return (
-      status === "queued" || status === "running" || status === "waiting" || status === "paused"
-    );
+    if (status === "paused" || status === "waitingForPause") {
+      logEvent("info", {
+        component: "source-actor",
+        event: "inflight-paused",
+        sourceId,
+        status,
+      });
+    }
+    return LIVE_WORKFLOW_STATUSES.has(status);
   }
 
   private async fireWorkflow(sourceId: string, nowMs: number): Promise<boolean> {
@@ -385,10 +405,9 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     // Deterministic instance id bucketed by the safety window so a spurious
     // double-fire within the window collides on the id (create throws) instead of
     // spawning a second ingest run. Distinct buckets across real fires.
-    const bucket = Math.floor(nowMs / SAFETY_WINDOW_MS);
     try {
       await wf.create({
-        id: `source-actor-${sourceId}-${bucket}`,
+        id: sourceActorWorkflowId(sourceId, nowMs),
         params: { sourceId, scheduledTime: nowMs },
       });
       logEvent("info", { component: "source-actor", event: "fired", sourceId });

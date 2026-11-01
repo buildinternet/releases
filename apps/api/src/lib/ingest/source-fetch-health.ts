@@ -12,6 +12,7 @@
  * deadline is computed from that same pre-update count.
  */
 import { and, eq, sql, type SQL } from "drizzle-orm";
+import { CLEARED_FEED_FIELDS } from "@releases/adapters/feed.js";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../../db.js";
 
@@ -168,6 +169,33 @@ export async function recordConsecutiveFetchError(
   });
 }
 
+/**
+ * Column when it is valid JSON, otherwise `{}`. Only evaluated from
+ * {@link patchMetadata}, which skips a malformed string entirely.
+ */
+function metadataBase(): SQL {
+  return sql`CASE WHEN json_valid(${sources.metadata}) THEN ${sources.metadata} ELSE '{}' END`;
+}
+
+/**
+ * Apply `patch` when metadata is null or valid JSON. A malformed string is
+ * left untouched: `json_set` / `json_extract` throw on it, and replacing it
+ * would drop the original bytes.
+ */
+function patchMetadata(patch: SQL): SQL {
+  return sql`CASE WHEN ${sources.metadata} IS NULL OR json_valid(${sources.metadata}) THEN ${patch} ELSE ${sources.metadata} END`;
+}
+
+/** Compare-and-set read of a numeric JSON path. Malformed metadata does not match. */
+function metadataEquals(path: string, value: number): SQL {
+  return sql`CASE WHEN json_valid(${sources.metadata}) THEN coalesce(json_extract(${sources.metadata}, ${path}), 0) END = ${value}`;
+}
+
+const CLEARED_FEED_PATHS = sql.join(
+  Object.keys(CLEARED_FEED_FIELDS).map((key) => sql.raw(`'$.${key}'`)),
+  sql`, `,
+);
+
 function metadataNumber(metadata: string | null, key: string): number {
   if (!metadata) return 0;
   try {
@@ -191,7 +219,9 @@ export async function recordFeed4xx(
   const [bumped] = await db
     .update(sources)
     .set({
-      metadata: sql`json_set(coalesce(${sources.metadata}, '{}'), '$.feed4xxStreak', coalesce(json_extract(${sources.metadata}, '$.feed4xxStreak'), 0) + 1)`,
+      metadata: patchMetadata(
+        sql`json_set(${metadataBase()}, '$.feed4xxStreak', coalesce(json_extract(${metadataBase()}, '$.feed4xxStreak'), 0) + 1)`,
+      ),
     })
     .where(eq(sources.id, sourceId))
     .returning({ metadata: sources.metadata });
@@ -201,16 +231,13 @@ export async function recordFeed4xx(
   const [cleared] = await db
     .update(sources)
     .set({
-      metadata: sql`json_set(json_remove(coalesce(${sources.metadata}, '{}'), '$.feedUrl', '$.feedType', '$.feedDiscoveredAt', '$.feedEtag', '$.feedLastModified', '$.feedContentLength', '$.feed4xxStreak'), '$.noFeedFound', json('false'))`,
+      metadata: patchMetadata(
+        sql`json_set(json_remove(${metadataBase()}, ${CLEARED_FEED_PATHS}), '$.noFeedFound', json('false'))`,
+      ),
       consecutiveErrors: 0,
       nextFetchAfter: null,
     })
-    .where(
-      and(
-        eq(sources.id, sourceId),
-        sql`coalesce(json_extract(${sources.metadata}, '$.feed4xxStreak'), 0) = ${streak}`,
-      ),
-    )
+    .where(and(eq(sources.id, sourceId), metadataEquals("$.feed4xxStreak", streak)))
     .returning({ id: sources.id });
   return { streak, invalidated: cleared != null };
 }
@@ -229,12 +256,14 @@ export async function recordEnrichmentOutcome(
     await db
       .update(sources)
       .set({
-        metadata: sql`json_set(coalesce(${sources.metadata}, '{}'), '$.enrichment', json('{"consecutiveFailures":0}'))`,
+        metadata: patchMetadata(
+          sql`json_set(${metadataBase()}, '$.enrichment', json('{"consecutiveFailures":0}'))`,
+        ),
       })
       .where(
         and(
           eq(sources.id, sourceId),
-          sql`coalesce(json_extract(${sources.metadata}, '$.enrichment.consecutiveFailures'), 0) = ${outcome.observedFailures}`,
+          metadataEquals("$.enrichment.consecutiveFailures", outcome.observedFailures),
         ),
       );
     return;
@@ -242,12 +271,16 @@ export async function recordEnrichmentOutcome(
   await db
     .update(sources)
     .set({
-      metadata: sql`json_set(coalesce(${sources.metadata}, '{}'), '$.enrichment', json_object('consecutiveFailures', coalesce(json_extract(${sources.metadata}, '$.enrichment.consecutiveFailures'), 0) + 1))`,
+      metadata: patchMetadata(
+        sql`json_set(${metadataBase()}, '$.enrichment', json_object('consecutiveFailures', coalesce(json_extract(${metadataBase()}, '$.enrichment.consecutiveFailures'), 0) + 1))`,
+      ),
     })
     .where(eq(sources.id, sourceId));
 }
 
 /** Patch only the Firecrawl bookkeeping keys. Other metadata stays put. */
 export function firecrawlBookkeepingMetadata(checkId: string, at: string): SQL {
-  return sql`json_set(coalesce(${sources.metadata}, '{}'), '$.firecrawl.enabled', json('true'), '$.firecrawl.lastCheckId', ${checkId}, '$.firecrawl.lastChangeAt', ${at})`;
+  return patchMetadata(
+    sql`json_set(${metadataBase()}, '$.firecrawl.enabled', json('true'), '$.firecrawl.lastCheckId', ${checkId}, '$.firecrawl.lastChangeAt', ${at})`,
+  );
 }

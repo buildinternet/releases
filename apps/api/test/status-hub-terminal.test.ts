@@ -9,6 +9,13 @@ function hub() {
       put: async (key: string, value: unknown) => {
         store.set(key, value);
       },
+      list: async ({ prefix }: { prefix: string }) => {
+        const out = new Map<string, unknown>();
+        for (const [key, value] of store) {
+          if (key.startsWith(prefix)) out.set(key, value);
+        }
+        return out;
+      },
       getAlarm: async () => null,
       setAlarm: async () => {},
     },
@@ -40,5 +47,24 @@ describe("StatusHub terminal sessions", () => {
     const session = store.get("session:ses_1") as { status: string; error?: string };
     expect(session.status).toBe("complete");
     expect(session.error).toBeUndefined();
+  });
+
+  it("a late complete replaces a sweep timeout", async () => {
+    const { actor, store } = hub();
+    await post(actor, { type: "session:start", sessionId: "ses_1", company: "Acme" });
+    const started = store.get("session:ses_1") as { lastUpdatedAt: number };
+    started.lastUpdatedAt = Date.now() - 20 * 60 * 1000;
+    store.set("session:ses_1", started);
+
+    const listed = await actor.fetch(new Request("https://do/sessions"));
+    expect(listed.status).toBe(200);
+    const swept = store.get("session:ses_1") as { status: string; error?: string };
+    expect(swept.status).toBe("error");
+    expect(swept.error).toBe("Session timed out (no updates received)");
+
+    await post(actor, { type: "session:complete", sessionId: "ses_1" });
+    const done = store.get("session:ses_1") as { status: string; error?: string };
+    expect(done.status).toBe("complete");
+    expect(done.error).toBeUndefined();
   });
 });

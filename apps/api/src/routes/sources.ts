@@ -38,6 +38,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { coerceReleaseType } from "@buildinternet/releases-core/release-type";
+import { MANUAL_UNSUPPRESS_REASON } from "../lib/classification/reclassify-marketing.js";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
@@ -3248,7 +3249,7 @@ sourceRoutes.post(
     tags: ["Releases"],
     summary: "Suppress or unsuppress releases in bulk",
     description:
-      "Sets `suppressed` on each listed release in chunked, idempotent statements. When `suppressed` is true the optional `reason` is stored in `suppressed_reason`; when false the reason is cleared. Unknown ids are skipped — the response counts only rows actually updated.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Sets `suppressed` on each listed release in chunked, idempotent statements. When `suppressed` is true the optional `reason` is stored in `suppressed_reason`. When false the row is marked manually unsuppressed so a later automatic reclassify does not hide it again. Unknown ids are skipped — the response counts only rows actually updated.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -3268,7 +3269,7 @@ sourceRoutes.post(
     const ids = [...new Set(body.releaseIds)];
     const updates = body.suppressed
       ? { suppressed: true, suppressedReason: body.reason ?? null }
-      : { suppressed: false, suppressedReason: null };
+      : { suppressed: false, suppressedReason: MANUAL_UNSUPPRESS_REASON };
 
     const updated = await sumReleaseIdChunks(ids, async (chunk) => {
       const rows = await db
@@ -3692,7 +3693,7 @@ sourceRoutes.post(
     tags: ["Releases"],
     summary: "Unsuppress a release",
     description:
-      "Clears the suppression flag (`suppressed = false`) and nulls out `suppressed_reason`, making the release visible on all read paths again.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Clears the suppression flag (`suppressed = false`) and records that an operator did it, so a later automatic reclassify does not hide the release again.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -3713,7 +3714,7 @@ sourceRoutes.post(
       .update(releases)
       .set({
         suppressed: false,
-        suppressedReason: null,
+        suppressedReason: MANUAL_UNSUPPRESS_REASON,
       })
       .where(eq(releases.id, id))
       .returning({ id: releases.id, sourceId: releases.sourceId });

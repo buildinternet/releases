@@ -262,6 +262,39 @@ describe("POST /admin/marketing-classifier/reclassify", () => {
     ).toBe(true);
   });
 
+  it("does not re-suppress a release an operator unsuppressed", async () => {
+    installClassifier();
+    await seedRelease({
+      id: "rel_unsup",
+      title: "Case study: operator unsuppressed this",
+      suppressed: false,
+      suppressedReason: "manual:unsuppressed",
+    });
+    const res = await post({ releaseIds: ["rel_unsup"], dryRun: false });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      held: number;
+      suppressed: number;
+      results: Array<{
+        disposition: string;
+        applied: boolean;
+        suppressed: boolean;
+        suppressedReason: string;
+      }>;
+    };
+    expect(body.held).toBe(1);
+    expect(body.suppressed).toBe(0);
+    expect(body.results[0]).toMatchObject({
+      disposition: "held",
+      applied: false,
+      suppressed: false,
+      suppressedReason: "manual:unsuppressed",
+    });
+    const row = await stored("rel_unsup");
+    expect(row?.suppressed).toBeFalsy();
+    expect(row?.suppressedReason).toBe("manual:unsuppressed");
+  });
+
   it("404s a single unknown release and an unknown source", async () => {
     installClassifier();
     const missingRelease = await post({ releaseId: "rel_nope" });

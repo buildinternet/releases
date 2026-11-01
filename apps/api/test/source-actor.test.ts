@@ -190,6 +190,26 @@ describe("SourceActor.alarm", () => {
     expect(typeof mirror?.nextAlarmAt).toBe("string");
   });
 
+  it("does not start another workflow while a paused instance still holds the lease", async () => {
+    const db = mkDb();
+    seedSource(db, "src_due", { lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString() });
+    const h = mkActor(db, { instanceStatus: () => "paused" });
+    h.store.set("sourceId", "src_due");
+    h.store.set("state", {
+      tier: "normal",
+      lastFetchedAt: null,
+      nextAlarmAt: null,
+      inFlight: true,
+      lastFiredAt: Date.now() - 20 * 60 * 1000,
+      backoff: { consecutiveNoChange: 0, consecutiveErrors: 0, nextFetchAfter: null },
+    });
+
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(0);
+    expect((await h.actor.getState()).inFlight).toBe(true);
+  });
+
   it("does not start another workflow while the previous instance is still running", async () => {
     const db = mkDb();
     seedSource(db, "src_due", { lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString() });

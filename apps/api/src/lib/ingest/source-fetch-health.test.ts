@@ -196,6 +196,16 @@ describe("source fetch-health transitions", () => {
     tdb.cleanup();
   });
 
+  it("leaves malformed metadata untouched instead of throwing", async () => {
+    const tdb = await seed();
+    await tdb.db.update(sources).set({ metadata: "not-json" }).where(eq(sources.id, "src_a"));
+    const bumped = await recordFeed4xx(tdb.db as never, "src_a", 5);
+    expect(bumped).toEqual({ streak: 0, invalidated: false });
+    const [row] = await tdb.db.select().from(sources).where(eq(sources.id, "src_a"));
+    expect(row?.metadata).toBe("not-json");
+    tdb.cleanup();
+  });
+
   it("does not let an enrichment success reset a newer failure", async () => {
     const tdb = await seed();
     await tdb.db
