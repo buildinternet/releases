@@ -6,12 +6,14 @@
  * `refresh_token` grant when `offline_access` minted a refresh token.
  */
 import { and, eq } from "drizzle-orm";
+import { logEvent } from "@releases/lib/log-event";
 import type { AnyDb } from "../../db.js";
 import { workspaceIntegrations, type WorkspaceIntegration } from "../../db/schema-integrations.js";
 import { decryptOAuthSecret, encryptOAuthSecret } from "./oauth-token-crypto.js";
 import {
   UPLOADS_OAUTH_PROVIDER,
   refreshUploadsAccessToken,
+  revokeUploadsToken,
   uploadsWorkspaceFromAccessToken,
   type UploadsOAuthConfig,
   type UploadsTokenResponse,
@@ -154,9 +156,26 @@ export async function refreshStoredUploadsGrant(
     expectedRefreshTokenEnc: row.refreshTokenEnc,
   });
   if (!persisted) {
-    // A connect callback replaced this grant while the refresh was in flight.
-    // Hand back the token we just minted for this call; leave the stored row
-    // on the newer grant.
+    // A connect replaced this grant while the refresh was in flight. The
+    // access token is still usable for this call. The new refresh token is
+    // not stored, so revoke it or it stays live at uploads.sh on the old grant.
+    if (tokens.refreshToken) {
+      try {
+        await revokeUploadsToken(cfg, tokens.refreshToken, "refresh_token", fetchImpl);
+      } catch (err) {
+        logEvent("warn", {
+          component: "uploads-oauth",
+          event: "superseded-refresh-revoke-failed",
+          workspaceId: row.workspaceId,
+          err,
+        });
+      }
+    }
+    logEvent("info", {
+      component: "uploads-oauth",
+      event: "superseded-refresh",
+      workspaceId: row.workspaceId,
+    });
     return { tokens, uploadsWorkspace };
   }
   return { tokens, uploadsWorkspace };

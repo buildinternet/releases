@@ -81,17 +81,18 @@ export function shouldBackoffScrapeFailure(errorCategory: unknown): boolean {
 }
 
 async function applyScrapeFailureBackoff(db: D1Db, sourceId: string): Promise<void> {
-  const bumped = await recordConsecutiveFetchError(db, sourceId);
+  const bumped = await recordConsecutiveFetchError(db, sourceId, {
+    pauseAt: AUTO_PAUSE_AFTER_ERRORS,
+  });
   if (!bumped) return;
 
-  const shouldPause = bumped.value === AUTO_PAUSE_AFTER_ERRORS && bumped.fetchPriority === "paused";
-  logEvent(shouldPause ? "warn" : "info", {
+  logEvent(bumped.didPause ? "warn" : "info", {
     component: "fetch-log",
-    event: shouldPause ? "source-auto-paused" : "scrape-failure-backoff",
+    event: bumped.didPause ? "source-auto-paused" : "scrape-failure-backoff",
     sourceId,
     consecutiveErrors: bumped.value,
     backoffHours: failureBackoffHours(bumped.value),
-    paused: shouldPause,
+    paused: bumped.didPause,
   });
 }
 
@@ -126,15 +127,12 @@ async function applyDrainConvergence(
   });
   if (!bumped) return;
 
-  const shouldPause =
-    bumped.value === UNPRODUCTIVE_DRAIN_PAUSE_AFTER && bumped.fetchPriority === "paused";
-
-  logEvent(shouldPause ? "warn" : "info", {
+  logEvent(bumped.didPause ? "warn" : "info", {
     component: "fetch-log",
-    event: shouldPause ? "source-auto-paused-unproductive" : "drain-unproductive",
+    event: bumped.didPause ? "source-auto-paused-unproductive" : "drain-unproductive",
     sourceId,
     unproductiveDrains: bumped.value,
-    paused: shouldPause,
+    paused: bumped.didPause,
   });
 }
 

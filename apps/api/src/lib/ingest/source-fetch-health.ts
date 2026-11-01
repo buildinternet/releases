@@ -29,6 +29,8 @@ export interface SourceCounterBump {
   value: number;
   fetchPriority: string | null;
   nextFetchAfter: string | null;
+  /** True only when this write changed `fetch_priority` to `paused`. */
+  didPause: boolean;
 }
 
 export interface BumpSourceCounterOpts {
@@ -53,10 +55,16 @@ export function failureBackoffHours(count: number, capHours = ERROR_BACKOFF_CAP_
 }
 
 function hoursCase(col: CounterColumn, capHours: 48 | 72): SQL {
-  if (capHours === 48) {
-    return sql`CASE COALESCE(${col}, 0) WHEN 0 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 4 WHEN 3 THEN 8 WHEN 4 THEN 16 WHEN 5 THEN 32 ELSE 48 END`;
+  // Pre-update count `prior` backs off by failureBackoffHours(prior + 1).
+  // The first count whose delay is already the cap, and everything above it,
+  // is the ELSE arm, so this ladder cannot drift from the JS helper.
+  const arms: SQL[] = [];
+  for (let prior = 0; prior < 16; prior++) {
+    const hours = failureBackoffHours(prior + 1, capHours);
+    if (hours >= capHours) break;
+    arms.push(sql`WHEN ${prior} THEN ${hours}`);
   }
-  return sql`CASE COALESCE(${col}, 0) WHEN 0 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 4 WHEN 3 THEN 8 WHEN 4 THEN 16 WHEN 5 THEN 32 WHEN 6 THEN 64 ELSE 72 END`;
+  return sql`CASE COALESCE(${col}, 0) ${sql.join(arms, sql` `)} ELSE ${capHours} END`;
 }
 
 function nextFetchAfterSql(col: CounterColumn, capHours: 48 | 72, floorIso?: string): SQL {
@@ -113,29 +121,45 @@ export async function bumpSourceCounter(
   name: CounterName,
   opts: BumpSourceCounterOpts = {},
 ): Promise<SourceCounterBump | null> {
-  const [row] = await bumpSourceCounterQuery(db, sourceId, name, opts);
+  // One batch, so the priority we read is the priority this UPDATE saw.
+  // `didPause` is that transition, not a guess from the post-update row
+  // (a source that was already paused, or one re-paused above the threshold,
+  // looks the same afterwards).
+  const priorQuery = db
+    .select({ fetchPriority: sources.fetchPriority })
+    .from(sources)
+    .where(eq(sources.id, sourceId))
+    .limit(1);
+  const [priorRows, updatedRows] = await db.batch([
+    priorQuery,
+    bumpSourceCounterQuery(db, sourceId, name, opts),
+  ] as [typeof priorQuery, ReturnType<typeof bumpSourceCounterQuery>]);
+  const row = updatedRows[0];
   if (!row || row.value == null) return null;
+  const wasPaused = (priorRows[0]?.fetchPriority ?? "normal") === "paused";
   return {
     value: row.value,
     fetchPriority: row.fetchPriority,
     nextFetchAfter: row.nextFetchAfter,
+    didPause: opts.pauseAt != null && !wasPaused && row.fetchPriority === "paused",
   };
 }
 
 /**
- * Deterministic fetch failure: increment `consecutive_errors`, push
- * `next_fetch_after` out on the exponential ladder (at least `retryAfterMs`
- * when the upstream said so), and pause once the streak crosses
- * {@link AUTO_PAUSE_AFTER_ERRORS}.
+ * Increment `consecutive_errors` and push `next_fetch_after` out on the
+ * exponential ladder (at least `retryAfterMs` when the upstream said so).
+ * Pausing is opt-in: feed and GitHub poll errors must not pause, because a
+ * success does not move `fetch_priority` back off `paused`. The scrape/agent
+ * path passes `pauseAt`.
  */
 export async function recordConsecutiveFetchError(
   db: D1Db,
   sourceId: string,
-  opts?: { retryAfterMs?: number },
+  opts?: { retryAfterMs?: number; pauseAt?: number },
 ): Promise<SourceCounterBump | null> {
   const retryAfterMs = opts?.retryAfterMs;
   return bumpSourceCounter(db, sourceId, "consecutiveErrors", {
-    pauseAt: AUTO_PAUSE_AFTER_ERRORS,
+    ...(opts?.pauseAt != null ? { pauseAt: opts.pauseAt } : {}),
     backoffCapHours: ERROR_BACKOFF_CAP_HOURS,
     backoffFloorIso:
       retryAfterMs != null && retryAfterMs > 0
