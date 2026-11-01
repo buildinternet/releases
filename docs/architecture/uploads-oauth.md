@@ -50,20 +50,22 @@ Same principal gate as `/v1/workspaces/*` and `/v1/me/*` (`requireFollowsPrincip
 Better Auth session or a user Bearer). Absent from `publicReadRoutes` /
 `adminRoutes` (not in the public OpenAPI coverage gate).
 
-| Method   | Path                                                       | Who                                  | Effect                                                                      |
-| -------- | ---------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
-| `GET`    | `/v1/workspaces/:workspaceId/integrations/uploads`         | member+                              | `{ provider, connected, configured, connectedAt, scope, uploadsWorkspace }` |
-| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }`                 |
-| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                                          |
-| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                                    |
+| Method   | Path                                                       | Who                                  | Effect                                                                                    |
+| -------- | ---------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `GET`    | `/v1/workspaces/:workspaceId/integrations/uploads`         | member+                              | `{ provider, connected, configured, reconnecting, connectedAt, scope, uploadsWorkspace }` |
+| `POST`   | `/v1/workspaces/:workspaceId/integrations/uploads/connect` | owner/admin                          | Persist PKCE pending state; `{ authorizeUrl, redirectUri }`                               |
+| `POST`   | `/v1/integrations/uploads/callback`                        | owner/admin of the pending workspace | `{ code, state }` → token exchange                                                        |
+| `DELETE` | `/v1/workspaces/:workspaceId/integrations/uploads`         | owner/admin                          | Revoke-local (and attempt remote revoke)                                                  |
 
 `configured: false` when the token-encryption key is missing — Connect is
 disabled; the rest of the site is unaffected. No feature flag. The client is
 public PKCE (`releases-sh`); there is no client secret.
 
 Pending state expires after 10 minutes. Re-clicking Connect replaces the pending
-PKCE fields without dropping an already-connected token until the new callback
-succeeds.
+PKCE fields and leaves `status` as `connected` while the previous tokens are
+still stored. The status response sets `reconnecting: true` until that state
+expires or the new callback finishes. A finished reconnect revokes the previous
+grant at uploads.sh. A failed revoke does not fail the connect.
 
 ## Tokens at rest
 
