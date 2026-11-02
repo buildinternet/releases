@@ -52,7 +52,7 @@ Structure:
    - A full sentence, then a tight bullet list of concrete items.
    - A full sentence, then one or two short prose sentences (each ≤25 words). The opening sentence can stand alone when one sentence is enough.
    Sections with three or more concrete items SHOULD bullet. Don't pack them into a comma-separated paragraph. A prose sentence with four or more comma-listed items is the tell. A bullet that itself enumerates a small set ("works with A, B, C, and D") is fine.
-3. That opening sentence is the user-facing claim, not the implementation, and it is a complete sentence. Good: "Linear Agent can now pull context from an MCP server." Bad: "**Linear Agent gained MCP context reach.**" Bad: "**Tracing and SDK releases.**" Bad: "Linear Agent v2.4 added an /mcp endpoint with an allowlist param." Do not open a section with a bold line or a headline fragment. Endpoint names, parameter names, internal class names, and version numbers are not the subject of that sentence. Versions and code can carry weight in supporting prose or bullets, just not as the lead.
+3. That opening sentence is the user-facing claim, not the implementation, and it is a complete sentence. Good: "Linear Agent can now pull context from an MCP server." Bad: "**Linear Agent gained MCP context reach.**" Bad: "**Tracing and SDK releases.**" Bad: "Linear Agent v2.4 added an /mcp endpoint with an allowlist param." Do not open a section with a bold line, a headline fragment, or a short label ending in a colon ("Upgrade notes worth acting on:" fails; "Three upgrades need action before you update:" works). Endpoint names, parameter names, internal class names, and version numbers are not the subject of that sentence. Versions and code can carry weight in supporting prose or bullets, just not as the lead.
 4. Breaking changes and deprecations get called out inline where they fall.
 5. When multiple sources contribute, synthesize across them by topic — don't summarize each separately.
 6. When the org has product-blog content alongside SDK / library / repo releases, lead with the product-blog stories. SDK and library version bumps consolidate into one wrap-up sentence or a short final bullet group. Carve-out: when the org's primary product IS the library or developer tool (Prisma, pnpm, Bun, Deno's runtime, etc.), library releases ARE the user-facing news — keep them as primary sections.
@@ -314,6 +314,17 @@ export function lintOverviewBody(body: string, orgName: string): string[] {
     }
   }
 
+  // A short label line ending in a colon ("Upgrade notes worth acting on:") is
+  // the same fragment lead as a bold tease, just without the asterisks.
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (!t.endsWith(":") || /^[-*+]\s|^\d+\.\s/.test(t)) continue;
+    if (t.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length <= 6) {
+      violations.push("fragment-lead-in");
+      break;
+    }
+  }
+
   const dashes = text.match(/—| -- /g);
   if (dashes && dashes.length >= 2) violations.push("em-dash-overuse");
 
@@ -332,6 +343,9 @@ function correctiveOverviewSuffix(violations: string[], body: string): string {
     }
     if (v === "bold-fragment-lead") {
       return "bold-fragment-lead (a line that is only bold; rewrite it as a full sentence with the product as the subject, and bold at most one key term inside a sentence)";
+    }
+    if (v === "fragment-lead-in") {
+      return "fragment-lead-in (a short label line ending in a colon; rewrite it as a full sentence that says what the list is about)";
     }
     if (v === "em-dash-overuse") {
       return "em-dash-overuse (rewrite em-dash asides as their own sentences)";
