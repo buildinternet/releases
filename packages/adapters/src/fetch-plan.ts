@@ -40,6 +40,13 @@ export interface FetchPlan {
   intervalLabel: string;
   cadence: "poll" | "firecrawl-webhook" | "push";
   paused: boolean;
+  /**
+   * Why a polled source is paused: its own `fetchPriority`, or its org's
+   * `fetchPaused` (which the poll cron, SourceActor, and drain all honor).
+   * Null when not paused. Org pause only affects `cadence: "poll"` — Firecrawl
+   * monitors and push-fed publishers aren't driven by our scheduler.
+   */
+  pausedBy: "source" | "org" | null;
   /** Present only when strategy === "firecrawl". */
   firecrawlSchedule?: string;
 }
@@ -105,9 +112,18 @@ function formatInterval(hours: number): string {
   return `every ${hours} hours`;
 }
 
-export function describeFetchPlan(source: Source): FetchPlan {
+export interface DescribeFetchPlanOptions {
+  /** The source's org has `fetchPaused = true`. */
+  orgPaused?: boolean;
+}
+
+export function describeFetchPlan(
+  source: Source,
+  options: DescribeFetchPlanOptions = {},
+): FetchPlan {
   const meta = getSourceMeta(source);
   const paused = source.fetchPriority === "paused";
+  const pausedBy = paused ? "source" : null;
 
   // Push-fed wins over everything else, like firecrawl below: the source is
   // fed directly by its publisher (e.g. actions/publish-changelog) and has no
@@ -121,6 +137,7 @@ export function describeFetchPlan(source: Source): FetchPlan {
       intervalLabel: "on publish",
       cadence: "push",
       paused,
+      pausedBy,
     };
   }
 
@@ -135,19 +152,30 @@ export function describeFetchPlan(source: Source): FetchPlan {
       intervalLabel: schedule,
       cadence: "firecrawl-webhook",
       paused,
+      pausedBy,
       firecrawlSchedule: schedule,
     };
   }
 
   const strategy = resolveStrategy(source, meta);
-  const hours = paused ? null : tierHours(source.fetchPriority);
+  const pollPausedBy = pausedBy ?? (options.orgPaused ? "org" : null);
+  const pollPaused = pollPausedBy != null;
+  const hours = pollPaused ? null : tierHours(source.fetchPriority);
   return {
     strategy,
     strategyLabel: strategyLabel(strategy, meta),
     intervalHours: hours,
-    intervalLabel: paused ? "paused" : hours == null ? "—" : formatInterval(hours),
+    intervalLabel:
+      pollPausedBy === "org"
+        ? "org paused"
+        : pollPaused
+          ? "paused"
+          : hours == null
+            ? "—"
+            : formatInterval(hours),
     cadence: "poll",
-    paused,
+    paused: pollPaused,
+    pausedBy: pollPausedBy,
   };
 }
 

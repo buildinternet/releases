@@ -24,6 +24,8 @@ export interface FetchPlan {
   intervalLabel: string;
   cadence: "poll" | "firecrawl-webhook" | "push";
   paused: boolean;
+  /** Optional so an older API deploy without the field still type-checks at runtime. */
+  pausedBy?: "source" | "org" | null;
   firecrawlSchedule?: string;
 }
 

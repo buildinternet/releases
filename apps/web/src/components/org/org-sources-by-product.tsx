@@ -27,11 +27,19 @@ const TYPE_COLORS: Record<string, string> = {
   appstore: "var(--fg-2)",
 };
 
-function sourceState(source: SourceListItem): { label: string; title: string } | null {
+function sourceState(
+  source: SourceListItem,
+  orgFetchPaused: boolean,
+): { label: string; title: string } | null {
   const hidden = getHiddenStateBadge(source);
   if (hidden) return hidden;
   if (source.fetchPriority === "paused") {
     return { label: "Paused", title: "Fetching is paused for this source" };
+  }
+  // The org-level pause stops polling for every source in the org (poll cron,
+  // SourceActor, drain), so a source shouldn't read as active under it (#2602).
+  if (orgFetchPaused) {
+    return { label: "Paused", title: "Fetching is paused for this organization" };
   }
   return null;
 }
@@ -53,12 +61,15 @@ export function OrgSourcesByProduct({
   orgSlug,
   orgName,
   sourceSparklines,
+  orgFetchPaused = false,
 }: {
   sources: SourceListItem[];
   products: OrgDetail["products"];
   orgSlug: string;
   orgName: string;
   sourceSparklines?: Record<string, number[]>;
+  /** Org-level `fetchPaused`: every source shows as paused. */
+  orgFetchPaused?: boolean;
 }) {
   const productMap = new Map(products.map((p) => [p.slug, p.name]));
   const bySlug = new Map<string, SourceListItem[]>();
@@ -110,6 +121,7 @@ export function OrgSourcesByProduct({
                   source={s}
                   orgSlug={orgSlug}
                   spark={sourceSparklines?.[s.slug]}
+                  orgFetchPaused={orgFetchPaused}
                 />
               ))}
             </div>
@@ -124,13 +136,15 @@ function SourceRow({
   source,
   orgSlug,
   spark,
+  orgFetchPaused,
 }: {
   source: SourceListItem;
   orgSlug: string;
   spark?: number[];
+  orgFetchPaused: boolean;
 }) {
-  const state = sourceState(source);
-  const muted = isInactive(source);
+  const state = sourceState(source, orgFetchPaused);
+  const muted = isInactive(source) || orgFetchPaused;
   return (
     <div
       className={`flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3 transition-colors first:border-t-0 hover:bg-[var(--surface-2)] ${

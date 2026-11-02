@@ -55,6 +55,12 @@ function NextDueCell({ row, now }: { row: FetchPlanRow; now: number }) {
     return <span className="text-stone-400">webhook</span>;
   if (row.plan.cadence === "push")
     return <span className="text-stone-400">published directly</span>;
+  if (row.plan.pausedBy === "org")
+    return (
+      <span className="text-stone-400" title="Fetching is paused for this whole org">
+        org paused
+      </span>
+    );
   if (row.plan.paused) return <span className="text-stone-400">—</span>;
 
   // When the SourceActor DO is driving this source, show its alarm time
