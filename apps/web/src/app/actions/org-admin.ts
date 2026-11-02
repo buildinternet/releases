@@ -216,6 +216,8 @@ export async function setOrgFetchPausedAction(input: {
   }
 
   revalidatePath(`/${input.slug}`);
+  // The Sources tab badges every source as paused under an org pause (#2602).
+  revalidatePath(`/${input.slug}/sources`);
   revalidatePath(`/${input.slug}/admin`);
   return { ok: true };
 }

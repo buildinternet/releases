@@ -137,6 +137,40 @@ describe("describeFetchPlan — interval", () => {
     expect(plan.intervalHours).toBeNull();
     expect(plan.intervalLabel).toBe("paused");
     expect(plan.paused).toBe(true);
+    expect(plan.pausedBy).toBe("source");
+  });
+
+  it("org pause pauses a polled source and says so (#2602)", () => {
+    const s = mkSource({ fetchPriority: "normal", lastPolledAt: "2026-01-01T00:00:00.000Z" });
+    const plan = describeFetchPlan(s, { orgPaused: true });
+    expect(plan.paused).toBe(true);
+    expect(plan.pausedBy).toBe("org");
+    expect(plan.intervalHours).toBeNull();
+    expect(plan.intervalLabel).toBe("org paused");
+    expect(computeFetchState(s, plan, new Date("2026-01-02T00:00:00.000Z")).nextDueAt).toBeNull();
+  });
+
+  it("a source's own pause is reported ahead of the org pause", () => {
+    const plan = describeFetchPlan(mkSource({ fetchPriority: "paused" }), { orgPaused: true });
+    expect(plan.pausedBy).toBe("source");
+    expect(plan.intervalLabel).toBe("paused");
+  });
+
+  it("org pause leaves firecrawl and push cadences alone (not scheduler-driven)", () => {
+    const fc = describeFetchPlan(mkSource({ metadata: { firecrawl: { enabled: true } } }), {
+      orgPaused: true,
+    });
+    expect(fc.paused).toBe(false);
+    expect(fc.pausedBy).toBeNull();
+    const push = describeFetchPlan(mkSource({ metadata: { ingestMode: "push" } }), {
+      orgPaused: true,
+    });
+    expect(push.paused).toBe(false);
+    expect(push.cadence).toBe("push");
+  });
+
+  it("unpaused → pausedBy null", () => {
+    expect(describeFetchPlan(mkSource({})).pausedBy).toBeNull();
   });
 });
 

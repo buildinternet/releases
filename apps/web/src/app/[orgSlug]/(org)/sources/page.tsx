@@ -96,6 +96,7 @@ export default async function OrgSourcesPage({ params }: { params: Promise<{ org
         orgSlug={orgSlug}
         orgName={org.name}
         sourceSparklines={sourceSparklines}
+        orgFetchPaused={org.fetchPaused === true}
       />
     </>
   );

@@ -317,11 +317,12 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
   }
 
   const [orgRow] = await db
-    .select({ id: organizations.id })
+    .select({ id: organizations.id, fetchPaused: organizations.fetchPaused })
     .from(organizations)
     .where(eq(organizations.slug, org))
     .limit(1);
   if (!orgRow) return c.json({ sources: [] });
+  const orgPaused = orgRow.fetchPaused === true;
 
   // Exclude soft-deleted (tombstoned) sources (#666) so the panel matches normal
   // read-path behavior; hidden sources are kept — they still carry fetch config.
@@ -333,7 +334,7 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
 
   const now = new Date();
   const result = rows.map((s) => {
-    const plan = describeFetchPlan(s);
+    const plan = describeFetchPlan(s, { orgPaused });
     const meta = getSourceMeta(s);
     return {
       id: s.id,
@@ -383,8 +384,14 @@ statusRoutes.get("/status/source-workflow", async (c) => {
   const source = sourceRows[0];
   if (!source) return respondError(c, new NotFoundError());
 
+  const [orgRow] = await db
+    .select({ fetchPaused: organizations.fetchPaused })
+    .from(organizations)
+    .where(eq(organizations.id, source.orgId))
+    .limit(1);
+
   const now = new Date();
-  const plan = describeFetchPlan(source);
+  const plan = describeFetchPlan(source, { orgPaused: orgRow?.fetchPaused === true });
   const state = computeFetchState(source, plan, now);
   const sweep = computeSweepHealth(source, plan, now);
   const stages = describeWorkflowStages(source);

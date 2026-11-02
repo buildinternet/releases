@@ -97,6 +97,40 @@ describe("GET /v1/status/fetch-plan", () => {
     expect(paused.state.nextDueAt).toBeNull();
   });
 
+  it("marks polled sources paused when the org is paused (#2602)", async () => {
+    const db = mkDb();
+    await db.insert(organizations).values({
+      id: "org_p",
+      slug: "paused-co",
+      name: "Paused Co",
+      category: "cloud",
+      fetchPaused: true,
+    });
+    await db.insert(sources).values({
+      id: "src_live",
+      orgId: "org_p",
+      slug: "paused-co-feed",
+      name: "Paused Co Feed",
+      url: "https://p.test",
+      type: "feed",
+      metadata: JSON.stringify({ feedUrl: "https://p.test/feed", feedType: "rss" }),
+      fetchPriority: "normal",
+      lastPolledAt: "2026-01-01T00:00:00.000Z",
+    });
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/status/fetch-plan?org=paused-co"));
+    const body = (await res.json()) as {
+      sources: (PlanRow & { plan: { pausedBy: string | null } })[];
+    };
+    const row = body.sources[0]!;
+    expect(row.fetchPriority).toBe("normal");
+    expect(row.plan.paused).toBe(true);
+    expect(row.plan.pausedBy).toBe("org");
+    expect(row.plan.intervalLabel).toBe("org paused");
+    expect(row.state.nextDueAt).toBeNull();
+  });
+
   it("returns 400 when org is missing", async () => {
     const db = mkDb();
     const fetch = mkApp(db);
