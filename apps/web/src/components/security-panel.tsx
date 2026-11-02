@@ -14,6 +14,7 @@ import {
   revokeSession,
 } from "@/lib/auth-client";
 import { displayEmailOf } from "@/lib/auth-ui";
+import { oauthCallbackErrorCopy } from "@/lib/oauth-callback-error";
 import { SOCIAL_PROVIDERS, PROVIDER_META, type SocialProvider } from "@/lib/social-providers";
 import {
   PanelGrid,
@@ -624,7 +625,19 @@ function SessionsSection({ currentToken }: { currentToken: string | undefined })
 
 /* ── Panel ───────────────────────────────────────────────────────────── */
 
-export function SecurityPanel() {
+function CallbackError({ code, className }: { code?: string; className?: string }) {
+  if (!code) return null;
+  const copy = oauthCallbackErrorCopy(code);
+  return (
+    <div className={className}>
+      <ErrorText>
+        <span className="font-medium">{copy.title}.</span> {copy.message}
+      </ErrorText>
+    </div>
+  );
+}
+
+export function SecurityPanel({ callbackError }: { callbackError?: string }) {
   const { data: sessionData, isPending } = useSession();
   const user = sessionData?.user;
   const currentToken = (sessionData?.session as { token?: string } | undefined)?.token;
@@ -635,13 +648,16 @@ export function SecurityPanel() {
 
   if (!user) {
     return (
-      <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
-        Please{" "}
-        <Link href="/login?redirect=/account/security" className="underline">
-          sign in
-        </Link>{" "}
-        to manage your security.
-      </p>
+      <>
+        <CallbackError code={callbackError} className="mb-4" />
+        <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+          Please{" "}
+          <Link href="/login?redirect=/account/security" className="underline">
+            sign in
+          </Link>{" "}
+          to manage your security.
+        </p>
+      </>
     );
   }
 
@@ -657,6 +673,7 @@ export function SecurityPanel() {
       }
     >
       <div className="flex flex-col gap-9">
+        <CallbackError code={callbackError} />
         <EmailSection user={user} />
         <PasswordSection email={user.email} />
         <ConnectionsSection />

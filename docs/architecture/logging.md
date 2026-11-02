@@ -23,17 +23,21 @@ New worker code MUST use `logEvent`; existing plain-string `console.*` call site
 
 Human-auth business actions are emitted as `logEvent` audit records (`apps/api/src/auth/audit.ts`, #1427) — security/audit telemetry distinct from `telemetry_events` (PII-clean CLI contract) and `search_queries`. PII is minimal: the **user id**, never the email, the session token, or password material; client IPs are **truncated** by `redactIp` (IPv4 → `/24`, IPv6 → `/48`) before they reach the log sink.
 
-| `event`                    | severity | fields         | where it's wired                                                                              |
-| -------------------------- | -------- | -------------- | --------------------------------------------------------------------------------------------- |
-| `sign-in-success`          | info     | `userId`, `ip` | `databaseHooks.session.create.after` (email, social, one-tap, post-verification auto-sign-in) |
-| `sign-up`                  | info     | `userId`       | `databaseHooks.user.create.after`                                                             |
-| `email-verified`           | info     | `userId`       | `emailVerification.afterEmailVerification`                                                    |
-| `password-reset-completed` | info     | `userId`       | `emailAndPassword.onPasswordReset`                                                            |
-| `sign-out`                 | info     | `userId`       | `databaseHooks.session.delete.after` (request path `/sign-out`)                               |
-| `session-revoked`          | warn     | `userId`       | `databaseHooks.session.delete.after` (any other deletion, e.g. password-reset revocation)     |
-| `sign-in-failure`          | warn     | `reason`, `ip` | the `/api/auth/*` handler in `index.ts` (see below)                                           |
+| `event`                    | severity | fields              | where it's wired                                                                              |
+| -------------------------- | -------- | ------------------- | --------------------------------------------------------------------------------------------- |
+| `sign-in-success`          | info     | `userId`, `ip`      | `databaseHooks.session.create.after` (email, social, one-tap, post-verification auto-sign-in) |
+| `sign-up`                  | info     | `userId`            | `databaseHooks.user.create.after`                                                             |
+| `email-verified`           | info     | `userId`            | `emailVerification.afterEmailVerification`                                                    |
+| `password-reset-completed` | info     | `userId`            | `emailAndPassword.onPasswordReset`                                                            |
+| `sign-out`                 | info     | `userId`            | `databaseHooks.session.delete.after` (request path `/sign-out`)                               |
+| `session-revoked`          | warn     | `userId`            | `databaseHooks.session.delete.after` (any other deletion, e.g. password-reset revocation)     |
+| `sign-in-failure`          | warn     | `reason`, `ip`      | the `/api/auth/*` handler in `index.ts` (see below)                                           |
+| `auth-redirect-error`      | warn     | `code`, `provider?` | `/api/auth/*` handler, from a redirect's `?error=` (`auth-error.ts`)                          |
+| `auth-api-error`           | warn     | `code`              | `onAPIError.onError` in `createAuth`, skipping codes already logged as `sign-in-failure`      |
 
 `sign-in-failure` is logged at the **HTTP response layer**, not via an internal hook: a rate-limit rejection (429) short-circuits in Better Auth's router before any hook runs, so the response (path + status) is the only place all failure modes are observable. `reason` is derived from status alone — `429 → rate-limited`, `403 → unverified`, `401 → invalid-credentials`. `invalid-credentials` deliberately covers **both** a wrong password and an unknown email: Better Auth returns the same generic error for both (account-enumeration protection), so they're indistinguishable — and the _logged_ reason stays internal anyway, the user-facing response is always generic.
+
+`auth-redirect-error` and `auth-api-error` cover the other sign-in failures (OAuth callback, magic-link verify, email verification, account linking, MCP authorize). `code` is Better Auth's token (`state_mismatch`, `unable_to_create_user`, …). `provider` is set only from `/api/auth/callback/:provider`. The error message and `error_description` are not logged.
 
 The email-delivery hooks (`email-sent`, `email-no-binding`, `email-send-failed`, `secret-unresolved`) share the same `component: "auth"` (`apps/api/src/auth/email.ts`). The root-key admin routes emit `role-changed` (`apps/api/src/routes/admin-users.ts`) and `oauth-client-{created,updated,deleted,secret-rotated}` (`apps/api/src/routes/admin-oauth.ts`) under the same component — but via `logEvent` directly, so they carry no `environment` field (unlike the `makeAuthAudit` events above).
 

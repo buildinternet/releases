@@ -27,6 +27,8 @@ import {
 } from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
+import { classifyAuthRedirectFailure, rewriteBrowserAuthServerError } from "./auth/auth-error.js";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import {
   publicRateLimit,
   publicRateLimitMiddleware,
@@ -622,6 +624,7 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
   // internal hook runs — so all sign-in failure modes are classified here from the
   // response (path + status, no body read). Successes/state-changes ride the
   // internal hooks in createAuth. Never let an audit failure break the response.
+  const audit = makeAuthAudit(c.env);
   try {
     const failure = classifySignInFailure({
       path: new URL(c.req.url).pathname,
@@ -629,14 +632,47 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
       status: res.status,
     });
     if (failure) {
-      makeAuthAudit(c.env)("warn", {
+      audit("warn", {
         event: failure.event,
         reason: failure.reason,
         ip: redactIp(c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")),
       });
     }
+    // OAuth / magic-link / verify redirects throw status FOUND, which skips
+    // `onAPIError.onError`. The Location query is the record of what the
+    // user was sent.
+    const redirectFailure = classifyAuthRedirectFailure({
+      path: new URL(c.req.url).pathname,
+      method: c.req.method,
+      status: res.status,
+      location: res.headers.get("location"),
+    });
+    if (redirectFailure) audit("warn", redirectFailure);
   } catch {
     // Audit logging is best-effort; a classification/log error must not 500 the auth flow.
+  }
+
+  // An unhandled throw on a browser navigation is a JSON 500 (or an empty
+  // one). Send it to the same page as the handled redirects.
+  try {
+    const rewritten = await rewriteBrowserAuthServerError(
+      c.req.url,
+      c.req.method,
+      res,
+      `${releaseWebBase(c.env)}/auth/error`,
+    );
+    if (rewritten) {
+      const redirectFailure = classifyAuthRedirectFailure({
+        path: new URL(c.req.url).pathname,
+        method: c.req.method,
+        status: rewritten.status,
+        location: rewritten.headers.get("location"),
+      });
+      if (redirectFailure) audit("warn", redirectFailure);
+      return rewritten;
+    }
+  } catch {
+    // A rewrite failure must not hide the original response.
   }
 
   return res;

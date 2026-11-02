@@ -12,10 +12,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AccountSecurityPage() {
+export default async function AccountSecurityPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  // `linkSocial` and the change-email confirmation both return here with
+  // `?error=`. Only a single string is read; a repeated param is ignored so
+  // the banner can't be fed an array.
+  const callbackError = typeof params.error === "string" ? params.error : undefined;
+
   return (
     <SettingsSection group={item.group} title={item.label} description={item.description}>
-      <SecurityPanel />
+      <SecurityPanel callbackError={callbackError} />
     </SettingsSection>
   );
 }

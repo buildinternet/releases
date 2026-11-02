@@ -28,6 +28,7 @@ describe("routeMap", () => {
     "/admin/status",
     "/admin/anything",
     "/auth/error",
+    "/auth/continue",
     "/api/anything",
     "/_next/static/x",
     "/.well-known/foo",
