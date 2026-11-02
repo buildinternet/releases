@@ -160,7 +160,7 @@ describe("org-admin actions", () => {
 
       expect(result).toEqual({ ok: true });
       expect(JSON.parse(recorded[0]?.body ?? "null")).toEqual({ fetchPaused: true });
-      expect(revalidatedPaths).toEqual(["/acme", "/acme/admin"]);
+      expect(revalidatedPaths).toEqual(["/acme", "/acme/sources", "/acme/admin"]);
     });
   });
 
