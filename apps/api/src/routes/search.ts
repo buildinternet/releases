@@ -4,6 +4,7 @@ import { ERROR_ENVELOPE_SCHEMA } from "../lib/openapi-error.js";
 import { logEvent } from "@releases/lib/log-event";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/rendering/formatters.js";
+import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import {
   foldSourcesIntoCatalog,
   mergeCollectionHits,
@@ -112,9 +113,9 @@ export function hydrateReleaseHit(
   try {
     const parsed = JSON.parse(row.media ?? "[]");
     if (Array.isArray(parsed)) {
-      media = parsed.map((m: RawMediaRow) =>
-        Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
-      );
+      media = filterJunkMedia(
+        parsed.filter((m: RawMediaRow) => m && typeof m.url === "string"),
+      ).map((m: RawMediaRow) => Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }));
     }
   } catch {
     // Keep media empty — a malformed row shouldn't break the whole response.

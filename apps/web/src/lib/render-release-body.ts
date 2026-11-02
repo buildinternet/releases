@@ -8,6 +8,7 @@ import { visit, SKIP } from "unist-util-visit";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { releaseBodyImageUrl } from "@/lib/media";
+import { proseExcerpt } from "@releases/rendering/prose-excerpt";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
@@ -233,12 +234,17 @@ export function withCollectionReleaseView<T extends BodyRenderable & { id?: stri
 > {
   return releases.map((release) => {
     const excerpt = releaseExcerpt(release);
-    const fullBody = release.content || release.summary || "";
+    const summaryTextForMore = (release.summary ?? "").trim();
+    // Compare prose to prose when the card excerpt is the body fallback, so a
+    // short note that only differs by markdown syntax doesn't grow a "show more".
+    const fullComparable = summaryTextForMore
+      ? (release.content || release.summary || "").trim()
+      : proseExcerpt(release.content, { title: release.title, maxChars: 100_000 });
     const bodyHtml = renderReleaseBodyHtml(release, "collapsed");
     const hasId = !!release.id;
-    const hasMore = fullBody.trim() !== excerpt.trim() && hasId;
-    const hasBody = fullBody.trim().length > 0 && hasId;
-    const summaryText = (release.summary ?? "").trim();
+    const hasMore = fullComparable !== excerpt.trim() && hasId;
+    const hasBody = (release.content || release.summary || "").trim().length > 0 && hasId;
+    const summaryText = summaryTextForMore;
     const { content: _content, summary: _summary, ...rest } = release;
     return { ...rest, bodyHtml, hasMore, hasBody, summaryText };
   });

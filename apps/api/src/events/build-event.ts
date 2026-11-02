@@ -1,4 +1,5 @@
 import type { MediaItem } from "@buildinternet/releases-api-types";
+import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import type { ReleaseType } from "@buildinternet/releases-core/schema";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import type { ReleaseEventPayload } from "./types.js";
@@ -47,7 +48,7 @@ function parseMedia(raw: string | null): MediaItem[] {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed as MediaItem[];
+    return filterJunkMedia(parsed.filter((m): m is MediaItem => !!m && typeof m.url === "string"));
   } catch {
     return [];
   }

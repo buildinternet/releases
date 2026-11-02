@@ -103,6 +103,14 @@ export function lintOverviewBody(body, orgName) {
       break;
     }
   }
+  for (const line of text.split("\n")) {
+    if (/^\*\*[^*]+\*\*[:.!?]?$/.test(line.trim())) {
+      violations.push("bold-fragment-lead");
+      break;
+    }
+  }
+  const dashes = text.match(/—| -- /g);
+  if (dashes && dashes.length >= 2) violations.push("em-dash-overuse");
   const banned = [
     "biggest",
     "doubling down",
@@ -116,6 +124,7 @@ export function lintOverviewBody(body, orgName) {
     "transformative",
     "next-generation",
     "cutting-edge",
+    "is the point",
   ];
   for (const p of banned) {
     const re = new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");

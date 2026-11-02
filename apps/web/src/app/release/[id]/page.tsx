@@ -10,6 +10,7 @@ import { ReleaseDetailDocument } from "@/lib/graphql/__generated__/graphql";
 import type { ReleaseDetailQuery } from "@/lib/graphql/__generated__/graphql";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { clamp, stripMarkdown } from "@/lib/og-helpers";
+import { proseExcerpt } from "@releases/rendering/prose-excerpt";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
@@ -159,7 +160,13 @@ export async function generateMetadata({
     // read identically — and so identifiers survive (the local strip this
     // replaced deleted `_` and backticks, publishing `whatschanged` to
     // crawlers and link previews).
-    const description = clamp(stripMarkdown(release.summary ?? release.content ?? ""), 160);
+    const storedSummary = (release.summary ?? "").trim();
+    const description = clamp(
+      storedSummary
+        ? stripMarkdown(storedSummary)
+        : proseExcerpt(release.content, { title: release.title, maxChars: 160 }),
+      160,
+    );
     return {
       // Clamp so the <title> doesn't run long enough for search engines to
       // truncate it; the global `%s — Release Notes Index` template still adds the brand.

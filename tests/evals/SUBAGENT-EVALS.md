@@ -68,7 +68,7 @@ difference dominates the result. Three things change at once on the local path:
    arrives as **tool-result data**: the `overview-writer` sub-agent runs under the
    Claude Code _agent_ system prompt (tool list, loop instructions), then Reads the
    composed prompt as the _contents of a file_. So "≤5 sections", "every section
-   opens with a bold tease" land as suggestions inside a document the model is
+   opens with a full sentence" land as suggestions inside a document the model is
    reading, not as system-level law. Models follow system instructions far more
    reliably than instructions embedded in retrieved content — which is exactly why
    the same rules produce clean structure on the API and random collapse/blowup

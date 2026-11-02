@@ -35,6 +35,7 @@ import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
+import { proseExcerpt } from "@releases/rendering/prose-excerpt.js";
 import {
   buildChangelogResponse,
   formatChangelogSliceLine,
@@ -243,7 +244,9 @@ function toReleaseFeedRow(
     type: r.type as "feature" | "rollup",
     summary: r.summary,
     importance: r.importance ?? null,
-    contentPreview: (r.summary || r.content || "").slice(0, 500),
+    contentPreview: (r.summary ?? "").trim()
+      ? (r.summary ?? "").slice(0, 500)
+      : proseExcerpt(r.content, { title: r.title, maxChars: 500 }),
     publishedAt: r.publishedAt,
     url: r.url,
     webUrl: releaseWebUrl(webBase, r),

@@ -19,6 +19,7 @@ Output **only** the final overview body as markdown:
 - No preamble, sign-off, or explanation of what you did.
 - No code fences around the body.
 - No markdown headings (`#`, `##`, …) anywhere — the UI renders the org name and section headers.
+- Sections open with a full sentence. Do not open a section with a bold fragment or a line that is only bold. Bold is rare: at most one key term inside a sentence.
 - No surrounding quotes.
 
 If you are given a file path rather than inline content, read that file first, then produce the body.

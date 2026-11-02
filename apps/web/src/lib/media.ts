@@ -1,3 +1,4 @@
+import { isJunkMediaUrl } from "@releases/rendering/media-filter";
 import { cfImageUrl, cfMediaUrl } from "@releases/rendering/media-url";
 
 /** R2 / Cloudflare media origin (carries the `/cdn-cgi/image/` transform endpoint). */
@@ -220,7 +221,9 @@ export function pickReleaseThumb(
     | null
     | undefined,
 ): { url: string; alt: string } | null {
-  const first = media?.find((m) => m.type === "image" || m.type === "gif");
+  const first = media?.find(
+    (m) => (m.type === "image" || m.type === "gif") && !isJunkMediaUrl(m.url),
+  );
   if (!first) return null;
   const src = first.r2Url ?? first.url;
   if (!src) return null;

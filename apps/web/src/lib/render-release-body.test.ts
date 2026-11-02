@@ -6,35 +6,32 @@ import { beforeAll, describe, expect, mock, test } from "bun:test";
 // (bun resolves the static graph before running module bodies).
 mock.module("server-only", () => ({}));
 
-let renderReleaseBodyHtml: typeof import("./render-release-body").renderReleaseBodyHtml;
+let renderBodyMarkdownToHtml: typeof import("./render-release-body").renderBodyMarkdownToHtml;
 beforeAll(async () => {
-  ({ renderReleaseBodyHtml } = await import("./render-release-body"));
+  ({ renderBodyMarkdownToHtml } = await import("./render-release-body"));
 });
 
-// The release-body renderer shares the link sanitizer with the docs pipeline
-// (#1912). External links still open in a new tab with the external-UGC rel;
-// same-page fragment links must NOT — they stay in-document. And a fragment
-// link must no longer be stripped to plain text.
-describe("renderReleaseBodyHtml link handling", () => {
+// The markdown pipeline (not the prose excerpt) shares the link sanitizer with
+// the docs pipeline (#1912). Feed excerpts are plain prose; AI summaries and
+// the full body still run through this renderer. External links open in a new
+// tab with the external-UGC rel; same-page fragment links stay in-document.
+describe("renderBodyMarkdownToHtml link handling", () => {
   test("external links get target=_blank + external UGC rel", () => {
-    const html = renderReleaseBodyHtml(
-      { content: "See [the docs](https://example.com/docs)." },
-      "full",
-    );
+    const html = renderBodyMarkdownToHtml("See [the docs](https://example.com/docs).", "full");
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="nofollow ugc noopener noreferrer"');
   });
 
   test("fragment links survive and stay in-document (no target/rel)", () => {
-    const html = renderReleaseBodyHtml({ content: "Jump to [the section](#details)." }, "full");
+    const html = renderBodyMarkdownToHtml("Jump to [the section](#details).", "full");
     expect(html).toContain('href="#details"');
     expect(html).not.toContain('target="_blank"');
     expect(html).not.toContain("nofollow ugc");
   });
 
   test("dangerous schemes are still unwrapped to plain text", () => {
-    const html = renderReleaseBodyHtml({ content: "[click](javascript:alert(1))" }, "full");
+    const html = renderBodyMarkdownToHtml("[click](javascript:alert(1))", "full");
     expect(html).not.toContain("javascript:");
     expect(html).toContain("click");
   });
@@ -44,19 +41,17 @@ describe("renderReleaseBodyHtml link handling", () => {
   // (e.g. a raw GitHub CHANGELOG.md link) should keep the default new-tab +
   // external-UGC treatment.
   test("root-relative app paths still get target=_blank + external UGC rel", () => {
-    const html = renderReleaseBodyHtml({ content: "See [the docs](/docs/x)." }, "full");
+    const html = renderBodyMarkdownToHtml("See [the docs](/docs/x).", "full");
     expect(html).toContain('href="/docs/x"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="nofollow ugc noopener noreferrer"');
   });
 });
 
-describe("renderReleaseBodyHtml inline images", () => {
+describe("renderBodyMarkdownToHtml inline images", () => {
   test("full variant keeps a safe image src; collapsed drops the image", () => {
     const md = "![shot](https://cdn.vendor.com/a.png)";
-    expect(renderReleaseBodyHtml({ content: md }, "full")).toContain(
-      'src="https://cdn.vendor.com/a.png"',
-    );
-    expect(renderReleaseBodyHtml({ content: md }, "collapsed")).not.toContain("<img");
+    expect(renderBodyMarkdownToHtml(md, "full")).toContain('src="https://cdn.vendor.com/a.png"');
+    expect(renderBodyMarkdownToHtml(md, "collapsed")).not.toContain("<img");
   });
 });

@@ -104,6 +104,7 @@ import {
   heatmapDateRange,
   hydrateMediaUrls,
   parseReleaseMedia,
+  displaySummary,
   buildFeedCursor,
   parseBoolParam,
   parseFeedCursor,
@@ -2512,8 +2513,7 @@ orgRoutes.get(
         version: r.version,
         type: r.type,
         title: r.title,
-        summary:
-          r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+        summary: displaySummary(r.summary, r.content, r.title),
         titleGenerated: r.title_generated,
         titleShort: r.title_short,
         // List paths carry `breaking` only, never `migrationNotes` (#1710).

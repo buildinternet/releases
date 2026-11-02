@@ -16,6 +16,8 @@ import {
   IMPORTANCE_MIN,
   isImportanceScore,
 } from "@buildinternet/releases-core/importance";
+import { isJunkMediaUrl } from "@releases/rendering/media-filter.js";
+import { displaySummary } from "@releases/rendering/prose-excerpt.js";
 import {
   hydrateMediaUrls,
   normalizeMediaUrl,
@@ -25,6 +27,7 @@ import type { CollectionReleaseItem, MediaItem } from "@buildinternet/releases-a
 import { parseFeedCursorKey, type AggregateReleaseRow } from "@releases/core-internal/feed-cursor";
 import type { createDb } from "./db.js";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
+export { displaySummary } from "@releases/rendering/prose-excerpt.js";
 
 /**
  * Shape a cross-org feed row into the wire-format `CollectionReleaseItem`
@@ -43,7 +46,7 @@ export function formatAggregateReleaseRow(
     version: r.version,
     type: r.type,
     title: r.title,
-    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    summary: displaySummary(r.summary, r.content, r.title),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
     importance: r.importance ?? null,
@@ -80,19 +83,27 @@ export function parseReleaseMedia(raw: string | null, mediaOrigin: string): Medi
     return [];
   }
   if (!Array.isArray(parsed)) return [];
-  return parsed.map((m: RawMediaRow) =>
-    Object.assign({}, m, {
-      // Unwrap Next.js/Vercel image-optimizer URLs (including basePath-doubled
-      // forms like `…/updates/_next/image?…` that 404 off-origin) to the
-      // underlying asset. The extract/scrape ingest path stores media verbatim
-      // (unlike poll-fetch, which normalizes at write time), so this read-time
-      // unwrap is the universal safety net — mirroring how `hydrateMediaUrls`
-      // already rewrites proxy URLs in content bodies at read time. Idempotent
-      // on plain URLs.
-      url: typeof m.url === "string" ? normalizeMediaUrl(m.url) : m.url,
-      r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-    }),
-  );
+  const out: MediaItem[] = [];
+  for (const m of parsed as RawMediaRow[]) {
+    const url = typeof m.url === "string" ? normalizeMediaUrl(m.url) : m.url;
+    // Hide contributor avatars and other junk already stored on older rows.
+    // New ingest drops them; this is the read-side backstop (no row rewrite).
+    if (typeof url === "string" && isJunkMediaUrl(url)) continue;
+    out.push(
+      Object.assign({}, m, {
+        // Unwrap Next.js/Vercel image-optimizer URLs (including basePath-doubled
+        // forms like `…/updates/_next/image?…` that 404 off-origin) to the
+        // underlying asset. The extract/scrape ingest path stores media verbatim
+        // (unlike poll-fetch, which normalizes at write time), so this read-time
+        // unwrap is the universal safety net — mirroring how `hydrateMediaUrls`
+        // already rewrites proxy URLs in content bodies at read time. Idempotent
+        // on plain URLs.
+        url,
+        r2Url: resolveR2Url(m.r2Key, mediaOrigin),
+      }),
+    );
+  }
+  return out;
 }
 
 /**

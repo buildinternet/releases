@@ -29,7 +29,7 @@ describe("releaseExcerpt", () => {
   it("never returns the full body when it exceeds the cap (SEO invariant)", () => {
     const body = "word ".repeat(400); // ~2000 chars
     const out = releaseExcerpt({ content: body, summary: null, title: "v1" });
-    expect(out.length).toBeLessThanOrEqual(EXCERPT_MAX_CHARS + 1); // +1 for the ellipsis
+    expect(out.length).toBeLessThanOrEqual(EXCERPT_MAX_CHARS);
     expect(out.endsWith("…")).toBe(true);
     expect(out.length).toBeLessThan(body.length);
   });
@@ -39,10 +39,18 @@ describe("releaseExcerpt", () => {
     expect(releaseExcerpt({ content: body, summary: null, title: "v1" })).toBe("First paragraph.");
   });
 
+  it("skips a leading hero image instead of excerpting the raw markdown", () => {
+    const title = "Export RUM and Product Analytics data with Export Pipelines";
+    const body = `![${title}](https://web-assets.dd-static.net/hero.png "${title}")\n\nTeams can export session data to their own warehouse.`;
+    const out = releaseExcerpt({ content: body, summary: null, title });
+    expect(out.startsWith("![")).toBe(false);
+    expect(out).toBe("Teams can export session data to their own warehouse.");
+  });
+
   it("handles a body with no spaces without crashing", () => {
     const body = "x".repeat(400);
     const out = releaseExcerpt({ content: body, summary: null, title: "v1" });
-    expect(out).toBe("x".repeat(EXCERPT_MAX_CHARS) + "…");
+    expect(out).toBe("x".repeat(EXCERPT_MAX_CHARS - 1) + "…");
   });
 
   it("returns empty string for empty content + empty summary", () => {

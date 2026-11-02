@@ -140,6 +140,21 @@ test("lintOverviewBody: flags banned editorializing phrases", () => {
   expect(v).toContain("banned-phrase:seamless");
 });
 
+test("lintOverviewBody: flags bold-only fragment leads and em-dash overuse", () => {
+  expect(lintOverviewBody("Shipped fixes.\n\n**Tracing and SDK releases.**", "Acme")).toContain(
+    "bold-fragment-lead",
+  );
+  expect(lintOverviewBody("Shipped fixes.\n\n**Persistent state landed.**", "Acme")).toContain(
+    "bold-fragment-lead",
+  );
+  expect(lintOverviewBody("Shipped a **faster** planner.", "Acme")).not.toContain(
+    "bold-fragment-lead",
+  );
+  expect(lintOverviewBody("Shipped a planner — then a follow-up — this week.", "Acme")).toContain(
+    "em-dash-overuse",
+  );
+});
+
 test("deriveCitationOffsets: finds offsets, drops not-found / overlapping / empty", () => {
   const body = "v2 ships with major improvements across the board.";
   const { citations, dropped } = deriveCitationOffsets(body, [

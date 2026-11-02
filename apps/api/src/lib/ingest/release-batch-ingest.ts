@@ -35,7 +35,7 @@ import { getSourceMeta, filterByUrlDeny, isPushFed } from "@releases/adapters/fe
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "./title-dedup.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../media/media-ingest.js";
-import { filterJunkMedia } from "@releases/rendering/media-filter.js";
+import { filterJunkMedia, isJunkMediaUrl } from "@releases/rendering/media-filter.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { normalizeMediaBind } from "../media/media-bind.js";
 import {
@@ -77,14 +77,20 @@ function normalizeMediaUrlsInBind(media: unknown): string {
   if (!Array.isArray(parsed) || parsed.length === 0) return bound;
   let changed = false;
   // oxlint-disable-next-line no-map-spread -- copy-on-write; must not mutate agent-provided media objects
-  const next = parsed.map((item) => {
-    if (!item || typeof item !== "object") return item;
+  const next = parsed.flatMap((item) => {
+    if (!item || typeof item !== "object") return [item];
     const m = item as { url?: unknown };
-    if (typeof m.url !== "string") return item;
+    if (typeof m.url !== "string") return [item];
     const url = normalizeMediaUrl(m.url);
-    if (url === m.url) return item;
+    // Contributor avatars and other junk never get stored, even when the R2
+    // mirror is unbound (that path used to persist the agent-supplied array).
+    if (isJunkMediaUrl(url)) {
+      changed = true;
+      return [];
+    }
+    if (url === m.url) return [item];
     changed = true;
-    return { ...m, url };
+    return [{ ...m, url }];
   });
   return changed ? JSON.stringify(next) : bound;
 }

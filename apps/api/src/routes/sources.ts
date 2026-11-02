@@ -118,6 +118,7 @@ import {
   heatmapDateRange,
   hydrateMediaUrls,
   parseReleaseMedia,
+  displaySummary,
   parseBoolParam,
   parseEnumParam,
   parseSortDir,
@@ -2034,7 +2035,7 @@ export async function buildSourceDetailPayload(
     version: r.version,
     type: r.type,
     title: r.title,
-    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    summary: displaySummary(r.summary, r.content, r.title),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
     // List paths carry `breaking` only, never `migrationNotes` (#1710).
@@ -2225,7 +2226,7 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     version: r.version,
     type: r.type,
     title: r.title,
-    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    summary: displaySummary(r.summary, r.content, r.title),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
     // List paths carry `breaking` only, never `migrationNotes` (#1710).
