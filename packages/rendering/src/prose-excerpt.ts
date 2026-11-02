@@ -9,7 +9,7 @@
  * the first prose paragraph and flatten the markdown.
  */
 
-import { stripMarkdown } from "./strip-markdown.js";
+import { stripMarkdown } from "./strip-markdown";
 
 /** Card / API preview cap. OG and MCP pass their own. */
 export const PROSE_EXCERPT_MAX = 280;
