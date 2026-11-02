@@ -7,6 +7,7 @@ import { knowledgePages, organizations } from "@buildinternet/releases-core/sche
 import { orgWhere } from "../utils.js";
 import { isProductId, listProductsBySlug, findProductById } from "@releases/queries/entities";
 import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
+import { revalidateOrgOverviewHtml } from "../lib/web-revalidate.js";
 import { fetchOverviewCitations } from "../lib/overview-citations.js";
 import { validateJson } from "../lib/validate.js";
 import {
@@ -86,7 +87,7 @@ app.post(
   async (c) => {
     const db = getDb(c);
     const [org] = await db
-      .select({ id: organizations.id })
+      .select({ id: organizations.id, slug: organizations.slug })
       .from(organizations)
       .where(orgWhere(c.req.param("slug")));
     if (!org) return respondError(c, new NotFoundError());
@@ -106,6 +107,10 @@ app.post(
       releaseCount: body.releaseCount,
       lastContributingReleaseAt: body.lastContributingReleaseAt ?? null,
     });
+
+    // The HTML pages are ISR for 24h. The API response is only edge-cached
+    // for about a minute, so without this ping /{org} keeps the old overview.
+    await revalidateOrgOverviewHtml(c.env, [org.slug]);
 
     return c.json({ ok: true, citations: result.citationsWritten });
   },

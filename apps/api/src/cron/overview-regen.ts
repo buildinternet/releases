@@ -23,6 +23,7 @@ import {
 } from "@releases/ai-internal/overview-content";
 import type { ResolvedOverviewModel } from "../lib/ai/text-model";
 import { logEvent } from "@releases/lib/log-event";
+import { revalidateOrgOverviewHtml, type WebRevalidateEnv } from "../lib/web-revalidate.js";
 
 export interface RegenChunkResult {
   generated: number;
@@ -122,11 +123,19 @@ export async function regenerateOverviewChunk(
   db: Parameters<typeof upsertOrgOverview>[0],
   resolved: ResolvedOverviewModel,
   candidates: OverviewCandidate[],
-  opts?: { dryRun?: boolean; maxAttempts?: number; retryBackoffMs?: number },
+  opts?: {
+    dryRun?: boolean;
+    maxAttempts?: number;
+    retryBackoffMs?: number;
+    /** When set, a persisted overview pings web to drop the ISR HTML for that org. */
+    revalidateEnv?: WebRevalidateEnv;
+    fetchImpl?: typeof fetch;
+  },
 ): Promise<RegenChunkResult> {
   let generated = 0;
   let skipped = 0;
   const failedSlugs: string[] = [];
+  const persistedSlugs: string[] = [];
   for (const c of candidates) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- per-org sequential: D1 + one LLM call each
@@ -178,6 +187,7 @@ export async function regenerateOverviewChunk(
         releaseCount: inputs.totalAvailable,
         lastContributingReleaseAt: inputs.selected[0]?.publishedAt ?? null,
       });
+      persistedSlugs.push(c.orgSlug);
       generated++;
     } catch (err: unknown) {
       failedSlugs.push(c.orgSlug);
@@ -189,6 +199,11 @@ export async function regenerateOverviewChunk(
         err,
       });
     }
+  }
+  if (!opts?.dryRun && persistedSlugs.length > 0 && opts?.revalidateEnv) {
+    await revalidateOrgOverviewHtml(opts.revalidateEnv, persistedSlugs, {
+      fetchImpl: opts.fetchImpl,
+    });
   }
   return { generated, skipped, failed: failedSlugs.length, failedSlugs };
 }
