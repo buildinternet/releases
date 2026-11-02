@@ -11,8 +11,10 @@ import {
   hasSessionHint,
   getLastUsedLoginMethod,
 } from "@/lib/auth-client";
+import { authContinueCallbackURL, authErrorCallbackURL } from "@/lib/auth-callback";
 import { safeRedirect } from "@/lib/auth-redirect";
 import { authOriginSupport } from "@/lib/auth-ui";
+import { passkeySignInMessage } from "@/lib/passkey-error";
 import { SOCIAL_PROVIDERS, PROVIDER_META } from "@/lib/social-providers";
 import {
   AuthCard,
@@ -201,6 +203,13 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
           router.push(target);
           router.refresh();
         },
+        // The One Tap client returns early when `/one-tap/callback` fails, so
+        // this is the only place that failure reaches the form. Prompt skips
+        // (no Google session, user dismissed) stay on `onPromptNotification`.
+        onError: (ctx) => {
+          const message = ctx.error.message?.trim();
+          setError(message || "Could not sign in with Google. Please try again.");
+        },
       },
       onPromptNotification: (notification) => {
         // Dev-only visibility into why Google skipped/didn't show the prompt.
@@ -228,7 +237,15 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
       try {
         if (!(await PKC.isConditionalMediationAvailable()) || cancelled) return;
         const res = await signIn.passkey({ autoFill: true });
-        if (cancelled || !res || res.error) return;
+        if (cancelled || !res) return;
+        if (res.error) {
+          // Dismissal resolves as an error object rather than a throw. Only a
+          // real failure (the options call, or verification after a selection)
+          // is worth a banner — a cancelled autofill prompt is not.
+          const message = passkeySignInMessage(res.error, "autofill");
+          if (message && !cancelled) setError(message);
+          return;
+        }
         router.push(target);
         router.refresh();
       } catch {
@@ -247,6 +264,19 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     return new URL(target, window.location.origin).toString();
   }
 
+  // Where a failed provider round-trip or magic-link click should land.
+  // Better Auth stores this per flow; without it, magic-link verify appends
+  // `?error=` onto the success URL, which does not read the query.
+  function errorCallbackURL(): string {
+    return authErrorCallbackURL(window.location.origin);
+  }
+
+  // Email verification has no `errorCallbackURL` — a bad token is appended to
+  // `callbackURL`. The continue page shows `/auth/error` or forwards to `target`.
+  function verifyCallbackURL(): string {
+    return authContinueCallbackURL(window.location.origin, target);
+  }
+
   // Explicit passkey sign-in (the button below). Opens the modal WebAuthn prompt;
   // on success soft-navigate to the post-auth target. The register/sign-in passkey
   // responses always resolve with a data object carrying `error` (per the plugin
@@ -258,8 +288,9 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     setPasskeyPending(true);
     try {
       const result = await signIn.passkey();
-      if (result?.error) {
-        setError(result.error.message ?? "Could not sign in with a passkey. Please try again.");
+      const passkeyError = passkeySignInMessage(result?.error, "button");
+      if (passkeyError) {
+        setError(passkeyError);
         return;
       }
       router.push(target);
@@ -289,8 +320,16 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     setSending(true);
     try {
       const result = isMagic
-        ? await signIn.magicLink({ email: pendingEmail, callbackURL: callbackURL() })
-        : await sendVerificationEmail({ email: pendingEmail, callbackURL: callbackURL() });
+        ? await signIn.magicLink({
+            email: pendingEmail,
+            callbackURL: callbackURL(),
+            newUserCallbackURL: callbackURL(),
+            errorCallbackURL: errorCallbackURL(),
+          })
+        : await sendVerificationEmail({
+            email: pendingEmail,
+            callbackURL: verifyCallbackURL(),
+          });
       if (result.error) {
         setError(result.error.message ?? failMsg);
         return;
@@ -327,6 +366,8 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
         email,
         ...(mode === "signup" && name ? { name } : {}),
         callbackURL: callbackURL(),
+        newUserCallbackURL: callbackURL(),
+        errorCallbackURL: errorCallbackURL(),
       });
       if (result.error) {
         setError(result.error.message ?? "Could not send a sign-in link. Please try again.");
@@ -357,7 +398,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
           name: String(data.get("name") ?? "").trim(),
           email,
           password,
-          callbackURL: callbackURL(),
+          callbackURL: verifyCallbackURL(),
         });
         if (result.error) {
           setError(prettyError(result.error, mode));
@@ -401,7 +442,12 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
       // callback must be ABSOLUTE on the web origin (see `callbackURL` above) — a
       // relative one resolves against the worker's baseURL and would strand the
       // user on api.releases.sh after the OAuth round-trip.
-      const result = await signIn.social({ provider, callbackURL: callbackURL() });
+      const result = await signIn.social({
+        provider,
+        callbackURL: callbackURL(),
+        newUserCallbackURL: callbackURL(),
+        errorCallbackURL: errorCallbackURL(),
+      });
       if (result.error) {
         setError(prettyError(result.error, mode));
         setSocial(null);

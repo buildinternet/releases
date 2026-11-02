@@ -23,4 +23,20 @@ describe("oauthCallbackErrorCopy", () => {
     expect(copy).toEqual(oauthCallbackErrorCopy(undefined));
     expect(copy.message).not.toContain("evil.example");
   });
+
+  it("names account creation, linking, and link-token failures", () => {
+    expect(oauthCallbackErrorCopy("unable_to_create_user").title).toBe(
+      "Couldn't create your account",
+    );
+    expect(oauthCallbackErrorCopy("account_not_linked").message).toContain("isn't connected");
+    expect(oauthCallbackErrorCopy("INVALID_TOKEN").title).toBe("This link isn't valid");
+    expect(oauthCallbackErrorCopy("TOKEN_EXPIRED").title).toBe("This link expired");
+    expect(oauthCallbackErrorCopy("invalid_redirect").message).toContain("isn't allowed");
+  });
+
+  it("uses the generic message for an internal failure without echoing the code", () => {
+    expect(oauthCallbackErrorCopy("internal_server_error")).toEqual(
+      oauthCallbackErrorCopy(undefined),
+    );
+  });
 });

@@ -130,6 +130,7 @@ import {
   auditOnPasswordReset,
   type AuthAuditEmitter,
 } from "./audit.js";
+import { classifyAuthApiError } from "./auth-error.js";
 
 /**
  * Build the Better Auth Stripe plugin (`@better-auth/stripe`), gated on BOTH the
@@ -811,12 +812,20 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     // parseable when BETTER_AUTH_URL is unset; prod/staging always set it.
     baseURL: env.BETTER_AUTH_URL ?? DEFAULT_AUTH_ORIGIN,
     trustedOrigins: authTrustedOrigins(env),
-    // OAuth callback failures redirect here instead of Better Auth's default
-    // development error page (`${baseURL}/error`, which is the API origin).
-    // Absolute on the web origin: a root-relative path is resolved against
+    // Browser auth failures redirect here instead of Better Auth's default
+    // error page (`${baseURL}/error`, the API origin) or a raw HTML dump.
+    // Absolute on the web origin: a root-relative path resolves against
     // baseURL and would strand the user on api.releases.sh.
+    // `onError` sees thrown API errors only — a `ctx.redirect` is status
+    // FOUND and returns before the hook. Those redirects are logged from the
+    // `/api/auth/*` handler. The hook records the code, never the message.
     onAPIError: {
       errorURL: `${releaseWebBase(env)}/auth/error`,
+      onError: (error) => {
+        const fields = classifyAuthApiError(error);
+        if (!fields) return;
+        audit("warn", fields);
+      },
     },
     // Short-lived cookie cache avoids a D1 read on every getSession within a
     // visit. `jwe` encrypts the `session_data` cookie; `session_token` stays the

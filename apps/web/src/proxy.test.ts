@@ -100,6 +100,7 @@ describe("proxy legacy ?tab= redirects", () => {
     // `changelog` is a source-level tab, so an unreserved two-segment path
     // would 308. `/auth/error` is a real route and must stay put.
     expect(run("/auth/error?tab=changelog").headers.get("location")).toBeNull();
+    expect(run("/auth/continue?tab=changelog").headers.get("location")).toBeNull();
     expect(run("/docs?tab=releases").headers.get("location")).toBeNull();
     expect(run("/search?tab=sources").headers.get("location")).toBeNull();
   });

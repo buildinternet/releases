@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { sendVerificationEmail } from "@/lib/auth-client";
+import { authContinueCallbackURL } from "@/lib/auth-callback";
 
 /**
  * Quiet nudge for a signed-in user whose email isn't verified (digest sends skip
@@ -23,9 +24,10 @@ export function VerifyEmailHint({
     if (state === "sending") return;
     setState("sending");
     try {
+      const next = `${window.location.pathname}${window.location.search}`;
       const result = await sendVerificationEmail({
         email,
-        callbackURL: window.location.href,
+        callbackURL: authContinueCallbackURL(window.location.origin, next),
       });
       setState(result.error ? "error" : "sent");
     } catch {
