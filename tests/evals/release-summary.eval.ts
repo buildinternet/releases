@@ -73,6 +73,9 @@ async function main() {
     anthropicModel: SUMMARY_MODEL,
     generationName: "summarize-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
+    // Mirror production resolveSummarizeModel: reasoning off so DeepSeek-class
+    // models don't spend the 440-token cap thinking and return empty text.
+    reasoning: { enabled: false },
   })!.model;
   console.error(`model under test: ${summaryModel.id}`);
   const rubric = useJudge

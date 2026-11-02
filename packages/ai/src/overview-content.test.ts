@@ -239,3 +239,15 @@ test("generateOverview keeps the first draft when the corrective is worse", asyn
   expect(body).toBe("Delivered a powerful streaming API.");
   expect(callsOf(model)).toBe(2);
 });
+
+test("lintOverviewBody flags a short colon label but not a full lead-in sentence", () => {
+  expect(
+    lintOverviewBody("Recently shipped X.\n\nUpgrade notes worth acting on:\n\n- One.", "Acme"),
+  ).toContain("fragment-lead-in");
+  expect(
+    lintOverviewBody(
+      "Recently shipped X.\n\nThree upgrades need action before you update:\n\n- One.",
+      "Acme",
+    ),
+  ).not.toContain("fragment-lead-in");
+});

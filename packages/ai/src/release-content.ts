@@ -230,7 +230,8 @@ The release block includes Org, Source, optionally Product, Title, Version, URL,
 - Include the version when the source title carries one. Drop redundant prefixes (don't repeat the product name twice if it's already in the source title).
 - Sentence case for body words. Preserve product names, proper nouns, and standard acronyms (API, CLI, MCP, SDK, TUI) as they appear in the body.
 - Target 60-90 characters. Hard cap at 100.
-- No trailing punctuation. No quotation marks. No markdown.
+- No trailing punctuation. No quotation marks. No markdown. No em dashes.
+- Report what shipped, not what a post does. Never use the org as the subject of a reporting verb: "Datadog says Bits investigations cost 84% less", "Acme details its new runtime", "Acme announces X" all fail. Write "Bits investigations now cost 84% less". Product names that contain the org name ("Datadog Agent", "Cloudflare Workers") are fine.
 - For empty or chore-only bodies, write a formulaic title using product + version: e.g., "Next.js v15.4.2 dependency update", "OpenAI Codex 2.35.1 internal release".
 </title_format>
 
@@ -245,9 +246,9 @@ Style rules:
 
 3. **Drop articles ("the", "a") wherever the meaning is clear without them.**
 
-4. **Join two clauses with a semicolon (";") or em-dash ("—"), not "and".** Reserve "and" for tightly-related items inside a single clause ("vision and coding").
+4. **Join two clauses with a semicolon (";"), not "and" and not an em dash or colon.** Reserve "and" for tightly-related items inside a single clause ("vision and coding"). No "Label: claim" headlines ("Bits investigations: 84% cheaper, 82% faster" fails; "Bits investigations now cost 84% less" works).
 
-5. **Telegraphic register.** One factual claim per clause. No connector phrases ("a number of", "various", "multiple"). No marketing intensifiers ("major", "important", "exciting", "significant").
+5. **Telegraphic register.** One factual claim per clause. Don't open with the org name: the page already shows it ("Datadog adds prompt registry" → "LLM prompts get a versioned registry"). No connector phrases ("a number of", "various", "multiple"). No marketing intensifiers ("major", "important", "exciting", "significant").
 
 6. **Hard cap at 70 characters. Target 30-60.** Smart brevity is character-economical by design.
 
@@ -265,7 +266,10 @@ Smart brevity transformations to internalize:
 - Begin with the change itself. No opening phrases like "Here is", "This release", or "Based on the notes".
 - Do not restate the version, product, or title — those appear separately in the UI.
 - Use exactly one or two sentences. The second is optional, used only when one cannot carry the most important change.
-- Plain factual prose with standard sentence punctuation. No markdown, no bullet lists, no JSON, no parentheticals, no headers.
+- Plain factual prose with standard sentence punctuation. No markdown, no bullet lists, no JSON, no parentheticals, no headers, no em dashes.
+- Every sentence is a complete sentence with a subject and a verb. No fragments ("Also fixed X." fails; "X no longer fails." works).
+- The product or the feature is the subject, never the org. Don't narrate the source: "Datadog details AI Guard, which…", "The post explains…", "Acme announces…" all fail. State what the product now does.
+- One idea per sentence. Name at most three items in a list; a sentence that strings together four or more comma-separated items reads as machine-written. Pick the ones that matter most, or characterize the rest ("plus CMake support and FFI bindings").
 - The summary is *reporting density* — it explains the mechanism (which file, which command, which API) and includes the second-tier change or long-tail characterization. The short title is the headline-density form; the summary adds technical depth.
 </summary_format>
 
@@ -795,6 +799,146 @@ export function parseBreaking(raw: string): {
   return { breaking, migrationNotes: NO_MIGRATION.has(note.toLowerCase()) ? null : note };
 }
 
+/** Verbs that turn the org into the narrator of a post ("Datadog details …"). */
+const REPORTING_VERBS =
+  "says|said|details|detailed|announces|announced|explains|describes|shares|highlights|outlines|explores|discusses|unveils|introduces|reveals";
+/** Action verbs that make the org the subject of a short headline or summary. */
+const ACTION_VERBS =
+  "adds|added|launches|launched|ships|shipped|releases|released|brings|expands|extends|rolls out|makes";
+
+/** Buzzwords the prompt bans. Kept short: these are the ones models actually emit. */
+const RELEASE_LINT_BANNED = [
+  "seamless",
+  "seamlessly",
+  "powerful",
+  "comprehensive",
+  "robust",
+  "exciting",
+  "unlock",
+  "unlocks",
+  "game-changing",
+  "cutting-edge",
+] as const;
+
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * True when `text` opens with the org name (one to three words matching the
+ * slug, ignoring case and punctuation), optionally after "The" or before
+ * "team", followed by one of `verbs`. "Datadog details …" and "Vercel Labs
+ * ships …" match; "Datadog Agent adds …" does not, because "Agent" sits
+ * between the org and the verb.
+ */
+function opensWithOrgVerb(text: string, orgSlug: string, verbs: string): boolean {
+  const org = normalizeName(orgSlug);
+  if (!org) return false;
+  const words = text
+    .trim()
+    .replace(/^the\s+/i, "")
+    .split(/\s+/);
+  const verbRe = new RegExp(`^(?:${verbs})$`, "i");
+  for (let n = 1; n <= 3 && n < words.length; n++) {
+    if (
+      normalizeName(
+        words
+          .slice(0, n)
+          .join("")
+          .replace(/['’]s$/i, ""),
+      ) !== org
+    )
+      continue;
+    const rest = words.slice(n);
+    if (rest[0]?.toLowerCase() === "team") rest.shift();
+    const next = rest.slice(0, 2).join(" ").toLowerCase();
+    return verbRe.test(rest[0] ?? "") || verbRe.test(next);
+  }
+  return false;
+}
+
+/** Split prose into sentences on . ! ? followed by whitespace or end. */
+function sentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Commas that separate items (not thousands separators like 1,000). */
+function listCommaCount(sentence: string): number {
+  return (sentence.match(/,(?!\d)/g) ?? []).length;
+}
+
+/**
+ * Lint generated title / short title / summary against the voice rules the
+ * prompt asks for. Returns violation tags (empty = clean); `summarizeRelease`
+ * uses them to drive one corrective regeneration. These are the tells readers
+ * call out as machine-written: the org narrating a post, comma-stacked lists,
+ * fragments, em dashes, and "Label: stat, stat" headlines.
+ */
+export function lintReleaseContent(
+  out: { title: string | null; titleShort: string | null; summary: string | null },
+  orgSlug: string,
+): string[] {
+  const violations: string[] = [];
+  const title = out.title ?? "";
+  const short = out.titleShort ?? "";
+  const summary = out.summary ?? "";
+
+  if (opensWithOrgVerb(title, orgSlug, REPORTING_VERBS)) violations.push("title-org-narrator");
+  if (opensWithOrgVerb(short, orgSlug, `${REPORTING_VERBS}|${ACTION_VERBS}`)) {
+    violations.push("short-org-subject");
+  }
+  if (/:\s/.test(short)) violations.push("short-colon-headline");
+
+  const summarySentences = sentences(summary);
+  if (
+    summarySentences.some((s) => opensWithOrgVerb(s, orgSlug, `${REPORTING_VERBS}|${ACTION_VERBS}`))
+  ) {
+    violations.push("summary-org-subject");
+  }
+  if (/^(this|the) (post|article|blog|announcement|release|update)\b/i.test(summary.trim())) {
+    violations.push("summary-narrates-source");
+  }
+  if (summarySentences.some((s) => /^also\b/i.test(s))) violations.push("summary-fragment");
+  if (summarySentences.some((s) => listCommaCount(s) >= 4)) violations.push("summary-comma-stack");
+
+  if (/—| -- /.test(`${title}\n${short}\n${summary}`)) violations.push("em-dash");
+
+  const all = `${title}\n${short}\n${summary}`;
+  for (const p of RELEASE_LINT_BANNED) {
+    if (new RegExp(`\\b${p}\\b`, "i").test(all)) violations.push(`banned-phrase:${p}`);
+  }
+  return violations;
+}
+
+const RELEASE_LINT_HINTS: Record<string, string> = {
+  "title-org-narrator":
+    'the title makes the org the narrator ("Acme says/details/announces"); state what shipped',
+  "short-org-subject": "the short title opens with the org name; lead with the thing that changed",
+  "short-colon-headline":
+    'the short title is a "Label: claim" headline; write one claim, or two joined by a semicolon',
+  "summary-org-subject":
+    "a summary sentence makes the org the subject; make the product or feature the subject",
+  "summary-narrates-source":
+    "the summary narrates the post or release; start with the change itself",
+  "summary-fragment":
+    'a summary sentence is a fragment ("Also fixed X."); give it a subject and a verb',
+  "summary-comma-stack":
+    "a summary sentence strings four or more comma-separated items; name at most three, or split it",
+  "em-dash": "an em dash appears; use a period or a semicolon instead",
+};
+
+/** Corrective instruction appended to the user message on a regeneration pass. */
+export function correctiveReleaseSuffix(violations: string[]): string {
+  const hints = violations.map((v) => RELEASE_LINT_HINTS[v] ?? v);
+  return (
+    `Your previous answer broke these rules: ${hints.join("; ")}. ` +
+    `Answer again in the same tag format, fixing every one and keeping the same facts.`
+  );
+}
+
 /**
  * Run a release body through the supplied `TextModel` to produce title / short
  * title / summary. The caller constructs the model (Anthropic Haiku via AI
@@ -842,14 +986,42 @@ export async function summarizeRelease(
     releaseId: input.releaseId,
   });
 
-  return {
-    ...parseReleaseContent(raw, null),
-    usage: {
-      input: usage.input,
-      output: usage.output,
-      cacheCreate: usage.cacheCreate,
-      cacheRead: usage.cacheRead,
-    },
-    skipped: false,
+  let parsed = parseReleaseContent(raw, null);
+  const total = {
+    input: usage.input,
+    output: usage.output,
+    cacheCreate: usage.cacheCreate,
+    cacheRead: usage.cacheRead,
   };
+
+  // One corrective pass when the draft reads machine-written. Keep the rewrite
+  // only when it parses and lints no worse; any retry failure keeps the draft.
+  const violations = parsed.summary ? lintReleaseContent(parsed, input.orgSlug) : [];
+  if (violations.length > 0) {
+    try {
+      const retry = await model.complete({
+        system: SYSTEM_PROMPT,
+        user: `${releaseBlock}\n\n${correctiveReleaseSuffix(violations)}`,
+        maxTokens: MAX_OUTPUT_TOKENS,
+        cacheSystem: true,
+        sourceId: input.sourceId,
+        releaseId: input.releaseId,
+      });
+      total.input += retry.usage.input;
+      total.output += retry.usage.output;
+      total.cacheCreate += retry.usage.cacheCreate;
+      total.cacheRead += retry.usage.cacheRead;
+      const corrected = parseReleaseContent(retry.text, null);
+      if (
+        corrected.summary &&
+        lintReleaseContent(corrected, input.orgSlug).length < violations.length
+      ) {
+        parsed = corrected;
+      }
+    } catch {
+      // Fail-open: the first draft is still a valid result.
+    }
+  }
+
+  return { ...parsed, usage: total, skipped: false };
 }

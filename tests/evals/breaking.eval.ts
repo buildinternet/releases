@@ -71,6 +71,9 @@ async function main() {
     anthropicModel: SUMMARIZE_MODEL,
     generationName: "breaking-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
+    // Mirror production resolveSummarizeModel: reasoning off so DeepSeek-class
+    // models don't spend the 440-token cap thinking and return empty text.
+    reasoning: { enabled: false },
   })!.model;
   console.error(`model under test: ${model.id}`);
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   parseBreaking,
   parseImportance,
+  lintReleaseContent,
   parseReleaseContent,
   summarizeRelease,
   type SummarizeReleaseInput,
@@ -234,5 +235,103 @@ describe("summarizeRelease importance", () => {
     const r = await summarizeRelease(model, INPUT);
     expect(r.skipped).toBe(false);
     expect(r.importance).toBe(5);
+  });
+});
+
+describe("lintReleaseContent", () => {
+  const clean = {
+    title: "Datadog Agent 7.85.0 requires Oracle client 19c or newer",
+    titleShort: "Oracle checks now need client 19c or newer",
+    summary:
+      "Oracle integration checks now require an external Oracle client 19c or newer. Older clients fail at startup.",
+  };
+
+  test("passes clean output, including product names that contain the org", () => {
+    expect(lintReleaseContent(clean, "datadog")).toEqual([]);
+  });
+
+  test("flags the tells from the Datadog feedback", () => {
+    const v = lintReleaseContent(
+      {
+        title: "Datadog says Bits investigations now cost 84% less and run 82% faster",
+        titleShort: "Bits investigations: 84% cheaper, 82% faster",
+        summary:
+          "Datadog details AI Guard, which blocks prompts. It offers crash handlers, C++17 and C99 APIs, CMake support, FFI bindings, and consent controls. Also fixed falcon.asgi.App creation.",
+      },
+      "datadog",
+    );
+    expect(v).toContain("title-org-narrator");
+    expect(v).toContain("short-colon-headline");
+    expect(v).toContain("summary-org-subject");
+    expect(v).toContain("summary-comma-stack");
+    expect(v).toContain("summary-fragment");
+  });
+
+  test("org as short-title subject, multi-word org slugs, em dashes", () => {
+    expect(
+      lintReleaseContent({ ...clean, titleShort: "Datadog adds prompt registry" }, "datadog"),
+    ).toContain("short-org-subject");
+    expect(
+      lintReleaseContent(
+        { ...clean, titleShort: "Vercel Labs ships agent toolkit" },
+        "vercel-labs",
+      ),
+    ).toContain("short-org-subject");
+    expect(
+      lintReleaseContent({ ...clean, summary: "Caching is on by default — no opt-in." }, "acme"),
+    ).toContain("em-dash");
+  });
+
+  test("thousands separators are not list commas", () => {
+    expect(
+      lintReleaseContent(
+        { ...clean, summary: "Limits rose from 1,000 to 10,000, then 100,000 and 1,000,000 rows." },
+        "acme",
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("summarizeRelease style retry", () => {
+  function sequenceModel(texts: string[]) {
+    const calls: TextModelRequest[] = [];
+    const model: TextModel = {
+      id: "anthropic:claude-haiku-5-5",
+      async complete(req) {
+        calls.push(req);
+        const text = texts[Math.min(calls.length - 1, texts.length - 1)];
+        return { text, usage: { input: 10, output: 6, cacheCreate: 0, cacheRead: 0 } };
+      },
+    };
+    return { model, calls };
+  }
+
+  test("a clean draft makes one call", async () => {
+    const { model, calls } = sequenceModel([response({})]);
+    await summarizeRelease(model, INPUT);
+    expect(calls.length).toBe(1);
+  });
+
+  test("a machine-sounding draft is rewritten once and the better answer kept", async () => {
+    const { model, calls } = sequenceModel([
+      response({ summary: "Acme details the new client. Also removed the legacy one." }),
+      response({ summary: "The new client replaces the legacy one, which was removed." }),
+    ]);
+    const r = await summarizeRelease(model, INPUT);
+    expect(calls.length).toBe(2);
+    expect(calls[1].user).toContain("makes the org the subject");
+    expect(r.summary).toBe("The new client replaces the legacy one, which was removed.");
+    expect(r.usage.input).toBe(20);
+  });
+
+  test("a retry that is no better keeps the first draft", async () => {
+    const draft = "Acme details the new client.";
+    const { model, calls } = sequenceModel([
+      response({ summary: draft }),
+      response({ summary: "Acme explains the new client." }),
+    ]);
+    const r = await summarizeRelease(model, INPUT);
+    expect(calls.length).toBe(2);
+    expect(r.summary).toBe(draft);
   });
 });
