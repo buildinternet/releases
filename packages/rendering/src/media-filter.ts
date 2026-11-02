@@ -50,6 +50,17 @@ export const CHROME_MEDIA_MARKERS: readonly string[] = [
 ];
 
 /**
+ * Substrings the junk-media purge can match in stored `media` JSON. Contributor
+ * profile photos (GitHub account avatars, Gravatar) — not editorial images.
+ * `github.com/{login}.png` without `?size=` still fails {@link isProfilePhotoUrl}
+ * at read time; this list is only the SQL prefilter.
+ */
+export const PROFILE_MEDIA_MARKERS: readonly string[] = [
+  "avatars.githubusercontent.com",
+  ".png?size=",
+];
+
+/**
  * Largest forced edge (px) we still treat as a thumbnail / avatar crop rather
  * than editorial media. Matches the classify-media-relevance skill's "under
  * ~200×200 square is likely chrome" guidance, with room for slightly larger
@@ -102,10 +113,41 @@ export function hasTinyForcedDimensions(url: string): boolean {
   return width <= TINY_FORCED_EDGE_PX && height <= TINY_FORCED_EDGE_PX;
 }
 
+/**
+ * Contributor / account profile photos. These are not release media: GitHub
+ * release notes embed `github.com/{login}.png` (and `avatars.githubusercontent.com`)
+ * for the people who shipped the tag. Org and product logos are stored on the
+ * entity, not in a release's `media[]`, so this does not touch those.
+ */
+export function isProfilePhotoUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (
+    host === "avatars.githubusercontent.com" ||
+    host === "gravatar.com" ||
+    host === "www.gravatar.com" ||
+    host === "secure.gravatar.com"
+  ) {
+    return true;
+  }
+  // GitHub account avatars are exactly /{login}.png. Repo screenshots live
+  // under /{owner}/{repo}/… or /user-attachments/ and must stay.
+  if (host === "github.com" || host === "www.github.com") {
+    return /^\/[^/]+\.png$/i.test(parsed.pathname);
+  }
+  return false;
+}
+
 /** Returns true when a URL points at junk we never want to mirror or promote. */
 export function isJunkMediaUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   if (url.startsWith("data:")) return true;
+  if (isProfilePhotoUrl(url)) return true;
   if (/(?:^|\/)favicon[.-]/i.test(url)) return true;
   if (hasTinyForcedDimensions(url)) return true;
   return (

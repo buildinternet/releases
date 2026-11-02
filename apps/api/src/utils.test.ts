@@ -45,6 +45,16 @@ describe("parseReleaseMedia — image-proxy unwrapping", () => {
     expect(m.r2Url).toBe("https://media.releases.sh/releases/abc.png");
   });
 
+  test("drops contributor profile photos already stored on the row", () => {
+    const raw = JSON.stringify([
+      { type: "image", url: "https://github.com/watson.png?size=48", alt: "@watson" },
+      { type: "image", url: "https://cdn.example.com/screenshot.png", alt: "Shot" },
+    ]);
+    expect(parseReleaseMedia(raw, ORIGIN).map((m) => m.url)).toEqual([
+      "https://cdn.example.com/screenshot.png",
+    ]);
+  });
+
   test("malformed JSON collapses to an empty list", () => {
     expect(parseReleaseMedia("{not json", ORIGIN)).toEqual([]);
   });

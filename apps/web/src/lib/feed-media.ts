@@ -1,4 +1,5 @@
 import type { ReleaseItem } from "@/lib/api";
+import { isJunkMediaUrl } from "@releases/rendering/media-filter";
 
 type FeedMediaItem = NonNullable<ReleaseItem["media"]>[number];
 
@@ -30,7 +31,11 @@ function isInlineMedia(item: FeedMediaItem, content: string): boolean {
 /** Structured `media[]` images/gifs not already rendered inline in the excerpt. */
 export function feedAttachments(media: ReleaseItem["media"] | undefined, content: string) {
   return (
-    media?.filter((m) => (m.type === "image" || m.type === "gif") && !isInlineMedia(m, content)) ??
-    []
+    media?.filter(
+      (m) =>
+        (m.type === "image" || m.type === "gif") &&
+        !isJunkMediaUrl(m.url) &&
+        !isInlineMedia(m, content),
+    ) ?? []
   );
 }

@@ -53,6 +53,18 @@ describe("isJunkMediaUrl", () => {
     expect(isJunkMediaUrl("https://cdn.example.com/photo.jpg?w=64&h=64&fit=crop")).toBe(true);
   });
 
+  test("flags contributor profile photos", () => {
+    expect(isJunkMediaUrl("https://github.com/watson.png?size=48")).toBe(true);
+    expect(isJunkMediaUrl("https://www.github.com/acme.png")).toBe(true);
+    expect(isJunkMediaUrl("https://avatars.githubusercontent.com/u/1?v=4")).toBe(true);
+    expect(isJunkMediaUrl("https://secure.gravatar.com/avatar/abc?d=identicon")).toBe(true);
+  });
+
+  test("passes GitHub repo screenshots and user-attachments", () => {
+    expect(isJunkMediaUrl("https://github.com/acme/cli/assets/screenshot.png")).toBe(false);
+    expect(isJunkMediaUrl("https://github.com/user-attachments/assets/abc-123")).toBe(false);
+  });
+
   test("passes a real screenshot URL", () => {
     expect(isJunkMediaUrl("https://cdn.example.com/blog/release-hero.png")).toBe(false);
   });

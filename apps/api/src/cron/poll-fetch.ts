@@ -1601,10 +1601,10 @@ export async function ingestRawReleases(
     }
   }
 
-  // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs. When
-  // `MEDIA` is bound (#1177), also drop junk (favicons / avatars / pixels) and
-  // mirror survivors into R2. Fail-open: an image-level failure keeps the
-  // third-party URL.
+  // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs and drop
+  // junk (contributor avatars, favicons, pixels) before insert. When `MEDIA`
+  // is bound (#1177), also mirror survivors into R2. Fail-open: an image-level
+  // failure keeps the third-party URL.
   const r2UploadEnabled = env.MEDIA != null;
   // GIF→MP4 transcode (#1368): store ingested GIFs as small MP4s. Gated on its own
   // flag AND the transform binding being bound; off → GIFs mirror verbatim.
@@ -1642,10 +1642,12 @@ export async function ingestRawReleases(
         await detectInlineVideos(enrich?.content ?? raw.content)
       : [];
     const withVideos = inlineVideos.length > 0 ? [...base, ...inlineVideos] : base;
-    let finalMedia = withVideos;
-    if (r2UploadEnabled && isNewRelease && withVideos.length > 0) {
+    // Drop contributor avatars and other junk before insert, whether or not R2
+    // mirroring runs. Mirroring is prod-only; storing profile photos is not.
+    let finalMedia = filterJunkMedia(withVideos);
+    if (r2UploadEnabled && isNewRelease && finalMedia.length > 0) {
       // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
-      finalMedia = await processMediaForR2(filterJunkMedia(withVideos), {
+      finalMedia = await processMediaForR2(finalMedia, {
         db,
         bucket: env.MEDIA!,
         sourceId: source.id,

@@ -17,6 +17,7 @@ import { releases } from "@buildinternet/releases-core/schema";
 import {
   CHROME_MEDIA_MARKERS,
   filterJunkMedia,
+  PROFILE_MEDIA_MARKERS,
   SMALL_MEDIA_MARKERS,
 } from "@releases/rendering/media-filter.js";
 import { isGifUrl } from "@releases/adapters/media-classify.js";
@@ -146,7 +147,11 @@ export interface JunkPurgeReport {
 }
 
 /** Every junk URL marker, so the SQL prefilter can't drift from `isJunkMediaUrl`. */
-const JUNK_MARKERS: readonly string[] = [...SMALL_MEDIA_MARKERS, ...CHROME_MEDIA_MARKERS];
+const JUNK_MARKERS: readonly string[] = [
+  ...SMALL_MEDIA_MARKERS,
+  ...CHROME_MEDIA_MARKERS,
+  ...PROFILE_MEDIA_MARKERS,
+];
 
 /**
  * SQL prefilter: a stored `media` JSON string containing any known junk marker.

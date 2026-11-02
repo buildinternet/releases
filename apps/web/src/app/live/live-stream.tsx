@@ -14,6 +14,7 @@ import { releaseLinkProps } from "@/lib/release-link";
 import { ImportanceMarker } from "@/components/importance-marker";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseThumbUrl, releaseThumbImage, IMG_TRANSFORM_ON } from "@/lib/media";
+import { isJunkMediaUrl } from "@releases/rendering/media-filter";
 import { isOptimizableImage } from "@/lib/sanitize";
 import { useFaviconBadge } from "@/hooks/use-favicon-badge";
 import { useReleaseStream, type LiveRelease } from "@/hooks/use-release-stream";
@@ -41,7 +42,9 @@ function StatusDot({ tone }: { tone: StatusTone }) {
 }
 
 function firstImage(media: MediaItem[]): MediaItem | null {
-  return media.find((m) => m.type === "image" || m.type === "gif") ?? null;
+  return (
+    media.find((m) => (m.type === "image" || m.type === "gif") && !isJunkMediaUrl(m.url)) ?? null
+  );
 }
 
 // A `type:"video"` item promoted from an inline body link (#1549): the watch URL

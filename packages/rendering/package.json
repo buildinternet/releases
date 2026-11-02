@@ -14,6 +14,7 @@
     "./media": "./src/media.ts",
     "./media-url": "./src/media-url.ts",
     "./media-filter": "./src/media-filter.ts",
+    "./prose-excerpt": "./src/prose-excerpt.ts",
     "./video-embed": "./src/video-embed.ts",
     "./digest-sections": "./src/digest-sections.ts",
     "./rewrite-links": "./src/rewrite-links.ts",

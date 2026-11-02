@@ -17,6 +17,7 @@ import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { contentHash } from "@releases/adapters/content-hash";
 import { thinkingParams } from "@releases/lib/models";
 import { extractMediaFromMarkdown } from "@releases/adapters/feed.js";
+import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
   SYSTEM_PROMPT,
@@ -256,16 +257,15 @@ export async function applyExtractedContent(
     }
 
     const size = computeContentSize(content);
-    const media = extractMediaFromMarkdown(content);
+    const media = filterJunkMedia(
+      extractMediaFromMarkdown(content).map((m) =>
+        Object.assign(m, { url: normalizeMediaUrl(m.url) }),
+      ),
+    );
     // Only backfill media from the article when the release has none — never
     // clobber existing feed / curated images.
     const mediaJson =
-      !hasStoredMedia(row.media) && media.length > 0
-        ? JSON.stringify(
-            // oxlint-disable-next-line no-map-spread
-            media.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
-          )
-        : undefined;
+      !hasStoredMedia(row.media) && media.length > 0 ? JSON.stringify(media) : undefined;
 
     // oxlint-disable-next-line no-await-in-loop -- bounded candidate set; sequential mirrors the sync route
     await db

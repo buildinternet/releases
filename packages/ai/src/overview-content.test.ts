@@ -197,6 +197,21 @@ test("lintOverviewBody flags format/voice violations and passes clean bodies", (
   const longOpener = `Shipped ${"word ".repeat(30)}today.`;
   expect(lintOverviewBody(longOpener, "Acme")).toContain("opener-too-long");
   expect(lintOverviewBody("Shipped a fast streaming API.", "Acme")).toEqual([]);
+  expect(
+    lintOverviewBody("Shipped a fast API.\n\n**Earlier ships still landing.**", "Acme"),
+  ).toContain("bold-fragment-lead");
+  expect(lintOverviewBody("Shipped a fast API with **one** term.", "Acme")).not.toContain(
+    "bold-fragment-lead",
+  );
+  expect(
+    lintOverviewBody("Shipped a fast API — the kind that matters — and stopped.", "Acme"),
+  ).toContain("em-dash-overuse");
+  expect(lintOverviewBody("Shipped a fast API — then stopped.", "Acme")).not.toContain(
+    "em-dash-overuse",
+  );
+  expect(lintOverviewBody("Cheaper inference is the point.", "Acme")).toContain(
+    "banned-phrase:is the point",
+  );
 });
 
 test("generateOverview runs one corrective regen and keeps the clean rewrite", async () => {
