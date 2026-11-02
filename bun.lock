@@ -248,7 +248,7 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.60.0",
+      "version": "0.60.1",
       "dependencies": {
         "@buildinternet/releases-core": "^0.36.0",
         "zod": "^4.4.3",
@@ -334,7 +334,7 @@
     },
     "packages/sdk": {
       "name": "@buildinternet/releases-sdk",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@buildinternet/releases-api-types": "workspace:*",
       },
