@@ -39,6 +39,7 @@ function summarizeModel(): string {
   return resolveModel("summarize");
 }
 import {
+  MAX_BODY_CHARS,
   MAX_OUTPUT_TOKENS,
   SYSTEM_PROMPT,
   buildReleaseBlock,
@@ -95,9 +96,6 @@ export type BatchSummarizeParams = {
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-/** Per-row body cap — matches `MAX_AUTOGEN_BODY_CHARS` in poll-and-fetch.ts. */
-const MAX_BODY_CHARS = 50_000;
 
 /** Default budget ceiling before any API calls. */
 const DEFAULT_MAX_COST_USD = 10;
@@ -189,20 +187,17 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           maxRows: MAX_ELIGIBLE_ROWS,
         });
 
-        // Filter out empty-content and over-size rows locally (no API call).
-        // Same order as before: empty wins over too-large, so who is submitted
-        // does not change. The ids are the `summarize-skip` signal.
+        // Empty bodies never reach the model. Longer bodies are kept:
+        // `buildReleaseBlock` truncates them to MAX_BODY_CHARS, same as the
+        // live generate-content path. The old 50k pre-filter dropped them.
         const skippedEmptyIds: string[] = [];
-        const skippedTooLargeIds: string[] = [];
+        const truncatedIds: string[] = [];
         const rows = eligible.filter((row) => {
           if (!row.content || isEmptyContent(row.content)) {
             skippedEmptyIds.push(row.id);
             return false;
           }
-          if (row.content.length > MAX_BODY_CHARS) {
-            skippedTooLargeIds.push(row.id);
-            return false;
-          }
+          if (row.content.length > MAX_BODY_CHARS) truncatedIds.push(row.id);
           return true;
         });
         logSummarizeSkip({
@@ -210,11 +205,15 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           reason: "empty",
           releaseIds: skippedEmptyIds,
         });
-        logSummarizeSkip({
-          component: "batch-summarize",
-          reason: "too-large",
-          releaseIds: skippedTooLargeIds,
-        });
+        if (truncatedIds.length > 0) {
+          logEvent("info", {
+            component: "batch-summarize",
+            event: "body-truncated",
+            count: truncatedIds.length,
+            releaseIds: truncatedIds.slice(0, 20),
+            cap: MAX_BODY_CHARS,
+          });
+        }
 
         // Estimate cost without any API calls. Each request carries the full
         // SYSTEM_PROMPT plus a per-row user message. We estimate token counts
@@ -270,7 +269,8 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           eligibleCount: eligible.length,
           filteredCount: rows.length,
           skippedEmpty: skippedEmptyIds.length,
-          skippedTooLarge: skippedTooLargeIds.length,
+          truncated: truncatedIds.length,
+          skippedTooLarge: 0,
           estCostUsd,
           maxCostUsd,
         });

@@ -11,7 +11,11 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { mockGlobalFetch, restoreGlobalFetch } from "../../../tests/global-fetch";
-import { generateContentForReleases } from "../src/lib/ingest/ingest-steps.js";
+import {
+  generateContentForReleases,
+  type GenerateContentSkip,
+} from "../src/lib/ingest/ingest-steps.js";
+import { MAX_BODY_CHARS } from "@releases/ai-internal/release-content";
 import { logSummarizeSkip } from "../src/lib/ai/summarize-skip.js";
 
 const REAL_BODY = "Fixed the installer bug that dropped the CLI binary on macOS.";
@@ -122,14 +126,23 @@ describe("summarize-skip logging", () => {
       return new Response("unexpected", { status: 500 });
     }) as typeof fetch);
 
-    const generated = await generateContentForReleases(db, modelEnv(), source, [
+    const skipped: GenerateContentSkip[] = [];
+    const generated = await generateContentForReleases(
+      db,
+      modelEnv(),
+      source,
+      ["rel_empty_1", "rel_empty_2", "rel_empty_3", "rel_empty_4"],
+      { skips: skipped },
+    );
+
+    expect(generated).toBe(0);
+    expect(skipped.map((s) => s.reason)).toEqual(["empty", "empty", "empty", "empty"]);
+    expect(skipped.map((s) => s.id)).toEqual([
       "rel_empty_1",
       "rel_empty_2",
       "rel_empty_3",
       "rel_empty_4",
     ]);
-
-    expect(generated).toBe(0);
     expect(calls).toEqual([]);
     const events = parseEvents(lines);
     const empty = skips(events);
@@ -156,36 +169,58 @@ describe("summarize-skip logging", () => {
     expect(stored.every((row) => row.titleGenerated === null)).toBe(true);
   });
 
-  it("emits reason=too-large and keeps the per-row body-cap-skip detail", async () => {
+  it("truncates a body over the model cap and still summarizes it", async () => {
     const db = mkDb();
     const source = await seed(db);
-    await insertRelease(db, "rel_big", "x".repeat(50_001));
-    mockGlobalFetch(
-      (async (_input: RequestInfo | URL) =>
-        new Response("unexpected", { status: 500 })) as typeof fetch,
-    );
+    const tail = "TAIL_MARKER_NOT_SENT";
+    await insertRelease(db, "rel_big", `${"x".repeat(52_000)}${tail}`);
+    let sent = "";
+    mockGlobalFetch((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(String(input), init);
+      if (!req.url.includes("api.anthropic.com")) {
+        return new Response(`unexpected ${req.url}`, { status: 500 });
+      }
+      sent = await req.text();
+      const text =
+        "<title>Agent 7.85 ships a long changelog</title><title_short>Agent 7.85 changelog</title_short><summary>The notes were truncated to the model cap.</summary>";
+      return new Response(
+        JSON.stringify({
+          id: "msg_test",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-5-5",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text }],
+          usage: { input_tokens: 10, output_tokens: 8 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch);
 
-    await generateContentForReleases(db, modelEnv(), source, ["rel_big"]);
+    const skipped: GenerateContentSkip[] = [];
+    const generated = await generateContentForReleases(db, modelEnv(), source, ["rel_big"], {
+      skips: skipped,
+    });
 
+    expect(generated).toBe(1);
+    expect(skipped).toEqual([]);
+    expect(sent).toContain("[truncated]");
+    expect(sent).not.toContain(tail);
+    expect(sent).not.toContain("x".repeat(MAX_BODY_CHARS + 1));
     const events = parseEvents(lines);
-    expect(skips(events)).toEqual([
-      expect.objectContaining({
-        reason: "too-large",
-        lane: "summarize-release",
-        count: 1,
-        releaseIds: ["rel_big"],
-      }),
-    ]);
-    expect(events.find((e) => e.event === "body-cap-skip")).toMatchObject({
+    expect(skips(events)).toEqual([]);
+    expect(events.find((e) => e.event === "body-truncated")).toMatchObject({
       releaseId: "rel_big",
-      cap: 50_000,
+      bodyChars: 52_000 + tail.length,
+      cap: MAX_BODY_CHARS,
     });
     expect(events.find((e) => e.event === "batch-summary")).toMatchObject({
       candidateCount: 1,
-      skippedTooLarge: 1,
-      skippedEmpty: 0,
-      generated: 0,
+      skippedTooLarge: 0,
+      generated: 1,
     });
+    const [row] = await db.select().from(releases).where(eq(releases.id, "rel_big"));
+    expect(row?.titleGenerated).toBe("Agent 7.85 ships a long changelog");
   });
 
   it("summarizes an eligible body and does not skip it", async () => {

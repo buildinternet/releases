@@ -59,6 +59,40 @@ const PING_TIMEOUT_MS = 2000;
 // sends a bounded request instead of relying on the other side to reject it.
 export const MAX_REVALIDATE_PATHS = 50;
 
+/**
+ * Server-rendered HTML that embeds an org overview. Both pages are on-demand
+ * ISR (`revalidate = 86400`); the API overview route is only edge-cached for
+ * ~60s and the `.md` twins are dynamic handlers, so an overview write that
+ * does not ping these paths leaves the HTML on the previous text.
+ */
+export function orgOverviewHtmlPaths(orgSlug: string): string[] {
+  return [`/${orgSlug}`, `/${orgSlug}/overview`];
+}
+
+/**
+ * Mark the org landing page and `/{org}/overview` stale after an overview
+ * write. Same fail-open contract as {@link notifyWebRevalidatePaths}. Callers
+ * inside a durable workflow step should invoke this from that step so a
+ * replay does not send the ping twice.
+ */
+export async function revalidateOrgOverviewHtml(
+  env: WebRevalidateEnv | undefined,
+  orgSlugs: readonly string[],
+  opts?: { fetchImpl?: typeof fetch },
+): Promise<void> {
+  // Test harnesses and unbound local workers pass no env. A missing env is the
+  // same as a missing secret: nothing to ping, and it must not fail the write.
+  if (!env) return;
+  const paths = [...new Set(orgSlugs.filter(Boolean).flatMap(orgOverviewHtmlPaths))];
+  for (let i = 0; i < paths.length; i += MAX_REVALIDATE_PATHS) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential, bounded chunks
+    await notifyWebRevalidatePaths(env, paths.slice(i, i + MAX_REVALIDATE_PATHS), {
+      component: "overview-revalidate",
+      fetchImpl: opts?.fetchImpl,
+    });
+  }
+}
+
 function logSkip(sourceSlug: string, reason: string): RevalidateResult {
   logEvent("info", { component: "web-revalidate", event: "skipped", sourceSlug, reason });
   return { status: "skipped", reason };

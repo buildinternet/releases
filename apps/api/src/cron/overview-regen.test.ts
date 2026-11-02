@@ -272,3 +272,37 @@ test("a transient error is retried and the second attempt succeeds", async () =>
   // exact count is >= 2 rather than pinned.)
   expect(calls).toBeGreaterThanOrEqual(2);
 });
+
+test("a persisted overview revalidates the org HTML pages", async () => {
+  const { db } = createTestDb();
+  const { orgId, orgSlug } = await seedOrgWithReleases(db, {
+    releases: 2,
+    orgId: "org_regen_html",
+    orgSlug: "regen-html",
+  });
+  const candidates = [makeCandidate(orgId, orgSlug, 2)];
+  const seen: unknown[] = [];
+  const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    seen.push(JSON.parse(String(init?.body)));
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const revalidateEnv = {
+    WEB_SERVICE_KEY: { get: async () => "secret" },
+    WEB_BASE_URL: "https://releases.sh",
+  };
+
+  const dry = await regenerateOverviewChunk(db as any, fakeModel(OUTPUT), candidates, {
+    dryRun: true,
+    revalidateEnv,
+    fetchImpl,
+  });
+  expect(dry.generated).toBe(1);
+  expect(seen).toEqual([]);
+
+  const res = await regenerateOverviewChunk(db as any, fakeModel(OUTPUT), candidates, {
+    revalidateEnv,
+    fetchImpl,
+  });
+  expect(res.generated).toBe(1);
+  expect(seen).toEqual([{ paths: [`/${orgSlug}`, `/${orgSlug}/overview`] }]);
+});

@@ -34,6 +34,7 @@ import { createDb } from "../db.js";
 import { resolveOverviewModel } from "../lib/ai/text-model.js";
 import { regenerateOverviewChunk, type RegenChunkResult } from "../cron/overview-regen.js";
 import type { TextModelEnv } from "../lib/ai/text-model.js";
+import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,14 +48,15 @@ export type OverviewRegenParams = {
   force?: boolean;
 };
 
-export type OverviewRegenWorkflowEnv = TextModelEnv & {
-  DB: D1Database;
-  FLAGS?: FlagshipBinding;
-  OVERVIEW_REGEN_ENABLED?: string;
-  /** Velocity fast-tier tunables (#1895); unset → eligibility defaults (2d at ≥15). */
-  OVERVIEW_FAST_CADENCE_DAYS?: string;
-  OVERVIEW_FAST_MIN_RELEASES?: string;
-};
+export type OverviewRegenWorkflowEnv = TextModelEnv &
+  WebRevalidateEnv & {
+    DB: D1Database;
+    FLAGS?: FlagshipBinding;
+    OVERVIEW_REGEN_ENABLED?: string;
+    /** Velocity fast-tier tunables (#1895); unset → eligibility defaults (2d at ≥15). */
+    OVERVIEW_FAST_CADENCE_DAYS?: string;
+    OVERVIEW_FAST_MIN_RELEASES?: string;
+  };
 
 /** Parse a positive-integer wrangler var; undefined (→ eligibility default) otherwise. */
 function positiveIntVar(value: string | undefined): number | undefined {
@@ -172,7 +174,10 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
               "no overview model available (no OpenRouter key and no Anthropic fallback)",
             );
           }
-          return regenerateOverviewChunk(db, resolved, slice, { dryRun });
+          return regenerateOverviewChunk(db, resolved, slice, {
+            dryRun,
+            revalidateEnv: this.env,
+          });
         },
       );
       totals.generated += r.generated;

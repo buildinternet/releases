@@ -24,7 +24,7 @@ import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/core-internal/schema-coverage.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { summarizeRelease } from "@releases/ai-internal/release-content";
+import { MAX_BODY_CHARS, summarizeRelease } from "@releases/ai-internal/release-content";
 import { splitModelId } from "@releases/ai-internal/text-model";
 import {
   qualifiesForBreakingClassification,
@@ -96,13 +96,23 @@ export function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneE
  */
 const MAX_AUTOGEN_ROWS_PER_FIRE = 20;
 
-/**
- * Per-row body cap (chars). Haiku 5.5 input is $0.10/M tokens on the ≤100K
- * tier. The previous tokenizer was ~4 chars/token; Haiku 5.5 counts ~30% more,
- * and 50k chars still stays under the 100K-token long-context tier. Above the
- * cap we skip the row — outlier bodies don't summarize well and they dominate cost.
- */
-const MAX_AUTOGEN_BODY_CHARS = 50_000;
+/** A scanned release that was not written, with why. Surfaced on the admin route. */
+export interface GenerateContentSkip {
+  id: string;
+  reason: string;
+  detail?: string;
+}
+
+function recordSkip(
+  skips: GenerateContentSkip[] | undefined,
+  id: string,
+  reason: string,
+  detail?: string,
+): void {
+  if (!skips) return;
+  const clipped = detail && detail.length > 200 ? `${detail.slice(0, 200)}…` : detail;
+  skips.push(clipped ? { id, reason, detail: clipped } : { id, reason });
+}
 
 /**
  * Per-org opt-in: when the source's org has `auto_generate_content = true`
@@ -120,9 +130,12 @@ const MAX_AUTOGEN_BODY_CHARS = 50_000;
  * Every pre-model short-circuit emits `summarize-skip` (`lane:
  * summarize-release`, stable `reason` code, `count` + `releaseIds`). That
  * includes gates that return before `batch-summary` (hidden, opted-out,
- * source opt-out, suppressed, coverage) and the in-loop empty / too-large
- * skips. A bulk insert over the per-call chunk size is split and each slice runs;
- * it is not dropped.
+ * source opt-out, suppressed, coverage) and the in-loop empty skips. Bodies
+ * longer than `MAX_BODY_CHARS` are truncated to that cap and still summarized
+ * (`body-truncated`); they are not dropped. A bulk insert over the per-call
+ * chunk size is split and each slice runs; it is not dropped.
+ *
+ * `opts.skips` collects every id that was not written, for the admin response.
  */
 export async function generateContentForReleases(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
@@ -134,7 +147,7 @@ export async function generateContentForReleases(
   // (for an explicit operator trigger that wants content regardless). The
   // per-source `metadata.summarize=false` opt-out is still honored — that's a
   // deliberate "never summarize this source" signal, not a rollout gate.
-  opts: { ignoreAutoGenerateGate?: boolean } = {},
+  opts: { ignoreAutoGenerateGate?: boolean; skips?: GenerateContentSkip[] } = {},
 ): Promise<number> {
   // Hidden sources skip AI features per existing convention.
   if (source.isHidden === true) {
@@ -144,6 +157,7 @@ export async function generateContentForReleases(
       releaseIds: insertedIds,
       sourceSlug: source.slug,
     });
+    for (const id of insertedIds) recordSkip(opts.skips, id, "hidden");
     return 0;
   }
 
@@ -234,6 +248,9 @@ export async function generateContentForReleases(
         opts.ignoreAutoGenerateGate === true,
       );
       logSummarizeSkips("auto-generate-content", source.slug, grouped);
+      for (const [reason, ids] of grouped) {
+        for (const id of ids) recordSkip(opts.skips, id, reason);
+      }
     } catch (err) {
       logEvent("warn", {
         component: "auto-generate-content",
@@ -242,6 +259,7 @@ export async function generateContentForReleases(
         count: ineligibleIds.length,
         err,
       });
+      for (const id of ineligibleIds) recordSkip(opts.skips, id, "ineligible");
     }
   }
 
@@ -251,12 +269,20 @@ export async function generateContentForReleases(
   // cheap OpenRouter model when `openrouter-enabled` is on + a model is configured.
   // Fail-open: null means no usable provider (no Anthropic key) — skip.
   const model = await resolveSummarizeModel(env);
-  if (!model) return 0;
+  if (!model) {
+    logEvent("warn", {
+      component: "auto-generate-content",
+      event: "no-model",
+      sourceSlug: source.slug,
+      count: rows.length,
+    });
+    for (const row of rows) recordSkip(opts.skips, row.id, "no-model");
+    return 0;
+  }
 
   const startedAt = Date.now();
 
   const skippedEmptyIds: string[] = [];
-  const skippedTooLargeIds: string[] = [];
   let failed = 0;
   let totalTokens = 0;
 
@@ -281,17 +307,19 @@ export async function generateContentForReleases(
   }[] = [];
 
   for (const row of rows) {
-    if ((row.content?.length ?? 0) > MAX_AUTOGEN_BODY_CHARS) {
-      skippedTooLargeIds.push(row.id);
-      logEvent("warn", {
+    const bodyChars = row.content?.length ?? 0;
+    if (bodyChars > MAX_BODY_CHARS) {
+      // summarizeRelease truncates to MAX_BODY_CHARS. The old 50k pre-filter
+      // dropped these rows (Datadog Agent 7.85.0, ~52k chars) and the admin
+      // route reported generated: 0 with no error.
+      logEvent("info", {
         component: "auto-generate-content",
-        event: "body-cap-skip",
+        event: "body-truncated",
         releaseId: row.id,
         orgSlug: row.orgSlug,
-        bodyChars: row.content.length,
-        cap: MAX_AUTOGEN_BODY_CHARS,
+        bodyChars,
+        cap: MAX_BODY_CHARS,
       });
-      continue;
     }
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; typical fire is 0–3 rows
@@ -339,6 +367,7 @@ export async function generateContentForReleases(
       }
       if (result.skipped) {
         skippedEmptyIds.push(row.id);
+        recordSkip(opts.skips, row.id, "empty");
         continue;
       }
 
@@ -364,6 +393,8 @@ export async function generateContentForReleases(
       });
     } catch (err) {
       failed++;
+      const detail = err instanceof Error ? err.message : String(err);
+      recordSkip(opts.skips, row.id, "failed", detail);
       logEvent("warn", {
         component: "auto-generate-content",
         event: "generation-failed",
@@ -405,6 +436,7 @@ export async function generateContentForReleases(
       generated += chunk.length;
     } catch (err) {
       failed += chunk.length;
+      for (const u of chunk) recordSkip(opts.skips, u.id, "failed", "update-batch-failed");
       logEvent("warn", {
         component: "auto-generate-content",
         event: "update-batch-failed",
@@ -422,12 +454,6 @@ export async function generateContentForReleases(
     releaseIds: skippedEmptyIds,
     sourceSlug: source.slug,
   });
-  logSummarizeSkip({
-    component: "auto-generate-content",
-    reason: "too-large",
-    releaseIds: skippedTooLargeIds,
-    sourceSlug: source.slug,
-  });
 
   logEvent("info", {
     component: "auto-generate-content",
@@ -436,7 +462,8 @@ export async function generateContentForReleases(
     candidateCount: rows.length,
     generated,
     skippedEmpty: skippedEmptyIds.length,
-    skippedTooLarge: skippedTooLargeIds.length,
+    // Historical. Oversized bodies are truncated to MAX_BODY_CHARS and summarized.
+    skippedTooLarge: 0,
     failed,
     totalTokens,
     durationMs: Date.now() - startedAt,

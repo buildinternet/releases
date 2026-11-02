@@ -153,6 +153,26 @@ const JUNK_MARKERS: readonly string[] = [
   ...PROFILE_MEDIA_MARKERS,
 ];
 
+/** GitHub login max length. The class excludes `/`, so repo screenshots don't match. */
+const GITHUB_LOGIN_CLASS = "[_0-9a-z-]";
+const GITHUB_LOGIN_MAX = 39;
+
+/**
+ * Unsized `github.com/{login}.png` (and `www.github.com/...`) avatars. A
+ * substring of `github.com/` would also select `github.com/{owner}/{repo}/…`
+ * screenshots and stall the purge on rows it can never clean. One GLOB per
+ * login length keeps the match to a single path segment.
+ */
+function githubAvatarGlobFilter(): SQL {
+  const globs: SQL[] = [];
+  for (let n = 1; n <= GITHUB_LOGIN_MAX; n++) {
+    globs.push(
+      sql`lower(${releases.media}) GLOB ${`*github.com/${GITHUB_LOGIN_CLASS.repeat(n)}.png*`}`,
+    );
+  }
+  return or(...globs)!;
+}
+
 /**
  * SQL prefilter: a stored `media` JSON string containing any known junk marker.
  * Cheap substring match to avoid scanning every row; the per-row
@@ -160,7 +180,10 @@ const JUNK_MARKERS: readonly string[] = [
  * which have no fixed marker, from any row this catches).
  */
 function junkCandidateFilter(sourceId?: string): SQL | undefined {
-  const hasMarker = or(...JUNK_MARKERS.map((m) => sql`${releases.media} LIKE ${`%${m}%`}`));
+  const hasMarker = or(
+    ...JUNK_MARKERS.map((m) => sql`${releases.media} LIKE ${`%${m}%`}`),
+    githubAvatarGlobFilter(),
+  );
   return and(
     hasMarker,
     eq(releases.suppressed, false),

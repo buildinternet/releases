@@ -125,6 +125,7 @@ import {
 } from "../lib/ai/text-model.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { workflowInstanceStatus, workflowInstanceTerminate } from "../lib/workflow-instance.js";
+import { parseOverviewRegenBody } from "../lib/overview-regen-request.js";
 import { respondError } from "../lib/error-response.js";
 import {
   ValidationError,
@@ -1161,22 +1162,18 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
 //
 // Admin manual trigger for the OverviewRegenWorkflow. Runs unconditionally
 // (no flag gate) so operators can smoke-test staging where the flag is off;
-// the workflow itself gates the cron path.
+// the workflow itself gates the cron path. The daily cron does not use this
+// route — it creates the workflow directly — so the scope requirement below
+// does not change the schedule.
 //
-// Body: { orgs?, dryRun?, maxOrgs?, force? }  (all optional)
+// Body: { orgs?, all?, dryRun?, maxOrgs?, force? }
+// An empty body is rejected. A full eligible sweep requires `all: true`.
 // `force` re-generates the listed orgs even with no new releases (a re-run
 // after a generation fix) and REQUIRES a non-empty `orgs` list.
 // Returns: { instanceId, statusUrl }
 
-interface OverviewRegenBody {
-  orgs?: string[];
-  dryRun?: boolean;
-  maxOrgs?: number;
-  force?: boolean;
-}
-
 workflowsRoutes.post("/workflows/overview-regen", async (c) => {
-  const body = await parseJsonBody<OverviewRegenBody>(c);
+  const body = await parseJsonBody<unknown>(c);
 
   if (!c.env.OVERVIEW_REGEN_WORKFLOW) {
     return respondError(
@@ -1185,46 +1182,19 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
     );
   }
 
-  let validOrgs: string[] | undefined;
-  if (body.orgs !== undefined) {
-    if (!Array.isArray(body.orgs)) {
-      return respondError(
-        c,
-        new ValidationError("`orgs` must be an array of strings", { code: "bad_request" }),
-      );
-    }
-    validOrgs = body.orgs
-      .filter((s): s is string => typeof s === "string")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    if (validOrgs.length === 0) {
-      return respondError(
-        c,
-        new ValidationError("`orgs` must contain at least one non-empty string", {
-          code: "bad_request",
-        }),
-      );
-    }
-  }
-
-  // `force` lifts the "≥1 new release" eligibility guard, so it must be scoped
-  // to an explicit org list — never allowed to fan out across every org.
-  const force = body.force === true;
-  if (force && (!validOrgs || validOrgs.length === 0)) {
-    return respondError(
-      c,
-      new ValidationError("`force` requires a non-empty `orgs` list", { code: "bad_request" }),
-    );
+  const parsed = parseOverviewRegenBody(body);
+  if (!parsed.ok) {
+    return respondError(c, new ValidationError(parsed.message, { code: "bad_request" }));
   }
 
   const scheduledTime = Date.now();
   const params = {
     scheduledTime,
     trigger: "admin" as const,
-    orgs: validOrgs,
-    dryRun: body.dryRun === true,
-    maxOrgs: typeof body.maxOrgs === "number" && body.maxOrgs > 0 ? body.maxOrgs : undefined,
-    force,
+    orgs: parsed.value.orgs,
+    dryRun: parsed.value.dryRun,
+    maxOrgs: parsed.value.maxOrgs,
+    force: parsed.value.force,
   };
 
   const instance = await c.env.OVERVIEW_REGEN_WORKFLOW.create({
@@ -1281,6 +1251,16 @@ workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) =>
     return respondError(c, new InternalError(message));
   }
 });
+
+// Stop a running overview-regen instance (same helper as the other workflows).
+workflowsRoutes.post("/workflows/overview-regen/terminate/:instanceId", async (c) =>
+  replyWorkflowTerminate(
+    c,
+    c.env.OVERVIEW_REGEN_WORKFLOW,
+    "OVERVIEW_REGEN_WORKFLOW binding not configured",
+    "workflows-overview-regen-terminate",
+  ),
+);
 
 // ── Update triggers ───────────────────────────────────────────────────────────
 //
@@ -1692,7 +1672,9 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
 // non-opted org yields zero candidates. Synchronous; cap via `limit`.
 //
 // Body: { sourceId? | sourceSlug?, releaseIds?, regenerate?, ignoreAutoGate?, limit?, dryRun? }
-// Returns: { source, scanned, generated, regenerate, dryRun }
+// Returns: { source, scanned, generated, regenerate, dryRun, skipped }
+// `skipped` lists scanned releases that were not written, with why. Bodies over
+// the model input cap are truncated and still generated.
 
 interface GenerateContentBody {
   sourceId?: string;
@@ -1720,6 +1702,12 @@ export interface GenerateContentOpts {
   dryRun: boolean;
 }
 
+export interface GenerateContentSkip {
+  id: string;
+  reason: string;
+  detail?: string;
+}
+
 export interface GenerateContentReport {
   /** Candidate releases selected (and, when not a dry run, handed to `generate`). */
   scanned: number;
@@ -1727,12 +1715,15 @@ export interface GenerateContentReport {
   generated: number;
   regenerate: boolean;
   dryRun: boolean;
+  /** Scanned releases that were not written, with why. Empty when every candidate was generated. */
+  skipped: GenerateContentSkip[];
 }
 
 export interface GenerateContentDeps {
   /** Summarize the given release ids and return how many got generated content —
-   *  the route wraps `generateContentForReleases`, which reports that count. */
-  generate: (ids: string[]) => Promise<number>;
+   *  the route wraps `generateContentForReleases`, which reports that count.
+   *  Push a `{ id, reason }` into `skips` for each id that was not written. */
+  generate: (ids: string[], skips: GenerateContentSkip[]) => Promise<number>;
 }
 
 /**
@@ -1769,11 +1760,13 @@ export async function runGenerateContent(
     .limit(opts.limit);
 
   const ids = candidates.map((r) => r.id);
+  const skipped: GenerateContentSkip[] = [];
   const report: GenerateContentReport = {
     scanned: ids.length,
     generated: 0,
     regenerate: opts.regenerate,
     dryRun: opts.dryRun,
+    skipped,
   };
   if (opts.dryRun || ids.length === 0) return report;
 
@@ -1789,9 +1782,9 @@ export async function runGenerateContent(
     }
   }
 
-  // generateContentForReleases reports how many rows it populated (skipping
-  // boilerplate / body-cap / errors), so no post-count query is needed.
-  report.generated = await deps.generate(ids);
+  // generateContentForReleases reports how many rows it populated and records
+  // why the rest were not written. Oversized bodies are truncated, not dropped.
+  report.generated = await deps.generate(ids, skipped);
   return report;
 }
 
@@ -1816,7 +1809,7 @@ export function buildGenerateContentDeps(
     // generateContentForReleases only reads isHidden/slug/id so the partial is
     // safe at runtime; db and env are cast to satisfy the typed workflow-env
     // shape difference.
-    generate: async (ids) => {
+    generate: async (ids, skips) => {
       const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
       const GEN_CHUNK = 20;
       let total = 0;
@@ -1827,7 +1820,7 @@ export function buildGenerateContentDeps(
           env as never,
           src as never,
           ids.slice(off, off + GEN_CHUNK),
-          { ignoreAutoGenerateGate: opts.ignoreAutoGate },
+          { ignoreAutoGenerateGate: opts.ignoreAutoGate, skips },
         );
       }
       return total;

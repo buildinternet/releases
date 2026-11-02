@@ -421,6 +421,34 @@ describe("runJunkMediaPurge", () => {
     expect(JSON.parse(mediaOf(db, r))).toHaveLength(2);
   });
 
+  it("purges an unsized github.com/{login}.png avatar and keeps repo screenshots", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const avatar = seedRelease(db, {
+      sourceId: "src_a",
+      media: [IMG("https://github.com/watson.png")],
+    });
+    const shot = seedRelease(db, {
+      sourceId: "src_a",
+      media: [IMG("https://github.com/acme/cli/assets/screenshot.png")],
+    });
+    const mixed = seedRelease(db, {
+      sourceId: "src_a",
+      media: [
+        IMG("https://github.com/acme/cli/assets/screenshot.png"),
+        IMG("https://www.github.com/acme.png"),
+      ],
+    });
+
+    const report = await runJunkMediaPurge(db as any, { limit: 50, dryRun: false });
+
+    expect(report.releasesUpdated).toBe(2);
+    expect(mediaOf(db, avatar)).toBe("[]");
+    expect(mediaOf(db, shot)).toContain("screenshot.png");
+    const kept = JSON.parse(mediaOf(db, mixed)) as { url: string }[];
+    expect(kept.map((m) => m.url)).toEqual(["https://github.com/acme/cli/assets/screenshot.png"]);
+  });
+
   it("scopes to a single source when sourceId is given", async () => {
     const db = mkDb();
     seedSource(db, "src_a");

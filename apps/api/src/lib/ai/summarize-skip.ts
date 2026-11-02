@@ -23,7 +23,8 @@ export const SUMMARIZE_RELEASE_LANE = "summarize-release";
  * rename existing ones — APL filters on these strings.
  *
  * - `empty` — `isEmptyContent` (no model call)
- * - `too-large` — body over the per-row char cap
+ * - `too-large` — historical. Bodies over the model cap are truncated to
+ *   `MAX_BODY_CHARS` and summarized; this code is no longer emitted.
  * - `opted-out` — org `autoGenerateContent` is false (and the caller is not ignoring that gate)
  * - `source-opt-out` — `metadata.summarize === false`
  * - `hidden` — source `isHidden`

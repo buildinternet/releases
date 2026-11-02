@@ -52,8 +52,9 @@ export const CHROME_MEDIA_MARKERS: readonly string[] = [
 /**
  * Substrings the junk-media purge can match in stored `media` JSON. Contributor
  * profile photos (GitHub account avatars, Gravatar) — not editorial images.
- * `github.com/{login}.png` without `?size=` still fails {@link isProfilePhotoUrl}
- * at read time; this list is only the SQL prefilter.
+ * Unsized `github.com/{login}.png` is not a substring here: a bare `github.com/`
+ * would also select repo screenshots and clog the purge. The purge adds a
+ * login-shaped GLOB for that shape. {@link isProfilePhotoUrl} is the real gate.
  */
 export const PROFILE_MEDIA_MARKERS: readonly string[] = [
   "avatars.githubusercontent.com",
