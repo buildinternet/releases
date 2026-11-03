@@ -75,6 +75,8 @@ export interface VerifiedOAuthToken {
   raw: JWTPayload;
 }
 
+const BASE64URL_SEGMENT_RE = /^[A-Za-z0-9_-]+$/;
+
 /**
  * Cheap routing check: does the credential look like a compact JWS (three
  * non-empty base64url segments)? The static root key carries no dots and the
@@ -85,7 +87,7 @@ export interface VerifiedOAuthToken {
 export function isJwtShaped(raw: string): boolean {
   const parts = raw.split(".");
   if (parts.length !== 3) return false;
-  return parts.every((p) => p.length > 0 && /^[A-Za-z0-9_-]+$/.test(p));
+  return parts.every((p) => p.length > 0 && BASE64URL_SEGMENT_RE.test(p));
 }
 
 /**

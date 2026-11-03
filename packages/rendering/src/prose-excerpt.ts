@@ -34,14 +34,17 @@ function stripLeadingDuplicateTitle(content: string, title: string | null | unde
   return nl === -1 ? "" : rest.slice(nl + 1);
 }
 
+const PARAGRAPH_BREAK_RE = /\n{2,}/;
+const HEADING_ONLY_RE = /^#{1,6}\s+\S[^\n]*$/;
+
 /** First paragraph that is actually prose — skip a heading-only line like `### Features`. */
 function firstProseParagraph(body: string): string {
   const paragraphs = body
-    .split(/\n{2,}/)
+    .split(PARAGRAPH_BREAK_RE)
     .map((p) => p.trim())
     .filter(Boolean);
   for (const para of paragraphs) {
-    if (/^#{1,6}\s+\S[^\n]*$/.test(para)) continue;
+    if (HEADING_ONLY_RE.test(para)) continue;
     if (stripMarkdown(para.replace(LIST_MARKER, ""))) return para;
   }
   return "";

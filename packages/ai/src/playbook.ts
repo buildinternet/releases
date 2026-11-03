@@ -38,6 +38,8 @@ export interface PlaybookInput {
   products?: ProductInfo[];
 }
 
+const NEWLINE_RE = /\n/g;
+
 /**
  * Generate the programmatic header for a playbook.
  * This is the auto-generated portion that reflects current source metadata.
@@ -119,7 +121,7 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
     lines.push("");
     for (const { source, meta } of sourcesWithInstructions) {
       lines.push(
-        `**${source.name}** (\`${source.slug}\`): ${meta.parseInstructions!.replace(/\n/g, " ")}`,
+        `**${source.name}** (\`${source.slug}\`): ${meta.parseInstructions!.replace(NEWLINE_RE, " ")}`,
       );
       lines.push("");
     }

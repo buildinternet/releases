@@ -591,7 +591,7 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
       logEvent("warn", {
         component: "api",
         event: "auth_edge_rate_limited",
-        path: new URL(c.req.url).pathname,
+        path: c.req.path,
         ip: redactIp(ip),
       });
       // Mirror Better Auth's 429 shape: it sets `X-Retry-After` (which the web
@@ -627,7 +627,7 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
   const audit = makeAuthAudit(c.env);
   try {
     const failure = classifySignInFailure({
-      path: new URL(c.req.url).pathname,
+      path: c.req.path,
       method: c.req.method,
       status: res.status,
     });
@@ -642,7 +642,7 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     // `onAPIError.onError`. The Location query is the record of what the
     // user was sent.
     const redirectFailure = classifyAuthRedirectFailure({
-      path: new URL(c.req.url).pathname,
+      path: c.req.path,
       method: c.req.method,
       status: res.status,
       location: res.headers.get("location"),
@@ -663,7 +663,7 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     );
     if (rewritten) {
       const redirectFailure = classifyAuthRedirectFailure({
-        path: new URL(c.req.url).pathname,
+        path: c.req.path,
         method: c.req.method,
         status: rewritten.status,
         location: rewritten.headers.get("location"),
@@ -984,7 +984,7 @@ app.get("/", (c) => {
 // Catch-all JSON 404 — matches the envelope used by `onError` so unknown
 // paths look the same as path-known errors to clients.
 app.notFound((c) =>
-  respondError(c, new NotFoundError(`No route for ${c.req.method} ${new URL(c.req.url).pathname}`)),
+  respondError(c, new NotFoundError(`No route for ${c.req.method} ${c.req.path}`)),
 );
 
 export default {

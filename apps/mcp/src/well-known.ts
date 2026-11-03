@@ -46,16 +46,27 @@ export function resourceForRequest(env: Env, requestUrl?: string): string {
   const audiences = oauthAudiences(env);
   if (requestUrl) {
     const origin = new URL(requestUrl).origin;
-    const match = audiences.find((aud) => {
-      try {
-        return new URL(aud).origin === origin;
-      } catch {
-        return false;
-      }
-    });
+    const match = audiences.find((aud) => audienceOrigin(aud) === origin);
     if (match) return match;
   }
   return audiences[0];
+}
+
+// Parsed origin per configured audience. The audience list is fixed per deploy,
+// so each entry is parsed once per isolate instead of on every request.
+const AUDIENCE_ORIGINS = new Map<string, string | null>();
+
+function audienceOrigin(aud: string): string | null {
+  let origin = AUDIENCE_ORIGINS.get(aud);
+  if (origin === undefined) {
+    try {
+      origin = new URL(aud).origin;
+    } catch {
+      origin = null;
+    }
+    AUDIENCE_ORIGINS.set(aud, origin);
+  }
+  return origin;
 }
 
 /** RFC 9728 metadata path (root form; the canonical resource is the bare origin). */

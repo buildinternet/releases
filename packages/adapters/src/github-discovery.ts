@@ -90,6 +90,11 @@ export function parseWorkspaces(pkgJsonText: string): string[] {
   return [];
 }
 
+const YAML_COMMENT_RE = /#.*$/;
+const PNPM_PACKAGES_KEY_RE = /^packages\s*:/i;
+const PNPM_LIST_ITEM_RE = /^\s*-\s*['"]?([^'"\s]+)['"]?\s*$/;
+const YAML_TOP_LEVEL_KEY_RE = /^[A-Za-z]/;
+
 /**
  * Parse `packages:` entries out of a `pnpm-workspace.yaml`. Light regex
  * parse — pnpm's workspace file is a flat list with a predictable shape, so
@@ -100,20 +105,20 @@ export function parsePnpmWorkspaces(yamlText: string): string[] {
   const out: string[] = [];
   let inPackages = false;
   for (const raw of lines) {
-    const line = raw.replace(/#.*$/, "").trimEnd();
+    const line = raw.replace(YAML_COMMENT_RE, "").trimEnd();
     if (!line) continue;
-    if (/^packages\s*:/i.test(line.trim())) {
+    if (PNPM_PACKAGES_KEY_RE.test(line.trim())) {
       inPackages = true;
       continue;
     }
     if (inPackages) {
-      const m = line.match(/^\s*-\s*['"]?([^'"\s]+)['"]?\s*$/);
+      const m = line.match(PNPM_LIST_ITEM_RE);
       if (m) {
         out.push(m[1]);
         continue;
       }
       // Top-level non-list line ends the packages block.
-      if (/^[A-Za-z]/.test(line)) inPackages = false;
+      if (YAML_TOP_LEVEL_KEY_RE.test(line)) inPackages = false;
     }
   }
   return out;

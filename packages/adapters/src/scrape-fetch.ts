@@ -204,15 +204,25 @@ export function pathMatchesIncludePrefix(
   sourceUrl: string,
   prefix: string,
 ): boolean {
-  if (!prefix) return true;
+  return includePrefixMatcher(sourceUrl, prefix)(pageUrl);
+}
+
+/**
+ * Build a {@link pathMatchesIncludePrefix} predicate for one source, parsing
+ * `sourceUrl` once instead of once per crawled page.
+ */
+function includePrefixMatcher(sourceUrl: string, prefix: string): (pageUrl: string) => boolean {
+  if (!prefix) return () => true;
   const sourceOrigin = new URL(sourceUrl).origin;
-  try {
-    const page = new URL(pageUrl);
-    if (page.origin !== sourceOrigin) return false;
-    return page.pathname.startsWith(prefix);
-  } catch {
-    return false;
-  }
+  return (pageUrl) => {
+    try {
+      const page = new URL(pageUrl);
+      if (page.origin !== sourceOrigin) return false;
+      return page.pathname.startsWith(prefix);
+    } catch {
+      return false;
+    }
+  };
 }
 
 export async function acquireCrawlMarkdown(
@@ -253,9 +263,11 @@ export async function acquireCrawlMarkdown(
     });
 
     const rawPages = await crawl.pollCrawlResults(jobId);
-    const pages = includePathPrefix
-      ? rawPages.filter((p) => pathMatchesIncludePrefix(p.url, source.url, includePathPrefix))
-      : rawPages;
+    let pages = rawPages;
+    if (includePathPrefix) {
+      const matches = includePrefixMatcher(source.url, includePathPrefix);
+      pages = rawPages.filter((p) => matches(p.url));
+    }
 
     if (includePathPrefix && pages.length !== rawPages.length) {
       logEvent("info", {

@@ -41,7 +41,7 @@ export function stagingAccessGate(): MiddlewareHandler<{
     }
     // Let public, secret-free paths (JWKS) through before touching the secret so
     // server-to-server OAuth JWT verification works on staging.
-    if (isStagingGateExemptPath(new URL(c.req.url).pathname)) {
+    if (isStagingGateExemptPath(c.req.path)) {
       await next();
       return;
     }

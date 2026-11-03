@@ -324,6 +324,8 @@ const VERSION_TOKEN_RE = /\bv?\d+\.\d+\.\d+/i;
 /** An anchor this short that carries a version is a label, not a change. */
 const VERSION_LABEL_MAX_WORDS = 4;
 
+const WHITESPACE_RUN_RE = /\s+/;
+
 /**
  * Link anchors in a raw body that are version labels — the version-by-version
  * recap the prompt forbids ("[2.1.274](rel:…) tackled…", "[Deno 2.9.1](…)").
@@ -337,7 +339,7 @@ export function versionAnchors(body: string): string[] {
   const re = /\[([^\]]*)\]\(rel:[A-Za-z0-9_-]+\)/g;
   for (let m = re.exec(body); m !== null; m = re.exec(body)) {
     const anchor = m[1]!;
-    const words = anchor.trim().split(/\s+/).length;
+    const words = anchor.trim().split(WHITESPACE_RUN_RE).length;
     if (VERSION_TOKEN_RE.test(anchor) && words <= VERSION_LABEL_MAX_WORDS) anchors.push(anchor);
   }
   return anchors;

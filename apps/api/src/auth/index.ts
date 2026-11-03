@@ -306,6 +306,8 @@ function extraTrustedOrigins(env: Bindings): string[] {
     .filter(Boolean);
 }
 
+const URL_SCHEME_PREFIX_RE = /^[a-z][a-z\d+.-]*:\/\//i;
+
 /**
  * Does `origin` match any operator-configured `BETTER_AUTH_TRUSTED_ORIGINS` entry?
  * Supports the two forms Better Auth's own origin check accepts, so the CORS layer
@@ -326,7 +328,7 @@ function matchesTrustedOrigin(origin: string, entries: string[]): boolean {
     if (entry.includes("*") || entry.includes("?")) {
       // Host wildcard. Drop an optional `scheme://` so `https://*.example.com` and
       // the bare `*.example.com` form both reduce to a host glob.
-      const pattern = entry.replace(/^[a-z][a-z\d+.-]*:\/\//i, "");
+      const pattern = entry.replace(URL_SCHEME_PREFIX_RE, "");
       return globToHostRegExp(pattern).test(host);
     }
     return entry === origin;
@@ -340,9 +342,17 @@ function matchesTrustedOrigin(origin: string, entries: string[]): boolean {
  * Auth's `[^/]*?` for this input.
  */
 function globToHostRegExp(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escaped.replace(/\*/g, ".*").replace(/\?/g, ".")}$`);
+  let re = HOST_GLOB_CACHE.get(pattern);
+  if (!re) {
+    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    re = new RegExp(`^${escaped.replace(/\*/g, ".*").replace(/\?/g, ".")}$`);
+    HOST_GLOB_CACHE.set(pattern, re);
+  }
+  return re;
 }
+
+/** Compiled host globs, keyed by pattern. Entries come from one env var, so the set is tiny. */
+const HOST_GLOB_CACHE = new Map<string, RegExp>();
 
 /**
  * Web origins permitted to call the auth API with credentials. Mirrors the CORS
@@ -567,6 +577,8 @@ function applyCorsHeaders(
   }
 }
 
+const COMMA_LIST_SEP_RE = /\s*,\s*/;
+
 /**
  * Worker-wide CORS (#2205), keyed on origin not path: trusted first-party →
  * reflect + credentials; else `*` (no credentials); no Origin → no CORS headers.
@@ -598,7 +610,7 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
         ? [
             ...new Set([
               ...AUTH_CORS_ALLOWED_HEADERS,
-              ...requested.split(/\s*,\s*/).filter(Boolean),
+              ...requested.split(COMMA_LIST_SEP_RE).filter(Boolean),
             ]),
           ]
         : [...AUTH_CORS_ALLOWED_HEADERS];

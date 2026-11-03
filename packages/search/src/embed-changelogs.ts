@@ -68,6 +68,8 @@ function snapToCodepointBoundary(content: string, offset: number): number {
   return offset;
 }
 
+const HEADING_LINE_RE = /^(#{1,3})\s+(.+?)\s*$/;
+
 /**
  * Best-effort heading lookup: scan lines from the start of the file and
  * return the most recent `#`/`##`/`###` heading whose line begins at or
@@ -81,7 +83,7 @@ function findHeadingBefore(content: string, offset: number): string | null {
     if (i === content.length || content[i] === "\n") {
       if (lineStart > offset) break;
       const line = content.slice(lineStart, i);
-      const m = /^(#{1,3})\s+(.+?)\s*$/.exec(line);
+      const m = HEADING_LINE_RE.exec(line);
       if (m) lastHeading = m[2].trim();
       lineStart = i + 1;
     }

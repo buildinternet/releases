@@ -220,6 +220,9 @@ export async function probeFeedPath(
   return null;
 }
 
+const LINK_TYPE_ATTR_RE = /type=["']([^"']+)["']/;
+const LINK_HREF_ATTR_RE = /href=["']([^"']+)["']/;
+
 export function parseFeedLinks(head: string, baseUrl: string): DiscoveredFeed | null {
   const linkRe = /<link\s[^>]*rel=["']alternate["'][^>]*>/gi;
   const candidates: DiscoveredFeed[] = [];
@@ -227,8 +230,8 @@ export function parseFeedLinks(head: string, baseUrl: string): DiscoveredFeed | 
 
   while ((match = linkRe.exec(head)) !== null) {
     const tag = match[0];
-    const typeMatch = tag.match(/type=["']([^"']+)["']/);
-    const hrefMatch = tag.match(/href=["']([^"']+)["']/);
+    const typeMatch = tag.match(LINK_TYPE_ATTR_RE);
+    const hrefMatch = tag.match(LINK_HREF_ATTR_RE);
     if (!typeMatch || !hrefMatch) continue;
 
     const feedType = classifyFeedMime(typeMatch[1]);
@@ -543,14 +546,10 @@ export async function bodyHashCheck(
 function feedItemUrl(item: { url?: string | null; id?: string | null }): string | undefined {
   if (item.url) return item.url;
   if (item.id) {
-    try {
-      new URL(item.id);
-      return item.id;
-    } catch {
-      // item.id is a tag URI or opaque token — leaving url undefined is the
-      // existing behavior; downstream is the right place to add a more
-      // permissive dedup key if a real source needs it.
-    }
+    if (URL.canParse(item.id)) return item.id;
+    // Otherwise item.id is a tag URI or opaque token — leaving url undefined is
+    // the existing behavior; downstream is the right place to add a more
+    // permissive dedup key if a real source needs it.
   }
   return undefined;
 }
@@ -763,6 +762,8 @@ function isSafeLinkHref(raw: string): boolean {
   return /^https?:\/\//i.test(url) || /^mailto:/i.test(url) || url.startsWith("/");
 }
 
+const VIDEO_HOST_RE = /youtube|vimeo|loom/i;
+
 /** Extract structured media items from HTML content. */
 export function extractMedia(
   html: string,
@@ -782,7 +783,7 @@ export function extractMedia(
   while ((m = iframeRe.exec(html)) !== null) {
     const src = m[1];
     if (!isSafeMediaUrl(src)) continue;
-    if (/youtube|vimeo|loom/i.test(src)) {
+    if (VIDEO_HOST_RE.test(src)) {
       media.push({ type: "video", url: iframeSrcToWatchUrl(src) });
     }
   }

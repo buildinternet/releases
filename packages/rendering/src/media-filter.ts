@@ -69,6 +69,9 @@ export const PROFILE_MEDIA_MARKERS: readonly string[] = [
  */
 export const TINY_FORCED_EDGE_PX = 128;
 
+const WIDTH_TRANSFORM_RE = /(?:^|[,/&?])w_(\d{1,4})(?=[,/&?]|$)/gi;
+const HEIGHT_TRANSFORM_RE = /(?:^|[,/&?])h_(\d{1,4})(?=[,/&?]|$)/gi;
+
 /**
  * Parse width/height stamped into a CDN transform URL (Cloudinary path segments
  * like `w_32,h_32` / `c_fill,w_32,h_32`, or query params `w=`/`h=`/`width=`/
@@ -83,10 +86,10 @@ export function parseForcedMediaDimensions(url: string): {
   let height: number | null = null;
 
   // Cloudinary / similar path transforms: w_32, h_32 (underscore form).
-  for (const match of url.matchAll(/(?:^|[,/&?])w_(\d{1,4})(?=[,/&?]|$)/gi)) {
+  for (const match of url.matchAll(WIDTH_TRANSFORM_RE)) {
     width = Number(match[1]);
   }
-  for (const match of url.matchAll(/(?:^|[,/&?])h_(\d{1,4})(?=[,/&?]|$)/gi)) {
+  for (const match of url.matchAll(HEIGHT_TRANSFORM_RE)) {
     height = Number(match[1]);
   }
 

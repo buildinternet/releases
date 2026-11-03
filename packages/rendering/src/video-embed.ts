@@ -183,6 +183,8 @@ export function canonicalVideoFromUrl(href: string): CanonicalVideo | null {
 /** URL-like tokens in a markdown/HTML body — links, raw URLs, href/src attrs. */
 const URL_TOKEN = /https?:\/\/[^\s"'<>)\]]+/g;
 
+const TRAILING_URL_PUNCT_RE = /[.,);]+$/;
+
 /**
  * Scan a body string for hosted-video links from known providers. Returns one
  * entry per distinct video (deduped by provider+id; first occurrence wins).
@@ -196,7 +198,7 @@ export function detectInlineVideoLinks(body: string | null | undefined): Detecte
   if (!matches) return out;
   for (const raw of matches) {
     // Trim trailing punctuation that commonly clings to a URL in prose.
-    const cleaned = raw.replace(/[.,);]+$/, "");
+    const cleaned = raw.replace(TRAILING_URL_PUNCT_RE, "");
     let u: URL;
     try {
       u = new URL(cleaned);

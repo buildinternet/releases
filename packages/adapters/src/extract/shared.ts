@@ -306,6 +306,14 @@ export function formatKnownReleases(knownReleases: KnownRelease[]): string {
   return `Known releases (most recent first):\n${entries.map((e, i) => `${i + 1}. ${e}`).join("\n")}`;
 }
 
+const TOC_STAR_LINE_RE = /^\*\s+\[.*\]\(#.*\)$/;
+const TOC_DASH_LINE_RE = /^-\s+\[.*\]\(#.*\)$/;
+const CHANGELOG_HEADING_RE = /^#\s+(changelog|release|what's new)/i;
+const BARE_VERSION_LINE_RE = /^\d+\.\d+(\.\d+)?$/;
+const VERSION_HEADING_RE = /^#{1,3}\s+[[v]?\d+\.\d+/;
+const MONTH_HEADING_RE =
+  /^#{1,3}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\b/i;
+
 /**
  * Scan forward to find where actual changelog content begins,
  * skipping past navigation, TOC, and boilerplate. Returns the
@@ -319,7 +327,7 @@ export function findContentStart(lines: string[]): number {
     const line = lines[i].trim();
 
     // Track TOC entries (lines like "* [2.1.87](#2-1-87)" or "* [4.67.0](#4670)")
-    if (/^\*\s+\[.*\]\(#.*\)$/.test(line) || /^-\s+\[.*\]\(#.*\)$/.test(line)) {
+    if (TOC_STAR_LINE_RE.test(line) || TOC_DASH_LINE_RE.test(line)) {
       lastTocLine = i;
       continue;
     }
@@ -328,26 +336,22 @@ export function findContentStart(lines: string[]): number {
     if (lastTocLine >= 0 && i <= lastTocLine + 3) continue;
 
     // Heading with "changelog", "release", or "what's new"
-    if (/^#\s+(changelog|release|what's new)/i.test(line)) {
+    if (CHANGELOG_HEADING_RE.test(line)) {
       return i;
     }
 
     // Standalone version number on its own line (e.g. "2.1.87") — only after nav
-    if (i > 50 && /^\d+\.\d+(\.\d+)?$/.test(line)) {
+    if (i > 50 && BARE_VERSION_LINE_RE.test(line)) {
       return Math.max(0, i - 3);
     }
 
     // Heading with version number (e.g. "## v2.1.87", "## [4.67.0]")
-    if (/^#{1,3}\s+[[v]?\d+\.\d+/.test(line)) {
+    if (VERSION_HEADING_RE.test(line)) {
       return Math.max(0, i - 2);
     }
 
     // Heading with a date-like pattern (e.g. "## March 2026")
-    if (
-      /^#{1,3}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(
-        line,
-      )
-    ) {
+    if (MONTH_HEADING_RE.test(line)) {
       return Math.max(0, i - 2);
     }
   }
@@ -426,7 +430,23 @@ export interface MappedEntry {
   media?: ExtractedEntry["media"];
 }
 
+const ABSOLUTE_HREF_RE = /^(?:https?:)?\/\//i;
+const TRAILING_SLASHES_RE = /\/+$/;
+const NON_SLUG_CHARS_RE = /[^a-z0-9]+/g;
+const EDGE_DASH_RE = /^-|-$/g;
+
+/** The source page's path without trailing slashes, or null when `sourceUrl` won't parse. */
+function sourceBasePath(sourceUrl: string): string | null {
+  try {
+    return new URL(sourceUrl).pathname.replace(TRAILING_SLASHES_RE, "");
+  } catch {
+    return null;
+  }
+}
+
 export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): MappedEntry[] {
+  // Parsed lazily, at most once per call — only root-relative hrefs need it.
+  let basePath: string | null | undefined;
   return entries
     .filter((e) => e.title && e.content)
     .map((e) => {
@@ -443,7 +463,7 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
       // a stable synthesized section anchor on the source page instead.
       let entryUrl: string | undefined;
       const href = e.url?.trim();
-      const isAbsolute = !!href && /^(?:https?:)?\/\//i.test(href);
+      const isAbsolute = !!href && ABSOLUTE_HREF_RE.test(href);
       const isFragment = !!href && href.startsWith("#");
       const isRootRelative = !!href && href.startsWith("/") && !href.startsWith("//");
       if (href && href !== opts.sourceUrl && (isAbsolute || isFragment)) {
@@ -453,22 +473,21 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
           entryUrl = href;
         }
       } else if (isRootRelative) {
-        try {
-          const src = new URL(opts.sourceUrl);
-          const basePath = src.pathname.replace(/\/+$/, "");
-          const resolved = new URL(href, opts.sourceUrl);
-          if (basePath && resolved.pathname.startsWith(`${basePath}/`)) {
-            entryUrl = resolved.href;
+        if (basePath === undefined) basePath = sourceBasePath(opts.sourceUrl);
+        if (basePath) {
+          try {
+            const resolved = new URL(href, opts.sourceUrl);
+            if (resolved.pathname.startsWith(`${basePath}/`)) entryUrl = resolved.href;
+          } catch {
+            // fall through to the synthesized anchor
           }
-        } catch {
-          // fall through to the synthesized anchor
         }
       }
       if (entryUrl === undefined) {
         const frag = (version ?? e.title ?? "")
           .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "")
+          .replace(NON_SLUG_CHARS_RE, "-")
+          .replace(EDGE_DASH_RE, "")
           .slice(0, 60);
         entryUrl = `${opts.sourceUrl}#${frag}`;
       }

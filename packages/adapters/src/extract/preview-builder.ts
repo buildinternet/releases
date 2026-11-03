@@ -58,12 +58,14 @@ export function buildJsonSketch(body: string): SketchResult {
   }
 }
 
+const TOKENISH_CHAR_RE = /[0-9a-zA-Z"]/;
+
 function estimateTruncation(body: string): number {
   // Walk backward from the end looking for the last structural or token-ish char.
   // This is a rough byte offset to help the model orient around truncation.
   for (let i = body.length - 1; i >= 0; i--) {
     const c = body[i]!;
-    if (c === "," || c === "]" || c === "}" || /[0-9a-zA-Z"]/.test(c)) return i;
+    if (c === "," || c === "]" || c === "}" || TOKENISH_CHAR_RE.test(c)) return i;
   }
   return body.length;
 }
@@ -137,16 +139,21 @@ function toolInstructions(queryJsonAvailable: boolean): string {
 }
 
 const STRIP_TAGS = ["script", "style", "svg", "nav", "header", "footer"];
+// Per tag: the full block (content included, non-greedy) and the self-closing form.
+const STRIP_TAG_RES = STRIP_TAGS.map(
+  (tag) =>
+    [
+      new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi"),
+      new RegExp(`<${tag}\\b[^>]*\\/>`, "gi"),
+    ] as const,
+);
 const PREVIEW_HEAD = 2000;
 const PREVIEW_TAIL = 2000;
 
 export function buildHtmlPreview(body: string): string {
   let cleaned = body;
-  for (const tag of STRIP_TAGS) {
-    // Remove full tag blocks (including content) — non-greedy, case-insensitive.
-    cleaned = cleaned.replace(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi"), "");
-    // Also remove self-closing variants.
-    cleaned = cleaned.replace(new RegExp(`<${tag}\\b[^>]*\\/>`, "gi"), "");
+  for (const [block, selfClosing] of STRIP_TAG_RES) {
+    cleaned = cleaned.replace(block, "").replace(selfClosing, "");
   }
 
   if (cleaned.length <= PREVIEW_HEAD + PREVIEW_TAIL) return cleaned;

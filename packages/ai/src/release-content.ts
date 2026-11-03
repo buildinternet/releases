@@ -683,13 +683,20 @@ export function buildReleaseBlock(input: SummarizeReleaseInput): string {
     .join("\n");
 }
 
+/** Compiled `<tag>…</tag>` matchers, keyed by tag. Callers pass a small fixed set of tags. */
+const TAGGED_RE_CACHE = new Map<string, RegExp>();
+
 /**
  * Pull a single tagged value out of a model response. Returns "" when the tag
  * is missing — callers should treat empty as "field not provided", not as an
  * error condition.
  */
 export function extractTagged(text: string, tag: string): string {
-  const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
+  let re = TAGGED_RE_CACHE.get(tag);
+  if (!re) {
+    re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
+    TAGGED_RE_CACHE.set(tag, re);
+  }
   const m = text.match(re);
   return (m?.[1] ?? "").trim();
 }
@@ -854,8 +861,26 @@ const RELEASE_LINT_BANNED = [
   "cutting-edge",
 ] as const;
 
+/** Each banned phrase as a whole-word, case-insensitive matcher, compiled once. */
+const RELEASE_LINT_BANNED_RES = RELEASE_LINT_BANNED.map(
+  (p) => [p, new RegExp(`\\b${p}\\b`, "i")] as const,
+);
+
+const REPORTING_VERB_RE = new RegExp(`^(?:${REPORTING_VERBS})$`, "i");
+const SUBJECT_VERB_RE = new RegExp(`^(?:${REPORTING_VERBS}|${ACTION_VERBS})$`, "i");
+const LEADING_THE_RE = /^the\s+/i;
+const WHITESPACE_RUN_RE = /\s+/;
+const POSSESSIVE_SUFFIX_RE = /['’]s$/i;
+const SENTENCE_BREAK_RE = /(?<=[.!?])\s+/;
+const LIST_COMMA_RE = /,(?!\d)/g;
+const COLON_HEADLINE_RE = /:\s/;
+const NARRATES_SOURCE_RE = /^(this|the) (post|article|blog|announcement|release|update)\b/i;
+const ALSO_FRAGMENT_RE = /^also\b/i;
+const EM_DASH_RE = /—| -- /;
+const NON_ALNUM_RE = /[^a-z0-9]/g;
+
 function normalizeName(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return s.toLowerCase().replace(NON_ALNUM_RE, "");
 }
 
 /**
@@ -865,23 +890,12 @@ function normalizeName(s: string): string {
  * ships …" match; "Datadog Agent adds …" does not, because "Agent" sits
  * between the org and the verb.
  */
-function opensWithOrgVerb(text: string, orgSlug: string, verbs: string): boolean {
+function opensWithOrgVerb(text: string, orgSlug: string, verbRe: RegExp): boolean {
   const org = normalizeName(orgSlug);
   if (!org) return false;
-  const words = text
-    .trim()
-    .replace(/^the\s+/i, "")
-    .split(/\s+/);
-  const verbRe = new RegExp(`^(?:${verbs})$`, "i");
+  const words = text.trim().replace(LEADING_THE_RE, "").split(WHITESPACE_RUN_RE);
   for (let n = 1; n <= 3 && n < words.length; n++) {
-    if (
-      normalizeName(
-        words
-          .slice(0, n)
-          .join("")
-          .replace(/['’]s$/i, ""),
-      ) !== org
-    )
+    if (normalizeName(words.slice(0, n).join("").replace(POSSESSIVE_SUFFIX_RE, "")) !== org)
       continue;
     const rest = words.slice(n);
     if (rest[0]?.toLowerCase() === "team") rest.shift();
@@ -894,14 +908,14 @@ function opensWithOrgVerb(text: string, orgSlug: string, verbs: string): boolean
 /** Split prose into sentences on . ! ? followed by whitespace or end. */
 function sentences(text: string): string[] {
   return text
-    .split(/(?<=[.!?])\s+/)
+    .split(SENTENCE_BREAK_RE)
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
 /** Commas that separate items (not thousands separators like 1,000). */
 function listCommaCount(sentence: string): number {
-  return (sentence.match(/,(?!\d)/g) ?? []).length;
+  return (sentence.match(LIST_COMMA_RE) ?? []).length;
 }
 
 /**
@@ -920,30 +934,28 @@ export function lintReleaseContent(
   const short = out.titleShort ?? "";
   const summary = out.summary ?? "";
 
-  if (opensWithOrgVerb(title, orgSlug, REPORTING_VERBS)) violations.push("title-org-narrator");
+  if (opensWithOrgVerb(title, orgSlug, REPORTING_VERB_RE)) violations.push("title-org-narrator");
   if (title.length > TITLE_MAX_CHARS) violations.push("title-too-long");
-  if (opensWithOrgVerb(short, orgSlug, `${REPORTING_VERBS}|${ACTION_VERBS}`)) {
+  if (opensWithOrgVerb(short, orgSlug, SUBJECT_VERB_RE)) {
     violations.push("short-org-subject");
   }
-  if (/:\s/.test(short)) violations.push("short-colon-headline");
+  if (COLON_HEADLINE_RE.test(short)) violations.push("short-colon-headline");
 
   const summarySentences = sentences(summary);
-  if (
-    summarySentences.some((s) => opensWithOrgVerb(s, orgSlug, `${REPORTING_VERBS}|${ACTION_VERBS}`))
-  ) {
+  if (summarySentences.some((s) => opensWithOrgVerb(s, orgSlug, SUBJECT_VERB_RE))) {
     violations.push("summary-org-subject");
   }
-  if (/^(this|the) (post|article|blog|announcement|release|update)\b/i.test(summary.trim())) {
+  if (NARRATES_SOURCE_RE.test(summary.trim())) {
     violations.push("summary-narrates-source");
   }
-  if (summarySentences.some((s) => /^also\b/i.test(s))) violations.push("summary-fragment");
+  if (summarySentences.some((s) => ALSO_FRAGMENT_RE.test(s))) violations.push("summary-fragment");
   if (summarySentences.some((s) => listCommaCount(s) >= 4)) violations.push("summary-comma-stack");
 
-  if (/—| -- /.test(`${title}\n${short}\n${summary}`)) violations.push("em-dash");
-
   const all = `${title}\n${short}\n${summary}`;
-  for (const p of RELEASE_LINT_BANNED) {
-    if (new RegExp(`\\b${p}\\b`, "i").test(all)) violations.push(`banned-phrase:${p}`);
+  if (EM_DASH_RE.test(all)) violations.push("em-dash");
+
+  for (const [p, re] of RELEASE_LINT_BANNED_RES) {
+    if (re.test(all)) violations.push(`banned-phrase:${p}`);
   }
   return violations;
 }

@@ -100,6 +100,8 @@ export function jwtSessionPayload(user: { role?: string | null } | null | undefi
   };
 }
 
+const WHITESPACE_RUN_RE = /\s+/;
+
 /**
  * True when a `/oauth2/consent` submission grants scopes beyond the user's
  * entitlement. Best-effort early gate: a deny (`accept !== true`) or an omitted
@@ -113,7 +115,7 @@ export function consentScopeViolation(
   if (!body || body.accept !== true) return false;
   const scope = typeof body.scope === "string" ? body.scope : "";
   if (!scope) return false;
-  const requested = scope.split(/\s+/).filter(Boolean);
+  const requested = scope.split(WHITESPACE_RUN_RE).filter(Boolean);
   try {
     assertScopesEntitled(role, requested);
     return false;

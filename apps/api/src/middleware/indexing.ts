@@ -18,7 +18,7 @@ export function blockIndexing(): MiddlewareHandler<{
       await next();
       return;
     }
-    if (c.req.method === "GET" && new URL(c.req.url).pathname === "/robots.txt") {
+    if (c.req.method === "GET" && c.req.path === "/robots.txt") {
       return c.text("User-agent: *\nDisallow: /\n", 200, {
         "Cache-Control": "public, max-age=3600",
       });

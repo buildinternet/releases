@@ -270,6 +270,27 @@ interface GitHubRelease {
   prerelease: boolean;
 }
 
+// Compiled `tagAllowPatterns`, keyed by pattern source. `evaluateTagFilter` runs
+// once per tag on every fetch with the same handful of patterns, so compile each
+// once. A failed compile is cached too, so the error is reported per call without
+// re-parsing. Patterns come from source metadata; the cap only guards against a
+// pathological spread of distinct patterns in one isolate.
+const TAG_PATTERN_CACHE = new Map<string, RegExp | { error: unknown }>();
+const TAG_PATTERN_CACHE_MAX = 512;
+
+function compileTagPattern(pattern: string): RegExp | { error: unknown } {
+  let compiled = TAG_PATTERN_CACHE.get(pattern);
+  if (compiled) return compiled;
+  try {
+    compiled = new RegExp(pattern);
+  } catch (error) {
+    compiled = { error };
+  }
+  if (TAG_PATTERN_CACHE.size >= TAG_PATTERN_CACHE_MAX) TAG_PATTERN_CACHE.clear();
+  TAG_PATTERN_CACHE.set(pattern, compiled);
+  return compiled;
+}
+
 /**
  * Returns `"deny"` if the tag should be skipped due to a deny-prefix match,
  * `"allow"` if the tag passes an allow-pattern filter, `"no-filter"` if no
@@ -301,12 +322,10 @@ export function evaluateTagFilter(
     // is skipped (treated as non-matching) so one bad entry doesn't abort
     // the entire fetch.
     const matched = allowPatterns.some((pattern) => {
-      try {
-        return new RegExp(pattern).test(tag);
-      } catch (err) {
-        onInvalidPattern?.(pattern, err);
-        return false;
-      }
+      const compiled = compileTagPattern(pattern);
+      if (compiled instanceof RegExp) return compiled.test(tag);
+      onInvalidPattern?.(pattern, compiled.error);
+      return false;
     });
     return matched ? "allow" : "allow-miss";
   }

@@ -2,6 +2,8 @@
  * Helpers for safely interpolating caller-supplied strings into LLM prompts.
  */
 
+const CLOSING_TAG_RE = /<\/[a-zA-Z][^>]*>/g;
+
 /**
  * Escape a caller-supplied string for safe interpolation inside an
  * XML-tagged data block in an LLM prompt.
@@ -14,7 +16,7 @@ export function escapeForPromptTag(value: string): string {
   return (
     value
       // Strip closing XML tags so injected content cannot break out of its wrapper.
-      .replace(/<\/[a-zA-Z][^>]*>/g, "")
+      .replace(CLOSING_TAG_RE, "")
       // Strip ASCII control characters (keep \t U+0009 and \n U+000A).
       .split("")
       .filter((ch) => {

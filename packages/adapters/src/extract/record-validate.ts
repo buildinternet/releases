@@ -124,6 +124,22 @@ function isTrackingRedirectHost(host: string): boolean {
   return TRACKING_REDIRECT_HOSTS.some((frag) => trackingFragmentMatches(labels, frag));
 }
 
+// Every record in a batch shares one sourceUrl, so remember the last one's
+// parsed host + registrable domain instead of re-deriving them per record.
+let lastSourceDomain: { url: string; host: string; reg: string } | null = null;
+
+function sourceDomain(sourceUrl: string): { host: string; reg: string } {
+  if (lastSourceDomain?.url === sourceUrl) return lastSourceDomain;
+  let host: string;
+  try {
+    host = new URL(sourceUrl).hostname;
+  } catch {
+    host = "";
+  }
+  lastSourceDomain = { url: sourceUrl, host, reg: host ? registrableDomain(host) : "" };
+  return lastSourceDomain;
+}
+
 /**
  * Reject URLs whose host doesn't plausibly belong to the source's domain
  * family, obvious tracking-redirect wrappers, and bare index/listing pages
@@ -153,14 +169,7 @@ export function checkUrlSanity(url: string | undefined, sourceUrl: string): stri
     }
   }
 
-  let sourceHost: string;
-  try {
-    sourceHost = new URL(sourceUrl).hostname;
-  } catch {
-    sourceHost = "";
-  }
-
-  const sourceReg = sourceHost ? registrableDomain(sourceHost) : "";
+  const { host: sourceHost, reg: sourceReg } = sourceDomain(sourceUrl);
   const urlReg = registrableDomain(parsed.hostname);
   const sameRegistrableDomain = Boolean(sourceReg) && sourceReg === urlReg;
 
@@ -245,8 +254,10 @@ const CHROME_PHRASES = [
   "toggle menu",
 ];
 
+const WHITESPACE_RUN_RE = /\s+/;
+
 function normalizedWordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
+  return text.trim().split(WHITESPACE_RUN_RE).filter(Boolean).length;
 }
 
 /**
