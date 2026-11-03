@@ -117,17 +117,20 @@ export default async function OrgSlugPage({
   }
 
   if (resolved.kind === "product") {
-    const org = await getOrg(orgSlug);
-    if (collapsesToOrg(org)) permanentRedirect(`/${orgSlug}`);
     // Critical path via ProductPage GraphQL: identity + sources + collections
     // + first product-scoped feed page. Overview / activity / heatmap stay on
     // fail-open REST inside ProductView (#2047). REST fallback inside
-    // getProductPage covers PersistedQueryNotFound deploy windows.
-    const { product, collections, releases } = await getProductPage({
-      id: resolved.product.id,
-      orgSlug,
-      productSlug: resolved.product.slug,
-    });
+    // getProductPage covers PersistedQueryNotFound deploy windows. The org
+    // read is independent, so both run concurrently.
+    const [org, { product, collections, releases }] = await Promise.all([
+      getOrg(orgSlug),
+      getProductPage({
+        id: resolved.product.id,
+        orgSlug,
+        productSlug: resolved.product.slug,
+      }),
+    ]);
+    if (collapsesToOrg(org)) permanentRedirect(`/${orgSlug}`);
     return (
       <ProductView
         orgSlug={orgSlug}

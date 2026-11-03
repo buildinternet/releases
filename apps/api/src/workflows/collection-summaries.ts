@@ -25,7 +25,6 @@ import {
   generateWeeklyDigestForCollection,
   pingAfterDigests,
   type DigestedWeek,
-  type CollectionSummaryTarget,
 } from "../cron/collection-summaries.js";
 import type { WebRevalidateEnv } from "../lib/web-revalidate.js";
 import {
@@ -109,10 +108,10 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
 
     const plan = await step.do("plan", RETRY_PLAN, async (): Promise<{ tasks: SummaryTask[] }> => {
       const db = createDb(this.env.DB);
-      const cols: CollectionSummaryTarget[] = await listCollectionSummaryTargets(db, {
-        collectionId,
-      });
-      const model = await resolveCollectionSummaryModel(this.env);
+      const [cols, model] = await Promise.all([
+        listCollectionSummaryTargets(db, { collectionId }),
+        resolveCollectionSummaryModel(this.env),
+      ]);
       if (!model) {
         throw new NonRetryableError(
           "no collection summary model (ANTHROPIC_API_KEY or OPENROUTER_API_KEY required)",
@@ -201,8 +200,10 @@ export class CollectionSummariesWorkflow extends WorkflowEntrypoint<
       RETRY_PLAN,
       async (): Promise<{ tasks: WeeklyDigestTask[] }> => {
         const db = createDb(this.env.DB);
-        const cols = await listCollectionWeeklyDigestTargets(db);
-        const model = await resolveCollectionWeeklyDigestModel(this.env);
+        const [cols, model] = await Promise.all([
+          listCollectionWeeklyDigestTargets(db),
+          resolveCollectionWeeklyDigestModel(this.env),
+        ]);
         if (!model) {
           throw new NonRetryableError(
             "no collection weekly digest model (ANTHROPIC_API_KEY or OPENROUTER_API_KEY required)",

@@ -477,12 +477,35 @@ searchRoutes.get(
     const userAgent = c.req.header("user-agent") ?? null;
     const anonId = c.req.header("x-releases-anon-id") ?? null;
     const clientKind = deriveClientKind(userAgent);
-    // Resolve auth synchronously here so the `waitUntil(logSearch(...))` calls
-    // below capture it without re-reading the secret per branch.
-    const authed = await isValidBearerAuth(c);
-
     // Parse once — reused by both the lexical and hybrid branches below.
     const coordinate = parseCoordinate(q);
+
+    const rawOrg = c.req.query("org")?.trim();
+    const rawProduct = c.req.query("product");
+    const rawCategory = c.req.query("category")?.trim();
+    const rawCollection = c.req.query("collection")?.trim();
+
+    // Auth and every optional scope lookup are independent of each other, so
+    // resolve them concurrently up front. Validation below still runs in the
+    // original order, so error precedence is unchanged; a short-circuit just
+    // discards lookups it no longer needs. Auth is resolved here so the
+    // `waitUntil(logSearch(...))` calls below capture it without re-reading
+    // the secret per branch.
+    const [authed, domainResolution, orgRow, productResolution, aliasMap, collectionRow] =
+      await Promise.all([
+        isValidBearerAuth(c),
+        rawDomain ? resolveDomainScope(db, rawDomain) : null,
+        rawOrg
+          ? db
+              .select({ id: organizations.id, slug: organizations.slug })
+              .from(organizations)
+              .where(orgWhere(rawOrg))
+              .get()
+          : undefined,
+        rawProduct ? resolveProductScope(db, rawProduct) : null,
+        rawCategory ? loadAliasMap(db) : undefined,
+        rawCollection ? getCollectionBySlug(db, rawCollection) : null,
+      ]);
 
     // Optional `?domain=` narrows the result set to a single org. We resolve
     // up front and short-circuit on invalid/miss so we don't waste a
@@ -490,7 +513,6 @@ searchRoutes.get(
     // away. `domainResolution` is also surfaced on the response so callers
     // can distinguish "domain isn't owned" from "domain is owned but the
     // query had no hits."
-    const domainResolution = rawDomain ? await resolveDomainScope(db, rawDomain) : null;
     if (domainResolution?.kind === "invalid") {
       return respondError(
         c,
@@ -504,20 +526,12 @@ searchRoutes.get(
     // Optional `?org=` is the same single-org scope as `?domain=`, keyed by
     // slug or `org_…` id. Unknown org → empty envelope with `orgStatus:
     // "not_found"`, mirroring a domain miss.
-    const rawOrg = c.req.query("org")?.trim();
     if (rawOrg && rawDomain) {
       return respondError(
         c,
         new ValidationError("Pass either `org` or `domain`, not both", { code: "bad_request" }),
       );
     }
-    const orgRow = rawOrg
-      ? await db
-          .select({ id: organizations.id, slug: organizations.slug })
-          .from(organizations)
-          .where(orgWhere(rawOrg))
-          .get()
-      : undefined;
     const orgMissed = Boolean(rawOrg) && !orgRow;
     const orgEcho = orgRow ? { org: orgRow.slug, orgStatus: "matched" as const } : {};
     const scopeOrgId =
@@ -527,8 +541,6 @@ searchRoutes.get(
     // belonging to one product. Bare slugs are rejected because product slugs
     // are org-scoped (#690). Unknown products return an empty envelope with
     // `productStatus: "not_found"` — matching how domain miss works.
-    const rawProduct = c.req.query("product");
-    const productResolution = rawProduct ? await resolveProductScope(db, rawProduct) : null;
     if (productResolution?.kind === "invalid") {
       return respondError(
         c,
@@ -552,10 +564,8 @@ searchRoutes.get(
     // Optional `?category=` scopes hits to one org category. Categories are a
     // fixed enum (+ curator aliases), so an unknown value is a 400 — not an
     // empty envelope like domain/collection. Resolve aliases to canonical.
-    const rawCategory = c.req.query("category")?.trim();
     let categorySlug: string | undefined;
-    if (rawCategory) {
-      const aliasMap = await loadAliasMap(db);
+    if (rawCategory && aliasMap) {
       const resolved = resolveCategorySlug(rawCategory, aliasMap);
       if (!resolved) {
         return respondError(
@@ -571,8 +581,6 @@ searchRoutes.get(
     // Optional `?collection=` scopes hits to a curated collection's member
     // orgs. Unknown slug → empty envelope with `collectionStatus: "not_found"`
     // (mirrors domain miss); collections are data, not a fixed enum.
-    const rawCollection = c.req.query("collection")?.trim();
-    const collectionRow = rawCollection ? await getCollectionBySlug(db, rawCollection) : null;
     const collectionMissed = Boolean(rawCollection) && !collectionRow;
 
     // Reusable scope options + response echoes for the category/collection
@@ -716,8 +724,12 @@ searchRoutes.get(
     // as the (only) org hit — the caller has named an entity, so confirming
     // it is more useful than re-running the LIKE on the org name. Catalog
     // and releases still respect the query within the scoped org.
-    const [scopedOrgRow] = scopeOrgId
-      ? await db
+    //
+    // Entity search never depends on release search (lexical FTS or the
+    // hybrid helper), so each branch below runs the two concurrently.
+    const searchOrgHits = async () => {
+      if (scopeOrgId) {
+        const [scopedOrgRow] = await db
           .select({
             slug: organizationsActive.slug,
             name: organizationsActive.name,
@@ -732,12 +744,9 @@ searchRoutes.get(
           })
           .from(organizationsActive)
           .where(eq(organizationsActive.id, scopeOrgId))
-          .limit(1)
-      : [];
-
-    const [orgs, rawProducts, rawSources, collectionsDirectLexical] = await Promise.all([
-      scopedOrgRow
-        ? Promise.resolve([
+          .limit(1);
+        if (scopedOrgRow) {
+          return [
             {
               slug: scopedOrgRow.slug,
               name: scopedOrgRow.name,
@@ -747,75 +756,54 @@ searchRoutes.get(
               status: scopedOrgRow.status,
               aliasDomains: scopedOrgRow.aliasConcat ? scopedOrgRow.aliasConcat.split(",") : [],
             },
-          ])
-        : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty, ...catColScope }),
-      searchProducts(db, q, limit, {
-        orgId: scopeOrgId,
-        kind: kindFilter,
-        sourceIds: productSourceIds,
-        ...catColScope,
-      }),
-      searchSources(db, q, limit, {
-        orgId: scopeOrgId,
-        kind: kindFilter,
-        sourceIds: productSourceIds,
-        ...catColScope,
-      }),
-      // Direct LIKE match on collection name/slug/description — runs in
-      // every mode. Independent of `?domain=`: collections are cross-org
-      // by design, so a domain-scoped query still surfaces a relevant
-      // collection (e.g. searching within Vercel can return the "Frontier
-      // AI Labs" collection if Vercel is a member).
-      searchCollectionsDirect(db, q, limit),
-    ]);
-    const catalog = foldSourcesIntoCatalog(rawProducts, rawSources);
-
-    const collectionsMember = await findCollectionsByMemberOrgs(
-      db,
-      orgs.map((o) => o.slug),
-      limit,
-    );
-
-    // Pre-compute the source-id list when narrowing — needed for the hybrid
-    // path's `orgSourceIds` filter. When both domain (org scope) and product
-    // scope are active, the product scope is more specific and wins. The
-    // lexical path scopes via SQL predicates instead (orgId / sourceIds /
-    // orgCategory / collectionId), so this list is hybrid-only.
-    let scopeSourceIds: string[] | undefined;
-    if (productSourceIds) {
-      // Product scope is already a pre-resolved source-ID list.
-      scopeSourceIds = productSourceIds;
-    } else if (scopeOrgId) {
-      const rows = await db
-        .select({ id: sources.id })
-        .from(sources)
-        .where(eq(sources.orgId, scopeOrgId));
-      scopeSourceIds = rows.map((r) => r.id);
-    }
-    // Category/collection scope: materialize the member orgs' source IDs and
-    // intersect with any existing (product/domain) scope. Unlike the lexical
-    // SQL predicates this is uncapped, so a large category still filters the
-    // hybrid post-filter correctly. `scopeSourceIds` becoming `[]` here means
-    // "scope active, zero sources" — the hybrid guard below passes the empty
-    // list through so no releases leak, rather than falling back to unscoped.
-    if (categorySlug || collectionRow) {
-      const catColRows = await db
-        .select({ id: sources.id })
-        .from(sources)
-        .leftJoin(organizationsActive, eq(organizationsActive.id, sources.orgId))
-        .where(
-          and(
-            categorySlug ? eq(organizationsActive.category, categorySlug) : undefined,
-            collectionRow
-              ? sql`EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = ${collectionRow.id} AND cm.org_id = ${sources.orgId})`
-              : undefined,
+          ];
+        }
+      }
+      return searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty, ...catColScope });
+    };
+    const searchEntities = async () => {
+      const [[orgs, collectionsMember], rawProducts, rawSources, collectionsDirectLexical] =
+        await Promise.all([
+          // Member-collection hits key off the org hits, so chain them here
+          // rather than waiting on the whole entity batch.
+          searchOrgHits().then(
+            async (orgHits) =>
+              [
+                orgHits,
+                await findCollectionsByMemberOrgs(
+                  db,
+                  orgHits.map((o) => o.slug),
+                  limit,
+                ),
+              ] as const,
           ),
-        );
-      const catColIds = catColRows.map((r) => r.id);
-      scopeSourceIds = scopeSourceIds
-        ? scopeSourceIds.filter((id) => catColIds.includes(id))
-        : catColIds;
-    }
+          searchProducts(db, q, limit, {
+            orgId: scopeOrgId,
+            kind: kindFilter,
+            sourceIds: productSourceIds,
+            ...catColScope,
+          }),
+          searchSources(db, q, limit, {
+            orgId: scopeOrgId,
+            kind: kindFilter,
+            sourceIds: productSourceIds,
+            ...catColScope,
+          }),
+          // Direct LIKE match on collection name/slug/description — runs in
+          // every mode. Independent of `?domain=`: collections are cross-org
+          // by design, so a domain-scoped query still surfaces a relevant
+          // collection (e.g. searching within Vercel can return the "Frontier
+          // AI Labs" collection if Vercel is a member).
+          searchCollectionsDirect(db, q, limit),
+        ]);
+      return {
+        orgs,
+        catalog: foldSourcesIntoCatalog(rawProducts, rawSources),
+        collectionsDirectLexical,
+        collectionsMember,
+      };
+    };
+
     // A source-narrowing filter is active whenever any of product/domain/
     // category/collection resolved. Distinguishes "no scope" (undefined —
     // don't pass orgSourceIds) from "scope active but empty" ([] — pass it so
@@ -830,19 +818,23 @@ searchRoutes.get(
     // the cascading enrichment from matched entities) to preserve the cache
     // key semantics for the existing web UI.
     if (mode === "lexical") {
-      const ftsRows = await searchReleasesFts(db, q, limit, offset, {
-        includeCoverage,
-        includeContent,
-        orgId: scopeOrgId,
-        sourceIds: productSourceIds,
-        kind: kindFilter,
-        since,
-        until,
-        ...catColScope,
-      }).catch((err) => {
-        logEvent("warn", { component: "search", event: "fts-query-failed", error: err });
-        return [] as RawSearchReleaseRow[];
-      });
+      const [{ orgs, catalog, collectionsDirectLexical, collectionsMember }, ftsRows] =
+        await Promise.all([
+          searchEntities(),
+          searchReleasesFts(db, q, limit, offset, {
+            includeCoverage,
+            includeContent,
+            orgId: scopeOrgId,
+            sourceIds: productSourceIds,
+            kind: kindFilter,
+            since,
+            until,
+            ...catColScope,
+          }).catch((err) => {
+            logEvent("warn", { component: "search", event: "fts-query-failed", error: err });
+            return [] as RawSearchReleaseRow[];
+          }),
+        ]);
       let rawReleases = ftsRows;
       if (rawReleases.length === 0 && (orgs.length > 0 || catalog.length > 0)) {
         rawReleases = await searchReleasesFromMatchedEntities(
@@ -923,6 +915,49 @@ searchRoutes.get(
       return c.json(result);
     }
 
+    // Pre-compute the source-id list when narrowing — needed for the hybrid
+    // path's `orgSourceIds` filter. When both domain (org scope) and product
+    // scope are active, the product scope is more specific and wins. The
+    // lexical path scopes via SQL predicates instead (orgId / sourceIds /
+    // orgCategory / collectionId), so this list is hybrid-only.
+    //
+    // Category/collection scope: materialize the member orgs' source IDs and
+    // intersect with any existing (product/domain) scope. Unlike the lexical
+    // SQL predicates this is uncapped, so a large category still filters the
+    // hybrid post-filter correctly. `scopeSourceIds` becoming `[]` here means
+    // "scope active, zero sources" — the hybrid guard below passes the empty
+    // list through so no releases leak, rather than falling back to unscoped.
+    const resolveScopeSourceIds = async (): Promise<string[] | undefined> => {
+      const [orgSourceRows, catColRows] = await Promise.all([
+        // Product scope is already a pre-resolved source-ID list.
+        !productSourceIds && scopeOrgId
+          ? db.select({ id: sources.id }).from(sources).where(eq(sources.orgId, scopeOrgId))
+          : undefined,
+        categorySlug || collectionRow
+          ? db
+              .select({ id: sources.id })
+              .from(sources)
+              .leftJoin(organizationsActive, eq(organizationsActive.id, sources.orgId))
+              .where(
+                and(
+                  categorySlug ? eq(organizationsActive.category, categorySlug) : undefined,
+                  collectionRow
+                    ? sql`EXISTS (SELECT 1 FROM collection_members cm WHERE cm.collection_id = ${collectionRow.id} AND cm.org_id = ${sources.orgId})`
+                    : undefined,
+                ),
+              )
+          : undefined,
+      ]);
+      let scopeSourceIds = productSourceIds ?? orgSourceRows?.map((r) => r.id);
+      if (catColRows) {
+        const catColIds = catColRows.map((r) => r.id);
+        scopeSourceIds = scopeSourceIds
+          ? scopeSourceIds.filter((id) => catColIds.includes(id))
+          : catColIds;
+      }
+      return scopeSourceIds;
+    };
+
     // Semantic / hybrid modes — run the shared helper and flatten release
     // hits into the legacy `releases` field so existing consumers keep
     // working. Chunk hits ride along on a new `chunks` field. Collection
@@ -930,35 +965,44 @@ searchRoutes.get(
     // release path (returns empty + reason) so a missing binding never
     // 500s the whole response. Embed config is resolved once and shared so
     // both helpers don't independently read the Secrets Store binding.
-    const embedConfig = await buildEmbedConfig(c.env);
-    const sharedOpts = {
-      waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),
-      embedConfig,
+    const searchSemantic = async () => {
+      const [scopeSourceIds, embedConfig] = await Promise.all([
+        resolveScopeSourceIds(),
+        buildEmbedConfig(c.env),
+      ]);
+      const sharedOpts = {
+        waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),
+        embedConfig,
+      };
+      return Promise.all([
+        runHybridSearch(
+          c.env,
+          db,
+          {
+            query: q,
+            topK: limit,
+            mode,
+            includeCoverage,
+            includeContent,
+            // Domain / product / category / collection narrowing all reach into
+            // the hybrid layer via the existing `orgSourceIds` post-filter so
+            // vector + FTS results stay scoped. Passed whenever a source scope is
+            // active — including the empty-set case, so an empty scope drops
+            // every hit rather than silently falling back to unscoped.
+            ...(sourceScopeActive ? { orgSourceIds: scopeSourceIds ?? [] } : {}),
+            ...(kindFilter ? { kind: kindFilter } : {}),
+            ...(since ? { since } : {}),
+            ...(until ? { until } : {}),
+          },
+          sharedOpts,
+        ),
+        runCollectionsSemantic(c.env, db, { query: q, limit }, sharedOpts),
+      ]);
     };
-    const [hybrid, collectionsSemantic] = await Promise.all([
-      runHybridSearch(
-        c.env,
-        db,
-        {
-          query: q,
-          topK: limit,
-          mode,
-          includeCoverage,
-          includeContent,
-          // Domain / product / category / collection narrowing all reach into
-          // the hybrid layer via the existing `orgSourceIds` post-filter so
-          // vector + FTS results stay scoped. Passed whenever a source scope is
-          // active — including the empty-set case, so an empty scope drops
-          // every hit rather than silently falling back to unscoped.
-          ...(sourceScopeActive ? { orgSourceIds: scopeSourceIds ?? [] } : {}),
-          ...(kindFilter ? { kind: kindFilter } : {}),
-          ...(since ? { since } : {}),
-          ...(until ? { until } : {}),
-        },
-        sharedOpts,
-      ),
-      runCollectionsSemantic(c.env, db, { query: q, limit }, sharedOpts),
-    ]);
+    const [
+      { orgs, catalog, collectionsDirectLexical, collectionsMember },
+      [hybrid, collectionsSemantic],
+    ] = await Promise.all([searchEntities(), searchSemantic()]);
 
     const releases: SearchReleaseHit[] = hybrid.hits
       .filter((h): h is Extract<typeof h, { kind: "release" }> => h.kind === "release")

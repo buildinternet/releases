@@ -1506,9 +1506,10 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
   toDate.setUTCDate(toDate.getUTCDate() + 1);
   const toExclusive = toDate.toISOString().slice(0, 10);
 
-  const bucketRows = await getSourceActivityBuckets(db, src.id, from, toExclusive);
-
-  const { org } = await findLiveParents(db, { orgId: src.orgId, productId: null });
+  const [bucketRows, { org }] = await Promise.all([
+    getSourceActivityBuckets(db, src.id, from, toExclusive),
+    findLiveParents(db, { orgId: src.orgId, productId: null }),
+  ]);
   const orgSlug = org?.slug ?? null;
   const orgName = org?.name ?? null;
 
