@@ -170,13 +170,15 @@ export async function runLookup(
       // Malformed metadata — treat as not-empty and use the existing fast path.
     }
     if (!isEmptyStub) {
-      const relatedOrg = await resolveRelatedOrg(db, parsed.org);
-      const existingReleases = await db
-        .select()
-        .from(releases)
-        .where(eq(releases.sourceId, source.id))
-        .orderBy(desc(releases.publishedAt))
-        .limit(20);
+      const [relatedOrg, existingReleases] = await Promise.all([
+        resolveRelatedOrg(db, parsed.org),
+        db
+          .select()
+          .from(releases)
+          .where(eq(releases.sourceId, source.id))
+          .orderBy(desc(releases.publishedAt))
+          .limit(20),
+      ]);
       return { status: "existing", source, releases: existingReleases, relatedOrg };
     }
     // Empty stub — refresh in place. We re-probe and, if the repo now has

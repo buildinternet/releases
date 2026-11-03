@@ -111,16 +111,18 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
     // products.org_id wipe an active product when we hard-purge the org. The
     // soft path is reversible up to the retention boundary; this guard makes
     // the cron's hard-delete safe regardless of how the tombstones got set.
-    const orgsBlockedByActiveProducts = await db
-      .selectDistinct({ orgId: products.orgId })
-      .from(products)
-      .innerJoin(organizations, eq(organizations.id, products.orgId))
-      .where(and(expired(organizations.deletedAt), isNull(products.deletedAt)));
-    const orgsBlockedByActiveSources = await db
-      .selectDistinct({ orgId: sources.orgId })
-      .from(sources)
-      .innerJoin(organizations, eq(organizations.id, sources.orgId))
-      .where(and(expired(organizations.deletedAt), isNull(sources.deletedAt)));
+    const [orgsBlockedByActiveProducts, orgsBlockedByActiveSources] = await Promise.all([
+      db
+        .selectDistinct({ orgId: products.orgId })
+        .from(products)
+        .innerJoin(organizations, eq(organizations.id, products.orgId))
+        .where(and(expired(organizations.deletedAt), isNull(products.deletedAt))),
+      db
+        .selectDistinct({ orgId: sources.orgId })
+        .from(sources)
+        .innerJoin(organizations, eq(organizations.id, sources.orgId))
+        .where(and(expired(organizations.deletedAt), isNull(sources.deletedAt))),
+    ]);
     const blockedOrgIds = new Set<string>([
       ...orgsBlockedByActiveProducts
         .map((r: { orgId: string | null }) => r.orgId)

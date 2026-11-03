@@ -378,8 +378,10 @@ aiLaneRoutes.post("/ai/lanes/:lane", async (c) => {
     }
     const releaseId = release?.id ?? null;
     const pointSourceId = source?.id ?? null;
-    const threshold = await loadMarketingThreshold(fetchEnv.DB);
-    const model = await resolveMarketingModel(fetchEnv);
+    const [threshold, model] = await Promise.all([
+      loadMarketingThreshold(fetchEnv.DB),
+      resolveMarketingModel(fetchEnv),
+    ]);
     if (!model) {
       writeLaneClassification(
         c.env,

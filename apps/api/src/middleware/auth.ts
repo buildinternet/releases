@@ -274,6 +274,19 @@ async function verifyUserKey(
 }
 
 /**
+ * The `relu_` user-key lane is open only when tokens aren't globally disabled
+ * AND user keys are enabled. Both flags are read concurrently — this runs on
+ * every user-key request.
+ */
+async function userKeyLaneOpen(c: Context<Env>): Promise<boolean> {
+  const [tokensDisabled, userKeysEnabled] = await Promise.all([
+    flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled),
+    flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled),
+  ]);
+  return !tokensDisabled && userKeysEnabled;
+}
+
+/**
  * Validate a presented `relu_` user key for the RATE-LIMIT account tier only —
  * never for authorization. Returns `{ valid, userId }`. Flag-gated exactly like
  * the metered lane (`API_TOKENS_DISABLED` kill switch + `USER_API_KEYS_ENABLED`
@@ -287,10 +300,7 @@ export async function validateAccountCredential(
   presented: string,
 ): Promise<{ valid: boolean; userId?: string }> {
   if (!isUserApiKeyShaped(presented)) return { valid: false };
-  if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
-    return { valid: false };
-  if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
-    return { valid: false };
+  if (!(await userKeyLaneOpen(c))) return { valid: false };
   const v = await verifyUserKey(c, presented);
   if (v.ok && v.userId) {
     setIssueContext({ "user.id": v.userId });
@@ -404,10 +414,7 @@ async function resolveAuthUncached(
   if (isUserApiKeyShaped(presented)) {
     // Exempt path (limiter, public reads): do not verify/meter — read as anonymous.
     if (!meterUserKeys) return { kind: "none", skip: false };
-    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
-      return { kind: "none", skip: false };
-    if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
-      return { kind: "none", skip: false };
+    if (!(await userKeyLaneOpen(c))) return { kind: "none", skip: false };
     const v = await verifyUserKey(c, presented);
     if (v.ok) {
       // User keys are read-only. Clamp to the user-key ceiling regardless of the
@@ -792,10 +799,7 @@ type BearerPrincipal =
 
 async function resolveBearerUser(c: Context<Env>, presented: string): Promise<BearerPrincipal> {
   if (isUserApiKeyShaped(presented)) {
-    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
-      return { kind: "none" };
-    if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
-      return { kind: "none" };
+    if (!(await userKeyLaneOpen(c))) return { kind: "none" };
     const v = await verifyUserKey(c, presented);
     if (v.ok)
       return v.userId

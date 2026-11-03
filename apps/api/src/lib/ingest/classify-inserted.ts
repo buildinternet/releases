@@ -60,8 +60,10 @@ export async function classifyInsertedReleases(
   const rows = await loadInsertedRows(db, insertedIds);
   if (rows.length === 0) return new Set();
 
-  const threshold = await loadMarketingThreshold(env.DB);
-  const model = await resolveMarketingModel(env);
+  const [threshold, model] = await Promise.all([
+    loadMarketingThreshold(env.DB),
+    resolveMarketingModel(env),
+  ]);
   if (!model) {
     logEvent("warn", {
       component: "sources-batch",

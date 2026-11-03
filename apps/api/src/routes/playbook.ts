@@ -114,19 +114,18 @@ app.patch(
       await db.run(sql`UPDATE knowledge_pages SET notes = ${notes}, updated_at = ${now}
         WHERE scope = 'playbook' AND org_id = ${org.id}`);
     } else {
-      const orgSources = await db
-        .select()
-        .from(sourcesActive)
-        .where(eq(sourcesActive.orgId, org.id));
-      const orgProducts = await db
-        .select({
-          id: productsActive.id,
-          name: productsActive.name,
-          slug: productsActive.slug,
-          description: productsActive.description,
-        })
-        .from(productsActive)
-        .where(eq(productsActive.orgId, org.id));
+      const [orgSources, orgProducts] = await Promise.all([
+        db.select().from(sourcesActive).where(eq(sourcesActive.orgId, org.id)),
+        db
+          .select({
+            id: productsActive.id,
+            name: productsActive.name,
+            slug: productsActive.slug,
+            description: productsActive.description,
+          })
+          .from(productsActive)
+          .where(eq(productsActive.orgId, org.id)),
+      ]);
 
       const header = generatePlaybookHeader({
         orgName: org.name,

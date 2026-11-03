@@ -542,8 +542,10 @@ async function resolveRenderFn(
   env: BatchEnrichWorkflowEnv,
 ): Promise<((url: string) => Promise<string | null>) | null> {
   if (env._renderOverride) return env._renderOverride;
-  const accountId = await getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null);
-  const apiToken = await getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null);
+  const [accountId, apiToken] = await Promise.all([
+    getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
+    getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
+  ]);
   if (!accountId || !apiToken) return null;
   return (url: string) => fetchCloudflareMarkdown(url, accountId, apiToken);
 }
