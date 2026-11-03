@@ -50,3 +50,4 @@ The artifact is the overview body — markdown only, no surrounding metadata. Wh
 - Media items (markdown images or video links) total at most two. Three or more is a fail.
 - Media uses standard markdown — `![alt](url)` for images, `[title](url)` for videos. Raw URLs pasted as text fail.
 - The body does not end with a generic closing line ("Stay tuned for more!", "More to come."). The last sentence should land on a concrete change, not a sign-off.
+- A less common acronym (RUM, APM, DDOT) is spelled out on first use with the acronym in parentheses, then used alone. Widely known ones (API, SDK, CLI, AWS, TLS, CI) are exempt.
