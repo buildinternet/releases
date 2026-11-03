@@ -18,7 +18,6 @@ import {
   computeFetchState,
   computeSweepHealth,
 } from "@releases/adapters/fetch-plan";
-import { getSourceMeta } from "@releases/adapters/source-meta";
 import { describeWorkflowStages } from "@releases/adapters/workflow-stages";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
@@ -335,7 +334,6 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
   const now = new Date();
   const result = rows.map((s) => {
     const plan = describeFetchPlan(s, { orgPaused });
-    const meta = getSourceMeta(s);
     return {
       id: s.id,
       slug: s.slug,
@@ -345,7 +343,14 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
       plan,
       state: computeFetchState(s, plan, now),
       sweep: computeSweepHealth(s, plan, now),
-      sourceActor: meta.sourceActor ?? null,
+      sourceActor:
+        s.actorManaged == null || s.actorLastAlarmAt == null
+          ? null
+          : {
+              managed: s.actorManaged,
+              nextAlarmAt: s.actorNextAlarmAt,
+              lastAlarmAt: s.actorLastAlarmAt,
+            },
     };
   });
   return c.json({ sources: result });

@@ -197,13 +197,9 @@ describe("getProviderHealth", () => {
       fetchPriority: "normal",
       lastFetchedAt: daysAgo(0),
       createdAt: daysAgo(365),
-      metadata: JSON.stringify({
-        sourceActor: {
-          managed: false,
-          nextAlarmAt: null,
-          lastAlarmAt: daysAgo(30),
-        },
-      }),
+      actorManaged: false,
+      actorNextAlarmAt: null,
+      actorLastAlarmAt: daysAgo(30),
     });
 
     const result = await getProviderHealth(db as unknown as D1Db);

@@ -160,8 +160,12 @@ function seedScrapeFlagged(
 
 async function metaSourceActor(db: Db, id: string): Promise<Record<string, unknown> | null> {
   const [row] = await db.select().from(sources).where(eq(sources.id, id)).limit(1);
-  const meta = row?.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
-  return (meta.sourceActor as Record<string, unknown> | undefined) ?? null;
+  if (!row || row.actorManaged == null) return null;
+  return {
+    managed: row.actorManaged,
+    nextAlarmAt: row.actorNextAlarmAt,
+    lastAlarmAt: row.actorLastAlarmAt,
+  };
 }
 
 describe("SourceActor.alarm", () => {

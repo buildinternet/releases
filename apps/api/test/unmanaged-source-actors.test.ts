@@ -33,14 +33,7 @@ async function addSource(
     nextAlarmAt?: string | null;
   } = {},
 ): Promise<void> {
-  const sourceActor =
-    opts.managed === undefined
-      ? undefined
-      : {
-          managed: opts.managed,
-          nextAlarmAt: opts.nextAlarmAt ?? null,
-          lastAlarmAt: new Date().toISOString(),
-        };
+  const mirrored = opts.managed !== undefined;
   await db.insert(sources).values({
     id,
     orgId: opts.orgId ?? "org_a",
@@ -49,10 +42,14 @@ async function addSource(
     url: `https://${id}.test/changelog`,
     type: "scrape",
     fetchPriority: opts.fetchPriority ?? "normal",
-    metadata: JSON.stringify({
-      ...(opts.firecrawl ? { firecrawl: { enabled: true } } : {}),
-      ...(sourceActor ? { sourceActor } : {}),
-    }),
+    metadata: JSON.stringify(opts.firecrawl ? { firecrawl: { enabled: true } } : {}),
+    ...(mirrored
+      ? {
+          actorManaged: opts.managed,
+          actorNextAlarmAt: opts.nextAlarmAt ?? null,
+          actorLastAlarmAt: new Date().toISOString(),
+        }
+      : {}),
   });
 }
 

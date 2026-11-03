@@ -357,22 +357,6 @@ export interface SourceMetadata {
   lastFailedExtractHash?: string;
 
   /**
-   * Write-through observability mirror written by the SourceActor DO on each
-   * alarm tick and whenever `ensureScheduled` / `onSourceChanged` arms one.
-   * Absent on sources not managed by the actor, or after the actor has handed
-   * the source back (`managed: false`). Used by the fetch-plan panel and the
-   * unmanaged-actor health/sweep (#2286). Never used for fetch routing.
-   */
-  sourceActor?: {
-    /** ISO timestamp of the actor's next scheduled alarm; null while idle. */
-    nextAlarmAt: string | null;
-    /** ISO timestamp of the most recent alarm execution. */
-    lastAlarmAt: string;
-    /** True while the actor is driving this source; false when handed back. */
-    managed: boolean;
-  };
-
-  /**
    * Marks a source as fed directly by its publisher — e.g. `actions/publish-changelog`
    * POSTing to `POST /v1/sources/:id/releases/batch` on every push to the
    * changelog file. A push-fed source is "externally driven, no local cadence"

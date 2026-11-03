@@ -1,7 +1,7 @@
 /**
  * Active sources whose SourceActor is not driving a live alarm (#2286).
  *
- * The D1 `metadata.sourceActor` mirror is observational, but it is also the
+ * The D1 `sources.actor_*` mirror is observational, but it is also the
  * only fleet-wide view of whether a DO alarm is armed. A source that hit
  * `noReschedule` (paused / org-paused / firecrawl) writes `managed:false` and
  * deletes its alarm; if nothing later calls `ensureScheduled`, it stays quiet.
@@ -13,7 +13,7 @@
  * still needs an alarm for its next interval.
  */
 
-import { sql, and, eq, or } from "drizzle-orm";
+import { sql, and, eq, isNull, lt, or } from "drizzle-orm";
 import { organizations, sourcesActive } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../db.js";
@@ -45,12 +45,12 @@ function unmanagedWhere(now: Date) {
       hasCadence,
       sql`${sourcesActive.orgId} NOT IN (${pausedOrgIds(db)})`,
       locallyFetchedSql(sourcesActive.metadata),
-      sql`(
-        json_extract(${sourcesActive.metadata}, '$.sourceActor.managed') IS NULL
-        OR json_extract(${sourcesActive.metadata}, '$.sourceActor.managed') = 0
-        OR json_extract(${sourcesActive.metadata}, '$.sourceActor.nextAlarmAt') IS NULL
-        OR json_extract(${sourcesActive.metadata}, '$.sourceActor.nextAlarmAt') < ${staleCutoff}
-      )`,
+      or(
+        isNull(sourcesActive.actorManaged),
+        eq(sourcesActive.actorManaged, false),
+        isNull(sourcesActive.actorNextAlarmAt),
+        lt(sourcesActive.actorNextAlarmAt, staleCutoff),
+      ),
     );
 }
 
