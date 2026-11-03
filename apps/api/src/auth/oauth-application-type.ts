@@ -20,7 +20,7 @@
  * registration. Both opencode and Cursor fail `/oauth2/register` on 1.7
  * unless the registration body is corrected before the plugin validates it.
  *
- * This stack runs `@better-auth/oauth-provider@1.7.14`. The register schema
+ * This stack runs `@better-auth/oauth-provider@1.7.16`. The register schema
  * carries `application_type`, and the default for an omitted field is still
  * `"web"`. `clientRegistrationDefaultApplicationType: "infer"` (1.7.8, widened
  * to loopback `http` in 1.7.10) would cover opencode, but it never overrides an
