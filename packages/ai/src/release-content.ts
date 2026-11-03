@@ -224,7 +224,7 @@ The <importance> tag scores newsworthiness — see <importance_format> below.
 
 <title_format>
 The release block includes Org, Source, optionally Product, Title, Version, URL, and Body. Source is the human-readable product label (e.g. "Claude Code", "OpenAI Node SDK", "Next.js") that should appear in the headline; Product is the broader product line the source belongs to, when there is one. Pick ONE name for the headline subject and never stack them ("Datadog APM dd-trace-js 6.23.0" and "APM dd-trace-py 4.16.2" both fail):
-- A versioned release (Version is set): use Source, because the version belongs to that package ("Datadog dd-trace-js 6.23.0 …", "Datadog Agent 7.85.0 …").
+- A versioned release (Version is set): use Source, because the version belongs to that package ("Datadog dd-trace-js 6.23.0 …", "Datadog Agent 7.85.0 …"). Exception: when Source is a generic label ("Release Notes", "Changelog", "Blog", "Updates"), use Product instead ("Superhuman Mail 3.4.0 …").
 - An unversioned post or announcement: use the specific product or feature the body is about ("RUM Managed Archive …", "Bits investigations …"); fall back to Product, then Source.
 Use these to construct a self-contained news headline.
 

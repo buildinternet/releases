@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme tracer-py",
+    "productName": "APM",
+    "title": "4.16.2",
+    "version": "v4.16.2",
+    "url": "https://github.com/acme/tracer-py/releases/tag/v4.16.2"
+  },
+  "spec": { "expectDiscarded": false, "forbidInTitle": ["APM tracer-py", "APM Acme", "Acme APM"] }
+}
