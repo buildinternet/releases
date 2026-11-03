@@ -48,6 +48,10 @@ export function createDigestAnchorSlugger(): (heading: string) => string {
 // Private-Use-Area sentinel (not a control character, won't appear in real
 // markdown) marking a code span's position while emphasis stripping runs.
 const CODE_SPAN_PLACEHOLDER = "";
+const CODE_SPAN_PLACEHOLDER_RE = new RegExp(
+  `${CODE_SPAN_PLACEHOLDER}(\\d+)${CODE_SPAN_PLACEHOLDER}`,
+  "g",
+);
 
 /**
  * Strips inline markdown down to its display text, matching how rehype
@@ -77,10 +81,7 @@ function stripInlineMarkdown(s: string): string {
     // `max_tokens` (a single underscore inside a word) never match.
     .replace(/(^|\W)(__?)(\S.*?\S|\S)\2(?=\W|$)/g, "$1$3");
   return withoutEmphasis
-    .replace(
-      new RegExp(`${CODE_SPAN_PLACEHOLDER}(\\d+)${CODE_SPAN_PLACEHOLDER}`, "g"),
-      (_m, i: string) => codeSpans[Number(i)] ?? "",
-    )
+    .replace(CODE_SPAN_PLACEHOLDER_RE, (_m, i: string) => codeSpans[Number(i)] ?? "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -90,6 +91,8 @@ function firstSentence(paragraph: string): string {
   const m = /^(.+?[.!?])(?=\s+[A-Z0-9"“(]|$)/.exec(text);
   return (m ? m[1] : text).trim();
 }
+
+const BLANK_LINE_RE = /\n\s*\n/;
 
 export function parseDigestSections(body: string): ParsedDigestSection[] {
   // CommonMark allows up to 3 leading spaces before an ATX heading marker.
@@ -103,7 +106,7 @@ export function parseDigestSections(body: string): ParsedDigestSection[] {
     // heading, so slugging it here matches the DOM id the page assigns.
     const heading = stripInlineMarkdown(rawHeading);
     const rest = nl === -1 ? "" : part.slice(nl + 1);
-    const firstPara = rest.trim().split(/\n\s*\n/)[0] ?? "";
+    const firstPara = rest.trim().split(BLANK_LINE_RE)[0] ?? "";
     const releaseIds: string[] = [];
     for (const m of rest.matchAll(RELEASE_LINK_RE)) {
       if (!releaseIds.includes(m[1])) releaseIds.push(m[1]);

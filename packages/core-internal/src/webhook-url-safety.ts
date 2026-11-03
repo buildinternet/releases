@@ -27,12 +27,14 @@ function normalizeHostname(hostname: string): string {
   return hostname.toLowerCase().replace(/\.$/, "");
 }
 
+const IPV4_OCTET_RE = /^\d{1,3}$/;
+
 function parseIpv4(host: string): number[] | null {
   const parts = host.split(".");
   if (parts.length !== 4) return null;
   const octets: number[] = [];
   for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return null;
+    if (!IPV4_OCTET_RE.test(part)) return null;
     const n = Number(part);
     if (n > 255) return null;
     octets.push(n);

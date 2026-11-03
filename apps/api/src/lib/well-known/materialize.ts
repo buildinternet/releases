@@ -353,6 +353,8 @@ async function defaultProbe(
   };
 }
 
+const LEADING_AT_RE = /^@/;
+
 function knownGitHubOwners(
   manifest: ReleasesJsonDomain,
   accounts: Array<{ handle: string }>,
@@ -362,9 +364,10 @@ function knownGitHubOwners(
   const declared = manifest.social?.github;
   if (declared) {
     const coordinate = githubCoordinateFromUrl(declared);
-    owners.add((coordinate?.split("/")[0] ?? declared.replace(/^@/, "")).toLowerCase());
+    owners.add((coordinate?.split("/")[0] ?? declared.replace(LEADING_AT_RE, "")).toLowerCase());
   }
-  for (const account of accounts) owners.add(account.handle.replace(/^@/, "").toLowerCase());
+  for (const account of accounts)
+    owners.add(account.handle.replace(LEADING_AT_RE, "").toLowerCase());
   for (const source of existingSources) {
     const coordinate = githubCoordinateFromUrl(source.url);
     if (coordinate) owners.add(coordinate.split("/")[0]!);

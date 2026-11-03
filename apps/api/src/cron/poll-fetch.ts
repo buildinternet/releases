@@ -986,6 +986,9 @@ export interface RenderCheckResult {
  * resets `lastIndex` per call), so the shared `g`-flagged instance is safe. */
 const CANDIDATE_LINK_RE = /\]\((https?:\/\/[^)\s]+)\)|(?<![(\w])(https?:\/\/[^)\s\]]+)/g;
 
+const URL_FRAGMENT_RE = /#.*$/;
+const TRAILING_SLASH_RE = /\/$/;
+
 /**
  * Markdown-link + bare-URL extraction, restricted to the index's own origin and
  * excluding the index URL itself. This is a coarse "did the render expose
@@ -999,7 +1002,7 @@ export function extractCandidateLinks(markdown: string, baseUrl: string): string
   try {
     const u = new URL(baseUrl);
     origin = u.origin;
-    normalizedBase = u.href.replace(/#.*$/, "").replace(/\/$/, "");
+    normalizedBase = u.href.replace(URL_FRAGMENT_RE, "").replace(TRAILING_SLASH_RE, "");
   } catch {
     return [];
   }
@@ -1011,7 +1014,7 @@ export function extractCandidateLinks(markdown: string, baseUrl: string): string
     try {
       const u = new URL(raw);
       if (u.origin !== origin) continue;
-      href = u.href.replace(/#.*$/, "").replace(/\/$/, "");
+      href = u.href.replace(URL_FRAGMENT_RE, "").replace(TRAILING_SLASH_RE, "");
     } catch {
       continue;
     }

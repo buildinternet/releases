@@ -27,6 +27,9 @@ import { isPrereleaseVersion } from "./prerelease";
 
 const SEGMENT_WIDTH = 10;
 
+const NUMERIC_SEGMENT_RE = /^\d+$/;
+const MIXED_SEGMENT_RE = /^([^\d]*)(\d+)(.*)$/;
+
 export function computeVersionSort(version: string | null | undefined): string | null {
   if (!version) return null;
   const trimmed = version.trim();
@@ -41,12 +44,12 @@ export function computeVersionSort(version: string | null | undefined): string |
     // Delimiters pass through unchanged.
     if (tok === "." || tok === "-" || tok === "+") return tok;
     // Pure-numeric segment → pad.
-    if (/^\d+$/.test(tok)) {
+    if (NUMERIC_SEGMENT_RE.test(tok)) {
       hasNumericSegment = true;
       return tok.padStart(SEGMENT_WIDTH, "0");
     }
     // Mixed segment like `v1` or `1a` → pad just the leading number if present.
-    const m = tok.match(/^([^\d]*)(\d+)(.*)$/);
+    const m = tok.match(MIXED_SEGMENT_RE);
     if (m) {
       hasNumericSegment = true;
       const [, prefix, num, rest] = m;

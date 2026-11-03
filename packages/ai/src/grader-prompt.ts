@@ -48,10 +48,15 @@ function escapeLabel(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
+const CLOSING_TAG_RES = {
+  rubric: /<\/rubric>/gi,
+  artifact: /<\/artifact>/gi,
+} as const;
+
 function neutralizeClosingTag(body: string, tag: "rubric" | "artifact"): string {
   // A body containing a literal `</rubric>` or `</artifact>` would otherwise
   // close the data envelope and let downstream content read as instructions.
-  return body.replace(new RegExp(`</${tag}>`, "gi"), `</__${tag}__>`);
+  return body.replace(CLOSING_TAG_RES[tag], `</__${tag}__>`);
 }
 
 export function buildGraderPrompt(input: BuildGraderPromptInput): string {

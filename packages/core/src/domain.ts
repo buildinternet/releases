@@ -14,6 +14,8 @@
 
 const HOST_SEGMENT = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
+const ALL_DIGITS_RE = /^\d+$/;
+
 export function normalizeDomain(input: string): string | null {
   const trimmed = input.trim().toLowerCase();
   if (!trimmed) return null;
@@ -64,7 +66,7 @@ export function normalizeDomain(input: string): string | null {
   }
   // Bare IPv4 — `1.2.3.4` passes the segment regex but isn't a domain we'd
   // ever own. Reject.
-  if (parts.every((p) => /^\d+$/.test(p))) return null;
+  if (parts.every((p) => ALL_DIGITS_RE.test(p))) return null;
 
   return host;
 }

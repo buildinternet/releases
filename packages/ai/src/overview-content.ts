@@ -245,8 +245,17 @@ function extractOpener(body: string): string {
   return (sentence ? sentence[0] : trimmed.split("\n")[0] || "").trim();
 }
 
+const MARKDOWN_EMPHASIS_CHARS_RE = /[*`_]/g;
+const WHITESPACE_RUN_RE = /\s+/;
+
+/** Word count of `text` with markdown emphasis characters dropped. */
+function plainWordCount(text: string): number {
+  return text.replace(MARKDOWN_EMPHASIS_CHARS_RE, "").split(WHITESPACE_RUN_RE).filter(Boolean)
+    .length;
+}
+
 function openerWordCount(body: string): number {
-  return extractOpener(body).replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length;
+  return plainWordCount(extractOpener(body));
 }
 
 /**
@@ -271,6 +280,21 @@ const OVERVIEW_LINT_BANNED = [
   "is the point",
 ] as const;
 
+/** Each banned phrase as a whole-word, case-insensitive matcher, compiled once. */
+const OVERVIEW_LINT_BANNED_RES = OVERVIEW_LINT_BANNED.map(
+  (p) => [p, new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i")] as const,
+);
+
+const MARKDOWN_HEADING_LINE_RE = /^#{1,6}\s/m;
+const LEADING_BOLD_MARKERS_RE = /^\**\s*/;
+const POSSESSIVE_START_RE = /^['’]s\b/;
+const LOWERCASE_WORD_START_RE = /^\s+[a-z]/;
+const BOLD_SPAN_RE = /\*\*\s*([^*]+?)\s*\*\*/g;
+const VERSION_OR_CVE_LEAD_RE = /^(v?\d+(\.\d+)+|CVE-\d)/i;
+const BOLD_ONLY_LINE_RE = /^\*\*[^*]+\*\*[:.!?]?$/;
+const LIST_ITEM_START_RE = /^[-*+]\s|^\d+\.\s/;
+const DASH_RE = /—| -- /g;
+
 /**
  * Lint an overview body against the format/voice rules the prompt asks for — the
  * same checks the local agent workflow applies. Returns violation tags (empty =
@@ -281,26 +305,26 @@ const OVERVIEW_LINT_BANNED = [
 export function lintOverviewBody(body: string, orgName: string): string[] {
   const text = typeof body === "string" ? body : "";
   const violations: string[] = [];
-  if (/^#{1,6}\s/m.test(text)) violations.push("markdown-heading");
+  if (MARKDOWN_HEADING_LINE_RE.test(text)) violations.push("markdown-heading");
 
   const opener = extractOpener(text);
-  if (opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length > 25) {
+  if (plainWordCount(opener) > 25) {
     violations.push("opener-too-long");
   }
 
   const name = (typeof orgName === "string" ? orgName : "").trim();
   if (name) {
-    const rest = opener.replace(/^\**\s*/, "");
+    const rest = opener.replace(LEADING_BOLD_MARKERS_RE, "");
     if (rest.toLowerCase().startsWith(name.toLowerCase())) {
       const remainder = rest.slice(name.length);
-      if (/^['’]s\b/.test(remainder) || /^\s+[a-z]/.test(remainder)) {
+      if (POSSESSIVE_START_RE.test(remainder) || LOWERCASE_WORD_START_RE.test(remainder)) {
         violations.push("org-as-subject-opener");
       }
     }
   }
 
-  for (const m of text.matchAll(/\*\*\s*([^*]+?)\s*\*\*/g)) {
-    if (/^(v?\d+(\.\d+)+|CVE-\d)/i.test(m[1].trim())) {
+  for (const m of text.matchAll(BOLD_SPAN_RE)) {
+    if (VERSION_OR_CVE_LEAD_RE.test(m[1].trim())) {
       violations.push("version-lead-tease");
       break;
     }
@@ -309,7 +333,7 @@ export function lintOverviewBody(body: string, orgName: string): string[] {
   // A line that is only a bold span is the old "bold tease": a fragment
   // standing in for a sentence. Inline bold of one term inside a sentence is fine.
   for (const line of text.split("\n")) {
-    if (/^\*\*[^*]+\*\*[:.!?]?$/.test(line.trim())) {
+    if (BOLD_ONLY_LINE_RE.test(line.trim())) {
       violations.push("bold-fragment-lead");
       break;
     }
@@ -319,18 +343,17 @@ export function lintOverviewBody(body: string, orgName: string): string[] {
   // the same fragment lead as a bold tease, just without the asterisks.
   for (const line of text.split("\n")) {
     const t = line.trim();
-    if (!t.endsWith(":") || /^[-*+]\s|^\d+\.\s/.test(t)) continue;
-    if (t.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length <= 6) {
+    if (!t.endsWith(":") || LIST_ITEM_START_RE.test(t)) continue;
+    if (plainWordCount(t) <= 6) {
       violations.push("fragment-lead-in");
       break;
     }
   }
 
-  const dashes = text.match(/—| -- /g);
+  const dashes = text.match(DASH_RE);
   if (dashes && dashes.length >= 2) violations.push("em-dash-overuse");
 
-  for (const p of OVERVIEW_LINT_BANNED) {
-    const re = new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+  for (const [p, re] of OVERVIEW_LINT_BANNED_RES) {
     if (re.test(text)) violations.push("banned-phrase:" + p);
   }
   return violations;

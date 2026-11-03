@@ -3427,6 +3427,8 @@ sourceRoutes.delete(
   },
 );
 
+const UNIQUE_VIOLATION_RE = /UNIQUE constraint failed/i;
+
 /** True when `err` (or a cause) is SQLite's UNIQUE constraint failure. */
 function isUniqueConstraintError(err: unknown): boolean {
   const seen = new Set<unknown>();
@@ -3441,7 +3443,7 @@ function isUniqueConstraintError(err: unknown): boolean {
           : typeof cur === "object" && "message" in cur
             ? String((cur as { message: unknown }).message)
             : "";
-    if (/UNIQUE constraint failed/i.test(message)) return true;
+    if (UNIQUE_VIOLATION_RE.test(message)) return true;
     cur =
       typeof cur === "object" && "cause" in cur ? (cur as { cause?: unknown }).cause : undefined;
   }

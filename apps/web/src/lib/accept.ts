@@ -14,6 +14,8 @@ export type MediaRange = {
   order: number;
 };
 
+const SURROUNDING_QUOTES_RE = /^"|"$/g;
+
 export function parseAccept(header: string | null): MediaRange[] {
   if (!header || !header.trim()) {
     return [{ type: "*", subtype: "*", q: 1, specificity: 1, order: 0 }];
@@ -40,7 +42,7 @@ export function parseAccept(header: string | null): MediaRange[] {
       const value = param
         .slice(eq + 1)
         .trim()
-        .replace(/^"|"$/g, "");
+        .replace(SURROUNDING_QUOTES_RE, "");
       const parsed = Number.parseFloat(value);
       if (Number.isFinite(parsed)) {
         q = Math.max(0, Math.min(1, parsed));

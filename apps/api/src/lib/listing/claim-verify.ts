@@ -131,6 +131,8 @@ function unquote(value: string): string {
   return value;
 }
 
+const WHITESPACE_RUN_RE = /\s+/;
+
 async function checkDnsTxt(
   domain: string,
   token: string,
@@ -173,7 +175,7 @@ async function checkDnsTxt(
       // A TXT value can arrive as multiple quoted strings concatenated with a
       // space (e.g. `"part1" "part2"`); join them before comparing.
       const joined = answer.data
-        .split(/\s+/)
+        .split(WHITESPACE_RUN_RE)
         .map((part) => unquote(part))
         .join("");
       if (joined === token) return "ok";

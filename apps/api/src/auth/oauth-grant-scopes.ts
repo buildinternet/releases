@@ -41,12 +41,14 @@ const KNOWN_SCOPES: ReadonlySet<string> = new Set(OAUTH_SCOPES);
  */
 const OFFLINE_ACCESS = "offline_access";
 
+const WHITESPACE_RUN_RE = /\s+/;
+
 function filterScopeString(
   scope: string,
   allowedScopes: readonly string[],
   role?: string | null,
 ): string | undefined {
-  const requested = scope.split(/\s+/).filter(Boolean);
+  const requested = scope.split(WHITESPACE_RUN_RE).filter(Boolean);
   const allow = new Set(allowedScopes);
   let permitted = requested.filter((id) => KNOWN_SCOPES.has(id) && allow.has(id));
   if (role !== undefined) {

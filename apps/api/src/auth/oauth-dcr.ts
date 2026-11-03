@@ -49,6 +49,8 @@ function scopesEqual(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((scope, i) => scope === b[i]);
 }
 
+const WHITESPACE_RUN_RE = /\s+/;
+
 /**
  * Parse a DCR `scope` (RFC 7591 space-delimited string) or `scope` array.
  * Unknown / privileged ids are dropped. Empty or malformed → the full
@@ -57,7 +59,7 @@ function scopesEqual(a: readonly string[], b: readonly string[]): boolean {
 export function capDcrScopes(requested: unknown): string[] {
   let tokens: string[] = [];
   if (typeof requested === "string") {
-    tokens = requested.split(/\s+/).filter(Boolean);
+    tokens = requested.split(WHITESPACE_RUN_RE).filter(Boolean);
   } else if (Array.isArray(requested)) {
     tokens = requested.filter((s): s is string => typeof s === "string" && s.length > 0);
   }
@@ -119,7 +121,7 @@ export function sanitizeDcrRegistrationBody(
     const capped = capDcrScopes(next.scope);
     const current =
       typeof next.scope === "string"
-        ? next.scope.split(/\s+/).filter(Boolean)
+        ? next.scope.split(WHITESPACE_RUN_RE).filter(Boolean)
         : Array.isArray(next.scope)
           ? next.scope.filter((s): s is string => typeof s === "string")
           : [];
@@ -162,7 +164,7 @@ export function registrationScopesIncludePrivileged(scopes: unknown): boolean {
   const list = Array.isArray(scopes)
     ? scopes
     : typeof scopes === "string"
-      ? scopes.split(/\s+/).filter(Boolean)
+      ? scopes.split(WHITESPACE_RUN_RE).filter(Boolean)
       : [];
   return list.some((s) => s === "admin" || s === "write");
 }

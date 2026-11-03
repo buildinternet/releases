@@ -25,6 +25,8 @@ export type ParsedMdx = {
 
 type Scalar = { ok: true; value: string | number | boolean | null } | { ok: false };
 
+const HEX4_RE = /^[0-9a-fA-F]{4}$/;
+
 function parseDoubleQuoted(input: string): Scalar {
   let out = "";
   let i = 1;
@@ -38,7 +40,7 @@ function parseDoubleQuoted(input: string): Scalar {
       else if (next === "r") out += "\r";
       else if (next === "u") {
         const hex = input.slice(i + 2, i + 6);
-        if (!/^[0-9a-fA-F]{4}$/.test(hex)) return { ok: false };
+        if (!HEX4_RE.test(hex)) return { ok: false };
         out += String.fromCharCode(Number.parseInt(hex, 16));
         i += 6;
         continue;
@@ -101,6 +103,8 @@ function parseScalar(raw: string): Scalar {
   return { ok: true, value: plain };
 }
 
+const LEADING_SPACES_RE = /^ */;
+
 function readBlock(
   lines: string[],
   start: number,
@@ -117,7 +121,7 @@ function readBlock(
       i++;
       continue;
     }
-    const indent = /^ */.exec(line)?.[0].length ?? 0;
+    const indent = LEADING_SPACES_RE.exec(line)?.[0].length ?? 0;
     if (indent === 0) break;
     if (contentIndent === null) contentIndent = indent;
     if (indent < contentIndent) break;
@@ -149,11 +153,13 @@ function readBlock(
   return { value: text, next: i };
 }
 
+const INDENTED_LINE_RE = /^\s/;
+
 function skipIndented(lines: string[], start: number): number {
   let i = start;
   while (i < lines.length) {
     const line = lines[i] ?? "";
-    if (line.trim() === "" || /^\s/.test(line)) {
+    if (line.trim() === "" || INDENTED_LINE_RE.test(line)) {
       i++;
       continue;
     }
@@ -162,6 +168,11 @@ function skipIndented(lines: string[], start: number): number {
   return i;
 }
 
+const TRAILING_CR_RE = /\r$/;
+const YAML_COMMENT_LINE_RE = /^\s*#/;
+const YAML_KEY_LINE_RE = /^([^:#\n]+?):\s*(.*)$/;
+const YAML_BLOCK_HEADER_RE = /^([|>])([-+])?\d*(?:\s+#.*)?$/;
+
 /**
  * Top-level YAML map for changelog frontmatter. Returns null when a scalar
  * cannot be read (the caller drops the whole block, matching a parser throw).
@@ -169,22 +180,22 @@ function skipIndented(lines: string[], start: number): number {
  * still lands; they are not fields the planner reads.
  */
 function parseYamlObject(yaml: string): Record<string, unknown> | null {
-  const lines = yaml.split("\n").map((line) => line.replace(/\r$/, ""));
+  const lines = yaml.split("\n").map((line) => line.replace(TRAILING_CR_RE, ""));
   const data: Record<string, unknown> = {};
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? "";
-    if (line.trim() === "" || /^\s*#/.test(line)) {
+    if (line.trim() === "" || YAML_COMMENT_LINE_RE.test(line)) {
       i++;
       continue;
     }
-    if (/^\s/.test(line)) return null;
-    const keyMatch = /^([^:#\n]+?):\s*(.*)$/.exec(line);
+    if (INDENTED_LINE_RE.test(line)) return null;
+    const keyMatch = YAML_KEY_LINE_RE.exec(line);
     if (!keyMatch) return null;
     const key = keyMatch[1]?.trim() ?? "";
     if (!key) return null;
     const header = (keyMatch[2] ?? "").trim();
-    const block = /^([|>])([-+])?\d*(?:\s+#.*)?$/.exec(header);
+    const block = YAML_BLOCK_HEADER_RE.exec(header);
     if (block) {
       const style = block[1] === ">" ? ">" : "|";
       const chomp = block[2] === "-" ? "strip" : block[2] === "+" ? "keep" : "clip";
@@ -196,7 +207,7 @@ function parseYamlObject(yaml: string): Record<string, unknown> | null {
     if (header === "" || header.startsWith("#")) {
       let j = i + 1;
       while (j < lines.length && (lines[j] ?? "").trim() === "") j++;
-      if (j < lines.length && /^\s/.test(lines[j] ?? "")) {
+      if (j < lines.length && INDENTED_LINE_RE.test(lines[j] ?? "")) {
         i = skipIndented(lines, i + 1);
         continue;
       }

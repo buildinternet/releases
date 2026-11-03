@@ -1,3 +1,6 @@
+const WHITESPACE_RUN_RE = /\s+/;
+const DOUBLE_QUOTE_RE = /"/g;
+
 /**
  * FTS5 query sanitizers (backend-neutral string shaping).
  *
@@ -27,8 +30,8 @@
  */
 export function toFtsMatchQuery(input: string): string {
   const tokens = input
-    .split(/\s+/)
-    .map((tok) => tok.replace(/"/g, "").trim())
+    .split(WHITESPACE_RUN_RE)
+    .map((tok) => tok.replace(DOUBLE_QUOTE_RE, "").trim())
     .filter(Boolean);
   if (tokens.length === 0) return '""';
   return tokens.map((tok) => `"${tok}"`).join(" ");
@@ -42,8 +45,8 @@ export function toFtsMatchQuery(input: string): string {
  */
 export function toFtsPrefixMatchQuery(input: string): string {
   const tokens = input
-    .split(/\s+/)
-    .map((tok) => tok.replace(/"/g, "").trim())
+    .split(WHITESPACE_RUN_RE)
+    .map((tok) => tok.replace(DOUBLE_QUOTE_RE, "").trim())
     .filter(Boolean);
   if (tokens.length === 0) return '""';
   return tokens.map((tok) => `"${tok}"*`).join(" ");

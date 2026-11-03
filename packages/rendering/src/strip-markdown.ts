@@ -55,6 +55,7 @@ function safeHref(url: string): string | null {
 }
 
 const SENTINEL = "\u0000";
+const SENTINEL_INDEX_RE = new RegExp(`${SENTINEL}(\\d+)${SENTINEL}`, "g");
 
 export type InlineMarkdownStyles = {
   /** Inline style applied to `<code>` (email needs styles inline, not in a sheet). */
@@ -115,7 +116,7 @@ export function inlineMarkdownToHtml(
 
   return out
     .replace(
-      new RegExp(`${SENTINEL}(\\d+)${SENTINEL}`, "g"),
+      SENTINEL_INDEX_RE,
       (_m, i: string) => `<code${codeAttr}>${escapeHtml(codeSpans[Number(i)])}</code>`,
     )
     .replace(/\s+/g, " ")
