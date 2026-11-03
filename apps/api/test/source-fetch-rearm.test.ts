@@ -31,9 +31,9 @@ describe("POST /v1/sources/:id/fetch — SourceActor re-arm (#2286)", () => {
       url: "https://example.com/news",
       orgId: "org_a",
       fetchPriority: "normal",
-      metadata: JSON.stringify({
-        sourceActor: { managed: false, nextAlarmAt: null, lastAlarmAt: "2026-07-01T00:00:00.000Z" },
-      }),
+      actorManaged: false,
+      actorNextAlarmAt: null,
+      actorLastAlarmAt: "2026-07-01T00:00:00.000Z",
     });
 
     const ensured: Array<{ id: string; force?: boolean }> = [];

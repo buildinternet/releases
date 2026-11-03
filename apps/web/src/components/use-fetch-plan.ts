@@ -44,7 +44,7 @@ export interface SweepHealth {
   starved: boolean;
 }
 
-/** Mirrors SourceMetadata.sourceActor — written by the SourceActor DO. */
+/** Mirrors the `sources.actor_*` columns — written by the SourceActor DO. */
 export interface SourceActorMirror {
   nextAlarmAt: string | null;
   lastAlarmAt: string;

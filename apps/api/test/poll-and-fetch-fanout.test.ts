@@ -150,9 +150,9 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
       url: "https://example.com/u",
       fetchPriority: "normal",
       lastPolledAt: new Date().toISOString(),
-      metadata: JSON.stringify({
-        sourceActor: { managed: false, nextAlarmAt: null, lastAlarmAt: "2026-07-01T00:00:00.000Z" },
-      }),
+      actorManaged: false,
+      actorNextAlarmAt: null,
+      actorLastAlarmAt: "2026-07-01T00:00:00.000Z",
       createdAt: new Date().toISOString(),
     });
     const actor = mkFakeActorNamespace();

@@ -488,6 +488,15 @@ export const sources = sqliteTable(
     // every SourceActor poll tick. NULL = never drained through the actor path.
     lastDrainAt: text("last_drain_at"),
     lastPolledAt: text("last_polled_at"),
+    // SourceActor observability mirror, written on every actor alarm
+    // (`mirrorToD1`). `actorManaged` NULL = the actor has never mirrored this
+    // source; false = handed back (paused / firecrawl / push-fed). The poll
+    // cron's unmanaged sweep reads these to find sources with no live alarm.
+    // Promoted out of `metadata.sourceActor` so the alarm doesn't rewrite the
+    // whole metadata blob.
+    actorManaged: integer("actor_managed", { mode: "boolean" }),
+    actorNextAlarmAt: text("actor_next_alarm_at"),
+    actorLastAlarmAt: text("actor_last_alarm_at"),
     // Cadence observability — written by the daily retier job. `medianGapDays`
     // is the median gap (in days) between consecutive publishedAt values over
     // the last 180 days of non-suppressed releases; null when <3 releases of
@@ -1474,6 +1483,9 @@ export const sourcesActive = sqliteView("sources_active", {
   // `SELECT sources.*`, so it exposes it once the view is recreated.
   lastDrainAt: text("last_drain_at"),
   lastPolledAt: text("last_polled_at"),
+  actorManaged: integer("actor_managed", { mode: "boolean" }),
+  actorNextAlarmAt: text("actor_next_alarm_at"),
+  actorLastAlarmAt: text("actor_last_alarm_at"),
   medianGapDays: real("median_gap_days"),
   lastRetieredAt: text("last_retiered_at"),
   isPrimary: integer("is_primary", { mode: "boolean" }),
@@ -1545,6 +1557,9 @@ export const sourcesVisible = sqliteView("sources_visible", {
   // `SELECT sources.*`, so it exposes it once the view is recreated.
   lastDrainAt: text("last_drain_at"),
   lastPolledAt: text("last_polled_at"),
+  actorManaged: integer("actor_managed", { mode: "boolean" }),
+  actorNextAlarmAt: text("actor_next_alarm_at"),
+  actorLastAlarmAt: text("actor_last_alarm_at"),
   medianGapDays: real("median_gap_days"),
   lastRetieredAt: text("last_retiered_at"),
   isPrimary: integer("is_primary", { mode: "boolean" }),

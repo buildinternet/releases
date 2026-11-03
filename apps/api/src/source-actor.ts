@@ -21,7 +21,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { createDb } from "./db.js";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
@@ -469,26 +469,26 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
-   * Write-through a tiny observability mirror into `metadata.sourceActor` so the
-   * dev fetch-plan panel can show whether a source is actor-managed and its exact
-   * next alarm. Best-effort: never block or fail scheduling. No new D1 column /
-   * migration (the panel's due/backoff math already reads existing columns the
-   * ingest path keeps fresh).
+   * Write-through a tiny observability mirror into the `sources.actor_*`
+   * columns so the dev fetch-plan panel can show whether a source is
+   * actor-managed and its exact next alarm, and the poll cron's unmanaged sweep
+   * can find sources with no live alarm. Best-effort: never block or fail
+   * scheduling.
    */
   private async mirrorToD1(
     sourceId: string,
     nextAlarmMs: number | null,
     managed = true,
   ): Promise<void> {
-    const blob = JSON.stringify({
-      nextAlarmAt: nextAlarmMs == null ? null : new Date(nextAlarmMs).toISOString(),
-      lastAlarmAt: new Date().toISOString(),
-      managed,
-    });
     try {
-      await this.db().run(
-        sql`UPDATE sources SET metadata = json_set(coalesce(metadata, '{}'), '$.sourceActor', json(${blob})) WHERE id = ${sourceId}`,
-      );
+      await this.db()
+        .update(sources)
+        .set({
+          actorManaged: managed,
+          actorNextAlarmAt: nextAlarmMs == null ? null : new Date(nextAlarmMs).toISOString(),
+          actorLastAlarmAt: new Date().toISOString(),
+        })
+        .where(eq(sources.id, sourceId));
     } catch (err) {
       logEvent("warn", {
         component: "source-actor",

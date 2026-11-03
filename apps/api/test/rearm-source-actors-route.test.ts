@@ -104,9 +104,9 @@ describe("POST /v1/workflows/rearm-source-actors", () => {
       type: "scrape",
       url: "https://example.com/dead",
       fetchPriority: "normal",
-      metadata: JSON.stringify({
-        sourceActor: { managed: false, nextAlarmAt: null, lastAlarmAt: "2026-07-01T00:00:00.000Z" },
-      }),
+      actorManaged: false,
+      actorNextAlarmAt: null,
+      actorLastAlarmAt: "2026-07-01T00:00:00.000Z",
     });
     const { fetch, ensured } = mkApp(db);
     const res = await fetch({ all: true });
@@ -139,9 +139,9 @@ describe("POST /v1/workflows/rearm-source-actors", () => {
       type: "scrape",
       url: "https://example.com/dead",
       fetchPriority: "normal",
-      metadata: JSON.stringify({
-        sourceActor: { managed: false, nextAlarmAt: null, lastAlarmAt: "2026-07-01T00:00:00.000Z" },
-      }),
+      actorManaged: false,
+      actorNextAlarmAt: null,
+      actorLastAlarmAt: "2026-07-01T00:00:00.000Z",
     });
     const { fetch, ensured } = mkApp(db);
     const res = await fetch({ all: true, dryRun: false });
