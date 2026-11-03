@@ -25,8 +25,15 @@ export type { ReleaseComposition };
  *  identical request shapes through the Batches API. */
 export const MODEL = modelId("summarize");
 
-/** Maximum characters of release body sent to the model (truncated at this length). */
-export const MAX_BODY_CHARS = 8000;
+/** Maximum characters of release body sent to the model (truncated at this length).
+ *  Sized from prod data (30 days to 2026-11-03): median body 297 chars, p99 ~21K, and
+ *  only ~0.5% of releases exceed 40K. Bodies past the cap keep an outline of their
+ *  remaining headings (`TRUNCATED_OUTLINE_*`) so the model knows what it didn't see. */
+export const MAX_BODY_CHARS = 40_000;
+
+/** Max headings / chars of the outline appended after a truncated body. */
+const TRUNCATED_OUTLINE_MAX_HEADINGS = 40;
+const TRUNCATED_OUTLINE_MAX_CHARS = 2_000;
 
 /** Cap on the model's response. Sized for ~80-char title + ~70-char short + 1-2 sentence summary
  *  in tagged XML, with headroom for the trailing <composition> count tag (~25-30 tokens for
@@ -627,14 +634,34 @@ export interface SummarizeReleaseResult {
 }
 
 /**
+ * Cut a body to `MAX_BODY_CHARS`. When anything is cut, append the markdown
+ * headings from the dropped remainder so the model can tell the body continues
+ * with, say, a "New Features" section it never saw. Exported for tests.
+ */
+export function truncateBody(content: string): string {
+  if (content.length <= MAX_BODY_CHARS) return content;
+  const head = content.slice(0, MAX_BODY_CHARS);
+  const headings: string[] = [];
+  let chars = 0;
+  for (const line of content.slice(MAX_BODY_CHARS).split("\n")) {
+    const m = /^\s{0,3}#{1,4}\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!m) continue;
+    const h = m[1].trim();
+    if (!h || chars + h.length > TRUNCATED_OUTLINE_MAX_CHARS) break;
+    headings.push(h);
+    chars += h.length;
+    if (headings.length >= TRUNCATED_OUTLINE_MAX_HEADINGS) break;
+  }
+  if (headings.length === 0) return `${head}\n\n[truncated]`;
+  return `${head}\n\n[truncated; later sections not shown: ${headings.join(" | ")}]`;
+}
+
+/**
  * Render the user-message block from a release. Exported for cross-provider
  * evaluations that need the same input shape.
  */
 export function buildReleaseBlock(input: SummarizeReleaseInput): string {
-  const body =
-    input.content.length > MAX_BODY_CHARS
-      ? input.content.slice(0, MAX_BODY_CHARS) + "\n\n[truncated]"
-      : input.content;
+  const body = truncateBody(input.content);
 
   const productLine =
     input.productName && input.productName !== input.sourceName

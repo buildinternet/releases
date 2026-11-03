@@ -5,6 +5,8 @@ import {
   lintReleaseContent,
   parseReleaseContent,
   summarizeRelease,
+  truncateBody,
+  MAX_BODY_CHARS,
   type SummarizeReleaseInput,
 } from "./release-content";
 import type { TextModel, TextModelRequest } from "./text-model";
@@ -339,5 +341,37 @@ describe("summarizeRelease style retry", () => {
     const r = await summarizeRelease(model, INPUT);
     expect(calls.length).toBe(2);
     expect(r.summary).toBe(draft);
+  });
+});
+
+describe("truncateBody", () => {
+  test("leaves bodies at or under the cap untouched", () => {
+    const body = "a".repeat(MAX_BODY_CHARS);
+    expect(truncateBody(body)).toBe(body);
+  });
+
+  test("cuts at the cap and marks it [truncated] when no headings follow", () => {
+    const out = truncateBody("a".repeat(MAX_BODY_CHARS + 500));
+    expect(out).toBe(`${"a".repeat(MAX_BODY_CHARS)}\n\n[truncated]`);
+  });
+
+  test("lists headings from the dropped remainder", () => {
+    const body =
+      "## Upgrade Notes\n" +
+      "x".repeat(MAX_BODY_CHARS) +
+      "\n## New Features\n- k8sevents receiver\n### Bug Fixes ###\nnot a # heading\n#### Other\n";
+    const out = truncateBody(body);
+    expect(out.startsWith("## Upgrade Notes\n")).toBe(true);
+    expect(out).toEndWith(
+      "[truncated; later sections not shown: New Features | Bug Fixes | Other]",
+    );
+    expect(out).not.toContain("k8sevents");
+  });
+
+  test("caps the outline", () => {
+    const tail = Array.from({ length: 100 }, (_, i) => `## Section ${i}`).join("\n");
+    const out = truncateBody("x".repeat(MAX_BODY_CHARS) + "\n" + tail);
+    const outline = out.slice(out.indexOf("[truncated;"));
+    expect(outline.split(" | ").length).toBe(40);
   });
 });
