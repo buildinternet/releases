@@ -237,11 +237,13 @@ async function deliverRelease(
   if (claimed.length === 0) return;
 
   const userIds = [...new Set(claimed.map((item) => item.alert.userId))];
-  const contacts = await loadContacts(db, userIds);
-  const hooks = await loadWebhookTargets(
-    db,
-    claimed.map((item) => item.alert),
-  );
+  const [contacts, hooks] = await Promise.all([
+    loadContacts(db, userIds),
+    loadWebhookTargets(
+      db,
+      claimed.map((item) => item.alert),
+    ),
+  ]);
   const manageUrl = `${releaseWebBase(env)}/account/notifications`;
   const releaseUrl = event.release.webUrl ?? body.url;
   const messages: DeliveryMessage[] = [];

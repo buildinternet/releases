@@ -40,40 +40,41 @@ sitemapRoutes.get(
     c.header("Cache-Control", "private, no-store");
     const db = createDb(c.env.DB);
 
-    const orgRows = await db
-      .select({
-        id: organizationsPublic.id,
-        slug: organizationsPublic.slug,
-        lastActivity: max(sourcesActive.lastFetchedAt),
-      })
-      .from(organizationsPublic)
-      .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsPublic.id))
-      // Stub orgs (#1947) are noindex thin pages — keep them out of the sitemap.
-      // Dropping them from orgRows also drops their products/sources below, which
-      // are keyed off this org-id set.
-      .where(eq(organizationsPublic.tier, "tracked"))
-      .groupBy(organizationsPublic.id);
-
-    // Collections are independent of orgs (they reference orgs but live as
-    // their own top-level resource), so always pull them — even when no orgs
-    // exist (a fresh staging DB shouldn't drop the curated collection list).
-    const collectionRows = await db
-      .select({ slug: collections.slug, updatedAt: collections.updatedAt })
-      .from(collections)
-      .orderBy(collections.slug);
-
-    // Weekly digests are their own permalinked pages (~600/yr at full scale)
-    // — small enough to fold into the main sitemap payload rather than a
-    // dedicated /sitemap/digests surface, mirroring the collections list above.
-    const digestRows = await db
-      .select({
-        collectionSlug: collections.slug,
-        weekStart: collectionWeeklyDigests.weekStart,
-        generatedAt: collectionWeeklyDigests.generatedAt,
-      })
-      .from(collectionWeeklyDigests)
-      .innerJoin(collections, eq(collections.id, collectionWeeklyDigests.collectionId))
-      .orderBy(collections.slug, collectionWeeklyDigests.weekStart);
+    // The three top-level reads are independent — run them concurrently.
+    const [orgRows, collectionRows, digestRows] = await Promise.all([
+      db
+        .select({
+          id: organizationsPublic.id,
+          slug: organizationsPublic.slug,
+          lastActivity: max(sourcesActive.lastFetchedAt),
+        })
+        .from(organizationsPublic)
+        .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsPublic.id))
+        // Stub orgs (#1947) are noindex thin pages — keep them out of the sitemap.
+        // Dropping them from orgRows also drops their products/sources below, which
+        // are keyed off this org-id set.
+        .where(eq(organizationsPublic.tier, "tracked"))
+        .groupBy(organizationsPublic.id),
+      // Collections are independent of orgs (they reference orgs but live as
+      // their own top-level resource), so always pull them — even when no orgs
+      // exist (a fresh staging DB shouldn't drop the curated collection list).
+      db
+        .select({ slug: collections.slug, updatedAt: collections.updatedAt })
+        .from(collections)
+        .orderBy(collections.slug),
+      // Weekly digests are their own permalinked pages (~600/yr at full scale)
+      // — small enough to fold into the main sitemap payload rather than a
+      // dedicated /sitemap/digests surface, mirroring the collections list above.
+      db
+        .select({
+          collectionSlug: collections.slug,
+          weekStart: collectionWeeklyDigests.weekStart,
+          generatedAt: collectionWeeklyDigests.generatedAt,
+        })
+        .from(collectionWeeklyDigests)
+        .innerJoin(collections, eq(collections.id, collectionWeeklyDigests.collectionId))
+        .orderBy(collections.slug, collectionWeeklyDigests.weekStart),
+    ]);
 
     if (orgRows.length === 0) {
       return c.json({

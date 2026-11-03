@@ -79,12 +79,10 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
   }
   const db = env._drizzleOverride ?? createDb(env.DB);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "https://media.releases.sh";
-  const materializationEnabled = await flag(
-    env.FLAGS,
-    env.WELL_KNOWN_MATERIALIZATION_ENABLED,
-    FLAGS.wellKnownMaterializationEnabled,
-  );
-  const githubToken = (await getSecret(env.GITHUB_TOKEN)) ?? undefined;
+  const [materializationEnabled, githubToken] = await Promise.all([
+    flag(env.FLAGS, env.WELL_KNOWN_MATERIALIZATION_ENABLED, FLAGS.wellKnownMaterializationEnabled),
+    getSecret(env.GITHUB_TOKEN).then((t) => t ?? undefined),
+  ]);
 
   const intervalHours = positiveIntOr(env.WELL_KNOWN_SWEEP_INTERVAL_HOURS, DEFAULT_INTERVAL_HOURS);
   const maxPerRun = positiveIntOr(env.WELL_KNOWN_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);

@@ -168,13 +168,17 @@ async function resolveTextModel(
   skipOpenRouter = false,
 ): Promise<TextModel | null> {
   // Register Cloudflare Agents AI-SDK telemetry (payload flag re-read each call).
-  await ensureAgentTracing(env);
-  const useOpenRouter =
-    !skipOpenRouter && (await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled));
+  const [, useOpenRouter] = await Promise.all([
+    ensureAgentTracing(env),
+    !skipOpenRouter && flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled),
+  ]);
 
   if (useOpenRouter) {
-    const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
-    const model = (await effectiveLaneModel(env, opts.lane)) ?? opts.orModel?.trim();
+    const [orKey, laneModel] = await Promise.all([
+      getSecret(env.OPENROUTER_API_KEY).catch(() => null),
+      effectiveLaneModel(env, opts.lane),
+    ]);
+    const model = laneModel ?? opts.orModel?.trim();
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
       return withLaneUsageLogging(
@@ -446,12 +450,17 @@ export async function resolveOverviewModel(
 ): Promise<ResolvedOverviewModel | null> {
   // Overview uses generateText directly (not aisdkTextModel) — still needs the
   // global Agents telemetry registration for spans to land in the dashboard.
-  await ensureAgentTracing(env);
-  const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
+  const [, useOpenRouter] = await Promise.all([
+    ensureAgentTracing(env),
+    flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled),
+  ]);
 
   if (useOpenRouter) {
-    const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
-    const model = (await effectiveLaneModel(env, "summarize")) ?? env.SUMMARIZE_MODEL?.trim();
+    const [orKey, laneModel] = await Promise.all([
+      getSecret(env.OPENROUTER_API_KEY).catch(() => null),
+      effectiveLaneModel(env, "summarize"),
+    ]);
+    const model = laneModel ?? env.SUMMARIZE_MODEL?.trim();
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
       return {

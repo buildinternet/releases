@@ -570,8 +570,10 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
   // Bare slug. Source and product slugs are unique per org, not globally, so
   // a mixed id list from every org would scope a read to the wrong catalog.
   // One match resolves; several matches throw so the caller can qualify it.
-  const sourceMatches = await listSourcesBySlug(db, id);
-  const productMatches = await listProductsBySlug(db, id);
+  const [sourceMatches, productMatches] = await Promise.all([
+    listSourcesBySlug(db, id),
+    listProductsBySlug(db, id),
+  ]);
   if (sourceMatches.length > 1) {
     throw new AmbiguousEntityError("source", id, toAmbiguousCandidates(sourceMatches));
   }
@@ -1786,8 +1788,10 @@ export async function search(
     wanted.has("collections") && mode !== "lexical" && searchEnv?.ENTITIES_INDEX
       ? (async () => {
           try {
-            const { runCollectionsSemantic } = await import("./lib/search-hybrid.js");
-            const embedConfig = await resolveEmbedConfig();
+            const [{ runCollectionsSemantic }, embedConfig] = await Promise.all([
+              import("./lib/search-hybrid.js"),
+              resolveEmbedConfig(),
+            ]);
             const r = await runCollectionsSemantic(
               searchEnv,
               db,
@@ -1821,8 +1825,10 @@ export async function search(
         }
 
         if (mode !== "lexical" && searchEnv) {
-          const { runHybridSearch } = await import("./lib/search-hybrid.js");
-          const embedConfig = await resolveEmbedConfig();
+          const [{ runHybridSearch }, embedConfig] = await Promise.all([
+            import("./lib/search-hybrid.js"),
+            resolveEmbedConfig(),
+          ]);
           const hybrid = await runHybridSearch(
             searchEnv,
             db,

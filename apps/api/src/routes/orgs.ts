@@ -256,28 +256,27 @@ orgRoutes.get(
         isNotNull(organizations.trackingRequestedAt),
         isNull(organizations.deletedAt),
       );
-      const rows = await db
-        .select({
-          id: organizations.id,
-          slug: organizations.slug,
-          name: organizations.name,
-          domain: organizations.domain,
-          description: organizations.description,
-          category: organizations.category,
-          avatarUrl: organizations.avatarUrl,
-          featured: organizations.featured,
-          tier: organizations.tier,
-          trackingRequestedAt: organizations.trackingRequestedAt,
-        })
-        .from(organizations)
-        .where(trackingRequestedFilter)
-        .orderBy(desc(organizations.trackingRequestedAt))
-        .limit(pagination.pageSize)
-        .offset(pagination.offset);
-      const [{ n: totalItems }] = await db
-        .select({ n: count() })
-        .from(organizations)
-        .where(trackingRequestedFilter);
+      const [rows, [{ n: totalItems }]] = await Promise.all([
+        db
+          .select({
+            id: organizations.id,
+            slug: organizations.slug,
+            name: organizations.name,
+            domain: organizations.domain,
+            description: organizations.description,
+            category: organizations.category,
+            avatarUrl: organizations.avatarUrl,
+            featured: organizations.featured,
+            tier: organizations.tier,
+            trackingRequestedAt: organizations.trackingRequestedAt,
+          })
+          .from(organizations)
+          .where(trackingRequestedFilter)
+          .orderBy(desc(organizations.trackingRequestedAt))
+          .limit(pagination.pageSize)
+          .offset(pagination.offset),
+        db.select({ n: count() }).from(organizations).where(trackingRequestedFilter),
+      ]);
 
       // These are self-serve stub orgs by construction (no processed sources
       // yet), so the zeroed stats fields below are accurate, not placeholders
@@ -460,9 +459,6 @@ orgRoutes.get(
 
     const cutoff = daysAgoIso(30);
     const cutoff90d = daysAgoIso(90);
-    // Resolved up front so the knowledge-page read can skip the playbook row.
-    // No Bearer header (anonymous reads) returns false without any I/O.
-    const isAuthed = await isValidBearerAuth(c);
 
     const [
       accounts,
@@ -476,6 +472,8 @@ orgRoutes.get(
       knowledgePageRows,
       citationRowsRaw,
       metricsRow,
+      isAuthed,
+      locations,
     ] = await Promise.all([
       db
         .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
@@ -518,8 +516,8 @@ orgRoutes.get(
         .from(sources)
         .where(eq(sources.orgId, org.id)),
 
-      // Overview (+ playbook for authed callers) for this org. The playbook is
-      // internal, so anonymous reads — the bulk of this route — skip its row.
+      // Overview + playbook pages for this org (single query, split client-side).
+      // Only the columns the response uses.
       db
         .select({
           scope: knowledgePages.scope,
@@ -532,12 +530,7 @@ orgRoutes.get(
         })
         .from(knowledgePages)
         .where(
-          and(
-            isAuthed
-              ? inArray(knowledgePages.scope, ["org", "playbook"])
-              : eq(knowledgePages.scope, "org"),
-            eq(knowledgePages.orgId, org.id),
-          ),
+          and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
         ),
 
       // Citations attached to the org-scope overview page. Joined here so the
@@ -567,6 +560,14 @@ orgRoutes.get(
             sql`${releases.publishedAt} IS NOT NULL`,
           ),
         ),
+
+      // Playbook content (header + agent notes) is internal — only returned to
+      // authenticated callers so we don't leak it via the public-cached JSON.
+      isValidBearerAuth(c),
+
+      // Declared locations back the read contract for a stub (its `sources`
+      // array is empty). Only stubs carry locators, so the query is stub-only.
+      org.tier === "stub" ? loadReleaseLocations(db, org.id) : undefined,
     ]);
 
     const sourcesWithStats = orgSources.map((row) => ({
@@ -602,8 +603,6 @@ orgRoutes.get(
     const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
     const citationBase = releaseWebBase(c.env ?? {});
     const citationRows = citationRowsRaw.map((r) => mapOverviewCitationRow(citationBase, r));
-    // Playbook content (header + agent notes) is internal — only returned to
-    // authenticated callers so we don't leak it via the public-cached JSON.
     const playbookRow = isAuthed
       ? (knowledgePageRows.find((r) => r.scope === "playbook") ?? null)
       : null;
@@ -619,10 +618,6 @@ orgRoutes.get(
           citations: citationRows,
         }
       : null;
-
-    // Declared locations back the read contract for a stub (its `sources` array
-    // is empty). Only stubs carry locators, so the extra query is stub-only.
-    const locations = org.tier === "stub" ? await loadReleaseLocations(db, org.id) : undefined;
 
     const result = {
       id: org.id,
@@ -876,12 +871,14 @@ orgRoutes.post(
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
-    const materializationEnabled = await flag(
-      c.env.FLAGS,
-      c.env.WELL_KNOWN_MATERIALIZATION_ENABLED,
-      FLAGS.wellKnownMaterializationEnabled,
-    );
-    const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
+    const [materializationEnabled, githubToken] = await Promise.all([
+      flag(
+        c.env.FLAGS,
+        c.env.WELL_KNOWN_MATERIALIZATION_ENABLED,
+        FLAGS.wellKnownMaterializationEnabled,
+      ),
+      getSecret(c.env.GITHUB_TOKEN).then((t) => t ?? undefined),
+    ]);
 
     const result = await syncOrgWellKnown(db, org.id, {
       bucket: c.env.MEDIA,

@@ -135,14 +135,16 @@ export async function syncSourceRepo(
   const config = validated.data;
   const marker = parseSelfDeclared(source.metadata);
 
-  const orgProducts = await db
-    .select()
-    .from(products)
-    .where(and(eq(products.orgId, source.orgId), isNull(products.deletedAt)));
-  const orgSources = await db
-    .select()
-    .from(sources)
-    .where(and(eq(sources.orgId, source.orgId), isNull(sources.deletedAt)));
+  const [orgProducts, orgSources] = await Promise.all([
+    db
+      .select()
+      .from(products)
+      .where(and(eq(products.orgId, source.orgId), isNull(products.deletedAt))),
+    db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.orgId, source.orgId), isNull(sources.deletedAt))),
+  ]);
   const stableId = config.registries?.["releases.sh"]?.product;
   const locatorProductId = config.releases
     ?.map((location) => {

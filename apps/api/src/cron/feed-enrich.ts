@@ -252,8 +252,10 @@ export async function buildEnrichDeps(
 
   // getSecret caches per-isolate and throws on transient failure; soft-fail to
   // null so absent / unreachable creds simply disable render escalation.
-  const accountId = await getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null);
-  const apiToken = await getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null);
+  const [accountId, apiToken] = await Promise.all([
+    getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
+    getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
+  ]);
   const renderFn =
     accountId && apiToken
       ? (url: string) => fetchCloudflareMarkdown(url, accountId, apiToken)
