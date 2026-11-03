@@ -18,7 +18,7 @@ The artifact is the overview body — markdown only, no surrounding metadata. Wh
 - Opens with one concrete sentence on a recent ship, ≤25 words. "Recently shipped X and Y" passes; "Continues to evolve their platform" fails. The opener follows the same self-reference rule as the rest of the body — `Linear's current focus is...` fails because the page header already shows "Linear".
 - Body has two to five primary themed sections, each opening with a full sentence. One-section overviews pass only when the source material is genuinely thin (see faithfulness — short bodies are preferred to padded ones). A trailing wrap-up paragraph (per the Format rules above) does not count toward the section limit.
 - When multiple sources contribute, sections synthesize by topic across sources rather than summarizing each source separately. A section that reads as a per-source recap is a fail.
-- Breaking changes and deprecations are called out inline where they fall, not buried.
+- Breaking changes and deprecations are called out inline where they fall, not buried. Each one says who is affected and what to do in plain words; the mechanism behind it (certificate chains, internal flags, a removed setting that now does nothing) is a flag. More than three upgrade notes is a flag.
 - No filler phrases like "continues to evolve", "received improvements", "substantial updates", "robust enhancements", or "exciting new features".
 - No restated context the reader already has (project name in body, source count, generic description of what the org does).
 
