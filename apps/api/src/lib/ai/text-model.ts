@@ -378,8 +378,12 @@ export function resolveCollectionWeeklyDigestModel(env: TextModelEnv): Promise<T
  * emits a longer completion, so a 30s ceiling sits right on the edge of the normal
  * latency band (issue #1793); give it a wider timeout, applied per model call in
  * `generateOverview`. The per-org retry in the regen loop covers the rarer stall.
+ *
+ * Reasoning is disabled on the OpenRouter path, like the summarize lanes: with it
+ * on, DeepSeek spent 4-5K tokens thinking before any text and every Datadog call
+ * hit the timeout (2026-11-03). 90s gives a normal 1-2K-token completion ample room.
  */
-const OVERVIEW_TIMEOUT_MS = 60_000;
+const OVERVIEW_TIMEOUT_MS = 90_000;
 const OVERVIEW_LANE = "org-overview";
 
 export interface ResolvedOverviewModel {
@@ -459,6 +463,7 @@ export async function resolveOverviewModel(
           referer: "https://releases.sh",
           title: APP_TITLE,
           providerPrefs: SUMMARIZE_PROVIDER as Record<string, unknown>,
+          reasoning: SUMMARIZE_REASONING,
           trace: {
             generationName: OVERVIEW_LANE,
             ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
