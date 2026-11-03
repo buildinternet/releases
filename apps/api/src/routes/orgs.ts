@@ -516,9 +516,18 @@ orgRoutes.get(
         .from(sources)
         .where(eq(sources.orgId, org.id)),
 
-      // Overview + playbook pages for this org (single query, split client-side)
+      // Overview + playbook pages for this org (single query, split client-side).
+      // Only the columns the response uses.
       db
-        .select()
+        .select({
+          scope: knowledgePages.scope,
+          content: knowledgePages.content,
+          notes: knowledgePages.notes,
+          releaseCount: knowledgePages.releaseCount,
+          lastContributingReleaseAt: knowledgePages.lastContributingReleaseAt,
+          generatedAt: knowledgePages.generatedAt,
+          updatedAt: knowledgePages.updatedAt,
+        })
         .from(knowledgePages)
         .where(
           and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
@@ -1100,7 +1109,10 @@ orgRoutes.post(
     const slug = c.req.param("slug");
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
@@ -1665,7 +1677,10 @@ orgRoutes.get(
     const slug = c.req.param("slug");
     const platform = c.req.query("platform");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (platform) {
@@ -1740,7 +1755,10 @@ orgRoutes.delete(
       );
     }
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const deleted = await db
@@ -1788,7 +1806,10 @@ orgRoutes.get(
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
@@ -1845,7 +1866,10 @@ orgRoutes.put(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const { tags: tagNames } = c.req.valid("json");
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (tagNames.length > 0) {
@@ -1894,7 +1918,10 @@ orgRoutes.delete(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const { tags: tagNames } = c.req.valid("json");
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const slugs = Array.from(new Set(tagNames.map((t) => toSlug(t))));
@@ -2174,7 +2201,10 @@ orgRoutes.get(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const { from, to, toExclusive } = heatmapDateRange();
@@ -2708,7 +2738,10 @@ orgRoutes.post(
     const slug = c.req.param("slug");
     const body = c.req.valid("json");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     try {

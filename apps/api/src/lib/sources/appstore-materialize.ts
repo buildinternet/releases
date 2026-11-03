@@ -176,8 +176,11 @@ export async function materializeAppStoreSource(
     .limit(1);
   if (existing.length > 0) {
     const src = existing[0]! as typeof sources.$inferSelect;
-    const rel = await db.select().from(releases).where(eq(releases.sourceId, src.id));
-    return { status: "existing", source: src, releaseCount: rel.length };
+    const [rel] = await db
+      .select({ n: sql<number>`COUNT(*)` })
+      .from(releases)
+      .where(eq(releases.sourceId, src.id));
+    return { status: "existing", source: src, releaseCount: Number(rel?.n ?? 0) };
   }
 
   // Org. When the caller already resolved one by id (discovery path), bind to

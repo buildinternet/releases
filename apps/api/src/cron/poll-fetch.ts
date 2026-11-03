@@ -2525,8 +2525,15 @@ export async function refreshChangelogFile(
   const now = new Date().toISOString();
 
   // Upsert each fetched file.
+  // Skip `content`: a hash match is all the diff needs, and pulling up to 20
+  // whole CHANGELOG bodies on every GitHub fetch is the bulk of this read.
   const existing = await db
-    .select()
+    .select({
+      id: sourceChangelogFiles.id,
+      path: sourceChangelogFiles.path,
+      contentHash: sourceChangelogFiles.contentHash,
+      tokens: sourceChangelogFiles.tokens,
+    })
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, source.id));
   const existingByPath = new Map(existing.map((e) => [e.path, e]));
@@ -2565,7 +2572,8 @@ export async function refreshChangelogFile(
     } else if (prior.contentHash === file.contentHashHex) {
       // Hash unchanged — short-circuit, no embed needed. Backfill tokens if the prior row predates that column.
       const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
-      if (prior.tokens === null) touch.tokens = countTokensSafe(prior.content);
+      // Same hash ⇒ same content, so count the freshly fetched body.
+      if (prior.tokens === null) touch.tokens = countTokensSafe(file.content);
       // oxlint-disable-next-line no-await-in-loop -- sequential per-file touch (content unchanged path)
       await db.update(sourceChangelogFiles).set(touch).where(eq(sourceChangelogFiles.id, prior.id));
     } else {
