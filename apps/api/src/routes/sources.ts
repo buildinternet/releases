@@ -345,7 +345,10 @@ sourceRoutes.get(
     // Resolve org by slug
     let resolvedOrgId: string | undefined;
     if (orgSlug) {
-      const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
+      const [org] = await db
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(orgWhere(orgSlug));
       if (!org) return emptyResult();
       resolvedOrgId = org.id;
       conditions.push(eq(sources.orgId, org.id));
@@ -1596,8 +1599,28 @@ const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
   if (!src) return respondError(c, new NotFoundError("Source not found"));
+  const requestedPath = c.req.query("path") ?? null;
+  // A monorepo source holds up to 20 whole CHANGELOG files (1MB each), but only
+  // one body is returned. Ship `content` only for the row(s) that can be picked:
+  // the requested path, or — matching `selectChangelogFile`'s default — the
+  // root-level files. Every other row comes back as metadata only.
+  const contentCandidate = requestedPath
+    ? sql`${sourceChangelogFiles.path} = ${requestedPath}`
+    : sql`instr(${sourceChangelogFiles.path}, '/') = 0`;
   const allRows = await db
-    .select()
+    .select({
+      id: sourceChangelogFiles.id,
+      path: sourceChangelogFiles.path,
+      filename: sourceChangelogFiles.filename,
+      url: sourceChangelogFiles.url,
+      rawUrl: sourceChangelogFiles.rawUrl,
+      bytes: sourceChangelogFiles.bytes,
+      tokens: sourceChangelogFiles.tokens,
+      fetchedAt: sourceChangelogFiles.fetchedAt,
+      content: sql<
+        string | null
+      >`CASE WHEN ${contentCandidate} THEN ${sourceChangelogFiles.content} END`,
+    })
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .orderBy(sourceChangelogFiles.path);
@@ -1605,14 +1628,26 @@ const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
     return respondError(c, new NotFoundError("Changelog file not found"));
   }
 
-  const requestedPath = c.req.query("path") ?? null;
-  const selected = selectChangelogFile(allRows, requestedPath);
-  if (!selected) {
+  const picked = selectChangelogFile(allRows, requestedPath);
+  if (!picked) {
     return respondError(
       c,
       new NotFoundError(`Changelog file not found for path: ${requestedPath}`),
     );
   }
+  // No root-level file → `selectChangelogFile` fell back to the first row, whose
+  // body wasn't shipped above. Load just that one.
+  let content = picked.content;
+  if (content === null) {
+    const [row] = await db
+      .select({ content: sourceChangelogFiles.content })
+      .from(sourceChangelogFiles)
+      .where(eq(sourceChangelogFiles.id, picked.id))
+      .limit(1);
+    if (!row) return respondError(c, new NotFoundError("Changelog file not found"));
+    content = row.content;
+  }
+  const selected = { ...picked, content };
 
   const files = allRows.map((r) => ({
     path: r.path,
@@ -1775,7 +1810,11 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const allRows = await db
-    .select()
+    .select({
+      id: sourceChangelogFiles.id,
+      path: sourceChangelogFiles.path,
+      tokens: sourceChangelogFiles.tokens,
+    })
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .orderBy(sourceChangelogFiles.path);
@@ -2474,7 +2513,10 @@ sourceRoutes.post(
     let orgId: string | null = null;
     const orgRef = body.orgId ?? body.orgSlug;
     if (orgRef) {
-      const [org] = await db.select().from(organizations).where(orgWhere(orgRef));
+      const [org] = await db
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(orgWhere(orgRef));
       orgId = org?.id ?? null;
     }
     if (!orgId) {
@@ -3546,7 +3588,7 @@ sourceRoutes.patch(
     // Join sources so we have the source row available for the re-embed side
     // effect (and the media-mirror sourceId) without a second round-trip.
     const [row] = await db
-      .select({ release: releases, source: sources })
+      .select({ releaseId: releases.id, source: sources })
       .from(releases)
       .innerJoin(sources, eq(sources.id, releases.sourceId))
       .where(eq(releases.id, id));

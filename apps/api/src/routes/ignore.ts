@@ -77,7 +77,10 @@ ignoreRoutes.get(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const singleUrl = c.req.query("url");
@@ -142,7 +145,10 @@ ignoreRoutes.post(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const body = c.req.valid("json");
@@ -196,7 +202,10 @@ ignoreRoutes.delete(
       );
     }
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     await db

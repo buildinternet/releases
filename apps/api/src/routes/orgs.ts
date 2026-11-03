@@ -460,6 +460,9 @@ orgRoutes.get(
 
     const cutoff = daysAgoIso(30);
     const cutoff90d = daysAgoIso(90);
+    // Resolved up front so the knowledge-page read can skip the playbook row.
+    // No Bearer header (anonymous reads) returns false without any I/O.
+    const isAuthed = await isValidBearerAuth(c);
 
     const [
       accounts,
@@ -515,12 +518,26 @@ orgRoutes.get(
         .from(sources)
         .where(eq(sources.orgId, org.id)),
 
-      // Overview + playbook pages for this org (single query, split client-side)
+      // Overview (+ playbook for authed callers) for this org. The playbook is
+      // internal, so anonymous reads — the bulk of this route — skip its row.
       db
-        .select()
+        .select({
+          scope: knowledgePages.scope,
+          content: knowledgePages.content,
+          notes: knowledgePages.notes,
+          releaseCount: knowledgePages.releaseCount,
+          lastContributingReleaseAt: knowledgePages.lastContributingReleaseAt,
+          generatedAt: knowledgePages.generatedAt,
+          updatedAt: knowledgePages.updatedAt,
+        })
         .from(knowledgePages)
         .where(
-          and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
+          and(
+            isAuthed
+              ? inArray(knowledgePages.scope, ["org", "playbook"])
+              : eq(knowledgePages.scope, "org"),
+            eq(knowledgePages.orgId, org.id),
+          ),
         ),
 
       // Citations attached to the org-scope overview page. Joined here so the
@@ -585,9 +602,8 @@ orgRoutes.get(
     const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
     const citationBase = releaseWebBase(c.env ?? {});
     const citationRows = citationRowsRaw.map((r) => mapOverviewCitationRow(citationBase, r));
-    // Playbook content (header + agent notes) is internal — only return it to
+    // Playbook content (header + agent notes) is internal — only returned to
     // authenticated callers so we don't leak it via the public-cached JSON.
-    const isAuthed = await isValidBearerAuth(c);
     const playbookRow = isAuthed
       ? (knowledgePageRows.find((r) => r.scope === "playbook") ?? null)
       : null;
@@ -1096,7 +1112,10 @@ orgRoutes.post(
     const slug = c.req.param("slug");
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
@@ -1661,7 +1680,10 @@ orgRoutes.get(
     const slug = c.req.param("slug");
     const platform = c.req.query("platform");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (platform) {
@@ -1736,7 +1758,10 @@ orgRoutes.delete(
       );
     }
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const deleted = await db
@@ -1784,7 +1809,10 @@ orgRoutes.get(
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
@@ -1841,7 +1869,10 @@ orgRoutes.put(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const { tags: tagNames } = c.req.valid("json");
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (tagNames.length > 0) {
@@ -1890,7 +1921,10 @@ orgRoutes.delete(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const { tags: tagNames } = c.req.valid("json");
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const slugs = Array.from(new Set(tagNames.map((t) => toSlug(t))));
@@ -2170,7 +2204,10 @@ orgRoutes.get(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const { from, to, toExclusive } = heatmapDateRange();
@@ -2704,7 +2741,10 @@ orgRoutes.post(
     const slug = c.req.param("slug");
     const body = c.req.valid("json");
 
-    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     try {

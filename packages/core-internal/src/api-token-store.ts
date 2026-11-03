@@ -59,8 +59,19 @@ export async function verifyApiToken(
     return { ok: false };
   }
 
+  // Runs on every `relk_` request — read only the columns the checks below use.
   const row = await db
-    .select()
+    .select({
+      id: apiTokens.id,
+      tokenHash: apiTokens.tokenHash,
+      scopes: apiTokens.scopes,
+      principalType: apiTokens.principalType,
+      principalId: apiTokens.principalId,
+      active: apiTokens.active,
+      revokedAt: apiTokens.revokedAt,
+      expiresAt: apiTokens.expiresAt,
+      sourceId: apiTokens.sourceId,
+    })
     .from(apiTokens)
     .where(eq(apiTokens.lookupId, parsed.lookupId))
     .get();
