@@ -6,7 +6,7 @@
  * createTestDb + same insert helpers.
  */
 
-import { test, expect } from "bun:test";
+import { test, expect, spyOn } from "bun:test";
 import { eq, and } from "drizzle-orm";
 import {
   organizations,
@@ -305,4 +305,40 @@ test("a persisted overview revalidates the org HTML pages", async () => {
   });
   expect(res.generated).toBe(1);
   expect(seen).toEqual([{ paths: [`/${orgSlug}`, `/${orgSlug}/overview`] }]);
+});
+
+test("a response cut off mid-body is skipped with an org-truncated-discarded warning", async () => {
+  const { db } = createTestDb();
+  const { orgId, orgSlug } = await seedOrgWithReleases(db, {
+    releases: 1,
+    orgId: "org_regen_cut",
+    orgSlug: "regen-org-cut",
+  });
+  const candidates = [makeCandidate(orgId, orgSlug, 1)];
+  const cutOff = resolvedModel(
+    new MockLanguageModelV3({
+      doGenerate: async () => ({
+        content: [{ type: "text", text: '{"body":"Acme shipped a stream' }],
+        finishReason: { unified: "length", raw: undefined },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 8000, text: 8000, reasoning: 0 },
+        },
+        warnings: [],
+      }),
+    }) as unknown as LanguageModel,
+  );
+
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const res = await regenerateOverviewChunk(db as any, cutOff, candidates, {
+      retryBackoffMs: 0,
+    });
+    expect(res.generated).toBe(0);
+    expect(res.skipped).toBe(1);
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes('"event":"org-truncated-discarded"'))).toBe(true);
+  } finally {
+    warn.mockRestore();
+  }
 });

@@ -18,6 +18,7 @@ import {
 import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
 import {
   generateOverview,
+  OVERVIEW_OUTPUT_MAX_TOKENS,
   type GenerateOverviewOptions,
   type OverviewRequestInput,
 } from "@releases/ai-internal/overview-content";
@@ -159,6 +160,18 @@ export async function regenerateOverviewChunk(
         opts,
       );
       if (body.trim().length === 0) {
+        if (truncated) {
+          // The response hit the output cap before the body closed, so nothing
+          // usable came back. Warn: a quiet skip here hid this for days.
+          logEvent("warn", {
+            component: "overview-regen",
+            event: "org-truncated-discarded",
+            orgId: c.orgId,
+            orgSlug: c.orgSlug,
+            releaseCount: inputs.totalAvailable,
+            maxOutputTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
+          });
+        }
         skipped++;
         continue;
       }
