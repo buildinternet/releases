@@ -223,13 +223,16 @@ The <importance> tag scores newsworthiness — see <importance_format> below.
 </output_structure>
 
 <title_format>
-The release block includes Org, Source, optionally Product, Title, Version, URL, and Body. Source is the human-readable product label (e.g. "Claude Code", "OpenAI Node SDK", "Next.js") that should appear in the headline; Product is set only when an org groups multiple products through one source. Prefer Product when present, otherwise Source. Use these to construct a self-contained news headline.
+The release block includes Org, Source, optionally Product, Title, Version, URL, and Body. Source is the human-readable product label (e.g. "Claude Code", "OpenAI Node SDK", "Next.js") that should appear in the headline; Product is the broader product line the source belongs to, when there is one. Pick ONE name for the headline subject and never stack them ("Datadog APM dd-trace-js 6.23.0" and "APM dd-trace-py 4.16.2" both fail):
+- A versioned release (Version is set): use Source, because the version belongs to that package ("Datadog dd-trace-js 6.23.0 …", "Datadog Agent 7.85.0 …").
+- An unversioned post or announcement: use the specific product or feature the body is about ("RUM Managed Archive …", "Bits investigations …"); fall back to Product, then Source.
+Use these to construct a self-contained news headline.
 
 - News-headline style: lead with the product (and version when applicable), then a verb-led description of the most important change.
 - Reader test: someone seeing this title in isolation, with no surrounding context, should know what changed and which product it concerns. A title like "v2.1.128" or "Various improvements" fails this test.
 - Include the version when the source title carries one. Drop redundant prefixes (don't repeat the product name twice if it's already in the source title).
 - Sentence case for body words. Preserve product names, proper nouns, and standard acronyms (API, CLI, MCP, SDK, TUI) as they appear in the body.
-- Target 60-90 characters. Hard cap at 100.
+- Target 50-80 characters. Hard cap at 90. Cut qualifiers and audiences ("for noncritical workloads", "to your cloud storage") before cutting the change itself.
 - No trailing punctuation. No quotation marks. No markdown. No em dashes.
 - Report what shipped, not what a post does. Never use the org as the subject of a reporting verb: "Datadog says Bits investigations cost 84% less", "Acme details its new runtime", "Acme announces X" all fail. Write "Bits investigations now cost 84% less". Product names that contain the org name ("Datadog Agent", "Cloudflare Workers") are fine.
 - For empty or chore-only bodies, write a formulaic title using product + version: e.g., "Next.js v15.4.2 dependency update", "OpenAI Codex 2.35.1 internal release".
@@ -269,6 +272,7 @@ Smart brevity transformations to internalize:
 - Plain factual prose with standard sentence punctuation. No markdown, no bullet lists, no JSON, no parentheticals, no headers, no em dashes.
 - Every sentence is a complete sentence with a subject and a verb. No fragments ("Also fixed X." fails; "X no longer fails." works).
 - The product or the feature is the subject, never the org. Don't narrate the source: "Datadog details AI Guard, which…", "The post explains…", "Acme announces…" all fail. State what the product now does.
+- Don't let an upgrade note crowd out a security fix or a new capability. When the body has items from more than one of the top three priority tiers (see <priority_order>), the summary names the top item from at least two of those tiers.
 - One idea per sentence. Name at most three items in a list; a sentence that strings together four or more comma-separated items reads as machine-written. Pick the ones that matter most, or characterize the rest ("plus CMake support and FFI bindings").
 - The summary is *reporting density* — it explains the mechanism (which file, which command, which API) and includes the second-tier change or long-tail characterization. The short title is the headline-density form; the summary adds technical depth.
 </summary_format>
@@ -806,6 +810,9 @@ const REPORTING_VERBS =
 const ACTION_VERBS =
   "adds|added|launches|launched|ships|shipped|releases|released|brings|expands|extends|rolls out|makes";
 
+/** Hard cap on `title_generated`, matching <title_format>. */
+const TITLE_MAX_CHARS = 90;
+
 /** Buzzwords the prompt bans. Kept short: these are the ones models actually emit. */
 const RELEASE_LINT_BANNED = [
   "seamless",
@@ -887,6 +894,7 @@ export function lintReleaseContent(
   const summary = out.summary ?? "";
 
   if (opensWithOrgVerb(title, orgSlug, REPORTING_VERBS)) violations.push("title-org-narrator");
+  if (title.length > TITLE_MAX_CHARS) violations.push("title-too-long");
   if (opensWithOrgVerb(short, orgSlug, `${REPORTING_VERBS}|${ACTION_VERBS}`)) {
     violations.push("short-org-subject");
   }
@@ -916,6 +924,7 @@ export function lintReleaseContent(
 const RELEASE_LINT_HINTS: Record<string, string> = {
   "title-org-narrator":
     'the title makes the org the narrator ("Acme says/details/announces"); state what shipped',
+  "title-too-long": `the title is over ${TITLE_MAX_CHARS} characters; cut qualifiers and audiences, keep the change`,
   "short-org-subject": "the short title opens with the org name; lead with the thing that changed",
   "short-colon-headline":
     'the short title is a "Label: claim" headline; write one claim, or two joined by a semicolon',

@@ -21,7 +21,6 @@ import { feedAttachments } from "@/lib/feed-media";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
-import { BreakingChip } from "./breaking-chip";
 import { ImportanceMarker } from "./importance-marker";
 import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
@@ -482,7 +481,6 @@ export function ReleaseListItem({
                 )}
               </h2>
               <RollupBadge type={release.type} />
-              <BreakingChip level={release.breaking} />
               <ClusterChip count={release.coverageCount} />
               {release.prerelease && (
                 <span
