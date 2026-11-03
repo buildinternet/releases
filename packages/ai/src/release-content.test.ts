@@ -282,6 +282,12 @@ describe("lintReleaseContent", () => {
     ).toContain("em-dash");
   });
 
+  test("titles over 90 characters are flagged", () => {
+    const title =
+      "Datadog Infrastructure Basic brings lightweight host monitoring for noncritical workloads and teams";
+    expect(lintReleaseContent({ ...clean, title }, "datadog")).toContain("title-too-long");
+  });
+
   test("thousands separators are not list commas", () => {
     expect(
       lintReleaseContent(

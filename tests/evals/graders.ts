@@ -68,8 +68,12 @@ export interface StructuralSpec {
   summaryMustBeNonEmpty?: boolean;
   /** Per-fixture leakage tokens, on top of the defaults. */
   forbidInSummary?: string[];
+  /** Substrings the generated title must not contain (e.g. a stacked "APM tracer-py"). */
+  forbidInTitle?: string[];
 }
 export interface SummaryArtifact {
+  /** Generated headline (`title_generated`); optional for callers that don't grade it. */
+  title?: string | null;
   summary: string | null;
   titleShort: string | null;
   skipped: boolean;
@@ -124,6 +128,17 @@ export function gradeStructural(
     ...(opts.extraForbidden ?? []),
     ...(spec.forbidInSummary ?? []),
   ];
+  if (spec.forbidInTitle && artifact.title) {
+    const title = artifact.title;
+    const hit = spec.forbidInTitle.find((tok) => title.includes(tok));
+    fields.push({
+      field: "title subject",
+      passed: hit === undefined,
+      expected: "clean",
+      actual: hit ?? "clean",
+    });
+  }
+
   for (const [label, text] of [
     ["summary", artifact.summary],
     ["titleShort", artifact.titleShort],
