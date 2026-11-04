@@ -10,6 +10,7 @@ import {
   releasesVisible,
   productsActive,
   fetchLog,
+  sourceReleaseStats,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { StatsResponseSchema } from "@buildinternet/releases-api-types";
@@ -99,10 +100,12 @@ export async function computeStats(d1: D1Database, days: number) {
   ] = await Promise.all([
     db.select({ n: count() }).from(organizationsActive),
     db.select({ n: count() }).from(sourcesActive),
+    // Sums the trigger-maintained per-source rollup (one row per source)
+    // instead of counting every visible release.
     db
-      .select({ n: count() })
-      .from(releasesVisible)
-      .innerJoin(sourcesActive, eq(releasesVisible.sourceId, sourcesActive.id)),
+      .select({ n: sql<number>`COALESCE(SUM(${sourceReleaseStats.releaseCount}), 0)` })
+      .from(sourceReleaseStats)
+      .innerJoin(sourcesActive, eq(sourceReleaseStats.sourceId, sourcesActive.id)),
     db.select({ n: count() }).from(productsActive),
     db
       .select({ n: count() })
@@ -121,6 +124,18 @@ export async function computeStats(d1: D1Database, days: number) {
   // Per-source activity (top sources by recent release count) and recent fetch
   // activity are independent of each other and of the counts above — run them
   // concurrently rather than back-to-back (#1800 finding 8).
+  // Recent-window counts per source: an index range on published_at, so only
+  // the last `days` of releases are read.
+  const recentBySource = db
+    .select({
+      sourceId: releasesVisible.sourceId,
+      n: sql<number>`COUNT(*)`.as("recent_n"),
+    })
+    .from(releasesVisible)
+    .where(gte(releasesVisible.publishedAt, cutoff))
+    .groupBy(releasesVisible.sourceId)
+    .as("recent_by_source");
+
   const [perSource, recentActivity] = await Promise.all([
     db
       .select({
@@ -129,14 +144,14 @@ export async function computeStats(d1: D1Database, days: number) {
         sourceType: sourcesVisible.type,
         orgName: organizationsActive.name,
         lastFetchedAt: sourcesVisible.lastFetchedAt,
-        totalReleases: sql<number>`COUNT(${releasesVisible.id})`,
-        recentReleases: sql<number>`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`,
+        totalReleases: sql<number>`COALESCE(${sourceReleaseStats.releaseCount}, 0)`,
+        recentReleases: sql<number>`COALESCE(${recentBySource.n}, 0)`,
       })
       .from(sourcesVisible)
-      .leftJoin(releasesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
+      .leftJoin(sourceReleaseStats, eq(sourceReleaseStats.sourceId, sourcesVisible.id))
+      .leftJoin(recentBySource, eq(recentBySource.sourceId, sourcesVisible.id))
       .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
-      .groupBy(sourcesVisible.id)
-      .orderBy(desc(sql`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`)),
+      .orderBy(desc(sql`COALESCE(${recentBySource.n}, 0)`)),
 
     // Recent fetch activity — join sources + orgs so we can return name/slug/org
     db
@@ -146,7 +161,7 @@ export async function computeStats(d1: D1Database, days: number) {
         orgName: organizationsActive.name,
         releasesFound: fetchLog.releasesFound,
         releasesInserted: fetchLog.releasesInserted,
-        totalReleases: sql<number>`(SELECT COUNT(*) FROM releases_visible r WHERE r.source_id = ${sourcesActive.id})`,
+        totalReleases: sql<number>`COALESCE(${sourceReleaseStats.releaseCount}, 0)`,
         status: fetchLog.status,
         durationMs: fetchLog.durationMs,
         error: fetchLog.error,
@@ -154,6 +169,7 @@ export async function computeStats(d1: D1Database, days: number) {
       })
       .from(fetchLog)
       .innerJoin(sourcesActive, eq(fetchLog.sourceId, sourcesActive.id))
+      .leftJoin(sourceReleaseStats, eq(sourceReleaseStats.sourceId, sourcesActive.id))
       .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
       .orderBy(desc(fetchLog.createdAt))
       .limit(20),

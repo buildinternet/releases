@@ -138,7 +138,8 @@ export function makeD1Shim(sqlite: Database): D1Database {
           return {
             async run() {
               try {
-                stmt.run(...(args as Parameters<typeof stmt.run>));
+                const { changes } = stmt.run(...(args as Parameters<typeof stmt.run>));
+                return { results: [], success: true, meta: { changes } };
               } catch {
                 // ignore — some DDL-only tables may not exist in the fixture
               }

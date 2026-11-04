@@ -264,6 +264,17 @@ The forcing function is concrete: a paying self-hoster, an OSS PR, or a D1 ceili
   provide a transaction-based `.batch()` analog, and re-tune the bound-param
   chunking constants for the new ceiling.
 
+## Per-source release rollup (`source_release_stats`)
+
+Aggregate reads (the `/v1/stats` rollup, the org directory and its counts, per-org catalog stats) sum `source_release_stats`, one row per source, instead of counting every row of `releases_visible`. Those full counts were the top D1 read consumers and 1-3 s queries on a single-threaded database.
+
+- The table holds `release_count`, `first_published_at` and `last_published_at` over exactly the rows `releases_visible` returns (not suppressed, not the coverage side of a link).
+- SQLite triggers keep it current (migration `20261104230000_source_release_stats.sql`). An insert increments the row. A delete, a suppress or unsuppress, a `published_at` or `source_id` change, or a coverage link or unlink recomputes that one source's row. App code never writes to it.
+- Source hide/delete and org hide are still read-time filters: readers join through `sources_visible` and `organizations_active`.
+- "Last N days" counts are not stored, because they go stale. Readers range-scan `idx_releases_published` / `idx_releases_source_published` for them instead of putting a `CASE` inside a full scan.
+- `reconcileSourceReleaseStats` rebuilds every row on the daily `0 4 * * *` tick and logs `source-release-stats`/`reconcile` with a `drifted` count. Drift should be zero; a non-zero count means a write path the triggers miss.
+- A new backend would need equivalent triggers, or app-level maintenance plus the reconcile.
+
 ## Follow-ups (deferred, not blocking)
 
 1. ~~**Hoist `createDb` into a shared package**~~ — **done** ([#2002](https://github.com/buildinternet/releases/issues/2002)).

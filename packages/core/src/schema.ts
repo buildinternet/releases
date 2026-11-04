@@ -1275,6 +1275,27 @@ export const sourceChangelogFiles = sqliteTable(
 export type SourceChangelogFile = typeof sourceChangelogFiles.$inferSelect;
 export type NewSourceChangelogFile = typeof sourceChangelogFiles.$inferInsert;
 
+/**
+ * Per-source rollup of the rows `releases_visible` returns (not suppressed,
+ * not the coverage side of a link): count plus first/last `published_at`.
+ * Maintained by SQLite triggers on `releases` and `release_coverage`
+ * (migration 20261104230000) and rebuilt daily by
+ * `reconcileSourceReleaseStats`. Lets stats, the org directory and the catalog
+ * sum one row per source instead of counting every release. Never write to it
+ * from app code. "Last N days" counts are deliberately not stored here.
+ */
+export const sourceReleaseStats = sqliteTable("source_release_stats", {
+  sourceId: text("source_id")
+    .primaryKey()
+    .references(() => sources.id, { onDelete: "cascade" }),
+  releaseCount: integer("release_count").notNull().default(0),
+  firstPublishedAt: text("first_published_at"),
+  lastPublishedAt: text("last_published_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type SourceReleaseStats = typeof sourceReleaseStats.$inferSelect;
+
 export const sourceRawSnapshots = sqliteTable(
   "source_raw_snapshots",
   {
