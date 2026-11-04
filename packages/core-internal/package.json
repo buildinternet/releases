@@ -12,6 +12,7 @@
     "./webhook-sign": "./src/webhook-sign.ts",
     "./webhook-resilience": "./src/webhook-resilience.ts",
     "./webhook-url-safety": "./src/webhook-url-safety.ts",
+    "./outbound-fetch-guard": "./src/outbound-fetch-guard.ts",
     "./webhook-delivery": "./src/webhook-delivery.ts",
     "./webhook-delivery-state": "./src/webhook-delivery-state.ts",
     "./release-event": "./src/release-event.ts",

@@ -7,6 +7,7 @@ import type {
   VideoChannelInfo,
   VideoProvider,
 } from "./types.js";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";
 
 const FEED_BASE = "https://www.youtube.com/feeds/videos.xml";
 
@@ -126,7 +127,7 @@ async function resolveFeed(
     // fetch the page and scrape it. This is the one fragile path — playlist and
     // /channel/UC… URLs are pure. Send our bot UA so YouTube serves the real
     // page rather than a bot interstitial that lacks the channelId.
-    const res = await fetchImpl(url, {
+    const res = await guardFetch(fetchImpl)(url, {
       redirect: "follow",
       headers: { "User-Agent": RELEASES_BOT_UA, Accept: "text/html" },
     });
