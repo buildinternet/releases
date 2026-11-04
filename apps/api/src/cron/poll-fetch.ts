@@ -298,11 +298,7 @@ export async function pollAndFetch(
 
 // ── Query due sources ──
 
-export async function queryDueSources(
-  db: D1Db,
-  now: Date,
-  opts?: { changeDetectEnabled?: boolean },
-): Promise<Source[]> {
+function dueSourcesWhere(db: D1Db, now: Date, opts?: { changeDetectEnabled?: boolean }) {
   // Scheduling reads from sources_active, NOT sources_visible. This query is
   // the sole feed for both the poll cron and the SourceActor re-seed
   // heartbeat (`fanOutPollAndFetch`) — a source excluded here never gets its
@@ -355,19 +351,41 @@ export async function queryDueSources(
   // Push-fed sources (#2374) are likewise fed by their publisher, not polled.
   const notExternallyDriven = locallyFetchedSql(sourcesActive.metadata);
 
+  return and(
+    pollable,
+    notPaused,
+    orgNotFetchPaused,
+    backoffReady,
+    notExternallyDriven,
+    or(...tierConditions),
+  );
+}
+
+export async function queryDueSources(
+  db: D1Db,
+  now: Date,
+  opts?: { changeDetectEnabled?: boolean },
+): Promise<Source[]> {
   return db
     .select()
     .from(sourcesActive)
-    .where(
-      and(
-        pollable,
-        notPaused,
-        orgNotFetchPaused,
-        backoffReady,
-        notExternallyDriven,
-        or(...tierConditions),
-      ),
-    );
+    .where(dueSourcesWhere(db, now, opts));
+}
+
+/**
+ * Same predicate as {@link queryDueSources}, projecting only `id` + `orgId`.
+ * The SourceActor re-seed heartbeat needs nothing else, and pulling every due
+ * row's full `metadata` blob each hour is the bulk of that read.
+ */
+export async function queryDueSourceRefs(
+  db: D1Db,
+  now: Date,
+  opts?: { changeDetectEnabled?: boolean },
+): Promise<Array<{ id: string; orgId: string | null }>> {
+  return db
+    .select({ id: sourcesActive.id, orgId: sourcesActive.orgId })
+    .from(sourcesActive)
+    .where(dueSourcesWhere(db, now, opts));
 }
 
 // ── Poll one source ──

@@ -65,6 +65,18 @@ export async function queryUnmanagedActiveSources(
   return opts?.limit != null ? q.limit(opts.limit) : q;
 }
 
+/** {@link queryUnmanagedActiveSources}, projecting only `id` + `orgId` (heartbeat seed). */
+export async function queryUnmanagedActiveSourceRefs(
+  db: D1Db,
+  now: Date = new Date(),
+): Promise<Array<{ id: string; orgId: string | null }>> {
+  const where = unmanagedWhere(now)(db);
+  return db
+    .select({ id: sourcesActive.id, orgId: sourcesActive.orgId })
+    .from(sourcesActive)
+    .where(where);
+}
+
 /** Cheap COUNT for the admin health signal — same predicate as the list. */
 export async function countUnmanagedActiveSources(
   db: D1Db,

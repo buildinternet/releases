@@ -79,13 +79,14 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
   // returns without seeding; otherwise every due source is `ensureScheduled` in
   // bounded waves.
   async function heartbeatReplica(actor: ReturnType<typeof mkFakeActorNamespace> | null) {
-    const { queryDueSources } = await import("../src/cron/poll-fetch");
-    const { queryUnmanagedActiveSources } = await import("../src/queries/unmanaged-source-actors");
+    const { queryDueSourceRefs } = await import("../src/cron/poll-fetch");
+    const { queryUnmanagedActiveSourceRefs } =
+      await import("../src/queries/unmanaged-source-actors");
     const now = new Date();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dueAll = await queryDueSources(db as any, now, { changeDetectEnabled: true });
+    const dueAll = await queryDueSourceRefs(db as any, now, { changeDetectEnabled: true });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const unmanaged = await queryUnmanagedActiveSources(db as any, now);
+    const unmanaged = await queryUnmanagedActiveSourceRefs(db as any, now);
     const byId = new Map<string, (typeof dueAll)[number]>();
     for (const s of dueAll) byId.set(s.id, s);
     for (const s of unmanaged) byId.set(s.id, s);
@@ -119,6 +120,23 @@ describe("fanOutPollAndFetch SourceActor heartbeat", () => {
     expect(new Set(actor.ensured).size).toBe(163);
     // Each wave stays within the concurrency bound.
     expect(actor.maxWave.value).toBeLessThanOrEqual(ENSURE_CONCURRENCY);
+  });
+
+  it("narrow ref queries return the same ids as the full-row queries", async () => {
+    await seedSources(db, 25);
+    const { queryDueSources, queryDueSourceRefs } = await import("../src/cron/poll-fetch");
+    const { queryUnmanagedActiveSources, queryUnmanagedActiveSourceRefs } =
+      await import("../src/queries/unmanaged-source-actors");
+    const now = new Date();
+    const ids = (rows: Array<{ id: string }>) => rows.map((r) => r.id).sort();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = db as any;
+    expect(ids(await queryDueSourceRefs(d, now, { changeDetectEnabled: true }))).toEqual(
+      ids(await queryDueSources(d, now, { changeDetectEnabled: true })),
+    );
+    expect(ids(await queryUnmanagedActiveSourceRefs(d, now))).toEqual(
+      ids(await queryUnmanagedActiveSources(d, now)),
+    );
   });
 
   it("seeds nothing when the SOURCE_ACTOR binding is absent", async () => {
