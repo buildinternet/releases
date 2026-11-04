@@ -12,6 +12,7 @@
 import { logEvent } from "@releases/lib/log-event";
 import { ReleasesError, UpstreamError, ValidationError } from "@releases/lib/releases-error";
 import { sniffImageDimensions } from "./image-dims.js";
+import { isPrivateOrReservedIp } from "@releases/core-internal/webhook-url-safety";
 
 const TIMEOUT_MS = 5_000;
 /** Below this an "image" is almost certainly a spacer / error page. */
@@ -130,29 +131,13 @@ export function isPrivateOrLocalHost(hostname: string): boolean {
   if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true;
   if (h.endsWith(".internal") || h === "metadata.google.internal") return true;
 
-  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
-  if (v4) {
-    const a = Number(v4[1]);
-    const b = Number(v4[2]);
-    if ([a, b, Number(v4[3]), Number(v4[4])].some((n) => n > 255)) return true; // malformed
-    if (a === 0 || a === 127 || a === 10) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true; // link-local incl. 169.254.169.254
-    if (a >= 224) return true; // multicast / reserved
-    return false;
+  // IP literals (v4, and v6 incl. hex-form mapped, NAT64, 6to4) share the
+  // webhook SSRF classifier so the two guards can't drift.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
+    if (h.split(".").some((n) => Number(n) > 255)) return true; // malformed
+    return isPrivateOrReservedIp(h);
   }
-
-  if (h.includes(":")) {
-    // IPv6 literal.
-    if (h === "::1" || h === "::") return true;
-    if (h.startsWith("fc") || h.startsWith("fd")) return true; // unique-local fc00::/7
-    if (h.startsWith("fe80") || h.startsWith("fe9") || h.startsWith("fea") || h.startsWith("feb"))
-      return true; // link-local fe80::/10
-    const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(h);
-    if (mapped) return isPrivateOrLocalHost(mapped[1]!);
-    return false;
-  }
+  if (h.includes(":")) return isPrivateOrReservedIp(h);
 
   // No dot, not an IP → single-label / internal hostname.
   if (!h.includes(".")) return true;

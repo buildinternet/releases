@@ -42,28 +42,129 @@ function parseIpv4(host: string): number[] | null {
   return octets;
 }
 
+/**
+ * True for an IPv4 address that must never be an outbound fetch target:
+ * private, loopback, link-local (incl. 169.254.169.254 metadata), CGNAT,
+ * IETF protocol assignments, benchmarking, documentation, multicast,
+ * reserved and broadcast ranges.
+ */
 export function isPrivateIpv4(octets: number[]): boolean {
-  const [a, b] = octets;
-  if (a === 10) return true;
-  if (a === 127) return true;
-  if (a === 0) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true;
+  const [a, b, c] = octets;
+  if (a === 0) return true; // 0.0.0.0/8 "this network"
+  if (a === 10) return true; // RFC 1918
+  if (a === 127) return true; // loopback
+  if (a === 169 && b === 254) return true; // link-local, cloud metadata
+  if (a === 172 && b >= 16 && b <= 31) return true; // RFC 1918
+  if (a === 192 && b === 168) return true; // RFC 1918
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+  if (a === 192 && b === 0 && (c === 0 || c === 2)) return true; // IETF 192.0.0/24, TEST-NET-1
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking 198.18/15
+  if (a === 198 && b === 51 && c === 100) return true; // TEST-NET-2
+  if (a === 203 && b === 0 && c === 113) return true; // TEST-NET-3
+  if (a >= 224) return true; // multicast 224/4, reserved 240/4, broadcast
   return false;
 }
 
-export function isPrivateIpv6(host: string): boolean {
-  const h = normalizeHostname(host);
-  if (h === "::1" || h === "0:0:0:0:0:0:0:1") return true;
-  if (h.startsWith("fc") || h.startsWith("fd")) return true;
-  if (/^fe[89ab]/.test(h)) return true;
-  if (h.startsWith("::ffff:")) {
-    const mapped = h.slice("::ffff:".length);
-    const octets = parseIpv4(mapped);
-    if (octets) return isPrivateIpv4(octets);
+const HEXTET_RE = /^[0-9a-f]{1,4}$/;
+
+/**
+ * Parse an IPv6 literal (with or without brackets / zone id) into 8 hextets.
+ * Handles `::` compression and a trailing dotted IPv4 (`::ffff:1.2.3.4`).
+ * Returns null for anything that isn't a well-formed IPv6 address.
+ */
+export function parseIpv6(host: string): number[] | null {
+  let h = normalizeHostname(host);
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  const zone = h.indexOf("%");
+  if (zone !== -1) h = h.slice(0, zone);
+  if (!h.includes(":")) return null;
+
+  let tail: number[] = [];
+  const lastColon = h.lastIndexOf(":");
+  const maybeV4 = h.slice(lastColon + 1);
+  if (maybeV4.includes(".")) {
+    const v4 = parseIpv4(maybeV4);
+    if (!v4) return null;
+    tail = [(v4[0]! << 8) | v4[1]!, (v4[2]! << 8) | v4[3]!];
+    h = h.slice(0, lastColon + 1) + "0:0"; // two placeholder hextets, replaced below
   }
+
+  const halves = h.split("::");
+  if (halves.length > 2) return null;
+  const parseSide = (side: string): number[] | null => {
+    if (side === "") return [];
+    const parts = side.split(":");
+    const out: number[] = [];
+    for (const part of parts) {
+      if (!HEXTET_RE.test(part)) return null;
+      out.push(parseInt(part, 16));
+    }
+    return out;
+  };
+  const head = parseSide(halves[0]!);
+  const rest = halves.length === 2 ? parseSide(halves[1]!) : [];
+  if (!head || !rest) return null;
+
+  let hextets: number[];
+  if (halves.length === 2) {
+    const fill = 8 - head.length - rest.length;
+    if (fill < 1) return null;
+    hextets = [...head, ...Array<number>(fill).fill(0), ...rest];
+  } else {
+    hextets = head;
+  }
+  if (hextets.length !== 8) return null;
+  if (tail.length === 2) hextets.splice(6, 2, tail[0]!, tail[1]!);
+  return hextets;
+}
+
+function embeddedIpv4(hi: number, lo: number): number[] {
+  return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff];
+}
+
+/**
+ * True for an IPv6 literal that must never be an outbound fetch target, or
+ * that embeds an IPv4 address which must not be (mapped, compatible, NAT64,
+ * 6to4). Accepts the bracketed form `URL.hostname` returns (`[::1]`). An
+ * unparseable value is treated as private (fail closed).
+ */
+export function isPrivateIpv6(host: string): boolean {
+  const x = parseIpv6(host);
+  if (!x) return true;
+  const [h0, h1, h2, h3, h4, h5, h6, h7] = x as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const firstSixZero = h0 === 0 && h1 === 0 && h2 === 0 && h3 === 0 && h4 === 0;
+  if (firstSixZero && h5 === 0) {
+    // :: (unspecified), ::1 (loopback), ::a.b.c.d (deprecated v4-compatible)
+    if (h6 === 0 && (h7 === 0 || h7 === 1)) return true;
+    return isPrivateIpv4(embeddedIpv4(h6, h7));
+  }
+  if (firstSixZero && h5 === 0xffff) return isPrivateIpv4(embeddedIpv4(h6, h7)); // ::ffff:0:0/96
+  if (h0 === 0 && h1 === 0 && h2 === 0 && h3 === 0 && h4 === 0xffff && h5 === 0) {
+    return isPrivateIpv4(embeddedIpv4(h6, h7)); // ::ffff:0:0:0/96 SIIT
+  }
+  if (h0 === 0x64 && h1 === 0xff9b) {
+    if (h2 === 0 && h3 === 0 && h4 === 0 && h5 === 0) {
+      return isPrivateIpv4(embeddedIpv4(h6, h7)); // NAT64 64:ff9b::/96
+    }
+    if (h2 === 1) return true; // local-use NAT64 64:ff9b:1::/48
+  }
+  if (h0 === 0x2002) return isPrivateIpv4(embeddedIpv4(h1, h2)); // 6to4 2002::/16
+  if (h0 === 0x2001 && h1 === 0) return true; // Teredo 2001::/32 (embeds an obfuscated v4)
+  if (h0 === 0x2001 && h1 === 0xdb8) return true; // documentation
+  if (h0 === 0x100 && h1 === 0 && h2 === 0 && h3 === 0) return true; // discard 100::/64
+  if ((h0 & 0xfe00) === 0xfc00) return true; // unique-local fc00::/7
+  if ((h0 & 0xffc0) === 0xfe80) return true; // link-local fe80::/10
+  if ((h0 & 0xffc0) === 0xfec0) return true; // site-local fec0::/10 (deprecated)
+  if ((h0 & 0xff00) === 0xff00) return true; // multicast ff00::/8
   return false;
 }
 

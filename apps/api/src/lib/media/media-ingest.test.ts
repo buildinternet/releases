@@ -116,14 +116,17 @@ describe("processMediaForR2", () => {
     const db = createDb(testDb as unknown as D1Database);
     const { bucket, puts } = makeFakeBucket();
 
-    const result = await processMediaForR2([{ type: "image", url: "https://x/page.html" }], {
-      db,
-      bucket,
-      fetchImpl: imageFetch(2048, "text/html"),
-    });
+    const result = await processMediaForR2(
+      [{ type: "image", url: "https://x.example/page.html" }],
+      {
+        db,
+        bucket,
+        fetchImpl: imageFetch(2048, "text/html"),
+      },
+    );
 
     expect(result[0]!.r2Key).toBeUndefined();
-    expect(result[0]!.url).toBe("https://x/page.html");
+    expect(result[0]!.url).toBe("https://x.example/page.html");
     expect(puts).toHaveLength(0);
   });
 
@@ -132,11 +135,14 @@ describe("processMediaForR2", () => {
     const db = createDb(testDb as unknown as D1Database);
     const { bucket, puts } = makeFakeBucket();
 
-    const result = await processMediaForR2([{ type: "image", url: "https://x/pixel.gif" }], {
-      db,
-      bucket,
-      fetchImpl: imageFetch(10, "image/gif"),
-    });
+    const result = await processMediaForR2(
+      [{ type: "image", url: "https://x.example/pixel.gif" }],
+      {
+        db,
+        bucket,
+        fetchImpl: imageFetch(10, "image/gif"),
+      },
+    );
 
     expect(result[0]!.r2Key).toBeUndefined();
     expect(puts).toHaveLength(0);
@@ -150,7 +156,7 @@ describe("processMediaForR2", () => {
       throw new Error("network down");
     }) as unknown as typeof fetch;
 
-    const result = await processMediaForR2([{ type: "image", url: "https://x/a.png" }], {
+    const result = await processMediaForR2([{ type: "image", url: "https://x.example/a.png" }], {
       db,
       bucket,
       fetchImpl: throwingFetch,
@@ -169,7 +175,7 @@ describe("processMediaForR2", () => {
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
       })) as unknown as typeof fetch;
 
-    const result = await processMediaForR2([{ type: "image", url: "https://x/slow.png" }], {
+    const result = await processMediaForR2([{ type: "image", url: "https://x.example/slow.png" }], {
       db,
       bucket,
       perItemTimeoutMs: 10,
@@ -187,8 +193,8 @@ describe("processMediaForR2", () => {
 
     const result = await processMediaForR2(
       [
-        { type: "image", url: "https://x/a.png" },
-        { type: "image", url: "https://y/b.png" },
+        { type: "image", url: "https://x.example/a.png" },
+        { type: "image", url: "https://y.example/b.png" },
       ],
       { db, bucket, fetchImpl: imageFetch(2048) },
     );
@@ -203,7 +209,7 @@ describe("processMediaForR2", () => {
     const db = createDb(testDb as unknown as D1Database);
     const { bucket, puts } = makeFakeBucket();
 
-    const result = await processMediaForR2([{ type: "image", url: "https://x/huge.png" }], {
+    const result = await processMediaForR2([{ type: "image", url: "https://x.example/huge.png" }], {
       db,
       bucket,
       fetchImpl: imageFetch(MEDIA_MAX_BYTES + 1),
@@ -226,9 +232,9 @@ describe("processMediaForR2", () => {
 
     const result = await processMediaForR2(
       [
-        { type: "image", url: "https://x/1.png" },
-        { type: "image", url: "https://x/2.png" },
-        { type: "image", url: "https://x/3.png" },
+        { type: "image", url: "https://x.example/1.png" },
+        { type: "image", url: "https://x.example/2.png" },
+        { type: "image", url: "https://x.example/3.png" },
       ],
       { db, bucket, maxItems: 2, fetchImpl: sizedFetch },
     );
@@ -340,7 +346,7 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
 
     // A GIF larger than MEDIA_MAX_BYTES proves the transcode sidesteps the cap:
     // the raw bytes are never buffered/size-checked.
-    const result = await processMediaForR2([{ type: "gif", url: "https://x/demo.gif" }], {
+    const result = await processMediaForR2([{ type: "gif", url: "https://x.example/demo.gif" }], {
       db,
       bucket,
       mediaTransform: binding,
@@ -361,7 +367,7 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
       .where(eq(mediaAssets.r2Key, result[0]!.r2Key!));
     expect(rows).toHaveLength(1);
     expect(rows[0]!.contentType).toBe("video/mp4");
-    expect(rows[0]!.sourceUrl).toBe("https://x/demo.gif");
+    expect(rows[0]!.sourceUrl).toBe("https://x.example/demo.gif");
   });
 
   test("flag off (transcodeGif unset): a GIF takes the verbatim mirror path", async () => {
@@ -370,7 +376,7 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
     const { bucket, puts } = makeFakeBucket();
     const { binding, getInputs } = makeFakeMediaTransform(4096);
 
-    const result = await processMediaForR2([{ type: "gif", url: "https://x/small.gif" }], {
+    const result = await processMediaForR2([{ type: "gif", url: "https://x.example/small.gif" }], {
       db,
       bucket,
       mediaTransform: binding, // present, but transcodeGif not set
@@ -387,7 +393,7 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
     const db = createDb(testDb as unknown as D1Database);
     const { bucket, puts } = makeFakeBucket();
 
-    const result = await processMediaForR2([{ type: "gif", url: "https://x/small.gif" }], {
+    const result = await processMediaForR2([{ type: "gif", url: "https://x.example/small.gif" }], {
       db,
       bucket,
       transcodeGif: true, // on, but no mediaTransform binding
@@ -404,7 +410,7 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
     const { bucket, puts } = makeFakeBucket();
     const { binding, getInputs } = makeFakeMediaTransform(4096);
 
-    const result = await processMediaForR2([{ type: "image", url: "https://x/shot.png" }], {
+    const result = await processMediaForR2([{ type: "image", url: "https://x.example/shot.png" }], {
       db,
       bucket,
       mediaTransform: binding,
@@ -423,7 +429,7 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
     const { bucket, puts } = makeFakeBucket();
     const { binding } = makeFakeMediaTransform(4096, "throw-on-media");
 
-    const result = await processMediaForR2([{ type: "gif", url: "https://x/demo.gif" }], {
+    const result = await processMediaForR2([{ type: "gif", url: "https://x.example/demo.gif" }], {
       db,
       bucket,
       mediaTransform: binding,
@@ -432,7 +438,85 @@ describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
     });
 
     expect(result[0]!.r2Key).toBeUndefined();
-    expect(result[0]!.url).toBe("https://x/demo.gif");
+    expect(result[0]!.url).toBe("https://x.example/demo.gif");
     expect(puts).toHaveLength(0);
+  });
+});
+
+describe("processMediaForR2 — SSRF screen", () => {
+  test("never fetches private, internal or non-http media URLs", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const fetched: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      fetched.push(url);
+      return new Response(new Uint8Array(2048).fill(7), {
+        headers: { "content-type": "image/png" },
+      });
+    }) as unknown as typeof fetch;
+
+    const urls = [
+      "http://169.254.169.254/latest/meta-data/x.png",
+      "http://127.0.0.1:8080/x.png",
+      "http://[::ffff:7f00:1]/x.png",
+      "http://10.0.0.5/x.png",
+      "http://intranet/x.png",
+      "https://svc.internal/x.png",
+      "file:///etc/passwd",
+    ];
+    const result = await processMediaForR2(
+      urls.map((url) => ({ type: "image", url })),
+      { db, bucket, sourceId: null, fetchImpl },
+    );
+
+    expect(fetched).toEqual([]);
+    expect(puts).toHaveLength(0);
+    expect(result.every((r) => r.r2Key === undefined)).toBe(true);
+  });
+
+  test("re-screens each redirect hop and refuses a bounce to a private host", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const fetched: Array<{ url: string; redirect?: string }> = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      fetched.push({ url, redirect: init?.redirect });
+      return new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await processMediaForR2(
+      [{ type: "image", url: "https://cdn.example.com/hero.png" }],
+      { db, bucket, sourceId: null, fetchImpl },
+    );
+
+    expect(fetched).toEqual([{ url: "https://cdn.example.com/hero.png", redirect: "manual" }]);
+    expect(puts).toHaveLength(0);
+    expect(result[0]!.r2Key).toBeUndefined();
+  });
+
+  test("follows a public redirect and mirrors the final image", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const fetchImpl = (async (url: string) => {
+      if (url === "https://cdn.example.com/hero.png") {
+        return new Response(null, { status: 301, headers: { location: "/v2/hero.png" } });
+      }
+      return new Response(new Uint8Array(2048).fill(7), {
+        headers: { "content-type": "image/png" },
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await processMediaForR2(
+      [{ type: "image", url: "https://cdn.example.com/hero.png" }],
+      { db, bucket, sourceId: null, fetchImpl },
+    );
+
+    expect(puts).toHaveLength(1);
+    expect(result[0]!.r2Key).toMatch(/^releases\/[0-9a-f]{64}\.png$/);
   });
 });
