@@ -3,6 +3,7 @@ import type { RawRelease } from "./types.js";
 import { RELEASES_BOT_UA } from "./user-agent.js";
 import { htmlToMarkdown } from "./feed.js";
 import { getSourceMeta } from "./source-meta.js";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";
 
 /**
  * Help-center API adapter. A `type: "feed"` source whose `metadata.helpCenter`
@@ -112,7 +113,7 @@ export async function fetchZendeskArticles(
   try {
     while (url && pages < maxPages) {
       // oxlint-disable-next-line no-await-in-loop -- pages are strictly sequential; each next_page URL comes from the prior response
-      const res: Response = await fetch(url, { headers: { "User-Agent": RELEASES_BOT_UA } });
+      const res: Response = await guardFetch()(url, { headers: { "User-Agent": RELEASES_BOT_UA } });
       if (!res.ok) break;
       // oxlint-disable-next-line no-await-in-loop -- body read for the page just fetched above
       const json = (await res.json()) as { articles?: ZendeskArticle[]; next_page?: string | null };

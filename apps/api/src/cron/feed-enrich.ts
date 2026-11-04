@@ -21,6 +21,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { classifyProviderQuota } from "@releases/lib/provider-quota";
 import { resolveArticleExtractModel, type TextModelEnv } from "../lib/ai/text-model.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage, type UsageLogDb } from "../lib/ai/usage-log.js";
@@ -112,7 +113,9 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
     return { status: "no_improvement" };
   }
 
-  const fetchImpl = deps.fetchImpl ?? fetch;
+  // item.url is the feed item's own link (third-party content), so screen it
+  // and every redirect hop before the worker fetches it.
+  const fetchImpl = guardFetch(deps.fetchImpl ?? fetch);
   const floor = bar(item.summary, deps.thinChars);
 
   // Cheap path: plain fetch → markdown → AI cleanup. The fetch (and body read)

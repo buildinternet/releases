@@ -64,3 +64,50 @@ describe("publishReleaseEvents", () => {
     expect(result).toBeUndefined();
   });
 });
+
+describe("publishReleaseEvents — hidden-source containment", () => {
+  /** Minimal D1 stand-in: answers the visibility lookup, nulls everything else. */
+  function fakeDb(row: { hidden: number; deletedAt: string | null } | null | "throw") {
+    return {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async () => {
+            if (/FROM sources WHERE id/.test(sql)) {
+              if (row === "throw") throw new Error("d1 down");
+              return row;
+            }
+            return null;
+          },
+          all: async () => ({ results: [] }),
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+
+  const ctx = {
+    src: { name: "x", slug: "x", orgId: null, sourceId: "src_h" },
+    inserted: [{ id: "rel_h", title: "t", version: null, publishedAt: null, media: null }],
+  };
+
+  for (const [label, row] of [
+    ["hidden", { hidden: 1, deletedAt: null }],
+    ["soft-deleted", { hidden: 0, deletedAt: "2026-11-01T00:00:00Z" }],
+    ["missing", null],
+    ["unreadable", "throw"],
+  ] as const) {
+    it(`publishes nothing for a ${label} source`, async () => {
+      const { namespace, calls } = makeHub();
+      await publishReleaseEvents({ RELEASE_HUB: namespace as any, DB: fakeDb(row) } as any, ctx);
+      expect(calls).toHaveLength(0);
+    });
+  }
+
+  it("publishes for a visible source", async () => {
+    const { namespace, calls } = makeHub();
+    await publishReleaseEvents(
+      { RELEASE_HUB: namespace as any, DB: fakeDb({ hidden: 0, deletedAt: null }) } as any,
+      ctx,
+    );
+    expect(calls).toHaveLength(1);
+  });
+});

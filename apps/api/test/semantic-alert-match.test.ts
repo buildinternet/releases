@@ -572,6 +572,10 @@ describe("publishReleaseEvents semantic alerts", () => {
       logs.push(args.map(String).join(" "));
     };
     const db = {
+      // The source-visibility check passes; the failure under test is the match.
+      prepare: () => ({
+        bind: () => ({ first: async () => ({ hidden: 0, deletedAt: null }) }),
+      }),
       select() {
         throw new Error(`db touched ${QUERY}`);
       },

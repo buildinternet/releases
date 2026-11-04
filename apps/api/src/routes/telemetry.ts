@@ -9,12 +9,19 @@ import { newTelemetryEventId } from "@buildinternet/releases-core/id";
 import { sanitizeString, sanitizeInt } from "../lib/sanitize.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
-import { ValidationError } from "@releases/lib/releases-error";
+import {
+  PayloadTooLargeError,
+  RateLimitedError,
+  ValidationError,
+} from "@releases/lib/releases-error";
 
 export const telemetryRoutes = new Hono<Env>();
 
 const MAX_STRING = 200;
 const MAX_COMMAND = 120;
+/** A telemetry event is a handful of short fields; anything bigger is not one. */
+export const MAX_TELEMETRY_BODY_BYTES = 4096;
+const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 function sanitizeClientKind(v: unknown): string {
   if (typeof v !== "string") return "external";
@@ -27,9 +34,34 @@ function sanitizeSurface(v: unknown): string | null {
 }
 
 telemetryRoutes.post("/telemetry", async (c) => {
+  // Anonymous and open, so bound both the rate and the size of what one
+  // client can write into telemetry_events.
+  const limiter = c.env.TELEMETRY_RATE_LIMITER;
+  if (limiter) {
+    const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+    const { success } = await limiter.limit({ key: `telemetry:${ip}` });
+    if (!success) {
+      c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+      return respondError(c, new RateLimitedError("Too many telemetry events. Retry shortly."));
+    }
+  }
+
+  const declared = Number(c.req.header("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_TELEMETRY_BODY_BYTES) {
+    return respondError(c, new PayloadTooLargeError("Telemetry event too large"));
+  }
+  const raw = await c.req.text();
+  if (new TextEncoder().encode(raw).byteLength > MAX_TELEMETRY_BODY_BYTES) {
+    return respondError(c, new PayloadTooLargeError("Telemetry event too large"));
+  }
+
   let body: Record<string, unknown>;
   try {
-    body = await c.req.json();
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("not an object");
+    }
+    body = parsed as Record<string, unknown>;
   } catch {
     return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }

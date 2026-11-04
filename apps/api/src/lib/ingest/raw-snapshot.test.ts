@@ -7,10 +7,17 @@ import { saveRawSnapshot, loadRawSnapshot } from "./raw-snapshot.js";
 
 function fakeR2() {
   const store = new Map<string, string>();
+  const types = new Map<string, string | undefined>();
   return {
     store,
-    put: async (k: string, v: ArrayBuffer | string) => {
+    types,
+    put: async (
+      k: string,
+      v: ArrayBuffer | string,
+      opts?: { httpMetadata?: { contentType?: string } },
+    ) => {
       store.set(k, typeof v === "string" ? v : new TextDecoder().decode(v));
+      types.set(k, opts?.httpMetadata?.contentType);
     },
     get: async (k: string) => (store.has(k) ? { text: async () => store.get(k)! } : null),
     head: async (k: string) => (store.has(k) ? {} : null),
@@ -35,6 +42,23 @@ async function seedSource(db: ReturnType<typeof createDb>): Promise<void> {
 }
 
 describe("saveRawSnapshot / loadRawSnapshot", () => {
+  it("stores HTML and markdown bodies as plain text, never as a renderable document", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    await seedSource(db);
+    const R2 = fakeR2();
+    const html = await saveRawSnapshot(
+      { R2, db },
+      { sourceId: "src_x", body: "<script>alert(1)</script>", format: "html" },
+    );
+    const md = await saveRawSnapshot(
+      { R2, db },
+      { sourceId: "src_x", body: "# hi", format: "markdown" },
+    );
+    expect(R2.types.get(html.r2Key)).toBe("text/plain; charset=utf-8");
+    expect(R2.types.get(md.r2Key)).toBe("text/plain; charset=utf-8");
+  });
+
   it("round-trip: saves body to R2 + D1 pointer and loads it back", async () => {
     const { db: testDb } = createTestDb();
     const db = createDb(testDb as unknown as D1Database);

@@ -20,7 +20,7 @@ export async function fetchAndParseVideoFeed(
   conditionalHeaders?: Record<string, string>,
   fetchImpl: typeof fetch = fetch,
 ): Promise<FetchVideoFeedResult> {
-  const res = await fetchImpl(feedUrl, {
+  const res = await guardFetch(fetchImpl)(feedUrl, {
     headers: { "User-Agent": RELEASES_BOT_UA, Accept: FEED_ACCEPT, ...conditionalHeaders },
     redirect: "follow",
   });
@@ -46,3 +46,4 @@ export type {
   ResolvedVideoFeed,
   ParsedVideoFeed,
 } from "./types.js";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";

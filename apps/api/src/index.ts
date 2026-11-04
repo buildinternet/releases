@@ -241,6 +241,8 @@ export type Env = {
     // because publicRateLimitMiddleware only covers safe methods.
     FEEDBACK_RATE_LIMIT_ENABLED?: string;
     FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Per-IP limiter for the open POST /v1/telemetry (see routes/telemetry.ts).
+    TELEMETRY_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
     // Anonymous self-serve listing lane (/v1/listing validate + activate,
     // #1947). Kill switch + per-IP and per-domain rate limiters.
     LISTING_SELF_SERVE_ENABLED?: string;

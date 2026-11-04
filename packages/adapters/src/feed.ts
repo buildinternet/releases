@@ -18,6 +18,7 @@ export {
   type SourceMetadata,
 } from "@releases/adapters/source-meta";
 import type { SourceMetadata } from "@releases/adapters/source-meta";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";
 
 /**
  * Count of consecutive 4xx responses on a stored feedUrl after which we
@@ -143,7 +144,7 @@ async function discoverFromHead(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DiscoveredFeed | null> {
   try {
-    const res = await fetchImpl(pageUrl, {
+    const res = await guardFetch(fetchImpl)(pageUrl, {
       headers: { Accept: "text/html", "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
     });
@@ -184,7 +185,7 @@ export async function probeFeedPath(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DiscoveredFeed | null> {
   const probeUrl = `${origin}${path}`;
-  const res = await fetchImpl(probeUrl, {
+  const res = await guardFetch(fetchImpl)(probeUrl, {
     method: "HEAD",
     redirect: "follow",
     headers: { "User-Agent": RELEASES_BOT_UA },
@@ -203,7 +204,7 @@ export async function probeFeedPath(
   const feedLikePath =
     /\.(xml|rss|atom|json)$/i.test(path) || /(^|\/)(feed|rss|atom)\/?$/i.test(path);
   if (feedLikePath || /xml/i.test(ct)) {
-    const getRes = await fetchImpl(probeUrl, {
+    const getRes = await guardFetch(fetchImpl)(probeUrl, {
       redirect: "follow",
       headers: {
         "User-Agent": RELEASES_BOT_UA,
@@ -325,14 +326,14 @@ export async function fetchAndParseFeed(
     ...headers,
   };
 
-  let res = await fetchImpl(feedUrl, { headers: reqHeaders, redirect: "follow" });
+  let res = await guardFetch(fetchImpl)(feedUrl, { headers: reqHeaders, redirect: "follow" });
 
   // Belt-and-braces: if the server returns 406 (Not Acceptable) — some
   // CDN/WAF stacks reject even feed-specific Accept types — retry once with
   // Accept: */* before giving up. This is a single fallback, not a loop.
   if (res.status === 406) {
     const fallbackHeaders = { ...reqHeaders, Accept: "*/*" };
-    res = await fetchImpl(feedUrl, { headers: fallbackHeaders, redirect: "follow" });
+    res = await guardFetch(fetchImpl)(feedUrl, { headers: fallbackHeaders, redirect: "follow" });
   }
 
   if (res.status === 304) return { releases: [] };
@@ -412,7 +413,7 @@ export async function headCheckUrl(
   const start = Date.now();
 
   try {
-    const res = await fetchImpl(url, {
+    const res = await guardFetch(fetchImpl)(url, {
       method: "HEAD",
       headers: { "User-Agent": RELEASES_BOT_UA },
       signal: controller.signal,
@@ -505,7 +506,7 @@ export async function bodyHashCheck(
   const start = Date.now();
 
   try {
-    const res = await fetchImpl(url, {
+    const res = await guardFetch(fetchImpl)(url, {
       headers: { "User-Agent": RELEASES_BOT_UA },
       signal: controller.signal,
       redirect: "follow",

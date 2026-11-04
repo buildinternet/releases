@@ -137,11 +137,12 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
+// Raster only: `PUT /v1/media/:key` refuses SVG (it would run as a document on
+// media.releases.sh), matching the avatar-ingest allowlist.
 const CONTENT_TYPES: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
-  svg: "image/svg+xml",
   webp: "image/webp",
   gif: "image/gif",
 };
