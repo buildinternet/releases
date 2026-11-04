@@ -46,8 +46,8 @@ import { mountV1Routes } from "./v1-routes.js";
 import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namespaces.js";
 import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
-import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
-import { queryUnmanagedActiveSources } from "./queries/unmanaged-source-actors.js";
+import { pollAndFetch, queryDueSourceRefs } from "./cron/poll-fetch.js";
+import { queryUnmanagedActiveSourceRefs } from "./queries/unmanaged-source-actors.js";
 import { seedSourceActors } from "./lib/sources/source-actor-schedule.js";
 import { buildFetchOneEnv } from "./workflows/_fetch-env.js";
 import { createDb } from "./db.js";
@@ -71,6 +71,7 @@ import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/email/send
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
+import { crashMessage, withTransientDbRetry } from "./lib/cron-db-retry.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { NotFoundError } from "@releases/lib/releases-error";
 
@@ -1380,9 +1381,14 @@ function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): 
   return p
     .then(() => undefined)
     .catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = crashMessage(err);
       const stack = err instanceof Error ? err.stack : undefined;
-      logEvent("error", { component: tag, event: "dispatch-failed", err });
+      logEvent("error", {
+        component: tag,
+        event: "dispatch-failed",
+        err,
+        ...dbErrorLogFields(err),
+      });
       if (alertEnv) {
         // Fire-and-forget — never block or throw in the catch handler.
         const alert = formatCronCrashAlert({
@@ -1430,10 +1436,14 @@ async function fanOutPollAndFetch(env: Env["Bindings"]): Promise<void> {
 
   try {
     const now = new Date();
-    const [dueAll, unmanaged] = await Promise.all([
-      queryDueSources(db, now, { changeDetectEnabled: true }),
-      queryUnmanagedActiveSources(db, now),
-    ]);
+    // Sequential, not Promise.all: both scan sources_active, and stacking them
+    // in the same instant is what tips D1 into "overloaded" on a busy tick.
+    const dueAll = await withTransientDbRetry("due-sources", () =>
+      queryDueSourceRefs(db, now, { changeDetectEnabled: true }),
+    );
+    const unmanaged = await withTransientDbRetry("unmanaged-sources", () =>
+      queryUnmanagedActiveSourceRefs(db, now),
+    );
     if (unmanaged.length > 0) {
       logEvent("warn", {
         component: "poll-fetch-cron",
