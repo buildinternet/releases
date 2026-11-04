@@ -81,6 +81,41 @@ async function resolveSourceContext(
   }
 }
 
+/**
+ * Hidden-source containment for the live surfaces. A hidden source (paused,
+ * curator-pending discoveries such as appstore candidates) or a soft-deleted
+ * one is filtered from every public read via `sources_visible`; its releases
+ * must not leak through the WebSocket stream, the hub's replay buffer,
+ * webhooks or semantic alerts either. Fails closed: if visibility can't be
+ * read, nothing is published (live events are best-effort; leaking isn't).
+ * With no DB binding (unit tests) there is nothing to check against.
+ */
+async function isSourcePublic(db: D1Database | undefined, sourceId: string): Promise<boolean> {
+  if (!db) return true;
+  try {
+    const row = await db
+      .prepare(`SELECT is_hidden AS hidden, deleted_at AS deletedAt FROM sources WHERE id = ?`)
+      .bind(sourceId)
+      .first<{ hidden: number | null; deletedAt: string | null }>();
+    if (row && !row.hidden && !row.deletedAt) return true;
+    logEvent("info", {
+      component: "events",
+      event: "publish-skipped-non-public-source",
+      sourceId,
+      reason: row ? (row.deletedAt ? "deleted" : "hidden") : "missing",
+    });
+    return false;
+  } catch (err) {
+    logEvent("warn", {
+      component: "events",
+      event: "source-visibility-check-failed",
+      sourceId,
+      err,
+    });
+    return false;
+  }
+}
+
 export interface PublishEnv extends SemanticAlertEnv {
   RELEASE_HUB: DurableObjectNamespace;
   RELEASE_EVENTS_QUEUE?: Queue<ReleaseFanoutMessage>;
@@ -100,6 +135,7 @@ export interface PublishEnv extends SemanticAlertEnv {
  */
 export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext): Promise<void> {
   if (ctx.inserted.length === 0) return;
+  if (!(await isSourcePublic(env.DB, ctx.src.sourceId))) return;
   const eventOwners = new Map<
     string,
     { orgId: string; sourceId: string; productId: string | null; releaseType: "feature" | "rollup" }
