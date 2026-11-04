@@ -62,6 +62,10 @@ export const adminRoutes = [
   "ai",
   "status/fetch-log",
   "status/fetch-activity",
+  // Per-source scheduling + last-run detail (incl. hidden sources, fetch
+  // errors, AI usage). Read by the web admin views through /api/proxy.
+  "status/fetch-plan",
+  "status/source-workflow",
   "status/usage",
   "status/event",
   "admin/blocklist",

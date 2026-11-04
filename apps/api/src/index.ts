@@ -5,6 +5,7 @@ import { bindIssueTracing } from "@releases/lib/issue-context";
 bindIssueTracing(cloudflareWorkers);
 import {
   authMiddleware,
+  statusStreamAuthMiddleware,
   publicReadAuthMiddleware,
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
@@ -16,6 +17,7 @@ import {
   runAuthWithWaitUntil,
   type BetterAuthInstance,
 } from "./auth/index.js";
+import { sessionJwtOriginGuard, SESSION_JWT_PATH } from "./auth/session-jwt-origin-guard.js";
 import {
   oauthSelfServiceGuard,
   OAUTH_SELF_SERVICE_WRITE_PATHS,
@@ -567,6 +569,9 @@ app.get("/.well-known/oauth-protected-resource", (c) =>
 for (const p of OAUTH_SELF_SERVICE_WRITE_PATHS) {
   app.use(p, oauthSelfServiceGuard());
 }
+// Session → JWT is server-to-server only; refuse browser reads from any origin
+// but the exact web origin (see session-jwt-origin-guard.ts).
+app.use(SESSION_JWT_PATH, sessionJwtOriginGuard());
 
 // ── Better Auth ──
 // Human user sessions. Served at /api/auth/* on this worker (api.releases.sh). createAuth is
@@ -702,6 +707,10 @@ for (const r of adminRoutes) {
   v1.use(`/${r}`, mw, dbHealthCheck);
   v1.use(`/${r}/*`, mw, dbHealthCheck);
 }
+// The status WebSocket is opened straight from the admin dashboard in the
+// browser, which can't send a Bearer header; its gate also accepts an admin
+// cookie session from the exact web origin (see statusStreamAuthMiddleware).
+v1.use("/status/ws", statusStreamAuthMiddleware);
 // `publicWriteRoutes` namespaces get NO auth middleware and NO shared
 // rate-limit middleware here — every method, including writes, is open to
 // anonymous callers, and the handlers carry their OWN kill switch + per-IP /
