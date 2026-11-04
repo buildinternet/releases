@@ -1,5 +1,14 @@
 # @buildinternet/releases-api-types
 
+## 0.60.1
+
+### Patch Changes
+
+- 3c599a5: `PATCH` source updates accept `unproductiveDrains`, so an operator can reset the drain-convergence counter directly. Moving `fetchPriority` off `paused` clears the counter unless the same request sets it.
+- Updated dependencies [3301ad8]
+- Updated dependencies [9eb3223]
+  - @buildinternet/releases-core@0.36.1
+
 ## 0.60.0
 
 ### Minor Changes

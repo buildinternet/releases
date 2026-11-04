@@ -1,5 +1,12 @@
 # @buildinternet/releases-core
 
+## 0.36.1
+
+### Patch Changes
+
+- 3301ad8: Compile the regexes used inside loops in `fts`, `version-sort`, `domain`, and the changelog frontmatter parser once at module load instead of on every iteration. No behavior change.
+- 9eb3223: Add `actorManaged`, `actorNextAlarmAt`, and `actorLastAlarmAt` columns to the `sources` table and the `sourcesActive` / `sourcesVisible` views. They replace the `metadata.sourceActor` JSON mirror.
+
 ## 0.36.0
 
 ### Minor Changes
