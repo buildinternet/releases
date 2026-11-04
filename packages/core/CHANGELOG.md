@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.36.2
+
+### Patch Changes
+
+- 6045b21: Add the `sourceReleaseStats` table to the schema: a trigger-maintained per-source rollup of visible release counts and first/last `published_at`.
+
 ## 0.36.1
 
 ### Patch Changes
