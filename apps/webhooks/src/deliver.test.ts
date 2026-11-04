@@ -77,6 +77,53 @@ describe("deliver", () => {
     expect(r.httpStatus).toBe(400);
   });
 
+  it("does not follow a redirect and returns perm_fail on 3xx", async () => {
+    let seen: Request | undefined;
+    const r = await deliver(msg(), {
+      masterKey: "deadbeef".repeat(8),
+      timeoutMs: 1000,
+      fetchImpl: (async (req: Request) => {
+        seen = req;
+        return new Response(null, {
+          status: 307,
+          headers: { Location: "http://169.254.169.254/latest/meta-data/" },
+        });
+      }) as any,
+      now: () => 1,
+    });
+    expect(seen?.redirect).toBe("manual");
+    expect(r.outcome).toBe("perm_fail");
+    expect(r.httpStatus).toBe(307);
+    expect(r.errorCode).toBe("subscriber_redirect");
+  });
+
+  it("blocks bracketed private IPv6 literals before any fetch", async () => {
+    for (const url of [
+      "https://[::1]/hook",
+      "https://[::ffff:127.0.0.1]/hook",
+      "https://[::ffff:169.254.169.254]/hook",
+      "https://[64:ff9b::a9fe:a9fe]/hook",
+      "https://[fd00::1]/hook",
+    ]) {
+      let called = false;
+      const r = await deliver(
+        { ...msg(), url },
+        {
+          masterKey: "deadbeef".repeat(8),
+          timeoutMs: 1000,
+          fetchImpl: (async () => {
+            called = true;
+            return new Response("ok", { status: 200 });
+          }) as any,
+          resolveDns: PUBLIC_RESOLVE,
+          now: () => 1,
+        },
+      );
+      expect(r.errorCode).toBe("ssrf_blocked");
+      expect(called).toBe(false);
+    }
+  });
+
   it("returns retry on 5xx", async () => {
     const r = await deliver(msg(), {
       masterKey: "deadbeef".repeat(8),

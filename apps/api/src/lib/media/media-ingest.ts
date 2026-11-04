@@ -20,6 +20,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { mediaAssets, releases } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
+import { isPrivateOrLocalHost } from "./avatar-ingest.js";
 
 // Loose drizzle handle (matches the worker-helper convention in
 // `appstore-materialize.ts`) so both the schema-typed `createDb` result and
@@ -329,6 +330,30 @@ function logSkip(
   });
 }
 
+/** Max redirect hops followed while mirroring; each hop is re-screened. */
+const MEDIA_MAX_REDIRECTS = 4;
+
+/** Parse + SSRF-screen a media URL: http(s) only, no private / internal host. */
+function screenMediaUrl(raw: string, base?: URL): URL | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw, base);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  if (isPrivateOrLocalHost(parsed.hostname)) return null;
+  return parsed;
+}
+
+/**
+ * Fetch a media URL for mirroring. Media URLs come from third-party content
+ * (feed bodies, scraped pages, publish-token batch writes), so the target and
+ * every redirect hop go through the same SSRF screen as avatar ingest; redirects
+ * are followed manually so a 302 can't bounce the fetch to an internal host.
+ * A blocked URL throws, which `uploadOne` logs and fails open on (the
+ * third-party URL stays in place, unmirrored).
+ */
 async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
@@ -337,7 +362,19 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { signal: controller.signal });
+    let current = screenMediaUrl(url);
+    for (let hop = 0; hop <= MEDIA_MAX_REDIRECTS; hop++) {
+      if (!current) throw new Error("media url blocked by SSRF screen");
+      // oxlint-disable-next-line no-await-in-loop -- redirect chain is inherently sequential
+      const res = await fetchImpl(current.toString(), {
+        signal: controller.signal,
+        redirect: "manual",
+      });
+      const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+      if (!location) return res;
+      current = screenMediaUrl(location, current);
+    }
+    throw new Error("media url exceeded redirect limit");
   } finally {
     clearTimeout(timer);
   }

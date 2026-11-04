@@ -86,6 +86,9 @@ export async function deliver(
     headers,
     body,
     signal: AbortSignal.timeout(opts.timeoutMs),
+    // Never follow a redirect: the SSRF screen above only vetted message.url,
+    // and a 3xx could point the signed POST at an internal or third-party host.
+    redirect: "manual",
   });
 
   const start = Date.now();
@@ -99,6 +102,15 @@ export async function deliver(
         latencyMs,
         errorMessage: null,
         errorCode: null,
+      };
+    }
+    if (res.status >= 300 && res.status < 400) {
+      return {
+        outcome: "perm_fail",
+        httpStatus: res.status,
+        latencyMs,
+        errorMessage: `subscriber redirected (${res.status}); webhook URLs must not redirect`,
+        errorCode: "subscriber_redirect",
       };
     }
     if (res.status >= 400 && res.status < 500) {

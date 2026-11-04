@@ -38,7 +38,7 @@ import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import { checkPublishBinding } from "../queries/publish-tokens.js";
 import type { Env } from "../index.js";
-import { createAuth } from "../auth/index.js";
+import { createAuth, isExactWebOrigin } from "../auth/index.js";
 import { apiScopesFromPermissions, clampUserKeyScopes } from "../auth/api-key-scope.js";
 import { respondError } from "../lib/error-response.js";
 
@@ -551,6 +551,35 @@ export const authMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
   allowPublicReads: false,
   requiredScope: "admin",
 });
+
+/**
+ * Gate for the operator status WebSocket (`GET /v1/status/ws`). A browser
+ * `WebSocket` can't set an `Authorization` header, so the admin dashboard
+ * can't present the root key the way the `/api/proxy` routes do. Two ways in:
+ *
+ *   • a Bearer credential → the same `authMiddleware` admin gate as the rest
+ *     of `/status/*` (root key or an admin-scoped token);
+ *   • no Bearer → a Better Auth cookie session whose `user.role` is `admin`,
+ *     and only from the exact web origin. The Origin check stops a
+ *     cross-site page (or a sibling `*.releases.sh` host) from opening the
+ *     stream with an admin's cookie.
+ *
+ * Anything else falls through to `authMiddleware`, which keeps its 401 shape
+ * and the local-dev skip when no root secret is configured.
+ */
+export const statusStreamAuthMiddleware: MiddlewareHandler<Env> = async (c, next) => {
+  if (!bearer(c) && isExactWebOrigin(c.req.header("Origin"), c.env)) {
+    const auth = await getOrCreateAuth(c);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    const role = (session?.user as { role?: string | null } | undefined)?.role;
+    if (session?.user?.id && role === "admin") {
+      attachSessionIssueContext(session);
+      await next();
+      return;
+    }
+  }
+  return authMiddleware(c, next);
+};
 
 /**
  * GET/HEAD/OPTIONS pass without auth. POST/PATCH/DELETE require `write` scope

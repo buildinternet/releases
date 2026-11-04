@@ -123,6 +123,30 @@ describe("isTrustedCorsOrigin", () => {
     expect(isTrustedCorsOrigin("https://evil.example", { ENVIRONMENT: "production" })).toBe(false);
   });
 
+  it("trusts the releases.sh family over HTTPS only", () => {
+    const prodEnv = { ENVIRONMENT: "production" };
+    expect(isTrustedCorsOrigin("http://releases.sh", prodEnv)).toBe(false);
+    expect(isTrustedCorsOrigin("http://app.releases.sh", prodEnv)).toBe(false);
+    expect(isTrustedCorsOrigin("ws://app.releases.sh", prodEnv)).toBe(false);
+    expect(isTrustedCorsOrigin("https://releases.sh.evil.example", prodEnv)).toBe(false);
+    expect(isTrustedCorsOrigin("https://notreleases.sh", prodEnv)).toBe(false);
+  });
+
+  it("trusts the releases.localhost dev family only off-prod", () => {
+    expect(isTrustedCorsOrigin("https://releases.localhost", { ENVIRONMENT: "production" })).toBe(
+      false,
+    );
+    expect(
+      isTrustedCorsOrigin("http://api.releases.localhost", { ENVIRONMENT: "production" }),
+    ).toBe(false);
+    expect(isTrustedCorsOrigin("https://releases.localhost", { ENVIRONMENT: "development" })).toBe(
+      true,
+    );
+    expect(
+      isTrustedCorsOrigin("http://api.releases.localhost", { ENVIRONMENT: "development" }),
+    ).toBe(true);
+  });
+
   it("allows loopback only off-prod", () => {
     expect(isTrustedCorsOrigin("http://localhost:3000", { ENVIRONMENT: "production" })).toBe(false);
     expect(isTrustedCorsOrigin("http://localhost:3000", { ENVIRONMENT: "development" })).toBe(true);

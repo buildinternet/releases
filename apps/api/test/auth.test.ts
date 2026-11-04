@@ -381,7 +381,9 @@ describe("authTrustedOrigins", () => {
 
   it("mirrors the CORS family with subdomain wildcards", () => {
     const origins = authTrustedOrigins({} as never);
-    expect(origins).toContain("*.releases.sh");
+    // HTTPS-pinned: a scheme-less `*.releases.sh` would also trust http:// hosts.
+    expect(origins).toContain("https://*.releases.sh");
+    expect(origins).not.toContain("*.releases.sh");
     expect(origins).toContain("*.releases.localhost");
   });
 
@@ -405,12 +407,8 @@ describe("authTrustedOrigins", () => {
   it("excludes loopback origins in production (family only)", () => {
     const origins = authTrustedOrigins({ ENVIRONMENT: "production" } as never);
     expect(origins).not.toContain("http://localhost:*");
-    expect(origins).toEqual([
-      "https://releases.sh",
-      "*.releases.sh",
-      "https://releases.localhost",
-      "*.releases.localhost",
-    ]);
+    // The releases.localhost portless dev hosts are off-prod only too.
+    expect(origins).toEqual(["https://releases.sh", "https://*.releases.sh"]);
   });
 });
 

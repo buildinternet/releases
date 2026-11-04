@@ -3,6 +3,7 @@ export type Outcome = "success" | "retry" | "perm_fail" | "skipped" | "dlq" | "a
 export type ErrorCode =
   | "network"
   | "timeout"
+  | "subscriber_redirect"
   | "subscriber_4xx"
   | "subscriber_5xx"
   | "ssrf_blocked";
