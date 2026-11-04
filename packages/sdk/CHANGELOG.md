@@ -1,5 +1,12 @@
 # @buildinternet/releases-sdk
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [3c599a5]
+  - @buildinternet/releases-api-types@0.60.1
+
 ## 0.2.0
 
 ### Minor Changes

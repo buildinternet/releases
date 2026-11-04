@@ -248,15 +248,15 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.60.0",
+      "version": "0.60.1",
       "dependencies": {
-        "@buildinternet/releases-core": "^0.36.0",
+        "@buildinternet/releases-core": "^0.36.1",
         "zod": "^4.4.3",
       },
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",
-      "version": "0.36.0",
+      "version": "0.36.1",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
         "js-tiktoken": "^1.0.21",
@@ -334,7 +334,7 @@
     },
     "packages/sdk": {
       "name": "@buildinternet/releases-sdk",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@buildinternet/releases-api-types": "workspace:*",
       },
