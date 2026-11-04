@@ -4,7 +4,11 @@ import { sourceRawSnapshots } from "@buildinternet/releases-core/schema";
 import type { createDb } from "../../db.js";
 
 interface R2Like {
-  put(key: string, value: ArrayBuffer | string): Promise<unknown>;
+  put(
+    key: string,
+    value: ArrayBuffer | string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>;
   get(key: string): Promise<{ text(): Promise<string> } | null>;
   head(key: string): Promise<unknown | null>;
 }
@@ -12,6 +16,15 @@ interface R2Like {
 export type RawFormat = "markdown" | "html";
 
 const EXT: Record<RawFormat, string> = { markdown: "md", html: "html" };
+
+/**
+ * Snapshots hold third-party page bodies and the bucket is publicly served
+ * (`raw.releases.sh`; on staging the binding points at `released-media`,
+ * served from `media.releases.sh`). Store every body as plain text so a
+ * browser never renders scraped HTML as a document on a `releases.sh`
+ * subdomain. Readers go through `loadRawSnapshot`, which ignores the type.
+ */
+export const RAW_SNAPSHOT_CONTENT_TYPE = "text/plain; charset=utf-8";
 
 export async function saveRawSnapshot(
   deps: { R2: R2Like; db: ReturnType<typeof createDb> },
@@ -30,7 +43,9 @@ export async function saveRawSnapshot(
 
   // Only upload to R2 if not already there (content-addressed dedup)
   if (!(await deps.R2.head(r2Key))) {
-    await deps.R2.put(r2Key, input.body);
+    await deps.R2.put(r2Key, input.body, {
+      httpMetadata: { contentType: RAW_SNAPSHOT_CONTENT_TYPE },
+    });
   }
 
   // Insert the D1 pointer row, deduped at the DB on the

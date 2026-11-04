@@ -24,6 +24,7 @@ import {
   type MappedEntry,
 } from "./shared.js";
 import type { ExtractDeps, ExtractedEntry, UsageEntry } from "./types.js";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";
 
 export interface AgentExtractionOptions {
   guidance?: ExtractionGuidance;
@@ -318,7 +319,7 @@ export async function runAgentExtraction(
 
 async function isJsRenderedPage(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, {
+    const res = await guardFetch()(url, {
       headers: { "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
       signal: AbortSignal.timeout(10_000),

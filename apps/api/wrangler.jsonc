@@ -574,6 +574,15 @@
         "namespace_id": "1009",
         "simple": { "limit": 3, "period": 60 },
       },
+      {
+        // Per-IP cap for the open POST /v1/telemetry (CLI command events).
+        // Enforced in-handler (routes/telemetry.ts); generous for a busy agent
+        // loop, but bounds how fast one client can grow telemetry_events.
+        "name": "TELEMETRY_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1010",
+        "simple": { "limit": 120, "period": 60 },
+      },
     ],
   },
   // Secrets are managed in Cloudflare's Secrets Store (dashboard → Workers → Secrets Store).

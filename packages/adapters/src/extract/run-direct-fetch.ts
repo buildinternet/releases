@@ -21,6 +21,7 @@ import {
   type MappedEntry,
 } from "./shared.js";
 import type { ExtractDeps } from "./types.js";
+import { guardFetch } from "@releases/core-internal/outbound-fetch-guard";
 
 export interface DirectFetchOptions {
   fetchUrl: string;
@@ -58,7 +59,7 @@ export async function runDirectFetchExtraction(
   }
 
   logger.info(`Direct-fetch: GET ${opts.fetchUrl}`);
-  const res = await fetch(opts.fetchUrl, {
+  const res = await guardFetch()(opts.fetchUrl, {
     headers,
     redirect: "follow",
     signal: AbortSignal.timeout(30_000),

@@ -5,7 +5,7 @@ import { mediaAssets } from "@buildinternet/releases-core/schema";
 import { authMiddleware } from "../middleware/auth.js";
 import type { UploadResult } from "@releases/rendering/media";
 import { respondError } from "../lib/error-response.js";
-import { NotFoundError } from "@releases/lib/releases-error";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 type Env = {
   Bindings: {
@@ -54,10 +54,35 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
   return new Response(object.body, { headers });
 });
 
+/**
+ * Content types `PUT /media/:key` will store. The bucket is served as-is from
+ * `media.releases.sh`, a sibling of the web origin that shares its
+ * `.releases.sh` cookies, so anything a browser would run as a document (HTML,
+ * SVG, XML, JS) must never land there. Mirrors the media/avatar ingest
+ * allowlists: raster images plus the video formats the mirror writes.
+ */
+export const ALLOWED_MEDIA_PUT_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "video/mp4",
+  "video/webm",
+]);
+
 mediaRoutes.put("/media/:key{.+}", authMiddleware, async (c) => {
   const key = c.req.param("key");
+  const contentType = (c.req.header("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  if (!ALLOWED_MEDIA_PUT_TYPES.has(contentType)) {
+    return respondError(
+      c,
+      new ValidationError(
+        `Unsupported media type "${contentType || "missing"}": allowed types are ${[...ALLOWED_MEDIA_PUT_TYPES].join(", ")}`,
+      ),
+    );
+  }
   const body = await c.req.arrayBuffer();
-  const contentType = c.req.header("content-type") ?? "application/octet-stream";
 
   await c.env.MEDIA.put(key, body, {
     httpMetadata: { contentType },
