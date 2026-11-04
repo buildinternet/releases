@@ -366,14 +366,19 @@ const HOST_GLOB_CACHE = new Map<string, RegExp>();
  * origin is also trusted so local OAuth works on plain `localhost` ports.
  */
 export function authTrustedOrigins(env: Bindings): string[] {
-  const defaults = [
-    "https://releases.sh",
-    "*.releases.sh",
-    "https://releases.localhost",
-    "*.releases.localhost",
-  ];
+  // HTTPS only for the public family: a scheme-less `*.releases.sh` would also
+  // trust `http://<anything>.releases.sh`, which any on-path attacker can serve.
+  // The `releases.localhost` portless dev hosts are trusted only off-prod.
+  const defaults = ["https://releases.sh", "https://*.releases.sh"];
   const localDev =
-    env.ENVIRONMENT === "production" ? [] : ["http://localhost:*", "http://127.0.0.1:*"];
+    env.ENVIRONMENT === "production"
+      ? []
+      : [
+          "https://releases.localhost",
+          "*.releases.localhost",
+          "http://localhost:*",
+          "http://127.0.0.1:*",
+        ];
   return [...new Set([...defaults, ...localDev, ...extraTrustedOrigins(env)])];
 }
 
@@ -422,15 +427,20 @@ export function oauthValidAudiences(env: Bindings): string[] {
   return [...new Set([...auds].flatMap(audienceVariants))];
 }
 
-/** True for an origin in the releases.sh / releases.localhost family (any subdomain). */
-function isReleasesFamilyOrigin(origin: string): boolean {
+/**
+ * True for an origin in the releases.sh family (any subdomain, HTTPS only) or,
+ * outside production, the releases.localhost portless dev family. Kept in
+ * lockstep with the defaults in {@link authTrustedOrigins}.
+ */
+function isReleasesFamilyOrigin(origin: string, env: { ENVIRONMENT?: string }): boolean {
   try {
-    const host = new URL(origin).hostname;
+    const { protocol, hostname: host } = new URL(origin);
+    if (protocol === "https:" && (host === "releases.sh" || host.endsWith(".releases.sh"))) {
+      return true;
+    }
     return (
-      host === "releases.sh" ||
-      host.endsWith(".releases.sh") ||
-      host === "releases.localhost" ||
-      host.endsWith(".releases.localhost")
+      env.ENVIRONMENT !== "production" &&
+      (host === "releases.localhost" || host.endsWith(".releases.localhost"))
     );
   } catch {
     return false;
@@ -552,7 +562,7 @@ export function isTrustedCorsOrigin(
   env: { ENVIRONMENT?: string; BETTER_AUTH_TRUSTED_ORIGINS?: string },
 ): boolean {
   if (!origin) return false;
-  if (isReleasesFamilyOrigin(origin)) return true;
+  if (isReleasesFamilyOrigin(origin, env)) return true;
   if (matchesTrustedOrigin(origin, extraTrustedOrigins(env as Bindings))) return true;
   if (env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) return true;
   return false;
