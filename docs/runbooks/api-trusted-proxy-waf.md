@@ -35,13 +35,20 @@ Cloudflare dashboard → **Security** → **WAF** → **Custom rules** → **Cre
 
 The minimal trio (SBFM + BIC + Security Level) is not always enough on `releases.sh`. In production, trusted-proxy avatar uploads only worked after also skipping rate limiting, managed rules, user-agent blocking, and hotlink protection. Leave **All remaining custom rules** and **Zone Lockdown** unchecked unless you have a reason to bypass them.
 
-Expression (requires both trusted-proxy headers the web sends on every server-to-server call):
+Expression (requires both trusted-proxy headers the web sends on every server-to-server call,
+with the proxy key matched by **value**; paste the real `RELEASES_PROXY_KEY` in place of the
+placeholder):
 
 ```txt
 (http.host eq "api.releases.sh"
   and http.request.headers["x-requested-with"][0] eq "releases-web"
-  and http.request.headers["x-releases-proxy-key"][0] ne "")
+  and http.request.headers["x-releases-proxy-key"][0] eq "<RELEASES_PROXY_KEY>")
 ```
+
+Never match on header presence (`ne ""`): both headers are client-settable, so a presence
+check lets anyone skip the zone's rate limiting, managed rules and bot checks on
+`api.releases.sh`. Rotating `RELEASES_PROXY_KEY` means re-running the script below (it
+updates the rule in place).
 
 Place this rule **above** any broad challenge/block rules so it matches first.
 
@@ -64,7 +71,8 @@ After deploy, retry avatar upload on `/account/general` — should return JSON (
 
 ## Apply via script (recommended)
 
-With `CLOUDFLARE_API_TOKEN` (Zone WAF Edit) in the environment:
+With `CLOUDFLARE_API_TOKEN` (Zone WAF Edit) and `RELEASES_PROXY_KEY` in the environment
+(the script never prints the key; an existing presence-only rule is updated in place):
 
 ```bash
 bun scripts/apply-trusted-proxy-waf-skip.ts
@@ -73,7 +81,7 @@ bun scripts/apply-trusted-proxy-waf-skip.ts --dry-run
 
 Or dispatch the **Apply trusted-proxy WAF skip** GitHub Actions workflow
 (`.github/workflows/apply-trusted-proxy-waf.yml`) — it uses the repo’s
-`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets.
+`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` / `RELEASES_PROXY_KEY` secrets.
 
 ## API equivalent
 
