@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## October 31, 2026
+
+**Fixed**
+- Google sign-in no longer returns a 500 error for accounts that previously had a Gmail address variation stored — the callback no longer overwrites the account's saved email address, so sign-in succeeds without a conflict.
+
 ## October 24, 2026
 
 **Added**
