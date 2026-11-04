@@ -29,20 +29,26 @@ export async function getOrgsWithStats(
   // same set of rows whether or not empties are included. Stub orgs (#1947)
   // have no releases by design but ARE part of the directory (coverage breadth
   // is the product), so they're kept regardless of the empty-org toggle.
-  const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0 OR o.tier = 'stub'`;
+  const having = opts.includeEmpty
+    ? sql``
+    : sql`HAVING COALESCE(SUM(st.release_count), 0) > 0 OR o.tier = 'stub'`;
 
   return db.all<OrgListRow>(sql`
     SELECT
       o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured, o.tier,
       COUNT(DISTINCT s.id) AS source_count,
-      COUNT(r.id) AS release_count,
-      MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
-      COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
+      COALESCE(SUM(st.release_count), 0) AS release_count,
+      MAX(st.last_published_at) AS last_activity,
+      -- 30-day count per org: a range on idx_releases_source_published for that
+      -- org's sources, not a CASE over every release.
+      (SELECT COUNT(*) FROM releases_visible rr
+        JOIN sources_visible rs ON rs.id = rr.source_id
+        WHERE rs.org_id = o.id AND rr.published_at >= ${cutoff30d}) AS recent_release_count,
       (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products,
       (SELECT GROUP_CONCAT(d.domain, '||') FROM (SELECT domain FROM domain_aliases WHERE org_id = o.id AND product_id IS NULL ORDER BY domain) d) AS alias_domains
     FROM organizations_active o
     LEFT JOIN sources_visible s ON s.org_id = o.id
-    LEFT JOIN releases_visible r ON r.source_id = s.id
+    LEFT JOIN source_release_stats st ON st.source_id = s.id
     ${where}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured, o.tier
     ${having}
@@ -78,10 +84,10 @@ export async function countOrgsForList(
       SUM(CASE WHEN per_org.release_count = 0 AND per_org.tier = 'stub' THEN 1 ELSE 0 END) AS stub_empty,
       SUM(CASE WHEN per_org.release_count = 0 AND per_org.tier <> 'stub' THEN 1 ELSE 0 END) AS other_empty
     FROM (
-      SELECT o.id, o.tier, COUNT(r.id) AS release_count
+      SELECT o.id, o.tier, COALESCE(SUM(st.release_count), 0) AS release_count
       FROM organizations_active o
       LEFT JOIN sources_visible s ON s.org_id = o.id
-      LEFT JOIN releases_visible r ON r.source_id = s.id
+      LEFT JOIN source_release_stats st ON st.source_id = s.id
       ${where}
       GROUP BY o.id, o.tier
     ) AS per_org
@@ -110,12 +116,14 @@ export async function getOrgIdsForList(
   opts: OrgListOpts = {},
 ): Promise<string[]> {
   const where = orgListWhere(undefined, opts);
-  const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0 OR o.tier = 'stub'`;
+  const having = opts.includeEmpty
+    ? sql``
+    : sql`HAVING COALESCE(SUM(st.release_count), 0) > 0 OR o.tier = 'stub'`;
   const rows = await db.all<{ id: string }>(sql`
     SELECT o.id
     FROM organizations_active o
     LEFT JOIN sources_visible s ON s.org_id = o.id
-    LEFT JOIN releases_visible r ON r.source_id = s.id
+    LEFT JOIN source_release_stats st ON st.source_id = s.id
     ${where}
     GROUP BY o.id
     ${having}
@@ -149,14 +157,18 @@ export async function getOrgStatsByIds(
     SELECT
       o.id,
       COUNT(DISTINCT s.id) AS source_count,
-      COUNT(r.id) AS release_count,
-      MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
-      COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
+      COALESCE(SUM(st.release_count), 0) AS release_count,
+      MAX(st.last_published_at) AS last_activity,
+      -- 30-day count per org: a range on idx_releases_source_published for that
+      -- org's sources, not a CASE over every release.
+      (SELECT COUNT(*) FROM releases_visible rr
+        JOIN sources_visible rs ON rs.id = rr.source_id
+        WHERE rs.org_id = o.id AND rr.published_at >= ${cutoff30d}) AS recent_release_count,
       (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products,
       (SELECT GROUP_CONCAT(d.domain, '||') FROM (SELECT domain FROM domain_aliases WHERE org_id = o.id AND product_id IS NULL ORDER BY domain) d) AS alias_domains
     FROM organizations_active o
     LEFT JOIN sources_visible s ON s.org_id = o.id
-    LEFT JOIN releases_visible r ON r.source_id = s.id
+    LEFT JOIN source_release_stats st ON st.source_id = s.id
     WHERE o.id IN ${orgIds}
     GROUP BY o.id
   `);

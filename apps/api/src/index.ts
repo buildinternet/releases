@@ -69,6 +69,7 @@ import { sendDigests } from "./cron/send-digests.js";
 import { handleQueueBatch } from "./queues/handler.js";
 import { runCollectionSummaries } from "./cron/collection-summaries.js";
 import { refreshStatsRollup } from "./routes/stats.js";
+import { reconcileSourceReleaseStats } from "./queries/source-release-stats.js";
 import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/email/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
@@ -1229,6 +1230,11 @@ export default {
           }),
           alertEnv,
         ),
+      );
+      // Rebuild the trigger-maintained per-source release rollup and log any
+      // drift (should be zero). Daily because it reads every visible release.
+      ctx.waitUntil(
+        loggedDispatch("source-release-stats-reconcile-cron", reconcileSourceReleaseStats(env.DB)),
       );
       // Stub-tier demotion sweep (#1958): same daily tick, independent of the
       // staleness digest above — a `tracked` org that's lost every live
