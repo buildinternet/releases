@@ -89,10 +89,7 @@
   },
   "overrides": {
     "kysely": "^0.28.17",
-    "better-call": "1.4.4",
-    "@better-auth/infra": {
-      "@better-auth/utils": "0.5.1"
-    },
+    "better-call": "1.4.5",
     "ip-address": "^10.7.4"
   },
   "keywords": [

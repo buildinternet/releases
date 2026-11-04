@@ -73,7 +73,7 @@ This worker does implement RFC 8628 for the seeded `releases-cli` client (`devic
 
 **What we do.** `defaultRegistrationApplicationType` and `coerceExplicitWebToNativeForPrivateUseScheme` in `apps/api/src/auth/oauth-application-type.ts`, applied by `applyOAuthClientInterop` on `/oauth2/register` alongside the `grant_types` rewrite (composed on the same body).
 
-**This stack is `@better-auth/oauth-provider@1.7.14`, so this rewrite is live.** It was written under the 1.6.25 pin as forward-compat and became load-bearing with the 1.7 upgrade. Ported from buildinternet/uploads PRs #885–#887. Upstream's `clientRegistrationDefaultApplicationType: "infer"` (1.7.8, loopback `http` included in 1.7.10) still leaves an explicit `application_type: "web"` alone, which is what Cursor sends, so the coercion stays.
+**This stack is `@better-auth/oauth-provider@1.7.16`, so this rewrite is live.** It was written under the 1.6.25 pin as forward-compat and became load-bearing with the 1.7 upgrade. Ported from buildinternet/uploads PRs #885–#887. Upstream's `clientRegistrationDefaultApplicationType: "infer"` (1.7.8, loopback `http` included in 1.7.10) still leaves an explicit `application_type: "web"` alone, which is what Cursor sends, so the coercion stays.
 
 **Host-bearing redirects shipped in 1.7.8.** better-auth/better-auth#10956 accepts `cursor://anysphere.cursor-mcp/oauth/callback` for native clients and CIMD documents. The dist patch (`patches/@better-auth%2Foauth-provider@1.7.7.patch`) that ported that fix onto 1.7.7 is removed.
 
