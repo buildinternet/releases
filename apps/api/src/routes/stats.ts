@@ -85,6 +85,31 @@ export const STATS_ROLLUP_KEY = "stats:v1:days=30";
  */
 export const STATS_ROLLUP_TTL_SECONDS = 70 * 60;
 
+/**
+ * Visible releases published since `cutoff`, per active source. The rollup's
+ * only read of `releases`: `releasesInPeriod` and
+ * `sourceActivity.recentReleases` are both derived from it, so the window is
+ * read once per rollup instead of twice.
+ *
+ * `GROUP BY +source_id` stops SQLite from walking a source_id-leading index
+ * end to end to skip the group-by sort. It range-seeks the covering
+ * `idx_releases_published_source` instead, so it reads only the window's index
+ * entries plus the coverage probe. The join to `sources_active` runs once per
+ * group, not once per release. Exported for the query-plan test.
+ */
+export function recentReleasesBySourceSql(cutoff: string) {
+  return sql`
+    SELECT g.source_id, g.n
+    FROM (
+      SELECT source_id, COUNT(*) AS n
+      FROM releases_visible
+      WHERE published_at >= ${cutoff}
+      GROUP BY +source_id
+    ) g
+    INNER JOIN sources_active s ON s.id = g.source_id
+  `;
+}
+
 export async function computeStats(d1: D1Database, days: number) {
   const db = createDb(d1);
   const cutoff = daysAgoIso(days);
@@ -94,9 +119,11 @@ export async function computeStats(d1: D1Database, days: number) {
     [sourceCount],
     [releaseCount],
     [productCount],
-    [recentReleaseCount],
     [neverFetched],
     [recentlyFetched],
+    recentBySource,
+    visibleSources,
+    recentActivity,
   ] = await Promise.all([
     db.select({ n: count() }).from(organizationsActive),
     db.select({ n: count() }).from(sourcesActive),
@@ -109,49 +136,26 @@ export async function computeStats(d1: D1Database, days: number) {
     db.select({ n: count() }).from(productsActive),
     db
       .select({ n: count() })
-      .from(releasesVisible)
-      .innerJoin(sourcesActive, eq(releasesVisible.sourceId, sourcesActive.id))
-      .where(sql`${releasesVisible.publishedAt} >= ${cutoff}`),
-    db
-      .select({ n: count() })
       .from(sourcesActive)
       .where(sql`${sourcesActive.lastFetchedAt} IS NULL`),
     db.select({ n: count() }).from(sourcesActive).where(gte(sourcesActive.lastFetchedAt, cutoff)),
-  ]);
+    db.all<{ source_id: string; n: number }>(recentReleasesBySourceSql(cutoff)),
 
-  const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
-
-  // Per-source activity (top sources by recent release count) and recent fetch
-  // activity are independent of each other and of the counts above — run them
-  // concurrently rather than back-to-back (#1800 finding 8).
-  // Recent-window counts per source: an index range on published_at, so only
-  // the last `days` of releases are read.
-  const recentBySource = db
-    .select({
-      sourceId: releasesVisible.sourceId,
-      n: sql<number>`COUNT(*)`.as("recent_n"),
-    })
-    .from(releasesVisible)
-    .where(gte(releasesVisible.publishedAt, cutoff))
-    .groupBy(releasesVisible.sourceId)
-    .as("recent_by_source");
-
-  const [perSource, recentActivity] = await Promise.all([
+    // Per-source activity: one row per visible source. Recent counts are
+    // merged in from `recentBySource` below.
     db
       .select({
+        sourceId: sourcesVisible.id,
         sourceName: sourcesVisible.name,
         sourceSlug: sourcesVisible.slug,
         sourceType: sourcesVisible.type,
         orgName: organizationsActive.name,
         lastFetchedAt: sourcesVisible.lastFetchedAt,
         totalReleases: sql<number>`COALESCE(${sourceReleaseStats.releaseCount}, 0)`,
-        recentReleases: sql<number>`COALESCE(${recentBySource.n}, 0)`,
       })
       .from(sourcesVisible)
       .leftJoin(sourceReleaseStats, eq(sourceReleaseStats.sourceId, sourcesVisible.id))
-      .leftJoin(recentBySource, eq(recentBySource.sourceId, sourcesVisible.id))
-      .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
-      .orderBy(desc(sql`COALESCE(${recentBySource.n}, 0)`)),
+      .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id)),
 
     // Recent fetch activity — join sources + orgs so we can return name/slug/org
     db
@@ -175,6 +179,22 @@ export async function computeStats(d1: D1Database, days: number) {
       .limit(20),
   ]);
 
+  const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
+
+  // `recentBySource` covers every active source, hidden ones included, which
+  // is what `releasesInPeriod` counts. `sourceActivity` lists visible sources
+  // only, most recent releases first.
+  const recentCounts = new Map<string, number>();
+  let recentReleaseCount = 0;
+  for (const row of recentBySource) {
+    const n = Number(row.n);
+    recentCounts.set(row.source_id, n);
+    recentReleaseCount += n;
+  }
+  const perSource = visibleSources
+    .map(({ sourceId, ...rest }) => ({ ...rest, recentReleases: recentCounts.get(sourceId) ?? 0 }))
+    .toSorted((a, b) => b.recentReleases - a.recentReleases);
+
   return {
     // Legacy flat fields (back-compat)
     orgs: orgCount.n,
@@ -187,7 +207,7 @@ export async function computeStats(d1: D1Database, days: number) {
       organizations: orgCount.n,
       sources: sourceCount.n,
       releases: releaseCount.n,
-      releasesInPeriod: recentReleaseCount.n,
+      releasesInPeriod: recentReleaseCount,
     },
     sourceHealth: {
       upToDate: recentlyFetched.n,

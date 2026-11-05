@@ -739,7 +739,15 @@ export const releases = sqliteTable(
     index("idx_releases_url").on(table.url),
     index("idx_releases_source_published").on(table.sourceId, table.publishedAt),
     index("idx_releases_source_body_hash").on(table.sourceId, table.bodyHash),
-    index("idx_releases_published").on(table.publishedAt),
+    // Window counts ("releases in the last N days", per source). Covers every
+    // column `releases_visible` needs for a count, so a published_at range
+    // read never touches the table rows (migration 20261105000000).
+    index("idx_releases_published_source").on(
+      table.publishedAt,
+      table.sourceId,
+      table.suppressed,
+      table.id,
+    ),
     // Covers `(published_at DESC, id DESC)` cursor walks — GraphQL `latestReleases`
     // and REST `/v1/orgs/:slug/releases`. Drizzle's index() helper doesn't emit
     // direction modifiers, so the matching DESC index is hand-authored in the
@@ -758,11 +766,12 @@ export const releases = sqliteTable(
       table.publishedAt,
       table.id,
     ),
-    // Backs `minImportance` feed filtering. Partial: most rows are NULL
-    // (unscored history and low-signal releases never scored), so the index
-    // stays small and a `importance >= ?` seek skips the full published_at scan.
-    index("idx_releases_importance_published")
-      .on(table.importance, table.publishedAt)
+    // Backs `minImportance` feed filtering. Partial (scored rows only) and in
+    // the feed's own order, so `importance >= ?` walks newest-first, filters in
+    // the index, and stops at LIMIT instead of sorting every match. The DESC
+    // form is hand-authored in migration 20261105000000.
+    index("idx_releases_scored_feed")
+      .on(table.publishedAt, table.fetchedAt, table.id, table.importance)
       .where(sql`${table.importance} IS NOT NULL`),
   ],
 );
