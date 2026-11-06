@@ -25,8 +25,9 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "hono": "^4.13.11",
+    "hono": "^4.13.16",
     "ip-address": "^10.7.4",
-    "zod": "4.6.6"
+    "zod": "4.6.6",
+    "body-parser": "^2.4.0"
   }
 }

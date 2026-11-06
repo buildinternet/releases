@@ -90,7 +90,10 @@
   "overrides": {
     "kysely": "^0.28.17",
     "better-call": "1.4.5",
-    "ip-address": "^10.7.4"
+    "ip-address": "^10.7.4",
+    "body-parser": "^2.4.0",
+    "undici@7": "^7.30.2",
+    "undici@8": "^8.12.4"
   },
   "keywords": [
     "changelog",
@@ -127,7 +130,7 @@
     "@changesets/cli": "^2.31.1",
     "@types/bun": "^1.4.2",
     "drizzle-kit": "^0.31.10",
-    "hono": "^4.13.11",
+    "hono": "^4.13.16",
     "husky": "^9.1.7",
     "jose": "^6.2.12",
     "lint-staged": "^17.3.0",
