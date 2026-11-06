@@ -753,6 +753,10 @@ export const releases = sqliteTable(
     // direction modifiers, so the matching DESC index is hand-authored in the
     // migration file (20260506000000_releases_published_id_index.sql).
     index("idx_releases_published_id").on(table.publishedAt, table.id),
+    // The cross-source feed order (`published_at, fetched_at, id` DESC), so
+    // `listLatestReleases` walks newest-first and stops at LIMIT. DESC form is
+    // hand-authored in migration 20261106230000.
+    index("idx_releases_feed_order").on(table.publishedAt, table.fetchedAt, table.id),
     index("idx_releases_source_suppressed_published").on(
       table.sourceId,
       table.suppressed,

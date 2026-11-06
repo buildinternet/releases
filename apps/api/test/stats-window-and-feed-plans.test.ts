@@ -185,3 +185,91 @@ describe("listLatestReleases minImportance", () => {
     );
   });
 });
+
+describe("listLatestReleases join order", () => {
+  async function seeded() {
+    const sqlite = new Database(":memory:");
+    applyMigrations(sqlite);
+    let last: { sql: string; params: unknown[] } | null = null;
+    const db = drizzle(sqlite, {
+      schema,
+      logger: {
+        logQuery(query, params) {
+          last = { sql: query, params };
+        },
+      },
+    });
+    await db.insert(organizations).values([
+      { id: "org_a", slug: "acme", name: "Acme" },
+      { id: "org_h", slug: "hidden", name: "Hidden", isHidden: true },
+    ]);
+    const src = (id: string, orgId: string, type: "github" | "feed", extra = {}) => ({
+      id,
+      orgId,
+      slug: id,
+      name: id,
+      type,
+      url: `https://${id}.test`,
+      createdAt: NOW,
+      ...extra,
+    });
+    await db
+      .insert(sources)
+      .values([
+        src("src_gh", "org_a", "github"),
+        src("src_feed", "org_a", "feed"),
+        src("src_hidden", "org_a", "feed", { isHidden: true }),
+        src("src_horg", "org_h", "feed"),
+      ]);
+    const rel = (id: string, sourceId: string, daysAgo: number) => ({
+      id,
+      sourceId,
+      title: id,
+      content: "",
+      url: `https://${sourceId}.test/${id}`,
+      publishedAt: daysAgoIso(daysAgo),
+      fetchedAt: NOW,
+    });
+    await db
+      .insert(releases)
+      .values([
+        rel("gh_1", "src_gh", 1),
+        rel("feed_2", "src_feed", 2),
+        rel("feed_40", "src_feed", 40),
+        rel("hidden_1", "src_hidden", 1),
+        rel("horg_1", "src_horg", 1),
+      ]);
+    // Planner statistics are what sent the unscoped feed down the
+    // sources-first plan; keep them present so the test sees that planner.
+    sqlite.run("ANALYZE");
+    const outerTable = () => {
+      const { sql: query, params } = last!;
+      const plan = sqlite
+        .query(`EXPLAIN QUERY PLAN ${query}`)
+        .all(...(params as never[])) as Array<{ detail: string }>;
+      return plan.map((r) => r.detail).find((d) => /^(SCAN|SEARCH) (releases|sources)/.test(d));
+    };
+    return { db, outerTable };
+  }
+
+  it("walks the feed-order index from releases when the feed isn't scoped", async () => {
+    const { db, outerTable } = await seeded();
+    const cases = [
+      [{}, ["gh_1", "feed_2", "feed_40"]],
+      [{ since: daysAgoIso(30) }, ["gh_1", "feed_2"]],
+      [{ excludeSourceTypes: ["github"] }, ["feed_2", "feed_40"]],
+    ] as const;
+    for (const [filter, expected] of cases) {
+      const rows = await listLatestReleases(db as never, { limit: 20, ...filter } as never);
+      expect(rows.map((r) => r.id)).toEqual([...expected]);
+      expect(outerTable()).toMatch(/^(SCAN|SEARCH) releases USING INDEX idx_releases_feed_order/);
+    }
+  });
+
+  it("starts from the org's sources when scoped to an org", async () => {
+    const { db, outerTable } = await seeded();
+    const rows = await listLatestReleases(db as never, { limit: 20, orgId: "org_a" });
+    expect(rows.map((r) => r.id)).toEqual(["gh_1", "feed_2", "feed_40"]);
+    expect(outerTable()).toMatch(/^(SCAN|SEARCH) sources/);
+  });
+});
