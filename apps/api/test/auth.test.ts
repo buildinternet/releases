@@ -22,6 +22,7 @@ import {
   authTrustedOrigins,
   apiCorsMiddleware,
   AUTH_CORS_ALLOWED_HEADERS,
+  API_CORS_EXPOSED_HEADERS,
   deriveCookieDomain,
   derivePasskeyRp,
   createAuth,
@@ -31,6 +32,7 @@ import {
 import { buildStripePlugin } from "../src/auth/instance.js";
 import { resolveStoredMailbox } from "../src/auth/mailbox-link.js";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { magicLinkTemplate, type AuthEmailMessage } from "../src/auth/email.js";
@@ -493,26 +495,59 @@ describe("apiCorsMiddleware origin policy", () => {
   });
 
   // Drift guard: the regression in #1544 was the auth CORS allow-list falling behind the
-  // headers the sentinel client sends. Rather than re-hardcode "the three headers we know
-  // about today", read the headers the INSTALLED @better-auth/infra client actually stamps
-  // onto outgoing requests (`.set("X-…")` in its browser bundle) and assert every one is in
-  // AUTH_CORS_ALLOWED_HEADERS. A package bump that introduces a new custom header now fails
-  // here instead of silently breaking sign-in in production.
-  it("CORS allow-list covers every custom header the sentinel client sends", () => {
+  // headers the sentinel client sends. Rather than re-hardcode "the headers we know about
+  // today", read the Sentinel header-name table out of the INSTALLED @better-auth/infra
+  // client (the `client` entry plus the chunks it imports — since 0.4.27 the names live in a
+  // shared `NAMES = { requestId: ["X-Request-Id", "X-Sentinel-Request-Id"], … }` table) and
+  // assert every request header is in AUTH_CORS_ALLOWED_HEADERS and every response header the
+  // PoW solver reads is in API_CORS_EXPOSED_HEADERS. A package bump that introduces a new
+  // custom header now fails here instead of silently breaking sign-in in production.
+  function sentinelHeaderNames(): Map<string, string[]> {
     const require = createRequire(import.meta.url);
-    const clientBundle = readFileSync(require.resolve("@better-auth/infra/client"), "utf8");
-    const sentHeaders = new Set<string>();
-    for (const m of clientBundle.matchAll(/\.set\(\s*["'](X-[A-Za-z0-9-]+)["']/g)) {
-      sentHeaders.add(m[1]!.toLowerCase());
+    const entry = require.resolve("@better-auth/infra/client");
+    const dir = dirname(entry);
+    let source = readFileSync(entry, "utf8");
+    for (const m of source.matchAll(/from\s*["']\.\/([^"']+\.m?js)["']/g)) {
+      source += "\n" + readFileSync(join(dir, m[1]!), "utf8");
     }
-    // Sanity: the scan must find the known fingerprint headers, or the bundle shape changed
-    // and the regex needs revisiting (a silently-empty match set would make this test inert).
-    expect(sentHeaders.has("x-request-id")).toBe(true);
-    expect(sentHeaders.has("x-visitor-id")).toBe(true);
+    const table = source.match(/const NAMES = \{([\s\S]*?)\};/);
+    // Sanity: a missing table means the bundle shape changed and this scan needs revisiting
+    // (a silently-empty match set would make the test inert).
+    expect(table).not.toBeNull();
+    const names = new Map<string, string[]>();
+    for (const m of table![1]!.matchAll(/(\w+):\s*\[([^\]]*)\]/g)) {
+      names.set(
+        m[1]!,
+        [...m[2]!.matchAll(/["'](X-[A-Za-z0-9-]+)["']/g)].map((h) => h[1]!.toLowerCase()),
+      );
+    }
+    return names;
+  }
 
+  // Keys the client WRITES on requests vs. READS off responses (see `writeHeader` /
+  // `readHeader` call sites in the infra client bundle).
+  const SENTINEL_REQUEST_KEYS = ["requestId", "visitorId", "powSolution"];
+  const SENTINEL_RESPONSE_KEYS = ["powChallenge", "powReason"];
+
+  it("CORS allow-list covers every custom header the sentinel client sends", () => {
+    const names = sentinelHeaderNames();
+    expect(names.get("requestId")).toContain("x-request-id");
+    expect(names.get("visitorId")).toContain("x-visitor-id");
+    expect([...names.keys()].sort()).toEqual(
+      [...SENTINEL_REQUEST_KEYS, ...SENTINEL_RESPONSE_KEYS].sort(),
+    );
+
+    const sent = SENTINEL_REQUEST_KEYS.flatMap((k) => names.get(k) ?? []);
     const allowed = new Set(AUTH_CORS_ALLOWED_HEADERS.map((h) => h.toLowerCase()));
-    const missing = [...sentHeaders].filter((h) => !allowed.has(h));
-    expect(missing).toEqual([]);
+    expect(sent.filter((h) => !allowed.has(h))).toEqual([]);
+  });
+
+  it("CORS exposes every response header the sentinel PoW solver reads", () => {
+    const names = sentinelHeaderNames();
+    const read = SENTINEL_RESPONSE_KEYS.flatMap((k) => names.get(k) ?? []);
+    expect(read).toContain("x-pow-challenge");
+    const exposed = new Set(API_CORS_EXPOSED_HEADERS.map((h) => h.toLowerCase()));
+    expect(read.filter((h) => !exposed.has(h))).toEqual([]);
   });
 
   it("reflects the releases.sh family in production with credentials", async () => {
@@ -629,6 +664,7 @@ describe("apiCorsMiddleware origin policy", () => {
     );
 
     expect(res.headers.get("access-control-expose-headers")).toContain("Idempotency-Replayed");
+    expect(res.headers.get("access-control-expose-headers")).toContain("X-PoW-Challenge");
   });
 });
 

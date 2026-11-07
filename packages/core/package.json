@@ -62,8 +62,8 @@
     "access": "public"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.4",
     "js-tiktoken": "^1.0.21",
-    "nanoid": "^6.0.0"
+    "nanoid": "^6.0.2"
   }
 }

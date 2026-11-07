@@ -539,9 +539,11 @@ export function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
 /**
  * Baseline CORS preflight allow-list. The Sentinel client (#1544) stamps
  * `/api/auth/*` with `X-Visitor-Id` / `X-Request-Id` / `X-PoW-Solution` — these
- * must be listed or auth preflights fail. Drift-tested against the installed
- * `@better-auth/infra` client in auth.test.ts. Preflights may also request
- * extra headers; those are unioned in at request time.
+ * must be listed or auth preflights fail. Since `@better-auth/infra` 0.4.27 the
+ * client can send `X-Sentinel-*` spellings instead (`sentinelHeaders: "modern"`);
+ * both are listed so flipping that option never breaks sign-in. Drift-tested
+ * against the installed `@better-auth/infra` client in auth.test.ts. Preflights
+ * may also request extra headers; those are unioned in at request time.
  */
 export const AUTH_CORS_ALLOWED_HEADERS = [
   "Content-Type",
@@ -550,6 +552,24 @@ export const AUTH_CORS_ALLOWED_HEADERS = [
   "X-Visitor-Id",
   "X-Request-Id",
   "X-PoW-Solution",
+  "X-Sentinel-Visitor-Id",
+  "X-Sentinel-Request-Id",
+  "X-Sentinel-PoW-Solution",
+] as const;
+
+/**
+ * Response headers a cross-origin page may read. The web app calls the auth
+ * worker cross-origin (`releases.sh` → `api.releases.sh`), and the Sentinel
+ * client's PoW auto-solver reads the challenge from a 423's `X-PoW-Challenge` /
+ * `X-PoW-Reason` (or `X-Sentinel-*`) headers — unexposed, the browser hides them
+ * and the challenge is never solved. Drift-tested alongside the allow-list.
+ */
+export const API_CORS_EXPOSED_HEADERS = [
+  "Idempotency-Replayed",
+  "X-PoW-Challenge",
+  "X-PoW-Reason",
+  "X-Sentinel-PoW-Challenge",
+  "X-Sentinel-PoW-Reason",
 ] as const;
 
 /**
@@ -633,7 +653,7 @@ export function apiCorsMiddleware(): MiddlewareHandler<Env> {
 
     // 101 (WebSocket upgrade) headers are immutable — same skip as cacheDefaultDeny.
     if (c.res.status === 101) return;
-    c.res.headers.set("Access-Control-Expose-Headers", "Idempotency-Replayed");
+    c.res.headers.set("Access-Control-Expose-Headers", API_CORS_EXPOSED_HEADERS.join(", "));
     if (origin) applyCorsHeaders(c.res.headers, origin, env);
   };
 }
