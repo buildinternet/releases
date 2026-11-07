@@ -56,10 +56,12 @@ jobs:
 
       - name: Draft the changelog
         if: steps.existing.outputs.open == '0' && steps.window.outputs.skip == 'false'
-        uses: anthropics/claude-code-action@62238ddb33772a079b0a6d8665a1ff3043583067 # v1.0.114
+        uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1.0.262
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowed-tools "Bash(gh pr:*),Bash(git:*),Read,Edit,Write"'
+          # `sonnet` is an alias for the newest Sonnet the bundled Claude Code knows, so a newer
+          # model needs only an action bump (v1.0.262 ships Claude Code 2.1.310).
+          claude_args: '--model sonnet --allowed-tools "Bash(gh pr:*),Bash(git:*),Read,Edit,Write"'
           prompt: |
             You are drafting the daily self-changelog for releases.sh.
 
