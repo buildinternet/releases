@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
 import type { Env } from "./index.js";
 import { PUBLIC_OPERATIONS, specOperations } from "./api-surface.js";
+import { errorResponse } from "./lib/openapi-error.js";
 
 // Scalar pinned to a major version; jsdelivr resolves to the latest 1.x patch.
 // A breaking 2.x release won't silently swap in.
@@ -186,6 +187,11 @@ async function buildSpec(v1: Hono<Env>, c: Context<Env>) {
         },
         tags: TAGS,
       },
+      // hono-openapi >= 1.4 documents a 400 on every route that runs a
+      // validator and doesn't declare one, inlining its own error schema by
+      // default. Point it at the shared envelope `$ref` instead — that is what
+      // `validateJson` actually returns on a bad body.
+      defaultValidationErrorResponse: errorResponse("Invalid request body"),
     },
     c,
   );

@@ -126,7 +126,7 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   content, useful for direct links but not worth crawl budget (#1601
   index-bloat cleanup; the curated `sitemap-releases.xml` from #1181 was
   retired with the blanket noindex, and its backing `GET
-/v1/sitemap/releases` endpoint was removed as consumer-less in #2219 —
+  /v1/sitemap/releases` endpoint was removed as consumer-less in #2219 —
   the `SitemapRelease`/`SitemapReleasesPayload` schemas stay in
   `@buildinternet/releases-api-types`, `@deprecated`, through the
   one-minor deprecation lane). `robots.txt` also carries

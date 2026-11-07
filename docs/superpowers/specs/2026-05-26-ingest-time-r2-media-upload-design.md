@@ -97,7 +97,7 @@ timeout:
 1. `fetch(url)` (plain `fetch`, no auth).
 2. **Validate** the response: `Content-Type` matches
    `image/(png|jpe?g|gif|webp|avif)`; `byteLength` in `[MEDIA_MIN_BYTES,
-MEDIA_MAX_BYTES]` (floor drops spacers/pixels; ceiling drops absurd payloads).
+   MEDIA_MAX_BYTES]` (floor drops spacers/pixels; ceiling drops absurd payloads).
    On miss → skip (leave item untouched, no `r2Key`).
 3. `sha256(arrayBuffer)` via Web Crypto (`crypto.subtle.digest`) → hex.
 4. `r2Key = releases/{hash}.{ext}` (ext derived from the validated content-type).
@@ -131,7 +131,7 @@ exact current code path.
   `step.do`, which has a generous wall-clock budget.
 - **`workers/api/src/routes/sources.ts` `/releases/batch` (~708).** `r.media`
   arrives as a JSON string. Parse → `filterJunkMedia` → `await
-processMediaForR2(...)` → re-serialize before the insert row is built. This is
+  processMediaForR2(...)` → re-serialize before the insert row is built. This is
   the latency-sensitive request path; the per-fire cap + per-item timeout +
   bounded concurrency keep it controlled.
 
@@ -205,7 +205,7 @@ field. No migration → the schema-pairing CI gate is not triggered.
 - **Type/lint:** `npx tsc --noEmit` (root + `workers/api` + `web`); `bun run lint`.
 - **Smoke (R2 / cf.image can't run locally):** branch deploy
   `gh workflow run deploy-workers.yml --ref <branch> -f worker=api -f
-environment=production`, trigger a fetch on a media-rich source, confirm
+  environment=production`, trigger a fetch on a media-rich source, confirm
   `media-r2-upload` events in Axiom (`releases-cloudflare-logs`) and a
   `GET media.releases.sh/releases/{hash}.{ext}` → 200. Only then tighten CF
   Sources and verify a third-party transform now 403s while an R2 source 200s.

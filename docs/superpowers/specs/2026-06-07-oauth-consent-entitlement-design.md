@@ -299,7 +299,7 @@ If there is no session the page links to `/login` (the AS redirect chain via
    `requested ∩ entitledScopes(role)` via the web-local ladder mirror, rendered
    with friendly labels (`read` → "Read your catalog data", etc.).
 4. **Allow** → `authClient.oauth2.consent({ accept: true, scope: granted.join(" "),
-oauth_query })`; **Deny** → `{ accept: false, oauth_query }`. Follow the
+   oauth_query })`; **Deny** → `{ accept: false, oauth_query }`. Follow the
    returned redirect to the client's `redirect_uri`.
 
 Styling is hand-written Tailwind (stone palette, `dark:` variants), consistent

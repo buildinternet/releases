@@ -31,8 +31,8 @@ selected by an explicit per-subscription `format` field.
   `retry`. This engine is format-agnostic and stays unchanged.
 - The event body is a `ReleaseEvent` (`workers/api/src/events/types.ts`):
   `event.release.{ id, title, version, publishedAt, sourceName, sourceSlug,
-summary, org?: { slug, name, avatarUrl, githubHandle }, product?: { slug, name },
-media, ... }`. Slack-relevant fields are title, version, summary, org, product,
+  summary, org?: { slug, name, avatarUrl, githubHandle }, product?: { slug, name },
+  media, ... }`. Slack-relevant fields are title, version, summary, org, product,
   publishedAt, and a release URL.
 
 ## Decisions

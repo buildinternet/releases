@@ -18,7 +18,7 @@ redeploy, with an audit trail — before there's anything to authorize in phases
 ## Decisions (resolved with the user)
 
 1. **"operator" is a synonym for `admin`.** The ladder stays `{user, curator,
-admin}` (user→read, curator→read+write, admin→read+write+admin). There is no
+   admin}` (user→read, curator→read+write, admin→read+write+admin). There is no
    OAuth scope tier between `write` and `admin` for a distinct "operator" to
    occupy, so we do not invent one. **`entitlement.ts` is untouched** — the
    security boundary and the #1481 drift gate are unaffected.

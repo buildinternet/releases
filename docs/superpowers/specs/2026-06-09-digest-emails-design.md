@@ -208,7 +208,7 @@ Additive — CLI/MCP can adopt later without a breaking change. Published on the
   deleted-org / null-`published_at` rows excluded; cap respected.
 - **Cron:** empty gather → no send + no watermark advance; non-empty → send + watermark =
   `runStart`; only cadence-matching **and** `emailVerified` users selected; `digest-emails-
-enabled` off or `CRON_ENABLED` off → no-op; one failed send doesn't abort the loop.
+  enabled` off or `CRON_ENABLED` off → no-op; one failed send doesn't abort the loop.
 - **Unsubscribe token:** valid token → `cadence='off'`, idempotent; bad/malformed token →
   opaque 404; one user's token cannot affect another user's row.
 - **Auth gating on `/v1/me/digest`:** session works; `relu_` / OAuth-JWT user works;

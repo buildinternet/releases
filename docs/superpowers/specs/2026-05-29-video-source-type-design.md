@@ -86,7 +86,7 @@ App Store-like (always-changed).
 - New nested metadata block in `packages/adapters/src/source-meta.ts` (parity
   with `metadata.appStore`):
   - `video: { provider: "youtube" | "vimeo" | "wistia"; channel?: { id?; handle?;
-title?; playlistId?; playlistTitle? } }` — provider discriminator + resolved
+    title?; playlistId?; playlistTitle? } }` — provider discriminator + resolved
     identity for display and re-resolution.
   - `feedUrl` / `feedType` (existing) hold the Atom endpoint, so polling reuses
     feed machinery. Storing `feedUrl` is what lets a video source ride the
@@ -103,7 +103,7 @@ New `packages/adapters/src/video/` package area:
   - `parseFeed(xml): { channel, releases }` — provider-specific XML parse
     producing channel identity + `RawRelease[]`.
 - `index.ts` — `fetchAndParseVideoFeed(feedUrl, provider, conditionalHeaders?,
-fetchImpl?)` that fetches the feed (mirroring `fetchAndParseFeed`'s transport:
+  fetchImpl?)` that fetches the feed (mirroring `fetchAndParseFeed`'s transport:
   bot UA, conditional GET, 304-handling) and delegates the parse to
   `provider.parseFeed`. The parse is provider-specific because the generic feed
   parser (`@rowanmanning/feed-parser`) drops the `media:*` namespace — so it
@@ -126,7 +126,7 @@ YouTube provider specifics:
   - `content` = `media:group/media:description` (the creator's description, used
     as-is; `contentFromSummary` is intentionally left unset — see §4).
   - feed-root `channel` = `{ id: yt:channelId, title: author/name,
-playlistId: yt:playlistId, playlistTitle: title }`.
+    playlistId: yt:playlistId, playlistTitle: title }`.
 
 This registry is the seam Vimeo/Wistia plug into later — no other layer changes
 to add a provider.
@@ -164,7 +164,7 @@ at `workers/api/src/routes/sources.ts:~2201`):
 - Resolves provider via the registry → `feedUrl`, `canonicalUrl`, channel
   identity. Sets `source.url` to the **human** channel/playlist URL;
   `metadata.feedUrl` / `feedType` to the Atom endpoint; `metadata.video =
-{ provider, channel }`; `metadata.marketingFilter = true` (see §6) with a
+  { provider, channel }`; `metadata.marketingFilter = true` (see §6) with a
   `marketingFilterHint`.
 - Mints the source and runs an initial fetch.
 - CLI surface (`releases admin source create-video`) lives out-of-tree in the

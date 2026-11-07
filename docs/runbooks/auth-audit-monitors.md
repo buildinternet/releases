@@ -34,8 +34,8 @@ Monitor write goes through the **Axiom management API**, not the repo or the MCP
   automation path. On update, omit `notifierIds` to keep existing notifiers (`[]` removes them).
   `checkMonitors` is still the quickest way to verify state.
 - Threshold monitor body shape: `{ name, description, aplQuery, type:"Threshold",
-operator:"AboveOrEqual", threshold, intervalMinutes, rangeMinutes, triggerFromNRuns:1,
-notifierIds:[…] }`. The query must return a single scalar (`summarize count()` / `sum()`) and
+  operator:"AboveOrEqual", threshold, intervalMinutes, rangeMinutes, triggerFromNRuns:1,
+  notifierIds:[…] }`. The query must return a single scalar (`summarize count()` / `sum()`) and
   must NOT carry its own time filter — the monitor applies `rangeMinutes` as the window.
 
 Thresholds start permissive (see Tuning); all queries were validated against live

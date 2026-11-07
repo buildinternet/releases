@@ -125,9 +125,9 @@ filters, or the JSON payload? Advanced options →" → `/account/webhooks`.
    - Pointer to `/account/webhooks` for org-scoped alerts, filters, and JSON format.
 2. **Route:** `web/src/app/docs/integrations/slack/page.tsx` — copy the `api/webhooks`
    wrapper: `const SLUG = "integrations/slack"; generateMetadata = () =>
-docPageMetadata(SLUG); export default … <MarkdownDoc slug={SLUG} />`.
+   docPageMetadata(SLUG); export default … <MarkdownDoc slug={SLUG} />`.
 3. **Manifest:** add `{ slug: "integrations/slack", section: "Integrations", label:
-"Slack" }` to `ENTRIES` in `docs-manifest.ts`. Place the new **Integrations** section in
+   "Slack" }` to `ENTRIES` in `docs-manifest.ts`. Place the new **Integrations** section in
    a sensible order (proposed: after "For Owners", before "CLI").
 
 ## Cross-links

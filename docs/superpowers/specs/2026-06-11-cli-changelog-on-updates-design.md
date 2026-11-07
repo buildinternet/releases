@@ -53,7 +53,7 @@ the interesting work is purely the `/updates` presentation.
   `packages/core/src/reserved-slugs.ts`; fallback `releases-cli`). Set `category`/`kind` so
   it reads as a developer tool. `url: https://github.com/buildinternet/releases-cli`.
 - `POST /v1/sources` → **GitHub** source, `url:
-https://github.com/buildinternet/releases-cli`, `productSlug: cli`, `type: github`. The
+  https://github.com/buildinternet/releases-cli`, `productSlug: cli`, `type: github`. The
   existing `product-changelog` source keeps `isPrimary`. Creation auto-fetches all ~62
   releases; each lands with `version` = tag, `content` = changeset body, and a
   summarizer-generated `titleShort`/`summary`.
@@ -67,7 +67,7 @@ idempotent on re-fetch (dedup on `(source_id, url)`).
 
 > **Implementation note (2026-06-11):** the day spine and the same-day version-pill rollup
 > the brainstorm approved **already exist**. `buildFeedEntries` (`web/src/components/
-org-release-entries.ts`) groups the org feed by calendar day and collapses same-day
+> org-release-entries.ts`) groups the org feed by calendar day and collapses same-day
 > GitHub-tag clusters per `product ?? source` (via `rollupTags`/`isTag`), and
 > `ReleaseRollupRow` (`org-release-list.tsx`) renders the collapsed card — caret + product
 > label + `· N releases` + `v0.60 v0.61 v0.62` pills, expandable to per-version rows. The

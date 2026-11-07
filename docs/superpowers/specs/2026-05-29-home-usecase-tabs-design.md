@@ -21,14 +21,14 @@ tab.
 ## Current state
 
 - `web/src/components/terminal-session.tsx` — presentational, renders one `blocks:
-TerminalBlock[]` transcript. Already stateful: tracks `view` (`human`/`agents`) and a
+  TerminalBlock[]` transcript. Already stateful: tracks `view` (`human`/`agents`) and a
   typewriter `reveal` animation. Owns the panel border, the `●●●` traffic-light chrome
   (`showChrome`), the footer (`Humans/Agents` toggle when any block has `json`, plus a
   replay button when `animate`), and a copy button. A `TerminalCompare` sibling shares its
   surface tokens.
 - `web/src/app/page.tsx` — defines `DEMO_SESSION: TerminalBlock[]` (3 blocks, real
   CLI-faithful values/IDs) inline and renders `<TerminalSession blocks={DEMO_SESSION}
-maxHeight="20rem" animate ariaLabel="Example releases CLI session" />` inside a
+  maxHeight="20rem" animate ariaLabel="Example releases CLI session" />` inside a
   `data-nosnippet` wrapper. The transcript is **static** — not live-fetched.
 
 ## Design
