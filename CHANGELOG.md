@@ -3,6 +3,30 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## November 3, 2026
+
+**Fixed**
+- Patched multiple authentication vulnerabilities in a Better Auth 1.7.16 update — revoked sessions could remain valid for up to 5 minutes via the cookie cache, passkey verification did not enforce the expected web origin, workspace org admins could invite at elevated privilege levels, and email-change links remained usable after the email address changed hands.
+- Org overviews that carry text forward from a previous generation now run the same prose-quality checks over those carried-over sections.
+
+## November 2, 2026
+
+**Changed**
+- The "Breaking change" chip has been removed from release list cards — breaking-change details remain available through the API and MCP responses.
+
+**Fixed**
+- Org overviews now use full prose sentences instead of bold headline fragments and refresh immediately after regeneration; previously the page could serve a stale overview for up to 24 hours.
+- AI-generated release titles now target 50–80 characters (was 60–90) with a hard cap of 90; release bodies that previously exceeded the summarizer's input limit are now truncated and summarized rather than skipped.
+- Release summaries and org overviews are now rewritten when the first draft contains common machine-written patterns — the org narrating its own post, comma-stacked stat lists, or em-dash asides.
+- Contributor avatar photos are now filtered from release media at ingest time, not only when R2 mirroring is active.
+- The sources page for a paused org now shows each source as paused instead of displaying normal fetch schedules.
+
+## November 1, 2026
+
+**Fixed**
+- Sign-in failures during OAuth and magic-link flows now redirect to an error page with a clear message instead of returning raw errors to the browser.
+- Revoking a publish token that is already revoked now returns the current state rather than an error; reconnecting a workspace integration now shows a "reconnecting" status while the new authorization is being processed.
+
 ## October 31, 2026
 
 **Fixed**
