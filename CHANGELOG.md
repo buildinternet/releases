@@ -6,7 +6,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 ## November 3, 2026
 
 **Fixed**
-- Patched multiple authentication vulnerabilities in a Better Auth 1.7.16 update — revoked sessions could remain valid for up to 5 minutes via the cookie cache, passkey verification did not enforce the expected web origin, workspace org admins could invite at elevated privilege levels, and email-change links remained usable after the email address changed hands.
+- Applied upstream security fixes to sign-in, sessions, passkeys, workspace invitations, and email changes.
 - Org overviews that carry text forward from a previous generation now run the same prose-quality checks over those carried-over sections.
 
 ## November 2, 2026
@@ -57,7 +57,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 ## October 21, 2026
 
 **Fixed**
-- Patched four Next.js security advisories affecting the web frontend (SVG RCE via Image Optimization, `use cache` typed-array RCE, Server Action DoS, Image Optimization SSRF) and four MCP server/client advisories affecting the remote MCP server.
+- Applied upstream security fixes to the web frontend and the remote MCP server.
 
 ## October 20, 2026
 
@@ -147,7 +147,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 - `until` date filters — bare dates now include releases through the end of that day; the REST API, MCP tools, and CLI `--until` flag were cutting the day off at midnight, so single-day queries returned nothing.
 - `/updates/<date>` pages — day pages, the sitemap, and the digest archive now follow pagination through the full feed history; they were 404ing or truncating once the feed exceeded 100 releases.
 - Google sign-in — a duplicate-identity issue left a small number of users unable to sign in with Google; affected rows are cleared and the condition is now rejected at the database level.
-- OAuth error page — sign-in failures now redirect to a proper page on releases.sh instead of a raw API error screen; the underlying auth library update also closes a security advisory for an OAuth state / magic-link token confusion issue (any in-flight flows at deploy time will need to be restarted).
+- OAuth error page — sign-in failures now redirect to a proper page on releases.sh instead of a raw API error screen; the same update includes upstream security fixes for sign-in (sign-in flows in progress at deploy time needed to be restarted).
 
 ## October 3, 2026
 
@@ -263,7 +263,7 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 - Docs site gains three how-to guides: locating a changelog source for a product, converting any changelog to an RSS/Atom feed, and setting up release notifications.
 
 **Fixed**
-- MCP clients can now complete OAuth authorization — resource-request validation was incorrectly blocking clients that hadn't pre-declared their target resource, and a column encoding bug was silently discarding scope grants on new OAuth client registrations.
+- MCP clients can now complete OAuth authorization — clients that didn't name a target resource were being turned away, and newly registered clients could lose the permissions they were granted.
 - MCP OAuth sessions now issue refresh tokens so authenticated clients stay connected past the one-hour access-token expiry; concurrent token refreshes from multiple tabs or agent processes no longer trigger a forced re-authorization.
 
 ## August 30, 2026
@@ -276,7 +276,7 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 ## August 25, 2026
 
 **Fixed**
-- Generic MCP clients (MCPJam and similar) can now complete OAuth against the hosted MCP server — extra grant types are intersected rather than rejected, unrecognized scopes are dropped, and both the origin and `/mcp` path are accepted as valid resource identifiers. Follow tools that forward the caller's Bearer token to the REST API now work end-to-end.
+- More MCP clients (MCPJam and similar) can now complete OAuth against the hosted MCP server, and follow tools now work end-to-end once signed in.
 
 ## August 24, 2026
 
@@ -442,8 +442,7 @@ Turn one on from Account → Notifications. Follows, the digest, and webhooks st
 - Anonymous API reads are now served from Cloudflare Workers Cache — a global tiered cache rather than per-datacenter, so catalog, org, and search responses warm once and hit worldwide.
 
 **Fixed**
-- Auth sessions are no longer cached — a Workers Cache heuristic was letting `GET /api/auth/get-session` responses land in the shared cache, causing signed-in users to appear signed out for up to two hours.
-- Admin-gated and authorization-required API responses are no longer stored in shared cache — a gap where write-scoped and admin responses could be served to anonymous callers has been closed.
+- Signed-in users no longer appear signed out for up to two hours, and responses that depend on who is signed in are now kept out of the shared cache.
 
 ## July 6, 2026
 
