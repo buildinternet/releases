@@ -48,6 +48,18 @@ is unclear.
 - Distill aggressively: a 70-commit day might yield 3–7 bullets. Merge related PRs into one bullet.
 - A quiet or all-internal day produces no section at all.
 
+## Security fixes
+
+This changelog is public. A security fix gets one plain bullet that says which area was hardened
+("Applied upstream security fixes to sign-in and sessions"), not how it could have been exploited.
+
+- Don't describe the weakness, the attack, who could have exploited it, or how long it was open.
+- Don't list advisory titles or exploit classes (RCE, SSRF, DoS) for dependency updates. Naming a
+  public CVE id is fine when users have something to act on, such as updating the CLI.
+- Hardening the reader can't notice (internal route auth, SSRF guards, WAF or CORS rules, rate
+  limits) gets no bullet at all, same as other internal changes.
+- When a fix changes something users will see, describe that change and nothing more.
+
 ## Guardrails
 
 No PR numbers, no commit hashes, no internal file/function names, no conventional-commit prefixes,
