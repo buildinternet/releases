@@ -38,7 +38,7 @@
     "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "jose": "^6.2.12"
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.2.15"
   }
 }
