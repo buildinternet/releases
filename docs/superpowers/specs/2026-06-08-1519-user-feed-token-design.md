@@ -130,13 +130,13 @@ export function userFeedToAtom(
 - Maps `ReleaseLatestItem[]` → `EntryInput[]`: `sourceSlug = release.source.slug`,
   `sourceName = release.source.name`, `orgName = null` (author falls back to source
   name, which is correct for a cross-org feed), `linkHref = release.id ?
-${baseUrl}/release/${release.id} : release.url`.
+  ${baseUrl}/release/${release.id} : release.url`.
 - Feed-level: `scope: "user"`, `slug: lookupId` (non-secret, stable per token →
   stable `feedId` tag URI), `title: "Your followed releases"`, `subtitle:
-"Releases from the organizations and products you follow on Releases."`,
+  "Releases from the organizations and products you follow on Releases."`,
   `selfUrl` = the tokenized feed URL (standard for tokenized feeds — it's what the
   reader already holds), `alternateUrl: ${baseUrl}/following`, `authorName:
-"Releases"`.
+  "Releases"`.
 
 `opts.baseUrl` = `WEB_BASE_URL` (defaults `https://releases.sh`) so entry links and
 the alternate link point at the web app, matching every other feed.

@@ -96,7 +96,7 @@ Endpoints:
 1. Resolve the caller's follows into a set of followed org ids and followed product ids.
 2. Select from `releases_visible` JOIN `sources_visible` WHERE
    `source.org_id IN (followed orgs)` **OR** `source.product_id IN (followed
-products)`.
+   products)`.
 3. Order `published_at DESC, id DESC` (covered by the existing
    `idx_releases_published_id` index), apply the existing coverage-side hiding, and
    page with the existing cursor shape used by the other release-list routes.

@@ -188,7 +188,7 @@ morning's run. A live "today" refresh is a documented later enhancement.
   JSON parse (well-formed, fenced, trailing-prose, malformed → safe skip), eligibility
   (0-release day → no row/no AI call), idempotent upsert (re-run replaces, doesn't duplicate).
 - **Worker route smoke:** in-process `routes.request()` for `GET
-/v1/collections/:slug/daily-summaries` (range filter, empty range) against a `createTestDb()`
+  /v1/collections/:slug/daily-summaries` (range filter, empty range) against a `createTestDb()`
   env, per the existing worker smoke pattern.
 - **Eval (on-demand, not CI-gated):** a `tests/evals/collection-summary.eval.ts` mirroring
   `release-summary.eval.ts` to sanity-check prompt output quality on real day-windows.

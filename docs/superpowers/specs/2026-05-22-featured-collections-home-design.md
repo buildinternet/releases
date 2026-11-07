@@ -115,7 +115,7 @@ Mirror the existing per-entity admin menus:
   reflecting `isFeatured`.
 - New server action `web/src/app/actions/collection-admin.ts`:
   `setCollectionFeaturedAction({ slug, featured })` → `PATCH /v1/collections/:slug
-{ isFeatured: featured }` via `adminActionEnv()` (re-checks the gate server-side).
+  { isFeatured: featured }` via `adminActionEnv()` (re-checks the gate server-side).
   On success `revalidatePath("/")`, `revalidatePath("/collections")`,
   `revalidatePath("/collections/${slug}")`.
 - `web/src/app/collections/[slug]/page.tsx`: when `isLocalAdminEnabled()`, render

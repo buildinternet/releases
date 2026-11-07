@@ -138,7 +138,7 @@ behave differently per client. (Confirmed with the requester.)
 Worker unit tests (Bun, in-repo test DB):
 
 - `PATCH /v1/orgs/:slug { isHidden: true }` writes `is_hidden = 1`; `{ isHidden:
-false }` clears it; `isHidden` round-trips on `GET /v1/orgs/:slug`.
+  false }` clears it; `isHidden` round-trips on `GET /v1/orgs/:slug`.
 - `getOrgsWithStats` / `countOrgsForList` exclude a hidden org.
 - `getLatestReleasesAcross` excludes a hidden org's releases.
 - **Regression guards (the "stays reachable" requirement):** a hidden org is

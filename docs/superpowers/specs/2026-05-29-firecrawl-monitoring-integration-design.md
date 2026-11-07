@@ -283,7 +283,7 @@ from the App Store source-type work (#1160).
 
 1. **Firecrawl clearing CF managed challenge** — ✅ **RESOLVED (2026-05-29 spike).**
    `POST /v2/scrape { url: help.openai.com/.../chatgpt-release-notes, formats:["markdown"],
-proxy:"auto" }` returned HTTP 200 / `success:true`, page `statusCode:200`, title
+   proxy:"auto" }` returned HTTP 200 / `success:true`, page `statusCode:200`, title
    "ChatGPT — Release Notes | OpenAI Help Center", and **155,598 chars** of current
    markdown (dated entries, "Updated: 26 minutes ago") in 650ms. The premise holds for the
    OpenAI sources. `proxy:"auto"` was sufficient and fast — actual per-check credit cost

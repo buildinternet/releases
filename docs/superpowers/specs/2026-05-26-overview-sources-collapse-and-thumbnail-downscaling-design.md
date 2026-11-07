@@ -38,7 +38,7 @@ on its chip.
 - When expanded: all chips visible; toggle reads `Show fewer`.
 - The toggle is its own line below the chip grid, styled like the existing body
   "Show more" affordance: `text-[12px] font-medium text-stone-500
-hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200`. It is a
+  hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200`. It is a
   real `<button type="button">` with `aria-expanded`.
 
 ### Anchor-jump correctness (the subtle part)
@@ -153,7 +153,7 @@ the jagged thumb).
   without `unoptimized` next/image would double-optimize and re-incur Vercel
   image billing).
 - `MediaGallery` images (max-h-48 ≈ 400px display) → `cfImageUrl(src, { width:
-800 })`, likewise `unoptimized`.
+  800 })`, likewise `unoptimized`.
 - **Lightbox unchanged** — keeps the full original `src`. "Show full version on
   click/expand" already works (both the thumbnail button and gallery buttons
   open the `Lightbox`).

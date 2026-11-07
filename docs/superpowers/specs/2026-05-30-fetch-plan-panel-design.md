@@ -29,12 +29,12 @@ side-effect-correct write paths: **fetch priority/interval** and **Firecrawl**.
   `queryDueSources`) and run on their own `metadata.firecrawl.schedule` (default
   "every 6 hours"), ingested via the inbound webhook + workflow.
 - **Provisioning a Firecrawl monitor** is NOT a raw metadata write. `POST
-/v1/sources/:id/firecrawl/sync` (`workers/api/src/routes/firecrawl.ts`) merges
+  /v1/sources/:id/firecrawl/sync` (`workers/api/src/routes/firecrawl.ts`) merges
   `{enabled,schedule,proxy,goal}` into `metadata.firecrawl` _and_ creates the external
   monitor on enable / deletes it on disable, with orphan-compensation. The edit feature
   must use this route for the Firecrawl toggle.
 - **Existing write paths the edit feature reuses:** `PATCH
-/v1/orgs/:orgSlug/sources/:sourceSlug { fetchPriority }`; server-action plumbing in
+  /v1/orgs/:orgSlug/sources/:sourceSlug { fetchPriority }`; server-action plumbing in
   `web/src/app/actions/source-admin.ts` (`adminActionEnv()` + admin Bearer secret).
 
 ## Design
@@ -50,7 +50,14 @@ poll cron.
 - `describeFetchPlan(source: Source): FetchPlan` where
   ```ts
   type FetchStrategy =
-    "github" | "feed" | "appstore" | "video" | "crawl" | "scrape" | "agent" | "firecrawl";
+    | "github"
+    | "feed"
+    | "appstore"
+    | "video"
+    | "crawl"
+    | "scrape"
+    | "agent"
+    | "firecrawl";
   interface FetchPlan {
     strategy: FetchStrategy;
     strategyLabel: string; // "GitHub API", "RSS feed", "Browser scrape", "Firecrawl", …

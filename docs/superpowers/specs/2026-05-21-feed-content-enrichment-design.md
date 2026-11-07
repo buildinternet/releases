@@ -172,7 +172,7 @@ async function enrichFeedItem(
 ```
 
 1. **Cheap path — no CF call:** `fetch(item.url, { headers: { "User-Agent":
-RELEASES_BOT_UA } })` → HTML → `htmlToMarkdown()` (existing export). Run
+   RELEASES_BOT_UA } })` → HTML → `htmlToMarkdown()` (existing export). Run
    `extractArticle()` on that markdown; collect media via
    `extractMediaFromMarkdown()` (existing export).
 2. **Improvement bar:** accept only if
@@ -235,7 +235,7 @@ SSR feeds even if the binding is deferred).
   is **not** gated on `org.autoGenerateContent` — it improves stored content
   regardless of whether AI summaries are generated.
 - **Dedup interaction:** because we enrich only new URLs and `UNIQUE(source_id,
-url)` skips re-seen items, steady-state enrichment cost is bounded to
+  url)` skips re-seen items, steady-state enrichment cost is bounded to
   genuinely new items per fire.
 
 ### 5. Backfill — operator-triggered
@@ -251,7 +251,7 @@ POST /v1/workflows/enrich-feed-content
 
 - Selects thin, un-enriched releases for the source:
   `metadata.enrichment IS NULL` (or `json_extract(metadata,'$.enrichment') IS
-NULL`) **and** the row is still thin (`content == summary`-style predicate),
+  NULL`) **and** the row is still thin (`content == summary`-style predicate),
   ordered newest-first, capped at `limit`.
 - For each, run `enrichFeedItem`. On success, `UPDATE` `content`, `media`
   (when empty), `contentChars`/`contentTokens`/`contentHash`, and the marker.
@@ -262,7 +262,7 @@ NULL`) **and** the row is still thin (`content == summary`-style predicate),
   body without modifying that function; clearing `embeddedAt` queues the row for
   re-embed on the next embed pass.
 - `dryRun: true` reports per-release `{ id, currentChars, wouldEnrich,
-estimatedVia }` without writing.
+  estimatedVia }` without writing.
 - Returns a summary `{ scanned, enriched, skipped, failed, dryRun }`.
 
 The CLI wrapper (`releases admin source enrich <slug> [--limit] [--dry-run]`)
@@ -298,7 +298,7 @@ worker already uses — no new secret values: `CLOUDFLARE_ACCOUNT_ID` and
 ## Error handling
 
 - Every enrichment failure is **fail-open**: log a `logEvent("warn", { component:
-"feed-enrich", event: "enrich-failed", sourceSlug, url, err })` and keep the
+  "feed-enrich", event: "enrich-failed", sourceSlug, url, err })` and keep the
   feed summary. An item is never dropped or left empty because enrichment failed.
 - Render escalation is attempted at most once per item; the marker prevents
   retry storms across fires.

@@ -306,8 +306,8 @@ grants `read`/`write`/`admin` on those surfaces.
 - **Discovery surface.** The REST API worker is itself an OAuth resource server,
   so it serves its own RFC 9728 metadata at
   `GET /.well-known/oauth-protected-resource` (`{ resource: <API origin>,
-authorization_servers: [<origin>/api/auth], scopes_supported,
-bearer_methods_supported }`, built by `buildApiProtectedResourceMetadata` in
+  authorization_servers: [<origin>/api/auth], scopes_supported,
+  bearer_methods_supported }`, built by `buildApiProtectedResourceMetadata` in
   `oauth-discovery.ts`), mirroring the MCP worker's surface (see
   [mcp.md → OAuth discovery surface](mcp.md#oauth-discovery-surface-rfc-9728)).
   `resource` is the bare origin (= the verified `aud`); the issuer carries the

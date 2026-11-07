@@ -272,7 +272,7 @@ the gap with the web collection view:
 - **Org identity on every row.** Feed rows and the detail byline now carry the
   org's company icon (avatar) plus a human-readable label. `ReleaseFeedRow` /
   `ReleaseDetailStructured` gained `source.type`, `org { name, slug, avatarUrl,
-githubHandle }`, and `product { name, slug }`; the shared collection-feed
+  githubHandle }`, and `product { name, slug }`; the shared collection-feed
   `SELECT` and the latest-releases / `get_release` queries now resolve
   `avatar_url` plus the first linked GitHub handle (`org_accounts`,
   `platform = 'github'`) for the `OrgAvatar` fallback chain (stored avatar →

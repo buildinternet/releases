@@ -33,7 +33,7 @@ conventions coexist, each reinvented per surface:
    **no shared `errorResponse()` producer helper** — every site builds the object
    inline. HTTP status is chosen per call site.
 2. **A declared-but-unenforced wire schema.** `ErrorResponseSchema =
-{ error: string, message: string, errorCode?: string }`
+   { error: string, message: string, errorCode?: string }`
    (`packages/api-types/src/schemas/shared.ts:61`) is the nominal contract the CLI
    consumes, but producers only partly match it and **no consumer decodes it** —
    `web/src/lib/api.ts` reads only `res.status` and discards the body.
@@ -363,7 +363,7 @@ incremental. Retire the `ErrorResponseSchema` alias when the last site is gone.
 **`packages/api-types/src/schemas/errors.ts`**
 
 - `errorEnvelopeSchema` — `z.object({ error: z.object({ code: z.string(),
-type: <enum from core>, message: z.string(), details: z.unknown().optional() }) })`,
+  type: <enum from core>, message: z.string(), details: z.unknown().optional() }) })`,
   `.meta({ id })` for clean OpenAPI `$ref`.
 - `ErrorEnvelope` inferred type.
 - `decodeApiError(body): { code, type, message, details? }` — lenient parse,
