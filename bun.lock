@@ -256,7 +256,7 @@
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",
-      "version": "0.36.2",
+      "version": "0.36.3",
       "dependencies": {
         "drizzle-orm": "^0.45.4",
         "js-tiktoken": "^1.0.21",
