@@ -162,40 +162,51 @@ export async function listLatestReleases(db: AnyDb, q: LatestReleasesQuery) {
   }
   if (q.after) conds.push(afterFeedKey(r, q.after));
 
+  // Join order. Scoped to an org or a set of sources, SQLite should start from
+  // those sources and range-read each one's releases. Unscoped, the only cheap
+  // plan is walking `idx_releases_feed_order` newest-first and stopping at
+  // LIMIT, but with `sqlite_stat1` present the planner still prefers to start
+  // from `sources`, read every release, and sort them all (seconds on D1).
+  // CROSS JOIN is SQLite's join-order hint: the left table stays the outer
+  // loop, so `releases` drives the walk and the join condition moves to WHERE.
+  const scoped = q.orgId !== undefined || q.sourceIds !== undefined;
+  if (!scoped) conds.push(eq(r.sourceId, s.id));
+
+  const base = db
+    .select({
+      id: r.id,
+      title: r.title,
+      version: r.version,
+      type: r.type,
+      content: q.includeContent ? r.content : sql<string | null>`NULL`,
+      summary: r.summary,
+      importance: r.importance,
+      breaking: r.breaking,
+      titleGenerated: r.titleGenerated,
+      titleShort: r.titleShort,
+      publishedAt: r.publishedAt,
+      fetchedAt: r.fetchedAt,
+      url: r.url,
+      media: r.media,
+      contentChars: r.contentChars,
+      contentTokens: r.contentTokens,
+      coverageCount: sql<number>`(SELECT COUNT(*) FROM release_coverage WHERE canonical_id = ${r.id})`,
+      sourceName: s.name,
+      sourceSlug: s.slug,
+      sourceType: s.type,
+      sourceKind: s.kind,
+      orgName: o.name,
+      orgSlug: o.slug,
+      orgAvatarUrl: o.avatarUrl,
+      orgGithubHandle: githubHandleSubquery(sql`${o.id}`),
+      productName: p.name,
+      productSlug: p.slug,
+      productKind: p.kind,
+    })
+    .from(r);
+  const joined = scoped ? base.innerJoin(s, eq(r.sourceId, s.id)) : base.crossJoin(s);
   return (
-    db
-      .select({
-        id: r.id,
-        title: r.title,
-        version: r.version,
-        type: r.type,
-        content: q.includeContent ? r.content : sql<string | null>`NULL`,
-        summary: r.summary,
-        importance: r.importance,
-        breaking: r.breaking,
-        titleGenerated: r.titleGenerated,
-        titleShort: r.titleShort,
-        publishedAt: r.publishedAt,
-        fetchedAt: r.fetchedAt,
-        url: r.url,
-        media: r.media,
-        contentChars: r.contentChars,
-        contentTokens: r.contentTokens,
-        coverageCount: sql<number>`(SELECT COUNT(*) FROM release_coverage WHERE canonical_id = ${r.id})`,
-        sourceName: s.name,
-        sourceSlug: s.slug,
-        sourceType: s.type,
-        sourceKind: s.kind,
-        orgName: o.name,
-        orgSlug: o.slug,
-        orgAvatarUrl: o.avatarUrl,
-        orgGithubHandle: githubHandleSubquery(sql`${o.id}`),
-        productName: p.name,
-        productSlug: p.slug,
-        productKind: p.kind,
-      })
-      .from(r)
-      .innerJoin(s, eq(r.sourceId, s.id))
+    joined
       .leftJoin(p, eq(s.productId, p.id))
       .leftJoin(o, eq(s.orgId, o.id))
       .where(and(...conds))
