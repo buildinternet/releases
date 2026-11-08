@@ -1,5 +1,12 @@
 # @buildinternet/releases-core
 
+## 0.36.3
+
+### Patch Changes
+
+- 2f539e1: Add `idx_releases_feed_order` (`published_at, fetched_at, id`) to the `releases` schema so the cross-source latest feed can walk in its own order.
+- 6e624f3: Update `releases` index definitions: `idx_releases_scored_feed` (feed-order partial index for `minImportance`) replaces `idx_releases_importance_published`, and the covering `idx_releases_published_source` replaces `idx_releases_published`.
+
 ## 0.36.2
 
 ### Patch Changes
