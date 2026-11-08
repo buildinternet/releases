@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## November 4, 2026
+
+**Fixed**
+- Applied upstream security fixes to sign-in and the web frontend.
+
 ## November 3, 2026
 
 **Fixed**
