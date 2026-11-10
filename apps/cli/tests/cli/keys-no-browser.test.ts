@@ -99,10 +99,10 @@ afterAll(() => {
 function env(): Record<string, string> {
   const dir = mkdtempSync(join(tmpdir(), "rel-keys-nobrowser-run-"));
   return {
-    RELEASED_API_KEY: "",
-    RELEASED_API_URL: baseUrl,
-    RELEASED_DATA_DIR: dir,
-    RELEASED_TELEMETRY_DISABLED: "1",
+    RELEASES_API_KEY: "",
+    RELEASES_API_URL: baseUrl,
+    RELEASES_DATA_DIR: dir,
+    RELEASES_TELEMETRY_DISABLED: "1",
   };
 }
 

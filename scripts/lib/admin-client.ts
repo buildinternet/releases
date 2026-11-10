@@ -24,12 +24,8 @@
 
 import { logger } from "@buildinternet/releases-lib/logger";
 
-const BASE_URL = (
-  process.env.RELEASES_API_URL ??
-  process.env.RELEASED_API_URL ??
-  "https://api.releases.sh"
-).replace(/\/$/, "");
-const API_KEY = process.env.RELEASES_API_KEY ?? process.env.RELEASED_API_KEY;
+const BASE_URL = (process.env.RELEASES_API_URL ?? "https://api.releases.sh").replace(/\/$/, "");
+const API_KEY = process.env.RELEASES_API_KEY;
 const STAGING_KEY = process.env.STAGING_ACCESS_KEY;
 
 // ── Defaults ─────────────────────────────────────────────────────────────────

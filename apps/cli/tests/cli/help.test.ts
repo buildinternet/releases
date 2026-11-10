@@ -11,12 +11,9 @@ describe("CLI help", () => {
 });
 
 describe("CLI command gating (public mode)", () => {
-  // Clear both URL and KEY (both prefixes) so the CLI falls back to the default
-  // public URL and an inherited RELEASES_/RELEASED_ key can't leak through the
-  // legacyEnv fallback and defeat the public-mode gate.
+  // Clear both URL and KEY so the CLI falls back to the default public URL and
+  // an inherited key can't defeat the public-mode gate.
   const publicEnv = {
-    RELEASED_API_URL: "",
-    RELEASED_API_KEY: "",
     RELEASES_API_URL: "",
     RELEASES_API_KEY: "",
   };
@@ -72,7 +69,7 @@ describe("CLI command gating (public mode)", () => {
 });
 
 describe("CLI command gating (admin mode)", () => {
-  const adminEnv = { RELEASED_API_KEY: "test-key" };
+  const adminEnv = { RELEASES_API_KEY: "test-key" };
 
   it("shows the admin entrypoint in root help", () => {
     const { stdout } = runCli(["--help"], { env: adminEnv });

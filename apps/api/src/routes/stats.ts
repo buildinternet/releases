@@ -7,7 +7,6 @@ import {
   organizationsActive,
   sourcesActive,
   sourcesVisible,
-  releasesVisible,
   productsActive,
   fetchLog,
   sourceReleaseStats,

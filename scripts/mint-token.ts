@@ -13,11 +13,8 @@ function arg(flag: string): string | undefined {
 }
 
 async function main(): Promise<void> {
-  const apiUrl = (process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL)?.replace(
-    /\/+$/,
-    "",
-  );
-  const apiKey = process.env.RELEASES_API_KEY ?? process.env.RELEASED_API_KEY;
+  const apiUrl = process.env.RELEASES_API_URL?.replace(/\/+$/, "");
+  const apiKey = process.env.RELEASES_API_KEY;
   if (!apiUrl || !apiKey) {
     console.error("Set RELEASES_API_URL and RELEASES_API_KEY (the static root key) first.");
     process.exit(1);

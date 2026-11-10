@@ -152,11 +152,8 @@ async function main(): Promise<void> {
   const manifestPath = resolve(args.manifest);
   const rawDir = args.rawDir ? resolve(args.rawDir) : join(dirname(manifestPath), "raw");
   const mediaOrigin = (process.env.MEDIA_ORIGIN ?? "https://media.releases.sh").replace(/\/+$/, "");
-  const apiUrl = (process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL ?? "").replace(
-    /\/+$/,
-    "",
-  );
-  const apiKey = process.env.RELEASES_API_KEY ?? process.env.RELEASED_API_KEY ?? "";
+  const apiUrl = (process.env.RELEASES_API_URL ?? "").replace(/\/+$/, "");
+  const apiKey = process.env.RELEASES_API_KEY ?? "";
   const stagingKey = process.env.STAGING_ACCESS_KEY ?? "";
   const only = args.only ? new Set(args.only.split(",").map((s) => s.trim())) : null;
 

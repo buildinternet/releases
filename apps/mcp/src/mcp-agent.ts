@@ -35,7 +35,7 @@ import { scopeSatisfies } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
-import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { getSecret } from "@releases/lib/secrets";
 import { type FlagshipBinding } from "@releases/lib/flags";
 import type { RateLimiter } from "@releases/lib/rate-limit-tiers";
 
@@ -127,8 +127,6 @@ export interface Env {
    * (confused-deputy fix, see `maybeLookup`). Bound from Secrets Store in both
    * prod + staging.
    */
-  RELEASED_API_KEY?: SecretBinding;
-  /** New-prefix alias of the static root credential. Preferred over the legacy binding. */
   RELEASES_API_KEY?: SecretBinding;
   /**
    * Staging-only shared secret. When bound, every request must carry a
@@ -425,9 +423,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     if (!coord) return;
     if (!scopeSatisfies(authScopes, "write")) return;
     const forwardToken =
-      authToken ??
-      (await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(() => null)) ??
-      "";
+      authToken ?? (await getSecret(env.RELEASES_API_KEY).catch(() => null)) ?? "";
     if (!forwardToken) return;
     try {
       const headers: Record<string, string> = {

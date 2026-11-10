@@ -18,9 +18,8 @@ export function runCli(
   // OSS CLI is remote-only — a real-looking URL must be set so the CLI starts.
   // Commands that don't hit the API (e.g. `categories`) succeed without it.
   // Drop the developer's real RELEASES_* env (API key/URL/token, data dir) so a
-  // local run can't pick up ~/.releases or a shell-exported key — the canonical
-  // names win over the RELEASED_* values set below and over a test's tmp
-  // RELEASED_DATA_DIR. Tests that need one pass it via options.env.
+  // local run can't pick up ~/.releases or a shell-exported key. Tests that
+  // need one pass it via options.env.
   const inherited = Object.fromEntries(
     Object.entries(process.env as Record<string, string>).filter(
       ([k]) => !AMBIENT_RELEASES_ENV.has(k),
@@ -28,8 +27,8 @@ export function runCli(
   );
   const safeEnv: Record<string, string> = {
     ...inherited,
-    RELEASED_API_URL: "https://test.example.com",
-    RELEASED_API_KEY: "test",
+    RELEASES_API_URL: "https://test.example.com",
+    RELEASES_API_KEY: "test",
     ...options?.env,
   };
   // --no-env-file: bun autoloads `.env` from the cwd, and in the monorepo the

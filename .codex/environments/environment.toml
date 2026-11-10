@@ -17,10 +17,10 @@ command = "bun run dev:api"
 name = "Web (local API)"
 icon = "run"
 command = "bun run dev:web"
-env = { RELEASED_API_URL = "http://localhost:8787" }
+env = { RELEASES_API_URL = "http://localhost:8787" }
 
 [[actions]]
 name = "Web (prod API)"
 icon = "run"
 command = "bun run dev:web"
-env = { RELEASED_API_URL = "https://api.releases.sh" }
+env = { RELEASES_API_URL = "https://api.releases.sh" }

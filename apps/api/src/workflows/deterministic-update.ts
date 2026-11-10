@@ -20,7 +20,7 @@ import { runScrapeFetchLoop } from "@releases/adapters/deterministic-update";
 import { classifyUsFatal } from "@releases/lib/session-error-classify";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
-import { getSecret, getSecretWithFallback, type SecretBinding } from "@releases/lib/secrets";
+import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { createDb } from "../db.js";
 import { d1ScrapePersister } from "../lib/ingest/d1-scrape-persister.js";
 import type { TextModelEnv } from "../lib/ai/text-model.js";
@@ -45,7 +45,6 @@ export interface DeterministicUpdateWorkflowEnv extends TextModelEnv {
    */
   API_SELF?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   RELEASES_API_KEY?: SecretBinding;
-  RELEASED_API_KEY?: SecretBinding;
   /** Staging gate key — attached to self-calls so they clear the staging API gate. */
   STAGING_ACCESS_KEY?: SecretBinding;
   CLOUDFLARE_ACCOUNT_ID?: SecretBinding;
@@ -296,7 +295,7 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
         getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
         getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
         getSecret(env.ANTHROPIC_API_KEY).catch(() => null),
-        getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(() => null),
+        getSecret(env.RELEASES_API_KEY).catch(() => null),
         getSecret(env.AI_GATEWAY_TOKEN).catch(() => null),
         getSecret(env.STAGING_ACCESS_KEY).catch(() => null),
       ]);

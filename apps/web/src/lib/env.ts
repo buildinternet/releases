@@ -1,37 +1,19 @@
-const warned = new Set<string>();
-
-function legacyEnv(canonical: string, legacy: string): string | undefined {
-  const next = process.env[canonical];
-  if (next) return next;
-  const old = process.env[legacy];
-  if (old) {
-    if (!warned.has(legacy)) {
-      warned.add(legacy);
-      console.warn(
-        `[releases] ${legacy} is deprecated; rename it to ${canonical}. The legacy name still works for now but will be removed.`,
-      );
-    }
-    return old;
-  }
-  return undefined;
-}
-
 /**
  * API worker base URL. Returns `undefined` when unset so callers keep their own
  * default (dev localhost vs. production host differ by call site).
  */
 export function apiBaseUrl(): string | undefined {
-  return legacyEnv("RELEASES_API_URL", "RELEASED_API_URL");
+  return process.env.RELEASES_API_URL || undefined;
 }
 
 /** Static root API token for server-to-API admin calls. Undefined when unset. */
 export function serverApiKey(): string | undefined {
-  return legacyEnv("RELEASES_API_KEY", "RELEASED_API_KEY");
+  return process.env.RELEASES_API_KEY || undefined;
 }
 
 /** Canonical-base-URL override for statically generated files. Undefined when unset. */
 export function staticBaseUrlEnv(): string | undefined {
-  return legacyEnv("RELEASES_BASE_URL", "RELEASED_BASE_URL");
+  return process.env.RELEASES_BASE_URL || undefined;
 }
 
 /**
@@ -42,8 +24,7 @@ export function staticBaseUrlEnv(): string | undefined {
  * consumer, and the next internal endpoint reuses this rather than adding
  * another secret to provision and rotate. See `lib/service-auth.ts`.
  *
- * Undefined when unset, which fails those endpoints closed. No legacy
- * `RELEASED_` alias — this name is new.
+ * Undefined when unset, which fails those endpoints closed.
  */
 export function serviceKey(): string | undefined {
   return process.env.RELEASES_SERVICE_KEY;

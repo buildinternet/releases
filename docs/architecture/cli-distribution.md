@@ -10,7 +10,7 @@ Seven packages ship together as one changesets `fixed` group (see `.changeset/co
 | --------------------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------- |
 | `@buildinternet/releases`                                                                           | `apps/cli/npm/releases`   | Meta package: README, launcher, optional deps on the five below |
 | `@buildinternet/releases-darwin-arm64`, `-darwin-x64`, `-linux-x64`, `-linux-arm64`, `-windows-x64` | `apps/cli/npm/releases-*` | Platform packages, each holding one compiled binary             |
-| `@buildinternet/releases-lib`                                                                       | `packages/releases-lib`   | CLI helpers (`config`, `legacy-env`, `logger`)                  |
+| `@buildinternet/releases-lib`                                                                       | `packages/releases-lib`   | CLI helpers (`config`, `logger`)                                |
 
 `@buildinternet/releases-lib` is owned by this repo and is a workspace; the CLI and other packages consume it via `workspace:*`.
 

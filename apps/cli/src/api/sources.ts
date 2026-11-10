@@ -417,38 +417,6 @@ export async function getUsageStats(days: number): Promise<UsageStatsResponse> {
   return apiFetch<UsageStatsResponse>(`/v1/admin/logs/usage/stats?days=${days}`);
 }
 
-export async function postUsageLog(entry: {
-  operation: string;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  sourceSlug?: string | null;
-  releaseCount?: number | null;
-}): Promise<void> {
-  await apiFetch("/v1/admin/logs/usage", {
-    method: "POST",
-    body: JSON.stringify(entry),
-  });
-}
-
-// ── Fetch log write ──
-
-export async function postFetchLog(entry: {
-  sourceId: string;
-  releasesFound: number;
-  releasesInserted: number;
-  durationMs?: number | null;
-  status: "success" | "error" | "no_change" | "dry_run";
-  error?: string | null;
-  rawContent?: string | null;
-  sessionId?: string | null;
-}): Promise<void> {
-  await apiFetch("/v1/admin/logs/fetch", {
-    method: "POST",
-    body: JSON.stringify(entry),
-  });
-}
-
 // ── Fetch log read ──
 
 interface RawFetchLogRow {

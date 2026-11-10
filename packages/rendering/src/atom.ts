@@ -363,7 +363,7 @@ export function userFeedToAtom(
   );
 }
 
-function aggregateReleaseEntries(releases: CollectionReleaseItem[], baseUrl: string): EntryInput[] {
+function aggregateReleaseEntries(releases: CollectionReleaseItem[]): EntryInput[] {
   return releases.map((release) => ({
     release,
     sourceSlug: release.source.slug,
@@ -391,7 +391,7 @@ export function categoryReleasesToAtom(
       selfUrl: `${path}.atom`,
       alternateUrl: path,
       authorName: params.categoryName,
-      entries: aggregateReleaseEntries(params.releases, opts.baseUrl),
+      entries: aggregateReleaseEntries(params.releases),
     },
     opts,
   );
@@ -418,7 +418,7 @@ export function collectionReleasesToAtom(
       selfUrl: `${path}.atom`,
       alternateUrl: path,
       authorName: params.collectionName,
-      entries: aggregateReleaseEntries(params.releases, opts.baseUrl),
+      entries: aggregateReleaseEntries(params.releases),
     },
     opts,
   );

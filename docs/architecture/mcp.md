@@ -97,13 +97,13 @@ Hosts that support the MCP Apps extension (Claude Desktop is the first) render a
 
 - `get_latest_releases`, `get_collection_releases` → `ui://releases/release-feed.html` (card timeline with cursor-based "Load more", "Open source", and "Ask about this").
 
-**Build pattern (Bun, no Vite):** Each app lives in its own folder under `apps/mcp/ui/` with an `app.tsx` entry and a `styles.css`. `apps/mcp/ui/build.ts` runs `Bun.build` over the entry, reads the sibling CSS, inlines both into a minimal HTML shell, and writes the bundled strings into `apps/mcp/src/ui-bundles.ts`. The worker imports those strings and serves them through `registerAppResource` in `apps/mcp/src/resources.ts`. The bundle file is committed so deploys never depend on a UI install; `deploy:mcp` regenerates it first as a safety net.
+**Build pattern (Bun, no Vite):** Each app lives in its own folder under `apps/mcp/ui/` with an `app.tsx` entry and a `styles.css`. `apps/mcp/ui/build.ts` runs `Bun.build` over the entry, reads the sibling CSS, inlines both into a minimal HTML shell, and writes the bundled strings into `apps/mcp/src/ui-bundles.ts`. The worker imports those strings and serves them through `server.registerResource` in `apps/mcp/src/resources.ts`. The bundle file is committed so deploys never depend on a UI install; `deploy:mcp` regenerates it first as a safety net.
 
 **Adding a new UI:**
 
 1. `mkdir apps/mcp/ui/<name>` and drop in `app.tsx` (React entry) + `styles.css`.
 2. Add an entry to the `APPS` array in `apps/mcp/ui/build.ts`.
-3. Add an exported URI constant + `registerAppResource` call in `apps/mcp/src/resources.ts`.
+3. Add an exported URI constant + `server.registerResource` call (with `UI_RESOURCE_MIME_TYPE`) in `apps/mcp/src/resources.ts`.
 4. On the tool registration, add `_meta: { ui: { resourceUri: <CONST> } }`.
 5. Have the tool's handler also return `structuredContent` with the typed payload the UI reads (see `ReleaseFeedStructured` in `apps/mcp/src/tools.ts` for the shape).
 6. `bun run mcp:ui:build` to regenerate the bundle.

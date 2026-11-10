@@ -9,7 +9,7 @@ import { runCli } from "../utils.js";
 describe("source backfill (--help surface)", () => {
   it("requires a source identifier argument", () => {
     const { exitCode, stderr } = runCli(["admin", "source", "backfill"], {
-      env: { RELEASED_API_URL: "https://test.example.com", RELEASED_API_KEY: "test" },
+      env: { RELEASES_API_URL: "https://test.example.com", RELEASES_API_KEY: "test" },
     });
     expect(exitCode).not.toBe(0);
     expect(stderr.toLowerCase()).toContain("identifier");

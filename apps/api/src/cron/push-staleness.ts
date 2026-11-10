@@ -29,7 +29,7 @@
  * its own "No pushes lately" section.
  */
 import { createDb } from "../db.js";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { pushFedSql } from "../queries/source-fetch-routing.js";

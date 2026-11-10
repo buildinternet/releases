@@ -8,7 +8,7 @@ import { runCli } from "../utils.js";
  * `releases keys` / `releases publish-token` now open a fresh browser
  * approval per command (see docs/architecture "one-shot device session").
  * `--dry-run` must short-circuit BEFORE that approval — never touch the
- * network at all. We assert this by pointing RELEASED_API_URL at a port
+ * network at all. We assert this by pointing RELEASES_API_URL at a port
  * nothing listens on: if `--dry-run` ever reached the device-code request,
  * the connection would be refused and the command would fail non-zero
  * instead of printing its dry-run preview.
@@ -31,10 +31,10 @@ function env(): Record<string, string> {
   const dir = isolatedDir();
   dirs.push(dir);
   return {
-    RELEASED_API_KEY: "",
-    RELEASED_API_URL: UNROUTABLE_API_URL,
-    RELEASED_DATA_DIR: dir,
-    RELEASED_TELEMETRY_DISABLED: "1",
+    RELEASES_API_KEY: "",
+    RELEASES_API_URL: UNROUTABLE_API_URL,
+    RELEASES_DATA_DIR: dir,
+    RELEASES_TELEMETRY_DISABLED: "1",
   };
 }
 

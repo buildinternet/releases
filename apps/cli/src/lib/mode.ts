@@ -1,5 +1,4 @@
 import { logger } from "@buildinternet/releases-lib/logger";
-import { legacyEnv } from "@buildinternet/releases-lib/legacy-env";
 import { readCredential } from "./credentials.js";
 
 const DEFAULT_API_URL = "https://api.releases.sh";
@@ -14,7 +13,7 @@ export interface ResolvedCredential {
 
 /** Resolve the active credential: explicit env var wins, then the stored file. */
 export function resolveCredential(): ResolvedCredential {
-  const envKey = legacyEnv("RELEASES_API_KEY", "RELEASED_API_KEY");
+  const envKey = process.env.RELEASES_API_KEY || undefined;
   if (envKey) return { token: envKey, source: "env" };
   const stored = readCredential();
   if (stored) {
@@ -45,7 +44,7 @@ export const isAdminMode = isAuthenticated;
 // the stale value instead (see #388). Re-reading the env var per call is
 // cheap (string compare + a regex) and removes the whole class of bug.
 export function getApiUrl(): string {
-  const url = legacyEnv("RELEASES_API_URL", "RELEASED_API_URL") || DEFAULT_API_URL;
+  const url = process.env.RELEASES_API_URL || DEFAULT_API_URL;
   return url.replace(/\/$/, "");
 }
 
@@ -65,7 +64,7 @@ export function getApiKey(): string {
  */
 export function validateConfig(): void {
   const cred = resolveCredential();
-  if (legacyEnv("RELEASES_API_URL", "RELEASED_API_URL") && cred.source === "none") {
+  if (process.env.RELEASES_API_URL && cred.source === "none") {
     logger.warn(
       "RELEASES_API_URL is set but no API token is configured. Requests will be unauthenticated — run `releases auth login` to authenticate.",
     );

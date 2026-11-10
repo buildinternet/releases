@@ -2,18 +2,15 @@
  * Detect "the provider has cut us off for billing reasons" across every AI
  * client we use.
  *
- * This is deliberately separate from `classifyAnthropicError`. That classifier
- * discriminates on `instanceof APIError` from `@anthropic-ai/sdk` and covers
- * `credit_balance_too_low` — a *prepaid balance* problem. The 2026-07-23 outage
- * was a different failure: a configured **spend cap** on the account, surfaced
+ * The 2026-07-23 outage was not a *prepaid balance* problem
+ * (`credit_balance_too_low`) but a configured **spend cap** on the account, surfaced
  * through the AI SDK as a plain `AI_APICallError` whose only distinguishing
  * feature is its message:
  *
  *   "You have reached your specified API usage limits.
  *    You will regain access on 2026-08-01 at 00:00 UTC."
  *
- * `classifyAnthropicError` returns `{ kind: "other" }` for that, so it read as
- * an ordinary transient failure, retried, exhausted, and went quiet. Six days of
+ * Nothing classified that specially, so it read as an ordinary transient failure, retried, exhausted, and went quiet. Six days of
  * Firecrawl ingestion were lost before anyone noticed, because nothing in the
  * system distinguished "this call failed" from "this provider is closed for
  * business until a date certain".

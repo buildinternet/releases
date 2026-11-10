@@ -10,7 +10,6 @@ import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 type Env = {
   Bindings: {
     DB: D1Database;
-    RELEASED_API_KEY: string;
     RELEASES_API_KEY?: string;
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;

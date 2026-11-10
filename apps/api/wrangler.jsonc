@@ -56,7 +56,7 @@
     // LISTING_SELF_SERVE_ENABLED because promotion creates live fetching
     // sources (real spend); off by default until the flow has been validated.
     "LISTING_SELF_SERVE_PROMOTION_ENABLED": "false",
-    // Email notifications (see src/lib/email/email.ts + src/lib/email/notifications.ts).
+    // Email notifications (see src/lib/email/email.ts).
     // Recipient must be verified in Cloudflare Email Routing; sender domain
     // (releases.sh) must have Email Routing enabled.
     "EMAIL_NOTIFY_ENABLED": "true",
@@ -588,13 +588,7 @@
   // Secrets are managed in Cloudflare's Secrets Store (dashboard → Workers → Secrets Store).
   // To rotate or switch providers, update the secret there and redeploy.
   "secrets_store_secrets": [
-    {
-      "binding": "RELEASED_API_KEY",
-      "store_id": "a887a71cab084105b79706df23380723",
-      "secret_name": "RELEASED_API_KEY",
-    },
-    // New-prefix alias of the static root credential. Dual-bound during the
-    // RELEASED_->RELEASES_ migration; legacy binding removed in the teardown.
+    // Static root credential.
     {
       "binding": "RELEASES_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
@@ -1021,11 +1015,6 @@
         },
       ],
       "secrets_store_secrets": [
-        {
-          "binding": "RELEASED_API_KEY",
-          "store_id": "a887a71cab084105b79706df23380723",
-          "secret_name": "RELEASED_API_KEY",
-        },
         {
           "binding": "RELEASES_API_KEY",
           "store_id": "a887a71cab084105b79706df23380723",

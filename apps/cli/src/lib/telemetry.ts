@@ -2,7 +2,6 @@ import { readFileSync, writeFileSync, existsSync, chmodSync, unlinkSync } from "
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { getDataDir } from "@buildinternet/releases-lib/config";
-import { legacyEnv } from "@buildinternet/releases-lib/legacy-env";
 import { VERSION } from "../cli/version.js";
 import { RELEASES_CLI_UA } from "./user-agent.js";
 import type { TelemetryClientKind, TelemetrySurface } from "@buildinternet/releases-core/schema";
@@ -44,7 +43,7 @@ export function getOrCreateAnonId(): string {
 }
 
 export function isTelemetryEnabled(): boolean {
-  if (legacyEnv("RELEASES_TELEMETRY_DISABLED", "RELEASED_TELEMETRY_DISABLED") === "1") return false;
+  if (process.env.RELEASES_TELEMETRY_DISABLED === "1") return false;
   if (process.env.DO_NOT_TRACK === "1") return false;
   if (existsSync(filePath(DISABLE_FILE))) return false;
   return true;
@@ -69,15 +68,15 @@ function detectClientKind(): {
   agentName?: string;
   model?: string;
 } {
-  const envKind = legacyEnv("RELEASES_CLIENT_KIND", "RELEASED_CLIENT_KIND") as
+  const envKind = (process.env.RELEASES_CLIENT_KIND || undefined) as
     | TelemetryClientKind
     | undefined;
   if (envKind) {
     return {
       kind: envKind,
-      sessionId: legacyEnv("RELEASES_CLIENT_SESSION_ID", "RELEASED_CLIENT_SESSION_ID"),
-      agentName: legacyEnv("RELEASES_CLIENT_AGENT", "RELEASED_CLIENT_AGENT"),
-      model: legacyEnv("RELEASES_CLIENT_MODEL", "RELEASED_CLIENT_MODEL"),
+      sessionId: process.env.RELEASES_CLIENT_SESSION_ID || undefined,
+      agentName: process.env.RELEASES_CLIENT_AGENT || undefined,
+      model: process.env.RELEASES_CLIENT_MODEL || undefined,
     };
   }
   if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") {
@@ -121,7 +120,7 @@ export interface TelemetryEventInput {
 }
 
 function endpoint(): string {
-  return (legacyEnv("RELEASES_API_URL", "RELEASED_API_URL") || DEFAULT_ENDPOINT).replace(/\/$/, "");
+  return (process.env.RELEASES_API_URL || DEFAULT_ENDPOINT).replace(/\/$/, "");
 }
 
 export async function recordEvent(input: TelemetryEventInput): Promise<void> {
@@ -170,8 +169,7 @@ export function telemetryStatus(): {
 } {
   const enabled = isTelemetryEnabled();
   let reason: string | undefined;
-  if (legacyEnv("RELEASES_TELEMETRY_DISABLED", "RELEASED_TELEMETRY_DISABLED") === "1")
-    reason = "RELEASES_TELEMETRY_DISABLED=1";
+  if (process.env.RELEASES_TELEMETRY_DISABLED === "1") reason = "RELEASES_TELEMETRY_DISABLED=1";
   else if (process.env.DO_NOT_TRACK === "1") reason = "DO_NOT_TRACK=1";
   else if (existsSync(filePath(DISABLE_FILE))) reason = `${filePath(DISABLE_FILE)} present`;
   return {

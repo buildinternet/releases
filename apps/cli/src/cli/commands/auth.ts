@@ -2,7 +2,6 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { join } from "node:path";
 import { getDataDir } from "@buildinternet/releases-lib/config";
-import { legacyEnv } from "@buildinternet/releases-lib/legacy-env";
 import { getApiUrl, resolveCredential } from "../../lib/mode.js";
 import {
   writeCredential,
@@ -198,7 +197,7 @@ export function registerAuthCommand(parent: Command): void {
     .description("Remove the stored API token")
     .action(async () => {
       const { removed } = await runLogoutFlow();
-      if (legacyEnv("RELEASES_API_KEY", "RELEASED_API_KEY")) {
+      if (process.env.RELEASES_API_KEY) {
         console.log(
           chalk.yellow(
             "Removed any stored token, but RELEASES_API_KEY is still set in your environment.",

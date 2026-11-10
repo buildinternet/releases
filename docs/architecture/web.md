@@ -155,7 +155,7 @@ Write surface (admin-only, gated by `publicReadAuthMiddleware`'s SAFE_METHODS ch
 - `PUT /v1/collections/:slug/members` — replace membership atomically (delete + insert; D1 has no transaction primitive). The handler resolves every member in at most two `IN` queries (one for `org_…` ids, one for slugs) before touching the join table. Position defaults to array index, so order = order.
 - `POST /v1/collections/:slug/members`, `DELETE /v1/collections/:slug/members/:org` — single-member add/remove. `:org` accepts either an `org_…` id or a slug.
 
-Web: `apps/web/src/app/collections/[slug]/page.tsx` renders the header + member chips, then `CollectionReleaseList` for the paginated feed. Each row carries an `org` discriminator the byline uses to label which lab a release came from.
+Web: `apps/web/src/app/collections/[slug]/page.tsx` renders the header + member chips, then `CollectionTimeline` for the paginated feed. Each row carries an `org` discriminator the byline uses to label which lab a release came from.
 
 Seed model: the first collection (`frontier-ai-labs`) is created via migration (`20260507000003_seed_frontier_ai_labs.sql`); the CLI admin commands are the layer above the write API. Membership is intentionally curated — orgs onboarded later are not retroactively added to existing collections.
 

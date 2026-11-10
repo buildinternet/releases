@@ -26,7 +26,7 @@ export async function adminActionEnv(): Promise<AdminActionEnv | { error: string
 
   if (isLocalAdminEnabled()) {
     const bearer = serverApiKey();
-    if (!bearer) return { error: "RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured." };
+    if (!bearer) return { error: "RELEASES_API_KEY not configured." };
     return { apiUrl, bearer };
   }
 

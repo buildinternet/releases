@@ -4,7 +4,6 @@ import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { type Kind, isValidKind } from "@buildinternet/releases-core/kinds";
 import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
-import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import { listLatestReleases } from "@releases/queries/releases";
 import type { AnyDb } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
