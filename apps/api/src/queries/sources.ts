@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { daysAgoIso, nowIso } from "@buildinternet/releases-core/dates";
+import { IN_ARRAY_CHUNK_SIZE } from "@buildinternet/releases-core/d1-limits";
 import { SOURCE_STALE_DAYS } from "@buildinternet/releases-core/sources";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type {
@@ -107,10 +108,10 @@ export async function countSourcesForList(
 ): Promise<number> {
   const fromView = opts.includeHidden ? sql`sources_active` : sql`sources_visible`;
   const staleJoin = opts.staleOnly
-    ? sql`LEFT JOIN (SELECT r.source_id, MAX(r.published_at) AS latest_date FROM releases_visible r GROUP BY r.source_id) rs ON rs.source_id = sources.id`
+    ? sql`LEFT JOIN source_release_stats rs ON rs.source_id = sources.id`
     : sql``;
   const staleWhere = opts.staleOnly
-    ? sql`(rs.latest_date IS NULL OR rs.latest_date < ${daysAgoIso(SOURCE_STALE_DAYS)})`
+    ? sql`(rs.last_published_at IS NULL OR rs.last_published_at < ${daysAgoIso(SOURCE_STALE_DAYS)})`
     : null;
   const filterExtras = changelogActivityJoinAndWhere(opts);
   const combinedWhere = andWhere([whereClause, staleWhere, filterExtras.where]);
@@ -150,7 +151,7 @@ function sourceOrderBy(sort: SourceSortField, dir: SortDir): SQL {
     case "type":
       return sql`sources.type ${d}, sources.name ASC`;
     case "latest_date":
-      return sql`rs.latest_date IS NULL, rs.latest_date ${d}, sources.name ASC`;
+      return sql`rs.last_published_at IS NULL, rs.last_published_at ${d}, sources.name ASC`;
     case "last_fetched_at":
       return sql`sources.last_fetched_at IS NULL, sources.last_fetched_at ${d}, sources.name ASC`;
     case "fetch_priority":
@@ -175,17 +176,17 @@ export async function getSourcesWithStats(
   const orderBy = sourceOrderBy(opts?.sort ?? "name", opts?.dir ?? "asc");
   const fromView = opts?.includeHidden ? sql`sources_active` : sql`sources_visible`;
   const staleWhere = opts?.staleOnly
-    ? sql`(rs.latest_date IS NULL OR rs.latest_date < ${daysAgoIso(SOURCE_STALE_DAYS)})`
+    ? sql`(rs.last_published_at IS NULL OR rs.last_published_at < ${daysAgoIso(SOURCE_STALE_DAYS)})`
     : null;
   const filterExtras = changelogActivityJoinAndWhere(opts ?? {});
   const combinedWhere = andWhere([whereClause, staleWhere, filterExtras.where]);
-  // SQLite can't push the outer source filter into the GROUP BY subquery, so
-  // without this a one-slug lookup aggregates every release first. The caller's
-  // `whereClause` only references `sources` columns, so it scopes the inner set.
-  const releaseStatsScope = whereClause
-    ? sql`WHERE r.source_id IN (SELECT sources.id FROM ${fromView} sources WHERE ${whereClause})`
-    : sql``;
-  return db.all<SourceListRow>(sql`
+  // Count and latest date come from the trigger-maintained per-source rollup
+  // (`source_release_stats` covers exactly `releases_visible`), so sorting,
+  // the stale filter and pagination never aggregate the releases table. The
+  // unscoped list used to group all ~93K visible releases first (4.5 s on D1).
+  // Only `latest_version` still reads releases, for the returned page alone
+  // (`attachLatestVersions`).
+  const rows = await db.all<Omit<SourceListRow, "latest_version">>(sql`
     SELECT
       sources.*,
       organizations.slug AS org_slug,
@@ -193,21 +194,37 @@ export async function getSourcesWithStats(
       products.slug AS product_slug,
       products.name AS product_name,
       COALESCE(rs.release_count, 0) AS release_count,
-      rs.latest_version AS latest_version,
-      rs.latest_date AS latest_date
+      rs.last_published_at AS latest_date
     FROM ${fromView} sources
     LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
     LEFT JOIN products_active products ON products.id = sources.product_id
-    LEFT JOIN (
+    LEFT JOIN source_release_stats rs ON rs.source_id = sources.id
+    ${filterExtras.join}
+    ${combinedWhere ? sql`WHERE ${combinedWhere}` : sql``}
+    ORDER BY ${orderBy}
+    ${limitClause} ${offsetClause}
+  `);
+  return attachLatestVersions(db, rows);
+}
+
+/**
+ * Add each source's `latest_version`: the version with the highest
+ * semver-aware sort key, so a backported patch on an older line (e.g. Next.js
+ * v15.5.18 shipped after v16.x) doesn't beat the actual current major, falling
+ * back to the latest-published row's version when no row has a parseable
+ * `version_sort` (un-backfilled rows, calver-only sources, etc.). One grouped
+ * read per chunk of page source ids, ranged on the source_id index.
+ */
+async function attachLatestVersions(
+  db: D1Db,
+  rows: Omit<SourceListRow, "latest_version">[],
+): Promise<SourceListRow[]> {
+  const versions = new Map<string, string | null>();
+  for (let i = 0; i < rows.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const ids = rows.slice(i, i + IN_ARRAY_CHUNK_SIZE).map((r) => r.id);
+    const found = await db.all<{ source_id: string; latest_version: string | null }>(sql`
       SELECT
         r.source_id,
-        COUNT(*) AS release_count,
-        MAX(r.published_at) AS latest_date,
-        -- Prefer the version with the highest semver-aware sort key so a
-        -- backported patch on an older line (e.g. Next.js v15.5.18 shipped
-        -- after v16.x) doesn't beat the actual current major. Fall back to
-        -- the row with the latest publish date when no rows have a parseable
-        -- version_sort (un-backfilled rows, calver-only sources, etc.).
         COALESCE(
           NULLIF(
             SUBSTR(
@@ -225,14 +242,15 @@ export async function getSourcesWithStats(
           )
         ) AS latest_version
       FROM releases_visible r
-      ${releaseStatsScope}
+      WHERE r.source_id IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})
       GROUP BY r.source_id
-    ) rs ON rs.source_id = sources.id
-    ${filterExtras.join}
-    ${combinedWhere ? sql`WHERE ${combinedWhere}` : sql``}
-    ORDER BY ${orderBy}
-    ${limitClause} ${offsetClause}
-  `);
+    `);
+    for (const f of found) versions.set(f.source_id, f.latest_version);
+  }
+  return rows.map((r) => ({ ...r, latest_version: versions.get(r.id) ?? null }));
 }
 
 export type SourceReleaseRow = {
