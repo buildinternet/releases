@@ -150,9 +150,9 @@ export type SendRecommendationAddedResult =
 /** Thank-you email sent to the submitter when they provide a contact address. */
 export function formatRecommendationAckEmail(
   row: Recommendation,
-  webOrigin: string,
+  origin: string,
 ): { subject: string; text: string; html: string } {
-  const submitUrl = `${webOrigin}/submit`;
+  const submitUrl = `${origin}/submit`;
   // Name what they submitted in the subject: someone who suggested three sources
   // in a sitting gets three otherwise-identical acknowledgments.
   let host: string;

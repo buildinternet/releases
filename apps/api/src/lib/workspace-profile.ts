@@ -67,7 +67,7 @@ export function normalizeGithubHandle(input: string): string | null {
     try {
       const parsed = new URL(bare.includes("://") ? bare : `https://${bare}`);
       if (parsed.hostname.replace(/^www\./, "") !== "github.com") return null;
-      const seg = parsed.pathname.split("/").filter(Boolean)[0];
+      const seg = parsed.pathname.split("/").find(Boolean);
       return seg && GITHUB_HANDLE_RE.test(seg) ? seg.toLowerCase() : null;
     } catch {
       return null;

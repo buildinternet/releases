@@ -103,9 +103,9 @@ export function formatClaimVerifiedOperatorEmail(
     claimId: string;
     verifiedAt: string;
   },
-  webOrigin: string,
+  origin: string,
 ): { subject: string; text: string; html: string } {
-  const orgUrl = `${webOrigin}/${input.orgSlug}`;
+  const orgUrl = `${origin}/${input.orgSlug}`;
   const how = methodLabel(input.method);
   const subject = `[ownership] verified: ${input.domain}`;
   const { html, text } = renderEmail({

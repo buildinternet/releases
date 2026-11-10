@@ -378,10 +378,10 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
       });
     }
     case "digest.collection": {
-      const covered = (id: string, title: string, product: string, importance: number) => ({
-        id,
+      const covered = (relId: string, title: string, product: string, importance: number) => ({
+        id: relId,
         title,
-        path: `/release/${id}`,
+        path: `/release/${relId}`,
         org: { slug: "acme", name: "Acme", avatarUrl: null, githubHandle: null },
         product: { slug: product.toLowerCase(), name: product },
         importance,

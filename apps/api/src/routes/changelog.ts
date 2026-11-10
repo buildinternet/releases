@@ -356,8 +356,8 @@ async function fetchGitHubReleases(
   // Node's parallel LTS branches), making the viewer's version rail look
   // unsorted. Re-sort by `published_at` descending — authoritative for this
   // source — so it's reliably newest-first; undated entries sink to the end.
-  // `Array.sort` is stable, so equal/undated entries keep their API order.
-  const releases = mapGitHubReleases(data).sort((a, b) => {
+  // `toSorted` is stable, so equal/undated entries keep their API order.
+  const releases = mapGitHubReleases(data).toSorted((a, b) => {
     const ta = a.publishedAt ? Date.parse(a.publishedAt) : -Infinity;
     const tb = b.publishedAt ? Date.parse(b.publishedAt) : -Infinity;
     return tb - ta;

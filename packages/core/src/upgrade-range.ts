@@ -58,7 +58,7 @@ export function resolveUpgradeRange<T extends UpgradeRangeEntry>(
         (r): r is T & { versionSort: string } =>
           r.versionSort !== null && r.versionSort > fromSort && r.versionSort <= toSort,
       )
-      .sort((a, b) => asc(a.versionSort, b.versionSort));
+      .toSorted((a, b) => asc(a.versionSort, b.versionSort));
   }
 
   // Fallback: a non-numeric bound (e.g. "jaguar") can't be version-ordered —
@@ -73,7 +73,7 @@ export function resolveUpgradeRange<T extends UpgradeRangeEntry>(
         (r): r is T & { publishedAt: string } =>
           r.publishedAt !== null && r.publishedAt > fromDate && r.publishedAt <= toDate,
       )
-      .sort((a, b) => asc(a.publishedAt, b.publishedAt));
+      .toSorted((a, b) => asc(a.publishedAt, b.publishedAt));
   }
 
   return [];
