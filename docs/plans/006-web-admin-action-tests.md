@@ -73,7 +73,7 @@ export async function setSiteNoticeAction(notice: SiteNotice): Promise<ActionRes
   `import "server-only"`.
 - `web/src/lib/local-admin-flag.ts` — `isLocalAdminEnabled()` returns true iff
   `NODE_ENV !== "production"`, `VERCEL_ENV !== "production"`, and
-  `serverApiKey()` (reads `RELEASES_API_KEY` / legacy `RELEASED_API_KEY`) is
+  `serverApiKey()` (reads `RELEASES_API_KEY`) is
   set. **This is the test lever**: with a fake `RELEASES_API_KEY` env var set
   in the test, `adminActionEnv()` takes the local branch and `next/headers` is
   never called.

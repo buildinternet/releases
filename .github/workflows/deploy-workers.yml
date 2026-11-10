@@ -186,7 +186,7 @@ jobs:
         continue-on-error: true
         env:
           RELEASES_API_URL: https://api.releases.sh
-          RELEASES_API_KEY: ${{ secrets.RELEASES_API_KEY || secrets.RELEASED_API_KEY }}
+          RELEASES_API_KEY: ${{ secrets.RELEASES_API_KEY }}
           SUBSCRIPTION_ID: ${{ secrets.WEBHOOK_E2E_SUBSCRIPTION_ID }}
         run: |
           set -euo pipefail

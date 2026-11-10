@@ -11,7 +11,6 @@ Imported as `@releases/lib/<subpath>`.
 | Subpath                  | Purpose                                                                                                 |
 | ------------------------ | ------------------------------------------------------------------------------------------------------- |
 | `anthropic-client`       | Constructs an Anthropic SDK client, optionally routed through Cloudflare AI Gateway.                    |
-| `anthropic-errors`       | Classifies `@anthropic-ai/sdk` errors into a stable `kind` discriminant.                                |
 | `anthropic-pricing`      | List-price cost estimation for managed-agent sessions.                                                  |
 | `config`                 | Resolves the CLI/script data dir (`~/.releases` by default).                                            |
 | `consumption-ref`        | Derives a stable, PII-clean `consumerRef` identity for consumption metering.                            |
@@ -20,7 +19,6 @@ Imported as `@releases/lib/<subpath>`.
 | `errors`                 | Categorized error classes (`CategorizedError`, `AdapterError`, …) for ingest/adapter code.              |
 | `flags`                  | Worker-safe feature-flag helper backed by Cloudflare Flagship, with wrangler-var fallback.              |
 | `flags-docs`             | Renders the feature-flag reference table in `docs/architecture/feature-flags.md`.                       |
-| `legacy-env`             | Resolves an env var migrating from a legacy name, with a one-time deprecation warning.                  |
 | `log-event`              | Structured JSON logger for **worker code** (Workers Logs-friendly `console.*` dispatch).                |
 | `logger`                 | fs-backed logger for **CLI / runtime-neutral packages** (stderr + `~/.releases/logs/`). See note below. |
 | `oauth-jwt`              | Resource-server verification of "Sign in with Releases" OAuth JWTs via `jose` + JWKS.                   |

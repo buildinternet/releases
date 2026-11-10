@@ -91,10 +91,10 @@ afterAll(() => {
 });
 
 const env = () => ({
-  RELEASED_API_KEY: "",
-  RELEASED_API_URL: baseUrl,
-  RELEASED_DATA_DIR: dataDir,
-  RELEASED_TELEMETRY_DISABLED: "1",
+  RELEASES_API_KEY: "",
+  RELEASES_API_URL: baseUrl,
+  RELEASES_DATA_DIR: dataDir,
+  RELEASES_TELEMETRY_DISABLED: "1",
 });
 
 describe("releases auth (e2e)", () => {
@@ -127,10 +127,10 @@ describe("releases auth (e2e)", () => {
     const bad = mkdtempSync(join(tmpdir(), "rel-authbad-"));
     const r = runCli(["auth", "login", "--token", "relk_bad"], {
       env: {
-        RELEASED_API_KEY: "",
-        RELEASED_API_URL: baseUrl,
-        RELEASED_DATA_DIR: bad,
-        RELEASED_TELEMETRY_DISABLED: "1",
+        RELEASES_API_KEY: "",
+        RELEASES_API_URL: baseUrl,
+        RELEASES_DATA_DIR: bad,
+        RELEASES_TELEMETRY_DISABLED: "1",
       },
     });
     expect(r.exitCode).toBe(1);

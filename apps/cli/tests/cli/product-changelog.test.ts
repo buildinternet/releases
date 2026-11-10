@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { runCli } from "../utils.js";
 
 const publicEnv = {
-  RELEASED_API_URL: "",
-  RELEASED_API_KEY: "",
   RELEASES_API_URL: "",
   RELEASES_API_KEY: "",
 };

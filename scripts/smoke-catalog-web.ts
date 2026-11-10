@@ -188,8 +188,7 @@ async function main(): Promise<number> {
   const baseUrl = stripTrailingSlash(process.env.BASE_URL?.trim() || DEFAULT_BASE_URL);
   const apiUrl = stripTrailingSlash(
     process.env.API_URL?.trim() ||
-      process.env.RELEASES_API_URL?.trim() ||
-      process.env.RELEASED_API_URL?.trim() ||
+      process.env.RELEASES_API_URL?.trim()?.trim() ||
       deriveApiUrl(baseUrl),
   );
 

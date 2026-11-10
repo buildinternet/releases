@@ -20,7 +20,7 @@ import { runCli } from "../utils.js";
 describe("admin org delete --hard (CLI integration)", () => {
   it("rejects --hard without --yes when stdin is not a TTY", () => {
     const { stderr, exitCode } = runCli(["admin", "org", "delete", "vercel", "--hard"], {
-      env: { RELEASED_API_URL: "https://test.example.com", RELEASED_API_KEY: "test" },
+      env: { RELEASES_API_URL: "https://test.example.com", RELEASES_API_KEY: "test" },
     });
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("--yes");

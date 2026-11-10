@@ -5,8 +5,7 @@
  * to proxy requests; pass `gatewayToken` when the gateway is configured
  * in authenticated mode.
  *
- * Errors surface unchanged so callers can still `instanceof APIError`
- * / classify via `@releases/lib/anthropic-errors`.
+ * Errors surface unchanged so callers can still `instanceof APIError`.
  */
 
 import Anthropic from "@anthropic-ai/sdk";

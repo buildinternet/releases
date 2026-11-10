@@ -14,11 +14,8 @@ import { resolveModel } from "./resolve-model";
 
 const ENV_KEYS = [
   "RELEASES_INGEST_MODEL",
-  "RELEASED_INGEST_MODEL",
   "RELEASES_AGENT_MODEL",
-  "RELEASED_AGENT_MODEL",
   "RELEASES_SUMMARY_MODEL",
-  "RELEASED_SUMMARY_MODEL",
 ] as const;
 
 afterEach(() => {
@@ -125,9 +122,7 @@ describe("resolveModel", () => {
     expect(resolveModel("evalJudge")).toBe(modelId("evalJudge"));
   });
 
-  test("prefers RELEASES_ over RELEASED_ and ignores blank values", () => {
-    process.env.RELEASED_INGEST_MODEL = "legacy";
-    expect(resolveModel("extraction")).toBe("legacy");
+  test("reads the RELEASES_ override and ignores blank values", () => {
     process.env.RELEASES_INGEST_MODEL = "next";
     expect(resolveModel("extraction")).toBe("next");
     process.env.RELEASES_SUMMARY_MODEL = "   ";

@@ -44,7 +44,7 @@ Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens a
 
 ## Shared helper
 
-Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `apps/api/src/lib/ai/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `apps/api/src/lib/ai/anthropic.ts`) wrap it. Errors propagate unchanged, so error handling works identically with or without the gateway in front.
 
 Two routing modes:
 

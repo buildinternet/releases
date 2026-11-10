@@ -62,7 +62,7 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 - `packages/rendering/` → imported as **`@releases/rendering/*`**. Atom feed helpers, markdown/JSON formatters, and media URL helpers.
 - `packages/search/` → imported as **`@releases/search/*`**. Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
 - `packages/lib/` — slim private utilities (`config`, `errors`, Anthropic client/error helpers, `anthropic-pricing` for list-price cost estimates on managed-agent sessions, `spend-cap` daily-spend KV gate, `session-error-classify`). `logger` is published as `@buildinternet/releases-lib/logger`.
-- `packages/releases-lib/` → published as **`@buildinternet/releases-lib`** (CLI helpers: `config`, `legacy-env`, `logger`), part of the CLI's fixed release group. A workspace here; the CLI and `@releases/*` packages consume it via `workspace:*`.
+- `packages/releases-lib/` → published as **`@buildinternet/releases-lib`** (CLI helpers: `config`, `logger`), part of the CLI's fixed release group. A workspace here; the CLI and `@releases/*` packages consume it via `workspace:*`.
 
 Onboarding is agent-driven, not a remote harness: a local Claude Code session runs the local-ingest skill, self-serve listing, or on-demand `/v1/lookups` to add orgs/products/sources by hand. See [agents.md](docs/architecture/agents.md).
 

@@ -30,7 +30,7 @@ import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { adminGet, adminPatch as adminPatchClient } from "./lib/admin-client.js";
 
-const API_URL = process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL;
+const API_URL = process.env.RELEASES_API_URL;
 
 // Matches LIVE_ENCODE_MAX_CHARS in src/lib/tokens.ts. Kept as a local
 // constant so the script doesn't depend on an internal export.

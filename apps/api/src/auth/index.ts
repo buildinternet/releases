@@ -58,7 +58,7 @@ export async function resolveSigningSecret(env: {
 }): Promise<string | null> {
   // `||`, not `??`: an empty-string secret is never usable, so an empty/unresolved
   // binding must fall through to the dev var (and an empty dev var to null) — the
-  // same "no usable value" rule getSecretWithFallback uses.
+  // same "no usable value" rule getSecret uses.
   const resolved = await resolveSecret(env.BETTER_AUTH_SECRET);
   return resolved || env.BETTER_AUTH_SECRET_DEV || null;
 }

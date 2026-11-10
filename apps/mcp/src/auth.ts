@@ -1,4 +1,4 @@
-import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { getSecret } from "@releases/lib/secrets";
 import {
   isApiTokenShaped,
   isUserApiKeyShaped,
@@ -424,9 +424,7 @@ async function resolveIdentity(
     }
     return { invalidToken: true };
   }
-  const rootKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(
-    () => null,
-  );
+  const rootKey = await getSecret(env.RELEASES_API_KEY).catch(() => null);
   if (rootKey && presented === rootKey) {
     return { kind: "root", scopes: [ROOT_SCOPE], tokenId: null, token: null, userToken: null };
   }

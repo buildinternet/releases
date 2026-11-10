@@ -53,7 +53,7 @@ describe("shouldShowCompletionHint", () => {
     expect(
       shouldShowCompletionHint({
         ...TTY,
-        env: { SHELL: "/bin/zsh", RELEASED_CLIENT_KIND: "managed-agent" },
+        env: { SHELL: "/bin/zsh", RELEASES_CLIENT_KIND: "managed-agent" },
       }),
     ).toBe(false);
   });
@@ -108,7 +108,7 @@ describe("shouldShowCompletionNotice", () => {
 
   it("suppresses for non-external client kinds (managed agents)", () => {
     expect(
-      shouldShowCompletionNotice({ ...BASE, env: { RELEASED_CLIENT_KIND: "managed-agent" } }),
+      shouldShowCompletionNotice({ ...BASE, env: { RELEASES_CLIENT_KIND: "managed-agent" } }),
     ).toBe(false);
   });
 

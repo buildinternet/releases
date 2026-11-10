@@ -549,7 +549,7 @@ if (!capped.length) {
 const runInfo = await agent(
   `Create an ISOLATED maintenance run dir for this overview sweep. Do NOT run \`releases admin work start\` (it sets a shared pointer that leaks across sessions). Run exactly this, then return the absolute dir it prints:
 \`\`\`
-base="\${RELEASES_DATA_DIR:-\${RELEASED_DATA_DIR:-$HOME/.releases}}/work"
+base="\${RELEASES_DATA_DIR:-\$HOME/.releases}/work"
 dir="$base/runs/$(date +%Y-%m-%d-%H%M)-update-overviews"
 mkdir -p "$dir" "$base/tasks" "$base/reports"
 echo "$dir"

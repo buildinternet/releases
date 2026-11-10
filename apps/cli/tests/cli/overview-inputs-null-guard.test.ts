@@ -89,8 +89,6 @@ function env() {
   return {
     RELEASES_API_URL: baseUrl,
     RELEASES_API_KEY: "test-key",
-    RELEASED_API_URL: baseUrl,
-    RELEASED_API_KEY: "test-key",
   };
 }
 

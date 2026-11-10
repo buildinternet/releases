@@ -106,15 +106,15 @@ export const MODEL_ROLES = {
 export type ModelRole = keyof typeof MODEL_ROLES;
 
 /**
- * Process-env overrides for Anthropic roles. Canonical name, then the legacy
- * `RELEASED_*` name. Read by `resolveModel` and by `config`'s accessors.
+ * Process-env overrides for Anthropic roles. Read by `resolveModel` and by
+ * `config`'s accessors.
  * OpenRouter lanes are not here — those are wrangler vars plus `/admin/models`.
  */
 export const MODEL_ROLE_ENV = {
-  summarize: ["RELEASES_SUMMARY_MODEL", "RELEASED_SUMMARY_MODEL"],
-  extraction: ["RELEASES_INGEST_MODEL", "RELEASED_INGEST_MODEL"],
-  extractionAgent: ["RELEASES_AGENT_MODEL", "RELEASED_AGENT_MODEL"],
-} as const satisfies Partial<Record<ModelRole, readonly [string, string]>>;
+  summarize: "RELEASES_SUMMARY_MODEL",
+  extraction: "RELEASES_INGEST_MODEL",
+  extractionAgent: "RELEASES_AGENT_MODEL",
+} as const satisfies Partial<Record<ModelRole, string>>;
 
 /**
  * Dated DeepSeek V4.1 Flash snapshot shared by the summarize, extract, and

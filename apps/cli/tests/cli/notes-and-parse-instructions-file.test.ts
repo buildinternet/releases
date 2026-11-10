@@ -13,7 +13,7 @@ import { runCli } from "../utils.js";
  */
 
 describe("admin playbook --notes-file (#103 ws3)", () => {
-  const adminEnv = { RELEASED_API_KEY: "test-key" };
+  const adminEnv = { RELEASES_API_KEY: "test-key" };
 
   it("exits non-zero with unknown option error for removed --notes flag", () => {
     const { stderr, exitCode } = runCli(["admin", "playbook", "acme", "--notes", "x"], {
@@ -25,7 +25,7 @@ describe("admin playbook --notes-file (#103 ws3)", () => {
 });
 
 describe("source update --parse-instructions-file (#103 ws3)", () => {
-  const adminEnv = { RELEASED_API_KEY: "test-key" };
+  const adminEnv = { RELEASES_API_KEY: "test-key" };
 
   it("exits non-zero with unknown option error for removed --parse-instructions flag", () => {
     const { stderr, exitCode } = runCli(

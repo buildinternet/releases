@@ -1,7 +1,7 @@
 import type { ApiKey } from "@better-auth/api-key";
 import type { Context, MiddlewareHandler } from "hono";
 import { FLAGS, flag, type FlagDef } from "@releases/lib/flags";
-import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { getSecret } from "@releases/lib/secrets";
 import {
   buildConsumptionPayload,
   type ConsumptionIdentity,
@@ -488,7 +488,7 @@ async function resolveAuthUncached(
     return { kind: "none", skip: false };
   }
 
-  const secret = await getSecretWithFallback(c.env.RELEASES_API_KEY, c.env.RELEASED_API_KEY);
+  const secret = await getSecret(c.env.RELEASES_API_KEY);
   if (!secret) return { kind: "none", skip: true }; // local dev — no secret configured
   if (presented && presented === secret) return { kind: "root", scopes: [ROOT_SCOPE] };
   return { kind: "none", skip: false };

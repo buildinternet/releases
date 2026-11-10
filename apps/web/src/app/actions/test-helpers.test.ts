@@ -40,7 +40,6 @@ export function enableLocalAdminEnv(): void {
 /** Undo enableLocalAdminEnv() so isLocalAdminEnabled() sees no key configured. */
 export function disableLocalAdminEnv(): void {
   delete process.env.RELEASES_API_KEY;
-  delete process.env.RELEASED_API_KEY;
 }
 
 export interface RecordedRequest {

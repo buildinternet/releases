@@ -33,7 +33,6 @@ describe("authMiddleware", () => {
   function createApp() {
     type Env = {
       Bindings: {
-        RELEASED_API_KEY?: { get(): Promise<string> };
         RELEASES_API_KEY?: { get(): Promise<string> };
       };
     };
@@ -98,18 +97,6 @@ describe("authMiddleware", () => {
       { RELEASES_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
-  });
-
-  it("falls back to the legacy RELEASED_API_KEY binding when RELEASES_API_KEY is unset", async () => {
-    const app = createApp();
-    const res = await app.request(
-      "/test",
-      { headers: { Authorization: "Bearer legacy-secret" } },
-      { RELEASED_API_KEY: mockSecret("legacy-secret") },
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean };
-    expect(body.ok).toBe(true);
   });
 });
 

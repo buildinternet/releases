@@ -1,7 +1,6 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { legacyEnv } from "./legacy-env";
 
 let _dataDir: string | null = null;
 let _dataDirEnv: string | undefined;
@@ -9,10 +8,10 @@ let _dataDirEnv: string | undefined;
 export function getDataDir(): string {
   // Cache the resolved dir, but invalidate when the env var changes. In prod
   // the env is fixed at startup so this stays memoized (mkdir runs once); in
-  // tests, each file points RELEASED_DATA_DIR at its own temp dir, and the
+  // tests, each file points RELEASES_DATA_DIR at its own temp dir, and the
   // comparison re-resolves instead of returning a stale dir cached by another
   // file. (This is what `bun test --isolate` used to paper over — see #211.)
-  const env = legacyEnv("RELEASES_DATA_DIR", "RELEASED_DATA_DIR");
+  const env = process.env.RELEASES_DATA_DIR || undefined;
   if (_dataDir === null || env !== _dataDirEnv) {
     _dataDirEnv = env;
     _dataDir = env || join(homedir(), ".releases");

@@ -14,7 +14,7 @@ Shared code, split between published npm packages and private in-tree packages.
 | `search/`        | `@releases/search`                  | Private, workspace-only              | Embedding providers/cache, Vectorize hybrid search, embedding pipelines.                      |
 | `queries/`       | `@releases/queries`                 | Private, workspace-only              | Read queries shared by the API and MCP workers.                                               |
 | `design-system/` | `@releases/design-system`           | Private, workspace-only              | Token + component vocabulary behind the web app.                                              |
-| `releases-lib/`  | `@buildinternet/releases-lib`       | Published                            | CLI helpers (`config`, `legacy-env`, `logger`); part of the CLI's fixed release group.        |
+| `releases-lib/`  | `@buildinternet/releases-lib`       | Published                            | CLI helpers (`config`, `logger`); part of the CLI's fixed release group.                      |
 | `lib/`           | `@releases/lib`                     | Private (`logger` subpath published) | Small cross-app platform helpers — see its own README for scope.                              |
 
 ## Key rules
