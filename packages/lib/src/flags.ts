@@ -36,7 +36,7 @@ export interface FlagshipBinding {
 export type FlagKind = "kill-switch" | "rollout";
 
 /** Worker runtime(s) that evaluate a flag — where it actually takes effect. */
-export type FlagReader = "api" | "discovery" | "mcp" | "webhooks";
+export type FlagReader = "api" | "mcp" | "webhooks";
 
 export interface FlagDef {
   /** Flagship flag key (kebab-case). MUST exist identically in BOTH apps. */
@@ -103,7 +103,7 @@ export const FLAGS = {
     env: "WEB_BOT_AUTH_ENABLED",
     default: false,
     kind: "kill-switch",
-    reads: ["api", "discovery"],
+    reads: ["api"],
     description: "Signs outbound content fetches with RFC 9421 Web Bot Auth signatures.",
   },
   invalidationEnabled: {
@@ -119,7 +119,7 @@ export const FLAGS = {
     env: "MA_SESSIONS_DISABLED",
     default: false,
     kind: "kill-switch",
-    reads: ["api", "discovery"],
+    reads: ["api"],
     description: "Incident kill switch for managed-agent sessions. false = sessions allowed.",
   },
   batchSummarizeEnabled: {
@@ -215,7 +215,7 @@ export const FLAGS = {
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: true,
     kind: "kill-switch",
-    reads: ["api", "discovery"],
+    reads: ["api"],
     description:
       "Multi-round tool-use extraction for large bodies (>50K tokens). Off = one-shot inline only.",
   },
@@ -233,7 +233,7 @@ export const FLAGS = {
     env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
     default: false,
     kind: "rollout",
-    reads: ["api", "discovery"],
+    reads: ["api"],
     description:
       "Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).",
   },
@@ -257,7 +257,7 @@ export const FLAGS = {
     env: "OPENROUTER_ENABLED",
     default: true,
     kind: "kill-switch",
-    reads: ["api", "discovery"],
+    reads: ["api"],
     description:
       "Single switch for the secondary cheap-call AI lanes (marketing classifier, summarizer, feed-enrich, large-body extract). On = lanes with an OpenRouter model var route to OpenRouter; off = Anthropic Haiku.",
   },
