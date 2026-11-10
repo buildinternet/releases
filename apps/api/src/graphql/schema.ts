@@ -8,6 +8,7 @@ import {
   organizations,
   organizationsActive,
   releasesVisible,
+  sourceReleaseStats,
   sources,
   sourcesActive,
 } from "@buildinternet/releases-core/schema";
@@ -133,10 +134,12 @@ builder.queryType({
         const [[orgCount], [sourceCount], [releaseCount]] = await Promise.all([
           ctx.db.select({ n: count() }).from(organizationsActive),
           ctx.db.select({ n: count() }).from(sourcesActive),
+          // Sum the trigger-maintained per-source rollup (one row per source),
+          // same as the REST stats route, instead of counting every release.
           ctx.db
-            .select({ n: count() })
-            .from(releasesVisible)
-            .innerJoin(sourcesActive, eq(releasesVisible.sourceId, sourcesActive.id)),
+            .select({ n: sql<number>`COALESCE(SUM(${sourceReleaseStats.releaseCount}), 0)` })
+            .from(sourceReleaseStats)
+            .innerJoin(sourcesActive, eq(sourceReleaseStats.sourceId, sourcesActive.id)),
         ]);
         return { orgs: orgCount.n, sources: sourceCount.n, releases: releaseCount.n };
       },
