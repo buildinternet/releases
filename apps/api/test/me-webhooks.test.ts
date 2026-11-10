@@ -22,6 +22,25 @@ const DISCORD_HOOK_URL =
   "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz";
 const queueMessages: unknown[] = [];
 
+// Hostname URLs (Slack/Discord) go through the DoH lookup in
+// assertPublicWebhookTarget. Answer it locally so the suite runs offline.
+const realFetch = globalThis.fetch;
+function stubDohFetch() {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input : input.url,
+    );
+    if (url.hostname === "cloudflare-dns.com") {
+      const type = Number(url.searchParams.get("type"));
+      const answer = type === 1 ? [{ type: 1, data: "1.1.1.1" }] : [];
+      return new Response(JSON.stringify({ Answer: answer }), {
+        headers: { "content-type": "application/dns-json" },
+      });
+    }
+    return realFetch(input, init);
+  }) as typeof fetch;
+}
+
 let h: TestDatabase;
 
 function app() {
@@ -47,6 +66,7 @@ function app() {
 beforeEach(async () => {
   h = createTestDb();
   queueMessages.length = 0;
+  stubDohFetch();
   await h.db.insert(user).values({
     id: "u1",
     name: "T",
@@ -66,7 +86,10 @@ beforeEach(async () => {
   });
 });
 
-afterEach(() => h.cleanup());
+afterEach(() => {
+  globalThis.fetch = realFetch;
+  h.cleanup();
+});
 
 describe("/v1/me/webhooks", () => {
   it("POST creates a subscription by orgSlug and returns signing key", async () => {
