@@ -21,17 +21,14 @@
     "./legacy-env": "./src/legacy-env.ts",
     "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",
-    "./ma-rate-limit": "./src/ma-rate-limit.ts",
     "./models": "./src/models.ts",
     "./resolve-model": "./src/resolve-model.ts",
     "./oauth-jwt": "./src/oauth-jwt.ts",
-    "./prompt-escape": "./src/prompt-escape.ts",
     "./provider-quota": "./src/provider-quota.ts",
     "./rate-limit-tiers": "./src/rate-limit-tiers.ts",
     "./releases-error": "./src/releases-error.ts",
     "./secrets": "./src/secrets.ts",
     "./session-error-classify": "./src/session-error-classify.ts",
-    "./source-edit": "./src/source-edit.ts",
     "./spend-cap": "./src/spend-cap.ts"
   },
   "dependencies": {

@@ -6,7 +6,6 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   organizations,
   organizationsActive,
-  productsActive,
   sources,
   sourcesActive,
   releases,

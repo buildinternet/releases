@@ -428,10 +428,8 @@ async function runWebFetchLoop(
     // oxlint-disable-next-line no-await-in-loop -- Anthropic API rate limit; agent continuation turns must be sequential
     const response = await stream.finalMessage();
 
-    // TODO: remove cast once Anthropic SDK exposes `container` in response type.
-    const responseAny = response as unknown as Record<string, unknown>;
-    if (responseAny.container) {
-      containerId = (responseAny.container as { id: string }).id;
+    if (response.container) {
+      containerId = response.container.id;
     }
 
     totalInput += response.usage.input_tokens;

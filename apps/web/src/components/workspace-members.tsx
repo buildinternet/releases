@@ -40,7 +40,7 @@ export function WorkspaceMembers({
   const [error, setError] = useState<string | null>(null);
   // Confirm-on-second-click gate for the irreversible actions (leave / remove), keyed
   // `<action>:<memberId>` so only one row's action is armed at a time. Mirrors the
-  // confirm pattern in passkeys-panel / social-connections-panel.
+  // confirm pattern in security-panel / social-connections-panel.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const router = useRouter();
 
