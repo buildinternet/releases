@@ -92,9 +92,11 @@ export async function upsertOrgOverview(
     return { pageId: pageRow.id, citationsWritten: 0 };
   }
 
+  // An org overview cites that org's own releases.
   const releaseIdByUrl = await resolveReleaseIdsByUrl(
     db,
     input.citations.map((c) => c.sourceUrl),
+    { orgId: input.orgId },
   );
 
   const rows = input.citations.map((cit) => ({
@@ -140,21 +142,31 @@ export async function upsertOrgOverview(
  *
  * Keyed by the original (lowercased) citation URL so callers can do a
  * direct `.get(citation.sourceUrl.toLowerCase())` without re-normalizing.
+ *
+ * `orgId` limits the match to that org's sources. `LOWER(url)` can't use an
+ * index, so unscoped each pass scans every release (~80K rows on D1); scoped,
+ * it reads only the org's rows through the `(source_id, url)` index.
  */
 export async function resolveReleaseIdsByUrl(
   db: AnyDb,
   urls: string[],
+  opts: { orgId?: string } = {},
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (urls.length === 0) return out;
   const lowered = Array.from(new Set(urls.map((u) => u.toLowerCase())));
+  const orgScope = opts.orgId
+    ? sql` AND ${releases.sourceId} IN (SELECT id FROM sources WHERE org_id = ${opts.orgId})`
+    : sql``;
 
   // Pass 1: exact match.
-  for (const chunk of chunkArray(lowered, IN_ARRAY_CHUNK_SIZE)) {
+  // One bind for the org scope, the rest for URLs (D1 caps a statement at 100).
+  const chunkSize = opts.orgId ? IN_ARRAY_CHUNK_SIZE - 1 : IN_ARRAY_CHUNK_SIZE;
+  for (const chunk of chunkArray(lowered, chunkSize)) {
     const rows: Array<{ id: string; urlLower: string }> = await db
       .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
       .from(releases)
-      .where(sql`LOWER(${releases.url}) IN ${chunk}`);
+      .where(sql`LOWER(${releases.url}) IN ${chunk}${orgScope}`);
     for (const r of rows) {
       if (!out.has(r.urlLower)) out.set(r.urlLower, r.id);
     }
@@ -174,11 +186,11 @@ export async function resolveReleaseIdsByUrl(
 
   const bases = Array.from(new Set(stripped.map((s) => s.base)));
   const baseToReleaseId = new Map<string, string>();
-  for (const chunk of chunkArray(bases, IN_ARRAY_CHUNK_SIZE)) {
+  for (const chunk of chunkArray(bases, chunkSize)) {
     const rows: Array<{ id: string; urlLower: string }> = await db
       .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
       .from(releases)
-      .where(sql`LOWER(${releases.url}) IN ${chunk}`);
+      .where(sql`LOWER(${releases.url}) IN ${chunk}${orgScope}`);
     for (const r of rows) {
       if (!baseToReleaseId.has(r.urlLower)) baseToReleaseId.set(r.urlLower, r.id);
     }

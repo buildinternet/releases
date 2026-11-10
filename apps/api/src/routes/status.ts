@@ -402,7 +402,7 @@ statusRoutes.get("/status/source-workflow", async (c) => {
   const stages = describeWorkflowStages(source);
 
   const lastRun = recent[0] ?? null;
-  const sparkline = recent.map((r) => r.status).reverse(); // oldest→newest
+  const sparkline = recent.map((r) => r.status).toReversed(); // oldest→newest
 
   let aiPasses: {
     operation: string;

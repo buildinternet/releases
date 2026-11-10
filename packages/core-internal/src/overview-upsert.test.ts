@@ -172,6 +172,27 @@ describe("resolveReleaseIdsByUrl", () => {
     expect(out.get("https://example.com/changelog/v3.0#anything")).toBe("rel_fallback_b");
   });
 
+  it("matches only the given org's releases when orgId is set", async () => {
+    tdb.db
+      .insert(organizations)
+      .values({ id: "org_other", name: "Other", slug: "other", discovery: "curated" as const })
+      .run();
+    seedSource(tdb, { id: "src_other", slug: "other-source", orgId: "org_other" });
+    seedRelease(tdb, { id: "rel_mine", url: "https://example.com/changelog/mine" });
+    seedRelease(tdb, {
+      id: "rel_theirs",
+      sourceId: "src_other",
+      url: "https://other.test/changelog/theirs",
+    });
+
+    const out = await resolveReleaseIdsByUrl(
+      asDb(tdb.db),
+      ["https://example.com/changelog/mine", "https://other.test/changelog/theirs"],
+      { orgId: "org_cit_01" },
+    );
+    expect(Object.fromEntries(out)).toEqual({ "https://example.com/changelog/mine": "rel_mine" });
+  });
+
   it("deduplicates input URLs that differ only in case", async () => {
     seedRelease(tdb, {
       id: "rel_dedup",

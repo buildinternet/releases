@@ -81,7 +81,7 @@ export const DIRECTORY_SIGNATURE_TAG = "http-message-signatures-directory";
  * `"@authority";req` (the Host of the request that fetched the directory).
  */
 export function buildDirectorySignatureBase(args: { authority: string; params: string }): string {
-  return `"@authority";req: ${args.authority}\n` + `"@signature-params": ${args.params}`;
+  return `"@authority";req: ${args.authority}\n"@signature-params": ${args.params}`;
 }
 
 export interface SignDirectoryArgs {

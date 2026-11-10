@@ -94,6 +94,39 @@ describe("source_release_stats triggers", () => {
     await assertInSync();
   });
 
+  it("updates incrementally on a batch coverage insert, including first/last and suppressed rows", async () => {
+    const { db, rel, stats, assertInSync } = await setup();
+    await rel("r1", "2026-01-01");
+    await rel("r2", "2026-02-01");
+    await rel("r3", "2026-02-01");
+    await rel("r4", "2026-03-01");
+    await rel("r5", null);
+    await rel("r6", "2026-04-01", { suppressed: 1 });
+    // r1 holds first, r4 holds last, r3 ties r2's date, r5 is undated, r6 was
+    // never counted (suppressed).
+    await db.insert(releaseCoverage).values(
+      ["r1", "r3", "r4", "r5", "r6"].map((coverageId) => ({
+        coverageId,
+        canonicalId: "r2",
+        decidedBy: "test",
+        decidedAt: NOW,
+      })),
+    );
+    expect(await stats()).toEqual({ c: 1, f: "2026-02-01", l: "2026-02-01" });
+    await assertInSync();
+  });
+
+  it("clears first/last when the last visible dated release is covered", async () => {
+    const { db, rel, stats, assertInSync } = await setup();
+    await rel("r1", "2026-01-01");
+    await rel("r2", null);
+    await db
+      .insert(releaseCoverage)
+      .values({ coverageId: "r1", canonicalId: "r2", decidedBy: "test", decidedAt: NOW });
+    expect(await stats()).toEqual({ c: 1, f: null, l: null });
+    await assertInSync();
+  });
+
   it("handles deletes, including a covered release and a cascading source delete", async () => {
     const { db, rel, stats, assertInSync } = await setup();
     await rel("r1", "2026-01-02");
