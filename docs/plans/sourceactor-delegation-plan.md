@@ -7,7 +7,7 @@
 > `SOURCE_ACTOR_COHORT_PCT`, cron fan-out) was deleted at 100% (#1819) — the
 > actor is now the sole per-source fetch driver. Code snippets and phase tables
 > below describe the migration as planned, not the current code; see
-> [remote-mode.md → SourceActor](remote-mode.md) for present-day behavior.
+> [remote-mode.md → SourceActor](../architecture/remote-mode.md) for present-day behavior.
 > Parent epic: #1778.
 
 ## Overview

@@ -7,7 +7,7 @@
 > the delegation bolt-ons were retired onto it (#1780/#1814/#1816), and `OrgActor`
 > replaced the drain crons (#1777/#1822). `ProductActor` cross-source reconciliation
 > remains deferred (#1775). Details below describe the pre-actor system and the
-> proposal as sketched — see [remote-mode.md](remote-mode.md) for current behavior.
+> proposal as sketched — see [remote-mode.md](../architecture/remote-mode.md) for current behavior.
 
 Reference: [Rules of Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/).
 

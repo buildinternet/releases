@@ -112,7 +112,7 @@ This repo also ships the `releases` plugin (`plugins/claude/releases`) — hoste
 /plugin install releases@releases
 ```
 
-Other agent marketplaces (Grok Build via the [xAI plugin marketplace](https://github.com/xai-org/plugin-marketplace), and more as they are listed) install the same folder. Per-agent steps are in the [plugin README](plugins/claude/releases/README.md).
+Other agent marketplaces (Grok Build via the [xAI plugin marketplace](https://github.com/xai-org/plugin-marketplace), and more as they are listed) install the same folder. Per-agent steps are in the [plugin README](https://github.com/buildinternet/releases/blob/main/plugins/claude/releases/README.md).
 
 Operator/maintainer skills (source onboarding, parsing, playbooks) live with the backend in the [releases monorepo](https://github.com/buildinternet/releases) — its `.claude/skills/` tree is picked up automatically in a checkout.
 
@@ -184,8 +184,9 @@ Reader access requires nothing. Useful overrides:
 - `RELEASES_API_TOKEN` — write-scoped publish token for `releases publish` (see [Publish from any CI](#publish-from-any-ci)).
 - `RELEASES_API_URL` — override the default `https://api.releases.sh` (e.g. staging).
 - `RELEASES_TELEMETRY_DISABLED=1` — opt out of anonymous usage pings (`DO_NOT_TRACK=1` also honored).
-
-See [`.env.example`](./.env.example) for the full list.
+- `RELEASES_DATA_DIR` — move the local data directory (default `~/.releases`).
+- `RELEASES_NO_COMPLETION_HINT=1` — silence the shell-completion hint.
+- `RELEASES_DISABLE_SKILL_UPDATE_CHECK=1` — skip the check for newer agent skills.
 
 ### Custom CA certificates (TLS-intercepting proxies)
 

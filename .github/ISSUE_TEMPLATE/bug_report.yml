@@ -10,7 +10,7 @@ body:
         - API worker
         - MCP server
         - Web frontend
-        - Discovery worker
+        - CLI
         - Webhooks worker
         - Shared packages
         - Other / not sure

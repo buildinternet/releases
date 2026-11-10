@@ -6,8 +6,8 @@ Optional Cloudflare AI Gateway proxy in front of every direct Anthropic SDK call
 
 Covered when `ANTHROPIC_BASE_URL` is set:
 
-- `apps/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
-- `scripts/run-eval-task.ts` — local eval runner
+- `apps/api` — the refetch-release and backfill-source workflow routes, and the `BackfillSource`, `BatchEnrich`, `BatchSummarize`, and `FirecrawlIngest` workflows
+- `packages/adapters` — the deterministic update's extraction client (`extract-deps-worker.ts`)
 - `scripts/generate-release-content.ts` — operational backfill / regenerate tool (#1474)
 - `scripts/smoke-toolloop.ts` — one-off tool-loop smoke test (#1474)
 
@@ -49,11 +49,11 @@ Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packa
 Two routing modes:
 
 - **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. This is the default for Messages-API call sites listed under Scope above.
-- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call site listed under "Not covered" above (`apps/api/src/routes/errata.ts`). New code should follow this pattern any time it touches the memory-store API surface (`/v1/memory_stores/*`).
+- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Use it for any call that must not go through the gateway.
 
-## What this PR does not configure
+## What this repo does not configure
 
-Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) are configured in the Cloudflare dashboard, not in this repo. This PR is passthrough only: flip the env var and telemetry starts flowing. Per-route cache config and provider fallbacks land in follow-up changes once there's a week of baseline metrics.
+Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) are configured in the Cloudflare dashboard, not in this repo. The integration is passthrough only: set the env var and telemetry starts flowing.
 
 ## Cloudflare Agents tracing (AI SDK)
 

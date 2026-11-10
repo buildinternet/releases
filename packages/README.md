@@ -12,6 +12,7 @@ Shared code, split between published npm packages and private in-tree packages.
 | `ai/`            | `@releases/ai-internal`             | Private, workspace-only              | AI helpers for ingest/content pipelines — evaluation, extraction, classification, generation. |
 | `rendering/`     | `@releases/rendering`               | Private, workspace-only              | Atom feed helpers, markdown/JSON formatters, media URL helpers.                               |
 | `search/`        | `@releases/search`                  | Private, workspace-only              | Embedding providers/cache, Vectorize hybrid search, embedding pipelines.                      |
+| `queries/`       | `@releases/queries`                 | Private, workspace-only              | Read queries shared by the API and MCP workers.                                               |
 | `design-system/` | `@releases/design-system`           | Private, workspace-only              | Token + component vocabulary behind the web app.                                              |
 | `releases-lib/`  | `@buildinternet/releases-lib`       | Published                            | CLI helpers (`config`, `legacy-env`, `logger`); part of the CLI's fixed release group.        |
 | `lib/`           | `@releases/lib`                     | Private (`logger` subpath published) | Small cross-app platform helpers — see its own README for scope.                              |
