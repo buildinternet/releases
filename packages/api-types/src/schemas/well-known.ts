@@ -9,10 +9,15 @@ const SocialValueSchema = z.string().min(1).max(200);
 const SocialSchema = z.record(z.string().min(1).max(40), SocialValueSchema);
 
 // `z.url().startsWith(...)` keeps the runtime URL + https check AND serializes to
-// JSON Schema as `format: "uri"` + `pattern: "^https://"` — so the generated
-// public schema rejects non-https schemes too (a plain `.refine()` would be
-// silently dropped by z.toJSONSchema).
-const HttpsUrlSchema = z.url().startsWith("https://", "locator must be an https URL");
+// JSON Schema with `pattern: "^https://"` — so the generated public schema
+// rejects non-https schemes too (a plain `.refine()` would be silently dropped
+// by z.toJSONSchema). Since zod 4.6 the `startsWith` check overwrites the
+// emitted `format` with the non-standard `"starts_with"`, so `.meta()` pins it
+// back to `"uri"`.
+const HttpsUrlSchema = z
+  .url()
+  .startsWith("https://", "locator must be an https URL")
+  .meta({ format: "uri" });
 
 /** Shared tag-array bounds — kept identical for org-level and product-level tags. */
 const TagsSchema = z.array(z.string().min(1).max(60)).max(50);
