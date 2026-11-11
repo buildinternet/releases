@@ -1,7 +1,7 @@
 import { type NextRequest } from "next/server";
 import { notFound } from "next/navigation";
 import { getBaseUrl } from "@/lib/base-url";
-import { loadPage } from "@/lib/docs";
+import { loadPage, pageMarkdown } from "@/lib/docs";
 import { STATIC_PAGES } from "@/lib/route-map";
 import { markdownResponse } from "@/lib/markdown-response";
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     if ((err as NodeJS.ErrnoException).code === "ENOENT") notFound();
     throw err;
   }
-  return markdownResponse(doc.public, {
+  return markdownResponse(pageMarkdown(doc), {
     cache: "static",
     canonical: `${getBaseUrl(req)}/${slug}`,
   });

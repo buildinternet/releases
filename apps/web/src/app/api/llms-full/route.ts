@@ -1,7 +1,6 @@
-import matter from "gray-matter";
 import { adminDocs } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
-import { stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
+import { mdxToMarkdown } from "@/lib/docs";
 import {
   docsManifest,
   getLoadedDoc,
@@ -13,10 +12,7 @@ import {
 const BASE_URL = getStaticBaseUrl();
 
 function renderDoc(entry: DocEntry, showAdmin: boolean): string {
-  const parsed = matter(getLoadedDoc(entry.slug).public);
-  const transformed = showAdmin
-    ? keepAdminBlocks(parsed.content)
-    : stripAdminBlocks(parsed.content);
+  const transformed = mdxToMarkdown(getLoadedDoc(entry.slug).body, { includeAdmin: showAdmin });
 
   const header = `<!-- source: ${BASE_URL}${entry.path} -->`;
   return `${header}\n\n${transformed.trimStart()}`.trimEnd();

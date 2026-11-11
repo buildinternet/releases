@@ -53,4 +53,4 @@ opted-in `413` / `too_large` contract documented above.
 - Auth middleware/guards (`apps/api/src/middleware/auth.ts`, `auth/oauth-self-service-guard.ts`) still emit the legacy flat shape — deliberately outside Phase 3's `routes/**` scope (#1839).
 - `respondError`'s `HTTPException` branch types an off-map 4xx (e.g. 422) as `internal` while preserving the status — dead surface today, zero 422 producers (#1841).
 
-Public-facing consumer reference (types + common codes): [web `/docs/api/errors`](../../apps/web/src/content/docs/api/errors.md). Design rationale: `docs/superpowers/specs/2026-07-02-standardized-errors-design.md`.
+Public-facing consumer reference (types + common codes): [web `/docs/api/errors`](../../apps/web/src/content/docs/api/errors.mdx). Design rationale: `docs/superpowers/specs/2026-07-02-standardized-errors-design.md`.

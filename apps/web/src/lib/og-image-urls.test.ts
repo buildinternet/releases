@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { DOCS_WITH_OWN_OG_IMAGE, buildDocPageMetadata } from "./doc-metadata";
-import { collectionOgImageUrl, ogImageFields, siteOgImageUrl } from "./og-image-urls";
+import { buildDocPageMetadata } from "./doc-metadata";
+import {
+  collectionOgImageUrl,
+  docOgImageUrl,
+  ogImageFields,
+  siteOgImageUrl,
+} from "./og-image-urls";
 import { buildStaticPageMetadata } from "@/components/markdown-page";
 
 const fm = { title: "T", description: "D" };
@@ -11,6 +16,9 @@ describe("og image urls", () => {
     expect(siteOgImageUrl(env)).toBe("https://releases.sh/api/og/site");
     expect(collectionOgImageUrl("ai-labs", env)).toBe(
       "https://releases.sh/api/og/collection/ai-labs",
+    );
+    expect(docOgImageUrl("guides/find-a-changelog", env)).toBe(
+      "https://releases.sh/api/og/docs/guides/find-a-changelog",
     );
   });
 
@@ -30,12 +38,14 @@ describe("docPageMetadata", () => {
     expect((m.twitter as { images: unknown[] }).images).toHaveLength(1);
   });
 
-  it("omits images entirely (not undefined) for docs with a co-located card", () => {
-    for (const slug of DOCS_WITH_OWN_OG_IMAGE) {
-      const m = buildDocPageMetadata(slug, fm);
-      expect(Object.hasOwn(m.openGraph ?? {}, "images")).toBe(false);
-      expect(Object.hasOwn(m.twitter ?? {}, "images")).toBe(false);
-    }
+  it("points docs pages with `og` frontmatter at their own card, with alt text", () => {
+    const og = { alt: "Why card", eyebrow: "Why", title: "Why Releases" };
+    const m = buildDocPageMetadata("why", { ...fm, og });
+    const images = (m.openGraph as { images: Array<{ url: string; alt: string }> }).images;
+    expect(images).toHaveLength(1);
+    expect(images[0].url).toEndWith("/api/og/docs/why");
+    expect(images[0].alt).toBe("Why card");
+    expect((m.twitter as { images: unknown[] }).images).toEqual(images);
   });
 });
 

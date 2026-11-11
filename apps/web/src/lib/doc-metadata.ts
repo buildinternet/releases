@@ -1,18 +1,6 @@
 import type { Metadata } from "next";
-import { loadDoc } from "@/lib/docs";
-import { ogImageFields, siteOgImageUrl } from "@/lib/og-image-urls";
-
-/**
- * Docs slugs that ship their own co-located `opengraph-image.tsx`. They omit
- * `images` so Next merges that file in; every other docs page points at the
- * shared site card. Keep in sync with `apps/web/src/app/docs/**\/opengraph-image.tsx`.
- */
-export const DOCS_WITH_OWN_OG_IMAGE: ReadonlySet<string> = new Set([
-  "index",
-  "why",
-  "guides/find-a-changelog",
-  "guides/changelog-rss-feed",
-]);
+import { loadDoc, type DocFrontmatter } from "@/lib/docs";
+import { docOgImageUrl, ogImageFields, siteOgImageUrl } from "@/lib/og-image-urls";
 
 /** Canonical path for a docs slug. The "index" doc owns `/docs` itself. */
 export function docPath(slug: string): string {
@@ -36,12 +24,19 @@ export function docPageMetadata(slug: string): Metadata {
 /** Pure half of {@link docPageMetadata} (no filesystem read) so it is unit-testable. */
 export function buildDocPageMetadata(
   slug: string,
-  { title, description }: { title: string; description?: string },
+  { title, description, og }: Pick<DocFrontmatter, "title" | "description" | "og">,
 ): Metadata {
   const url = docPath(slug);
-  // Conditional spread, never `images: undefined` (that suppresses the
-  // co-located file convention too — see og-image-urls.ts).
-  const img = DOCS_WITH_OWN_OG_IMAGE.has(slug) ? null : ogImageFields(siteOgImageUrl());
+  // Pages with `og` frontmatter get their own card; the rest share the site card.
+  const img = og
+    ? // Same size/type as `OG_SIZE`/`OG_CONTENT_TYPE` in `@/lib/og` (not imported: it pulls in fonts).
+      ogImageFields(docOgImageUrl(slug), {
+        alt: og.alt,
+        width: 1200,
+        height: 630,
+        type: "image/png",
+      })
+    : ogImageFields(siteOgImageUrl());
   return {
     title,
     description,
@@ -50,12 +45,12 @@ export function buildDocPageMetadata(
       url,
       title,
       ...(description ? { description } : {}),
-      ...img?.openGraph,
+      ...img.openGraph,
     },
     twitter: {
       title,
       ...(description ? { description } : {}),
-      ...img?.twitter,
+      ...img.twitter,
     },
     alternates: { canonical: url, types: { "text/markdown": `${url}.md` } },
   };

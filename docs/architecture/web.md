@@ -56,6 +56,16 @@ The card sits above the source tabs, with the stable-release count beside a shor
 
 The pilot follows [Google's dataset guidelines](https://developers.google.com/search/docs/appearance/structured-data/dataset#sitemap): descriptive unique names, 50–5000-character descriptions matching visible copy, canonical landing pages in the sitemap advertised by robots.txt, and provenance for derived data. Dataset markup is emitted only on the main history page, not on listings or the highlights/changelog tabs, so no duplicate dataset description needs `sameAs`. JSON access returns pages, not a complete bulk export. Coverage may be incomplete. Software versions, publication dates, and fetch/poll timestamps are not dataset revisions or modification dates, so no dataset `version`, `temporalCoverage`, `dateModified`, download distribution, or content license is inferred. After deployment, validate the public pages with Google's Rich Results Test and Search Console URL Inspection, then monitor indexing and Dataset Search discovery; local checks do not establish Google eligibility or ranking impact.
 
+## Docs pages (`/docs`)
+
+The docs are MDX in `apps/web/src/content/docs/`, compiled by Fumadocs (`fumadocs-mdx` + `fumadocs-core`, content layer only; the layout, sidebar and markdown components are ours). Config is `apps/web/source.config.ts`; the generated `.source/` index is gitignored and rebuilt on install (`postinstall`), `next dev` and `next build`.
+
+- **Add a page:** create `<slug>.mdx` with `title` / `description` frontmatter and list it in `src/content/docs/meta.json`. No route file. `meta.json` uses Fumadocs' convention: `---Section---` separators, then page paths (`index`, `./cli/browsing`).
+- **Frontmatter extras:** `label` (shorter sidebar / llms.txt text), `adminOnly` (dev-only page), `og` (a custom Open Graph card served at `/api/og/docs/<slug>`; other pages use the site card).
+- **Components:** use them directly, e.g. `<SkillsInstall />`. The map is `src/components/docs/mdx-components.tsx`. Wrap dev-only content in `<AdminOnly>…</AdminOnly>` (each tag on its own line).
+- **Rendering:** one route, `app/docs/[[...slug]]/page.tsx`, through the same remark/rehype stack as other markdown (`source.config.ts` replaces Fumadocs' default plugins).
+- **Agent markdown** (`/docs/<slug>.md`, `llms.txt`, `llms-full.txt`, Copy page) reads the `.mdx` source from disk via `@/lib/docs` + `@/lib/docs-manifest` (no MDX compiler, so it works under `bun test`). `mdxToMarkdown` drops `<AdminOnly>` blocks outside dev and swaps standalone components for `COMPONENT_MARKDOWN_FALLBACKS` (components without one are dropped).
+
 ## Open Graph images
 
 Next.js's `opengraph-image.tsx` file convention (one per route segment, cascading). Shared template + helpers live in `apps/web/src/lib/og.tsx` (renders via `next/og`'s `ImageResponse`) with pure helpers carved into `apps/web/src/lib/og-helpers.ts` so they're unit-testable without the Next runtime.

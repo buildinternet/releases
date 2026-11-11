@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { createMDX } from "fumadocs-mdx/next";
 import path from "path";
 
 const apiUrl = process.env.RELEASES_API_URL ?? "http://localhost:3456";
@@ -213,4 +214,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Compiles `src/content/docs/**/*.mdx` (configured in `source.config.ts`) and
+// regenerates the `.source/` collection index on dev and build.
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

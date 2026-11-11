@@ -1,0 +1,154 @@
+---
+title: "Listing your product — releases.json"
+description: "One small file that tells the Release Notes Index registry — and any agent — where you publish product updates. Point at your changelog, feed, or GitHub releases."
+label: Get Listed
+---
+
+# Listing your product
+
+`releases.json` is a small file on your domain that tells the registry **where you publish product updates**: a changelog, feed, GitHub Releases, App Store listing, or hosted CHANGELOG file. Where the file lives decides what it speaks for. A file on your domain speaks for your company; a file at a repo root speaks for that repo only.
+
+When the file is live, [check and activate on the submit page](/submit).
+
+If the notes themselves live in git, you can [publish from GitHub Actions](/docs/integrations/github-actions) or [from any other CI](/docs/integrations/ci) so a push updates your releases right away, without waiting for our next check.
+
+## Fast track: let an agent write it
+
+Install the skill, paste the prompt (swap in your website), publish the file it produces at `/.well-known/releases.json`, then activate:
+
+```bash
+npx skills add buildinternet/releases --skill creating-releases-json
+```
+
+```text
+Create a releases.json manifest for our product so registries and agents can find where we publish release notes.
+
+1. Install the creating-releases-json skill:
+   npx skills add buildinternet/releases --skill creating-releases-json
+2. Follow that skill end-to-end: discover the real places we publish updates (changelog, feed, GitHub Releases, App Store, CHANGELOG file), write a valid v2 manifest, and show me the finished file plus the URL it should be served from (usually https://{domain}/.well-known/releases.json).
+3. Only declare locations that actually exist — never invent URLs.
+
+Our website is: <your website or domain>
+```
+
+The same install command and prompt are on the [submit page](/submit) with one-click copy.
+
+## Write it yourself
+
+Host this at `https://yourdomain.com/.well-known/releases.json`:
+
+```json
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "releases": [
+    {
+      "url": "https://updates.acme.com",
+      "feed": "https://updates.acme.com/rss.xml"
+    }
+  ]
+}
+```
+
+Each `releases[]` entry needs **at least one** locator:
+
+| Key        | Use it for                                                      |
+| ---------- | --------------------------------------------------------------- |
+| `url`      | Page a person reads (changelog / what's-new)                    |
+| `feed`     | RSS/Atom feed                                                   |
+| `github`   | Repo Releases — `"acme/cloud-sdk"` (or `"self"` in a repo file) |
+| `appstore` | App Store listing                                               |
+| `file`     | Hosted raw changelog (e.g. `CHANGELOG.md` URL)                  |
+
+Optional: `title` on a location; `"canonical": true` on the primary one per scope.
+
+### Publish it yourself
+
+If the changelog lives in git and you will push it with the [GitHub Action](/docs/integrations/github-actions), mark that entry instead of asking us to poll the repo:
+
+```json
+{
+  "github": "acme/docs",
+  "path": "changelog/**/*.mdx",
+  "publish": "push"
+}
+```
+
+`path` is the file (`CHANGELOG.md`) or glob (`changelog/**/*.mdx`) your publisher reads — the GitHub Action's `changelog-path` / `changelog-glob`, or the same path you diff in any other CI. We create that source only after you verify domain ownership. Checking the domain then lists the next steps: verify, mint a publish token, add the Action (or [post the batch yourself](/docs/integrations/ci)). Until then the locator stays declared and nothing is polled.
+
+### Multiple products
+
+Add `products[]` only when each product has **its own** release location. If everything shares one changelog, keep it as one entry. Company fields (`name`, `description`, `category`, `avatar`, `social`, `tags`) are optional.
+
+```json
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "name": "Acme",
+  "products": [
+    {
+      "name": "Acme Cloud",
+      "releases": [
+        {
+          "url": "https://acme.com/whats-new",
+          "feed": "https://acme.com/whats-new/rss.xml",
+          "canonical": true
+        },
+        { "github": "acme/cloud-sdk" }
+      ]
+    }
+  ],
+  "releases": [{ "url": "https://updates.acme.com" }]
+}
+```
+
+Top-level `releases` and `products` can coexist (company firehose + per-product streams).
+
+### In a repo
+
+Repo-root `releases.json` binds **that repo** only (`product` + `releases[]`). Use `{ "github": "self" }` when this repo's GitHub Releases are the record.
+
+```json
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 2,
+  "product": {
+    "name": "Acme Cloud",
+    "slug": "acme-cloud"
+  },
+  "releases": [
+    {
+      "url": "https://acme.com/whats-new",
+      "canonical": true
+    },
+    { "github": "self" }
+  ]
+}
+```
+
+## After you publish
+
+1. [Submit → check your domain](/submit) and activate if you're unlisted.
+2. The registry re-reads the file on a regular sweep; later edits land without re-submission.
+3. **Feeds / GitHub / App Store** go live after a quick automated check. **Plain web pages** get a quick review from our team before we start checking them.
+4. The registry only fills in blanks. It never overwrites curator or editorial fields, and an invalid or missing file changes nothing.
+
+No manifest yet? [Suggest a changelog URL](/submit) for curator review.
+
+## Add a badge
+
+Once you verify your domain, the claim panel on your organization's page offers a small Release Notes Index badge, in light and dark, with a Markdown snippet for your README and an HTML snippet for your site. The badge links to your organization's page:
+
+```md
+[![Release Notes Index](https://releases.sh/badges/listed.svg)](https://releases.sh/your-org)
+```
+
+Replace `your-org` with your organization's slug, or copy the snippet from the claim panel. Use `listed-dark.svg` for dark backgrounds.
+
+## Reference
+
+- **`version: 2` required.** v1 is no longer read.
+- **Limits:** ≤24 products, ≤8 locations per product, ≤32 locations total per file.
+- **`$schema`:** optional; [published schema](https://releases.sh/schemas/releases.json) for editors.
+- **Pin to registry IDs** (optional): `"registries": { "releases.sh": { "org": "org_…" } }` — IDs are on org/product pages.
+- **Live example:** [releases.sh/.well-known/releases.json](https://releases.sh/.well-known/releases.json).
