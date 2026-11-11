@@ -1,5 +1,5 @@
 import { adminDocs } from "@/flags";
-import { docsManifest, findLoadedDoc } from "@/lib/docs-manifest";
+import { docsManifest, findVisibleDoc } from "@/lib/docs-manifest";
 import { renderOgImage } from "@/lib/og";
 
 /**
@@ -13,13 +13,13 @@ export const dynamicParams = false;
 
 export function generateStaticParams() {
   return docsManifest({ includeAdmin: adminDocs })
-    .filter((entry) => findLoadedDoc(entry.slug)?.frontmatter.og)
+    .filter((entry) => entry.doc.frontmatter.og)
     .map((entry) => ({ slug: entry.slug.split("/") }));
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const og = findLoadedDoc(slug.join("/"))?.frontmatter.og;
+  const og = findVisibleDoc(slug.join("/"), { includeAdmin: adminDocs })?.frontmatter.og;
   if (!og) return new Response("Not found", { status: 404 });
   const { alt: _alt, ...card } = og;
   return renderOgImage(card);

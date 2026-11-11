@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { cache } from "react";
 import matter from "gray-matter";
+import { docFrontmatterSchema, type DocFrontmatter } from "@/lib/docs-schema";
 
 // Resolved from the process cwd: `apps/web/` under `next dev` / `next build`
 // (the bundled module has no stable path of its own). The repo root is
@@ -13,41 +14,28 @@ export const CONTENT_ROOT =
     path.join(process.cwd(), "apps", "web", "src", "content"),
   ].find((dir) => fs.existsSync(dir)) ?? path.join(process.cwd(), "src", "content");
 
-/** Open Graph card fields for a docs page with its own card (`/api/og/docs/<slug>`). */
-export type DocOgCard = {
-  alt: string;
-  eyebrow: string;
-  title: string;
-  subtitle?: string;
-  description?: string;
-};
-
-/** Mirrors the docs schema in `source.config.ts`. */
-export type DocFrontmatter = {
-  title: string;
-  description?: string;
-  /** Shorter sidebar / llms.txt link text. Defaults to `title`. */
-  label?: string;
-  adminOnly?: boolean;
-  og?: DocOgCard;
-};
+export type { DocFrontmatter };
 
 /** Frontmatter keys that drive the site and never appear in served markdown. */
 const INTERNAL_FRONTMATTER_KEYS = ["adminOnly", "label", "og"] as const;
 
 export type Doc = {
   slug: string;
-  frontmatter: DocFrontmatter;
+  /** Docs frontmatter is schema-validated; static pages keep extra keys (e.g. `effectiveDate`). */
+  frontmatter: DocFrontmatter & Record<string, unknown>;
   /** Raw body from the source file (no frontmatter). */
   body: string;
 };
 
+function readSource(dir: string, file: string) {
+  return matter(fs.readFileSync(path.join(CONTENT_ROOT, dir, file), "utf8"));
+}
+
 // ── Static pages (`src/content/pages/*.md`) ─────────────────────────────────
 
 export const loadPage = cache((slug: string): Doc => {
-  const raw = fs.readFileSync(path.join(CONTENT_ROOT, "pages", `${slug}.md`), "utf8");
-  const parsed = matter(raw);
-  return { slug, frontmatter: parsed.data as DocFrontmatter, body: parsed.content };
+  const parsed = readSource("pages", `${slug}.md`);
+  return { slug, frontmatter: parsed.data as Doc["frontmatter"], body: parsed.content };
 });
 
 /** Full markdown (frontmatter + body) for a static page's `.md` export and Copy page button. */
@@ -63,10 +51,19 @@ export function pageMarkdown(doc: Doc): string {
  * that only needs metadata or text, and stays importable from `bun test`.
  */
 export const loadDoc = cache((slug: string): Doc => {
-  const raw = fs.readFileSync(path.join(CONTENT_ROOT, "docs", `${slug}.mdx`), "utf8");
-  const parsed = matter(raw);
-  return { slug, frontmatter: parsed.data as DocFrontmatter, body: parsed.content };
+  const parsed = readSource("docs", `${slug}.mdx`);
+  return { slug, frontmatter: docFrontmatterSchema.parse(parsed.data), body: parsed.content };
 });
+
+/** Canonical URL for a docs slug. The `index` doc owns `/docs` itself. */
+export function docPath(slug: string): string {
+  return slug === "index" ? "/docs" : `/docs/${slug}`;
+}
+
+/** Raw-markdown URL for a docs slug (`/docs.md` for the index). */
+export function docMdPath(slug: string): string {
+  return `${docPath(slug)}.md`;
+}
 
 /**
  * Plain-markdown stand-ins for the interactive MDX components, used by the
@@ -110,15 +107,12 @@ export function mdxToMarkdown(body: string, { includeAdmin }: { includeAdmin: bo
   let adminDepth = 0;
 
   for (const line of body.split("\n")) {
+    const hidden = adminDepth > 0 && !includeAdmin;
     const fenceMatch = line.match(FENCE);
-    if (fence) {
-      if (fenceMatch && fenceMatch[1].startsWith(fence)) fence = null;
-      if (adminDepth === 0 || includeAdmin) out.push(line);
-      continue;
-    }
-    if (fenceMatch) {
-      fence = fenceMatch[1];
-      if (adminDepth === 0 || includeAdmin) out.push(line);
+    if (fence || fenceMatch) {
+      if (!fence) fence = fenceMatch![1];
+      else if (fenceMatch && fenceMatch[1].startsWith(fence)) fence = null;
+      if (!hidden) out.push(line);
       continue;
     }
     if (ADMIN_OPEN.test(line)) {
@@ -129,7 +123,7 @@ export function mdxToMarkdown(body: string, { includeAdmin }: { includeAdmin: bo
       adminDepth = Math.max(0, adminDepth - 1);
       continue;
     }
-    if (adminDepth > 0 && !includeAdmin) continue;
+    if (hidden) continue;
 
     const component = line.match(SELF_CLOSING_COMPONENT);
     if (component) {

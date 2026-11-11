@@ -1,13 +1,6 @@
-import path from "node:path";
 import { describe, expect, it } from "bun:test";
 import { docMarkdown, mdxToMarkdown } from "./docs";
-
-// docs-manifest reads content relative to process.cwd() at import time; pin it
-// to apps/web for the import (same pattern as app/api/llms/route.test.ts).
-const originalCwd = process.cwd();
-if (path.basename(originalCwd) !== "web") process.chdir(path.join(originalCwd, "apps", "web"));
-const { docsManifest, findLoadedDoc, parseMetaPages } = await import("./docs-manifest");
-if (process.cwd() !== originalCwd) process.chdir(originalCwd);
+import { docsManifest, findVisibleDoc, parseMetaPages } from "./docs-manifest";
 
 describe("mdxToMarkdown", () => {
   const body = [
@@ -107,6 +100,28 @@ describe("docs manifest", () => {
     });
     expect(pub.some((e) => e.adminOnly)).toBe(false);
     expect(all.length).toBeGreaterThan(pub.length);
-    for (const entry of all) expect(findLoadedDoc(entry.slug)?.frontmatter.title).toBeTruthy();
+    expect(findVisibleDoc("cli/admin", { includeAdmin: false })).toBeUndefined();
+    expect(findVisibleDoc("cli/admin", { includeAdmin: true })?.frontmatter.adminOnly).toBe(true);
+    expect(findVisibleDoc("not-a-page", { includeAdmin: true })).toBeUndefined();
+  });
+
+  // mdxToMarkdown only understands standalone `<Component />` lines and
+  // `<AdminOnly>` tags on their own lines. Catch any other JSX layout before it
+  // leaks into the `.md` / llms-full output.
+  it("leaves no JSX in any page's markdown export", () => {
+    for (const { doc } of docsManifest({ includeAdmin: true })) {
+      for (const includeAdmin of [false, true]) {
+        const prose = docMarkdown(doc, { includeAdmin })
+          .replace(/^(`{3,}|~{3,})[\s\S]*?^\1/gm, "") // fenced code
+          .replace(/`[^`\n]*`/g, ""); // inline code
+        expect({
+          slug: doc.slug,
+          jsx: prose.match(/<\/?[A-Z][A-Za-z0-9]*[\s/>]/g),
+        }).toEqual({
+          slug: doc.slug,
+          jsx: null,
+        });
+      }
+    }
   });
 });

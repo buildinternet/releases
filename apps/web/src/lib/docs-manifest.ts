@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CONTENT_ROOT, loadDoc, type Doc } from "@/lib/docs";
+import { CONTENT_ROOT, docMdPath, docPath, loadDoc, type Doc } from "@/lib/docs";
 
 export const SITE_NAME = "Release Notes Index";
 export const SITE_TAGLINE = "The latest product releases, indexed for agents.";
@@ -19,6 +19,8 @@ export type DocEntry = {
   title: string;
   description?: string;
   adminOnly: boolean;
+  /** The page's frontmatter and MDX source, loaded once per process. */
+  doc: Doc;
 };
 
 /**
@@ -56,38 +58,41 @@ function readMeta(): Meta {
 // Hydrate once per process. Route handlers run outside React's render context,
 // so `cache()` inside `loadDoc` wouldn't dedupe across calls — module scope is
 // the right granularity. Content is static at build time.
-const SEEDS = parseMetaPages(readMeta().pages);
+const ALL_ENTRIES: readonly DocEntry[] = parseMetaPages(readMeta().pages).map(
+  ({ slug, section }) => {
+    const doc = loadDoc(slug);
+    const { frontmatter } = doc;
+    return {
+      slug,
+      section,
+      label: frontmatter.label ?? frontmatter.title,
+      path: docPath(slug),
+      mdPath: docMdPath(slug),
+      title: frontmatter.title,
+      description: frontmatter.description,
+      adminOnly: frontmatter.adminOnly ?? false,
+      doc,
+    };
+  },
+);
 
-const DOCS_BY_SLUG: ReadonlyMap<string, Doc> = new Map(SEEDS.map((s) => [s.slug, loadDoc(s.slug)]));
-
-const ALL_ENTRIES: readonly DocEntry[] = SEEDS.map(({ slug, section }) => {
-  const { frontmatter } = DOCS_BY_SLUG.get(slug)!;
-  return {
-    slug,
-    section,
-    label: frontmatter.label ?? frontmatter.title,
-    path: slug === "index" ? "/docs" : `/docs/${slug}`,
-    mdPath: slug === "index" ? "/docs.md" : `/docs/${slug}.md`,
-    title: frontmatter.title,
-    description: frontmatter.description,
-    adminOnly: frontmatter.adminOnly ?? false,
-  };
-});
+const ENTRIES_BY_SLUG: ReadonlyMap<string, DocEntry> = new Map(ALL_ENTRIES.map((e) => [e.slug, e]));
 
 export function docsManifest({ includeAdmin }: { includeAdmin: boolean }): readonly DocEntry[] {
   return includeAdmin ? ALL_ENTRIES : ALL_ENTRIES.filter((e) => !e.adminOnly);
 }
 
-/** The preloaded `Doc` for a listed slug, or `undefined` if meta.json doesn't list it. */
-export function findLoadedDoc(slug: string): Doc | undefined {
-  return DOCS_BY_SLUG.get(slug);
-}
-
-/** Access the preloaded `Doc` for an entry so callers don't re-read the file. */
-export function getLoadedDoc(slug: string): Doc {
-  const doc = DOCS_BY_SLUG.get(slug);
-  if (!doc) throw new Error(`docs-manifest: unknown slug "${slug}"`);
-  return doc;
+/**
+ * The docs page at `slug` if it is listed in meta.json and visible (admin-only
+ * pages need `includeAdmin`), else `undefined`. The one visibility rule every
+ * docs route uses.
+ */
+export function findVisibleDoc(
+  slug: string,
+  { includeAdmin }: { includeAdmin: boolean },
+): Doc | undefined {
+  const entry = ENTRIES_BY_SLUG.get(slug);
+  return entry && (includeAdmin || !entry.adminOnly) ? entry.doc : undefined;
 }
 
 /** Group manifest entries by `section`, preserving insertion order. */

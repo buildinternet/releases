@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildDocPageMetadata } from "./doc-metadata";
+import { docPageMetadata } from "./doc-metadata";
 import {
   collectionOgImageUrl,
   docOgImageUrl,
@@ -32,7 +32,7 @@ describe("og image urls", () => {
 
 describe("docPageMetadata", () => {
   it("points docs pages without their own card at the shared site card", () => {
-    const m = buildDocPageMetadata("installation", fm);
+    const m = docPageMetadata("installation", fm);
     expect(m.openGraph).toHaveProperty("images");
     expect((m.openGraph as { images: unknown[] }).images).toHaveLength(1);
     expect((m.twitter as { images: unknown[] }).images).toHaveLength(1);
@@ -40,7 +40,7 @@ describe("docPageMetadata", () => {
 
   it("points docs pages with `og` frontmatter at their own card, with alt text", () => {
     const og = { alt: "Why card", eyebrow: "Why", title: "Why Releases" };
-    const m = buildDocPageMetadata("why", { ...fm, og });
+    const m = docPageMetadata("why", { ...fm, og });
     const images = (m.openGraph as { images: Array<{ url: string; alt: string }> }).images;
     expect(images).toHaveLength(1);
     expect(images[0].url).toEndWith("/api/og/docs/why");

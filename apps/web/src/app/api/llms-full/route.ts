@@ -1,21 +1,15 @@
 import { adminDocs } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { mdxToMarkdown } from "@/lib/docs";
-import {
-  docsManifest,
-  getLoadedDoc,
-  SITE_NAME,
-  SITE_TAGLINE,
-  type DocEntry,
-} from "@/lib/docs-manifest";
+import { docsManifest, SITE_NAME, SITE_TAGLINE, type DocEntry } from "@/lib/docs-manifest";
 
 const BASE_URL = getStaticBaseUrl();
 
 function renderDoc(entry: DocEntry, showAdmin: boolean): string {
-  const transformed = mdxToMarkdown(getLoadedDoc(entry.slug).body, { includeAdmin: showAdmin });
+  const transformed = mdxToMarkdown(entry.doc.body, { includeAdmin: showAdmin });
 
   const header = `<!-- source: ${BASE_URL}${entry.path} -->`;
-  return `${header}\n\n${transformed.trimStart()}`.trimEnd();
+  return `${header}\n\n${transformed}`.trimEnd();
 }
 
 export function GET() {

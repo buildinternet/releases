@@ -1,12 +1,9 @@
 import { ImageResponse } from "next/og";
-import { clamp, isHeroImageResponse, isJunkMediaUrl } from "./og-helpers";
+import { clamp, isHeroImageResponse, isJunkMediaUrl, OG_SIZE } from "./og-helpers";
 import { OG_BODY_FAMILY, OG_BODY_FONT } from "./og-body-font";
 import { PIXEL_WORDMARK_FAMILY, PIXEL_WORDMARK_FONT, pixelWordmark } from "./og-pixel-font";
 
-export { formatCount, formatDate, stripMarkdown } from "./og-helpers";
-
-export const OG_SIZE = { width: 1200, height: 630 } as const;
-export const OG_CONTENT_TYPE = "image/png" as const;
+export { formatCount, formatDate, OG_CONTENT_TYPE, OG_SIZE, stripMarkdown } from "./og-helpers";
 
 /**
  * Per-response cache headers for OG routes that need to control their own

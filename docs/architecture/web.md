@@ -64,7 +64,7 @@ The docs are MDX in `apps/web/src/content/docs/`, compiled by Fumadocs (`fumadoc
 - **Frontmatter extras:** `label` (shorter sidebar / llms.txt text), `adminOnly` (dev-only page), `og` (a custom Open Graph card served at `/api/og/docs/<slug>`; other pages use the site card).
 - **Components:** use them directly, e.g. `<SkillsInstall />`. The map is `src/components/docs/mdx-components.tsx`. Wrap dev-only content in `<AdminOnly>…</AdminOnly>` (each tag on its own line).
 - **Rendering:** one route, `app/docs/[[...slug]]/page.tsx`, through the same remark/rehype stack as other markdown (`source.config.ts` replaces Fumadocs' default plugins).
-- **Agent markdown** (`/docs/<slug>.md`, `llms.txt`, `llms-full.txt`, Copy page) reads the `.mdx` source from disk via `@/lib/docs` + `@/lib/docs-manifest` (no MDX compiler, so it works under `bun test`). `mdxToMarkdown` drops `<AdminOnly>` blocks outside dev and swaps standalone components for `COMPONENT_MARKDOWN_FALLBACKS` (components without one are dropped).
+- **Agent markdown** (`/docs/<slug>.md`, `llms.txt`, `llms-full.txt`, Copy page) reads the `.mdx` source from disk via `@/lib/docs` + `@/lib/docs-manifest` (no MDX compiler, so it works under `bun test`). `mdxToMarkdown` drops `<AdminOnly>` blocks outside dev and swaps standalone components for `COMPONENT_MARKDOWN_FALLBACKS` (components without one are dropped). Frontmatter extras are one zod schema (`src/lib/docs-schema.ts`) shared by the compiler and the disk reader, and `docs.test.ts` fails if any page's markdown export still contains JSX.
 
 ## Open Graph images
 
