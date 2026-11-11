@@ -14,7 +14,7 @@ webhooks, API keys, workspaces). Talks to the API worker at `api.releases.sh` (R
 - `src/lib/` — client/server helpers: API + GraphQL clients, auth client, account/API-key helpers,
   atom feed, agent-launch, well-known config, and their colocated tests
 - `src/hooks/` — React hooks
-- `src/content/` — static/markdown content
+- `src/content/` — `docs/` (MDX docs pages, ordered by `docs/meta.json`; see web.md → Docs pages) and `pages/` (static markdown pages)
 - `src/flags.ts` — feature-flag reads
 - `src/proxy.ts` — request proxy (with `proxy.test.ts`)
 - `src/well-known-releases.test.ts` — tests for the `.well-known/releases.json` surface
@@ -49,4 +49,4 @@ Deployed automatically on Vercel.
 
 - [web.md](../../docs/architecture/web.md) — changelog range/slicing API, GitHub CHANGELOG
   ingestion, Open Graph images, org overviews, category overlay, collections, media pipeline, org
-  avatars, follows/feed, admin hub
+  avatars, follows/feed, admin hub, docs pages (MDX)
