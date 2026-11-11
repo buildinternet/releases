@@ -166,7 +166,7 @@ Deep dives live in `docs/architecture/`. A reader's guide with task-based entry 
 - [mcp-cimd-interop.md](docs/architecture/mcp-cimd-interop.md) — generic MCP client OAuth (DCR grant_types, kitchen-sink scope, origin vs `/mcp` resource, forwarded Bearer).
 - [agents.md](docs/architecture/agents.md) — how local Claude Code agents onboard/maintain orgs: skills, local workflows, evals, and the onboarding API surface.
 - [coverage.md](docs/architecture/coverage.md) — release coverage + ingest-time grouping, cron observability.
-- [web.md](docs/architecture/web.md) — changelog range/slicing API, GitHub CHANGELOG ingestion, Open Graph images, org overviews, category overlay, collections, media pipeline, org avatars.
+- [web.md](docs/architecture/web.md) — changelog range/slicing API, GitHub CHANGELOG ingestion, Open Graph images, org overviews, category overlay, collections, media pipeline, org avatars, docs pages (MDX).
 - [events.md](docs/architecture/events.md) — release event bus: `ReleaseHub` Durable Object, `GET /v1/releases/stream` WebSocket, fire-and-forget publish from batch + cron ingest.
 - [cli-distribution.md](docs/architecture/cli-distribution.md) — OSS repo, npm, Homebrew tap.
 - [ai-gateway.md](docs/architecture/ai-gateway.md) — optional Cloudflare AI Gateway passthrough for Anthropic SDK calls; covers direct worker calls, leaves Voyage embeddings + managed-agent internal loops on the direct path.
