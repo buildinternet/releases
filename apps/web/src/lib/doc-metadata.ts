@@ -1,23 +1,7 @@
 import type { Metadata } from "next";
-import { loadDoc } from "@/lib/docs";
-import { ogImageFields, siteOgImageUrl } from "@/lib/og-image-urls";
-
-/**
- * Docs slugs that ship their own co-located `opengraph-image.tsx`. They omit
- * `images` so Next merges that file in; every other docs page points at the
- * shared site card. Keep in sync with `apps/web/src/app/docs/**\/opengraph-image.tsx`.
- */
-export const DOCS_WITH_OWN_OG_IMAGE: ReadonlySet<string> = new Set([
-  "index",
-  "why",
-  "guides/find-a-changelog",
-  "guides/changelog-rss-feed",
-]);
-
-/** Canonical path for a docs slug. The "index" doc owns `/docs` itself. */
-export function docPath(slug: string): string {
-  return slug === "index" ? "/docs" : `/docs/${slug}`;
-}
+import { docMdPath, docPath, type DocFrontmatter } from "@/lib/docs";
+import { OG_CONTENT_TYPE, OG_SIZE } from "@/lib/og-helpers";
+import { docOgImageUrl, ogImageFields, siteOgImageUrl } from "@/lib/og-image-urls";
 
 /**
  * Standard metadata for a docs page: title + description plus a COMPLETE
@@ -29,19 +13,15 @@ export function docPath(slug: string): string {
  * the root layout's wholesale (Next merges metadata shallowly), so `type` must
  * be repeated here rather than inherited.
  */
-export function docPageMetadata(slug: string): Metadata {
-  return buildDocPageMetadata(slug, loadDoc(slug).frontmatter);
-}
-
-/** Pure half of {@link docPageMetadata} (no filesystem read) so it is unit-testable. */
-export function buildDocPageMetadata(
+export function docPageMetadata(
   slug: string,
-  { title, description }: { title: string; description?: string },
+  { title, description, og }: Pick<DocFrontmatter, "title" | "description" | "og">,
 ): Metadata {
   const url = docPath(slug);
-  // Conditional spread, never `images: undefined` (that suppresses the
-  // co-located file convention too — see og-image-urls.ts).
-  const img = DOCS_WITH_OWN_OG_IMAGE.has(slug) ? null : ogImageFields(siteOgImageUrl());
+  // Pages with `og` frontmatter get their own card; the rest share the site card.
+  const img = og
+    ? ogImageFields(docOgImageUrl(slug), { alt: og.alt, ...OG_SIZE, type: OG_CONTENT_TYPE })
+    : ogImageFields(siteOgImageUrl());
   return {
     title,
     description,
@@ -50,13 +30,13 @@ export function buildDocPageMetadata(
       url,
       title,
       ...(description ? { description } : {}),
-      ...img?.openGraph,
+      ...img.openGraph,
     },
     twitter: {
       title,
       ...(description ? { description } : {}),
-      ...img?.twitter,
+      ...img.twitter,
     },
-    alternates: { canonical: url, types: { "text/markdown": `${url}.md` } },
+    alternates: { canonical: url, types: { "text/markdown": docMdPath(slug) } },
   };
 }

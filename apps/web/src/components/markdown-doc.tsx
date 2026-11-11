@@ -1,10 +1,7 @@
-import { Fragment } from "react";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import rehypeSlug from "rehype-slug";
-import matter from "gray-matter";
-import { loadDoc, stripAdminBlocks, keepAdminBlocks, type Doc } from "@/lib/docs";
-import { adminDocs } from "@/flags";
+import { loadPage, pageMarkdown } from "@/lib/docs";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { CodeBlock } from "@/components/code-block";
 import { CopyPageButton } from "@/components/copy-page-button";
@@ -15,68 +12,25 @@ const markdownComponents = {
   pre: CodeBlock,
 };
 
-const SLOT_PATTERN = /<!--\s*slot:([a-z0-9-]+)\s*-->/gi;
-
-type Segment = { type: "markdown"; content: string } | { type: "slot"; name: string };
-
-function splitBySlots(content: string): Segment[] {
-  const segments: Segment[] = [];
-  let lastIndex = 0;
-  for (const match of content.matchAll(SLOT_PATTERN)) {
-    const start = match.index ?? 0;
-    if (start > lastIndex) {
-      segments.push({ type: "markdown", content: content.slice(lastIndex, start) });
-    }
-    segments.push({ type: "slot", name: match[1] });
-    lastIndex = start + match[0].length;
-  }
-  if (lastIndex < content.length) {
-    segments.push({ type: "markdown", content: content.slice(lastIndex) });
-  }
-  return segments;
-}
-
-export async function MarkdownDoc({
-  slug,
-  slots,
-  loader = loadDoc,
-  viewHref,
-}: {
-  slug: string;
-  slots?: Record<string, React.ReactNode>;
-  loader?: (slug: string) => Doc;
-  /** "View .md" link; defaults to the docs path for `slug`. */
-  viewHref?: string;
-}) {
-  const doc = loader(slug);
-  const body = adminDocs ? keepAdminBlocks(doc.body) : stripAdminBlocks(doc.body);
-  const copyMarkdown = adminDocs
-    ? doc.public
-    : (() => {
-        const parsed = matter(doc.public);
-        return matter.stringify(stripAdminBlocks(parsed.content).trimStart(), parsed.data);
-      })();
-  const segments = splitBySlots(body);
+/**
+ * Renders a static markdown page from `src/content/pages/` (privacy, terms, …)
+ * with the docs typography and a Copy page button. Docs pages under `/docs`
+ * are MDX and render through `app/docs/[[...slug]]` instead.
+ */
+export function MarkdownDoc({ slug, viewHref }: { slug: string; viewHref: string }) {
+  const doc = loadPage(slug);
   return (
     <>
       <div className="not-prose mb-8 flex justify-end">
-        <CopyPageButton markdown={copyMarkdown} slug={slug} viewHref={viewHref} />
+        <CopyPageButton markdown={pageMarkdown(doc)} slug={slug} viewHref={viewHref} />
       </div>
-      {segments.map((seg, i) => (
-        <Fragment key={i}>
-          {seg.type === "markdown" ? (
-            <ReactMarkdown
-              remarkPlugins={remarkPlugins}
-              rehypePlugins={[rehypeSlug, rehypeShikiPlugin]}
-              components={markdownComponents}
-            >
-              {seg.content}
-            </ReactMarkdown>
-          ) : (
-            (slots?.[seg.name] ?? null)
-          )}
-        </Fragment>
-      ))}
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={[rehypeSlug, rehypeShikiPlugin]}
+        components={markdownComponents}
+      >
+        {doc.body}
+      </ReactMarkdown>
     </>
   );
 }

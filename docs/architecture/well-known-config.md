@@ -315,7 +315,7 @@ value.
 
 ## Public docs
 
-The owner-facing version lives at `/docs/listing` (`apps/web/src/content/docs/listing.md`), linked
+The owner-facing version lives at `/docs/listing` (`apps/web/src/content/docs/listing.mdx`), linked
 from `/submit`. Keep that page in sync when schema or reconciliation rules change; this file
 stays the engineering reference.
 

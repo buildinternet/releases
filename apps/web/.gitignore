@@ -4,3 +4,6 @@
 public/install
 public/.well-known/agent-skills/
 public/.well-known/mcp/
+
+# Fumadocs MDX generated collections (regenerated on install, dev and build)
+.source

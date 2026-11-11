@@ -6,6 +6,7 @@ import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
  * it stays cache-friendly:
  *
  * - `/api/og/site`            — 1 URL (docs, privacy/security/terms, …)
+ * - `/api/og/docs/<slug>`     — one per docs page with `og` frontmatter (a handful)
  * - `/api/og/collection/<s>`  — one per collection (~12), shared by the
  *   collection page's weekly digests and digest index (a per-week image would
  *   be ~230 URLs growing weekly, each requested ~once, so it could never hit
@@ -23,6 +24,11 @@ export function siteOgImageUrl(env: WebEnv = defaultEnv()): string {
   return `${releaseWebBase(env)}/api/og/site`;
 }
 
+/** Card for a docs page that declares `og` frontmatter (`index` is the `/docs` root). */
+export function docOgImageUrl(slug: string, env: WebEnv = defaultEnv()): string {
+  return `${releaseWebBase(env)}/api/og/docs/${slug}`;
+}
+
 export function collectionOgImageUrl(slug: string, env: WebEnv = defaultEnv()): string {
   return `${releaseWebBase(env)}/api/og/collection/${encodeURIComponent(slug)}`;
 }
@@ -34,9 +40,13 @@ export function collectionOgImageUrl(slug: string, env: WebEnv = defaultEnv()): 
  * as "already set" and so suppresses BOTH the explicit and file-convention
  * image.
  */
-export function ogImageFields(url: string) {
+export function ogImageFields(
+  url: string,
+  details?: { alt: string; width: number; height: number; type: string },
+) {
+  const image = details ? { url, ...details } : url;
   return {
-    openGraph: { images: [url] },
-    twitter: { card: "summary_large_image" as const, images: [url] },
+    openGraph: { images: [image] },
+    twitter: { card: "summary_large_image" as const, images: [image] },
   };
 }

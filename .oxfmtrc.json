@@ -17,6 +17,7 @@
     ".next",
     "apps/web/.next",
     "apps/web/next-env.d.ts",
+    "apps/web/.source",
     "**/*.d.ts",
     "bun.lock",
     "package-lock.json",
