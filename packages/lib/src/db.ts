@@ -90,13 +90,3 @@ export function primaryD1Binding<T>(db: T): T {
   }
   return db;
 }
-
-/** A D1 bookmark is opaque, but in practice short hex groups joined by dashes. */
-const BOOKMARK_RE = /^[0-9A-Za-z-]{1,128}$/;
-
-/** Validate an inbound `x-d1-bookmark` value; anything else is ignored. */
-export function parseD1Bookmark(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const value = raw.trim();
-  return BOOKMARK_RE.test(value) ? value : null;
-}

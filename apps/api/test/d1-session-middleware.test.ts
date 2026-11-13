@@ -1,11 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import { primaryD1Binding, parseD1Bookmark } from "@releases/lib/db";
-import {
-  chooseD1SessionConstraint,
-  d1ReadSession,
-  D1_BOOKMARK_HEADER,
-} from "../src/middleware/d1-session.js";
+import { primaryD1Binding } from "@releases/lib/db";
+import { chooseD1SessionConstraint, d1ReadSession } from "../src/middleware/d1-session.js";
 
 const BOOKMARK = "0000007b-00000002-00004f6e-a1b2c3d4e5f60718293a4b5c6d7e8f90";
 
@@ -46,15 +42,12 @@ describe("chooseD1SessionConstraint", () => {
     expect(chooseD1SessionConstraint(req("/v1/media"))).toBe("first-unconstrained");
   });
 
-  it("starts from a valid inbound bookmark and ignores junk", () => {
-    expect(
-      chooseD1SessionConstraint(req("/v1/orgs", { headers: { [D1_BOOKMARK_HEADER]: BOOKMARK } })),
-    ).toBe(BOOKMARK);
-    expect(
-      chooseD1SessionConstraint(req("/v1/orgs", { headers: { [D1_BOOKMARK_HEADER]: "x'; DROP" } })),
-    ).toBe("first-unconstrained");
-    expect(parseD1Bookmark("first-primary")).toBe("first-primary");
-    expect(parseD1Bookmark("a".repeat(200))).toBeNull();
+  it("ignores inbound bookmarks (D1 rejects junk ones at query time)", () => {
+    for (const value of [BOOKMARK, "not-a-real-bookmark", "first-primary"]) {
+      expect(
+        chooseD1SessionConstraint(req("/v1/orgs", { headers: { "x-d1-bookmark": value } })),
+      ).toBe("first-unconstrained");
+    }
   });
 });
 
@@ -81,12 +74,12 @@ function appWith(db: unknown) {
 }
 
 describe("d1ReadSession middleware", () => {
-  it("swaps env.DB for a session on anonymous reads and returns the bookmark", async () => {
+  it("swaps env.DB for a session on anonymous reads", async () => {
     const { db, calls } = fakeD1();
     const env = { DB: db as unknown as D1Database };
     const res = await appWith(db).request("/v1/orgs", {}, env);
     expect(await res.json()).toEqual({ swapped: true, primary: true });
-    expect(res.headers.get(D1_BOOKMARK_HEADER)).toBe(BOOKMARK);
+    expect(res.headers.get("x-d1-bookmark")).toBeNull();
     expect(calls).toEqual(["first-unconstrained"]);
     // The shared env object is never mutated.
     expect(env.DB as unknown).toBe(db);
@@ -96,7 +89,6 @@ describe("d1ReadSession middleware", () => {
     const { db, calls } = fakeD1();
     const res = await appWith(db).request("/v1/orgs", { method: "POST" }, { DB: db });
     expect(await res.json()).toEqual({ swapped: false, primary: true });
-    expect(res.headers.get(D1_BOOKMARK_HEADER)).toBeNull();
     expect(calls).toEqual([]);
   });
 
