@@ -14,6 +14,13 @@ import {
 import { touchLastUsed } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
+import { openD1Session } from "@releases/lib/db";
+
+/** `env` with DB swapped for a replica-eligible D1 session (unchanged if unsupported). */
+function withReadReplicaDb(env: Env): Env {
+  const session = openD1Session(env.DB, "first-unconstrained");
+  return session ? { ...env, DB: session as unknown as Env["DB"] } : env;
+}
 
 async function handle(
   request: Request,
@@ -112,9 +119,16 @@ async function handle(
   // defaults cover localhost and workers.dev only — a custom domain relies on
   // Cloudflare routing unless named here. Omitting them makes the wrapper
   // start rejecting our own callers.
+  // D1 read replication: anonymous callers' tool reads go through a Sessions
+  // API handle so a nearby replica can serve them (writes still reach the
+  // primary). Authenticated callers stay on the plain binding = primary, so a
+  // follow/webhook change is visible on their next call. A no-op until
+  // replication is enabled on the database.
+  const toolEnv = identity.kind === "anonymous" ? withReadReplicaDb(env) : env;
+
   return createMcpHandler(
     () =>
-      createServer(env, ctx, {
+      createServer(toolEnv, ctx, {
         userAgent: request.headers.get("user-agent"),
         authScopes: identity.scopes,
         authToken: identity.token,
