@@ -275,6 +275,19 @@ Aggregate reads (the `/v1/stats` rollup, the org directory and its counts, per-o
 - `reconcileSourceReleaseStats` rebuilds every row on the daily `0 4 * * *` tick and logs `source-release-stats`/`reconcile` with a `drifted` count. Drift should be zero; a non-zero count means a write path the triggers miss.
 - A new backend would need equivalent triggers, or app-level maintenance plus the reconcile.
 
+## Read replication
+
+D1 read replication is opt-in per query: only statements issued through a Sessions API handle (`env.DB.withSession(...)`) may be served by a replica; the plain binding always hits the primary. Replicas cost nothing extra (same `rows_read`/`rows_written` billing). Enabling it is a database setting (Dashboard → D1 → Settings, or `read_replication.mode: "auto"`), and disabling it is the kill switch — sessions then all run on the primary. There is no feature flag.
+
+What uses a session today:
+
+- **API worker** — `d1ReadSession()` (`apps/api/src/middleware/d1-session.ts`) swaps `c.env.DB` for a `first-unconstrained` session on a per-request copy of `env` for **anonymous reads only**: GET/HEAD with no `Authorization`, no cookie, no `X-Releases-Proxy-Key`, outside `/api/auth`, `/oauth2`, `/v1/me`, `/v1/admin`. A valid inbound `x-d1-bookmark` replaces the unconstrained start (read-your-writes), and the session's bookmark comes back in `x-d1-bookmark`. Existing `createDb(c.env.DB)` call sites need no change.
+- **MCP worker** — anonymous callers' tool reads (`withReadReplicaDb` in `apps/mcp/src/index.ts`).
+
+Deliberately on the primary: every write request; authenticated reads (token revocation and role changes must be seen at once); the web frontend, which sends the proxy key, so an ingest-triggered ISR revalidation never re-renders from a lagging replica and caches stale content until the next revalidate; Better Auth (`primaryD1Binding()` unwraps a session, and the auth instance cache keys on the underlying binding); crons, Workflows, `SourceActor`/`OrgActor`, queue consumers, and the webhooks worker (it loads a release right after it was created).
+
+A write inside a session still goes to the primary and the session stays sequentially consistent, so a GET that writes (lookups materialization, usage logs) is safe. The `source_release_stats` triggers run on the primary in the writing transaction, so a replica sees release rows and counters together. Helpers: `openD1Session` / `primaryD1Binding` / `parseD1Bookmark` in `@releases/lib/db`.
+
 ## Follow-ups (deferred, not blocking)
 
 1. ~~**Hoist `createDb` into a shared package**~~ — **done** ([#2002](https://github.com/buildinternet/releases/issues/2002)).

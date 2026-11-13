@@ -9,6 +9,7 @@ import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import { clampDcrRegistrationResult, dcrClientRowPatch } from "./oauth-dcr.js";
 import { preserveCustomAvatarOnUpdate } from "../lib/media/avatar-ingest.js";
 import type { AnyDb } from "../db.js";
+import { primaryD1Binding } from "@releases/lib/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { user, oauthClient } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
@@ -729,7 +730,9 @@ function dbBindingCacheKey(db: unknown): string {
 async function authCacheKey(env: Bindings): Promise<string> {
   const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
   return JSON.stringify({
-    DB: dbBindingCacheKey(env.DB),
+    // Key on the underlying binding: a per-request D1 session handle must not
+    // mint a fresh (and never-evicted) Better Auth instance per request.
+    DB: dbBindingCacheKey(primaryD1Binding(env.DB)),
     ENVIRONMENT: env.ENVIRONMENT ?? "",
     AUTH_RATE_LIMIT_DISABLED: env.AUTH_RATE_LIMIT_DISABLED ?? "",
     USER_API_KEYS_ENABLED: userApiKeysOn,

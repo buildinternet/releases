@@ -29,3 +29,74 @@ export function createDb(dbOrD1: AnyD1Database | D1Db): D1Db {
   }
   return drizzle(dbOrD1 as AnyD1Database, { schema });
 }
+
+// ── D1 read replication (Sessions API) ──────────────────────────────────────
+//
+// With read replication enabled on the database, only queries issued through a
+// `withSession()` handle may be served by a replica; plain-binding queries keep
+// going to the primary. So the plain binding IS the primary path, and opting a
+// request into replicas is a matter of swapping `env.DB` for a session handle.
+// Writes inside a session are still routed to the primary, and a session is
+// sequentially consistent (a read after its own write sees that write).
+// See docs/architecture/storage-portability.md → Read replication.
+
+/** `withSession()` start constraint: a replica-eligible start, a primary start, or a bookmark. */
+export type D1SessionConstraint = "first-unconstrained" | "first-primary" | (string & {});
+
+/** The slice of a D1 session handle we rely on (drizzle only calls prepare/batch). */
+export interface D1SessionLike {
+  prepare: (...args: never[]) => unknown;
+  batch: (...args: never[]) => unknown;
+  getBookmark: () => string | null;
+}
+
+interface D1WithSessions {
+  withSession: (constraint?: string) => D1SessionLike;
+}
+
+const PRIMARY_BINDING = Symbol.for("releases.d1.primaryBinding");
+
+/** True when the binding supports the Sessions API (prod/miniflare D1, not test shims). */
+export function supportsD1Sessions(db: unknown): db is D1WithSessions {
+  return (
+    db != null &&
+    typeof db === "object" &&
+    typeof (db as { withSession?: unknown }).withSession === "function"
+  );
+}
+
+/**
+ * Open a Sessions-API handle on a raw D1 binding. Returns `null` when the binding
+ * has no `withSession` (test shims, drizzle handles) so callers keep the plain
+ * binding. The handle remembers its source binding for {@link primaryD1Binding}.
+ */
+export function openD1Session(db: unknown, constraint: D1SessionConstraint): D1SessionLike | null {
+  if (!supportsD1Sessions(db)) return null;
+  const session = db.withSession(constraint);
+  Object.defineProperty(session, PRIMARY_BINDING, { value: db, enumerable: false });
+  return session;
+}
+
+/**
+ * The underlying binding behind a session handle (or the value itself when it
+ * isn't one). For consumers that must stay on the primary even inside a
+ * replica-eligible request, or that key caches on the binding's identity — the
+ * Better Auth instance cache does both.
+ */
+export function primaryD1Binding<T>(db: T): T {
+  if (db != null && typeof db === "object") {
+    const raw = (db as Record<symbol, unknown>)[PRIMARY_BINDING];
+    if (raw != null) return raw as T;
+  }
+  return db;
+}
+
+/** A D1 bookmark is opaque, but in practice short hex groups joined by dashes. */
+const BOOKMARK_RE = /^[0-9A-Za-z-]{1,128}$/;
+
+/** Validate an inbound `x-d1-bookmark` value; anything else is ignored. */
+export function parseD1Bookmark(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const value = raw.trim();
+  return BOOKMARK_RE.test(value) ? value : null;
+}

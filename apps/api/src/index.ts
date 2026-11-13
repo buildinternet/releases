@@ -43,6 +43,7 @@ import { LATEST_CACHE_TAG } from "./lib/latest-cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
 import { securityHeaders } from "./middleware/security-headers.js";
+import { d1ReadSession } from "./middleware/d1-session.js";
 import { stagingAccessGate } from "./middleware/staging-access.js";
 import { mountV1Routes } from "./v1-routes.js";
 import { publicReadRoutes, adminRoutes, publicWriteRoutes } from "./route-namespaces.js";
@@ -522,6 +523,11 @@ app.use("*", blockIndexing());
 
 // Security response headers. Skips 101 — WebSocket upgrade headers are immutable.
 app.use("*", securityHeaders());
+
+// D1 read replication: anonymous reads get a Sessions API handle in place of
+// c.env.DB so they can be served by a nearby replica; everything else stays on
+// the primary. See middleware/d1-session.ts.
+app.use("*", d1ReadSession());
 
 // Apex OAuth/OIDC discovery aliases — public (no per-route token auth). The two
 // AS-metadata aliases forward to Better Auth; the protected-resource metadata is

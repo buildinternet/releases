@@ -67,6 +67,7 @@ import {
   countActiveUserKeys,
 } from "./api-key-limit.js";
 import { createDb, type AnyDb } from "../db.js";
+import { primaryD1Binding } from "@releases/lib/db";
 import { eq } from "drizzle-orm";
 import {
   user,
@@ -413,7 +414,9 @@ export async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}
     githubClientSecret: await resolveSecret(env.GITHUB_CLIENT_SECRET),
   });
   const cookieDomain = deriveCookieDomain(env);
-  const db: AnyDb = deps.db ?? createDb(env.DB);
+  // Auth always reads the primary (sign-in → session reads, token revocation),
+  // even when a request-scoped replica session has replaced env.DB.
+  const db: AnyDb = deps.db ?? createDb(primaryD1Binding(env.DB));
   const sendEmail: AuthEmailSender = deps.sendEmail ?? ((msg) => sendAuthEmail(env, msg));
   // Audit-event sink for human-auth business actions (sign-up, sign-in-success,
   // sign-out / session-revoked, email-verified, password-reset-completed). Tests
