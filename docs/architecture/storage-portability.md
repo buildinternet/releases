@@ -281,12 +281,12 @@ D1 read replication is opt-in per query: only statements issued through a Sessio
 
 What uses a session today:
 
-- **API worker** — `d1ReadSession()` (`apps/api/src/middleware/d1-session.ts`) swaps `c.env.DB` for a `first-unconstrained` session on a per-request copy of `env` for **anonymous reads only**: GET/HEAD with no `Authorization`, no cookie, no `X-Releases-Proxy-Key`, outside `/api/auth`, `/oauth2`, `/v1/me`, `/v1/admin`. A valid inbound `x-d1-bookmark` replaces the unconstrained start (read-your-writes), and the session's bookmark comes back in `x-d1-bookmark`. Existing `createDb(c.env.DB)` call sites need no change.
+- **API worker** — `d1ReadSession()` (`apps/api/src/middleware/d1-session.ts`) swaps `c.env.DB` for a `first-unconstrained` session on a per-request copy of `env` for **anonymous reads only**: GET/HEAD with no `Authorization`, no cookie, no `X-Releases-Proxy-Key`, outside `/api/auth`, `/oauth2`, `/v1/me`, `/v1/admin`. Bookmarks are neither honored nor returned: D1 rejects a malformed or unknown inbound bookmark at query time (an anonymous-triggerable 500), read-your-writes clients are authenticated writers that stay on the primary anyway, and an edge-cached response would replay a stale outbound one. Existing `createDb(c.env.DB)` call sites need no change.
 - **MCP worker** — anonymous callers' tool reads (`withReadReplicaDb` in `apps/mcp/src/index.ts`).
 
 Deliberately on the primary: every write request; authenticated reads (token revocation and role changes must be seen at once); the web frontend, which sends the proxy key, so an ingest-triggered ISR revalidation never re-renders from a lagging replica and caches stale content until the next revalidate; Better Auth (`primaryD1Binding()` unwraps a session, and the auth instance cache keys on the underlying binding); crons, Workflows, `SourceActor`/`OrgActor`, queue consumers, and the webhooks worker (it loads a release right after it was created).
 
-A write inside a session still goes to the primary and the session stays sequentially consistent, so a GET that writes (lookups materialization, usage logs) is safe. The `source_release_stats` triggers run on the primary in the writing transaction, so a replica sees release rows and counters together. Helpers: `openD1Session` / `primaryD1Binding` / `parseD1Bookmark` in `@releases/lib/db`.
+A write inside a session still goes to the primary and the session stays sequentially consistent, so a GET that writes (lookups materialization, usage logs) is safe. The `source_release_stats` triggers run on the primary in the writing transaction, so a replica sees release rows and counters together. Helpers: `openD1Session` / `primaryD1Binding` in `@releases/lib/db`.
 
 ## Follow-ups (deferred, not blocking)
 

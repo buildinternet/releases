@@ -1,8 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { openD1Session, parseD1Bookmark, type D1SessionConstraint } from "@releases/lib/db";
-
-/** Request/response header carrying a D1 Sessions API bookmark. */
-export const D1_BOOKMARK_HEADER = "x-d1-bookmark";
+import { openD1Session, type D1SessionConstraint } from "@releases/lib/db";
 
 /**
  * Path prefixes that always stay on the primary, even for a credential-less
@@ -24,8 +21,11 @@ const PRIMARY_ONLY_PREFIXES = ["/api/auth", "/oauth2", "/v1/me", "/v1/admin"];
  *   ISR revalidation never re-renders from a lagging replica and pins stale
  *   content until the next revalidate.
  *
- * A valid inbound `x-d1-bookmark` replaces the unconstrained start, so a client
- * that just wrote can read its own write from a replica.
+ * Inbound `x-d1-bookmark` headers are deliberately NOT honored: D1 rejects a
+ * malformed or unknown bookmark at query time (a 500 any anonymous caller could
+ * trigger), and the clients that would need read-your-writes are authenticated
+ * writers, which stay on the primary anyway. For the same reason no bookmark is
+ * returned (an edge-cached response would replay a stale one).
  */
 export function chooseD1SessionConstraint(req: Request): D1SessionConstraint | null {
   if (req.method !== "GET" && req.method !== "HEAD") return null;
@@ -35,7 +35,7 @@ export function chooseD1SessionConstraint(req: Request): D1SessionConstraint | n
   if (PRIMARY_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return null;
   }
-  return parseD1Bookmark(h.get(D1_BOOKMARK_HEADER)) ?? "first-unconstrained";
+  return "first-unconstrained";
 }
 
 /**
@@ -45,7 +45,7 @@ export function chooseD1SessionConstraint(req: Request): D1SessionConstraint | n
  * swaps `c.env.DB` for a session handle on a per-request copy of `env`, so the
  * ~300 `createDb(c.env.DB)` call sites need no change. Any write the handler
  * makes still goes to the primary, and the session stays sequentially
- * consistent. The session's latest bookmark is returned in `x-d1-bookmark`.
+ * consistent.
  *
  * A no-op when the binding has no `withSession` (test shims) and, in effect,
  * when replication is disabled on the database — sessions then always hit the
@@ -58,16 +58,6 @@ export function d1ReadSession(): MiddlewareHandler<{ Bindings: { DB: D1Database 
     if (!session) return next();
 
     c.env = { ...c.env, DB: session as unknown as D1Database };
-    await next();
-
-    if (c.res.status === 101) return;
-    const bookmark = session.getBookmark();
-    if (!bookmark) return;
-    try {
-      c.res.headers.set(D1_BOOKMARK_HEADER, bookmark);
-    } catch {
-      // Immutable headers (e.g. a Response served straight from a cache) — the
-      // bookmark is advisory, so skip it rather than fail the request.
-    }
+    return next();
   };
 }
