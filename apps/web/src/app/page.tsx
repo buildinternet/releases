@@ -447,6 +447,14 @@ export default async function HomePage() {
         <SignupCta />
       </div>
       {latest.length > 0 && <ShippingNowTicker releases={latest} />}
+      {/* Weekly collection digests sit between the live ticker and the
+          featured-orgs table: the freshest written-up content leads, the
+          reference table follows. */}
+      {latestDigests.length > 0 && (
+        <div className="mt-4 mb-12 sm:mb-16">
+          <DigestReel preview={toReelPreview(latestDigests)} />
+        </div>
+      )}
       <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
         <aside className="hidden xl:block xl:order-2 xl:pt-2">
           <InstallStepsSidebar />
@@ -481,11 +489,6 @@ export default async function HomePage() {
           </Link>
         </div>
       </div>
-      {latestDigests.length > 0 && (
-        <div className="mt-4 mb-12 sm:mb-16">
-          <DigestReel preview={toReelPreview(latestDigests)} />
-        </div>
-      )}
       {/* Intro material lives below the changing content (ticker + tables):
           returning visitors get fresh releases first; the jump link under the
           demo carries first-timers down here. */}
