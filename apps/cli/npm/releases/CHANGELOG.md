@@ -1,5 +1,15 @@
 # @buildinternet/releases
 
+## 0.85.0
+
+### Minor Changes
+
+- 4e7f6f8: Drop the legacy `RELEASED_*` environment variable names. Use the `RELEASES_*` names (`RELEASES_API_KEY`, `RELEASES_API_URL`, `RELEASES_DATA_DIR`, and so on). `@buildinternet/releases-lib` no longer exports `legacy-env`.
+
+### Patch Changes
+
+- 4e7f6f8: Keep `format: "uri"` on the https locator fields of the releases.json schema under zod 4.6, and fix the CLI README's plugin link and environment variable list.
+
 ## 0.84.0
 
 ### Minor Changes
