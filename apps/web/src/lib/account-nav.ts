@@ -24,6 +24,7 @@ import {
   ModelIcon,
   PreviewIcon,
   ShieldIcon,
+  InboxIcon,
 } from "@/components/account/icons";
 
 /** Reveal not-yet-wired panels in the sidebar. Flip to true once their backends land. */
@@ -173,6 +174,16 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
   {
     label: ADMIN_GROUP_LABEL,
     items: [
+      {
+        key: "admin-submissions",
+        label: "Submissions",
+        href: "/admin/submissions",
+        group: ADMIN_GROUP_LABEL,
+        description:
+          "Everything users send in, newest first: source suggestions, feedback, tracking requests, and ownership claims.",
+        Icon: InboxIcon,
+        ready: true,
+      },
       {
         key: "admin-site-notice",
         label: "Site notice",

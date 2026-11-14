@@ -58,6 +58,7 @@ import { feedbackRoutes } from "./routes/feedback.js";
 import { adminFeedbackRoutes } from "./routes/admin-feedback.js";
 import { recommendationRoutes } from "./routes/recommendations.js";
 import { adminRecommendationRoutes } from "./routes/admin-recommendations.js";
+import { adminSubmissionRoutes } from "./routes/admin-submissions.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { collectionRoutes } from "./routes/collections.js";
 import { apiTokenRoutes } from "./routes/api-tokens.js";
@@ -131,6 +132,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", adminFeedbackRoutes);
   v1.route("/", recommendationRoutes);
   v1.route("/", adminRecommendationRoutes);
+  v1.route("/", adminSubmissionRoutes);
   v1.route("/", taxonomyRoutes);
   v1.route("/", collectionRoutes);
   v1.route("/", apiTokenRoutes);

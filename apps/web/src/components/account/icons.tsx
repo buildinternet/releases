@@ -285,3 +285,12 @@ export function StatusIcon(p: IconProps) {
     </Icon>
   );
 }
+
+export function InboxIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <path d="M4 13l2.5-7.5A1.5 1.5 0 0 1 7.9 4.5h8.2a1.5 1.5 0 0 1 1.4 1L20 13" />
+      <path d="M4 13v5a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 18v-5h-4.5l-1.5 2.5h-4L8.5 13H4z" />
+    </Icon>
+  );
+}

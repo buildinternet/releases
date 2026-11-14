@@ -78,6 +78,8 @@ export const adminRoutes = [
   "admin/datasets",
   "admin/feedback",
   "admin/recommendations",
+  // Consolidated user-submission inbox (read-only union of the above + claims).
+  "admin/submissions",
   "admin/overviews",
   "admin/orgs",
   "admin/sources",
