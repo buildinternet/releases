@@ -5,131 +5,124 @@
  *
  * Writes three things under `apps/web/src/content/`:
  *
- *   1. `openapi.json` — a snapshot of the production `/v1/openapi.json`
- *      (public operations only; see `apps/api/src/api-surface.ts`), built
- *      in-process from the API worker's routes exactly like
- *      `check-openapi-coverage.ts` does. No network, D1, or Wrangler.
- *   2. `docs/api/reference/<page>.mdx` — one docs page per entry in `PAGES`,
- *      each rendering its operations with `<APIPage />` (fumadocs-openapi).
+ *   1. `openapi.json` — a minified snapshot of the production
+ *      `/v1/openapi.json` (public operations only; see
+ *      `apps/api/src/api-surface.ts`), built in-process from the API worker's
+ *      routes exactly like `check-openapi-coverage.ts` does. No network, D1,
+ *      or Wrangler. Marked generated in `.gitattributes`.
+ *   2. `docs/api/reference/<group>/<endpoint>.mdx` — one docs page per
+ *      endpoint, each rendering `<APIPage operations="…" />` (fumadocs-openapi).
+ *      Dual-registered routes that share a summary (the bare `/products/:id`
+ *      and org-scoped `/orgs/:org/products/:slug` forms) share one page.
  *   3. The `---API Reference---` section of `docs/meta.json`.
  *
  * CI runs this and fails on a diff, so an API change that touches the public
  * spec ships with its regenerated reference. Every spec tag must belong to
- * exactly one page: a new tag fails here until someone places it.
+ * exactly one group: a new tag fails here until someone places it.
  */
+import { spawnSync } from "node:child_process";
 import { Hono } from "hono";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mountV1Routes } from "../apps/api/src/v1-routes.js";
 import type { Env } from "../apps/api/src/index.js";
 
-type Page = {
+type Group = {
   slug: string;
+  /** Sidebar group heading. */
   title: string;
-  /** Sidebar label (defaults to `title`). */
-  label?: string;
-  description: string;
   tags: string[];
 };
 
-/** Sidebar order. Each spec tag appears in exactly one page. */
-const PAGES: Page[] = [
-  {
-    slug: "releases",
-    title: "Releases",
-    description: "Read individual releases and the latest releases across the index.",
-    tags: ["Releases"],
-  },
-  {
-    slug: "search",
-    title: "Search",
-    description: "Lexical, semantic, and hybrid search across orgs, products, and releases.",
-    tags: ["Search"],
-  },
-  {
-    slug: "orgs",
-    title: "Organizations",
-    label: "Orgs",
-    description: "Organizations publish releases. List them, read one, and page through its feed.",
-    tags: ["Orgs"],
-  },
-  {
-    slug: "products",
-    title: "Products",
-    description: "The optional grouping layer between an org and its sources.",
-    tags: ["Products"],
-  },
-  {
-    slug: "sources",
-    title: "Sources",
-    description: "Changelog sources owned by an org, and the releases each one produced.",
-    tags: ["Sources"],
-  },
-  {
-    slug: "collections",
-    title: "Collections",
-    description: "Curated, named sets of orgs and their combined release feeds.",
-    tags: ["Collections"],
-  },
-  {
-    slug: "taxonomy",
-    title: "Categories and tags",
-    label: "Categories & tags",
-    description: "Browse the index by category and tag.",
-    tags: ["Taxonomy"],
-  },
-  {
-    slug: "related",
-    title: "Related",
-    description: "Similarity rails for releases and sources.",
-    tags: ["Related"],
-  },
-  {
-    slug: "overviews",
-    title: "Overviews",
-    description: "AI-generated summaries of an org's or product's recent activity.",
-    tags: ["Overviews"],
-  },
-  {
-    slug: "lookups",
-    title: "Lookups",
-    description: "Resolve a domain, bare slug, or GitHub coordinate to its home in the index.",
-    tags: ["Lookups"],
-  },
-  {
-    slug: "account",
-    title: "Account",
-    description:
-      "The signed-in caller: follows, the personalized feed, publish tokens, and alerts.",
-    tags: ["Account"],
-  },
-  {
-    slug: "api-keys",
-    title: "API keys",
-    description: "Create, list, and revoke read-only user API keys.",
-    tags: ["Authentication"],
-  },
-  {
-    slug: "webhooks",
-    title: "Webhooks",
-    description: "Manage outbound `release.created` webhook subscriptions.",
-    tags: ["Webhooks"],
-  },
-  {
-    slug: "listing",
-    title: "Listing and claims",
-    label: "Listing & claims",
-    description: "Validate a releases.json manifest, activate a listing, and claim a domain.",
-    tags: ["Listing"],
-  },
+/** Sidebar order. Each spec tag appears in exactly one group. */
+const GROUPS: Group[] = [
+  { slug: "releases", title: "Releases", tags: ["Releases"] },
+  { slug: "search", title: "Search", tags: ["Search"] },
+  { slug: "orgs", title: "Orgs", tags: ["Orgs"] },
+  { slug: "products", title: "Products", tags: ["Products"] },
+  { slug: "sources", title: "Sources", tags: ["Sources"] },
+  { slug: "collections", title: "Collections", tags: ["Collections"] },
+  { slug: "taxonomy", title: "Categories & tags", tags: ["Taxonomy"] },
+  { slug: "related", title: "Related", tags: ["Related"] },
+  { slug: "overviews", title: "Overviews", tags: ["Overviews"] },
+  { slug: "lookups", title: "Lookups", tags: ["Lookups"] },
+  { slug: "account", title: "Account", tags: ["Account"] },
+  { slug: "api-keys", title: "API keys", tags: ["Authentication"] },
+  { slug: "webhooks", title: "Webhooks", tags: ["Webhooks"] },
+  { slug: "listing", title: "Listing & claims", tags: ["Listing"] },
   {
     slug: "site",
-    title: "Stats and feedback",
-    label: "Stats & feedback",
-    description: "Registry stats, the site notice, feedback, and source recommendations.",
+    title: "Stats & feedback",
     tags: ["Stats", "Site", "Feedback", "Recommendations"],
   },
 ];
+
+/**
+ * Short sidebar labels for summaries too long for the 180px rail, keyed by
+ * the page's first operationId. The page title stays the full summary.
+ */
+const LABELS: Record<string, string> = {
+  getStats: "Registry stats",
+  getReleasesLatest: "Latest releases",
+  getWhatsChanged: "What's changed",
+  getSearch: "Search",
+  getRelatedReleases: "Related releases",
+  getRelatedSources: "Related sources",
+  getOrgsBySlugManifest: "Export manifest",
+  getOrgsBySlugCollections: "Org collections",
+  getOrgsBySlugAccounts: "List org accounts",
+  getOrgsBySlugReleases: "Org release feed",
+  getOrgsByOrgResolveBySlug: "Resolve a slug",
+  getOrgsBySlugProducts: "List org products",
+  getProductsBySlugCollections: "Product collections",
+  postLookups: "Materialize a GitHub source",
+  getLookupsSourceBySlug: "Source by slug",
+  getLookupsSourceByCoordinate: "Source by coordinate",
+  getLookupsProductBySlug: "Product by slug",
+  getLookupsByDomain: "Org by domain",
+  getCategories: "List categories",
+  getCategoriesBySlug: "Get category",
+  getCategoriesBySlugReleases: "Category release feed",
+  getTagsBySlug: "Get tag",
+  getCollectionsBySlug: "Get collection",
+  getCollectionsBySlugReleases: "Collection release feed",
+  getCollectionsBySlugDailySummaries: "Daily summaries",
+  getCollectionsBySlugDigests: "Weekly digests",
+  getCollectionsBySlugDigestsLatest: "Latest digest",
+  getCollectionsBySlugDigestsByWeekStart: "Digest by week",
+  deleteTokensMe: "Revoke the current key",
+  postMePublishTokens: "Mint a publish token",
+  getMeFeed: "Personalized feed",
+  getMeSemanticAlertsById: "Get a semantic alert",
+  getMeWebhooks: "List personal webhooks",
+  postMeWebhooks: "Create a personal webhook",
+  getMeWebhooksById: "Get a personal webhook",
+  patchMeWebhooksById: "Update a personal webhook",
+  deleteMeWebhooksById: "Delete a personal webhook",
+  postMeWebhooksByIdRotateSecret: "Rotate a personal secret",
+  postMeWebhooksByIdTest: "Test a personal webhook",
+  getMeWebhooksByIdDeliveries: "Personal deliveries",
+  getWorkspacesByWorkspaceIdWebhooks: "List workspace webhooks",
+  postWorkspacesByWorkspaceIdWebhooks: "Create a workspace webhook",
+  getWorkspacesByWorkspaceIdWebhooksById: "Get a workspace webhook",
+  patchWorkspacesByWorkspaceIdWebhooksById: "Update a workspace webhook",
+  deleteWorkspacesByWorkspaceIdWebhooksById: "Delete a workspace webhook",
+  postWorkspacesByWorkspaceIdWebhooksByIdRotateSecret: "Rotate a workspace secret",
+  postWorkspacesByWorkspaceIdWebhooksByIdTest: "Test a workspace webhook",
+  getWorkspacesByWorkspaceIdWebhooksByIdDeliveries: "Workspace deliveries",
+  getListingCapabilities: "Capabilities",
+  postListingValidate: "Validate a manifest",
+  postListingActivate: "Activate a listing",
+  postListingClaim: "Start a claim",
+  postListingClaimVerify: "Verify a claim",
+  getListingClaims: "List your claims",
+  deleteListingClaimsById: "Release a claim",
+  postListingPromote: "Promote a listing",
+  postRecommendations: "Recommend a source",
+};
+
+/** Labels longer than this need a `LABELS` entry, or they wrap in the sidebar. */
+const MAX_LABEL = 28;
 
 const ROOT = join(import.meta.dir, "..");
 const CONTENT = join(ROOT, "apps", "web", "src", "content");
@@ -139,7 +132,7 @@ const META_PATH = join(CONTENT, "docs", "meta.json");
 const SECTION = "API Reference";
 const METHODS = ["get", "post", "put", "patch", "delete"] as const;
 
-type Operation = { tags?: string[] };
+type Operation = { operationId?: string; tags?: string[]; summary?: string; description?: string };
 type Spec = { paths: Record<string, Partial<Record<string, Operation>>> };
 
 // ── 1. Build the production spec in-process ────────────────────────────────
@@ -155,93 +148,185 @@ if (!res.ok) {
   process.exit(2);
 }
 const spec = (await res.json()) as Spec;
-writeFileSync(SPEC_PATH, `${JSON.stringify(spec, null, 2)}\n`);
+// Minified: an API change diffs as one line instead of thousands.
+writeFileSync(SPEC_PATH, `${JSON.stringify(spec)}\n`);
 
-// ── 2. Group operations into pages ─────────────────────────────────────────
+// ── 2. Group operations into endpoint pages ────────────────────────────────
 
-const pageForTag = new Map<string, Page>();
-for (const page of PAGES) {
-  for (const tag of page.tags) {
-    if (pageForTag.has(tag)) throw new Error(`tag "${tag}" is listed on two PAGES`);
-    pageForTag.set(tag, page);
+const groupForTag = new Map<string, Group>();
+for (const group of GROUPS) {
+  for (const tag of group.tags) {
+    if (groupForTag.has(tag)) throw new Error(`tag "${tag}" is listed on two GROUPS`);
+    groupForTag.set(tag, group);
   }
 }
 
-const opsByPage = new Map<string, Array<{ path: string; method: string }>>();
+type Page = {
+  group: Group;
+  slug: string;
+  method: string;
+  title: string;
+  label: string;
+  description: string;
+  operationIds: string[];
+};
+
+function slugify(text: string): string {
+  return text
+    .replace(/\(.*?\)/g, "")
+    .toLowerCase()
+    .replace(/['’]s\b/g, "s")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .split("-")
+    .slice(0, 6)
+    .join("-");
+}
+
+/** First sentence of an operation description, for the page's meta description. */
+function firstSentence(text: string | undefined): string | undefined {
+  const flat = text?.replace(/`/g, "").replace(/\s+/g, " ").trim();
+  if (!flat) return undefined;
+  const match = flat.match(/^(.+?[.!?])(\s|$)/);
+  return (match ? match[1] : flat).slice(0, 200);
+}
+
+const pagesByKey = new Map<string, Page>();
 const unplaced = new Set<string>();
 for (const [path, item] of Object.entries(spec.paths)) {
   for (const method of METHODS) {
     const op = item[method];
     if (!op) continue;
     const tag = op.tags?.[0] ?? "(untagged)";
-    const page = pageForTag.get(tag);
-    if (!page) {
+    const group = groupForTag.get(tag);
+    if (!group) {
       unplaced.add(tag);
       continue;
     }
-    const list = opsByPage.get(page.slug) ?? [];
-    list.push({ path, method });
-    opsByPage.set(page.slug, list);
+    if (!op.operationId) throw new Error(`${method.toUpperCase()} ${path} has no operationId`);
+    const title = op.summary ?? `${method.toUpperCase()} ${path}`;
+    const key = `${group.slug}\0${method}\0${title}`;
+    const existing = pagesByKey.get(key);
+    if (existing) {
+      existing.operationIds.push(op.operationId);
+      continue;
+    }
+    const label = LABELS[op.operationId] ?? title;
+    pagesByKey.set(key, {
+      group,
+      // Curated labels make tidier URLs than truncated summaries.
+      slug: slugify(label),
+      method,
+      title,
+      label,
+      description: firstSentence(op.description) ?? title,
+      operationIds: [op.operationId],
+    });
   }
 }
 if (unplaced.size > 0) {
   console.error(
-    `OpenAPI tags with no docs page: ${[...unplaced].join(", ")}.\n` +
-      `Add them to PAGES in scripts/generate-openapi-docs.ts.`,
+    `OpenAPI tags with no docs group: ${[...unplaced].join(", ")}.\n` +
+      `Add them to GROUPS in scripts/generate-openapi-docs.ts.`,
   );
   process.exit(1);
 }
-const pages = PAGES.filter((p) => opsByPage.has(p.slug));
 
-// ── 3. Write one MDX page per entry ────────────────────────────────────────
-
-function yamlString(value: string): string {
-  return JSON.stringify(value);
+const pages = GROUPS.flatMap((g) => [...pagesByKey.values()].filter((p) => p.group === g));
+const seen = new Set<string>();
+const problems: string[] = [];
+for (const page of pages) {
+  const path = `${page.group.slug}/${page.slug}`;
+  if (seen.has(path)) problems.push(`two endpoints map to ${path}`);
+  seen.add(path);
+  if (page.label.length > MAX_LABEL) {
+    problems.push(
+      `"${page.label}" is too long for the sidebar; add LABELS.${page.operationIds[0]}`,
+    );
+  }
+}
+const unusedLabels = Object.keys(LABELS).filter(
+  (id) => !pages.some((p) => p.operationIds[0] === id),
+);
+for (const id of unusedLabels) problems.push(`LABELS.${id} matches no page; remove it`);
+if (problems.length > 0) {
+  console.error(problems.join("\n"));
+  process.exit(1);
 }
 
+// ── 3. Write one MDX page per endpoint ─────────────────────────────────────
+
+const yamlString = (value: string) => JSON.stringify(value);
+
 function renderPage(page: Page): string {
-  const frontmatter = [
+  return [
     "---",
     `title: ${yamlString(page.title)}`,
     `description: ${yamlString(page.description)}`,
-    ...(page.label ? [`label: ${yamlString(page.label)}`] : []),
+    ...(page.label !== page.title ? [`label: ${yamlString(page.label)}`] : []),
+    `navGroup: ${yamlString(page.group.title)}`,
+    `apiMethod: ${page.method.toUpperCase()}`,
     "---",
-  ];
-  return [
-    ...frontmatter,
     "",
     "{/* Generated by scripts/generate-openapi-docs.ts from the production OpenAPI spec. Do not edit; run `bun run docs:openapi`. */}",
     "",
     `# ${page.title}`,
     "",
-    page.description,
-    "",
-    `<APIPage tags="${page.tags.join(",")}" />`,
+    `<APIPage operations="${page.operationIds.join(",")}" />`,
     "",
   ].join("\n");
 }
 
-if (existsSync(REFERENCE_DIR)) {
-  for (const file of readdirSync(REFERENCE_DIR)) {
-    if (file.endsWith(".mdx")) rmSync(join(REFERENCE_DIR, file));
-  }
-}
-mkdirSync(REFERENCE_DIR, { recursive: true });
+if (existsSync(REFERENCE_DIR)) rmSync(REFERENCE_DIR, { recursive: true });
 for (const page of pages) {
-  writeFileSync(join(REFERENCE_DIR, `${page.slug}.mdx`), renderPage(page));
+  const dir = join(REFERENCE_DIR, page.group.slug);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${page.slug}.mdx`), renderPage(page));
 }
+
+// The area's landing page: what the API is, then every endpoint by group.
+const index = [
+  "---",
+  'title: "API Reference"',
+  'description: "Every public endpoint of the Releases REST API, with parameters, schemas, code samples, and a try-it playground."',
+  "---",
+  "",
+  "{/* Generated by scripts/generate-openapi-docs.ts from the production OpenAPI spec. Do not edit; run `bun run docs:openapi`. */}",
+  "",
+  "# API Reference",
+  "",
+  "Every public endpoint of the Releases REST API, generated from the [OpenAPI 3.1 spec](https://api.releases.sh/v1/openapi.json). Each page lists the endpoint's parameters, request and response schemas, and code samples, and has a playground for sending a real request.",
+  "",
+  "- **Base URL:** `https://api.releases.sh/v1`",
+  "- **Auth:** most reads are public. Account and write endpoints take a Bearer token. See [Authentication](/docs/api/rest#authentication).",
+  "- **Conventions:** pagination, date filters, and resource shapes are covered in [REST API](/docs/api/rest). Error responses are in [Errors](/docs/api/errors).",
+  "",
+  ...GROUPS.flatMap((group) => {
+    const groupPages = pages.filter((p) => p.group === group);
+    if (groupPages.length === 0) return [];
+    return [
+      `## ${group.title}`,
+      "",
+      ...groupPages.map(
+        (p) =>
+          `- \`${p.method.toUpperCase()}\` [${p.title}](/docs/api/reference/${group.slug}/${p.slug})`,
+      ),
+      "",
+    ];
+  }),
+].join("\n");
+writeFileSync(join(CONTENT, "docs", "api", "reference.mdx"), index);
 
 // ── 4. Splice the sidebar section into meta.json ───────────────────────────
 
 const meta = JSON.parse(readFileSync(META_PATH, "utf8")) as { pages: string[] };
 const separator = `---${SECTION}---`;
-const entries = [separator, ...pages.map((p) => `./api/reference/${p.slug}`)];
+const entries = [separator, ...pages.map((p) => `./api/reference/${p.group.slug}/${p.slug}`)];
 const start = meta.pages.indexOf(separator);
 if (start === -1) {
   // First run: place the section right after the narrative API section.
-  const after = meta.pages.findIndex(
-    (item, i) => i > meta.pages.indexOf("---API---") && item.startsWith("---"),
-  );
+  const api = meta.pages.indexOf("---API---");
+  const after = meta.pages.findIndex((item, i) => i > api && item.startsWith("---"));
   meta.pages.splice(after === -1 ? meta.pages.length : after, 0, ...entries);
 } else {
   let end = start + 1;
@@ -250,5 +335,14 @@ if (start === -1) {
 }
 writeFileSync(META_PATH, `${JSON.stringify(meta, null, 2)}\n`);
 
-const count = [...opsByPage.values()].reduce((n, ops) => n + ops.length, 0);
-console.log(`wrote ${pages.length} reference pages (${count} operations) + ${SPEC_PATH}`);
+// Run the outputs through oxfmt so they match what the pre-commit hook and
+// `format:check` produce (YAML quoting, etc.) and CI's drift check is stable.
+const format = spawnSync(
+  "bunx",
+  ["oxfmt", "--write", REFERENCE_DIR, join(CONTENT, "docs", "api", "reference.mdx"), META_PATH],
+  { stdio: "inherit" },
+);
+if (format.status !== 0) process.exit(format.status ?? 1);
+
+const count = pages.reduce((n, p) => n + p.operationIds.length, 0);
+console.log(`wrote ${pages.length} endpoint pages (${count} operations) + ${SPEC_PATH}`);

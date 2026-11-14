@@ -9,10 +9,15 @@ import { z } from "zod";
  * - `adminOnly` page only exists when admin docs are on (local dev)
  * - `og`        a custom Open Graph card, served at `/api/og/docs/<slug>`;
  *               pages without one use the shared site card
+ * - `navGroup`  collapsible sidebar group within the page's section (the
+ *               generated API reference groups endpoints by area)
+ * - `apiMethod` HTTP method badge shown beside the sidebar link
  */
 export const docExtrasSchema = z.object({
   label: z.string().optional(),
   adminOnly: z.boolean().optional(),
+  navGroup: z.string().optional(),
+  apiMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
   og: z
     .object({
       alt: z.string(),

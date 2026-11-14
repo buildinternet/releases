@@ -19,6 +19,10 @@ export type DocEntry = {
   title: string;
   description?: string;
   adminOnly: boolean;
+  /** Collapsible sidebar group within `section` (API reference areas). */
+  navGroup?: string;
+  /** HTTP method badge for API reference pages. */
+  apiMethod?: string;
   /** The page's frontmatter and MDX source, loaded once per process. */
   doc: Doc;
 };
@@ -71,6 +75,8 @@ const ALL_ENTRIES: readonly DocEntry[] = parseMetaPages(readMeta().pages).map(
       title: frontmatter.title,
       description: frontmatter.description,
       adminOnly: frontmatter.adminOnly ?? false,
+      navGroup: frontmatter.navGroup,
+      apiMethod: frontmatter.apiMethod,
       doc,
     };
   },
@@ -93,6 +99,29 @@ export function findVisibleDoc(
 ): Doc | undefined {
   const entry = ENTRIES_BY_SLUG.get(slug);
   return entry && (includeAdmin || !entry.adminOnly) ? entry.doc : undefined;
+}
+
+/**
+ * The API reference is its own docs area (`/docs/api/reference/**`, own layout
+ * and sidebar): its landing page plus the generated endpoint pages.
+ */
+export const API_REFERENCE_SLUG = "api/reference";
+
+export function isApiReferenceSlug(slug: string): boolean {
+  return slug === API_REFERENCE_SLUG || slug.startsWith(`${API_REFERENCE_SLUG}/`);
+}
+
+/**
+ * Pages for the main docs sidebar: everything outside the API reference area,
+ * plus the area's landing page as the one link into it.
+ */
+export function guidesNavEntries(entries: readonly DocEntry[]): DocEntry[] {
+  return entries.filter((e) => !isApiReferenceSlug(e.slug) || e.slug === API_REFERENCE_SLUG);
+}
+
+/** Pages in the API reference area, landing page first. */
+export function apiReferenceEntries(entries: readonly DocEntry[]): DocEntry[] {
+  return entries.filter((e) => isApiReferenceSlug(e.slug));
 }
 
 /** Group manifest entries by `section`, preserving insertion order. */

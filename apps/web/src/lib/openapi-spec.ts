@@ -66,25 +66,34 @@ export function loadOpenAPISpec(): OpenAPISpec {
   return cached;
 }
 
-/** `<APIPage tags="A,B" />` attribute → tag list. */
-export function parseTagList(tags: string): string[] {
-  return tags
+/** `<APIPage operations="a,b" />` attribute → operationId list. */
+export function parseIdList(ids: string): string[] {
+  return ids
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean);
 }
 
-/** Operations whose first tag is in `tags`, in spec order (how the generator groups pages). */
-export function operationsForTags(spec: OpenAPISpec, tags: readonly string[]): OperationRef[] {
-  const wanted = new Set(tags);
-  const out: OperationRef[] = [];
+/** Every operation in spec order, with its operationId. */
+export function allOperations(spec: OpenAPISpec): Array<OperationRef & { operationId?: string }> {
+  const out: Array<OperationRef & { operationId?: string }> = [];
   for (const [p, item] of Object.entries(spec.paths)) {
     for (const method of HTTP_METHODS) {
       const op = item[method];
-      if (op && wanted.has(op.tags?.[0] ?? "")) out.push({ path: p, method });
+      if (op) out.push({ path: p, method, operationId: op.operationId });
     }
   }
   return out;
+}
+
+/** The operations with these operationIds, in the given order. Unknown ids throw. */
+export function operationsByIds(spec: OpenAPISpec, ids: readonly string[]): OperationRef[] {
+  const byId = new Map(allOperations(spec).map((o) => [o.operationId, o]));
+  return ids.map((id) => {
+    const op = byId.get(id);
+    if (!op) throw new Error(`OpenAPI operation "${id}" not found; run \`bun run docs:openapi\``);
+    return { path: op.path, method: op.method };
+  });
 }
 
 /**
@@ -125,11 +134,15 @@ function cell(text: string | undefined): string {
   return (text ?? "").replace(/\s*\n+\s*/g, " ").replace(/(?<!\\)\|/g, "\\|");
 }
 
-function operationMarkdown(spec: OpenAPISpec, { path: p, method }: OperationRef): string {
+function operationMarkdown(
+  spec: OpenAPISpec,
+  { path: p, method }: OperationRef,
+  { heading }: { heading: boolean },
+): string {
   const op = spec.paths[p]?.[method];
   if (!op) return "";
   const base = spec.servers?.[0]?.url ?? "";
-  const lines: string[] = [`## ${op.summary ?? `${method.toUpperCase()} ${p}`}`, ""];
+  const lines: string[] = heading ? [`## ${method.toUpperCase()} ${p}`, ""] : [];
   lines.push(`\`${method.toUpperCase()} ${base}${p}\``, "");
   if (op.deprecated) lines.push("> **Deprecated.**", "");
   if (op.description) lines.push(op.description.trim(), "");
@@ -184,13 +197,14 @@ function operationMarkdown(spec: OpenAPISpec, { path: p, method }: OperationRef)
 }
 
 /**
- * Plain-markdown stand-in for `<APIPage tags="…" />`: one section per
- * operation with its URL, auth, parameters, body fields, and response codes,
- * plus a pointer to the full spec for exact schemas.
+ * Plain-markdown stand-in for `<APIPage operations="…" />`: the URL, auth,
+ * parameters, body fields, and response codes of each operation, plus a
+ * pointer to the full spec for exact schemas. A page's title is already its
+ * h1, so a single operation gets no heading of its own.
  */
-export function apiPageMarkdown(tags: readonly string[], spec = loadOpenAPISpec()): string {
-  const ops = operationsForTags(spec, tags);
-  const sections = ops.map((op) => operationMarkdown(spec, op));
+export function apiPageMarkdown(ids: readonly string[], spec = loadOpenAPISpec()): string {
+  const ops = operationsByIds(spec, ids);
+  const sections = ops.map((op) => operationMarkdown(spec, op, { heading: ops.length > 1 }));
   sections.push(
     "Full request and response schemas: [OpenAPI 3.1 spec](https://api.releases.sh/v1/openapi.json).",
   );

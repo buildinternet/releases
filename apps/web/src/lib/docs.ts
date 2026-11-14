@@ -3,7 +3,7 @@ import path from "node:path";
 import { cache } from "react";
 import matter from "gray-matter";
 import { docFrontmatterSchema, type DocFrontmatter } from "@/lib/docs-schema";
-import { apiPageMarkdown, parseTagList } from "@/lib/openapi-spec";
+import { apiPageMarkdown, parseIdList } from "@/lib/openapi-spec";
 
 // Resolved from the process cwd: `apps/web/` under `next dev` / `next build`
 // (the bundled module has no stable path of its own). The repo root is
@@ -18,7 +18,7 @@ export const CONTENT_ROOT =
 export type { DocFrontmatter };
 
 /** Frontmatter keys that drive the site and never appear in served markdown. */
-const INTERNAL_FRONTMATTER_KEYS = ["adminOnly", "label", "og"] as const;
+const INTERNAL_FRONTMATTER_KEYS = ["adminOnly", "label", "og", "navGroup", "apiMethod"] as const;
 
 export type Doc = {
   slug: string;
@@ -73,8 +73,8 @@ export function docMdPath(slug: string): string {
  * Keyed by the component name used in the `.mdx` files.
  */
 const COMPONENT_MARKDOWN_FALLBACKS: Record<string, string | ((line: string) => string)> = {
-  // `<APIPage tags="Orgs" />` — the generated API reference pages.
-  APIPage: (line) => apiPageMarkdown(parseTagList(line.match(/\btags="([^"]*)"/)?.[1] ?? "")),
+  // `<APIPage operations="getOrgs" />` — the generated API reference pages.
+  APIPage: (line) => apiPageMarkdown(parseIdList(line.match(/\boperations="([^"]*)"/)?.[1] ?? "")),
   SkillsInstall: [
     "**Standalone (any agent):**",
     "",
