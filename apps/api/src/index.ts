@@ -967,7 +967,7 @@ const apiIndexPayload = (c: IndexCtx) => {
       "REST API for the Releases changelog registry. See the OpenAPI spec or the rendered reference for endpoint details.",
     links: {
       openapi: `${origin}/v1/openapi.json`,
-      reference: `${origin}/v1/docs`,
+      reference: "https://releases.sh/docs/api/reference",
       docs: "https://releases.sh/docs/api/rest",
       web: "https://releases.sh",
     },
