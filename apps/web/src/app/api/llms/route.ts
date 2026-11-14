@@ -22,7 +22,7 @@ const SUMMARY = `${SITE_TAGLINE} Release Notes Index tracks release notes, chang
 
 const CONTEXT = `Quick facts:
 
-- REST API base URL: \`${API_BASE_URL}/v1\`. OpenAPI 3.1 spec: ${API_BASE_URL}/v1/openapi.json. Interactive reference: ${API_BASE_URL}/v1/docs.
+- REST API base URL: \`${API_BASE_URL}/v1\`. OpenAPI 3.1 spec: ${API_BASE_URL}/v1/openapi.json. Endpoint reference: ${BASE_URL}/docs/api/reference/releases (one page per API area, listed under API Reference below).
 - Hosted MCP server (Streamable HTTP, read tools public, no key): \`${MCP_REMOTE_URL}\`. Claude Code: \`${CLAUDE_CODE_MCP_CMD}\`. Claude (web, desktop, mobile): ${CLAUDE_DIRECTORY_URL}.
 - CLI: \`npm install -g @buildinternet/releases\` (or \`brew install buildinternet/tap/releases\`). Agent skills: \`npx skills add buildinternet/releases\`.
 - Pricing: free and open source — no paid plans. A free account raises API rate limits. Details: ${BASE_URL}/pricing.md.

@@ -82,6 +82,14 @@ const TAGS = [
       "The signed-in caller: follows, the personalized feed, publish tokens, and semantic alerts. Session cookie or user Bearer (`relu_` / OAuth JWT).",
   },
   { name: "Sessions", description: "Update-run sessions (status hub)." },
+  { name: "Authentication", description: "Self-serve user API keys." },
+  {
+    name: "Listing",
+    description: "Self-serve listing: manifest validation, activation, and ownership claims.",
+  },
+  { name: "Site", description: "Site-wide notices." },
+  { name: "Feedback", description: "Product feedback from users." },
+  { name: "Recommendations", description: "Source recommendations from users." },
 ];
 
 /**
@@ -154,14 +162,17 @@ async function buildSpec(v1: Hono<Env>, c: Context<Env>) {
             "**Links:** [releases.sh](https://releases.sh) · [Narrative docs](https://releases.sh/docs/api/rest) · [Errors](https://releases.sh/docs/api/errors) · [MCP server](https://releases.sh/docs/api/mcp)",
           ].join("\n"),
         },
+        // Paths are relative to the `/v1` sub-app, so the version prefix
+        // belongs on the server URL — otherwise "try it" clients call
+        // `https://api.releases.sh/orgs` instead of `/v1/orgs`.
         servers: isStaging
           ? [
               {
-                url: "https://api.releasenotesindex.dev",
+                url: "https://api.releasenotesindex.dev/v1",
                 description: "Staging (access-key gated)",
               },
             ]
-          : [{ url: "https://api.releases.sh", description: "Production" }],
+          : [{ url: "https://api.releases.sh/v1", description: "Production" }],
         components: {
           schemas: {
             ErrorEnvelope: errorEnvelopeOpenApiSchema,

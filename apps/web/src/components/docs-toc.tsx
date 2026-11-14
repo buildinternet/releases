@@ -14,6 +14,18 @@ type TocItem = { id: string; text: string; level: 2 | 3 };
  *
  * A scrollspy (IntersectionObserver) highlights the section currently in view.
  */
+/**
+ * A heading's visible label: its text without the hover-anchor's accessible
+ * label ("Link to this section") or the API reference's copy-link button.
+ */
+function headingText(h: HTMLHeadingElement): string {
+  const clone = h.cloneNode(true) as HTMLHeadingElement;
+  for (const el of clone.querySelectorAll("button, [aria-label='Link to this section']")) {
+    el.remove();
+  }
+  return (clone.textContent ?? "").replace(/Link to this section$/, "").trim();
+}
+
 export function DocsToc() {
   const pathname = usePathname();
   const [items, setItems] = useState<TocItem[]>([]);
@@ -27,16 +39,14 @@ export function DocsToc() {
       setItems([]);
       return;
     }
-    const headings = Array.from(article.querySelectorAll<HTMLHeadingElement>("h2[id], h3[id]"));
+    // On API reference pages, list only the operations: their h3s (Authorization,
+    // Query Parameters, …) repeat under every operation with the same ids.
+    const headings = Array.from(
+      article.querySelectorAll<HTMLHeadingElement>("h2[id], h3[id]"),
+    ).filter((h) => h.tagName === "H2" || !h.closest(".api-reference"));
     const next: TocItem[] = headings.map((h) => ({
       id: h.id,
-      // `textContent` includes the hover-anchor's accessible label ("Link to
-      // this section"); the anchor is the heading's last child, so drop it.
-      text:
-        (h.querySelector("a[href^='#']")
-          ? h.textContent?.replace(/Link to this section$/, "")
-          : h.textContent
-        )?.trim() ?? "",
+      text: headingText(h),
       level: h.tagName === "H3" ? 3 : 2,
     }));
     setItems(next.filter((i) => i.id && i.text));
