@@ -1,7 +1,6 @@
 /// <reference types="react/canary" />
 import type { Metadata } from "next";
-import { JetBrains_Mono } from "next/font/google";
-import localFont from "next/font/local";
+import { JetBrains_Mono, Schibsted_Grotesk } from "next/font/google";
 import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { FollowsProvider } from "@/components/follows-provider";
@@ -22,19 +21,13 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-// Geist Pixel, self-hosted as the official VARIABLE woff2 from
-// https://vercel.com/font?type=pixel (SIL OFL 1.1 — OFL.txt alongside). The npm
-// `geist` package only ships five static 500-weight instance files; the variable
-// build is a single ~39KB file at weight 400 with a custom ELSH ("Element
-// Shape") axis — 0 Regular · 1 Square · 20 Circle · 40 Grid · 60 Triangle ·
-// 80 Line. `.font-pixel` in globals.css pins the Square shape via
-// `font-variation-settings`.
-const geistPixel = localFont({
-  src: "./fonts/geist-pixel/GeistPixel-Variable.woff2",
-  variable: "--font-geist-pixel",
-  weight: "400",
+// Schibsted Grotesk: the display face for the header wordmark and short page /
+// entity titles (`.font-display` in globals.css). Body text stays on the system
+// sans stack and code on JetBrains Mono.
+const schibstedGrotesk = Schibsted_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-schibsted-grotesk",
   display: "swap",
-  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -82,10 +75,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // landing partway down the destination instead of at the top. The attribute
   // restores Next's instant scroll-to-top on route changes while keeping smooth
   // scrolling for in-page anchors. See the Next.js 16 upgrade guide.
-  // geistPixel only registers the `--font-geist-pixel` CSS variable here; the
-  // `.font-pixel` class in globals.css binds it to the wordmark + short entity
-  // titles. Nothing renders pixel unless an element opts in.
-  const htmlClassName = ["scroll-smooth", jetbrainsMono.variable, geistPixel.variable].join(" ");
+  // schibstedGrotesk only registers the `--font-schibsted-grotesk` CSS variable
+  // here; the `.font-display` class in globals.css binds it to the wordmark +
+  // short entity titles. Nothing renders in it unless an element opts in.
+  const htmlClassName = ["scroll-smooth", jetbrainsMono.variable, schibstedGrotesk.variable].join(
+    " ",
+  );
 
   return (
     <html

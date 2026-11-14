@@ -392,12 +392,14 @@ export default async function HomePage() {
         <ConveyorBackdrop style={{ position: "absolute" }} />
         <div className="relative z-10">
           <div className="pt-12 pb-8 text-center px-6">
-            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2 text-balance">
-              Release Notes Index
+            {/* The wordmark in the header already names the site, so the
+                headline says what it's for. */}
+            <h1 className="font-display text-[28px] text-stone-900 dark:text-stone-100 mb-2 text-balance">
+              Search what shipped this week
             </h1>
             <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6 text-pretty">
-              The latest product releases, indexed for agents. A registry of release notes from
-              across the web, queryable from your terminal, code, or MCP client.
+              Release notes and changelogs from across the web. Browse them here, or query the index
+              from the CLI, API, or an MCP client.
             </p>
             {/* Registry vitals as a mono, letter-spaced readout — an index
                 status line rather than marketing stats. Sources + releases

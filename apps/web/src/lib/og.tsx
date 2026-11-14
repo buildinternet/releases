@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { clamp, isHeroImageResponse, isJunkMediaUrl, OG_SIZE } from "./og-helpers";
 import { OG_BODY_FAMILY, OG_BODY_FONT } from "./og-body-font";
-import { PIXEL_WORDMARK_FAMILY, PIXEL_WORDMARK_FONT, pixelWordmark } from "./og-pixel-font";
+import { WORDMARK_FAMILY, WORDMARK_FONT, WORDMARK_WEIGHT, wordmarkText } from "./og-wordmark-font";
 
 export { formatCount, formatDate, OG_CONTENT_TYPE, OG_SIZE, stripMarkdown } from "./og-helpers";
 
@@ -30,15 +30,15 @@ export type OgResponseInit = { headers?: Record<string, string> };
 // Passing any `fonts` array makes Satori drop next/og's built-in default face,
 // so we re-supply it explicitly. Order matters: Satori treats the FIRST font as
 // the global default for unmatched families, so Geist (next/og's own default,
-// what titles/metrics use today) must come first and the pixel face second. The
-// pixel face is PUA-encoded, so it only ever renders the wordmark (which shifts
-// its chars into the PUA via `pixelWordmark`) — every other glyph stays Geist.
+// what titles/metrics use today) must come first and the wordmark face second.
+// The wordmark face is PUA-encoded, so it only ever renders the wordmark (which
+// shifts its chars into the PUA via `wordmarkText`); every other glyph stays Geist.
 const OG_FONTS = [
   { name: OG_BODY_FAMILY, data: OG_BODY_FONT, weight: 400 as const, style: "normal" as const },
   {
-    name: PIXEL_WORDMARK_FAMILY,
-    data: PIXEL_WORDMARK_FONT,
-    weight: 400 as const,
+    name: WORDMARK_FAMILY,
+    data: WORDMARK_FONT,
+    weight: WORDMARK_WEIGHT,
     style: "normal" as const,
   },
 ];
@@ -115,13 +115,13 @@ function BrandBar({ avatarUrl, bleed }: { avatarUrl?: string | null; bleed?: boo
       <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
         <div
           style={{
-            fontFamily: PIXEL_WORDMARK_FAMILY,
+            fontFamily: WORDMARK_FAMILY,
             fontSize: "30px",
-            fontWeight: 400,
+            fontWeight: WORDMARK_WEIGHT,
             color: "#fafaf9",
           }}
         >
-          {pixelWordmark("Release Notes Index")}
+          {wordmarkText("Release Notes Index")}
         </div>
       </div>
       {avatarUrl ? (

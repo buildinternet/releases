@@ -32,7 +32,7 @@ export default function ApiReferenceLayout({ children }: { children: React.React
           backLink={{ label: "Docs", href: "/docs" }}
           widthClassName="w-[230px]"
         />
-        <article className="pixel-doc-title min-w-0 flex-1 max-w-none prose prose-stone dark:prose-invert prose-headings:tracking-tight prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono">
+        <article className="display-doc-title min-w-0 flex-1 max-w-none prose prose-stone dark:prose-invert prose-headings:tracking-tight prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono">
           {children}
         </article>
       </div>
