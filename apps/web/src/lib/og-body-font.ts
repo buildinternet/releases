@@ -3,7 +3,7 @@
  *
  * `next/og` ships Geist-Regular.ttf as its built-in default font, so every OG
  * title/subtitle/metric renders in it today. But the moment you pass a `fonts`
- * array to `ImageResponse` (which we do, for the pixel wordmark), Satori stops
+ * array to `ImageResponse` (which we do, for the wordmark), Satori stops
  * using that built-in default and falls back to a different face — silently
  * changing every non-wordmark glyph. To keep titles byte-identical to what
  * ships now, we re-supply the exact same Geist-Regular.ttf as the base font.

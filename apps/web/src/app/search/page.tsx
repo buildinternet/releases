@@ -43,7 +43,7 @@ export default async function SearchPage({
     <SearchProvider initialQuery={q ?? ""} initialResults={results} initialRange={range}>
       <div className="min-h-screen">
         <div className="max-w-2xl mx-auto px-6 pt-12 pb-12">
-          <h1 className="font-pixel text-2xl mb-4">Search</h1>
+          <h1 className="font-display text-2xl mb-4">Search</h1>
           <SearchBar withFilters />
           <SearchCliHint />
           <SearchResultsLive initialFilter={filter} />

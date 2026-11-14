@@ -40,7 +40,7 @@ export function buildStaticPageMetadata(
 export function StaticMarkdownPage({ slug }: { slug: string }) {
   return (
     <div className="min-h-screen flex flex-col">
-      <article className="pixel-doc-title max-w-3xl w-full mx-auto px-6 py-10 flex-1 prose prose-stone dark:prose-invert prose-headings:tracking-tight prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono">
+      <article className="display-doc-title max-w-3xl w-full mx-auto px-6 py-10 flex-1 prose prose-stone dark:prose-invert prose-headings:tracking-tight prose-code:before:content-none prose-code:after:content-none prose-code:bg-stone-100 prose-code:dark:bg-stone-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono">
         <MarkdownDoc slug={slug} viewHref={`/${slug}.md`} />
       </article>
     </div>

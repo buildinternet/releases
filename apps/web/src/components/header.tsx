@@ -18,7 +18,7 @@ export function Header() {
     >
       <Link
         href="/"
-        className="font-pixel text-base sm:text-lg text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2 whitespace-nowrap"
+        className="font-display text-base sm:text-lg text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2 whitespace-nowrap"
       >
         <svg viewBox="0 0 64 64" aria-hidden="true" className="h-5 w-5 shrink-0">
           <rect
