@@ -5,55 +5,6 @@ import type { Env } from "./index.js";
 import { PUBLIC_OPERATIONS, specOperations } from "./api-surface.js";
 import { errorResponse } from "./lib/openapi-error.js";
 
-// Scalar pinned to a major version; jsdelivr resolves to the latest 1.x patch.
-// A breaking 2.x release won't silently swap in.
-//
-// Config choices:
-// - `agent.disabled` removes the "Ask AI" chat affordance; we don't host an
-//   inference endpoint, so it would error or send queries to Scalar's hosted
-//   service we don't control.
-// - `mcp.disabled` removes the "Generate MCP" button; we ship our own remote
-//   MCP server at agents.releases.sh and don't want a competing auto-generated
-//   wrapper offered here.
-// - `hideClientButton` hides the in-sidebar global client switcher (the
-//   per-endpoint client tabs still render).
-// - `customCss` hides the "Powered by Scalar" footer — no built-in toggle in
-//   Scalar 1.x. The "Back to docs" link lives in the OpenAPI `info.description`
-//   markdown instead, which Scalar renders as the intro panel.
-const SCALAR_CONFIG = {
-  theme: "default",
-  hideClientButton: true,
-  agent: { disabled: true },
-  mcp: { disabled: true },
-  metaData: {
-    title: "Releases API Reference",
-    ogTitle: "Releases API Reference",
-    description: "Interactive reference for the Releases changelog registry REST API.",
-  },
-  // The "Powered by Scalar" link sits in the bottom row of the sidebar's
-  // `.darklight-reference` footer, in a flex-1 wrapper that's a sibling of the
-  // dark-mode toggle. Hiding the wrapper keeps the toggle visible. Selector
-  // verified against the rendered DOM in 1.x; revisit if Scalar restructures.
-  customCss:
-    "aside.t-doc__sidebar .darklight-reference .flex-1.text-sidebar-c-2 { display: none !important; }",
-};
-const SCALAR_HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Releases API Reference</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-  </head>
-  <body>
-    <script
-      id="api-reference"
-      data-url="/v1/openapi.json"
-      data-configuration='${JSON.stringify(SCALAR_CONFIG).replace(/'/g, "&#39;")}'
-    ></script>
-    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1"></script>
-  </body>
-</html>`;
-
 const TAGS = [
   { name: "Orgs", description: "Organizations — top-level publisher of releases." },
   { name: "Sources", description: "Changelog sources owned by an org." },
@@ -113,6 +64,11 @@ export function applyApiSurface(paths: unknown, opts: { productionOnly: boolean 
   }
 }
 
+/** The human API reference in the web docs. */
+export function apiReferenceUrl(webBaseUrl?: string): string {
+  return `${webBaseUrl ?? "https://releases.sh"}/docs/api/reference`;
+}
+
 export function mountOpenApi(v1: Hono<Env>) {
   // Servers + securitySchemes are computed per environment so production's
   // public spec advertises only api.releases.sh, while staging's spec keeps
@@ -132,9 +88,11 @@ export function mountOpenApi(v1: Hono<Env>) {
     return c.json(await spec);
   });
 
+  // The old Scalar page. The reference now lives in the web docs, generated
+  // from this spec (`bun run docs:openapi`); keep the URL working for links.
   v1.get("/docs", (c) => {
     c.header("Cache-Control", "public, max-age=86400");
-    return c.html(SCALAR_HTML);
+    return c.redirect(apiReferenceUrl(c.env.WEB_BASE_URL), 301);
   });
 }
 

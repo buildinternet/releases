@@ -6,7 +6,6 @@ export const revalidate = false;
 const BASE_URL = "https://releases.sh";
 const REST_API_URL = "https://api.releases.sh";
 const OPENAPI_URL = `${REST_API_URL}/v1/openapi.json`;
-const SCALAR_DOCS_URL = `${REST_API_URL}/v1/docs`;
 const MCP_URL = "https://agents.releases.sh/mcp";
 // "Sign in with Releases" OAuth 2.0 / OIDC authorization server. The issuer is
 // the api host plus the `/api/auth` basePath; the discovery documents are served
@@ -41,8 +40,8 @@ const body = {
     {
       anchor: REST_API_URL,
       // service-desc: machine-readable OpenAPI 3.1 description.
-      // service-doc: human-readable references — the in-product Scalar UI plus
-      // the marketing-site landing page.
+      // service-doc: human-readable docs — the generated endpoint reference
+      // plus the REST guide (auth, pagination, errors).
       "service-desc": [
         {
           href: OPENAPI_URL,
@@ -52,15 +51,14 @@ const body = {
       ],
       "service-doc": [
         {
-          href: `${BASE_URL}/docs/api/rest`,
+          href: `${BASE_URL}/docs/api/reference`,
           type: "text/html",
           title: "Release Notes Index REST API — interactive reference",
         },
         {
-          href: SCALAR_DOCS_URL,
+          href: `${BASE_URL}/docs/api/rest`,
           type: "text/html",
-          title:
-            "Release Notes Index REST API — interactive reference (direct, no marketing chrome)",
+          title: "Release Notes Index REST API — guide",
         },
       ],
     },

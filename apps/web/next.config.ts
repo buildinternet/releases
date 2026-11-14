@@ -176,10 +176,6 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=()",
           },
           {
-            // `cdn.jsdelivr.net` carries the pinned Scalar bundle mounted by
-            // `/docs/api/rest`. The same origin is used by the API worker at
-            // `apps/api/src/openapi.ts`. style-src adds it too because
-            // Scalar injects its stylesheet from the same CDN.
             // `accounts.google.com/gsi/*` is Google Identity Services for the
             // Google One Tap sign-in prompt (better-auth `oneTapClient`, auto-
             // prompted from `auth-form.tsx`): it injects the GSI client script,
@@ -192,7 +188,7 @@ const nextConfig: NextConfig = {
             // without it they fall back to default-src 'self' and are blocked.
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://accounts.google.com/gsi/style; img-src 'self' https: data:; media-src 'self' https:; font-src 'self' https: data:; connect-src 'self' https: wss:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://accounts.google.com/gsi/; frame-ancestors 'none'",
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' https: data:; media-src 'self' https:; font-src 'self' https: data:; connect-src 'self' https: wss:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://accounts.google.com/gsi/; frame-ancestors 'none'",
           },
         ],
       },
