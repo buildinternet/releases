@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { SettingsSection } from "@releases/design-system";
-import { listSubmissionsAction, triageSubmissionAction } from "@/app/actions/admin-submissions";
+import {
+  approveRecommendationAction,
+  getRecommendationPlanAction,
+  listSubmissionsAction,
+  promoteOrgAction,
+  triageSubmissionAction,
+} from "@/app/actions/admin-submissions";
 import { navItem } from "@/lib/account-nav";
 import { SubmissionsInbox, type SubmissionsActions } from "./submissions-inbox";
 
@@ -15,6 +21,9 @@ export const metadata: Metadata = {
 const actions: SubmissionsActions = {
   list: listSubmissionsAction,
   triage: triageSubmissionAction,
+  plan: getRecommendationPlanAction,
+  approve: approveRecommendationAction,
+  promote: promoteOrgAction,
 };
 
 export default async function AdminSubmissionsPage() {

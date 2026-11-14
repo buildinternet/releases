@@ -13,7 +13,7 @@
  * always means "accept and let post-hoc handle it."
  */
 
-import { getDomain } from "tldts";
+import { registrableDomain } from "../registrable-domain.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { ExtractedEntry } from "./types.js";
 
@@ -97,21 +97,6 @@ function trackingFragmentMatches(labels: string[], frag: string): boolean {
 /** Bare index/listing paths a specific release URL should never collapse to. */
 const INDEX_PATH_RE =
   /^\/?(changelog|changelog\/?|release-notes|releases|blog|news|updates)\/?(index\.html?)?$/i;
-
-/**
- * Public-suffix-aware registrable domain (e.g. "blog.example.co.uk" ->
- * "example.co.uk"). Falls back to the naive last-two-label heuristic when
- * `tldts` can't determine one (localhost, bare IPs, single-label hosts) —
- * those aren't on a public suffix list, so there's nothing to look up.
- */
-function registrableDomain(host: string): string {
-  const lower = host.toLowerCase();
-  const domain = getDomain(lower);
-  if (domain) return domain;
-  const parts = lower.split(".").filter(Boolean);
-  if (parts.length <= 2) return parts.join(".");
-  return parts.slice(-2).join(".");
-}
 
 /**
  * Matches a tracking-redirect fragment against whole hostname labels rather

@@ -2,33 +2,40 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { listCardClass, listRowClass, smallButtonClass } from "@releases/design-system";
+import {
+  ErrorText,
+  SuccessBanner,
+  listCardClass,
+  listRowClass,
+  smallButtonClass,
+  smallPrimaryButtonClass,
+} from "@releases/design-system";
 import { LocalTimestamp } from "@/components/local-timestamp";
 import {
   isTriageable,
   SUBMISSION_KIND_LABEL,
   SUBMISSION_KINDS,
+  type Result,
   type SubmissionItem,
   type SubmissionKind,
   type SubmissionsQuery,
   type SubmissionsResponse,
+  type TriagePatch,
 } from "@/lib/admin-submissions";
-
-type ListResult = { ok: true; data: SubmissionsResponse } | { ok: false; error: string };
-type TriageResult = { ok: true } | { ok: false; error: string };
+import { ApprovePanel, PromotePanel, type ReviewActions } from "./review-panels";
 
 /**
  * Server-action seam, injected rather than imported so this "use client" tree
  * stays free of the `"use server"` module's `server-only` import chain and the
  * test can render it with plain fakes (same pattern as the classifier panel).
  */
-export interface SubmissionsActions {
-  list: (query: SubmissionsQuery) => Promise<ListResult>;
+export interface SubmissionsActions extends ReviewActions {
+  list: (query: SubmissionsQuery) => Promise<Result<SubmissionsResponse>>;
   triage: (
     kind: "recommendation" | "feedback",
     id: string,
-    patch: { status?: "new" | "triaged" | "closed"; archived?: boolean },
-  ) => Promise<TriageResult>;
+    patch: TriagePatch,
+  ) => Promise<Result<unknown>>;
 }
 
 const KIND_BADGE: Record<SubmissionKind, string> = {
@@ -55,18 +62,30 @@ function totalOpen(counts: Record<SubmissionKind, number>): number {
 function Row({
   item,
   busy,
+  actions,
   onTriage,
+  onDone,
 }: {
   item: SubmissionItem;
   busy: boolean;
-  onTriage: (
-    item: SubmissionItem,
-    patch: { status?: "new" | "triaged" | "closed"; archived?: boolean },
-  ) => void;
+  actions: ReviewActions;
+  onTriage: (item: SubmissionItem, patch: TriagePatch) => void;
+  onDone: (notice: string) => void;
 }) {
+  const [panel, setPanel] = useState<"approve" | "promote" | null>(null);
   const triageable = isTriageable(item.kind);
+  // Open suggestions can be approved; open tracking requests (still stubs) promoted.
+  const review = !item.open
+    ? null
+    : item.kind === "recommendation"
+      ? ({ panel: "approve", label: "Approve" } as const)
+      : item.kind === "tracking-request"
+        ? ({ panel: "promote", label: "Promote" } as const)
+        : null;
+  const closed = item.status === "closed";
+  const panelProps = { item, actions, onDone, onCancel: () => setPanel(null) };
   return (
-    <li className={`${listRowClass} items-start ${item.open ? "" : "opacity-60"}`}>
+    <li className={`${listRowClass} flex-wrap items-start ${item.open ? "" : "opacity-60"}`}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-stone-500 dark:text-stone-400">
           <span
@@ -113,47 +132,52 @@ function Row({
           </span>
         </div>
       </div>
-      {triageable && (
+      {(triageable || review) && (
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          {item.status === "new" && !item.archived && (
+          {review && (
             <button
               type="button"
-              className={smallButtonClass}
-              disabled={busy}
-              onClick={() => onTriage(item, { status: "triaged" })}
+              className={smallPrimaryButtonClass}
+              disabled={busy || panel !== null}
+              onClick={() => setPanel(review.panel)}
             >
-              Triage
+              {review.label}
             </button>
           )}
-          {item.status !== "closed" ? (
-            <button
-              type="button"
-              className={smallButtonClass}
-              disabled={busy}
-              onClick={() => onTriage(item, { status: "closed" })}
-            >
-              Close
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={smallButtonClass}
-              disabled={busy}
-              onClick={() => onTriage(item, { status: "new" })}
-            >
-              Reopen
-            </button>
+          {triageable && (
+            <>
+              {item.status === "new" && !item.archived && (
+                <button
+                  type="button"
+                  className={smallButtonClass}
+                  disabled={busy}
+                  onClick={() => onTriage(item, { status: "triaged" })}
+                >
+                  Triage
+                </button>
+              )}
+              <button
+                type="button"
+                className={smallButtonClass}
+                disabled={busy}
+                onClick={() => onTriage(item, { status: closed ? "new" : "closed" })}
+              >
+                {closed ? "Reopen" : "Close"}
+              </button>
+              <button
+                type="button"
+                className={smallButtonClass}
+                disabled={busy}
+                onClick={() => onTriage(item, { archived: !item.archived })}
+              >
+                {item.archived ? "Unarchive" : "Archive"}
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            className={smallButtonClass}
-            disabled={busy}
-            onClick={() => onTriage(item, { archived: !item.archived })}
-          >
-            {item.archived ? "Unarchive" : "Archive"}
-          </button>
         </div>
       )}
+      {panel === "approve" && <ApprovePanel {...panelProps} />}
+      {panel === "promote" && <PromotePanel {...panelProps} />}
     </li>
   );
 }
@@ -172,6 +196,7 @@ export function SubmissionsInbox({
   const [kind, setKind] = useState<SubmissionKind | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function reload(next: { kind: SubmissionKind | null; showClosed: boolean }) {
@@ -196,10 +221,12 @@ export function SubmissionsInbox({
     reload({ kind, showClosed: next });
   }
 
-  function triage(
-    item: SubmissionItem,
-    patch: { status?: "new" | "triaged" | "closed"; archived?: boolean },
-  ) {
+  function finishReview(message: string) {
+    setNotice(message);
+    reload({ kind, showClosed });
+  }
+
+  function triage(item: SubmissionItem, patch: TriagePatch) {
     if (!isTriageable(item.kind)) return;
     const triageKind = item.kind;
     setBusyId(item.id);
@@ -254,7 +281,8 @@ export function SubmissionsInbox({
         stub, or a claim that is pending or verified.
       </p>
 
-      {error && <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
+      {notice && <SuccessBanner>{notice}</SuccessBanner>}
 
       {items.length === 0 ? (
         <p className="text-sm text-stone-500 dark:text-stone-400">
@@ -267,7 +295,9 @@ export function SubmissionsInbox({
               key={`${item.kind}:${item.id}`}
               item={item}
               busy={busyId === item.id}
+              actions={actions}
               onTriage={triage}
+              onDone={finishReview}
             />
           ))}
         </ul>

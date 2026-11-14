@@ -3,6 +3,14 @@
  * Internal admin route, so the type lives here rather than in the published
  * api-types package.
  */
+import type { EvaluationResult } from "@buildinternet/releases-api-types";
+
+// Type-only (erased), so client components can use it without pulling in the
+// server-only admin-action module.
+export type { AdminResult as Result } from "./admin-action";
+
+export type TriagePatch = { status?: "new" | "triaged" | "closed"; archived?: boolean };
+
 export const SUBMISSION_KINDS = [
   "recommendation",
   "feedback",
@@ -56,4 +64,56 @@ export function submissionsQueryString(q: SubmissionsQuery): string {
   if (q.state === "all") params.set("state", "all");
   const s = params.toString();
   return s ? `?${s}` : "";
+}
+
+/** `GET /v1/admin/submissions/recommendations/:id/plan` (subset the panel uses). */
+export interface RecommendationPlan {
+  recommendationId: string;
+  evaluation: Pick<EvaluationResult, "recommendedMethod" | "confidence" | "feedUrl">;
+  source: {
+    name: string;
+    url: string;
+    type: "github" | "feed" | "scrape";
+    metadata: Record<string, unknown>;
+  };
+  matchedOrg: { slug: string; name: string } | null;
+  newOrg: { name: string; slug: string; domain: string | null };
+  existingSource: { orgSlug: string; slug: string; name: string } | null;
+}
+
+/** What the operator confirmed in the approve panel. */
+export interface ApproveRecommendationInput {
+  recommendationId: string;
+  /** Existing org slug, or a new org to create first. */
+  org: { slug: string } | { create: { name: string; slug: string; domain: string | null } };
+  source: RecommendationPlan["source"];
+  /** Run the onboarding backfill fetch now (otherwise the source waits for its schedule). */
+  fetchNow: boolean;
+  /** Email the submitter (only sent when the recommendation has a contact). */
+  notify: boolean;
+}
+
+export interface ApproveRecommendationResult {
+  orgSlug: string;
+  sourceSlug: string;
+  /** Non-fatal follow-up failures (closing, email). */
+  warnings: string[];
+}
+
+/** `POST /v1/orgs/:slug/promote` (subset the panel uses). */
+export interface PromoteResult {
+  promoted: boolean;
+  alreadyTracked?: boolean;
+  sourcesCreated: number;
+  sourcesMatched: number;
+  plan?: {
+    sources: Array<{
+      action: "match" | "create" | "skip";
+      type: string;
+      locator: string;
+      title: string;
+      paused: boolean;
+      note?: string;
+    }>;
+  };
 }

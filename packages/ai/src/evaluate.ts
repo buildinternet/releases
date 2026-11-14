@@ -41,6 +41,25 @@ export function buildMetadataFromEvaluation(result: EvaluationResult): Partial<S
   return meta;
 }
 
+/**
+ * Map an evaluation onto the fields `POST /v1/sources` takes. `url` stays the
+ * human page (a feed or `.md` endpoint rides in metadata); a GitHub URL is
+ * canonicalized to the repo root so `/releases/tag/…` submissions don't
+ * become the source URL.
+ */
+export function sourceFromEvaluation(
+  url: string,
+  result: EvaluationResult,
+): { type: "github" | "feed" | "scrape"; url: string; metadata: Partial<SourceMetadata> } {
+  const metadata = buildMetadataFromEvaluation(result);
+  const m = result.recommendedMethod;
+  if (m === "github" && result.githubRepo) {
+    return { type: "github", url: `https://github.com/${result.githubRepo}`, metadata };
+  }
+  if (m === "crawl") metadata.crawlEnabled = true;
+  return { type: m === "feed" ? "feed" : "scrape", url, metadata };
+}
+
 // ── Pre-checks (run in parallel, results feed into the agent) ──────
 
 function isGitHubUrl(url: string): { owner: string; repo: string } | null {
