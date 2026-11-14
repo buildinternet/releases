@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./types": "./src/types.ts",
+    "./registrable-domain": "./src/registrable-domain.ts",
     "./source-meta": "./src/source-meta.ts",
     "./fetch-plan": "./src/fetch-plan.ts",
     "./workflow-stages": "./src/workflow-stages.ts",

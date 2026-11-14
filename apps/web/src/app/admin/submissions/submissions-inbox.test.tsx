@@ -6,6 +6,9 @@ import { SubmissionsInbox, type SubmissionsActions } from "./submissions-inbox.t
 const noopActions: SubmissionsActions = {
   list: async () => ({ ok: true, data: { items: [], openCounts: emptyCounts() } }),
   triage: async () => ({ ok: true }),
+  plan: async () => ({ ok: false, error: "unused" }),
+  approve: async () => ({ ok: false, error: "unused" }),
+  promote: async () => ({ ok: false, error: "unused" }),
 };
 
 function emptyCounts(): SubmissionsResponse["openCounts"] {
@@ -56,6 +59,9 @@ describe("SubmissionsInbox", () => {
     expect(html).toContain('href="/stubco"');
     // "All" chip sums the open counts.
     expect(html).toMatch(/All<span[^>]*>4<\/span>/);
+    // Open suggestion gets Approve; the stub tracking request gets Promote.
+    expect(html.match(/>Approve</g)?.length).toBe(1);
+    expect(html.match(/>Promote</g)?.length).toBe(1);
     // Triage controls appear once (the recommendation), not on the tracking request.
     expect(html.match(/>Triage</g)?.length).toBe(1);
     expect(html.match(/>Archive</g)?.length).toBe(1);

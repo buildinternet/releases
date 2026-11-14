@@ -58,3 +58,55 @@ async function mintUserJwt(apiUrl: string): Promise<string | null> {
     return null;
   }
 }
+
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/** Result shape every admin server action returns; failures never throw. */
+export type AdminResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/**
+ * Admin fetch that parses the JSON body. The credential is resolved by
+ * `adminActionEnv()` — the root key in local dev, or the caller's role-clamped
+ * per-user JWT in production (the API enforces `admin` scope). Every failure
+ * mode — no admin credential, network error, timeout, non-2xx, or malformed
+ * body — is normalized to an `{ ok: false; error }` result so callers never throw.
+ *
+ * Pass a pre-resolved `env` to reuse one credential across several calls — a
+ * multi-step action (e.g. `revokeTokenAction`'s lookup-then-revoke) otherwise
+ * re-mints the per-user JWT once per call.
+ */
+export async function adminFetch<T>(
+  path: string,
+  init?: RequestInit,
+  env?: AdminActionEnv,
+): Promise<AdminResult<T>> {
+  const resolved = env ?? (await adminActionEnv());
+  if ("error" in resolved) return { ok: false, error: resolved.error };
+  let res: Response;
+  try {
+    res = await fetch(`${resolved.apiUrl}${path}`, {
+      cache: "no-store",
+      ...init,
+      headers: webApiHeaders({
+        ...(init?.headers as Record<string, string> | undefined),
+        Authorization: `Bearer ${resolved.bearer}`,
+        "Content-Type": "application/json",
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      return { ok: false, error: `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s.` };
+    }
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+  try {
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, error: `API ${res.status}: malformed response body` };
+  }
+}

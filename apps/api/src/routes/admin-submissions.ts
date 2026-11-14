@@ -26,6 +26,9 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { user } from "../db/schema-auth.js";
 import { createDb } from "../db.js";
+import { buildRecommendationPlan } from "../lib/submissions/recommendation-plan.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 import type { Env } from "../index.js";
 
 export const adminSubmissionRoutes = new Hono<Env>();
@@ -259,4 +262,11 @@ adminSubmissionRoutes.get("/admin/submissions", async (c) => {
 
   const body: SubmissionsResponse = { items, openCounts };
   return c.json(body);
+});
+
+/** Read-only approval plan for one source recommendation (see recommendation-plan.ts). */
+adminSubmissionRoutes.get("/admin/submissions/recommendations/:id/plan", async (c) => {
+  const plan = await buildRecommendationPlan(getDb(c), c.req.param("id"));
+  if (!plan) return respondError(c, new NotFoundError("Recommendation not found"));
+  return c.json(plan);
 });

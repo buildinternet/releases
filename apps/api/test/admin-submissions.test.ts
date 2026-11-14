@@ -4,9 +4,15 @@ import {
   orgClaims,
   organizations,
   recommendations,
+  sources,
 } from "@buildinternet/releases-core/schema";
 import { user } from "../src/db/schema-auth.js";
 import type { SubmissionsResponse } from "../src/routes/admin-submissions.js";
+import {
+  buildRecommendationPlan,
+  type Evaluate,
+  type RecommendationPlan,
+} from "../src/lib/submissions/recommendation-plan.js";
 import { createTestApp, createTestDb } from "./setup";
 
 async function makeApp() {
@@ -160,5 +166,110 @@ describe("GET /v1/admin/submissions", () => {
     const body = await get(fetch, "?kind=nope");
     expect(body.items.some((i) => i.id === "org_gone")).toBe(false);
     expect(body.items).toHaveLength(4);
+  });
+});
+
+describe("GET /v1/admin/submissions/recommendations/:id/plan", () => {
+  it("plans a canonical github source under the org already tracking that owner", async () => {
+    const { db, fetch } = await makeApp();
+    await db.insert(organizations).values({ id: "org_acme", slug: "acme-inc", name: "Acme" });
+    await db.insert(sources).values({
+      id: "src_engine",
+      orgId: "org_acme",
+      slug: "engine",
+      name: "Engine",
+      type: "github",
+      url: "https://github.com/acmehq/engine",
+    });
+    await db.insert(recommendations).values({
+      id: "rec_gh",
+      createdAt: 1,
+      url: "https://github.com/acmehq/rocket-cli/releases/tag/v1.2.0",
+    });
+
+    const res = await fetch(
+      new Request("http://x/v1/admin/submissions/recommendations/rec_gh/plan"),
+    );
+    expect(res.status).toBe(200);
+    const plan = (await res.json()) as RecommendationPlan;
+    expect(plan.source).toMatchObject({
+      type: "github",
+      name: "Rocket Cli",
+      url: "https://github.com/acmehq/rocket-cli",
+    });
+    expect(plan.matchedOrg).toEqual({ slug: "acme-inc", name: "Acme" });
+    expect(plan.existingSource).toBeNull();
+  });
+
+  it("404s an unknown recommendation", async () => {
+    const { fetch } = await makeApp();
+    const res = await fetch(
+      new Request("http://x/v1/admin/submissions/recommendations/rec_nope/plan"),
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+type PlanDb = Parameters<typeof buildRecommendationPlan>[0];
+
+describe("buildRecommendationPlan", () => {
+  const feedEval: Evaluate = async (url) => ({
+    recommendedMethod: "feed",
+    recommendedUrl: "https://docs.acme.test/changelog.xml",
+    feedUrl: "https://docs.acme.test/changelog.xml",
+    feedType: "rss",
+    pageStructure: "unknown",
+    alternatives: [],
+    confidence: "high",
+    notes: url,
+  });
+
+  it("matches the parent domain and keeps the page URL with the feed in metadata", async () => {
+    const db = createTestDb();
+    await db
+      .insert(organizations)
+      .values({ id: "org_acme", slug: "acme", name: "Acme", domain: "acme.test" });
+    await db.insert(sources).values({
+      id: "src_dup",
+      orgId: "org_acme",
+      slug: "changelog",
+      name: "Acme Changelog",
+      type: "feed",
+      url: "https://docs.acme.test/changelog",
+    });
+    await db.insert(recommendations).values({
+      id: "rec_feed",
+      createdAt: 1,
+      url: "https://docs.acme.test/changelog",
+    });
+
+    const plan = (await buildRecommendationPlan(db as unknown as PlanDb, "rec_feed", feedEval))!;
+    expect(plan.matchedOrg?.slug).toBe("acme");
+    expect(plan.source.type).toBe("feed");
+    expect(plan.source.url).toBe("https://docs.acme.test/changelog");
+    expect(plan.source.metadata.feedUrl).toBe("https://docs.acme.test/changelog.xml");
+    expect(plan.existingSource).toEqual({
+      orgSlug: "acme",
+      slug: "changelog",
+      name: "Acme Changelog",
+    });
+  });
+
+  it("suggests a new org from the root domain when nothing matches", async () => {
+    const db = createTestDb();
+    await db.insert(recommendations).values({
+      id: "rec_new",
+      createdAt: 1,
+      url: "https://updates.rocket-labs.co.uk/notes",
+    });
+    const plan = (await buildRecommendationPlan(db as unknown as PlanDb, "rec_new", feedEval))!;
+    // Public-suffix aware: not "co.uk"-style truncation, and not the subdomain.
+    expect(plan.matchedOrg).toBeNull();
+    expect(plan.newOrg).toEqual({
+      name: "Rocket Labs",
+      slug: "rocket-labs",
+      domain: "rocket-labs.co.uk",
+    });
+    expect(plan.source.name).toBe("Rocket Labs Changelog");
   });
 });
