@@ -32,12 +32,12 @@ export default function NotFound() {
             docs
           </Link>
           {", "}
-          <a
-            href="https://api.releases.sh/v1/docs"
+          <Link
+            href="/docs/api/rest"
             className="underline underline-offset-4 hover:text-stone-600 dark:hover:text-stone-300"
           >
             API
-          </a>
+          </Link>
         </p>
       </div>
     </div>

@@ -28,6 +28,7 @@
     "tests/evals/fixtures/tool-ux/runs",
     "packages/api-types/graphql/schema.graphql",
     "CHANGELOG.md",
+    "apps/web/src/content/openapi.json",
     "packages/core/fixtures/changelog-publish",
     "plans",
     "apps/cli/npm/*/bin",

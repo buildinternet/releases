@@ -229,6 +229,18 @@ jobs:
         # ALLOWLIST. Sub-second pure-JS check; no network, D1, or Wrangler.
         run: bun scripts/check-openapi-coverage.ts
 
+      - name: Verify the docs API reference matches the spec
+        # Regenerates apps/web/src/content/openapi.json + docs/api/reference/*
+        # from the production spec (in-process, no network) and fails on any
+        # drift, so a public API change ships with its regenerated reference.
+        run: |
+          bun run docs:openapi
+          if [ -n "$(git status --porcelain apps/web/src/content)" ]; then
+            git status --porcelain apps/web/src/content
+            echo "ERROR: the docs API reference is stale. Regenerate with: bun run docs:openapi" >&2
+            exit 1
+          fi
+
       - name: Run tests
         run: bun run test
 

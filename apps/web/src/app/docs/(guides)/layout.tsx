@@ -1,13 +1,15 @@
 import { DocsNav, type DocsNavSection } from "@/components/docs-nav";
 import { DocsToc } from "@/components/docs-toc";
 import { adminDocs } from "@/flags";
-import { docsManifest, groupBySection } from "@/lib/docs-manifest";
+import { docsManifest, groupBySection, guidesNavEntries } from "@/lib/docs-manifest";
 
 function navSections(): DocsNavSection[] {
-  return groupBySection(docsManifest({ includeAdmin: adminDocs })).map(({ section, items }) => ({
-    title: section,
-    items: items.map((entry) => ({ label: entry.label, href: entry.path })),
-  }));
+  return groupBySection(guidesNavEntries(docsManifest({ includeAdmin: adminDocs }))).map(
+    ({ section, items }) => ({
+      title: section,
+      items: items.map((entry) => ({ label: entry.label, href: entry.path })),
+    }),
+  );
 }
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {

@@ -6,6 +6,7 @@ import { InstallTabs } from "@/components/install-tabs";
 import { docMarkdownComponents } from "@/components/markdown-components";
 import { McpInstallButtons } from "@/components/mcp-install-buttons";
 import { SkillsInstall } from "@/components/skills-install";
+import { APIPage } from "@/components/docs/api-page";
 import { LatestCompare, SearchCompare } from "@/components/docs/examples-compare";
 
 /** Content only shown when admin docs are on (local dev). Stripped from `.md` exports too. */
@@ -26,6 +27,7 @@ export const docsMdxComponents: MDXComponents = {
   ...docMarkdownComponents,
   pre: CodeBlock,
   AdminOnly,
+  APIPage,
   InstallTabs: () => (
     <div className="not-prose my-8">
       <InstallTabs />

@@ -15,7 +15,7 @@ const markdownComponents = {
 /**
  * Renders a static markdown page from `src/content/pages/` (privacy, terms, …)
  * with the docs typography and a Copy page button. Docs pages under `/docs`
- * are MDX and render through `app/docs/[[...slug]]` instead.
+ * are MDX and render through `app/docs/(guides)/[[...slug]]` and `app/docs/api/reference/` instead.
  */
 export function MarkdownDoc({ slug, viewHref }: { slug: string; viewHref: string }) {
   const doc = loadPage(slug);

@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "@releases/design-system/tokens.css";
 @import "tw-animate-css";
+/* Docs API reference (fumadocs-openapi). The presets only register the utility
+   classes its components (and the fumadocs-ui primitives they use) emit; no
+   fumadocs-ui base styles or theme are imported — the `fd-*` colors are mapped
+   onto our tokens below. */
+@import "fumadocs-openapi/css/preset.css";
+@import "fumadocs-ui/css/generated/shared.css";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -13,6 +19,81 @@
    collapses to a single column and the Aside/PromoRail drop below the content
    as footer blocks. Scan the package source explicitly so its classes emit. */
 @source "../../../../packages/design-system/src";
+
+/* fumadocs color tokens → the stone palette the docs pages use (plus the site
+   accent), so the API reference follows the site theme instead of fumadocs'
+   neutral palette. Dark values are overridden under `.dark` below. */
+@theme {
+  --color-fd-background: var(--color-white);
+  --color-fd-foreground: var(--color-stone-900);
+  --color-fd-muted: var(--color-stone-100);
+  --color-fd-muted-foreground: var(--color-stone-500);
+  --color-fd-popover: var(--color-white);
+  --color-fd-popover-foreground: var(--color-stone-900);
+  --color-fd-card: var(--color-white);
+  --color-fd-card-foreground: var(--color-stone-900);
+  --color-fd-border: var(--color-stone-200);
+  --color-fd-primary: var(--accent);
+  --color-fd-primary-foreground: var(--on-accent);
+  --color-fd-secondary: var(--color-stone-100);
+  --color-fd-secondary-foreground: var(--color-stone-900);
+  --color-fd-accent: var(--color-stone-100);
+  --color-fd-accent-foreground: var(--color-stone-900);
+  --color-fd-ring: var(--accent);
+  --color-fd-overlay: rgb(0 0 0 / 0.2);
+  --color-fd-info: oklch(62.3% 0.214 259.815);
+  --color-fd-warning: oklch(76.9% 0.188 70.08);
+  --color-fd-error: oklch(63.7% 0.237 25.331);
+  --color-fd-success: oklch(72.3% 0.219 149.579);
+  --color-fd-idea: oklch(70.5% 0.209 60.849);
+}
+.dark {
+  --color-fd-background: var(--color-stone-950);
+  --color-fd-foreground: var(--color-stone-100);
+  --color-fd-muted: var(--color-stone-800);
+  --color-fd-muted-foreground: var(--color-stone-400);
+  --color-fd-popover: var(--color-stone-900);
+  --color-fd-popover-foreground: var(--color-stone-100);
+  --color-fd-card: var(--color-stone-900);
+  --color-fd-card-foreground: var(--color-stone-100);
+  --color-fd-border: var(--color-stone-800);
+  --color-fd-secondary: var(--color-stone-800);
+  --color-fd-secondary-foreground: var(--color-stone-100);
+  --color-fd-accent: var(--color-stone-800);
+  --color-fd-accent-foreground: var(--color-stone-100);
+}
+
+/* Tailwind v4 borders default to currentColor; fumadocs-ui's base styles (not
+   imported) would set them to the fd border token. Do the same, scoped to the
+   API reference and its popups / playground dialog (portaled out of it), in the base layer so utilities still win. */
+@layer base {
+  :is(.api-reference, .bg-fd-popover, .bg-fd-background),
+  :is(.api-reference, .bg-fd-popover, .bg-fd-background) :is(*, ::before, ::after) {
+    border-color: var(--color-fd-border);
+  }
+}
+
+/* API reference typography: operation titles read as section headings (the
+   fumadocs-ui typography plugin that would size them isn't loaded), and code
+   samples sit on the card color instead of Shiki's theme background (the
+   global `.shiki` rule would paint github-dark's #24292e under dark mode). */
+.api-reference h2 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.api-reference .shiki,
+.bg-fd-background .shiki {
+  background-color: var(--color-fd-card) !important;
+}
+.api-reference .shiki span,
+.bg-fd-background .shiki span {
+  background-color: transparent !important;
+}
+/* fumadocs-ui's shiki.css (not imported) pads code lines; pad the block instead. */
+:is(.api-reference, .bg-fd-background) .shiki pre {
+  padding-inline: 1rem;
+}
 
 @theme {
   --font-mono:
@@ -107,7 +188,9 @@
   font-family: var(--font-mono);
 }
 
-.prose pre {
+/* `:not(.not-prose *)`: components that opt out of prose (the API reference's
+   code samples) style their own code blocks. */
+.prose pre:not(.not-prose *) {
   background-color: oklch(0.97 0.001 286.3); /* stone-100 */
   border: 1px solid oklch(0.923 0.003 286.3); /* stone-200 */
   border-radius: 0.375rem;
@@ -116,7 +199,7 @@
   font-size: 0.8125rem;
   line-height: 1.625;
 }
-.dark .prose pre {
+.dark .prose pre:not(.not-prose *) {
   background-color: oklch(0.268 0.007 286.3); /* stone-850ish */
   border-color: oklch(0.372 0.01 286.3); /* stone-750ish */
 }

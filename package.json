@@ -60,6 +60,7 @@
     "eval:weekly-digest": "bun tests/evals/weekly-digest.eval.ts",
     "gen:releases-schema": "bun scripts/gen-releases-json-schema.ts",
     "flags:docs": "bun scripts/gen-flag-docs.ts",
+    "docs:openapi": "bun scripts/generate-openapi-docs.ts",
     "smoke:catalog-web": "bun scripts/smoke-catalog-web.ts",
     "changeset": "changeset",
     "changeset:version": "changeset version && bun apps/cli/scripts/sync-version.ts && bun install",
