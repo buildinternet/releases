@@ -3,6 +3,16 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## November 7, 2026
+
+**Changed**
+- `GET /v1/releases/latest` with `since`, `until`, or `exclude` filters, and the MCP `get_latest_releases` tool, now respond much faster — these uncached requests previously scanned every release before returning the newest 20.
+
+## November 5, 2026
+
+**Changed**
+- `GET /v1/releases/latest?minImportance=` now responds in milliseconds instead of several seconds, and `/v1/stats` and `releases stats` load faster.
+
 ## November 4, 2026
 
 **Fixed**
