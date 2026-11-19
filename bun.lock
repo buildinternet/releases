@@ -104,37 +104,37 @@
     },
     "apps/cli/npm/releases": {
       "name": "@buildinternet/releases",
-      "version": "0.84.0",
+      "version": "0.85.0",
       "bin": {
         "releases": "bin/releases",
       },
       "optionalDependencies": {
-        "@buildinternet/releases-darwin-arm64": "0.84.0",
-        "@buildinternet/releases-darwin-x64": "0.84.0",
-        "@buildinternet/releases-linux-arm64": "0.84.0",
-        "@buildinternet/releases-linux-x64": "0.84.0",
-        "@buildinternet/releases-windows-x64": "0.84.0",
+        "@buildinternet/releases-darwin-arm64": "0.85.0",
+        "@buildinternet/releases-darwin-x64": "0.85.0",
+        "@buildinternet/releases-linux-arm64": "0.85.0",
+        "@buildinternet/releases-linux-x64": "0.85.0",
+        "@buildinternet/releases-windows-x64": "0.85.0",
       },
     },
     "apps/cli/npm/releases-darwin-arm64": {
       "name": "@buildinternet/releases-darwin-arm64",
-      "version": "0.84.0",
+      "version": "0.85.0",
     },
     "apps/cli/npm/releases-darwin-x64": {
       "name": "@buildinternet/releases-darwin-x64",
-      "version": "0.84.0",
+      "version": "0.85.0",
     },
     "apps/cli/npm/releases-linux-arm64": {
       "name": "@buildinternet/releases-linux-arm64",
-      "version": "0.84.0",
+      "version": "0.85.0",
     },
     "apps/cli/npm/releases-linux-x64": {
       "name": "@buildinternet/releases-linux-x64",
-      "version": "0.84.0",
+      "version": "0.85.0",
     },
     "apps/cli/npm/releases-windows-x64": {
       "name": "@buildinternet/releases-windows-x64",
-      "version": "0.84.0",
+      "version": "0.85.0",
     },
     "apps/web": {
       "name": "releases-web",
@@ -248,7 +248,7 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.60.1",
+      "version": "0.60.2",
       "dependencies": {
         "@buildinternet/releases-core": "^0.36.1",
         "zod": "^4.6.7",
@@ -317,7 +317,7 @@
     },
     "packages/releases-lib": {
       "name": "@buildinternet/releases-lib",
-      "version": "0.84.0",
+      "version": "0.85.0",
     },
     "packages/rendering": {
       "name": "@releases/rendering",
@@ -334,7 +334,7 @@
     },
     "packages/sdk": {
       "name": "@buildinternet/releases-sdk",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@buildinternet/releases-api-types": "workspace:*",
       },

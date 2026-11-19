@@ -1,5 +1,11 @@
 # @buildinternet/releases-api-types
 
+## 0.60.2
+
+### Patch Changes
+
+- 4e7f6f8: Keep `format: "uri"` on the https locator fields of the releases.json schema under zod 4.6, and fix the CLI README's plugin link and environment variable list.
+
 ## 0.60.1
 
 ### Patch Changes
