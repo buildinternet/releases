@@ -8,11 +8,11 @@ order. No sender hand-rolls markup.
 
 ## Lanes
 
-| Lane     | Messages                                                                                                                                                                                           | Tone                                     |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, submission added, ownership claim verified                                                                 | accent                                   |
-| Reader   | daily + weekly follow digest, collection weekly digest                                                                                                                                             | accent                                   |
-| Operator | cron report, staleness digest, recommendation, ownership claim verified, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, search no-results, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
+| Lane     | Messages                                                                                                                                                                        | Tone                                     |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Account  | verify, magic link, password reset, email change, workspace invitation, submission ack, submission added, ownership claim verified                                              | accent                                   |
+| Reader   | daily + weekly follow digest, collection weekly digest                                                                                                                          | accent                                   |
+| Operator | cron report, staleness digest, recommendation, ownership claim verified, CLI feedback, and the `[alert]` family (cron crash, poll-and-fetch, webhook DLQ, webhook auto-disable) | `warn` when degraded, `crit` when failed |
 
 The lane label sits in the masthead; the tone colors the 3px rule at the top of
 the message (azure / amber / red), so severity reads before the subject does.
@@ -76,7 +76,6 @@ collapsed and blanks dropped:
 | staleness outage  | `[staleness] Firecrawl deliveries stopped for all 14 sources`                          |
 | cron report       | `[degraded] scrape-agent-sweep: degraded — 2/4 dispatched → 1 inserted (Example Co)`   |
 | webhook DLQ       | `[alert] webhook DLQ: 3 messages — Acme Inc`                                           |
-| search no-results | `[alert] search no-results: 24.0% zero-hit (29/120) — "sample zero hit" +1 more`       |
 
 A healthy cron run names nobody — there is no affected entity and the counts are
 the whole story. Operator subjects keep their `[alert]` / `[feedback]` prefixes
