@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## November 13, 2026
+
+**Added**
+- API reference in the docs — one generated page per endpoint at `/docs/api/reference`, with parameters, request and response schemas, code samples, and a try-it playground.
+
+**Changed**
+- `api.releases.sh/v1/docs` now redirects to the new API reference in the docs, and the API index and `/.well-known/api-catalog` link to it.
+- The homepage has a new headline ("Search what shipped this week"), a new display typeface, and the weekly collection digests now sit directly under the Recent ticker, above the featured orgs table.
+
 ## November 7, 2026
 
 **Changed**
