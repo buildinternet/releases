@@ -10,7 +10,6 @@ import {
   mapListingToRawReleases,
   appStoreCoordFromSource,
   resolveAppStore,
-  fetchAppStore,
   type AppStoreListing,
 } from "./appstore.js";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
@@ -161,10 +160,5 @@ describe("resolveAppStore (network)", () => {
     globalThis.fetch = (async () =>
       new Response("nope", { status: 403 })) as unknown as typeof fetch;
     expect(await resolveAppStore({ trackId: "1", platform: "ios", storefront: "us" })).toBeNull();
-  });
-
-  it("fetchAppStore returns [] when the source has no appStore meta", async () => {
-    const src = { type: "appstore", metadata: "{}" } as never;
-    expect(await fetchAppStore(src)).toEqual([]);
   });
 });

@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, sources, releases, products } from "@buildinternet/releases-core/schema";
 import {
-  resolveEffectiveCategory,
   recomputeReleaseEffectiveCategoryForOrg,
   recomputeReleaseEffectiveCategoryForProduct,
   recomputeReleaseEffectiveCategoryForSource,
@@ -20,19 +19,6 @@ async function loadCats(db: D1Db): Promise<Record<string, string | null>> {
   `);
   return Object.fromEntries(rows.map((r) => [r.id, r.cat]));
 }
-
-describe("resolveEffectiveCategory", () => {
-  it("prefers product over org", () => {
-    expect(resolveEffectiveCategory("framework", "cloud")).toBe("framework");
-  });
-  it("falls through to org when product is null", () => {
-    expect(resolveEffectiveCategory(null, "ai")).toBe("ai");
-    expect(resolveEffectiveCategory(undefined, "ai")).toBe("ai");
-  });
-  it("returns null when both absent", () => {
-    expect(resolveEffectiveCategory(null, null)).toBeNull();
-  });
-});
 
 describe("recomputeReleaseEffectiveCategory", () => {
   let tdb: TestDatabase;

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
-import { getSourceActivityBuckets, getSourceReleasesPaginated } from "../src/queries/sources";
+import { getSourceActivityBuckets } from "../src/queries/sources";
 import { getLatestReleasesAcross } from "../src/queries/releases";
 import { applyMigrations } from "../../../tests/db-helper";
 import { createTestDb } from "./setup";
@@ -85,32 +85,6 @@ describe("getSourceActivityBuckets", () => {
 
     const total = rows.reduce((sum, r) => sum + Number(r.cnt), 0);
     expect(total).toBe(3);
-  });
-});
-
-describe("getSourceReleasesPaginated", () => {
-  it("hides prereleases by default so SSR matches the cursor feed", async () => {
-    const db = createTestDb();
-    await seed(db);
-
-    const rows = await getSourceReleasesPaginated(db as never, "src_demo", 20, 0);
-
-    const versions = rows.map((r) => r.version);
-    expect(versions).toContain("2.0.0");
-    expect(versions).toContain("2.1.0");
-    expect(versions).not.toContain("3.0.0-beta.1");
-  });
-
-  it("includes prereleases when explicitly requested", async () => {
-    const db = createTestDb();
-    await seed(db);
-
-    const rows = await getSourceReleasesPaginated(db as never, "src_demo", 20, 0, {
-      includePrereleases: true,
-    });
-
-    const versions = rows.map((r) => r.version);
-    expect(versions).toContain("3.0.0-beta.1");
   });
 });
 

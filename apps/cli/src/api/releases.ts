@@ -246,17 +246,6 @@ export async function upsertSummary(
   });
 }
 
-export async function getMonthlySummary(
-  sourceSlugOrId: string,
-  year: number,
-  month: number,
-): Promise<ReleaseSummary | undefined> {
-  const rows = await apiFetch<ReleaseSummary[]>(
-    `/v1/sources/${encodeURIComponent(sourceSlugOrId)}/summaries?type=monthly&year=${year}&month=${month}`,
-  );
-  return rows?.[0];
-}
-
 export async function deleteReleasesForSource(
   source: Pick<Source, "id">,
   opts?: { hard?: boolean },
@@ -269,12 +258,4 @@ export async function deleteReleasesForSource(
   return apiFetch(`/v1/sources/${encodeURIComponent(source.id)}/releases${query}`, {
     method: "DELETE",
   });
-}
-
-// ── Query releases with media ──
-
-export async function queryReleasesWithMedia(): Promise<
-  { id: string; sourceId: string; media: string }[]
-> {
-  return apiFetch("/v1/releases?hasMedia=true&fields=id,sourceId,media");
 }

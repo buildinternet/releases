@@ -278,36 +278,6 @@ export type SourceReleaseRow = {
   coverage_count: number;
 };
 
-export async function getSourceReleasesPaginated(
-  db: D1Db,
-  sourceId: string,
-  pageSize: number,
-  offset: number,
-  opts: { includeCoverage?: boolean; includePrereleases?: boolean } = {},
-): Promise<SourceReleaseRow[]> {
-  const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
-  // Matches the default in `getSourceReleasesFeed`: prereleases are hidden
-  // unless the caller asks for them. Keeps SSR (this query) and the cursor
-  // feed (used by the client-side filter UI) in sync — otherwise the first
-  // paint includes canaries that disappear the moment any filter is toggled.
-  const prereleaseWhere = opts.includePrereleases
-    ? sql``
-    : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
-  return db.all<SourceReleaseRow>(sql`
-    SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated, r.title_short,
-           r.breaking, r.importance, r.content, r.published_at, r.fetched_at, r.url, r.media,
-           ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
-    FROM ${sql.raw(releasesTable)} r
-    WHERE r.source_id = ${sourceId}
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
-      ${prereleaseWhere}
-    ORDER BY
-      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
-      r.published_at DESC, r.fetched_at DESC
-    LIMIT ${pageSize} OFFSET ${offset}
-  `);
-}
-
 export type SourceFeedReleaseRow = SourceReleaseRow & {
   fetched_at: string;
   prerelease: 0 | 1;

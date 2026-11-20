@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { accessTokenNeedsRefresh } from "./uploads-oauth-tokens.js";
 import {
   DEFAULT_UPLOADS_OAUTH,
-  UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS,
   buildUploadsAuthorizeUrl,
   exchangeAuthorizationCode,
   refreshUploadsAccessToken,
@@ -69,15 +68,6 @@ describe("uploads-oauth config", () => {
     expect(uploadsOAuthRedirectUri(env, "http://127.0.0.1:8788")).toBe(
       "https://releases.sh/integrations/uploads/callback",
     );
-  });
-
-  it("lists the four registered web-origin callbacks", () => {
-    expect([...UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS]).toEqual([
-      "https://releases.sh/integrations/uploads/callback",
-      "http://localhost:3000/integrations/uploads/callback",
-      "http://127.0.0.1:3000/integrations/uploads/callback",
-      "https://releases.localhost/integrations/uploads/callback",
-    ]);
   });
 
   it("honors an explicit redirect override", () => {

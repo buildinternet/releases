@@ -104,31 +104,6 @@ async function resolveOptional(
   }
 }
 
-/**
- * Legacy mapping from the API's old flat `{ error: "<code>" }` body to a
- * friendly message. The API now returns the standardized nested envelope
- * (`{ error: { code, type, message } }`), which `apiFetch`/`ApiError`
- * already resolve to a human message directly — `postRecommendation` no
- * longer calls this. Kept (and exported) for its existing characterization
- * coverage; safe to remove once that coverage is retired.
- */
-export function submitErrorMessage(error: string | undefined, status: number): string {
-  switch (error) {
-    case "url_required":
-      return "That URL was rejected — provide a valid http(s) URL.";
-    case "invalid_email":
-      return "The contact email looks invalid — fix it or omit --contact.";
-    case "rate_limited":
-      return "Too many submissions. Please try again in a minute.";
-    case "recommendations_disabled":
-      return "Submissions are temporarily disabled. Please try again later.";
-    case "payload_too_large":
-      return "That submission is too large.";
-    default:
-      return `server returned ${status}`;
-  }
-}
-
 async function postRecommendation(
   payload: RecommendationPayload,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {

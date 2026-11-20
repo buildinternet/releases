@@ -15,17 +15,6 @@ export const UPLOADS_OAUTH_CALLBACK_PATH = "/integrations/uploads/callback";
 export const UPLOADS_OAUTH_PROVIDER = "uploads" as const;
 export const UPLOADS_OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 
-/**
- * Callbacks the `releases-sh` client must allow-list. Web origin only —
- * never `localhost:8788` (that's uploads-auth / Releases MCP preview).
- */
-export const UPLOADS_OAUTH_REGISTERED_REDIRECT_URIS = [
-  "https://releases.sh/integrations/uploads/callback",
-  "http://localhost:3000/integrations/uploads/callback",
-  "http://127.0.0.1:3000/integrations/uploads/callback",
-  "https://releases.localhost/integrations/uploads/callback",
-] as const;
-
 /** MCP preview (`preview:mcp`) — trusted for CORS, never an uploads redirect. */
 const MCP_PREVIEW_PORTS = new Set(["8788"]);
 

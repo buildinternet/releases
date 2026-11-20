@@ -27,7 +27,6 @@ import {
   formatRecommendationAddedEmail,
   formatRecommendationEmail,
 } from "./recommendation-email.js";
-import { buildNoResultsAlert } from "../search/search-no-results.js";
 import { formatCronCrashAlert } from "./send-alert.js";
 import {
   formatAutoDisableAlert,
@@ -60,7 +59,6 @@ export type EmailSampleId =
   | "operator.staleness-digest"
   | "operator.alert.cron-crash"
   | "operator.alert.poll-fetch"
-  | "operator.alert.search-no-results"
   | "operator.alert.webhook-dlq"
   | "operator.alert.webhook-auto-disable";
 
@@ -178,12 +176,6 @@ export const EMAIL_SAMPLE_CATALOG: EmailSampleMeta[] = [
     id: "operator.alert.poll-fetch",
     label: "Alert: poll-and-fetch failure",
     description: "Tier-1 alert when sources fail during poll-and-fetch",
-    channel: "operator",
-  },
-  {
-    id: "operator.alert.search-no-results",
-    label: "Alert: search no-results spike",
-    description: "Tier-1 alert when zero-hit search rate exceeds threshold",
     channel: "operator",
   },
   {
@@ -597,19 +589,6 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
       );
       return alert;
     }
-    case "operator.alert.search-no-results":
-      return buildNoResultsAlert(
-        {
-          total: 120,
-          zeroHits: 29,
-          topQueries: [
-            { query: "sample zero hit", count: 8, lastSeen: Date.now() },
-            { query: "another miss", count: 5, lastSeen: Date.now() },
-          ],
-        },
-        { fire: true, ratio: 0.24 },
-        { thresholdPct: 20, minVolume: 50 },
-      );
     // Rendered by the REAL formatters (shared via core-internal) rather than
     // rebuilt here: a hand-copied preview drifts from what operators actually
     // receive, which defeats the point of having a preview at all.

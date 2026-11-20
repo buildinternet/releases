@@ -10,14 +10,6 @@
 import { sql } from "drizzle-orm";
 import { IN_ARRAY_CHUNK_SIZE, chunkArray } from "@buildinternet/releases-core/d1-limits";
 
-/** Pure COALESCE — product wins, then org, else null. */
-export function resolveEffectiveCategory(
-  productCategory: string | null | undefined,
-  orgCategory: string | null | undefined,
-): string | null {
-  return productCategory ?? orgCategory ?? null;
-}
-
 /** Minimal runner for the recompute UPDATEs (drizzle + raw sql). */
 export type EffectiveCategoryDb = {
   run(query: ReturnType<typeof sql>): Promise<unknown>;

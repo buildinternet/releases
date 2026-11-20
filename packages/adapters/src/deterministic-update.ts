@@ -57,15 +57,6 @@ export interface UpdateLoopOptions {
 
 const ERROR_WITH_CATEGORY = /^Error \[([a-z]+)\]:\s*(.*)$/s;
 
-/**
- * Category from a `scrapeFetch` `Error [category]: …` result string, else null.
- * The single source of truth for this wire format — the agent path's
- * `extractToolErrorCategory` delegates here so the two can't drift.
- */
-export function scrapeFetchErrorCategory(raw: string): string | null {
-  return raw.match(ERROR_WITH_CATEGORY)?.[1] ?? null;
-}
-
 /** Normalize a `scrapeFetch` result string into a structured outcome. */
 export function parseScrapeFetchResult(source: string, raw: string): ScrapeFetchOutcome {
   const fail = (error: string, errorCategory?: string): ScrapeFetchOutcome => ({

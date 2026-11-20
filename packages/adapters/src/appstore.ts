@@ -172,15 +172,6 @@ export async function resolveAppStoreByBundleId(
   );
 }
 
-/** Convenience: resolve straight from a source row. */
-export async function fetchAppStore(source: Source): Promise<RawRelease[]> {
-  const coord = appStoreCoordFromSource(source);
-  if (!coord) return [];
-  const listing = await resolveAppStore(coord);
-  if (!listing) return [];
-  return mapListingToRawReleases(listing, coord);
-}
-
 /**
  * Parse the read-surface app info (platform + icon) from a source row's `type`
  * + raw `metadata` JSON. Returns null for non-appstore sources. Defensive
