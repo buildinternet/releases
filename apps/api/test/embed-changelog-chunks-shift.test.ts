@@ -21,8 +21,9 @@ import {
   sourceChangelogFiles,
   sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
-import { applyChunkOffsetUpdates, applyOnDiff, setChunkVectorIds } from "../src/cron/poll-fetch.js";
+import { applyOnDiff, setChunkVectorIds } from "../src/cron/poll-fetch.js";
 import type { D1Db } from "../src/db.js";
+import type { DiffResult } from "@releases/search/embed-changelogs.js";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -110,7 +111,16 @@ async function seed(db: ReturnType<typeof mkDb>) {
   ]);
 }
 
-describe("applyChunkOffsetUpdates", () => {
+/** Drive the production entry point with an unchanged-only diff. */
+function shiftOffsets(db: ReturnType<typeof asD1>, unchanged: DiffResult["unchanged"]) {
+  return applyOnDiff(db, {
+    fileId: "scf_a",
+    sourceId: "src_a",
+    diff: { toDelete: [], unchanged, toReembed: [], toInsert: [] },
+  });
+}
+
+describe("applyOnDiff offset shifts (park-and-shift)", () => {
   it("survives a forward shift that would collide on UNIQUE(file, offset)", async () => {
     const db = mkDb();
     await seed(db);
@@ -118,7 +128,7 @@ describe("applyChunkOffsetUpdates", () => {
     // Every chunk shifts forward by 100 — the previous offsets are all still
     // occupied when the loop starts. A naive one-pass UPDATE collides on the
     // unique index.
-    await applyChunkOffsetUpdates(asD1(db), [
+    await shiftOffsets(asD1(db), [
       {
         id: "scc_a",
         chunk: {
@@ -172,7 +182,7 @@ describe("applyChunkOffsetUpdates", () => {
     await seed(db);
 
     // Pure swap of A↔B's offsets — no naive ordering avoids collision.
-    await applyChunkOffsetUpdates(asD1(db), [
+    await shiftOffsets(asD1(db), [
       {
         id: "scc_a",
         chunk: {
@@ -208,14 +218,6 @@ describe("applyChunkOffsetUpdates", () => {
 
     expect(a[0].offset).toBe(200);
     expect(b[0].offset).toBe(100);
-  });
-
-  it("is a no-op for an empty list", async () => {
-    const db = mkDb();
-    await seed(db);
-    await applyChunkOffsetUpdates(asD1(db), []);
-    const rows = await db.select().from(sourceChangelogChunks);
-    expect(rows).toHaveLength(3);
   });
 });
 

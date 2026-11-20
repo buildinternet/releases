@@ -2,7 +2,6 @@ import { describe, it, expect } from "bun:test";
 import {
   validateUrl,
   buildRecommendationPayload,
-  submitErrorMessage,
   buildNotifyAddedBody,
 } from "../../src/cli/commands/recommend.js";
 import { InvalidInputError } from "../../src/lib/errors.js";
@@ -69,21 +68,6 @@ describe("buildRecommendationPayload", () => {
     });
     expect(p.note).toBeUndefined();
     expect(p.contactEmail).toBeUndefined();
-  });
-});
-
-describe("submitErrorMessage", () => {
-  it("maps each known API error code to an operator-friendly message", () => {
-    expect(submitErrorMessage("url_required", 400)).toContain("URL");
-    expect(submitErrorMessage("invalid_email", 400).toLowerCase()).toContain("email");
-    expect(submitErrorMessage("rate_limited", 429).toLowerCase()).toContain("too many");
-    expect(submitErrorMessage("recommendations_disabled", 503).toLowerCase()).toContain("disabled");
-    expect(submitErrorMessage("payload_too_large", 413).toLowerCase()).toContain("too large");
-  });
-
-  it("falls back to the raw status for an unknown code", () => {
-    expect(submitErrorMessage("something_new", 500)).toBe("server returned 500");
-    expect(submitErrorMessage(undefined, 502)).toBe("server returned 502");
   });
 });
 

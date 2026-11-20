@@ -23,7 +23,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-describe("me-webhooks client wire contract", () => {
+describe("user-owned webhooks (MY_WEBHOOKS) route to /v1/me/webhooks", () => {
   let originalFetch: typeof globalThis.fetch;
   let calls: Array<{ url: string; method: string; body: unknown }> = [];
   let responder: (url: string) => Response;
@@ -46,109 +46,28 @@ describe("me-webhooks client wire contract", () => {
     globalThis.fetch = originalFetch;
   });
 
-  it("listMyWebhooks GETs /v1/me/webhooks", async () => {
+  it("listWebhooks(MY_WEBHOOKS) GETs /v1/me/webhooks", async () => {
     responder = () => json({ subscriptions: [{ id: "whk_1", scope: "follows" }] });
-    const subs = await client.listMyWebhooks();
-    expect(subs).toHaveLength(1);
+    const { subscriptions } = await client.listWebhooks(client.MY_WEBHOOKS);
+    expect(subscriptions).toHaveLength(1);
     expect(calls[0]!.method).toBe("GET");
     expect(calls[0]!.url.endsWith("/v1/me/webhooks")).toBe(true);
   });
 
-  it("createMyWebhook POSTs follows scope", async () => {
-    responder = () => json({ id: "whk_2", signingKey: "abc", scope: "follows" }, 201);
-    const created = await client.createMyWebhook({
-      url: "https://ex.com/h",
-      scope: "follows",
-    });
-    expect(created.signingKey).toBe("abc");
-    expect(calls[0]!.method).toBe("POST");
-    expect(calls[0]!.body).toEqual({ url: "https://ex.com/h", scope: "follows" });
-  });
-
-  it("createMyWebhook POSTs org scope with orgSlug", async () => {
-    responder = () => json({ id: "whk_3", signingKey: "def", scope: "org" });
-    await client.createMyWebhook({ url: "https://ex.com/o", orgSlug: "vercel" });
-    expect(calls[0]!.body).toEqual({ url: "https://ex.com/o", orgSlug: "vercel" });
-  });
-
-  it("createMyWebhook POSTs format discord", async () => {
-    responder = () => json({ id: "whk_d", format: "discord", scope: "org" }, 201);
-    await client.createMyWebhook({
-      url: "https://discord.com/api/webhooks/1/token",
-      orgSlug: "acme",
-      format: "discord",
-    });
-    expect(calls[0]!.body).toEqual({
-      url: "https://discord.com/api/webhooks/1/token",
-      orgSlug: "acme",
-      format: "discord",
-    });
-  });
-
-  it("createMyWebhook POSTs org filters and releaseType", async () => {
-    responder = () => json({ id: "whk_7", signingKey: "ghi", scope: "org" });
-    await client.createMyWebhook({
-      url: "https://ex.com/f",
-      orgSlug: "vercel",
-      productSlug: "next-js",
-      sourceSlug: "changelog",
-      releaseType: "feature",
-    });
-    expect(calls[0]!.body).toEqual({
-      url: "https://ex.com/f",
-      orgSlug: "vercel",
-      productSlug: "next-js",
-      sourceSlug: "changelog",
-      releaseType: "feature",
-    });
-  });
-
-  it("updateMyWebhook PATCHes filter fields", async () => {
+  it("updateWebhook(MY_WEBHOOKS) PATCHes /v1/me/webhooks/:id with the fields as the body", async () => {
     responder = () => json({ id: "whk_8", releaseType: "rollup" });
-    await client.updateMyWebhook("whk_8", {
+    await client.updateWebhook(client.MY_WEBHOOKS, "whk_8", {
       productSlug: "next-js",
       releaseType: "rollup",
       sourceId: null,
     });
+    expect(calls[0]!.method).toBe("PATCH");
+    expect(calls[0]!.url.endsWith("/v1/me/webhooks/whk_8")).toBe(true);
     expect(calls[0]!.body).toEqual({
       productSlug: "next-js",
       releaseType: "rollup",
       sourceId: null,
     });
-  });
-
-  it("updateMyWebhook PATCHes format discord", async () => {
-    responder = () => json({ id: "whk_d2", format: "discord" });
-    await client.updateMyWebhook("whk_d2", {
-      format: "discord",
-      url: "https://discord.com/api/webhooks/2/token",
-    });
-    expect(calls[0]!.method).toBe("PATCH");
-    expect(calls[0]!.body).toEqual({
-      format: "discord",
-      url: "https://discord.com/api/webhooks/2/token",
-    });
-  });
-
-  it("updateMyWebhook PATCHes enabled", async () => {
-    responder = () => json({ id: "whk_4", enabled: false });
-    await client.updateMyWebhook("whk_4", { enabled: false });
-    expect(calls[0]!.method).toBe("PATCH");
-    expect(calls[0]!.url.endsWith("/v1/me/webhooks/whk_4")).toBe(true);
-    expect(calls[0]!.body).toEqual({ enabled: false });
-  });
-
-  it("deleteMyWebhook DELETEs by id", async () => {
-    responder = () => new Response(null, { status: 204 });
-    await client.deleteMyWebhook("whk_5");
-    expect(calls[0]!.method).toBe("DELETE");
-  });
-
-  it("testMyWebhook POSTs /test", async () => {
-    responder = () => json({ enqueued: true, eventId: "evt_1" });
-    const out = await client.testMyWebhook("whk_6");
-    expect(out.eventId).toBe("evt_1");
-    expect(calls[0]!.url.endsWith("/test")).toBe(true);
   });
 });
 

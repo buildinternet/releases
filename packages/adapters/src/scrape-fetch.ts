@@ -48,22 +48,6 @@ export function isSeedRun(knownReleases: readonly KnownRelease[]): boolean {
   return knownReleases.length === 0;
 }
 
-/**
- * True when the scrape path should route through full agent extraction rather
- * than incremental. Two conditions trigger this:
- *
- *   1. Seed run (no known releases) — incremental bails on an empty list.
- *   2. Crawl markdown — incremental deduplicates by title; per-post crawl
- *      pages share titles with existing fragment-URL rows and would produce
- *      zero new inserts. Agent extraction attributes canonical URLs per-entry.
- */
-export function shouldUseAgentExtraction(
-  cameFromCrawl: boolean,
-  knownReleases: readonly KnownRelease[],
-): boolean {
-  return isSeedRun(knownReleases) || cameFromCrawl;
-}
-
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface ScrapeEnv {
@@ -109,41 +93,6 @@ export interface ScrapeEnv {
 }
 
 // ── Content acquisition for scrape path ───────────────────────────
-
-/**
- * Derive a sensible default crawl include-pattern from the source URL.
- * For `https://resend.com/changelog` this returns `/changelog/**`.
- * Returns undefined when the URL has no meaningful path (e.g. bare domain).
- */
-export function deriveCrawlPattern(sourceUrl: string): string | undefined {
-  try {
-    const { pathname } = new URL(sourceUrl);
-    // Strip trailing slash, then require at least one path segment.
-    const path = pathname.replace(/\/+$/, "");
-    if (!path || path === "/") return undefined;
-    return `${path}/**`;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Compute the include-patterns array passed to `startCrawl`. Honors three
- * cases on `meta.crawlPattern`:
- *  - non-empty string → use that pattern verbatim
- *  - empty string     → no pattern filter (per-post URLs at unrelated paths)
- *  - undefined/absent → derive a sensible default from `source.url`
- */
-export function resolveCrawlIncludePatterns(
-  sourceUrl: string,
-  crawlPattern: string | undefined,
-): string[] {
-  if (typeof crawlPattern === "string") {
-    return crawlPattern.length > 0 ? [crawlPattern] : [];
-  }
-  const derived = deriveCrawlPattern(sourceUrl);
-  return derived ? [derived] : [];
-}
 
 /**
  * Outcome of a crawl-acquisition attempt.

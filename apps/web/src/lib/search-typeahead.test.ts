@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { UnifiedSearchResponse } from "./api.ts";
 import {
-  KIND_LABEL,
   launcherAction,
   moveHighlight,
   resultsMatchQuery,
@@ -250,7 +249,5 @@ describe("typeaheadItems", () => {
       secondary: "Google",
       kind: "source",
     });
-    expect(KIND_LABEL.source).toBe("Source");
-    expect(KIND_LABEL.product).toBe("Product");
   });
 });

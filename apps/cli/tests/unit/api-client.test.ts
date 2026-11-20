@@ -860,35 +860,6 @@ describe("getFetchLogs activeSession overlay (#1360)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// getMonthlySummary — null-safe 404 handling (#002)
-// ---------------------------------------------------------------------------
-
-describe("getMonthlySummary", () => {
-  let originalFetch: typeof globalThis.fetch;
-
-  beforeEach(() => {
-    originalFetch = globalThis.fetch;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  it("returns undefined from getMonthlySummary on GET 404", async () => {
-    mockFetch(404);
-    const result = await client.getMonthlySummary("src_123", 2026, 6);
-    expect(result).toBeUndefined();
-  });
-
-  it("returns the first row on 200", async () => {
-    const summaryRow = { id: "sum_1", sourceId: "src_123", year: 2026, month: 6 } as any;
-    mockFetch(200, [summaryRow]);
-    const result = await client.getMonthlySummary("src_123", 2026, 6);
-    expect(result).toEqual(summaryRow);
-  });
-});
-
 describe("apiFetch transport error context", () => {
   it("wraps transport errors with endpoint context", async () => {
     const original = globalThis.fetch;
@@ -1210,47 +1181,6 @@ describe("backfill and re-extract", () => {
     expect(body.sourceId).toBe("src_1");
     expect(body.dryRun).toBe(true);
     expect(result.via).toBe("snapshot");
-  });
-});
-
-// ── Batch overview ───────────────────────────────────────────────────────────
-
-// ── Media assets ─────────────────────────────────────────────────────────────
-
-describe("media assets", () => {
-  let originalFetch: typeof globalThis.fetch;
-  beforeEach(() => {
-    originalFetch = globalThis.fetch;
-  });
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  it("insertMediaAssets POSTs to /v1/media/assets with assets array", async () => {
-    const calls = captureFetch(200, { inserted: 2 });
-    const result = await client.insertMediaAssets([
-      {
-        releaseId: "rel_1",
-        url: "https://cdn.test/img.png",
-        contentHash: "abc",
-        mimeType: "image/png",
-        bytes: 100,
-      } as any,
-    ]);
-    expect(calls[0].url).toContain("/v1/media/assets");
-    expect(calls[0].init?.method).toBe("POST");
-    const body = JSON.parse(calls[0].init!.body as string);
-    expect(Array.isArray(body.assets)).toBe(true);
-    expect(result.inserted).toBe(2);
-  });
-
-  it("queryReleasesWithMedia GETs /v1/releases?hasMedia=true&fields=…", async () => {
-    const calls = captureFetch(200, [{ id: "rel_1", sourceId: "src_1", media: "[]" }]);
-    const result = await client.queryReleasesWithMedia();
-    expect(calls[0].url).toContain("/v1/releases");
-    expect(calls[0].url).toContain("hasMedia=true");
-    expect(calls[0].url).toContain("fields=id");
-    expect(result[0].id).toBe("rel_1");
   });
 });
 

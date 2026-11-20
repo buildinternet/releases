@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { importanceMarkerCopy, importanceMarkerLabel } from "./importance-marker";
+import { importanceMarkerCopy } from "./importance-marker";
 
 // Only 4 (major) and 5 (landmark) earn the flame; 1–3 stay silent.
 describe("importanceMarkerCopy", () => {
@@ -26,13 +26,5 @@ describe("importanceMarkerCopy", () => {
   test("null / undefined render nothing", () => {
     expect(importanceMarkerCopy(null)).toBeNull();
     expect(importanceMarkerCopy(undefined)).toBeNull();
-  });
-});
-
-describe("importanceMarkerLabel", () => {
-  test("delegates to copy.label", () => {
-    expect(importanceMarkerLabel(5)).toBe(importanceMarkerCopy(5)!.label);
-    expect(importanceMarkerLabel(4)).toBe(importanceMarkerCopy(4)!.label);
-    expect(importanceMarkerLabel(3)).toBeNull();
   });
 });

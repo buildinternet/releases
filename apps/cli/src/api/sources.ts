@@ -781,24 +781,6 @@ export async function getOverviewManifest(
 
 // ── Media Assets ──
 
-export interface MediaAssetInput {
-  r2Key: string;
-  sourceUrl: string;
-  sourceFilename: string | null;
-  contentType: string;
-  contentHash: string;
-  byteSize: number;
-  sourceId: string;
-  releaseId?: string;
-}
-
-export async function insertMediaAssets(assets: MediaAssetInput[]): Promise<{ inserted: number }> {
-  return apiFetch("/v1/media/assets", {
-    method: "POST",
-    body: JSON.stringify({ assets }),
-  });
-}
-
 export async function getMediaAssetStats(): Promise<{ count: number; totalBytes: number }> {
   return apiFetch("/v1/media/assets/stats");
 }

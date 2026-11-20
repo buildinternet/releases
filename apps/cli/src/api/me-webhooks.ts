@@ -129,25 +129,12 @@ export async function listWebhooks(
   };
 }
 
-/** List the signed-in user's own webhook subscriptions. */
-export async function listMyWebhooks(opts?: { enabled?: boolean }): Promise<UserWebhookListItem[]> {
-  const { subscriptions } = await listWebhooks(MY_WEBHOOKS, opts);
-  return subscriptions as UserWebhookListItem[];
-}
-
 /** Register a webhook for the given owner. The `signingKey` is shown once. */
 export async function createWebhook(
   owner: WebhookOwner,
   input: CreateUserWebhookInput,
 ): Promise<AnyCreateWebhookResponse> {
   return call((c) => hooks(c, owner).create(input));
-}
-
-/** Register a self-serve webhook. The `signingKey` is shown once. */
-export async function createMyWebhook(
-  input: CreateUserWebhookInput,
-): Promise<CreateUserWebhookResponse> {
-  return createWebhook(MY_WEBHOOKS, input) as Promise<CreateUserWebhookResponse>;
 }
 
 /** Read one subscription owned by `owner`. Returns null on 404. */
@@ -158,11 +145,6 @@ export async function getWebhook(
   return find((c) => hooks(c, owner).get(id));
 }
 
-/** Read one of the signed-in user's own subscriptions. Returns null on 404. */
-export async function getMyWebhook(id: string): Promise<AnyWebhookSubscription | null> {
-  return getWebhook(MY_WEBHOOKS, id);
-}
-
 export async function updateWebhook(
   owner: WebhookOwner,
   id: string,
@@ -171,19 +153,8 @@ export async function updateWebhook(
   return call((c) => hooks(c, owner).update(id, fields));
 }
 
-export async function updateMyWebhook(
-  id: string,
-  fields: UpdateMyWebhookInput,
-): Promise<AnyWebhookSubscription> {
-  return updateWebhook(MY_WEBHOOKS, id, fields);
-}
-
 export async function deleteWebhook(owner: WebhookOwner, id: string): Promise<void> {
   await call((c) => hooks(c, owner).delete(id));
-}
-
-export async function deleteMyWebhook(id: string): Promise<void> {
-  return deleteWebhook(MY_WEBHOOKS, id);
 }
 
 export async function rotateWebhookSecret(
@@ -193,19 +164,11 @@ export async function rotateWebhookSecret(
   return call((c) => hooks(c, owner).rotateSecret(id));
 }
 
-export async function rotateMyWebhookSecret(id: string): Promise<RotateUserWebhookSecretResponse> {
-  return rotateWebhookSecret(MY_WEBHOOKS, id);
-}
-
 export async function testWebhook(
   owner: WebhookOwner,
   id: string,
 ): Promise<TestUserWebhookResponse> {
   return call((c) => hooks(c, owner).test(id));
-}
-
-export async function testMyWebhook(id: string): Promise<TestUserWebhookResponse> {
-  return testWebhook(MY_WEBHOOKS, id);
 }
 
 export async function getWebhookDeliveries(

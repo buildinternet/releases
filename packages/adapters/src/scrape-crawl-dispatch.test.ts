@@ -1,8 +1,6 @@
 /**
  * Tests for the crawl-enabled dispatch helpers in `scrape-fetch.ts`:
  *
- *   - `deriveCrawlPattern`         — URL → include-pattern derivation (kept for back-compat)
- *   - `resolveCrawlIncludePatterns` — kept for back-compat, no longer wired to Cloudflare
  *   - `acquireCrawlMarkdown`        — dispatch with DI'd crawl primitives
  *
  * Crawl primitives are injected via the `CrawlDeps` parameter rather than
@@ -19,9 +17,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import { CrawlTimeoutError } from "@releases/lib/errors";
 import {
   acquireCrawlMarkdown,
-  deriveCrawlPattern,
   pathMatchesIncludePrefix,
-  resolveCrawlIncludePatterns,
   type CrawlDeps,
 } from "@releases/adapters/scrape-fetch";
 import { restoreGlobalFetch } from "../../../tests/global-fetch";
@@ -92,34 +88,6 @@ function makeDeps(behavior: {
   return recorder;
 }
 
-// ── deriveCrawlPattern ─────────────────────────────────────────────
-
-describe("deriveCrawlPattern", () => {
-  it("returns /changelog/** for https://resend.com/changelog", () => {
-    expect(deriveCrawlPattern("https://resend.com/changelog")).toBe("/changelog/**");
-  });
-
-  it("strips trailing slash before building the pattern", () => {
-    expect(deriveCrawlPattern("https://example.com/changelog/")).toBe("/changelog/**");
-  });
-
-  it("returns undefined for a bare domain (no meaningful path)", () => {
-    expect(deriveCrawlPattern("https://example.com")).toBeUndefined();
-  });
-
-  it("returns undefined for a bare domain with trailing slash", () => {
-    expect(deriveCrawlPattern("https://example.com/")).toBeUndefined();
-  });
-
-  it("builds a pattern from a deeper path", () => {
-    expect(deriveCrawlPattern("https://example.com/docs/changelog")).toBe("/docs/changelog/**");
-  });
-
-  it("returns undefined for an unparseable URL", () => {
-    expect(deriveCrawlPattern("not-a-url")).toBeUndefined();
-  });
-});
-
 // ── pathMatchesIncludePrefix ───────────────────────────────────────
 
 describe("pathMatchesIncludePrefix", () => {
@@ -158,30 +126,6 @@ describe("pathMatchesIncludePrefix", () => {
 
   it("returns false on a malformed pageUrl rather than throwing", () => {
     expect(pathMatchesIncludePrefix("not-a-url", source, "/changelog/")).toBe(false);
-  });
-});
-
-// ── resolveCrawlIncludePatterns ────────────────────────────────────
-
-describe("resolveCrawlIncludePatterns", () => {
-  it("uses an explicit non-empty crawlPattern verbatim", () => {
-    expect(resolveCrawlIncludePatterns("https://resend.com/changelog", "/posts/**")).toEqual([
-      "/posts/**",
-    ]);
-  });
-
-  it("returns an empty array when crawlPattern is the empty string (no filter)", () => {
-    expect(resolveCrawlIncludePatterns("https://resend.com/changelog", "")).toEqual([]);
-  });
-
-  it("derives a default from source.url when crawlPattern is undefined", () => {
-    expect(resolveCrawlIncludePatterns("https://resend.com/changelog", undefined)).toEqual([
-      "/changelog/**",
-    ]);
-  });
-
-  it("returns an empty array when crawlPattern is undefined and the URL has no path", () => {
-    expect(resolveCrawlIncludePatterns("https://example.com", undefined)).toEqual([]);
   });
 });
 

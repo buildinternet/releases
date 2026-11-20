@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { FLAGS, type FlagContext, flag, flagState, type FlagshipBinding } from "./flags.js";
+import { FLAGS, type FlagContext, flag, type FlagshipBinding } from "./flags.js";
 
 interface RecordingBinding extends FlagshipBinding {
   lastCall?: { key: string; defaultValue: boolean; context?: FlagContext };
@@ -92,45 +92,6 @@ describe("FLAGS registry", () => {
     const envs = defs.map((d) => d.env);
     expect(new Set(envs).size).toBe(envs.length);
     for (const e of envs) expect(e).toMatch(/^[A-Z0-9]+(_[A-Z0-9]+)*$/);
-  });
-});
-
-/** Stub binding that echoes the passed default — simulates an ABSENT Flagship key. */
-const echoingBinding: FlagshipBinding = {
-  getBooleanValue: async (_key, defaultValue) => defaultValue,
-};
-
-describe("flagState()", () => {
-  it("reads on/off from the var when the binding is absent", async () => {
-    expect(await flagState(undefined, "true", FLAGS.cacheDisabled)).toBe("on");
-    expect(await flagState(undefined, "false", FLAGS.cacheDisabled)).toBe("off");
-  });
-
-  it("returns unset when neither binding nor var supplies a value", async () => {
-    expect(await flagState(undefined, undefined, FLAGS.cacheDisabled)).toBe("unset");
-  });
-
-  it("reads an explicit Flagship value (present key wins over the probe defaults)", async () => {
-    expect(await flagState(bindingReturning(true), undefined, FLAGS.cacheDisabled)).toBe("on");
-    expect(await flagState(bindingReturning(false), undefined, FLAGS.cacheDisabled)).toBe("off");
-  });
-
-  it("returns unset when the Flagship key is absent (probe defaults differ)", async () => {
-    expect(await flagState(echoingBinding, undefined, FLAGS.cacheDisabled)).toBe("unset");
-  });
-
-  it("falls back to the var when the Flagship key is absent", async () => {
-    expect(await flagState(echoingBinding, "true", FLAGS.cacheDisabled)).toBe("on");
-    expect(await flagState(echoingBinding, "false", FLAGS.cacheDisabled)).toBe("off");
-  });
-
-  it("lets Flagship win over the var when the key is present", async () => {
-    expect(await flagState(bindingReturning(true), "false", FLAGS.cacheDisabled)).toBe("on");
-  });
-
-  it("collapses an eval error to the var, else unset", async () => {
-    expect(await flagState(throwingBinding, "true", FLAGS.cacheDisabled)).toBe("on");
-    expect(await flagState(throwingBinding, undefined, FLAGS.cacheDisabled)).toBe("unset");
   });
 });
 

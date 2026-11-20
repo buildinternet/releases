@@ -2895,20 +2895,6 @@ function buildChunkOffsetUpdateStatements(db: D1Db, unchanged: ReadonlyArray<Chu
 }
 
 /**
- * Wrapper that runs the park + final updates as a single atomic batch.
- * Kept exported for direct unit tests that exercise the offset-shift fix
- * in isolation; production code calls {@link applyOnDiff} instead.
- */
-export async function applyChunkOffsetUpdates(
-  db: D1Db,
-  unchanged: ReadonlyArray<ChunkOffsetUpdate>,
-): Promise<void> {
-  const ops = buildChunkOffsetUpdateStatements(db, unchanged);
-  if (ops.length === 0) return;
-  await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
-}
-
-/**
  * Apply a chunk-diff to D1 in a single atomic batch: stale rows are deleted,
  * unchanged rows park-and-shift to their new offsets, and new rows are
  * inserted with `vectorId = null` / `embeddedAt = null`. The follow-up

@@ -1,526 +1,151 @@
 import { describe, it, expect } from "bun:test";
-import {
-  sourceToMarkdown,
-  orgToMarkdown,
-  knowledgeToMarkdown,
-  type FormatSourceDetail,
-  type FormatOrgDetail,
-} from "../../src/lib/formatters.js";
-import type { OverviewPageItem } from "../../src/api/types.js";
+import { searchToMarkdown } from "../../src/lib/formatters.js";
+import type { UnifiedSearchResponse } from "../../src/api/types.js";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 
-const fullSource: FormatSourceDetail = {
-  slug: "next-js",
-  name: "Next.js",
-  type: "github",
-  url: "https://github.com/vercel/next.js",
-  changelogUrl: "https://nextjs.org/changelog",
-  org: { id: "org_vercel", slug: "vercel", name: "Vercel" },
-  releaseCount: 150,
-  latestVersion: "15.0.0",
-  latestDate: "2024-06-15T00:00:00Z",
-  lastFetchedAt: "2024-06-16T12:00:00Z",
-  trackingSince: "2024-01-01T00:00:00Z",
+const catalogHits: UnifiedSearchResponse["catalog"] = [
+  {
+    slug: "react",
+    name: "React",
+    orgSlug: "meta",
+    orgName: "Meta",
+    category: "frontend",
+    entryType: "product",
+  },
+  {
+    slug: "react-native",
+    name: "React Native",
+    orgSlug: "meta",
+    orgName: "Meta",
+    category: null,
+    entryType: "source",
+    sourceSlug: "react-native",
+  },
+];
+
+const searchResults: UnifiedSearchResponse = {
+  query: "react",
+  orgs: [{ slug: "meta", name: "Meta", domain: "meta.com", avatarUrl: null, category: "ai" }],
+  catalog: catalogHits,
+  products: catalogHits,
+  sources: [],
   releases: [
     {
-      version: "15.0.0",
-      title: "Next.js 15",
-      summary: "Major release with React 19 support",
-      content: "Full content here with **markdown**.",
-      publishedAt: "2024-06-15T00:00:00Z",
-      url: "https://github.com/vercel/next.js/releases/tag/v15.0.0",
-    },
-    {
-      version: "14.2.0",
-      title: "14.2.0",
-      summary: "Bug fixes",
-      publishedAt: "2024-05-01T00:00:00Z",
-      url: null,
-    },
-  ],
-  pagination: { nextCursor: null, limit: 20 },
-  summaries: {
-    rolling: {
-      windowDays: 90,
-      summary: "Focus on React 19 integration",
-      releaseCount: 10,
-      generatedAt: "2024-06-16T00:00:00Z",
-    },
-    monthly: [
-      {
-        year: 2024,
-        month: 6,
-        summary: "Major version bump",
-        releaseCount: 3,
-        generatedAt: "2024-06-16T00:00:00Z",
-      },
-    ],
-  },
-};
-
-const fullOrg: FormatOrgDetail = {
-  slug: "vercel",
-  name: "Vercel",
-  domain: "vercel.com",
-  avatarUrl: null,
-  description: "Frontend cloud platform",
-  category: "cloud",
-  tags: ["typescript", "edge"],
-  aliases: ["vercel.app", "nextjs.org"],
-  sourceCount: 5,
-  releaseCount: 300,
-  releasesLast30Days: 12,
-  avgReleasesPerWeek: 3.5,
-  lastFetchedAt: "2024-06-16T00:00:00Z",
-  lastPolledAt: "2024-06-16T06:00:00Z",
-  trackingSince: "2024-01-01T00:00:00Z",
-  accounts: [
-    { platform: "github", handle: "vercel" },
-    { platform: "twitter", handle: "vercel" },
-  ],
-  products: [
-    {
-      id: "prod_1",
-      slug: "nextjs",
-      name: "Next.js",
-      url: "https://nextjs.org",
-      description: "React framework",
-      sourceCount: 2,
-    },
-  ],
-  sources: [
-    {
-      slug: "next-js",
-      name: "Next.js",
-      type: "github",
-      releaseCount: 150,
-      latestVersion: "15.0.0",
-      latestDate: "2024-06-15",
-      isPrimary: true,
-    },
-    {
-      slug: "turbo",
-      name: "Turborepo",
-      type: "github",
-      releaseCount: 50,
-      latestVersion: "2.0.0",
-      latestDate: "2024-06-01",
+      id: "rel_react19",
+      sourceSlug: "react-releases",
+      sourceName: "React Releases",
+      orgSlug: "meta",
+      version: "19.0.0",
+      title: "React 19",
+      summary: "Major update with new features",
+      publishedAt: "2024-06-01T00:00:00Z",
     },
   ],
 };
 
-// ── sourceToMarkdown ───────────────────────────────────────────────
+// ── searchToMarkdown ──────────────────────────────────────────────
 
-describe("sourceToMarkdown", () => {
-  it("contains YAML frontmatter with correct fields", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("---");
-    expect(md).toContain("name: Next.js");
-    expect(md).toContain("slug: next-js");
-    expect(md).toContain("type: github");
-    expect(md).toContain("source_url: https://github.com/vercel/next.js");
-    expect(md).toContain("total_releases: 150");
-    expect(md).toContain("tracking_since: 2024-01-01");
+describe("searchToMarkdown", () => {
+  it("contains query in frontmatter", () => {
+    const md = searchToMarkdown(searchResults);
+    expect(md).toContain("query: react");
   });
 
-  it("contains organization fields when org is present", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("organization: Vercel");
-    expect(md).toContain("organization_slug: vercel");
+  it("has Organizations section with org details", () => {
+    const md = searchToMarkdown(searchResults);
+    expect(md).toContain("## Organizations");
+    expect(md).toContain("**Meta**");
+    expect(md).toContain("`meta`");
+    expect(md).toContain("[ai]");
   });
 
-  it("contains changelog_url when set", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("changelog_url: https://nextjs.org/changelog");
+  it("has Catalog section with product and standalone source details", () => {
+    const md = searchToMarkdown(searchResults);
+    expect(md).toContain("## Catalog");
+    expect(md).toContain("**React**");
+    expect(md).toContain("`react`");
+    expect(md).toContain("(Meta)");
+    expect(md).toContain("**React Native**");
+    expect(md).not.toContain("## Sources");
   });
 
-  it("contains latest_version and latest_date when set", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("latest_version: 15.0.0");
-    expect(md).toContain("latest_date: 2024-06-15");
+  it("falls back to deprecated `products` alias when `catalog` is absent", () => {
+    // Older API deploys send only `products`. Drop this test once the alias
+    // is removed from the wire (see monorepo issue #539 follow-up).
+    const legacyOnly = {
+      query: "react",
+      orgs: [],
+      products: catalogHits,
+      sources: [],
+      releases: [],
+    } as unknown as UnifiedSearchResponse;
+    const md = searchToMarkdown(legacyOnly);
+    expect(md).toContain("## Catalog");
+    expect(md).toContain("**React**");
   });
 
-  it("contains last_updated when lastFetchedAt is set", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("last_updated: 2024-06-16");
+  it("has Releases section with release details", () => {
+    const md = searchToMarkdown(searchResults);
+    expect(md).toContain("## Releases");
+    expect(md).toContain("**React Releases 19.0.0**");
+    expect(md).toContain("React 19");
+    expect(md).toContain("2024-06-01");
   });
 
-  it("contains rolling Summary tag with correct attributes", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain('<Summary type="rolling" window-days="90" release-count="10">');
-    expect(md).toContain("Focus on React 19 integration");
-    expect(md).toContain("</Summary>");
+  it("includes release summary as blockquote", () => {
+    const md = searchToMarkdown(searchResults);
+    expect(md).toContain("> Major update with new features");
   });
 
-  it("contains monthly Summary tags with period name", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain('<Summary type="monthly" period="June 2024"');
-    expect(md).toContain('release-count="3"');
-    expect(md).toContain("Major version bump");
+  it("includes view links when baseUrl is provided", () => {
+    const md = searchToMarkdown(searchResults, { baseUrl: "https://releases.sh" });
+    expect(md).toContain("[view](https://releases.sh/meta)");
+    expect(md).toContain("[view](https://releases.sh/meta/product/react)");
+    expect(md).toContain("[view](https://releases.sh/meta/react-native)");
   });
 
-  it("contains Release tags with version, date, url attributes", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain('version="15.0.0"');
-    expect(md).toContain('date="June 15, 2024"');
-    expect(md).toContain('published="2024-06-15T00:00:00Z"');
-    expect(md).toContain('url="https://github.com/vercel/next.js/releases/tag/v15.0.0"');
-    expect(md).toContain("</Release>");
-  });
-
-  it("prefers content over summary in release body", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("Full content here with **markdown**.");
-    // The summary for the first release should NOT appear since content is present
-    const firstReleaseBlock = md.split("</Release>")[0];
-    expect(firstReleaseBlock).not.toContain("Major release with React 19 support");
-  });
-
-  it("falls back to summary when content is missing", () => {
-    const md = sourceToMarkdown(fullSource);
-    // The second release has no content, so summary should appear
-    const secondReleaseBlock = md.split("</Release>")[1];
-    expect(secondReleaseBlock).toContain("Bug fixes");
-  });
-
-  it("omits title heading when title equals version", () => {
-    const md = sourceToMarkdown(fullSource);
-    // "14.2.0" is both version and title — no ## heading
-    const secondReleaseBlock = md.split("</Release>")[1];
-    expect(secondReleaseBlock).not.toContain("## 14.2.0");
-  });
-
-  it("shows title heading when title differs from version", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).toContain("## Next.js 15");
-  });
-
-  it("does NOT show Pagination when nextCursor is null", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).not.toContain("<Pagination");
-  });
-
-  it("shows Pagination tag when nextCursor is present", () => {
-    const source: FormatSourceDetail = {
-      ...fullSource,
-      pagination: { nextCursor: "tok_abc123", limit: 20 },
-    };
-    const md = sourceToMarkdown(source);
-    expect(md).toContain('<Pagination cursor="tok_abc123"');
-  });
-
-  it("includes canonical URL when baseUrl is provided", () => {
-    const md = sourceToMarkdown(fullSource, { baseUrl: "https://releases.sh" });
-    expect(md).toContain("canonical: https://releases.sh/vercel/next-js");
-    expect(md).toContain("organization_url: https://releases.sh/vercel");
-  });
-
-  it("includes next cursor URL in Pagination when baseUrl is provided", () => {
-    const source: FormatSourceDetail = {
-      ...fullSource,
-      pagination: { nextCursor: "tok_abc123", limit: 20 },
-    };
-    const md = sourceToMarkdown(source, { baseUrl: "https://releases.sh" });
-    expect(md).toContain('next="https://releases.sh/vercel/next-js.md?cursor=tok_abc123&limit=20"');
-  });
-
-  it("omits canonical URL when baseUrl is not provided", () => {
-    const md = sourceToMarkdown(fullSource);
-    expect(md).not.toContain("canonical:");
-    expect(md).not.toContain("organization_url:");
-  });
-
-  it("handles null latestVersion, latestDate, lastFetchedAt gracefully", () => {
-    const source: FormatSourceDetail = {
-      ...fullSource,
-      latestVersion: null,
-      latestDate: null,
-      lastFetchedAt: null,
-    };
-    const md = sourceToMarkdown(source);
-    expect(md).not.toContain("latest_version:");
-    expect(md).not.toContain("latest_date:");
-    expect(md).not.toContain("last_updated:");
-    // Should still produce valid output
-    expect(md).toContain("name: Next.js");
-  });
-
-  it("handles null org (no organization fields in frontmatter)", () => {
-    const source: FormatSourceDetail = {
-      ...fullSource,
-      org: null,
-    };
-    const md = sourceToMarkdown(source);
-    expect(md).not.toContain("organization:");
-    expect(md).not.toContain("organization_slug:");
-    // Without org, canonical path uses /source/ prefix
-    const mdWithBase = sourceToMarkdown(source, { baseUrl: "https://releases.sh" });
-    expect(mdWithBase).toContain("canonical: https://releases.sh/source/next-js");
-    expect(mdWithBase).not.toContain("organization_url:");
-  });
-
-  it("handles empty releases array", () => {
-    const source: FormatSourceDetail = {
-      ...fullSource,
+  it("shows 'No results found' when all arrays are empty", () => {
+    const empty: UnifiedSearchResponse = {
+      query: "nothing",
+      orgs: [],
+      catalog: [],
+      products: [],
+      sources: [],
       releases: [],
     };
-    const md = sourceToMarkdown(source);
-    expect(md).not.toContain("<Release");
-    expect(md).toContain("name: Next.js");
+    const md = searchToMarkdown(empty);
+    expect(md).toContain("No results found.");
+    expect(md).not.toContain("## Organizations");
+    expect(md).not.toContain("## Catalog");
+    expect(md).not.toContain("## Sources");
+    expect(md).not.toContain("## Releases");
   });
 
-  it("handles null/empty summaries", () => {
-    const source: FormatSourceDetail = {
-      ...fullSource,
-      summaries: { rolling: null, monthly: [] },
+  it("omits sections that have no results", () => {
+    const partial: UnifiedSearchResponse = {
+      query: "test",
+      orgs: [],
+      catalog: [],
+      products: [],
+      sources: [],
+      releases: [
+        {
+          id: "rel_foo1",
+          sourceSlug: "foo",
+          sourceName: "Foo",
+          orgSlug: null,
+          version: "1.0.0",
+          title: "Foo 1.0",
+          summary: "First release",
+          publishedAt: "2024-01-01T00:00:00Z",
+        },
+      ],
     };
-    const md = sourceToMarkdown(source);
-    expect(md).not.toContain("<Summary");
-    expect(md).toContain("name: Next.js");
-  });
-});
-
-// ── orgToMarkdown ──────────────────────────────────────────────────
-
-describe("orgToMarkdown", () => {
-  it("contains YAML frontmatter with correct fields", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain("name: Vercel");
-    expect(md).toContain("slug: vercel");
-    expect(md).toContain("domain: vercel.com");
-    expect(md).toContain("sources: 5");
-    expect(md).toContain("total_releases: 300");
-    expect(md).toContain("releases_last_30d: 12");
-    expect(md).toContain("avg_releases_per_week: 3.5");
-    expect(md).toContain("last_updated: 2024-06-16");
-    expect(md).toContain("tracking_since: 2024-01-01");
-  });
-
-  it("contains accounts block with platform/handle", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain("accounts:");
-    expect(md).toContain("  - platform: github");
-    expect(md).toContain("    handle: vercel");
-    expect(md).toContain("  - platform: twitter");
-  });
-
-  it("contains description when set", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain("description: Frontend cloud platform");
-  });
-
-  it("omits description when null", () => {
-    const org: FormatOrgDetail = { ...fullOrg, description: null };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("description:");
-  });
-
-  it("contains category when set", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain("category: cloud");
-  });
-
-  it("omits category when null", () => {
-    const org: FormatOrgDetail = { ...fullOrg, category: null };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("category:");
-  });
-
-  it("contains tags list when present", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain("tags:");
-    expect(md).toContain("  - typescript");
-    expect(md).toContain("  - edge");
-  });
-
-  it("omits tags block when empty", () => {
-    const org: FormatOrgDetail = { ...fullOrg, tags: [] };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("tags:");
-  });
-
-  it("contains aliases list when present", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain("aliases:");
-    expect(md).toContain("  - vercel.app");
-    expect(md).toContain("  - nextjs.org");
-  });
-
-  it("omits aliases block when empty", () => {
-    const org: FormatOrgDetail = { ...fullOrg, aliases: [] };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("aliases:");
-  });
-
-  it("contains Product tags when products are present", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain('<Product name="Next.js"');
-    expect(md).toContain('slug="nextjs"');
-    expect(md).toContain('sources="2"');
-    expect(md).toContain('url="https://nextjs.org"');
-  });
-
-  it("omits Product section when products are empty", () => {
-    const org: FormatOrgDetail = { ...fullOrg, products: [] };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("<Product");
-  });
-
-  it("omits accounts block when accounts array is empty", () => {
-    const org: FormatOrgDetail = { ...fullOrg, accounts: [] };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("accounts:");
-  });
-
-  it("contains Source tags with correct attributes", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).toContain('name="Next.js"');
-    expect(md).toContain('slug="next-js"');
-    expect(md).toContain('type="github"');
-    expect(md).toContain('releases="150"');
-    expect(md).toContain('latest-version="15.0.0"');
-    expect(md).toContain('latest-date="2024-06-15"');
-  });
-
-  it('Source tags include primary="true" for primary sources', () => {
-    const md = orgToMarkdown(fullOrg);
-    // Next.js is primary
-    expect(md).toContain('primary="true"');
-    // Turborepo line should NOT have primary
-    const turboLine = md.split("\n").find((l) => l.includes('slug="turbo"'));
-    expect(turboLine).toBeDefined();
-    expect(turboLine).not.toContain("primary");
-  });
-
-  it("includes canonical URL and source URLs when baseUrl is provided", () => {
-    const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
-    expect(md).toContain("canonical: https://releases.sh/vercel");
-    expect(md).toContain('url="https://releases.sh/vercel/next-js"');
-    expect(md).toContain('url="https://releases.sh/vercel/turbo"');
-  });
-
-  it("omits canonical URL when baseUrl is not provided", () => {
-    const md = orgToMarkdown(fullOrg);
-    expect(md).not.toContain("canonical:");
-  });
-
-  it("handles null domain gracefully", () => {
-    const org: FormatOrgDetail = { ...fullOrg, domain: null };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("domain:");
-    expect(md).toContain("name: Vercel");
-  });
-
-  it("handles null lastFetchedAt gracefully", () => {
-    const org: FormatOrgDetail = { ...fullOrg, lastFetchedAt: null };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("last_updated:");
-    expect(md).toContain("name: Vercel");
-  });
-
-  it("handles empty sources array", () => {
-    const org: FormatOrgDetail = { ...fullOrg, sources: [] };
-    const md = orgToMarkdown(org);
-    expect(md).not.toContain("<Source");
-    expect(md).toContain("name: Vercel");
-  });
-
-  it("includes overview_url when overview exists and baseUrl is provided", () => {
-    const org: FormatOrgDetail = {
-      ...fullOrg,
-      overview: {
-        scope: "org",
-        content: "test",
-        releaseCount: 10,
-        lastContributingReleaseAt: "2024-06-15T00:00:00Z",
-        generatedAt: "2024-06-16T00:00:00Z",
-        updatedAt: "2024-06-16T00:00:00Z",
-      },
-    };
-    const md = orgToMarkdown(org, { baseUrl: "https://releases.sh" });
-    expect(md).toContain("overview_url: https://releases.sh/vercel/overview.md");
-  });
-
-  it("omits overview_url when overview is absent", () => {
-    const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
-    expect(md).not.toContain("overview_url:");
-  });
-});
-
-// ── knowledgeToMarkdown ───────────────────────────────────────────
-
-describe("knowledgeToMarkdown", () => {
-  const fullKnowledge: OverviewPageItem = {
-    scope: "org",
-    content: "# Overview\n\nThis org ships fast.",
-    releaseCount: 42,
-    lastContributingReleaseAt: "2024-06-15T00:00:00Z",
-    generatedAt: "2024-06-16T00:00:00Z",
-    updatedAt: "2024-06-16T00:00:00Z",
-  };
-
-  it("contains frontmatter with scope and stats", () => {
-    const md = knowledgeToMarkdown(fullKnowledge, { orgSlug: "vercel" });
-    expect(md).toContain("scope: org");
-    expect(md).toContain("organization: vercel");
-    expect(md).toContain("release_count: 42");
-    expect(md).toContain("last_release: 2024-06-15");
-    expect(md).toContain("generated: 2024-06-16");
-    // updated omitted when it matches generated
-    expect(md).not.toContain("updated:");
-  });
-
-  it("includes updated frontmatter when content was amended after generation", () => {
-    const md = knowledgeToMarkdown(
-      {
-        ...fullKnowledge,
-        generatedAt: "2024-04-01T00:00:00Z",
-        updatedAt: "2024-07-04T00:00:00Z",
-      },
-      { orgSlug: "vercel" },
-    );
-    expect(md).toContain("generated: 2024-04-01");
-    expect(md).toContain("updated: 2024-07-04");
-  });
-
-  it("omits updated when timestamps are the same instant under different ISO forms", () => {
-    const md = knowledgeToMarkdown(
-      {
-        ...fullKnowledge,
-        generatedAt: "2024-06-16T00:00:00.000Z",
-        updatedAt: "2024-06-16T00:00:00+00:00",
-      },
-      { orgSlug: "vercel" },
-    );
-    expect(md).toContain("generated: 2024-06-16");
-    expect(md).not.toContain("updated:");
-  });
-
-  it("includes the content body after frontmatter", () => {
-    const md = knowledgeToMarkdown(fullKnowledge);
-    expect(md).toContain("# Overview");
-    expect(md).toContain("This org ships fast.");
-  });
-
-  it("includes canonical URL when baseUrl and orgSlug are provided", () => {
-    const md = knowledgeToMarkdown(fullKnowledge, {
-      baseUrl: "https://releases.sh",
-      orgSlug: "vercel",
-    });
-    expect(md).toContain("canonical: https://releases.sh/vercel/overview.md");
-  });
-
-  it("includes product slug for product-scoped pages", () => {
-    const knowledge: OverviewPageItem = { ...fullKnowledge, scope: "product" };
-    const md = knowledgeToMarkdown(knowledge, { productSlug: "nextjs" });
-    expect(md).toContain("scope: product");
-    expect(md).toContain("product: nextjs");
-  });
-
-  it("handles null lastContributingReleaseAt", () => {
-    const knowledge: OverviewPageItem = { ...fullKnowledge, lastContributingReleaseAt: null };
-    const md = knowledgeToMarkdown(knowledge);
-    expect(md).not.toContain("last_release:");
+    const md = searchToMarkdown(partial);
+    expect(md).not.toContain("## Organizations");
+    expect(md).not.toContain("## Catalog");
+    expect(md).not.toContain("## Sources");
+    expect(md).toContain("## Releases");
   });
 });

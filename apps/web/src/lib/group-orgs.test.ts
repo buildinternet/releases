@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import type { OrgListItem } from "@/lib/api";
-import { groupOrgsByLetter, CATALOG_LETTERS } from "./group-orgs";
+import { groupOrgsByLetter } from "./group-orgs";
 
 /** Minimal OrgListItem factory — only `name`/`slug` matter for grouping. */
 function org(name: string, slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-")): OrgListItem {
@@ -20,15 +20,6 @@ function org(name: string, slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
     sparkline: [], // unused by grouping
   };
 }
-
-describe("CATALOG_LETTERS", () => {
-  it("is A–Z followed by # (27 entries)", () => {
-    expect(CATALOG_LETTERS.length).toBe(27);
-    expect(CATALOG_LETTERS[0]).toBe("A");
-    expect(CATALOG_LETTERS[25]).toBe("Z");
-    expect(CATALOG_LETTERS[26]).toBe("#");
-  });
-});
 
 describe("groupOrgsByLetter", () => {
   it("returns [] for empty input", () => {

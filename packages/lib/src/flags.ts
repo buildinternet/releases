@@ -341,38 +341,3 @@ export async function flag(
     return fb;
   }
 }
-
-export type FlagState = "on" | "off" | "unset";
-
-/**
- * Three-state flag evaluation for inheritance. Distinguishes an explicit on/off
- * from "unset" (neither Flagship nor the var supplies a value), so a caller can
- * fall back to a different base (e.g. a global default flag) instead of the
- * FlagDef's hardcoded `default`. Precedence matches `flag()`: Flagship → var →
- * unset. Never throws.
- *
- * Flagship's getBooleanValue returns the passed default when a key is absent and
- * gives no separate "missing" signal, so we probe it twice with opposite
- * defaults: equal results ⇒ the key is present (explicit value); differing
- * results ⇒ the key is absent (the calls only echoed our two defaults).
- */
-export async function flagState(
-  binding: FlagshipBinding | undefined,
-  varValue: string | undefined,
-  def: FlagDef,
-  context?: FlagContext,
-): Promise<FlagState> {
-  if (binding) {
-    try {
-      const [asFalse, asTrue] = await Promise.all([
-        binding.getBooleanValue(def.key, false, context),
-        binding.getBooleanValue(def.key, true, context),
-      ]);
-      if (asFalse === asTrue) return asFalse ? "on" : "off";
-    } catch {
-      // fall through to the var / unset path
-    }
-  }
-  if (varValue !== undefined) return varValue === "true" ? "on" : "off";
-  return "unset";
-}
