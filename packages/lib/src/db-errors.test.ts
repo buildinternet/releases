@@ -23,6 +23,17 @@ describe("classifyDbError", () => {
     });
   });
 
+  it("classifies the account-wide throttle as DB_ACCOUNT_OVERLOADED + transient", () => {
+    const inner = new Error(
+      "D1_ERROR: Your account is generating too much load on D1 DBs. Please back off and try again later.",
+    );
+    const result = classifyDbError(
+      new Error('Failed query: select "id" from "sources_active"', { cause: inner }),
+    );
+    expect(result?.code).toBe("DB_ACCOUNT_OVERLOADED");
+    expect(result?.transient).toBe(true);
+  });
+
   it("classifies 'Network connection lost' as DB_NETWORK_LOST + transient", () => {
     const result = classifyDbError(new Error("D1_ERROR: Network connection lost."));
     expect(result?.code).toBe("DB_NETWORK_LOST");
