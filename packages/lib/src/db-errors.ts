@@ -17,6 +17,9 @@ import type { ErrorCode } from "@buildinternet/releases-core/errors";
 // immediate retry — surfaces / counters should react.
 
 // - DB_OVERLOADED:         D1 storage rejected requests for being queued too long.
+// - DB_ACCOUNT_OVERLOADED: Cloudflare throttled the whole account ("Your account is generating too
+//                          much load on D1 DBs. Please back off…"). Seen during a CF-side DO/D1
+//                          incident on 2026-11-20 while our own query volume was tiny.
 // - DB_NETWORK_LOST:       Connection to D1 dropped mid-request. Almost always clears next tick.
 // - DB_STORAGE_RESET:      "Internal error in D1 DB storage caused object to be reset."
 // - DB_TIMEOUT:            "D1 DB storage operation exceeded timeout which caused object to be reset."
@@ -25,6 +28,7 @@ import type { ErrorCode } from "@buildinternet/releases-core/errors";
 // - DB_UNKNOWN:            D1_ERROR with an unrecognized message. Treat as non-transient until classified.
 export const DB_ERROR_CODES = [
   "DB_OVERLOADED",
+  "DB_ACCOUNT_OVERLOADED",
   "DB_NETWORK_LOST",
   "DB_STORAGE_RESET",
   "DB_TIMEOUT",
@@ -55,6 +59,11 @@ interface Matcher {
 
 const MATCHERS: Matcher[] = [
   { pattern: /D1 DB is overloaded/i, code: "DB_OVERLOADED", transient: true },
+  {
+    pattern: /generating too much load on D1/i,
+    code: "DB_ACCOUNT_OVERLOADED",
+    transient: true,
+  },
   { pattern: /Network connection lost/i, code: "DB_NETWORK_LOST", transient: true },
   {
     pattern: /Internal error in D1 DB storage caused object to be reset/i,

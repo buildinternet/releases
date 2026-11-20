@@ -74,7 +74,7 @@ import { reconcileSourceReleaseStats } from "./queries/source-release-stats.js";
 import { formatCronCrashAlert, sendAlert, type AlertEnv } from "./lib/email/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
-import { dbErrorLogFields } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 import { crashMessage, withTransientDbRetry } from "./lib/cron-db-retry.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { NotFoundError } from "@releases/lib/releases-error";
@@ -1365,7 +1365,15 @@ export default {
     // The inline `pollAndFetch` below stays as the fallback when the binding is
     // absent (local dev, no DO infra). See issues #486 and #1776.
     if (env.POLL_AND_FETCH_WORKFLOW) {
-      ctx.waitUntil(loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env), alertEnv));
+      // The heartbeat is an idempotent hourly re-seed and actors keep their own
+      // alarms, so a missed tick on a transient D1 error (e.g. Cloudflare's
+      // account-wide throttle) costs nothing: the next hour covers it. Log it,
+      // don't page.
+      ctx.waitUntil(
+        loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env), alertEnv, {
+          quietOnTransientDb: true,
+        }),
+      );
       return;
     }
     // Same builder the workflow paths use (#2171), so the local-dev fallback
@@ -1398,20 +1406,29 @@ export default {
  *
  * When `alertEnv` is provided and the promise rejects, also fires a Tier-1
  * [alert] email via `sendAlert()` (fire-and-forget, deduplicated per 1h).
+ * `quietOnTransientDb` downgrades a transient D1 failure (overload, throttle,
+ * dropped connection) to a warn log with no email, for crons whose next tick
+ * fully recovers a missed run.
  */
-function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): Promise<void> {
+function loggedDispatch(
+  tag: string,
+  p: Promise<unknown>,
+  alertEnv?: AlertEnv,
+  opts: { quietOnTransientDb?: boolean } = {},
+): Promise<void> {
   return p
     .then(() => undefined)
     .catch((err) => {
       const message = crashMessage(err);
       const stack = err instanceof Error ? err.stack : undefined;
-      logEvent("error", {
+      const quiet = opts.quietOnTransientDb === true && classifyDbError(err)?.transient === true;
+      logEvent(quiet ? "warn" : "error", {
         component: tag,
-        event: "dispatch-failed",
+        event: quiet ? "dispatch-skipped-transient-db" : "dispatch-failed",
         err,
         ...dbErrorLogFields(err),
       });
-      if (alertEnv) {
+      if (alertEnv && !quiet) {
         // Fire-and-forget — never block or throw in the catch handler.
         const alert = formatCronCrashAlert({
           tag,
