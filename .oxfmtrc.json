@@ -24,6 +24,7 @@
     "**/migrations/**/*.sql",
     "plugins/claude/releases/skills",
     "skills",
+    "apps/mcp/src/skill-bundles.ts",
     "packages/*/dist",
     "tests/evals/fixtures/tool-ux/runs",
     "packages/api-types/graphql/schema.graphql",
