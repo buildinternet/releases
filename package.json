@@ -19,6 +19,7 @@
     "mcp:ui:build:dev": "cd apps/mcp/ui && bun install --silent && NODE_ENV=development bun run build",
     "mcp:ui:watch": "cd apps/mcp/ui && bun install --silent && bun run build:watch",
     "mcp:ui:typecheck": "cd apps/mcp/ui && bun run typecheck",
+    "mcp:skills:build": "bun apps/mcp/scripts/build-skills.ts",
     "mcp:inspect:local": "npx @modelcontextprotocol/inspector npx mcp-remote https://mcp.releases.localhost/mcp",
     "mcp:inspect:staging": "sh -c 'test -n \"$STAGING_ACCESS_KEY\" || { echo \"Set STAGING_ACCESS_KEY in .env\" >&2; exit 1; }; npx @modelcontextprotocol/inspector npx mcp-remote https://mcp.releasenotesindex.dev/mcp --header \"X-Releases-Staging-Key: $STAGING_ACCESS_KEY\"'",
     "mcp:inspect:prod": "npx @modelcontextprotocol/inspector npx mcp-remote https://agents.releases.sh/mcp",

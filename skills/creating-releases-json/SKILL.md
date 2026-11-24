@@ -239,6 +239,10 @@ tie-breaker if anything is ambiguous.
 Also confirm the file is syntactically clean JSON and, if you added `$schema`, that it points
 at `https://releases.sh/schemas/releases.json`.
 
+**If you can't run scripts** (for example, you loaded this skill over MCP in a chat app with no
+shell): check the file by hand against `references/schema.json` and the three cross-field rules
+above, and tell the owner to run `POST /v1/listing/validate` (Step 5) once it's published.
+
 ## Step 5 — Publish and confirm it's live
 
 **If you don't have the repo** (the common "here's our website" case), you can't publish it

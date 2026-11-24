@@ -23,6 +23,7 @@ import {
 } from "./tools.js";
 import { registerResources, RELEASE_FEED_UI_URI } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
+import { registerSkills } from "./skills.js";
 import { registerFollowsTools } from "./follows-tools.js";
 import { registerWebhookTools } from "./webhook-tools.js";
 import { registerWhatsChangedTool } from "./whats-changed-tool.js";
@@ -897,6 +898,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   registerWhatsChangedTool(server, env);
   registerResources(server, db, mediaOrigin);
   registerPrompts(server, db);
+  await registerSkills(server);
 
   return server;
 }
