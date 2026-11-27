@@ -22,10 +22,9 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   HUGE_BODY_MAX_OUTPUT_TOKENS,
   MAX_BODY_CHARS_TOOLLOOP,
-  EXTRACTION_TEMPERATURE,
   type ExtractionGuidance,
 } from "./shared.js";
-import { samplingParams, thinkingParams } from "@releases/lib/models";
+import { thinkingParams } from "@releases/lib/models";
 import { extractWithTools, LoopFallbackError } from "./extract-with-tools.js";
 
 export interface ExtractFromBodyOpts {
@@ -210,10 +209,8 @@ async function runOneShot(
   const stream = deps.anthropicClient.messages.stream({
     model,
     max_tokens: maxOutputTokens,
-    // Deterministic parse on models that still accept a non-default
-    // temperature; omitted (with top_p / top_k) when the registry says the
-    // model rejects sampling. See EXTRACTION_TEMPERATURE.
-    ...samplingParams(model, { temperature: EXTRACTION_TEMPERATURE }),
+    // No sampling params: Anthropic API version 2026-10-21 (SDK 1.x) rejects
+    // temperature / top_p / top_k on every model. See EXTRACTION_TEMPERATURE.
     ...thinkingParams(model),
     system: systemBlocks,
     tools: [toolDef],

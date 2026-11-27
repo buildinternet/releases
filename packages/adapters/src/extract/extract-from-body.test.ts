@@ -292,9 +292,9 @@ describe("extractFromBody — deterministic extraction", () => {
   // Regression: with no temperature the SDK defaults to 1.0, and the forced
   // extract_releases tool call intermittently returns `releases: []` on the same
   // input (observed 1-in-4 on the OpenAI changelog). temperature 0 makes the
-  // parse deterministic — but only on models that still accept it. Models
-  // released after Opus 4.6 (Sonnet 5.5, Opus 4.7+, Fable) reject a non-default
-  // temperature with a 400, so the knob is model-gated (modelAcceptsTemperature).
+  // parse deterministic on older models, but Anthropic API version 2026-10-21
+  // (SDK 1.x) rejects sampling params on every model, so this Anthropic SDK
+  // path never sends it. The AI SDK paths still apply it to OpenRouter models.
   function captureOneShotParams(respModel: string) {
     const captured: Anthropic.MessageCreateParams[] = [];
     const client: Pick<Anthropic, "messages"> = {
@@ -336,14 +336,15 @@ describe("extractFromBody — deterministic extraction", () => {
     useToolLoop: false as const,
   };
 
-  test("oneshot path requests temperature 0 on Haiku 4.5", async () => {
+  test("oneshot path never sends temperature, even on Haiku 4.5", async () => {
+    // API version 2026-10-21 rejects sampling params on every model.
     const { captured, client } = captureOneShotParams("claude-haiku-4-5-20251001");
     await extractFromBody(
       oneShotOpts,
       makeDeps(client, { oneShotModel: "claude-haiku-4-5-20251001" }),
     );
     expect(captured.length).toBe(1);
-    expect(captured[0]!.temperature).toBe(0);
+    expect(captured[0]!.temperature).toBeUndefined();
     expect(captured[0]!.thinking).toBeUndefined();
   });
 

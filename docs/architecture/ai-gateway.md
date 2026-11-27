@@ -48,7 +48,7 @@ Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packa
 
 Two routing modes:
 
-- **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. This is the default for Messages-API call sites listed under Scope above.
+- **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. It also sends the Anthropic key as `X-Api-Key` with `Authorization` removed: SDK 1.x would otherwise send it as `Authorization: Bearer`, and keeping `X-Api-Key` leaves the request the gateway forwards the same as on SDK 0.x. This is the default for Messages-API call sites listed under Scope above.
 - **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Use it for any call that must not go through the gateway.
 
 ## What this repo does not configure

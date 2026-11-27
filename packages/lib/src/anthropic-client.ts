@@ -31,15 +31,19 @@ export interface AnthropicClientOptions {
 
 export function buildAnthropicClient(opts: AnthropicClientOptions): Anthropic {
   const { apiKey, baseURL, gatewayToken, timeoutMs, defaultHeaders } = opts;
-  const mergedHeaders: Record<string, string> = {
+  // SDK 1.x sends the key as `Authorization: Bearer`. Keep it in `X-Api-Key`
+  // (and drop `Authorization`) so the wire format through Cloudflare AI Gateway
+  // stays what it was on SDK 0.x; the Claude API accepts either header.
+  const mergedHeaders: Record<string, string | null> = {
     ...defaultHeaders,
     ...(gatewayToken ? { "cf-aig-authorization": `Bearer ${gatewayToken}` } : {}),
+    "X-Api-Key": apiKey,
+    Authorization: null,
   };
-  const hasHeaders = Object.keys(mergedHeaders).length > 0;
   return new Anthropic({
     apiKey,
     ...(baseURL ? { baseURL } : {}),
     ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
-    ...(hasHeaders ? { defaultHeaders: mergedHeaders } : {}),
+    defaultHeaders: mergedHeaders,
   });
 }

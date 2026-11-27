@@ -9,10 +9,9 @@ import {
   TOOLLOOP_SYSTEM_PROMPT,
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
-  EXTRACTION_TEMPERATURE,
   type ExtractionGuidance,
 } from "./shared.js";
-import { samplingParams, thinkingParams } from "@releases/lib/models";
+import { thinkingParams } from "@releases/lib/models";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
 import { formatRejectionMessage, validateRecords } from "./record-validate.js";
 import type { ExtractDeps, ExtractedEntry, ExtractLogger } from "./types.js";
@@ -172,9 +171,8 @@ export async function extractWithTools(
     const stream = deps.anthropicClient.beta.messages.stream({
       model: deps.agentModel,
       max_tokens: 16_384,
-      // Deterministic parse on models that still accept a non-default
-      // temperature; omitted when the registry says the model rejects sampling.
-      ...samplingParams(deps.agentModel, { temperature: EXTRACTION_TEMPERATURE }),
+      // No sampling params: Anthropic API version 2026-10-21 (SDK 1.x) rejects
+      // temperature / top_p / top_k on every model.
       ...thinkingParams(deps.agentModel),
       system: systemBlocks,
       tools,
