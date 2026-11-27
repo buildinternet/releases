@@ -33,7 +33,7 @@
     "hono": "^4.13.23",
     "hono-openapi": "^1.6.0",
     "mimetext": "^3.0.28",
-    "stripe": "^22.6.2",
+    "stripe": "^23.2.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
