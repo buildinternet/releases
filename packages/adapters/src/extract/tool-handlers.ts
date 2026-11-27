@@ -34,7 +34,10 @@ export function handleQueryJson(body: string, input: QueryJsonInput): string {
     throw new Error("body is not valid JSON");
   }
 
-  const result = JSONPath({ path: input.path, json: parsed as object });
+  // jsonpath-plus 11 types the return as `unknown`; with the default
+  // `wrap: true` it is always an array (empty on no match).
+  const raw: unknown = JSONPath({ path: input.path, json: parsed as object });
+  const result: unknown[] = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
 
   if (result.length === 0) {
     return `no matches for ${input.path}`;

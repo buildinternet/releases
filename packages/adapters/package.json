@@ -47,7 +47,7 @@
     "@rowanmanning/feed-parser": "^2.1.5",
     "ai": "7.0.132",
     "fast-xml-parser": "^5.12.1",
-    "jsonpath-plus": "^10.4.0",
+    "jsonpath-plus": "^11.3.0",
     "linkedom": "^0.18.15",
     "partial-json": "^0.1.7",
     "tldts": "^7.6.2",
