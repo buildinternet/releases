@@ -186,15 +186,16 @@ export class DeterministicUpdateWorkflow extends WorkflowEntrypoint<
             // instance processes many sources — namespace every step name
             // under the source identifier so steps from different sources
             // never collide.
-            const nsStep = {
-              ...step,
+            // Object.create keeps WorkflowStep's prototype methods (a spread
+            // would copy own props only) while overriding `do`.
+            const nsStep: WorkflowStep = Object.assign(Object.create(step), {
               do: ((name: string, a: unknown, b?: unknown) =>
                 (step.do as (...args: unknown[]) => Promise<unknown>)(
                   `${result.source}:${name}`,
                   a,
                   b,
                 )) as WorkflowStep["do"],
-            } as WorkflowStep;
+            });
 
             // Content summarize + embed and cache invalidation are independent
             // concerns (#1970) — a generate-content/embed failure must not
