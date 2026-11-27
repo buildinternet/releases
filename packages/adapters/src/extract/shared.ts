@@ -390,9 +390,11 @@ export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
  * a whole fetch. Steady-state ingest masks this via poll-retry cadence; a
  * one-shot backfill has nothing to hide behind, which is how it surfaced. 0
  * removes the variance (0 misses across 5+5 validation runs). Models that
- * reject the knob are deterministic enough not to need it; Haiku 4.5 and
- * earlier still accept it, which is what suppresses the spurious-empty tool
- * call on those ids.
+ * reject the knob are deterministic enough not to need it.
+ *
+ * Only the AI SDK paths (OpenRouter models such as DeepSeek) still send it.
+ * The Anthropic SDK paths never do: API version 2026-10-21 (SDK 1.x) rejects
+ * temperature / top_p / top_k on every Anthropic model.
  */
 export const EXTRACTION_TEMPERATURE = 0;
 

@@ -87,7 +87,7 @@
     "packages/*"
   ],
   "catalog": {
-    "@anthropic-ai/sdk": "^0.120.0"
+    "@anthropic-ai/sdk": "^1.14.0"
   },
   "overrides": {
     "kysely": "^0.28.17",
