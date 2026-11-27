@@ -99,7 +99,8 @@
         "typescript/await-thenable": "off",
         "unicorn/no-array-sort": "off",
         "unicorn/no-array-reverse": "off",
-        "eslint/no-shadow": "off"
+        "eslint/no-shadow": "off",
+        "typescript/no-unsafe-class-instance-assignment": "off"
       }
     }
   ],
