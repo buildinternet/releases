@@ -14,11 +14,12 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { CLEARED_FEED_FIELDS } from "@releases/adapters/feed.js";
 import { sources } from "@buildinternet/releases-core/schema";
+import type { SourcePauseReason } from "@buildinternet/releases-core/source-enums";
 import type { D1Db } from "../../db.js";
 
 /** Pause a scrape/agent source after this many consecutive deterministic failures. */
 export const AUTO_PAUSE_AFTER_ERRORS = 6;
-/** Pause a source after this many flagged drains that insert nothing. */
+/** Pause a source after this many flagged drains whose extraction found 0 items. */
 export const UNPRODUCTIVE_DRAIN_PAUSE_AFTER = 5;
 export const ERROR_BACKOFF_CAP_HOURS = 72;
 export const NO_CHANGE_BACKOFF_CAP_HOURS = 48;
@@ -37,6 +38,11 @@ export interface SourceCounterBump {
 export interface BumpSourceCounterOpts {
   /** Pause when this bump crosses `pauseAt` and the source is not already paused. */
   pauseAt?: number;
+  /**
+   * Written to `paused_reason` (with `paused_at`) only on the transition into
+   * `paused`. A source that is already paused keeps its existing reason.
+   */
+  pauseReason?: SourcePauseReason;
   /** Set `next_fetch_after` from the pre-update count, capped at this many hours. */
   backoffCapHours?: typeof ERROR_BACKOFF_CAP_HOURS | typeof NO_CHANGE_BACKOFF_CAP_HOURS;
   /** ISO timestamp. `next_fetch_after` is at least this far out (Retry-After). */
@@ -73,8 +79,21 @@ function nextFetchAfterSql(col: CounterColumn, capHours: 48 | 72, floorIso?: str
   return floorIso ? sql`max(${floorIso}, ${at})` : at;
 }
 
+/** True on the pre-update row when this bump is the one that pauses the source. */
+function pausing(col: CounterColumn, pauseAt: number): SQL {
+  return sql`COALESCE(${col}, 0) >= ${pauseAt - 1} AND COALESCE(${sources.fetchPriority}, 'normal') != 'paused'`;
+}
+
 function pauseSql(col: CounterColumn, pauseAt: number): SQL {
-  return sql`CASE WHEN COALESCE(${col}, 0) >= ${pauseAt - 1} AND COALESCE(${sources.fetchPriority}, 'normal') != 'paused' THEN 'paused' ELSE ${sources.fetchPriority} END`;
+  return sql`CASE WHEN ${pausing(col, pauseAt)} THEN 'paused' ELSE ${sources.fetchPriority} END`;
+}
+
+function pausedReasonSql(col: CounterColumn, pauseAt: number, reason: SourcePauseReason): SQL {
+  return sql`CASE WHEN ${pausing(col, pauseAt)} THEN ${reason} ELSE ${sources.pausedReason} END`;
+}
+
+function pausedAtSql(col: CounterColumn, pauseAt: number): SQL {
+  return sql`CASE WHEN ${pausing(col, pauseAt)} THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE ${sources.pausedAt} END`;
 }
 
 function counterColumn(name: CounterName) {
@@ -97,6 +116,8 @@ export function bumpSourceCounterQuery(
     consecutiveNoChange?: SQL | number | null;
     unproductiveDrains?: SQL | number | null;
     fetchPriority?: SQL;
+    pausedReason?: SQL;
+    pausedAt?: SQL;
     nextFetchAfter?: SQL | string | null;
     changeDetectedAt?: string | null;
     lastFetchedAt?: string | null;
@@ -104,7 +125,13 @@ export function bumpSourceCounterQuery(
   } = {
     [name]: sql`COALESCE(${col}, 0) + 1`,
   };
-  if (opts.pauseAt != null) set.fetchPriority = pauseSql(col, opts.pauseAt);
+  if (opts.pauseAt != null) {
+    set.fetchPriority = pauseSql(col, opts.pauseAt);
+    if (opts.pauseReason != null) {
+      set.pausedReason = pausedReasonSql(col, opts.pauseAt, opts.pauseReason);
+      set.pausedAt = pausedAtSql(col, opts.pauseAt);
+    }
+  }
   if (opts.backoffCapHours != null) {
     set.nextFetchAfter = nextFetchAfterSql(col, opts.backoffCapHours, opts.backoffFloorIso);
   }
@@ -156,11 +183,13 @@ export async function bumpSourceCounter(
 export async function recordConsecutiveFetchError(
   db: D1Db,
   sourceId: string,
-  opts?: { retryAfterMs?: number; pauseAt?: number },
+  opts?: { retryAfterMs?: number; pauseAt?: number; pauseReason?: SourcePauseReason },
 ): Promise<SourceCounterBump | null> {
   const retryAfterMs = opts?.retryAfterMs;
   return bumpSourceCounter(db, sourceId, "consecutiveErrors", {
-    ...(opts?.pauseAt != null ? { pauseAt: opts.pauseAt } : {}),
+    ...(opts?.pauseAt != null
+      ? { pauseAt: opts.pauseAt, ...(opts.pauseReason ? { pauseReason: opts.pauseReason } : {}) }
+      : {}),
     backoffCapHours: ERROR_BACKOFF_CAP_HOURS,
     backoffFloorIso:
       retryAfterMs != null && retryAfterMs > 0
@@ -276,6 +305,11 @@ export async function recordEnrichmentOutcome(
       ),
     })
     .where(eq(sources.id, sourceId));
+}
+
+/** Zero the unproductive-drain streak. Does not un-pause or clear `paused_reason`. */
+export async function resetUnproductiveDrains(db: D1Db, sourceId: string): Promise<void> {
+  await db.update(sources).set({ unproductiveDrains: 0 }).where(eq(sources.id, sourceId));
 }
 
 /** Patch only the Firecrawl bookkeeping keys. Other metadata stays put. */

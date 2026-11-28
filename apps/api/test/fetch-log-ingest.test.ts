@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, fetchLog } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../src/db.js";
-import { ingestFetchLog } from "../src/lib/ingest/fetch-log-ingest.js";
+import { drainConvergenceAction, ingestFetchLog } from "../src/lib/ingest/fetch-log-ingest.js";
 
 // Direct (non-HTTP) coverage of the extracted ingest core (#1946 phase 4, task
 // 4) — the route-level backoff/convergence behavior is already covered by
@@ -41,6 +41,8 @@ async function readSource(db: D1Db) {
       nextFetchAfter: sources.nextFetchAfter,
       fetchPriority: sources.fetchPriority,
       unproductiveDrains: sources.unproductiveDrains,
+      pausedReason: sources.pausedReason,
+      pausedAt: sources.pausedAt,
     })
     .from(sources)
     .where(eq(sources.id, "src_a1"));
@@ -57,6 +59,32 @@ const baseInput = {
   error: null,
   errorCategory: null,
 };
+
+describe("drainConvergenceAction", () => {
+  it("strikes only a flagged drain that found nothing", () => {
+    expect(
+      drainConvergenceAction({ wasFlagged: true, releasesFound: 0, releasesInserted: 0 }),
+    ).toBe("strike");
+  });
+
+  it("treats a re-find of existing releases as neutral", () => {
+    expect(
+      drainConvergenceAction({ wasFlagged: true, releasesFound: 12, releasesInserted: 0 }),
+    ).toBe("neutral");
+    expect(
+      drainConvergenceAction({ wasFlagged: false, releasesFound: 0, releasesInserted: 0 }),
+    ).toBe("neutral");
+  });
+
+  it("resets whenever a fetch inserts, flagged or not", () => {
+    expect(
+      drainConvergenceAction({ wasFlagged: false, releasesFound: 5, releasesInserted: 1 }),
+    ).toBe("reset");
+    expect(
+      drainConvergenceAction({ wasFlagged: true, releasesFound: 0, releasesInserted: 1 }),
+    ).toBe("reset");
+  });
+});
 
 describe("ingestFetchLog", () => {
   it("bumps consecutive_errors and sets next_fetch_after on a bot_challenge failure", async () => {
@@ -94,6 +122,29 @@ describe("ingestFetchLog", () => {
     const row = await readSource(db);
     expect(row.unproductiveDrains).toBe(5);
     expect(row.fetchPriority).toBe("paused");
+    expect(row.pausedReason).toBe("unproductive_drains");
+    expect(row.pausedAt).toEqual(expect.any(String));
+  });
+
+  it("does not increment when a flagged drain re-finds existing releases", async () => {
+    const db = mkDb();
+    await seedSource(db, { unproductiveDrains: 3 });
+
+    await ingestFetchLog(
+      db,
+      {},
+      {
+        ...baseInput,
+        wasFlagged: true,
+        releasesFound: 57,
+        releasesInserted: 0,
+      },
+    );
+
+    const row = await readSource(db);
+    expect(row.unproductiveDrains).toBe(3);
+    expect(row.fetchPriority).not.toBe("paused");
+    expect(row.pausedReason).toBeNull();
   });
 
   it("resets unproductive_drains on wasFlagged + releasesInserted > 0", async () => {
@@ -115,6 +166,26 @@ describe("ingestFetchLog", () => {
       },
     );
     expect((await readSource(db)).unproductiveDrains).toBe(0);
+  });
+
+  it("resets unproductive_drains when an unflagged fetch inserts", async () => {
+    const db = mkDb();
+    await seedSource(db, { unproductiveDrains: 4 });
+
+    await ingestFetchLog(
+      db,
+      {},
+      {
+        ...baseInput,
+        releasesFound: 5,
+        releasesInserted: 1,
+        status: "success",
+      },
+    );
+
+    const row = await readSource(db);
+    expect(row.unproductiveDrains).toBe(0);
+    expect(row.fetchPriority).not.toBe("paused");
   });
 
   it("never lands wasFlagged as a fetch_log column", async () => {

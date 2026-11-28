@@ -66,6 +66,8 @@ async function readSource(db: D1Db) {
       consecutiveErrors: sources.consecutiveErrors,
       nextFetchAfter: sources.nextFetchAfter,
       fetchPriority: sources.fetchPriority,
+      pausedReason: sources.pausedReason,
+      pausedAt: sources.pausedAt,
     })
     .from(sources)
     .where(eq(sources.id, "src_a1"));
@@ -163,5 +165,7 @@ describe("POST /v1/admin/logs/fetch — deterministic-failure backoff (#1851)", 
     const row = await readSource(db);
     expect(row.consecutiveErrors).toBe(6);
     expect(row.fetchPriority).toBe("paused");
+    expect(row.pausedReason).toBe("extraction_errors");
+    expect(row.pausedAt).toEqual(expect.any(String));
   });
 });

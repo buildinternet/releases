@@ -3,6 +3,7 @@ import {
   SOURCE_TYPES,
   SOURCE_DISCOVERY,
   SOURCE_FETCH_PRIORITIES,
+  SOURCE_PAUSE_REASONS,
 } from "@buildinternet/releases-core/source-enums";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
@@ -16,6 +17,19 @@ import {
 export const SourceTypeSchema = z.enum(SOURCE_TYPES);
 export const SourceDiscoverySchema = z.enum(SOURCE_DISCOVERY);
 export const SourceFetchPrioritySchema = z.enum(SOURCE_FETCH_PRIORITIES);
+export const SourcePauseReasonSchema = z.enum(SOURCE_PAUSE_REASONS);
+
+/**
+ * Pause bookkeeping on source reads. Optional so a response from an older
+ * worker still parses. `pausedReason` / `pausedAt` are null while the source
+ * is not paused.
+ */
+const sourcePauseFields = {
+  /** Consecutive flagged drains that extracted 0 items. */
+  unproductiveDrains: z.number().int().nullable().optional(),
+  pausedReason: SourcePauseReasonSchema.nullable().optional(),
+  pausedAt: z.string().nullable().optional(),
+};
 
 /**
  * Per-source row used in list/embedded contexts (e.g. nested inside OrgDetail).
@@ -44,6 +58,7 @@ export const SourceListItemSchema = z.object({
    */
   discovery: SourceDiscoverySchema.optional(),
   fetchPriority: SourceFetchPrioritySchema.nullable().optional(),
+  ...sourcePauseFields,
   lastFetchedAt: z.string().nullable().optional(),
   lastPolledAt: z.string().nullable().optional(),
   changeDetectedAt: z.string().nullable().optional(),
@@ -88,6 +103,7 @@ export const SourceWithOrgSchema = z.object({
   lastFetchedAt: z.string().nullable(),
   lastPolledAt: z.string().nullable(),
   fetchPriority: SourceFetchPrioritySchema.nullable(),
+  ...sourcePauseFields,
   changeDetectedAt: z.string().nullable(),
   consecutiveNoChange: z.number().int().nullable(),
   consecutiveErrors: z.number().int().nullable(),
@@ -172,6 +188,7 @@ export const SourceDetailSchema = z.object({
   discovery: SourceDiscoverySchema.optional(),
   /** Poll tier; `paused` stops fetching. Optional for older servers. */
   fetchPriority: z.enum(["normal", "low", "paused"]).nullable().optional(),
+  ...sourcePauseFields,
   isPrimary: z.boolean(),
   metadata: z.string(),
   changelogUrl: z.string().nullable().optional(),
@@ -278,8 +295,10 @@ export const SourcePatchInputSchema = z.object({
   consecutiveErrors: z.number().int().optional(),
   /**
    * Drain-convergence streak (#1862). Leaving `fetchPriority` of `paused`
-   * clears this automatically; set it directly to reset a source that is
-   * not paused, or to override the automatic clear in the same request.
+   * clears this automatically and clears `pausedReason` / `pausedAt`. Moving
+   * `fetchPriority` to `paused` stamps `pausedReason: "manual"`. Set the
+   * counter directly to reset a source that is not paused, or to override the
+   * automatic clear in the same request.
    */
   unproductiveDrains: z.number().int().optional(),
   nextFetchAfter: z.string().nullable().optional(),

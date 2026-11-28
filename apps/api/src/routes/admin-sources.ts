@@ -6,12 +6,14 @@ import { parseEnumParam } from "../utils.js";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type {
+  AutoPausedSourcesResponse,
   OrgsRollupResponse,
   OrgsRollupRow,
   ProviderHealthResponse,
   StuckSourcesResponse,
 } from "@buildinternet/releases-api-types";
 import { SOURCE_STALE_DAYS } from "../queries/sources.js";
+import { listAutoPausedSources } from "../queries/auto-paused-sources.js";
 import { getStuckSources } from "../queries/stuck-sources.js";
 import { getProviderHealth } from "../queries/provider-health.js";
 import type { Env } from "../index.js";
@@ -206,6 +208,26 @@ adminSourcesRoutes.get("/admin/sources/stuck", async (c) => {
       minAttempts: result.minAttempts,
       includePaused: result.includePaused,
     },
+  };
+  return c.json(response);
+});
+
+/**
+ * Sources auto-paused in the last `?days` (default 7). Reads `paused_reason`
+ * and `paused_at` plus the latest fetch's found/inserted counts, so a weekly
+ * digest can list them without scanning the whole catalog. Manual pauses are
+ * not included.
+ */
+adminSourcesRoutes.get("/admin/sources/auto-paused", async (c) => {
+  const db = getDb(c);
+  const result = await listAutoPausedSources(db, {
+    days: parseOptionalInt(c.req.query("days")),
+  });
+  const response: AutoPausedSourcesResponse = {
+    days: result.days,
+    since: result.since,
+    sources: result.sources,
+    truncated: result.truncated,
   };
   return c.json(response);
 });

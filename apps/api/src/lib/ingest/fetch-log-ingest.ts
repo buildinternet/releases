@@ -5,7 +5,7 @@
  *
  * `ingestFetchLog` runs, in order: the fetch_log insert (throws on failure,
  * matching the route's existing 500 behavior), the #1851 scrape-failure
- * backoff/auto-pause, the #1862 drain-convergence auto-pause, and a
+ * backoff/auto-pause, the #1862 drain-convergence streak, and a
  * best-effort StatusHub notify. All side effects after the insert are
  * best-effort — they never fail the log write.
  *
@@ -30,6 +30,7 @@ import {
   bumpSourceCounter,
   failureBackoffHours,
   recordConsecutiveFetchError,
+  resetUnproductiveDrains,
 } from "./source-fetch-health.js";
 
 export { failureBackoffHours };
@@ -58,18 +59,18 @@ const BACKOFF_ERROR_CATEGORIES = new Set(["model", "bot_challenge"]);
 // hours of retries on the exponential ladder), pause the source so it stops
 // spending and surfaces for review rather than retrying indefinitely.
 
-// ── Auto-pause for non-converging *no-op* drains (#1862) ──────────────────
+// ── Auto-pause for non-converging *empty* drains (#1862) ──────────────────
 //
 // The #1851 backoff above only catches HARD failures (model/bot_challenge). A
-// source whose drain SUCCEEDS but finds nothing new — the extraction runs, the
-// change-detector had flagged it, yet 0 releases parse — is written back as
-// fully healthy (`updateSourceAfterFetch` resets every counter), so nothing
-// ever accumulates. Combined with the change-detector re-flagging it each poll,
-// such a source re-drained a no-op Haiku /update forever (once/day after the
-// #1862 cooldown, but still indefinitely). We count consecutive *flagged-but-
-// empty* drains and pause the source once it's clearly non-converging, so it
-// surfaces for curator review (SPA shell, moved changelog, dead source) rather
-// than draining to infinity. A productive drain (>=1 inserted) resets the count.
+// source whose drain succeeds but extracts nothing — the change-detector had
+// flagged it, yet the page yields 0 items (SPA shell, moved changelog, dead
+// source) — is written back as healthy, so nothing ever accumulates. We count
+// consecutive *flagged drains that found 0 items* and pause once that streak
+// hits UNPRODUCTIVE_DRAIN_PAUSE_AFTER.
+//
+// A drain that re-finds the existing releases (found > 0, inserted 0) is a
+// healthy "nothing new" and is not a strike. Any fetch that inserts at least
+// one release resets the streak, whether or not that fetch was flagged.
 
 /**
  * Whether a recorded fetch outcome is a deterministic, non-self-resolving
@@ -80,9 +81,35 @@ export function shouldBackoffScrapeFailure(errorCategory: unknown): boolean {
   return typeof errorCategory === "string" && BACKOFF_ERROR_CATEGORIES.has(errorCategory);
 }
 
+function countOf(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * What a recorded fetch does to the unproductive-drain streak.
+ *
+ * - `reset`: the fetch inserted at least one release. Clears the streak
+ *   whether or not the fetch was flagged.
+ * - `strike`: a flagged drain whose extraction found 0 items. Five of these
+ *   in a row pause the source.
+ * - `neutral`: everything else, including a flagged drain that re-found the
+ *   existing releases and inserted nothing. The streak is left as it is.
+ */
+export function drainConvergenceAction(input: {
+  wasFlagged: boolean;
+  releasesFound: number;
+  releasesInserted: number;
+}): "reset" | "strike" | "neutral" {
+  if (input.releasesInserted > 0) return "reset";
+  if (input.wasFlagged && input.releasesFound === 0) return "strike";
+  return "neutral";
+}
+
 async function applyScrapeFailureBackoff(db: D1Db, sourceId: string): Promise<void> {
   const bumped = await recordConsecutiveFetchError(db, sourceId, {
     pauseAt: AUTO_PAUSE_AFTER_ERRORS,
+    pauseReason: "extraction_errors",
   });
   if (!bumped) return;
 
@@ -97,33 +124,16 @@ async function applyScrapeFailureBackoff(db: D1Db, sourceId: string): Promise<vo
 }
 
 /**
- * Track consecutive flagged-but-empty drains and auto-pause a non-converging
- * source (#1862). Only invoked when the fetch reported `wasFlagged` (the source
- * was flagged as changed when the drain began) — a legitimately-quiet poll that
- * was never flagged is not counted, so healthy idle sources are never paused.
- * A productive drain (`releasesInserted > 0`) resets the streak; an empty one
- * increments it and pauses at UNPRODUCTIVE_DRAIN_PAUSE_AFTER. Un-pausing
- * (source PATCH moving `fetchPriority` off `paused`) also zeroes the streak
- * (#2550) — this function does not, so a stale count re-pauses immediately.
- * Best-effort.
+ * Count one flagged drain that extracted 0 items, and pause at the threshold
+ * (#1862). The caller has already decided this fetch is a strike.
+ * Un-pausing (source PATCH moving `fetchPriority` off `paused`) zeroes the
+ * streak (#2550) — this function does not, so a stale count re-pauses
+ * immediately. Best-effort.
  */
-async function applyDrainConvergence(
-  db: D1Db,
-  sourceId: string,
-  releasesInserted: number,
-): Promise<void> {
-  if (releasesInserted > 0) {
-    // Productive drain — the source converged. Clear any accumulated streak.
-    await db
-      .update(sources)
-      .set({ unproductiveDrains: 0 })
-      .where(eq(sources.id, sourceId))
-      .catch(() => {});
-    return;
-  }
-
+async function recordUnproductiveDrain(db: D1Db, sourceId: string): Promise<void> {
   const bumped = await bumpSourceCounter(db, sourceId, "unproductiveDrains", {
     pauseAt: UNPRODUCTIVE_DRAIN_PAUSE_AFTER,
+    pauseReason: "unproductive_drains",
   });
   if (!bumped) return;
 
@@ -133,6 +143,7 @@ async function applyDrainConvergence(
     sourceId,
     unproductiveDrains: bumped.value,
     paused: bumped.didPause,
+    ...(bumped.didPause ? { pausedReason: "unproductive_drains" } : {}),
   });
 }
 
@@ -197,12 +208,19 @@ export async function ingestFetchLog(
     }
   }
 
-  // Auto-pause a source whose flagged drains keep coming back empty (#1862).
-  // Only when the drain reported `wasFlagged` — a never-flagged poll finding
-  // nothing is normal and must not count toward a pause.
-  if (body.sourceId && wasFlagged === true) {
+  // Unproductive-drain streak (#1862). A strike is a flagged drain that
+  // extracted 0 items. Re-finding existing releases is neutral. Any insert
+  // resets the streak, flagged or not — including a fetch that was not itself
+  // a drain.
+  if (body.sourceId) {
+    const action = drainConvergenceAction({
+      wasFlagged: wasFlagged === true,
+      releasesFound: countOf(body.releasesFound),
+      releasesInserted: countOf(body.releasesInserted),
+    });
     try {
-      await applyDrainConvergence(db, body.sourceId, Number(body.releasesInserted ?? 0));
+      if (action === "reset") await resetUnproductiveDrains(db, body.sourceId);
+      else if (action === "strike") await recordUnproductiveDrain(db, body.sourceId);
     } catch {
       // convergence pause is best-effort
     }

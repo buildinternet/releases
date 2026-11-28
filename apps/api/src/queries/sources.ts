@@ -8,6 +8,7 @@ import type {
   SourceType,
   SourceDiscovery,
   SourceFetchPriority,
+  SourcePauseReason,
 } from "@buildinternet/releases-core/source-enums";
 import type { D1Db } from "../db.js";
 
@@ -29,6 +30,9 @@ export type SourceListRow = {
   last_fetched_at: string | null;
   last_polled_at: string | null;
   fetch_priority: SourceFetchPriority | null;
+  unproductive_drains: number | null;
+  paused_reason: SourcePauseReason | null;
+  paused_at: string | null;
   change_detected_at: string | null;
   consecutive_no_change: number | null;
   consecutive_errors: number | null;

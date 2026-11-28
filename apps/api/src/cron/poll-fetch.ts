@@ -2243,6 +2243,10 @@ export async function fetchOne(
           consecutiveErrors: 0,
           nextFetchAfter: null,
           changeDetectedAt: null,
+          // Any fetch that inserts clears the unproductive-drain streak, not
+          // only a flagged scrape drain (#1862). A deduped refetch (inserted
+          // 0) leaves the streak alone.
+          ...(inserted > 0 ? { unproductiveDrains: 0 } : {}),
           // GitHub stargazer refresh — captured in parallel with the releases
           // fetch above; folded into this atomic update so it runs on both the
           // inline-cron and Workflow ingest paths. Spreads nothing when the
