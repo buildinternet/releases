@@ -6,8 +6,8 @@ import { logEvent } from "@releases/lib/log-event";
 // Median gap thresholds in days. Sources with a median gap at or below
 // NORMAL_MAX are retiered to "normal" (polled every 4h), between NORMAL_MAX
 // and LOW_MAX to "low" (polled every 24h). Above LOW_MAX, current tier is
-// preserved — this pass never auto-pauses, because manual and automatic
-// pauses are indistinguishable on the current schema.
+// preserved. This pass never auto-pauses and never changes a source that is
+// already paused. Why a source is paused is recorded on paused_reason / paused_at.
 const NORMAL_MAX_DAYS = 14;
 const LOW_MAX_DAYS = 90;
 

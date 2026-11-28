@@ -132,6 +132,39 @@ describe("source fetch-health transitions", () => {
     tdb.cleanup();
   });
 
+  it("records the pause reason and timestamp only on the transition into paused", async () => {
+    const tdb = await seed();
+    await tdb.db.update(sources).set({ unproductiveDrains: 4 }).where(eq(sources.id, "src_a"));
+
+    const fifth = await bumpSourceCounter(tdb.db as never, "src_a", "unproductiveDrains", {
+      pauseAt: 5,
+      pauseReason: "unproductive_drains",
+    });
+    expect(fifth?.didPause).toBe(true);
+    const [paused] = await tdb.db
+      .select({
+        pausedReason: sources.pausedReason,
+        pausedAt: sources.pausedAt,
+      })
+      .from(sources)
+      .where(eq(sources.id, "src_a"));
+    expect(paused?.pausedReason).toBe("unproductive_drains");
+    expect(paused?.pausedAt).toEqual(expect.any(String));
+
+    const sixth = await bumpSourceCounter(tdb.db as never, "src_a", "unproductiveDrains", {
+      pauseAt: 5,
+      pauseReason: "unproductive_drains",
+    });
+    expect(sixth?.didPause).toBe(false);
+    const [still] = await tdb.db
+      .select({ pausedReason: sources.pausedReason, pausedAt: sources.pausedAt })
+      .from(sources)
+      .where(eq(sources.id, "src_a"));
+    expect(still?.pausedReason).toBe("unproductive_drains");
+    expect(still?.pausedAt).toBe(paused?.pausedAt);
+    tdb.cleanup();
+  });
+
   it("a no-change bump clears the error counter and advances the stored no-change streak", async () => {
     const tdb = await seed();
     await tdb.db

@@ -9,9 +9,14 @@ export type {
   SourceType,
   SourceDiscovery,
   SourceFetchPriority,
+  SourcePauseReason,
 } from "@buildinternet/releases-core/source-enums";
 // Re-export above doesn't create local bindings; import for use in interfaces below.
-import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
+import type {
+  SourceType,
+  SourceFetchPriority,
+  SourcePauseReason,
+} from "@buildinternet/releases-core/source-enums";
 import type { UserApiKey } from "./schemas/api-keys.js";
 import type { SEMANTIC_ALERT_CANDIDATE_POOL } from "./schemas/semantic-alerts.js";
 import type { UserWebhookListItem, WorkspaceMemberRole } from "./schemas/webhooks.js";
@@ -1006,6 +1011,42 @@ export interface StuckSourcesResponse extends ListResponse<StuckSource> {
     /** Whether already-paused sources were included. */
     includePaused: boolean;
   };
+}
+
+/**
+ * A source whose current pause was written by auto-pause (`unproductive_drains`
+ * or `extraction_errors`) with `pausedAt` inside the requested window. Manual
+ * pauses and pauses from before `paused_reason` existed are omitted. Un-pausing
+ * clears the columns, so a source that was auto-paused and later resumed is
+ * not listed.
+ */
+export interface AutoPausedSource {
+  sourceId: string;
+  sourceSlug: string;
+  name: string;
+  type: SourceType;
+  url: string;
+  orgSlug: string | null;
+  orgName: string | null;
+  fetchPriority: SourceFetchPriority;
+  pausedReason: Exclude<SourcePauseReason, "manual">;
+  pausedAt: string;
+  unproductiveDrains: number;
+  /** Latest non-`dry_run` fetch_log row, when one exists. */
+  lastReleasesFound: number | null;
+  lastReleasesInserted: number | null;
+  lastFetchStatus: string | null;
+  lastFetchAt: string | null;
+}
+
+export interface AutoPausedSourcesResponse {
+  /** Window the query used, in days. */
+  days: number;
+  /** Inclusive lower bound on `pausedAt` (ISO). */
+  since: string;
+  sources: AutoPausedSource[];
+  /** True when the result was cut at the query cap. */
+  truncated: boolean;
 }
 
 // ── Admin telemetry: provider / ingest health ──

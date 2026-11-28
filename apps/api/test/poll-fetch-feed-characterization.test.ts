@@ -193,6 +193,27 @@ describe("fetchOne — feed fetch cycle", () => {
     expect(newer.content).toContain("Redesigned the dashboard");
   });
 
+  it("a productive feed fetch clears an unproductive-drain streak and a deduped refetch does not", async () => {
+    const db = createTestDb();
+    const source = await seedFeedSource(db);
+    await db.update(sources).set({ unproductiveDrains: 4 }).where(eq(sources.id, source.id));
+    nextFeedImpl = async () => ({ releases: ITEMS });
+
+    // oxlint-disable-next-line no-explicit-any -- BunSQLiteDatabase vs DrizzleD1Database; works at runtime via the shim
+    const first = await fetchOne(db as any, source, {} as never, { skipSideEffects: true });
+    expect(first.releasesInserted).toBe(2);
+    const [afterInsert] = await db.select().from(sources).where(eq(sources.id, "src_a"));
+    expect(afterInsert!.unproductiveDrains).toBe(0);
+
+    await db.update(sources).set({ unproductiveDrains: 3 }).where(eq(sources.id, "src_a"));
+    const [reloaded] = await db.select().from(sources).where(eq(sources.id, "src_a"));
+    // oxlint-disable-next-line no-explicit-any -- BunSQLiteDatabase vs DrizzleD1Database; works at runtime via the shim
+    const second = await fetchOne(db as any, reloaded!, {} as never, { skipSideEffects: true });
+    expect(second.releasesInserted).toBe(0);
+    const [afterDedup] = await db.select().from(sources).where(eq(sources.id, "src_a"));
+    expect(afterDedup!.unproductiveDrains).toBe(3);
+  });
+
   it("second fetch with identical items inserts 0 (dedup on source_id+url)", async () => {
     const db = createTestDb();
     const source = await seedFeedSource(db);

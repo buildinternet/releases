@@ -363,6 +363,9 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
               consecutiveErrors: 0,
               nextFetchAfter: null,
               changeDetectedAt: null,
+              // A delivery that inserts releases clears the unproductive-drain
+              // streak. Re-finding the same items (inserted 0) does not.
+              ...(ingest.inserted > 0 ? { unproductiveDrains: 0 } : {}),
               metadata: firecrawlBookkeepingMetadata(checkId, checkedAt),
             })
             .where(eq(sources.id, sourceId)),

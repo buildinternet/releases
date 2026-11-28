@@ -37,6 +37,9 @@ async function seed() {
     type: "scrape",
     url: "https://acme.test/changelog",
     fetchPriority: "paused",
+    pausedReason: "unproductive_drains",
+    pausedAt: "2026-11-25T10:06:00.000Z",
+    unproductiveDrains: 5,
     metadata: "{}",
   });
 }
@@ -52,11 +55,35 @@ describe("entity detail fields", () => {
     expect(body.updatedAt).toBe("2026-02-01T00:00:00.000Z");
   });
 
-  it("source detail carries fetchPriority", async () => {
+  it("source detail carries fetchPriority and the recorded pause", async () => {
     await seed();
     const res = await callSource("/sources/src_acme");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { fetchPriority?: string | null };
+    const body = (await res.json()) as {
+      fetchPriority?: string | null;
+      pausedReason?: string | null;
+      pausedAt?: string | null;
+      unproductiveDrains?: number | null;
+    };
     expect(body.fetchPriority).toBe("paused");
+    expect(body.pausedReason).toBe("unproductive_drains");
+    expect(body.pausedAt).toBe("2026-11-25T10:06:00.000Z");
+    expect(body.unproductiveDrains).toBe(5);
+  });
+
+  it("source list carries the recorded pause", async () => {
+    await seed();
+    const res = await callSource("/sources");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{
+      id: string;
+      pausedReason?: string | null;
+      pausedAt?: string | null;
+      unproductiveDrains?: number | null;
+    }>;
+    const row = body.find((s) => s.id === "src_acme");
+    expect(row?.pausedReason).toBe("unproductive_drains");
+    expect(row?.pausedAt).toBe("2026-11-25T10:06:00.000Z");
+    expect(row?.unproductiveDrains).toBe(5);
   });
 });

@@ -72,6 +72,8 @@ async function readSource(db: D1Db) {
     .select({
       unproductiveDrains: sources.unproductiveDrains,
       fetchPriority: sources.fetchPriority,
+      pausedReason: sources.pausedReason,
+      pausedAt: sources.pausedAt,
     })
     .from(sources)
     .where(eq(sources.id, "src_a1"));
@@ -108,6 +110,19 @@ describe("fetch-log unproductive-drain auto-pause (#1862)", () => {
     const src = await readSource(db);
     expect(src.unproductiveDrains).toBe(PAUSE_AFTER);
     expect(src.fetchPriority).toBe("paused");
+    expect(src.pausedReason).toBe("unproductive_drains");
+    expect(src.pausedAt).toEqual(expect.any(String));
+  });
+
+  it("does not strike when a flagged drain re-finds existing releases", async () => {
+    const db = mkDb();
+    await seedSource(db, { unproductiveDrains: 2 });
+    const fetch = mkApp(db);
+    await postLog(fetch, { wasFlagged: true, releasesFound: 9, releasesInserted: 0 });
+    const src = await readSource(db);
+    expect(src.unproductiveDrains).toBe(2);
+    expect(src.fetchPriority).not.toBe("paused");
+    expect(src.pausedReason).toBeNull();
   });
 
   it("resets the streak on a productive drain (>=1 inserted)", async () => {
@@ -121,9 +136,28 @@ describe("fetch-log unproductive-drain auto-pause (#1862)", () => {
     expect((await readSource(db)).unproductiveDrains).toBe(0);
   });
 
+  it("resets the streak when an unflagged fetch inserts", async () => {
+    const db = mkDb();
+    await seedSource(db, { unproductiveDrains: 4 });
+    const fetch = mkApp(db);
+    await postLog(fetch, {
+      releasesFound: 5,
+      releasesInserted: 1,
+      status: "success",
+    });
+    const src = await readSource(db);
+    expect(src.unproductiveDrains).toBe(0);
+    expect(src.fetchPriority).not.toBe("paused");
+  });
+
   it("stays un-paused after one empty drain when un-paused at the threshold (#2550)", async () => {
     const db = mkDb();
-    await seedSource(db, { fetchPriority: "paused", unproductiveDrains: PAUSE_AFTER });
+    await seedSource(db, {
+      fetchPriority: "paused",
+      unproductiveDrains: PAUSE_AFTER,
+      pausedReason: "unproductive_drains",
+      pausedAt: "2026-11-25T10:06:00.000Z",
+    });
     const fetch = mkApp(db, { sources: true });
 
     const unpause = await fetch(
@@ -136,11 +170,45 @@ describe("fetch-log unproductive-drain auto-pause (#1862)", () => {
     expect(unpause.status).toBe(200);
     expect((await readSource(db)).fetchPriority).toBe("normal");
     expect((await readSource(db)).unproductiveDrains).toBe(0);
+    expect((await readSource(db)).pausedReason).toBeNull();
+    expect((await readSource(db)).pausedAt).toBeNull();
 
     const drain = await postLog(fetch, { wasFlagged: true });
     expect(drain.status).toBe(201);
     const src = await readSource(db);
     expect(src.unproductiveDrains).toBe(1);
     expect(src.fetchPriority).toBe("normal");
+    expect(src.pausedReason).toBeNull();
+  });
+
+  it("records a manual pause without clobbering an existing auto-pause reason", async () => {
+    const db = mkDb();
+    await seedSource(db);
+    const fetch = mkApp(db, { sources: true });
+
+    const pause = await fetch(
+      new Request("https://x.test/v1/sources/src_a1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fetchPriority: "paused" }),
+      }),
+    );
+    expect(pause.status).toBe(200);
+    const manual = await readSource(db);
+    expect(manual.fetchPriority).toBe("paused");
+    expect(manual.pausedReason).toBe("manual");
+    expect(manual.pausedAt).toEqual(expect.any(String));
+
+    const again = await fetch(
+      new Request("https://x.test/v1/sources/src_a1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fetchPriority: "paused", name: "Acme One" }),
+      }),
+    );
+    expect(again.status).toBe(200);
+    const kept = await readSource(db);
+    expect(kept.pausedReason).toBe("manual");
+    expect(kept.pausedAt).toBe(manual.pausedAt);
   });
 });

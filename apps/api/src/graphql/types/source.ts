@@ -62,6 +62,21 @@ export const SourceType = builder.objectType("Source", {
     type: t.field({ type: SourceTypeEnum, resolve: (s) => s.type }),
     url: t.exposeString("url"),
     fetchPriority: t.exposeString("fetchPriority", { nullable: true }),
+    unproductiveDrains: t.exposeInt("unproductiveDrains", {
+      nullable: true,
+      description:
+        "Consecutive flagged drains whose extraction found 0 items. Re-finding existing releases does not increment this.",
+    }),
+    pausedReason: t.exposeString("pausedReason", {
+      nullable: true,
+      description:
+        "Why fetchPriority is paused: manual, unproductive_drains, or extraction_errors. Null while the source is not paused.",
+    }),
+    pausedAt: t.expose("pausedAt", {
+      type: "DateTime",
+      nullable: true,
+      description: "When fetchPriority last became paused. Null while the source is not paused.",
+    }),
     lastFetchedAt: t.expose("lastFetchedAt", { type: "DateTime", nullable: true }),
     lastPolledAt: t.expose("lastPolledAt", { type: "DateTime", nullable: true }),
     medianGapDays: t.exposeFloat("medianGapDays", { nullable: true }),

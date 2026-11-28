@@ -470,14 +470,20 @@ export const sources = sqliteTable(
     lastFetchedAt: text("last_fetched_at"),
     lastContentHash: text("last_content_hash"),
     fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }).default("normal"),
+    // Why and when fetch_priority last became `paused`. Null while the source
+    // is not paused. Auto-pause writes `unproductive_drains` or
+    // `extraction_errors`; an operator PATCH to `paused` writes `manual`.
+    // Cleared when fetch_priority moves off `paused`.
+    pausedReason: text("paused_reason", {
+      enum: ["manual", "unproductive_drains", "extraction_errors"],
+    }),
+    pausedAt: text("paused_at"),
     consecutiveNoChange: integer("consecutive_no_change").default(0),
     consecutiveErrors: integer("consecutive_errors").default(0),
-    // Consecutive flagged-but-empty drains (#1862): a scrape/agent source that was
-    // flagged (change_detected_at set) but whose drain found 0 new releases,
-    // counted per drain and reset on a productive one. At
-    // UNPRODUCTIVE_DRAIN_PAUSE_AFTER the source auto-pauses (fetch-log.ts) so a
-    // broken/flapping source stops re-billing a no-op Haiku session forever.
-    // Sibling of consecutive_errors (which only fires on hard extraction errors).
+    // Consecutive flagged drains whose extraction found 0 items (#1862).
+    // Re-finding the existing releases (found > 0, inserted 0) is healthy and
+    // does not count. Any fetch that inserts — flagged or not — resets the
+    // streak. At UNPRODUCTIVE_DRAIN_PAUSE_AFTER the source auto-pauses.
     unproductiveDrains: integer("unproductive_drains").default(0),
     nextFetchAfter: text("next_fetch_after"),
     changeDetectedAt: text("change_detected_at"),
@@ -1507,6 +1513,11 @@ export const sourcesActive = sqliteView("sources_active", {
   lastFetchedAt: text("last_fetched_at"),
   lastContentHash: text("last_content_hash"),
   fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
+  // Type-level mirrors — the real view is `SELECT sources.*`.
+  pausedReason: text("paused_reason", {
+    enum: ["manual", "unproductive_drains", "extraction_errors"],
+  }),
+  pausedAt: text("paused_at"),
   consecutiveNoChange: integer("consecutive_no_change"),
   consecutiveErrors: integer("consecutive_errors"),
   // Type-level mirror of the #1862 unproductive-drain counter.
@@ -1581,6 +1592,11 @@ export const sourcesVisible = sqliteView("sources_visible", {
   lastFetchedAt: text("last_fetched_at"),
   lastContentHash: text("last_content_hash"),
   fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
+  // Type-level mirrors — the real view is `SELECT sources.*`.
+  pausedReason: text("paused_reason", {
+    enum: ["manual", "unproductive_drains", "extraction_errors"],
+  }),
+  pausedAt: text("paused_at"),
   consecutiveNoChange: integer("consecutive_no_change"),
   consecutiveErrors: integer("consecutive_errors"),
   // Type-level mirror of the #1862 unproductive-drain counter.

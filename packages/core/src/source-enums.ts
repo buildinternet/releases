@@ -15,3 +15,11 @@ export type SourceDiscovery = (typeof SOURCE_DISCOVERY)[number];
 
 export const SOURCE_FETCH_PRIORITIES = ["normal", "low", "paused"] as const;
 export type SourceFetchPriority = (typeof SOURCE_FETCH_PRIORITIES)[number];
+
+/**
+ * Why `fetch_priority` is `paused`. Null while the source is not paused.
+ * `manual` is an operator PATCH; the other two are written by the auto-pause
+ * paths in fetch-log ingest.
+ */
+export const SOURCE_PAUSE_REASONS = ["manual", "unproductive_drains", "extraction_errors"] as const;
+export type SourcePauseReason = (typeof SOURCE_PAUSE_REASONS)[number];

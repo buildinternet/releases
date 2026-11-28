@@ -526,6 +526,16 @@ type Source {
   nextFetchAfter: DateTime
   notice: EntityNotice
   org: Org!
+
+  """
+  When fetchPriority last became paused. Null while the source is not paused.
+  """
+  pausedAt: DateTime
+
+  """
+  Why fetchPriority is paused: manual, unproductive_drains, or extraction_errors. Null while the source is not paused.
+  """
+  pausedReason: String
   product: Product
   productId: String
   releaseCount: Int!
@@ -544,6 +554,11 @@ type Source {
   """
   trackingSince: DateTime!
   type: SourceType!
+
+  """
+  Consecutive flagged drains whose extraction found 0 items. Re-finding existing releases does not increment this.
+  """
+  unproductiveDrains: Int
   url: String!
 
   """Provider for video sources; null for all other source types. #1206"""
