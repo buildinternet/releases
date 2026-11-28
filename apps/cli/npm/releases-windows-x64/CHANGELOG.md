@@ -1,5 +1,9 @@
 # @buildinternet/releases-windows-x64
 
+## 0.85.1
+
+No changes in this release.
+
 ## 0.85.0
 
 No changes in this release.

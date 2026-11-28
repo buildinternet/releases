@@ -1,5 +1,11 @@
 # @buildinternet/releases
 
+## 0.85.1
+
+### Patch Changes
+
+- 6b07a9c: Update chalk to 6 and string-width to 9.
+
 ## 0.85.0
 
 ### Minor Changes

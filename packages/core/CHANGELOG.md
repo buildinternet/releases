@@ -1,5 +1,11 @@
 # @buildinternet/releases-core
 
+## 0.36.4
+
+### Patch Changes
+
+- 19f7a96: Record why and when a source was paused, and return `pausedReason`, `pausedAt`, and `unproductiveDrains` on source reads.
+
 ## 0.36.3
 
 ### Patch Changes

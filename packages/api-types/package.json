@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-api-types",
-  "version": "0.60.2",
+  "version": "0.60.3",
   "description": "Wire protocol — request/response types for the Releases Index API. Shared by web, workers, and clients.",
   "type": "module",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "postpack": "bun ../../scripts/pack-dist.ts postpack"
   },
   "dependencies": {
-    "@buildinternet/releases-core": "^0.36.1",
+    "@buildinternet/releases-core": "^0.36.4",
     "zod": "^4.6.7"
   },
   "publishConfig": {
